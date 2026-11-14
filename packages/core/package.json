@@ -1,0 +1,19 @@
+{
+  "name": "@ongrid/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./geometry": "./src/geometry/index.ts",
+    "./geometry/*": "./src/geometry/*.ts",
+    "./types/floorplan": "./src/types/floorplan.ts",
+    "./export": "./src/export/planExport.ts",
+    "./notes": "./src/notes/notes.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

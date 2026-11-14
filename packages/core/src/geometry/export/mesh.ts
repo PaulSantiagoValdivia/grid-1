@@ -1,0 +1,103 @@
+/**
+ * Triangle meshes for the 3D exporters.
+ *
+ * OBJ and glTF both write what Canvas3D draws, so the walls and floors are
+ * built here once and each exporter only serialises them. Two writers over two
+ * copies of this code could disagree about a hole, a winding or a name; over
+ * one copy they cannot.
+ *
+ * Internal on purpose: `export/index.ts` re-exports the exporters and not this
+ * module, so the public surface stays `toObj`, `toGlb` and the other formats.
+ *
+ * Points are in the model's own frame: metres, X and Y as on the plan, Z up
+ * (C4). Faces wind counter-clockwise seen from outside the solid. An exporter
+ * that changes frame has to change it as a rotation, never a mirror.
+ */
+
+import type { Vec2 } from '../vec2'
+import type { SceneSlab, SceneWall, Vec3 } from '../scene3d'
+import { triangulate } from '../triangulate'
+
+export type Face = readonly [number, number, number]
+
+export interface Mesh {
+  readonly points: readonly Vec3[]
+  readonly faces: readonly Face[]
+}
+
+/**
+ * Ids come from the plan file, which the assistant writes, and a name that
+ * carries a newline would end the `o` statement and start a forged one.
+ */
+export function sanitize(id: string): string {
+  const clean = id.replace(/[^A-Za-z0-9_.-]/g, '_')
+  return clean.length > 0 ? clean : '_'
+}
+
+/**
+ * A name allocator for one file: `prefix_id`, with a numeric suffix when the
+ * sanitised name was already taken.
+ */
+export function makeNamer(): (prefix: string, id: string) => string {
+  const taken = new Set<string>()
+  return (prefix, id) => {
+    const base = `${prefix}_${sanitize(id)}`
+    let name = base
+    for (let k = 2; taken.has(name); k++) name = `${base}_${k}`
+    taken.add(name)
+    return name
+  }
+}
+
+/**
+ * One wall as a closed solid: the elevation on both faces, and a band of
+ * quads round every boundary edge — the ends, the top, and the jambs, sills
+ * and lintels of every opening.
+ *
+ * The sides come from the triangulation's own rings, not from the outline and
+ * holes that went in. Those differ exactly where it matters: a door's bottom
+ * edge is also the wall's bottom edge, so it is no boundary, and a wall under
+ * an open door must not get a face.
+ */
+export function wallMesh(wall: SceneWall): Mesh | null {
+  const { elevation, basis } = wall
+  const { vertices, triangles, rings } = triangulate(elevation.outline, elevation.holes)
+  if (triangles.length === 0) return null
+
+  const half = elevation.thickness / 2
+  const place = (p: Vec2, across: number): Vec3 => ({
+    x: basis.origin.x + basis.along.x * p.x + basis.up.x * p.y + basis.across.x * across,
+    y: basis.origin.y + basis.along.y * p.x + basis.up.y * p.y + basis.across.y * across,
+    z: basis.origin.z + basis.along.z * p.x + basis.up.z * p.y + basis.across.z * across
+  })
+
+  // Vertex i is on the front face; vertex n + i is the same point on the back.
+  const n = vertices.length
+  const points = [...vertices.map((v) => place(v, half)), ...vertices.map((v) => place(v, -half))]
+
+  const faces: Face[] = []
+  for (const [a, b, c] of triangles) {
+    // `along × up = across`, so counter-clockwise on the elevation faces +across.
+    faces.push([a, b, c])
+    faces.push([n + a, n + c, n + b])
+  }
+
+  // The region is on the left of each ring edge, so its outside is on the right.
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length; i++) {
+      const p = ring[i]!
+      const q = ring[(i + 1) % ring.length]!
+      faces.push([n + p, n + q, q])
+      faces.push([n + p, q, p])
+    }
+  }
+
+  return { points, faces }
+}
+
+/** A room's floor: a flat surface at z = 0, facing up. */
+export function floorMesh(floor: SceneSlab): Mesh | null {
+  const { vertices, triangles } = triangulate(floor.polygon)
+  if (triangles.length === 0) return null
+  return { points: vertices.map((v) => ({ x: v.x, y: v.y, z: 0 })), faces: triangles }
+}

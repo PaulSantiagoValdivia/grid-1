@@ -1,0 +1,198 @@
+import { describe, expect, it } from 'vitest'
+import {
+  DEFAULT_FLOOR_ID,
+  EMPTY_FLOOR_PLAN,
+  FloorPlanSchema,
+  ROOM_USES,
+  parseFloorPlan,
+  safeParseFloorPlan
+} from '../floorplan'
+
+// A plan as it was written before floors existed. Kept literal on purpose: the
+// point of these tests is that such a file survives the schema change untouched.
+const v1Plan = {
+  version: '1',
+  units: 'm',
+  walls: [
+    { id: 'w1', start: [0, 0], end: [4, 0], thickness: 0.2, height: 2.7, kind: 'exterior' },
+    { id: 'w2', start: [4, 0], end: [4, 3], thickness: 0.2, height: 2.7, kind: 'exterior' }
+  ],
+  rooms: [{ id: 'r1', name: 'Living room', boundary: ['w1', 'w2'] }],
+  openings: [
+    { id: 'o1', wall: 'w1', type: 'door', offset: 1, width: 0.9, sill: 0, height: 2.1 }
+  ]
+}
+
+describe('a plan written before floors existed', () => {
+  it('parses', () => {
+    expect(() => parseFloorPlan(v1Plan)).not.toThrow()
+  })
+
+  it('gains no keys — the file round-trips byte-stable', () => {
+    const parsed = parseFloorPlan(v1Plan)
+
+    // The whole reason the new fields are .optional() rather than .default():
+    // handlers.ts reads a plan through this parse and writes the result back over
+    // the user's file, so an injected key would be a spurious diff in their repo.
+    expect(Object.keys(parsed).sort()).toEqual(['openings', 'rooms', 'units', 'version', 'walls'])
+    expect(parsed.walls.every((wall) => !('floor' in wall))).toBe(true)
+    expect(parsed.rooms.every((room) => !('floor' in room))).toBe(true)
+    expect(JSON.parse(JSON.stringify(parsed))).toEqual(v1Plan)
+  })
+
+  it('has no floors array of its own', () => {
+    expect(parseFloorPlan(v1Plan).floors).toBeUndefined()
+  })
+})
+
+describe('a plan that names floors', () => {
+  const multi = {
+    ...v1Plan,
+    floors: [
+      { id: 'ground', name: 'Ground floor', level: 0 },
+      { id: 'first', name: 'First floor', level: 1 }
+    ],
+    walls: [
+      { ...v1Plan.walls[0], floor: 'ground' },
+      { ...v1Plan.walls[1], floor: 'first' }
+    ],
+    rooms: [{ ...v1Plan.rooms[0], floor: 'ground' }]
+  }
+
+  it('keeps every floor field through the parse', () => {
+    const parsed = parseFloorPlan(multi)
+
+    expect(parsed.floors).toHaveLength(2)
+    expect(parsed.walls.map((wall) => wall.floor)).toEqual(['ground', 'first'])
+    expect(parsed.rooms[0]?.floor).toBe('ground')
+  })
+
+  it('defaults a floor level to 0 when it is not stated', () => {
+    const parsed = parseFloorPlan({ ...multi, floors: [{ id: 'ground', name: 'Ground floor' }] })
+
+    expect(parsed.floors?.[0]?.level).toBe(0)
+  })
+
+  it('rejects an empty floor id or name', () => {
+    expect(safeParseFloorPlan({ ...multi, floors: [{ id: '', name: 'Nameless' }] })).toBeNull()
+    expect(safeParseFloorPlan({ ...multi, floors: [{ id: 'ground', name: '' }] })).toBeNull()
+  })
+
+  it('rejects a non-integer level', () => {
+    expect(
+      safeParseFloorPlan({ ...multi, floors: [{ id: 'ground', name: 'Ground', level: 0.5 }] })
+    ).toBeNull()
+  })
+
+  it('accepts a negative level for a basement', () => {
+    const parsed = parseFloorPlan({
+      ...multi,
+      floors: [{ id: 'basement', name: 'Basement', level: -1 }]
+    })
+
+    expect(parsed.floors?.[0]?.level).toBe(-1)
+  })
+})
+
+describe('the version literal', () => {
+  // Pinned deliberately. The assistant reads a changed schema description and may
+  // infer the version should move with it; a bumped version fails this parse, the
+  // watcher drops the push, and the preview goes blank with no error anywhere.
+  it('still refuses any version but 1', () => {
+    expect(safeParseFloorPlan({ ...v1Plan, version: '2' })).toBeNull()
+    expect(FloorPlanSchema.safeParse({ ...v1Plan, version: 2 }).success).toBe(false)
+  })
+
+  it('still backfills a missing version', () => {
+    const noVersion: Record<string, unknown> = { ...v1Plan }
+    delete noVersion.version
+
+    expect(parseFloorPlan(noVersion).version).toBe('1')
+  })
+})
+
+describe('the empty plan', () => {
+  it('parses and names no floors', () => {
+    expect(() => parseFloorPlan(EMPTY_FLOOR_PLAN)).not.toThrow()
+    expect(parseFloorPlan(EMPTY_FLOOR_PLAN).floors).toBeUndefined()
+  })
+})
+
+describe('the default floor id', () => {
+  it('is what an unstated floor means', () => {
+    expect(DEFAULT_FLOOR_ID).toBe('ground')
+  })
+})
+
+// Hinge and swing are optional and never defaulted. Absent means "not
+// decided", and an undecided door draws no swing.
+describe('door hinge and swing', () => {
+  const withSwing = {
+    ...v1Plan,
+    openings: [{ ...v1Plan.openings[0], hinge: 'start', swing: 'left' }]
+  }
+
+  it('leaves a door without them untouched', () => {
+    const [door] = parseFloorPlan(v1Plan).openings
+    expect('hinge' in door).toBe(false)
+    expect('swing' in door).toBe(false)
+  })
+
+  it('round-trips both values', () => {
+    const parsed = parseFloorPlan(withSwing)
+    expect(parsed.openings[0]).toMatchObject({ hinge: 'start', swing: 'left' })
+    expect(JSON.parse(JSON.stringify(parsed))).toEqual(withSwing)
+  })
+
+  it('keeps half a swing, so validation can warn about it', () => {
+    const half = { ...v1Plan, openings: [{ ...v1Plan.openings[0], hinge: 'end' }] }
+    const [door] = parseFloorPlan(half).openings
+    expect(door.hinge).toBe('end')
+    expect('swing' in door).toBe(false)
+  })
+
+  it('rejects values outside the two words', () => {
+    const bad = (opening: object): unknown => ({ ...v1Plan, openings: [{ ...v1Plan.openings[0], ...opening }] })
+    expect(safeParseFloorPlan(bad({ hinge: 'left' }))).toBeNull()
+    expect(safeParseFloorPlan(bad({ swing: 'in' }))).toBeNull()
+  })
+})
+
+// Room.use: optional and never defaulted, so a room says what it is for only when someone
+// said so. An unknown value is read as not stated rather than failing the whole plan, because a
+// throw here means no preview at all (main parses with `FloorPlanSchema.parse`).
+describe('a room’s use', () => {
+  const withUse = (use: unknown) => ({
+    ...v1Plan,
+    rooms: [{ id: 'r1', name: 'Bedroom 2', boundary: ['w1', 'w2'], floor: 'ground', use }]
+  })
+
+  it('is absent from an old plan’s rooms, which round-trip byte-stable', () => {
+    const parsed = parseFloorPlan(v1Plan)
+    expect('use' in parsed.rooms[0]!).toBe(false)
+    expect(JSON.stringify(parsed.rooms)).toBe(JSON.stringify(v1Plan.rooms))
+  })
+
+  it('keeps each of the nine values', () => {
+    for (const use of ROOM_USES) {
+      const parsed = parseFloorPlan(withUse(use))
+      expect(parsed.rooms[0]!.use).toBe(use)
+      expect(JSON.parse(JSON.stringify(parsed)).rooms[0].use).toBe(use)
+    }
+    expect([...ROOM_USES]).toEqual([
+      'bedroom', 'living', 'dining', 'kitchen', 'bathroom', 'corridor', 'stair', 'storage', 'other'
+    ])
+  })
+
+  it.each([['a misspelled value', 'bedrom'], ['a number', 3], ['null', null]])(
+    'reads %s as not stated and keeps the rest of the room',
+    (_label, use) => {
+      const parsed = parseFloorPlan(withUse(use))
+      const room = parsed.rooms[0]!
+      expect(room.use).toBeUndefined()
+      expect(JSON.parse(JSON.stringify(room))).toEqual({
+        id: 'r1', name: 'Bedroom 2', boundary: ['w1', 'w2'], floor: 'ground'
+      })
+    }
+  )
+})

@@ -1,0 +1,159 @@
+/**
+ * One plain-English line per change, from a fixed template.
+ *
+ * Every word comes from the computed properties and the plan's own names. The
+ * assistant never writes one, so a summary cannot claim what did not happen.
+ * Lengths are in metres to two decimals; there are no compass words, because
+ * the model has no north.
+ */
+
+import type { FloorPlan } from '../plan'
+import { planFloors } from '../floors'
+import type { PlanChange, PropChange, WallMotion } from './types'
+
+function metres(value: number): string {
+  // `abs` keeps a rounded-to-zero negative from printing as -0.00.
+  return Math.abs(value).toFixed(2)
+}
+
+function degrees(value: number): string {
+  return Math.abs(value).toFixed(1).replace(/\.0$/, '')
+}
+
+function text(value: unknown): string {
+  return String(value)
+}
+
+function prop(change: PlanChange, key: string): PropChange | undefined {
+  return change.props.find((p) => p.key === key)
+}
+
+function range(p: PropChange): string {
+  return `${metres(Number(p.before))} → ${metres(Number(p.after))} m`
+}
+
+function capitalise(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1)
+}
+
+function motionPart(motion: WallMotion): string {
+  switch (motion.kind) {
+    case 'translated':
+      return `moved ${metres(Math.hypot(motion.normalDistance, motion.axialDistance))} m`
+    case 'resized':
+      return motion.lengthDelta >= 0
+        ? `extended ${metres(motion.lengthDelta)} m`
+        : `shortened ${metres(motion.lengthDelta)} m`
+    case 'rotated':
+      return `rotated ${degrees(motion.angleDeg)}° ${motion.angleDeg >= 0 ? 'counter-clockwise' : 'clockwise'}`
+    case 'reshaped':
+      return 'reshaped'
+  }
+}
+
+export interface Summarizer {
+  (change: PlanChange): string
+}
+
+/** Looks names up in the plans the change came from, once. */
+export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
+  const floorNames = new Map<string, string>()
+  for (const floor of [...planFloors(base), ...planFloors(head)]) {
+    floorNames.set(floor.id, floor.name)
+  }
+  const floorName = (id: string): string => floorNames.get(id) ?? id
+
+  // The later type wins: a door turned into a window is a window now.
+  const openingType = new Map<string, string>()
+  for (const opening of [...base.openings, ...head.openings]) {
+    openingType.set(opening.id, opening.type)
+  }
+  const headRooms = new Map(head.rooms.map((r) => [r.id, r.name || r.id] as const))
+  const baseRooms = new Map(base.rooms.map((r) => [r.id, r.name || r.id] as const))
+  const baseFloors = new Map(planFloors(base).map((f) => [f.id, f.name] as const))
+  const headFloors = new Map(planFloors(head).map((f) => [f.id, f.name] as const))
+
+  const wallSummary = (change: PlanChange): string => {
+    if (change.kind !== 'modified') return `Wall ${change.kind}`
+    const parts: string[] = []
+    if (change.motion) parts.push(motionPart(change.motion))
+    const thickness = prop(change, 'thickness')
+    if (thickness) parts.push(`thickness ${range(thickness)}`)
+    const height = prop(change, 'height')
+    if (height) parts.push(`height ${range(height)}`)
+    const kind = prop(change, 'kind')
+    if (kind) parts.push(`kind ${text(kind.before)} → ${text(kind.after)}`)
+    const virtual = prop(change, 'virtual')
+    if (virtual) parts.push(virtual.after === true ? 'made virtual' : 'made solid')
+    const floor = prop(change, 'floor')
+    if (floor) parts.push(`moved to ${floorName(text(floor.after))}`)
+    return `Wall ${parts.join('; ')}`
+  }
+
+  const openingSummary = (change: PlanChange): string => {
+    const noun = capitalise(openingType.get(change.entity.id) ?? 'opening')
+    if (change.kind !== 'modified') return `${noun} ${change.kind}`
+    if (change.derived) return `${noun} moved with its wall`
+
+    const parts: string[] = []
+    const type = prop(change, 'type')
+    if (type) parts.push(`changed from ${text(type.before)}`)
+    const wall = prop(change, 'wall')
+    if (wall) parts.push('moved to another wall')
+    const offset = prop(change, 'offset')
+    if (offset) {
+      parts.push(`moved ${metres(Number(offset.after) - Number(offset.before))} m along its wall`)
+    }
+    const width = prop(change, 'width')
+    if (width) {
+      parts.push(`${Number(width.after) >= Number(width.before) ? 'widened' : 'narrowed'} ${range(width)}`)
+    }
+    const sill = prop(change, 'sill')
+    if (sill) parts.push(`sill ${range(sill)}`)
+    const height = prop(change, 'height')
+    if (height) parts.push(`height ${range(height)}`)
+    return `${noun} ${parts.join('; ')}`
+  }
+
+  const roomSummary = (change: PlanChange): string => {
+    const id = change.entity.id
+    if (change.kind === 'added') return `Room added: ${headRooms.get(id) ?? id}`
+    if (change.kind === 'removed') return `Room removed: ${baseRooms.get(id) ?? id}`
+    if (change.derived) return `${headRooms.get(id) ?? id} changed with its walls`
+    const name = prop(change, 'name')
+    const subject = name ? text(name.before) : (headRooms.get(id) ?? id)
+    const parts: string[] = []
+    if (name) parts.push(`renamed to ${text(name.after)}`)
+    if (prop(change, 'boundary')) parts.push('walls changed')
+    const floor = prop(change, 'floor')
+    if (floor) parts.push(`moved to ${floorName(text(floor.after))}`)
+    return `${subject} ${parts.join('; ')}`
+  }
+
+  const floorSummary = (change: PlanChange): string => {
+    const id = change.entity.id
+    if (change.kind === 'added') return `Floor added: ${headFloors.get(id) ?? id}`
+    if (change.kind === 'removed') return `Floor removed: ${baseFloors.get(id) ?? id}`
+
+    const name = prop(change, 'name')
+    const subject = name ? text(name.before) : (headFloors.get(id) ?? id)
+    const parts: string[] = []
+    if (name) parts.push(`renamed to ${text(name.after)}`)
+    const level = prop(change, 'level')
+    if (level) parts.push(`level ${text(level.before)} → ${text(level.after)}`)
+    return `${subject} ${parts.join('; ')}`
+  }
+
+  return (change) => {
+    switch (change.entity.type) {
+      case 'wall':
+        return wallSummary(change)
+      case 'opening':
+        return openingSummary(change)
+      case 'room':
+        return roomSummary(change)
+      case 'floor':
+        return floorSummary(change)
+    }
+  }
+}

@@ -1,0 +1,5 @@
+export * from './types'
+export { diffPlans } from './diff'
+export { changesOutsideScope, MIN_MOVEMENT_M } from './scope'
+export { revertChanges } from './revert'
+export { statusOf } from './status'
