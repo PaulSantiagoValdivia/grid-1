@@ -10,8 +10,8 @@
  */
 
 import * as THREE from 'three'
-import type { FloorPlan, Opening, Vec3 } from '@ongrid/core/geometry'
-import { pointAlong, wallAxis } from '@ongrid/core/geometry'
+import type { FloorPlan, Opening, Vec3 } from '@ongrid/floorplan/geometry'
+import { pointAlong, wallAxis } from '@ongrid/floorplan/geometry'
 import type { InFlight } from '../preview/playback'
 import { progressOf, removalProgress } from '../preview/progress'
 

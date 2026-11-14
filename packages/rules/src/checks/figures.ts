@@ -13,7 +13,7 @@
  * figure; they are not a judgement on any code.
  */
 
-import type { RuleCitation } from '@ongrid/core/geometry'
+import type { RuleCitation } from '@ongrid/floorplan/geometry'
 import type { AppliedFigure, RuleFigures } from './types'
 
 export const FIGURE_KEYS = [

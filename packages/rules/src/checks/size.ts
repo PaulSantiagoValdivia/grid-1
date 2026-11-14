@@ -6,9 +6,9 @@
  * not checked.
  */
 
-import { area, indexPlan, type FloorPlan } from '@ongrid/core/geometry'
-import { roomOutlines } from '@ongrid/core/geometry/rules/graph'
-import { ROOM_USES, type RoomUse } from '@ongrid/core/types/floorplan'
+import { area, indexPlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
+import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { HABITABLE_USES } from './catalogue'
 import { messages } from './messages'
 import type { AppliedFigure, NotChecked, RuleFinding } from './types'

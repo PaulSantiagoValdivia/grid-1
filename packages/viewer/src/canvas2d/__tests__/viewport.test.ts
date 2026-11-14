@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Bounds } from '@ongrid/core/geometry'
-import { computeBounds } from '@ongrid/core/geometry'
+import type { Bounds } from '@ongrid/floorplan/geometry'
+import { computeBounds } from '@ongrid/floorplan/geometry'
 import type { SharedViewport, Viewport } from '../viewport'
 import {
   contains,

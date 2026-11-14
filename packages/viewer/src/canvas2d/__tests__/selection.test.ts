@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan } from '@ongrid/core/geometry'
-import { buildFloorPlan, planForFloor } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/geometry'
+import { buildFloorPlan, planForFloor } from '@ongrid/floorplan/geometry'
 import { retainSelection } from '../selection'
 
 /**

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { WallExposure } from '@ongrid/core/geometry'
+import type { WallExposure } from '@ongrid/floorplan/geometry'
 import { hoverColor, mutedColor, mutedGlow, wallExposureColor } from '../convert'
 
 const EXPOSURES: WallExposure[] = ['exterior', 'interior', 'detached']

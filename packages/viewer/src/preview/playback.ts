@@ -13,7 +13,7 @@
  * an injected scheduler so tests can drive it without real frames.
  */
 
-import type { BuildStep, StepKind, Vec2 } from '@ongrid/core/geometry'
+import type { BuildStep, StepKind, Vec2 } from '@ongrid/floorplan/geometry'
 
 /** The shortest a wall step gets, so a big save stays readable. */
 export const MIN_UNIT = 80

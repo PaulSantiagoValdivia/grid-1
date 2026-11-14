@@ -1,4 +1,4 @@
-import type { FloorPlan, Opening, Room, Wall } from '@ongrid/core/geometry'
+import type { FloorPlan, Opening, Room, Wall } from '@ongrid/floorplan/geometry'
 
 /**
  * Plans for the checks, drawn the way an assistant draws them: one wall per room

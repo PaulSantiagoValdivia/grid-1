@@ -8,8 +8,8 @@
  */
 
 import { useMemo, useSyncExternalStore } from 'react'
-import type { BuildStep, FloorPlan, Vec2 } from '@ongrid/core/geometry'
-import { planAfter } from '@ongrid/core/geometry'
+import type { BuildStep, FloorPlan, Vec2 } from '@ongrid/floorplan/geometry'
+import { planAfter } from '@ongrid/floorplan/geometry'
 import type { InFlight, PlaybackClock, PlaybackSnapshot } from './playback'
 
 /** One save to draw: the plan before, the plan after, and the steps between. */

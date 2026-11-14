@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan } from '@ongrid/core/geometry'
-import { LIMITS, RULES as PLAN_RULES } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/geometry'
+import { LIMITS, RULES as PLAN_RULES } from '@ongrid/floorplan/geometry'
 import { FIGURE_LIMITS, FIGURE_RULES, FIGURES, GENERAL_GUIDANCE_LABEL, RULE_FIGURES, RULES, checkLocalRules } from '..'
 
 const empty = (): FloorPlan => ({ version: '1', units: 'm', walls: [], rooms: [], openings: [] })

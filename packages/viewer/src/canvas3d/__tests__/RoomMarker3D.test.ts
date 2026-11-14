@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SceneSlab } from '@ongrid/core/geometry'
+import type { SceneSlab } from '@ongrid/floorplan/geometry'
 import { markerGeometry } from '../RoomMarker3D'
 
 const slab: SceneSlab = {

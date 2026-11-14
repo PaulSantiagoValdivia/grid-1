@@ -1,8 +1,8 @@
 // 2D floor plan: walls as lines, rooms as polygons, dimensions
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
-import type { AreaDelta, Bounds, Dimension, DiffStatusMap, Vec2 } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import type { AreaDelta, Bounds, Dimension, DiffStatusMap, Vec2 } from '@ongrid/floorplan/geometry'
 import {
   boundsWithDimensions,
   boundsWithGhosts,
@@ -13,7 +13,7 @@ import {
   resolveFloor,
   traceWall,
   validateDoorSweeps
-} from '@ongrid/core/geometry'
+} from '@ongrid/floorplan/geometry'
 import type { PlaybackClock } from '../preview/playback'
 import type { PlanBuild } from '../preview/useBuildFrame'
 import { useBuildFrame } from '../preview/useBuildFrame'

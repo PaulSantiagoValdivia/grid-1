@@ -7,8 +7,8 @@
  * drawn", and a window that opens only in part needs a bigger frame than these figures.
  */
 
-import { indexPlan, type FloorPlan, type Opening } from '@ongrid/core/geometry'
-import { openingSides, roomOutlines } from '@ongrid/core/geometry/rules/graph'
+import { indexPlan, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
+import { openingSides, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { ESCAPE_TOP_LEVEL } from './figures'
 import { messages } from './messages'
 import type { AppliedFigure, RuleFinding } from './types'

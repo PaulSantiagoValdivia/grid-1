@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { planForFloor, type FloorPlan } from '@ongrid/core/geometry'
-import { floorGraph } from '@ongrid/core/geometry/rules/graph'
+import { planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { floorGraph } from '@ongrid/floorplan/geometry/rules/graph'
 import { checkLocalRules } from '..'
 import type { RuleFinding } from '..'
 import { door, edit, flat, twoFloorHouse, withOpening, withoutOpening } from './fixtures'
@@ -138,7 +138,7 @@ describe('what cannot be drawn', () => {
   it('does not throw on the plan in the repository, read raw, and joins its open-plan rooms', async () => {
     const { readFileSync } = await import('node:fs')
     // Read raw: its virtual wall v1 has no thickness or height, which the schema rejects.
-    const raw = JSON.parse(readFileSync(`${__dirname}/../../../../core/fixtures/floor-plan.json`, 'utf8')) as FloorPlan
+    const raw = JSON.parse(readFileSync(`${__dirname}/../../../../floorplan/fixtures/floor-plan.json`, 'utf8')) as FloorPlan
     expect(() => checkLocalRules(raw)).not.toThrow()
     const graph = floorGraph(planForFloor(raw, 'ground'))
     expect(graph.links).toContainEqual({ rooms: ['r1', 'r2'], via: 'v1' })

@@ -7,8 +7,8 @@
  * flipped. How thick each line is lives in the stylesheet.
  */
 
-import type { PlanOpening, Vec2 } from '@ongrid/core/geometry'
-import { doorSwing } from '@ongrid/core/geometry'
+import type { PlanOpening, Vec2 } from '@ongrid/floorplan/geometry'
+import { doorSwing } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from './doorHanding'
 
 type Line = readonly [Vec2, Vec2]

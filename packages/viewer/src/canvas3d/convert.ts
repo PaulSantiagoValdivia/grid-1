@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { Vec3, WallExposure } from '@ongrid/core/geometry'
+import type { Vec3, WallExposure } from '@ongrid/floorplan/geometry'
 import type { StoreyLook } from './building'
 
 /**

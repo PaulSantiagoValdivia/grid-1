@@ -5,7 +5,7 @@ figures themselves, each with where it was read and how far it has been checked.
 
 ## What the checks are
 
-`@ongrid/core` runs four checks on the drawing itself. They need no figure and cite no
+`@ongrid/floorplan` runs four checks on the drawing itself. They need no figure and cite no
 document: a way out of the ground floor, a door on every room, a route from every room to
 a way out, and doors that lead somewhere.
 

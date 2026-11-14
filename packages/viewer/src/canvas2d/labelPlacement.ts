@@ -9,7 +9,7 @@
  *
  * Pure: no DOM measuring, so it runs in tests and on every render without layout reads.
  */
-import type { Dimension, Vec2 } from '@ongrid/core/geometry'
+import type { Dimension, Vec2 } from '@ongrid/floorplan/geometry'
 
 export interface Box {
   readonly minX: number

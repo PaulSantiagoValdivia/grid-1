@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
-import { buildSteps } from '@ongrid/core/geometry'
+import { buildSteps } from '@ongrid/floorplan/geometry'
 import { createPlayback } from '../../preview/playback'
 import type { PlanBuild } from '../../preview/useBuildFrame'
 import { fakeScheduler } from '../../preview/__tests__/fakeScheduler'

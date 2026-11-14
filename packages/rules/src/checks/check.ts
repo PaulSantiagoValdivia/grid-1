@@ -7,8 +7,8 @@
  * network.
  */
 
-import { checkLocalRules as checkPlan, planFloors, planForFloor, type FloorPlan } from '@ongrid/core/geometry'
-import { drawable } from '@ongrid/core/geometry/rules/check'
+import { checkLocalRules as checkPlan, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { FIGURE_LIMITS, FIGURE_RULES, RULE_FIGURES, type FigureRuleId } from './catalogue'
 import { escapeCheck, hasEscapeFigures, type EscapeFigures } from './escape'
 import { resolveFigure, type FigureKey } from './figures'

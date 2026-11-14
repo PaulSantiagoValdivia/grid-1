@@ -2,7 +2,7 @@
  * A step's progress as both views read it: eased, and looked up by kind and id.
  */
 
-import type { StepKind } from '@ongrid/core/geometry'
+import type { StepKind } from '@ongrid/floorplan/geometry'
 import type { InFlight } from './playback'
 
 /** Slow in and out, so a part settles instead of stopping dead. */

@@ -6,7 +6,7 @@
  * nowhere else.
  */
 
-import type { Bounds, Vec2 } from '@ongrid/core/geometry'
+import type { Bounds, Vec2 } from '@ongrid/floorplan/geometry'
 
 /** From the model (Y up) to SVG (Y down). */
 export function toScreen(p: Vec2): Vec2 {

@@ -1,4 +1,4 @@
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import {
   SLAB_THICKNESS,
   buildScene,
@@ -7,7 +7,7 @@ import {
   planFloors,
   type BuildingElevations,
   type Scene3D
-} from '@ongrid/core/geometry'
+} from '@ongrid/floorplan/geometry'
 
 /**
  * The whole building in 3D, decided without Three:

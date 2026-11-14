@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import type { BuildStep, FloorPlan } from '@ongrid/core/geometry'
+import type { BuildStep, FloorPlan } from '@ongrid/floorplan/geometry'
 import type { InFlight } from '../../preview/playback'
 import { ease } from '../../preview/progress'
 import { applyFrame, openingOutline, pulseHeight, REST, slabOpacity, wallPose } from '../buildFrame3d'

@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import type { SceneSlab } from '@ongrid/core/geometry'
+import type { SceneSlab } from '@ongrid/floorplan/geometry'
 import { MODEL_TO_THREE } from './convert'
 
 /** How far above the tallest wall the marker floats, so it never fights the wall tops. */

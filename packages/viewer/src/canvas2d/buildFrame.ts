@@ -1,12 +1,12 @@
 /**
  * How the 2D view draws a part in flight.
  *
- * The geometry (what a half-traced wall covers) comes from `@ongrid/core/geometry`;
+ * The geometry (what a half-traced wall covers) comes from `@ongrid/floorplan/geometry`;
  * this only maps a step's progress to the cheap things the view changes per
  * animation frame: a clip, an offset, an opacity, a width.
  */
 
-import type { BuildStep, Dimension, PlanOpening, Vec2 } from '@ongrid/core/geometry'
+import type { BuildStep, Dimension, PlanOpening, Vec2 } from '@ongrid/floorplan/geometry'
 import type { InFlight } from '../preview/playback'
 import { progressOf } from '../preview/progress'
 

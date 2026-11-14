@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan } from '@ongrid/core/geometry'
-import { RULES as PLAN_RULES } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/geometry'
+import { RULES as PLAN_RULES } from '@ongrid/floorplan/geometry'
 import {
   GENERAL_GUIDANCE_LABEL,
   LOOKUP_NOTICE,

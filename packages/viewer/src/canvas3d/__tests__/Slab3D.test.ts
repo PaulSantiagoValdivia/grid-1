@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type * as THREE from 'three'
-import { SLAB_THICKNESS, type SceneSlab } from '@ongrid/core/geometry'
+import { SLAB_THICKNESS, type SceneSlab } from '@ongrid/floorplan/geometry'
 import { floorSlabGeometry, roofGeometry } from '../Slab3D'
 
 /**

@@ -1,4 +1,4 @@
-import type { Floor } from '@ongrid/core/types/floorplan'
+import type { Floor } from '@ongrid/floorplan/types/floorplan'
 
 /**
  * The floor rail's model: which rows it

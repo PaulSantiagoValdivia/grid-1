@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
-import type { Scene3D, SceneWall } from '@ongrid/core/geometry'
+import type { Scene3D, SceneWall } from '@ongrid/floorplan/geometry'
 import { toThree } from './convert'
 
 /**

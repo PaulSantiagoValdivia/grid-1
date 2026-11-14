@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { area, indexPlan, roomPolygon, type FloorPlan, type Room, type Wall } from '@ongrid/core/geometry'
-import type { RoomUse } from '@ongrid/core/types/floorplan'
+import { area, indexPlan, roomPolygon, type FloorPlan, type Room, type Wall } from '@ongrid/floorplan/geometry'
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { FIGURES, HABITABLE_USES, RULES, checkLocalRules } from '..'
 import { messages } from '../messages'
 import { edit, flat, twoFloorHouse } from './fixtures'

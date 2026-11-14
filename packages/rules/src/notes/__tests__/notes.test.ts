@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan, Opening } from '@ongrid/core/types/floorplan'
+import type { FloorPlan, Opening } from '@ongrid/floorplan/types/floorplan'
 import {
   GENERAL_GUIDANCE_LABEL,
   LOOKUP_NOTICE,

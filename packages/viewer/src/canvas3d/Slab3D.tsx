@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import { SLAB_THICKNESS, type SceneSlab } from '@ongrid/core/geometry'
+import { SLAB_THICKNESS, type SceneSlab } from '@ongrid/floorplan/geometry'
 import { MODEL_TO_THREE } from './convert'
 
 /**

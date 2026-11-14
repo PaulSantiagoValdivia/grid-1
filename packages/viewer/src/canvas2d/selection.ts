@@ -1,4 +1,4 @@
-import type { PlanDrawing } from '@ongrid/core/geometry'
+import type { PlanDrawing } from '@ongrid/floorplan/geometry'
 
 /**
  * The selection, as far as the drawing agrees it exists.

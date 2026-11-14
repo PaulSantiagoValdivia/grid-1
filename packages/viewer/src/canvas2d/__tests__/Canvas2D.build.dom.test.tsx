@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { act, cleanup, render } from '@testing-library/react'
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
-import { buildSteps } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { buildSteps } from '@ongrid/floorplan/geometry'
 import { createPlayback } from '../../preview/playback'
 import type { PlanBuild } from '../../preview/useBuildFrame'
 import { fakeScheduler } from '../../preview/__tests__/fakeScheduler'

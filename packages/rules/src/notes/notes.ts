@@ -7,12 +7,12 @@
  * parsing text. Pure.
  */
 
-import { GENERAL_GUIDANCE_LABEL, planFloors, type FindingCode as PlanFindingCode, type FloorPlan } from '@ongrid/core/geometry'
-import { planNotes as planCheckNotes, type NoteText, type PlanNote as PlanCheckNote } from '@ongrid/core/notes'
+import { GENERAL_GUIDANCE_LABEL, planFloors, type FindingCode as PlanFindingCode, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { planNotes as planCheckNotes, type NoteText, type PlanNote as PlanCheckNote } from '@ongrid/floorplan/notes'
 import type { VerificationStatus } from '../checks/figures'
 import type { AppliedFigure, FigureFindingCode, RuleFinding, RulesReport } from '../checks/types'
 
-export type { NoteText } from '@ongrid/core/notes'
+export type { NoteText } from '@ongrid/floorplan/notes'
 
 export interface PlanNote extends Omit<PlanCheckNote, 'tag'> {
   /** What the note is about: getting out, a bedroom's escape window, or a room's size. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan, Opening, Room, Wall } from '@ongrid/core/types/floorplan'
+import type { FloorPlan, Opening, Room, Wall } from '@ongrid/floorplan/types/floorplan'
 import {
   IDLE,
   matchViewWords,

@@ -3,7 +3,7 @@
  * ended while the assistant works on the next save.
  */
 
-import type { Vec2 } from '@ongrid/core/geometry'
+import type { Vec2 } from '@ongrid/floorplan/geometry'
 
 interface PulseState {
   /** The drawing has caught up with the latest save. */

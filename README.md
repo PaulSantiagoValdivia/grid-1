@@ -15,7 +15,7 @@ is published yet and there is no release to install.
 
 | Path | Package | Contents |
 |---|---|---|
-| `packages/core` | `@ongrid/core` | Plan schema, geometry, validation, plan checks and exporters |
+| `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
 | `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan |
 | `packages/cli` | `ongrid` | Building blocks for the `grid` and `ongrid` commands: the preview tool server, CAD program lookup and export helpers. The commands themselves are not built yet |

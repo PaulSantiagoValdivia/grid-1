@@ -1,4 +1,4 @@
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 
 export const EMPTY: FloorPlan = { version: '1', units: 'm', walls: [], rooms: [], openings: [] }
 

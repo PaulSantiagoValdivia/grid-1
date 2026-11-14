@@ -15,11 +15,11 @@ import type {
   RuleCitation,
   RuleFinding as PlanRuleFinding,
   RulesReport as PlanRulesReport
-} from '@ongrid/core/geometry'
+} from '@ongrid/floorplan/geometry'
 import type { FigureKey, FigureUnit, VerificationStatus } from './figures'
 
-export { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from '@ongrid/core/geometry'
-export type { Rule, RuleCitation, RuleSource, RouteStep } from '@ongrid/core/geometry'
+export { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from '@ongrid/floorplan/geometry'
+export type { Rule, RuleCitation, RuleSource, RouteStep } from '@ongrid/floorplan/geometry'
 
 /**
  * Added to a report that applied at least one looked-up figure. The report keeps its

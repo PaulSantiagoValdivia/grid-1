@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { checkLocalRules } from '..'
 import { edit, flat, twoFloorHouse, withoutOpening } from './fixtures'
 
@@ -58,7 +58,7 @@ describe('the checks and the notes', () => {
   const offending = (source: string): boolean =>
     FORBIDDEN.test(source) ||
     [...source.matchAll(/from '([^']+)'/g)].some(
-      ([, path]) => !path!.startsWith('./') && !path!.startsWith('../') && !path!.startsWith('@ongrid/core/')
+      ([, path]) => !path!.startsWith('./') && !path!.startsWith('../') && !path!.startsWith('@ongrid/floorplan/')
     )
 
   it('import only from this package and the core', () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { DoorHinge, DoorSide, PlanOpening } from '@ongrid/core/geometry'
-import { buildFloorPlan } from '@ongrid/core/geometry'
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
+import type { DoorHinge, DoorSide, PlanOpening } from '@ongrid/floorplan/geometry'
+import { buildFloorPlan } from '@ongrid/floorplan/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { doorSymbolOf } from '../doorSymbol'
 
 /** One wall at `angle` radians from +X, 5 m long, 0.2 m thick, with a 0.9 m door 1 m from its start. */

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { Canvas2D } from '../Canvas2D'
 
 /**

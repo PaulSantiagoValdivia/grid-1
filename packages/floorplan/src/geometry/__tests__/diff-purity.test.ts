@@ -81,7 +81,7 @@ describe('the plan diff’s purity', () => {
     const inside = "import type { FloorPlan } from '../../types/floorplan'\nimport { indexPlan } from '../plan'\n"
     expect(impurities(scratch, clean + inside)).toEqual([])
     expect(impurities(scratch, clean + "import { x } from '../../export/planExport'\n").join()).toContain('from outside')
-    expect(impurities(scratch, clean + "import { x } from '@ongrid/core/geometry'\n").join()).toContain('imports @ongrid/core')
+    expect(impurities(scratch, clean + "import { x } from '@ongrid/floorplan/geometry'\n").join()).toContain('imports @ongrid/floorplan')
   })
 
   it.each([

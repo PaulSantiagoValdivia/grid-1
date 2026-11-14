@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { BuildStep } from '@ongrid/core/geometry'
+import type { BuildStep } from '@ongrid/floorplan/geometry'
 import type { FrameScheduler } from '../playback'
 import { createPlayback } from '../playback'
 

@@ -1,5 +1,5 @@
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
-import { floorOf, planFloors } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { floorOf, planFloors } from '@ongrid/floorplan/geometry'
 
 /**
  * The preview follows the assistant's work.

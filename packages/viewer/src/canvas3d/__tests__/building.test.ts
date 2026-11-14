@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Floor, FloorPlan, Room, Wall } from '@ongrid/core/types/floorplan'
-import { SLAB_THICKNESS, floorElevations, planBounds, planForFloor, type Scene3D } from '@ongrid/core/geometry'
+import type { Floor, FloorPlan, Room, Wall } from '@ongrid/floorplan/types/floorplan'
+import { SLAB_THICKNESS, floorElevations, planBounds, planForFloor, type Scene3D } from '@ongrid/floorplan/geometry'
 import { buildingFrame, buildingLayout, createSceneMemo, type StoreyLayout } from '../building'
 
 /**

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan } from '@ongrid/core/geometry'
-import { buildSteps, planAfter } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/geometry'
+import { buildSteps, planAfter } from '@ongrid/floorplan/geometry'
 import type { FrameScheduler } from '../playback'
 import { createPlayback } from '../playback'
 import type { PlanBuild } from '../useBuildFrame'

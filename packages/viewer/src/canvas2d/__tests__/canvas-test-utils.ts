@@ -1,4 +1,4 @@
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 
 /**
  * Shared set-up for the Canvas2D jsdom tests.

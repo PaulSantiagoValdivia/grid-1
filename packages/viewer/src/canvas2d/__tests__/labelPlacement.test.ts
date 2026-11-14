@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildFloorPlan, roomDimensions } from '@ongrid/core/geometry'
-import type { Dimension, PlanRoom } from '@ongrid/core/geometry'
-import type { FloorPlan } from '@ongrid/core/types/floorplan'
+import { buildFloorPlan, roomDimensions } from '@ongrid/floorplan/geometry'
+import type { Dimension, PlanRoom } from '@ongrid/floorplan/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { dimensionTextBox, overlaps, placeDimensionLabel, roomLabelBox } from '../labelPlacement'
 
 // About 70 px per metre: the "normal zoom" the issue measured (0.33 m ≈ 20-25 px).

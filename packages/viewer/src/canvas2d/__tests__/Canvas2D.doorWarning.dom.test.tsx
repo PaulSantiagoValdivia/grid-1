@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { validateDoorSweeps } from '@ongrid/core/geometry'
+import { validateDoorSweeps } from '@ongrid/floorplan/geometry'
 import { Canvas2D } from '../Canvas2D'
 import { edit } from './fixtures'
 

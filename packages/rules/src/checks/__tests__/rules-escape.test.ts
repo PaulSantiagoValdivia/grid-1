@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan, Opening, Room, Wall } from '@ongrid/core/geometry'
+import type { FloorPlan, Opening, Room, Wall } from '@ongrid/floorplan/geometry'
 import { ESCAPE_TOP_LEVEL, FIGURES, RULES, checkLocalRules } from '..'
 import { messages } from '../messages'
 

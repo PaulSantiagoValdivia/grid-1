@@ -6,8 +6,8 @@
  * were read in. The figures themselves, with their full provenance, are in `figures.ts`.
  */
 
-import { RULES as PLAN_RULES } from '@ongrid/core/geometry'
-import type { RoomUse } from '@ongrid/core/types/floorplan'
+import { RULES as PLAN_RULES } from '@ongrid/floorplan/geometry'
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { ESCAPE_TOP_LEVEL, FIGURES, US_MODEL_CODES, type FigureKey, type SourceCitation } from './figures'
 import type { Rule, RuleCitation } from './types'
 

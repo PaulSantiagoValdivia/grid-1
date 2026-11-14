@@ -1,4 +1,4 @@
-import type { PlanOpening, PlanRoom, PlanWall } from '@ongrid/core/geometry'
+import type { PlanOpening, PlanRoom, PlanWall } from '@ongrid/floorplan/geometry'
 import { pathOf } from './viewport'
 
 /**

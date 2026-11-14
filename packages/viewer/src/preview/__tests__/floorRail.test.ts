@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Floor } from '@ongrid/core/types/floorplan'
+import type { Floor } from '@ongrid/floorplan/types/floorplan'
 import {
   RAIL_SIZE,
   TYPE_RESET_MS,

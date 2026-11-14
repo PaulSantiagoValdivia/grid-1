@@ -11,7 +11,7 @@ Notes for agents and people changing this repository.
 
 ## Layout
 
-- `packages/core`: the plan schema, geometry, validation and exporters. It stays pure: no
+- `packages/floorplan`: the plan schema, geometry, validation and exporters. It stays pure: no
   React, no Three.js, no DOM and no network.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
@@ -43,7 +43,7 @@ Run the type check and the tests before calling a change done.
 
 ## Rules and standards
 
-The checks in `packages/core` are checks on the drawing and cite no document. The checks in
+The checks in `packages/floorplan` are checks on the drawing and cite no document. The checks in
 `packages/rules` apply figures from building codes. Keep what is stored here to facts and our
 own words.
 

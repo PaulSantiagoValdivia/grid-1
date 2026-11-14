@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
-import type { FloorPlan } from '@ongrid/core/geometry'
+import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { Canvas2D } from '../Canvas2D'
 import type { SharedViewport } from '../viewport'
 import { installResizeObserver, mixedPlan } from './canvas-test-utils'
