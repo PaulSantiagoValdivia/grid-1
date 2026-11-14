@@ -1,0 +1,17 @@
+{
+  "name": "@ongrid/rules",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./store": "./src/store/store.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ongrid/core": "*",
+    "zod": "^3.23.8"
+  }
+}
