@@ -1,0 +1,54 @@
+/* Colours of the plan, light and dark. The 2D and 3D views read these. */
+:root {
+  --plan-paper: #ffffff;
+  --plan-room: #f2efe7;
+  --plan-wall: #232320;
+  --plan-wall-exterior: #121210;
+  --plan-virtual: #b3afa2;
+  --plan-note: #c2410c;
+  --plan-grid: #e6e2d6;
+  --plan-grid-section: #cfc9b8;
+  --plan-window: #dce9f2;
+  --plan-label: #232320;
+  --plan-label-soft: #75726a;
+  --plan-dimension: #6f6c63;
+  --plan-dimension-soft: #a9a598;
+  --plan-dimension-text: #4a483f;
+  --plan-dimension-soft-text: #75726a;
+  --plan-selected: #2f6f78;
+  --plan-selected-soft: #dfecec;
+  --plan-warning: #b4531a;
+  --plan-wall-exterior-3d: #e6e1d7;
+  --plan-wall-interior-3d: #f4f1eb;
+  --plan-wall-detached-3d: #9f5138;
+  --plan-floor-3d: #fbfaf7;
+  --plan-background-3d: #f1eee8;
+  --plan-muted-wash-3d: 0.5;
+}
+
+.dark {
+  --plan-paper: #15150f;
+  --plan-room: #23201a;
+  --plan-wall: #ddd8cc;
+  --plan-wall-exterior: #f3f1ec;
+  --plan-virtual: #635a4d;
+  --plan-note: #fb923c;
+  --plan-grid: #3d3a2e;
+  --plan-grid-section: #57533f;
+  --plan-window: #22323d;
+  --plan-label: #ddd8cc;
+  --plan-label-soft: #8a8175;
+  --plan-dimension: #a9a598;
+  --plan-dimension-soft: #635a4d;
+  --plan-dimension-text: #c9c4b6;
+  --plan-dimension-soft-text: #8a8175;
+  --plan-selected: #6fb3bd;
+  --plan-selected-soft: #1d3a3f;
+  --plan-warning: #f2a774;
+  --plan-wall-exterior-3d: #cbc6bb;
+  --plan-wall-interior-3d: #e6e2da;
+  --plan-wall-detached-3d: #b3654a;
+  --plan-floor-3d: #b9ae95;
+  --plan-background-3d: #15150f;
+  --plan-muted-wash-3d: 0;
+}

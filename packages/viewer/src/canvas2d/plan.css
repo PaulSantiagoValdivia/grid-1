@@ -1,0 +1,227 @@
+/**
+ * The plan's finish on the 2D canvas: default drafting styles, NOT the final finish.
+ *
+ * The canvas itself (size, paper, cursors, focus and drop outlines) is styled with
+ * Tailwind in Canvas2D.tsx; this sheet only dresses what is drawn inside it. Elements
+ * carry stable data attributes (data-part, data-type, data-exposure) and hang off the
+ * svg's plain `canvas` class. Every color is a --plan-* token (plan-tokens.css, light and dark).
+ *
+ * Unlayered on purpose, as the CSS Module it replaces was: the review's and the hover
+ * tint's sheets (planDiff.css, extraChanges.css) win over these by specificity.
+ *
+ * Drafting conventions — line weights, door and window symbols, label
+ * typography — belong to the design side.
+ */
+
+.canvas [data-part='room'] {
+  fill: var(--plan-room, #f2efe7);
+  stroke: none;
+}
+
+.canvas [data-part='wall'] {
+  fill: var(--plan-wall, #232320);
+  stroke: none;
+}
+
+/* A wall facing the outside reads heavier, as on a construction drawing. */
+.canvas [data-part='wall'][data-exposure='exterior'] {
+  fill: var(--plan-wall-exterior, #121210);
+}
+
+/* The divider with no substance, between rooms that open into each other.
+   With non-scaling-stroke the width and the dashes are read in screen pixels,
+   not in the meters the viewBox is measured in — written as meters they come
+   out at a hundredth of a pixel and the line never shows up. */
+.canvas [data-part='virtual'] {
+  fill: none;
+  stroke: var(--plan-virtual, #b3afa2);
+  stroke-width: 1.5;
+  stroke-dasharray: 7 5;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='opening'] {
+  fill: var(--plan-paper, #ffffff);
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* A doorless opening is an open gap: no lines along the wall faces, which on
+   a door are what say "something closes here". */
+.canvas [data-part='opening'][data-type='opening'] {
+  stroke: none;
+}
+
+.canvas [data-part='opening'][data-type='window'] {
+  fill: var(--plan-window, #dce9f2);
+}
+
+/* ── Door symbol ──────────────────────────────────────────────────────
+   Only for a door whose hinge and swing are known; any other door keeps the
+   gap above. The leaf reads as the door (medium), the arc as its travel
+   (thin), all in the wall ink so it follows the theme. The gap drops its
+   outline: along the wall faces it would read as a closed door beside the
+   open leaf, so the jambs are drawn on their own. */
+
+.canvas [data-part='opening'][data-swing='true'] {
+  stroke: none;
+}
+
+.canvas [data-part='jamb'] {
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='door-leaf'] {
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 1.5;
+  stroke-linecap: square;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='door-arc'] {
+  fill: none;
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+
+/* A door whose swing runs into something: a small orange dot on the gap.
+   Hovering it outlines what the door hits and says why. */
+.canvas [data-part='door-warning'] {
+  cursor: help;
+}
+
+.canvas [data-part='door-warning-dot'] {
+  fill: var(--plan-warning, #b4531a);
+  stroke: var(--plan-paper, #ffffff);
+  stroke-width: 1.5;
+}
+
+.canvas [data-part='door-warning-text'] {
+  fill: var(--plan-warning, #b4531a);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  paint-order: stroke;
+  stroke: var(--plan-paper, #ffffff);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* `[data-part]` matches the gap rule above in weight, so being later wins over its `stroke: none`. */
+.canvas [data-part][data-hit='true'] {
+  stroke: var(--plan-warning, #b4531a);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='label'] {
+  fill: var(--plan-label, #232320);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+.canvas [data-part='area'] {
+  fill: var(--plan-label-soft, #75726a);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+.canvas [data-selectable='true'] {
+  cursor: pointer;
+}
+
+.canvas [data-selected='true'] {
+  fill: var(--plan-selected, #2f6f78);
+}
+
+.canvas [data-part='room'][data-selected='true'] {
+  fill: var(--plan-selected-soft, #dfecec);
+}
+
+/* ── Dimensions ─────────────────────────────────────────────────────────────
+   Defaults only. Real drafting conventions — tick marks instead of plain
+   lines, weights per layer, text rotated along the dimension — belong here
+   too, and replace all of this. */
+
+.canvas [data-part='dimension-line'] {
+  stroke: var(--plan-dimension, #6f6c63);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='extension'] {
+  stroke: var(--plan-dimension, #6f6c63);
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='dimension-text'] {
+  fill: var(--plan-dimension-text, #4a483f);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Room dimensions are guidance inside the room, so they read lighter than the
+   overall ones, which are the drawing's headline measurements. */
+.canvas [data-kind='room'] [data-part='dimension-line'] {
+  stroke: var(--plan-dimension-soft, #a9a598);
+  stroke-dasharray: 3 3;
+}
+
+.canvas [data-kind='room'] [data-part='dimension-text'] {
+  fill: var(--plan-dimension-soft-text, #75726a);
+  font-size: 10px;
+}
+
+/* ── Reference image ────────────────────────────────────────────────────────
+   The backdrop to trace over. Its opacity is driven from the component, and the
+   drop outline is a Tailwind class on the canvas, so neither is set here. */
+
+.canvas [data-part='reference'] {
+  pointer-events: none;
+}
+
+/* With a reference loaded the plan stops being a filled drawing and becomes an
+   outline, so the image underneath stays visible. Rooms painted solid would
+   hide the very thing being traced — which is the whole point of the backdrop. */
+.canvas[data-has-reference='true'] [data-part='room'] {
+  fill: none;
+}
+
+.canvas[data-has-reference='true'] [data-part='opening'] {
+  fill: var(--plan-paper, #ffffff);
+  fill-opacity: 0.55;
+}
+
+.canvas[data-has-reference='true'] [data-part='room'][data-selected='true'] {
+  fill: var(--plan-selected-soft, #dfecec);
+  fill-opacity: 0.45;
+}
+
+/* The "still working" pulse during a live run (animation: --animate-grid-pulse).
+   Scales about its own centre, in screen pixels like the labels. */
+.canvas [data-part='pulse'] {
+  fill: var(--plan-wall-exterior, #121210);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas [data-part='pulse'] {
+    display: none;
+  }
+}
