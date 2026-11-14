@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# Secrets: never commit
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+
+# Editor
+.vscode/settings.json
+.idea/
