@@ -2,7 +2,7 @@ import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSy
 import { homedir, tmpdir } from 'os'
 import { join, parse, resolve } from 'path'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
-import { NAME_MAX_BYTES, openProject, pathProblem, PathRefused, type Project } from '../projectFiles'
+import { NAME_MAX_BYTES, openProject, pathProblem, PathRefused, startProjectFolder, type Project } from '../projectFiles'
 import { LINK_CASES_SKIPPED_ON_WINDOWS, T5_TRACE_IMAGE_PATHS, T4_WINDOWS_NAMES } from './attackCases'
 
 const windows = process.platform === 'win32'
@@ -269,5 +269,43 @@ describe('the project folder', () => {
     expect(() => openProject('plan.json', root)).toThrow(/a file, not a folder/)
     expect(() => openProject('https://example.invalid/', root)).toThrow(/an address \(https:\)/)
     expect(() => openProject('\\\\server\\share', root)).toThrow(/a network path/)
+  })
+})
+
+describe('making new files and the project folder (CMD-6)', () => {
+  it('createFile writes a new file and never replaces one', () => {
+    const file = join(root, 'plan.json')
+    expect(project.createFile(file, 'new')).toBe(join(real, 'plan.json'))
+    expect(readFileSync(file, 'utf8')).toBe('new')
+    expect(() => project.createFile(file, 'again')).toThrow(expect.objectContaining({ code: 'EEXIST' }))
+    expect(readFileSync(file, 'utf8')).toBe('new')
+    expect(readdirSync(root)).toEqual(['plan.json'])
+  })
+
+  it('createFile refuses a path outside the project, through a link too', () => {
+    const outside = tempDir('grid-outside-')
+    linkFolder(outside, join(root, 'out'))
+    expectRefused(() => project.createFile(join(root, 'out', 'plan.json'), 'x'), join(root, 'out', 'plan.json'), 'symbolic link')
+    expectRefused(() => project.createFile('../plan.json', 'x'), '../plan.json')
+    expect(readdirSync(outside)).toEqual([])
+  })
+
+  it('exists tells a missing name from a file and a folder', () => {
+    mkdirSync(join(root, 'exports'))
+    writeFileSync(join(root, 'plan.json'), '{}')
+    expect(project.exists(join(root, 'exports'))).toBe(true)
+    expect(project.exists(join(root, 'plan.json'))).toBe(true)
+    expect(project.exists(join(root, 'grid.json'))).toBe(false)
+  })
+
+  it('startProjectFolder makes the last folder only, and opens one that is there', () => {
+    const started = startProjectFolder('demo', root)
+    expect(started.made).toBe(true)
+    expect(started.project.folder).toBe(join(real, 'demo'))
+    expect(startProjectFolder('demo', root).made).toBe(false)
+    expect(startProjectFolder(undefined, join(root, 'demo')).project.folder).toBe(join(real, 'demo'))
+    expect(() => startProjectFolder(join('missing', 'demo'), root)).toThrow(PathRefused)
+    expect(() => startProjectFolder('CON', root)).toThrow(PathRefused)
+    expect(readdirSync(root)).toEqual(['demo'])
   })
 })

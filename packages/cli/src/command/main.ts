@@ -1,5 +1,5 @@
 /**
- * The `grid` command, which `ongrid` runs too: `check`, `draw`, `export` and `serve`.
+ * The `grid` command, which `ongrid` runs too: `init`, `check`, `draw`, `export` and `serve`.
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -7,6 +7,8 @@
  *
  * Every file a command reads or writes is inside the project folder: the folder named with
  * `--project`, or else the folder it runs in. Any other path is refused (`fs/projectFiles.ts`).
+ * A project folder that holds `grid.json`, as `grid init` makes it, is a Grid project: there
+ * `check`, `draw` and `export` read its `plan.json` when no plan file is named (`init.ts`).
  *
  * Exit codes: 0 when the command did its work, 1 when the plan or a path was refused or a file
  * could not be written, 2 when the command line was refused. Every refusal is one line on
@@ -20,6 +22,7 @@ import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
+import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
 import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
 
@@ -41,18 +44,23 @@ class WriteFailed extends Error {}
 const HELP_FLAG: OptionSpecs = { '--help': { takesValue: false, help: 'Show this help.' } }
 
 const COMMANDS = {
+  init: {
+    usage: 'grid init [<folder>]',
+    summary: `Starts a project folder: ${PROJECT_FILE}, a starter ${PROJECT_PLAN} and exports/. Makes the folder when it isn't there.`,
+    options: INIT_OPTIONS,
+  },
   check: {
-    usage: 'grid check <plan.json> [--floor <id>] [--country <code>] [--json] [--project <folder>]',
+    usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--json] [--project <folder>]',
     summary: 'Checks a plan and prints the report: general guidance, not your local rules.',
     options: CHECK_OPTIONS,
   },
   draw: {
-    usage: 'grid draw <plan.json> [--png] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    usage: 'grid draw [<plan.json>] [--png] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
     summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png.',
     options: DRAW_OPTIONS,
   },
   export: {
-    usage: 'grid export <plan.json> --format dxf|ifc|glb|obj [--floor <id>] [--out <file>] [--project <folder>]',
+    usage: 'grid export [<plan.json>] --format dxf|ifc|glb|obj [--floor <id>] [--out <file>] [--project <folder>]',
     summary: 'Writes the plan as a file for another program, into exports/ beside the plan unless --out names one.',
     options: EXPORT_OPTIONS,
   },
@@ -82,6 +90,11 @@ const OVERVIEW = [
   'A path outside it, also through a symbolic link, is refused, and so are web addresses,',
   'network paths and names Windows keeps for devices, such as CON or NUL. A relative path',
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
+  '',
+  `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
+  `check, draw and export read ${PROJECT_PLAN} when no plan file is named, and export writes into`,
+  'exports/. grid init never replaces a file: it refuses a folder that already holds',
+  `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
 ].join('\n')
 
@@ -136,7 +149,23 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     return EXIT_OK
   }
 
-  const planFile = onePlanFile(name, parsed.positionals)
+  if (name === 'init') {
+    const folder = initFolder(parsed.positionals)
+    io.stdout(initText(initProject(folder, io.cwd), folder))
+    return EXIT_OK
+  }
+
+  // A plan file named on the command line, or else the plan of the Grid project it runs in.
+  let planFile: string
+  if (parsed.positionals.length > 0) {
+    planFile = onePlanFile(name, parsed.positionals)
+  } else {
+    const found = projectPlanFile(openProject(projectOption, io.cwd))
+    if (found === null) {
+      throw new UsageError(`${name} needs a plan file: grid ${name} <plan.json>, or run it in a project folder grid init made, which holds ${PROJECT_FILE}.`)
+    }
+    planFile = found
+  }
 
   if (name === 'check') {
     const json = parsed.values.has('--json')
@@ -217,7 +246,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof WriteFailed || error instanceof ExportWriteFailed) {
+    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

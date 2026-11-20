@@ -13,15 +13,20 @@ export const EXPORTS_DIR = 'exports'
 
 const IGNORE_LINES = new Set(['exports', 'exports/', '/exports', '/exports/'])
 
-function ensureIgnored(project: Project, folder: string): void {
+/**
+ * Adds `exports/` to the `.gitignore` in `folder`, making the file when it isn't there.
+ * Returns whether it added the line.
+ */
+export function ensureExportsIgnored(project: Project, folder: string): boolean {
   const file = path.join(folder, '.gitignore')
   // A linked .gitignore, symbolic or hard, could be a file anywhere. The export still goes
   // ahead; only the ignore line is left out.
-  if (project.isLinked(file)) return
+  if (project.isLinked(file)) return false
   const text = project.readTextIfThere(file) ?? ''
-  if (text.split(/\r?\n/).some((line) => IGNORE_LINES.has(line.trim()))) return
+  if (text.split(/\r?\n/).some((line) => IGNORE_LINES.has(line.trim()))) return false
   const separator = text === '' || text.endsWith('\n') ? '' : '\n'
   project.appendText(file, `${separator}${EXPORTS_DIR}/\n`)
+  return true
 }
 
 /**
@@ -38,6 +43,6 @@ export function writeProjectExport(project: Project, folder: string, fileName: s
   if (path.relative(real, dir) !== EXPORTS_DIR) {
     throw new Error(`the exports folder is a link to ${JSON.stringify(project.relative(dir))}: exports go into a plain exports folder beside the plan`)
   }
-  ensureIgnored(project, real)
+  ensureExportsIgnored(project, real)
   return project.writeFile(path.join(dir, fileName), data)
 }

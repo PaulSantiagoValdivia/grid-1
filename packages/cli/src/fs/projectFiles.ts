@@ -17,7 +17,7 @@
  * (a file about to be written doesn't exist yet), and the real path must be inside the real
  * project folder. What is read or written is that real path, so what was checked is what is
  * opened. Grid never creates folders on the way, except the one `exports/` folder it names
- * itself.
+ * itself and the one project folder `grid init` is asked to make.
  *
  * Nothing else in `packages/cli` may import `fs`: a test fails if it does.
  */
@@ -336,6 +336,33 @@ export class Project {
     return real
   }
 
+  /** Whether something is there: a file, a folder, or a link that leads inside the project. */
+  exists(given: string): boolean {
+    return this.locate(given).missing === 0
+  }
+
+  /**
+   * Writes a new file, and never replaces one: errors with `EEXIST` as `code` when the name is
+   * taken, even by a file made a moment ago. Its folder must exist. Readable by its owner only.
+   * Returns the real path written.
+   */
+  createFile(given: string, data: string | Uint8Array): string {
+    const { real, missing } = this.locate(given)
+    if (missing > 1) throw errno('ENOENT', `the folder of ${quoted(given)} does not exist`)
+    if (missing === 0) throw errno('EEXIST', `${quoted(given)} is already there`)
+    const fd = fs.openSync(real, 'wx', 0o600)
+    try {
+      fs.writeFileSync(fd, data)
+      fs.fsyncSync(fd)
+    } catch (error) {
+      fs.closeSync(fd)
+      fs.rmSync(real, { force: true })
+      throw error
+    }
+    fs.closeSync(fd)
+    return real
+  }
+
   /** Makes one folder when it isn't there; its parent must exist. Returns its real path. */
   makeFolder(given: string): string {
     const { real, missing } = this.locate(given)
@@ -394,6 +421,34 @@ export function openProject(given: string | undefined, cwd: string, relativeTo: 
     throw new PathRefused(`${named}, which is the home folder and can't be the project folder: Grid would read and write anywhere in it. ${fix}`)
   }
   return new Project({ real: folder, named: wanted }, { real: here, named: path.resolve(cwd) }, relativeTo)
+}
+
+/**
+ * The project folder `grid init` starts: `given`, resolved against `cwd`, made when it isn't
+ * there, or else `cwd`. Only the last folder is made: the folder above it must exist. Refused
+ * as `openProject` refuses, and when the new folder's name is one `pathProblem` refuses.
+ * `made` says whether the folder was made now.
+ */
+export function startProjectFolder(given: string | undefined, cwd: string): { readonly project: Project; readonly made: boolean } {
+  if (given === undefined) return { project: openProject(undefined, cwd), made: false }
+  const fix = 'Name the folder to start the project in.'
+  const problem = addressProblem(given) ?? pathProblem(path.basename(separated(given)))
+  if (problem) throw new PathRefused(`${quoted(given)} is refused as the project folder: ${problem}. ${fix}`)
+  const wanted = path.resolve(cwd, separated(given))
+  let made = false
+  try {
+    fs.mkdirSync(wanted)
+    made = true
+  } catch (error) {
+    const code = codeOf(error)
+    if (code === 'ENOENT' || code === 'ENOTDIR') {
+      throw new PathRefused(`${quoted(given)} can't be made: the folder above it does not exist. Grid makes only the last folder. ${fix}`)
+    }
+    if (code === 'EACCES' || code === 'EPERM') throw new PathRefused(`${quoted(given)} can't be made: permission denied. ${fix}`)
+    // Already there: openProject says whether it can be the project folder.
+    if (code !== 'EEXIST') throw error
+  }
+  return { project: openProject(given, cwd), made }
 }
 
 /** Open with O_EXCL beside the target, flush, then rename over it. */
