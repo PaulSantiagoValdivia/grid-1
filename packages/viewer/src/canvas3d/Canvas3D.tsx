@@ -1,5 +1,5 @@
 // 3D model: extruded walls, real openings, orbit camera
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { Grid, OrbitControls } from '@react-three/drei'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
@@ -10,12 +10,12 @@ import { isStillClick } from '../preview/click'
 import { useReducedMotion } from '../preview/useReducedMotion'
 import { usePlanColors } from './usePlanColors'
 import { buildingFrame, buildingLayout } from './building'
+import { openingCamera } from './camera'
 import { moveRig } from './pivot'
-import { Storey3D, type StoreyPointer } from './Storey3D'
+import { BuildingScene, GROUND_GRID } from './BuildingScene'
+import type { StoreyPointer } from './Storey3D'
 
 type BuildClock = PlaybackClock<PlanBuild>
-
-const NO_BUILDS: ReadonlyMap<string, BuildClock> = new Map()
 
 interface Canvas3DProps {
   floorPlan: FloorPlan
@@ -39,7 +39,7 @@ const LABEL_OFFSET = 14
 export function Canvas3D({
   floorPlan,
   focus,
-  builds = NO_BUILDS,
+  builds,
   highlightRoom = null,
   onFocus
 }: Canvas3DProps): JSX.Element {
@@ -95,58 +95,37 @@ export function Canvas3D({
   // A storey that is no longer drawn can't stay hovered.
   const shownHover = layout.storeys.some((s) => s.floorId === hovered && s.look !== 'hidden') ? hovered : null
   const hoveredName = layout.storeys.find((s) => s.floorId === shownHover)?.name ?? null
-  const onRoof = useCallback((floorId: string) => layout.roof?.floorIds.includes(floorId) ?? false, [layout.roof])
 
-  const { shadow } = frame
   const [cx, , cz] = frame.target
 
   return (
     <div ref={container} className="relative size-full overflow-hidden" style={{ cursor: shownHover ? 'pointer' : undefined }}>
-      <Canvas shadows camera={{ position: initial.position, fov: 45 }}>
-        <color attach="background" args={[colors.background]} />
-        <hemisphereLight args={['#fdfbf5', '#6b6553', 2.2]} />
-        <directionalLight
-          position={shadow.position}
-          intensity={1.3}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-bias={-0.0005}
-          shadow-camera-left={-shadow.extent}
-          shadow-camera-right={shadow.extent}
-          shadow-camera-top={shadow.extent}
-          shadow-camera-bottom={-shadow.extent}
-          shadow-camera-near={shadow.near}
-          shadow-camera-far={shadow.far}
+      <Canvas shadows camera={openingCamera(initial)}>
+        <BuildingScene
+          floorPlan={floorPlan}
+          layout={layout}
+          frame={frame}
+          colors={colors}
+          builds={builds}
+          highlightRoom={highlightRoom}
+          hovered={shownHover}
+          pointer={pointer}
         />
 
         {/* At the ground, where it reads as ground; basements go below it. */}
         <Grid
-          position={[cx, -0.01, cz]}
-          args={[40, 40]}
-          cellSize={1}
+          position={[cx, GROUND_GRID.y, cz]}
+          args={GROUND_GRID.args}
+          cellSize={GROUND_GRID.cellSize}
+          cellThickness={GROUND_GRID.cellThickness}
           cellColor={colors.grid}
-          sectionSize={5}
+          sectionSize={GROUND_GRID.sectionSize}
+          sectionThickness={GROUND_GRID.sectionThickness}
           sectionColor={colors.gridSection}
-          fadeDistance={45}
+          fadeDistance={GROUND_GRID.fadeDistance}
+          fadeStrength={GROUND_GRID.fadeStrength}
           infiniteGrid
         />
-
-        {layout.storeys.map((storey) =>
-          storey.look === 'hidden' ? null : (
-            <Storey3D
-              key={storey.floorId}
-              floorPlan={floorPlan}
-              storey={storey}
-              roofAt={onRoof(storey.floorId) && layout.roof ? layout.roof.bottom - storey.base : null}
-              build={builds.get(storey.floorId) ?? null}
-              colors={colors}
-              highlightRoom={highlightRoom}
-              hovered={storey.floorId === shownHover}
-              castShadow={!layout.single}
-              pointer={pointer}
-            />
-          )
-        )}
 
         {/* Orbiting lets the build keep rising, like scrolling while code is written. */}
         <OrbitControls target={initial.target} makeDefault />
