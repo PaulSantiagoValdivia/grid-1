@@ -185,8 +185,10 @@ function validateOpening(
     ok = false
   }
 
+  // A dividing line stands no height (0 unless it says otherwise), so a gap in it cannot be
+  // too tall for it.
   const head = opening.sill + opening.height
-  if (head > wall.height + 1e-9) {
+  if (!wall.virtual && head > wall.height + 1e-9) {
     issues.push(
       issue(
         'opening',

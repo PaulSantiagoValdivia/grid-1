@@ -136,11 +136,56 @@ function writeHeader(w: DxfWriter, drawing: PlanDrawing): void {
   w.pair(0, 'ENDSEC')
 }
 
-function writeLayerTable(w: DxfWriter): void {
+/**
+ * The line types the layers use. A dividing line (a virtual wall) is a line on the floor,
+ * not a wall, and a drawing shows it dashed: 0.2 m dashes with 0.1 m gaps, in metres like
+ * everything else. R12 needs every line type a layer names to be declared here, and
+ * CONTINUOUS with it once the table exists.
+ */
+const LINE_TYPES = [
+  { name: 'CONTINUOUS', description: 'Solid line', pattern: [] },
+  { name: 'DASHED', description: 'Dashed __ __ __', pattern: [0.2, -0.1] }
+] as const
+
+/** Which line type each layer draws with. */
+const LAYER_LINE_TYPE: Readonly<Record<DxfLayer, (typeof LINE_TYPES)[number]['name']>> = {
+  'GRID-WALLS-EXTERIOR': 'CONTINUOUS',
+  'GRID-WALLS-INTERIOR': 'CONTINUOUS',
+  'GRID-WALLS-VIRTUAL': 'DASHED',
+  'GRID-ROOMS': 'CONTINUOUS',
+  'GRID-OPENINGS': 'CONTINUOUS',
+  'GRID-LABELS': 'CONTINUOUS',
+  'GRID-DOOR-SWINGS': 'CONTINUOUS'
+}
+
+function writeLineTypeTable(w: DxfWriter): void {
+  w.pair(0, 'TABLE')
+  w.pair(2, 'LTYPE')
+  w.pair(70, LINE_TYPES.length)
+
+  for (const type of LINE_TYPES) {
+    w.pair(0, 'LTYPE')
+    w.pair(2, type.name)
+    w.pair(70, 0)
+    w.pair(3, type.description)
+    // 65 is the alignment code, "A", the only one R12 has.
+    w.pair(72, 65)
+    w.pair(73, type.pattern.length)
+    w.pair(40, num(type.pattern.reduce((sum, length) => sum + Math.abs(length), 0)))
+    // A positive length is a dash, a negative one a gap.
+    for (const length of type.pattern) w.pair(49, num(length))
+  }
+
+  w.pair(0, 'ENDTAB')
+}
+
+function writeTables(w: DxfWriter): void {
   const names = Object.values(DXF_LAYERS)
 
   w.pair(0, 'SECTION')
   w.pair(2, 'TABLES')
+  // Line types before layers: a layer names its line type, and readers resolve it in order.
+  writeLineTypeTable(w)
   w.pair(0, 'TABLE')
   w.pair(2, 'LAYER')
   w.pair(70, names.length)
@@ -153,7 +198,7 @@ function writeLayerTable(w: DxfWriter): void {
     // does not pick colours or line weights (see the rendering seam); the code
     // is written only because the format requires one.
     w.pair(62, 7)
-    w.pair(6, 'CONTINUOUS')
+    w.pair(6, LAYER_LINE_TYPE[name])
   }
 
   w.pair(0, 'ENDTAB')
@@ -288,7 +333,7 @@ export function toDxf(drawing: PlanDrawing): string {
   const w = new DxfWriter()
 
   writeHeader(w, drawing)
-  writeLayerTable(w)
+  writeTables(w)
   writeEntities(w, drawing)
 
   w.pair(0, 'EOF')

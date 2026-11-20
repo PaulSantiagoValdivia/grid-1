@@ -164,7 +164,9 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
         from: pointAlong(axis, span.from),
         to: pointAlong(axis, span.to),
         normal: axis.normal,
-        thickness: wall.thickness,
+        // A dividing line has no width, so neither has a gap in it: it must not paint the
+        // written thickness across the floor.
+        thickness: wall.virtual ? 0 : wall.thickness,
         width: opening.width,
         // Only what the plan states: an undecided door has no key, so nothing downstream guesses.
         ...(opening.hinge !== undefined && { hinge: opening.hinge }),

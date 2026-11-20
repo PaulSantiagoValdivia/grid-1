@@ -104,9 +104,21 @@ export interface SceneSlab {
   readonly polygon: readonly Vec2[]
 }
 
+/**
+ * A dividing line (a virtual wall): no substance to raise, so the scene draws it on the
+ * floor, between the slabs of the rooms either side, which meet on it.
+ */
+export interface SceneDivider {
+  readonly wallId: string
+  /** The wall's axis on the model's XY plane, at z = 0. */
+  readonly from: Vec2
+  readonly to: Vec2
+}
+
 export interface Scene3D {
   readonly walls: readonly SceneWall[]
   readonly slabs: readonly SceneSlab[]
+  readonly dividers: readonly SceneDivider[]
   /** Plan envelope, for framing the camera. */
   readonly bounds: Bounds
   /** Height of the tallest wall. */
@@ -204,6 +216,7 @@ export function buildScene(plan: FloorPlan): Scene3D {
   const { issues, broken } = validatePlan(plan, index)
 
   const walls: SceneWall[] = []
+  const dividers: SceneDivider[] = []
   const extent: Vec2[] = []
   let height = 0
 
@@ -212,6 +225,10 @@ export function buildScene(plan: FloorPlan): Scene3D {
 
     const axis = wallAxis(wall)
     extent.push(axis.start, axis.end)
+    if (wall.virtual) {
+      dividers.push({ wallId: wall.id, from: axis.start, to: axis.end })
+      continue
+    }
 
     const usable = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
     const elevation = wallElevation(wall, usable)
@@ -236,5 +253,5 @@ export function buildScene(plan: FloorPlan): Scene3D {
     extent.push(...slab.polygon)
   }
 
-  return { walls, slabs, bounds: computeBounds(extent), height, issues }
+  return { walls, slabs, dividers, bounds: computeBounds(extent), height, issues }
 }

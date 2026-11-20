@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../../plan'
 import { buildFloorPlan } from '../../floorplan'
 import { DXF_LAYERS, toDxf } from '../dxf'
+import { parseFloorPlan } from '../../../types/floorplan'
 
 /**
  * DXF export.
@@ -96,7 +97,8 @@ describe('layers', () => {
     const dxf = dxfOf(samplePlan())
     const all = pairs(dxf)
 
-    const tableEnd = all.findIndex((p) => p.code === 0 && p.value === 'ENDTAB')
+    // The last table is the layer table; the line types come before it.
+    const tableEnd = all.findLastIndex((p) => p.code === 0 && p.value === 'ENDTAB')
     const declared = new Set(
       all.slice(0, tableEnd).filter((p) => p.code === 2).map((p) => p.value)
     )
@@ -458,5 +460,77 @@ describe('door swings (door-swing-export)', () => {
     const hingeAt = hinge === 'start' ? 1.0 : 1.9
     expect(num(arc, 10)).toBeCloseTo(hingeAt * Math.cos(theta), 6)
     expect(num(arc, 20)).toBeCloseTo(hingeAt * Math.sin(theta), 6)
+  })
+})
+
+/** ARE-2: an 8 × 4 room split at x = 4 by a dividing line that states no thickness or height. */
+function openPlan(): FloorPlan {
+  const solid = (id: string, start: [number, number], end: [number, number]) => ({ id, start, end, thickness: 0.2, kind: 'exterior' })
+  return parseFloorPlan({
+    walls: [
+      solid('s1', [0, 0], [4, 0]),
+      solid('s2', [4, 0], [8, 0]),
+      solid('e', [8, 0], [8, 4]),
+      solid('n2', [8, 4], [4, 4]),
+      solid('n1', [4, 4], [0, 4]),
+      solid('w', [0, 4], [0, 0]),
+      { id: 'line', start: [4, 0], end: [4, 4], virtual: true }
+    ],
+    rooms: [
+      { id: 'kitchen', name: 'Kitchen', boundary: ['s1', 'line', 'n1', 'w'] },
+      { id: 'living', name: 'Living', boundary: ['s2', 'e', 'n2', 'line'] }
+    ]
+  })
+}
+
+describe('a dividing line (ARE-2)', () => {
+  const dxf = dxfOf(openPlan())
+  const all = pairs(dxf)
+  const tables = all.slice(
+    all.findIndex((p) => p.code === 2 && p.value === 'TABLES'),
+    all.findIndex((p, i) => i > 0 && p.code === 0 && p.value === 'ENDSEC' && all.slice(0, i).some((q) => q.value === 'TABLES'))
+  )
+
+  it('is one dashed line on its own layer, over the two room outlines that meet on it', () => {
+    const entities = entitiesOf(dxf)
+    const line = entities.filter((e) => e.layer === DXF_LAYERS.wallVirtual)
+    const rooms = entities.filter((e) => e.layer === DXF_LAYERS.rooms)
+    const vertices = (start: number): string[] => {
+      const out: string[] = []
+      for (let i = start + 1; i < entities.length && entities[i]!.type === 'VERTEX'; i++) {
+        out.push(`${num(entities[i]!, 10)},${num(entities[i]!, 20)}`)
+      }
+      return out
+    }
+    expect({
+      line: line.map((e) => ({ type: e.type, from: [num(e, 10), num(e, 20)], to: [num(e, 11), num(e, 21)] })),
+      rooms: rooms.filter((e) => e.type === 'POLYLINE').map((e) => vertices(entities.indexOf(e))),
+      tables: tables.map((p) => `${p.code} ${p.value}`)
+    }).toMatchSnapshot()
+  })
+
+  it('declares the dashed line type before the layer that uses it', () => {
+    const ltype = tables.findIndex((p) => p.code === 2 && p.value === 'DASHED')
+    const layer = tables.findIndex((p) => p.code === 2 && p.value === DXF_LAYERS.wallVirtual)
+    expect(ltype).toBeGreaterThan(-1)
+    expect(layer).toBeGreaterThan(ltype)
+    expect(tables[layer + 3]).toEqual({ code: 6, value: 'DASHED' })
+  })
+
+  it('declares every line type a layer names', () => {
+    const declared = new Set<string>()
+    const named = new Set<string>()
+    for (let i = 0; i < tables.length; i++) {
+      if (tables[i]!.code === 0 && tables[i]!.value === 'LTYPE') declared.add(tables[i + 1]!.value)
+      if (tables[i]!.code === 6) named.add(tables[i]!.value)
+    }
+    expect([...named].sort()).toEqual(['CONTINUOUS', 'DASHED'])
+    for (const type of named) expect(declared).toContain(type)
+  })
+
+  it('keeps solid walls and their outlines on continuous layers', () => {
+    const layerType = (name: string): string | undefined => tables[tables.findIndex((p) => p.code === 2 && p.value === name) + 3]?.value
+    expect(layerType(DXF_LAYERS.wallExterior)).toBe('CONTINUOUS')
+    expect(layerType(DXF_LAYERS.rooms)).toBe('CONTINUOUS')
   })
 })
