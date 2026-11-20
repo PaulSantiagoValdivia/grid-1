@@ -5,13 +5,12 @@
  * The SVG comes from `planToSvg` in `@ongrid/viewer`: the same elements the app's 2D view
  * draws, with the colours, line widths and font written in. The PNG is that SVG drawn by
  * Skia through `@napi-rs/canvas` (MIT), which ships a prebuilt binary for Linux, macOS and
- * Windows and needs nothing else installed.
+ * Windows and needs nothing else installed. It is loaded on the first PNG, not before.
  *
  * Text is drawn in the first font of `PICTURE_FONT` the machine has, so a PNG's letters can
  * differ slightly between machines. Where labels go does not: it is worked out from a
  * fixed estimate of text width, never from the font.
  */
-import { createCanvas, loadImage } from '@napi-rs/canvas'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { PictureOptions } from '@ongrid/viewer/src/picture'
 import { pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
@@ -61,6 +60,9 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   const width = Math.round(picture.width * scale)
   const height = Math.round(picture.height * scale)
   if (width < 1 || height < 1) throw new RangeError(`A scale of ${scale} leaves no pixels to draw`)
+
+  // Loaded only for a PNG: it is a native module, and an SVG needs none of it.
+  const { createCanvas, loadImage } = await import('@napi-rs/canvas')
 
   // The SVG is written at the PNG's own size, so Skia draws it at full resolution rather than
   // enlarging a smaller image.

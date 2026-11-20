@@ -10,6 +10,7 @@
   "dependencies": {
     "@napi-rs/canvas": "1.1.0",
     "@ongrid/floorplan": "*",
+    "@ongrid/rules": "*",
     "@ongrid/viewer": "*"
   },
   "devDependencies": {

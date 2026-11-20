@@ -21,7 +21,3 @@ export function atomicWriteFile(path: string, data: string | Uint8Array): void {
     throw error
   }
 }
-
-export function atomicWriteJson(path: string, data: unknown): void {
-  atomicWriteFile(path, JSON.stringify(data, null, 2))
-}

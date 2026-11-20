@@ -1,0 +1,270 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {
+      "id": "south",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        10,
+        0
+      ],
+      "thickness": 0.25,
+      "height": 2.6,
+      "kind": "exterior"
+    },
+    {
+      "id": "east",
+      "start": [
+        10,
+        0
+      ],
+      "end": [
+        10,
+        7.5
+      ],
+      "thickness": 0.25,
+      "height": 2.6,
+      "kind": "exterior"
+    },
+    {
+      "id": "north",
+      "start": [
+        10,
+        7.5
+      ],
+      "end": [
+        0,
+        7.5
+      ],
+      "thickness": 0.25,
+      "height": 2.6,
+      "kind": "exterior"
+    },
+    {
+      "id": "west",
+      "start": [
+        0,
+        7.5
+      ],
+      "end": [
+        0,
+        0
+      ],
+      "thickness": 0.25,
+      "height": 2.6,
+      "kind": "exterior"
+    },
+    {
+      "id": "spine",
+      "start": [
+        4,
+        0
+      ],
+      "end": [
+        4,
+        7.5
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior"
+    },
+    {
+      "id": "bedrooms",
+      "start": [
+        0,
+        3.75
+      ],
+      "end": [
+        4,
+        3.75
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior"
+    },
+    {
+      "id": "living",
+      "start": [
+        4,
+        2.6
+      ],
+      "end": [
+        10,
+        2.6
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior"
+    },
+    {
+      "id": "bath-wall",
+      "start": [
+        6.5,
+        0
+      ],
+      "end": [
+        6.5,
+        2.6
+      ],
+      "thickness": 0.1,
+      "height": 2.6,
+      "kind": "interior"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "bed2",
+      "name": "Bedroom 2",
+      "boundary": [
+        "south",
+        "spine",
+        "bedrooms",
+        "west"
+      ]
+    },
+    {
+      "id": "bed1",
+      "name": "Bedroom 1",
+      "boundary": [
+        "bedrooms",
+        "spine",
+        "north",
+        "west"
+      ]
+    },
+    {
+      "id": "bath",
+      "name": "Bathroom",
+      "boundary": [
+        "south",
+        "bath-wall",
+        "living",
+        "spine"
+      ]
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "boundary": [
+        "south",
+        "east",
+        "living",
+        "bath-wall"
+      ]
+    },
+    {
+      "id": "lounge",
+      "name": "Living room",
+      "boundary": [
+        "living",
+        "east",
+        "north",
+        "spine"
+      ]
+    }
+  ],
+  "openings": [
+    {
+      "id": "front",
+      "wall": "north",
+      "type": "door",
+      "offset": 1,
+      "width": 0.95,
+      "height": 2.1,
+      "sill": 0,
+      "hinge": "start",
+      "swing": "left"
+    },
+    {
+      "id": "bed2-door",
+      "wall": "spine",
+      "type": "door",
+      "offset": 2.85,
+      "width": 0.8,
+      "height": 2.1,
+      "sill": 0,
+      "hinge": "start",
+      "swing": "left"
+    },
+    {
+      "id": "bed1-door",
+      "wall": "spine",
+      "type": "door",
+      "offset": 4.6,
+      "width": 0.8,
+      "height": 2.1,
+      "sill": 0,
+      "hinge": "end",
+      "swing": "left"
+    },
+    {
+      "id": "bath-door",
+      "wall": "living",
+      "type": "door",
+      "offset": 1,
+      "width": 0.75,
+      "height": 2.1,
+      "sill": 0,
+      "hinge": "start",
+      "swing": "right"
+    },
+    {
+      "id": "kitchen-gap",
+      "wall": "living",
+      "type": "opening",
+      "offset": 3.3,
+      "width": 2,
+      "height": 2.1,
+      "sill": 0
+    },
+    {
+      "id": "bed2-window",
+      "wall": "south",
+      "type": "window",
+      "offset": 1.2,
+      "width": 1.4,
+      "height": 1.2,
+      "sill": 0.9
+    },
+    {
+      "id": "kitchen-window",
+      "wall": "south",
+      "type": "window",
+      "offset": 7.6,
+      "width": 1.4,
+      "height": 1.2,
+      "sill": 0.9
+    },
+    {
+      "id": "lounge-window",
+      "wall": "north",
+      "type": "window",
+      "offset": 3,
+      "width": 1.8,
+      "height": 1.2,
+      "sill": 0.9
+    },
+    {
+      "id": "bed1-window",
+      "wall": "north",
+      "type": "window",
+      "offset": 7.3,
+      "width": 1.4,
+      "height": 1.2,
+      "sill": 0.9
+    },
+    {
+      "id": "east-window",
+      "wall": "east",
+      "type": "window",
+      "offset": 4,
+      "width": 1.6,
+      "height": 1.2,
+      "sill": 0.9
+    }
+  ]
+}
