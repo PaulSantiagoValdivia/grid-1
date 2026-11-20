@@ -21,6 +21,14 @@ export interface OptionSpec {
 
 export type OptionSpecs = Readonly<Record<`--${string}`, OptionSpec>>
 
+/** Every command that reads or writes a file takes it. See `fs/projectFiles.ts`. */
+export const PROJECT_OPTION: OptionSpecs = {
+  '--project': {
+    takesValue: true,
+    help: 'The project folder. Grid reads and writes files only inside it. The folder Grid runs in when left out.',
+  },
+}
+
 export interface ParsedArgs {
   readonly positionals: readonly string[]
   /** A switch's value is `true`; any other option's value is its text. */

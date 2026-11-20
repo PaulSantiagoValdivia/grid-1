@@ -4,13 +4,14 @@
  */
 import { drawPlan } from '../draw/drawPlan'
 import { floorOption, type LoadedPlan } from './plan'
-import { UsageError, type OptionSpecs } from './options'
+import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
-  '--out': { takesValue: true, help: 'The file to write, ending in .svg (or .png with --png). Standard output when left out.' },
+  '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out.' },
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8. 1 when left out.' },
+  ...PROJECT_OPTION,
 }
 
 export const MAX_SCALE = 8

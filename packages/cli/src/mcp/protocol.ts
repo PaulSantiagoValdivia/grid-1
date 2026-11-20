@@ -1,8 +1,10 @@
 /**
- * The few MCP messages Grid's preview tool needs, by hand.
+ * The few MCP messages Grid's tool server needs, by hand.
  *
  * This runs inside the tool server an agent's host starts, so it imports nothing:
- * no SDK, no files, no network. A call is only echoed back.
+ * no SDK, no files, no network. A preview call is only echoed back. Tools that read or write
+ * files are handed in by the caller (`serveTools.ts`), and reach the disk only through the
+ * project's resolver.
  */
 
 export const PREVIEW_SERVER_NAME = 'grid'
@@ -88,6 +90,14 @@ function echo(args: PreviewArgs): string {
 
 type Id = string | number | null
 
+/** A tool the server offers beside the preview, handed in by whoever starts the server. */
+export interface ServerTool {
+  /** The tool as `tools/list` shows it: its name, description, input schema and hints. */
+  readonly definition: { readonly name: string } & Record<string, unknown>
+  /** Runs one call. Every refusal comes back as text with `isError`, never as a throw. */
+  call(args: unknown): { readonly text: string; readonly isError?: boolean }
+}
+
 function reply(id: Id, result: unknown): string {
   return JSON.stringify({ jsonrpc: '2.0', id, result })
 }
@@ -101,7 +111,7 @@ function toolText(text: string, isError = false): Record<string, unknown> {
 }
 
 /** One JSON-RPC line in, one line out, or null when nothing should be sent. */
-export function handleLine(line: string): string | null {
+export function handleLine(line: string, tools: readonly ServerTool[] = []): string | null {
   if (!line.trim()) return null
   let message: Record<string, unknown>
   try {
@@ -135,8 +145,19 @@ export function handleLine(line: string): string | null {
     case 'ping':
       return reply(id, {})
     case 'tools/list':
-      return reply(id, { tools: [TOOL] })
+      return reply(id, { tools: [TOOL, ...tools.map((tool) => tool.definition)] })
     case 'tools/call': {
+      const other = tools.find((tool) => tool.definition.name === params['name'])
+      if (other) {
+        let answer: { readonly text: string; readonly isError?: boolean }
+        try {
+          answer = other.call(params['arguments'])
+        } catch (error) {
+          const why = String((error as Error)?.message ?? error).replace(/\s+/g, ' ').trim()
+          answer = { text: `Something went wrong inside Grid: ${why}`, isError: true }
+        }
+        return reply(id, toolText(answer.text, answer.isError === true))
+      }
       if (params['name'] !== PREVIEW_TOOL_NAME) return fail(id, -32602, 'Unknown tool')
       const args = parsePreviewArgs(params['arguments'])
       if (!args) {

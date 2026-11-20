@@ -1,49 +1,43 @@
 /**
- * Writes an export into `<project>/exports/`, where "Open in" keeps the copy it hands to a CAD
- * program. The folder is ignored by version history: exports are derived files, and opening
- * one in AutoCAD must not turn into a version.
+ * Writes an export into the `exports/` folder beside the plan, where "Open in" keeps the copy
+ * it hands to a CAD program. The folder is ignored by version history: exports are derived
+ * files, and opening one in AutoCAD must not turn into a version.
+ *
+ * Every path goes through the project's resolver (`fs/projectFiles.ts`), so nothing lands
+ * outside the project folder.
  */
-import { lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs'
-import { basename, join, relative } from 'path'
-import { atomicWriteFile } from '../fs/atomicWrite'
+import path from 'path'
+import { pathProblem, type Project } from '../fs/projectFiles'
 
 export const EXPORTS_DIR = 'exports'
 
 const IGNORE_LINES = new Set(['exports', 'exports/', '/exports', '/exports/'])
 
-function ensureIgnored(projectPath: string): void {
-  const file = join(projectPath, '.gitignore')
-  // A linked .gitignore could point outside the project, where Grid must never write. The
-  // export still goes ahead; only the ignore line is left out.
-  try {
-    if (lstatSync(file).isSymbolicLink()) return
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
-  let text = ''
-  try {
-    text = readFileSync(file, 'utf8')
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-  }
+function ensureIgnored(project: Project, folder: string): void {
+  const file = path.join(folder, '.gitignore')
+  // A linked .gitignore, symbolic or hard, could be a file anywhere. The export still goes
+  // ahead; only the ignore line is left out.
+  if (project.isLinked(file)) return
+  const text = project.readTextIfThere(file) ?? ''
   if (text.split(/\r?\n/).some((line) => IGNORE_LINES.has(line.trim()))) return
   const separator = text === '' || text.endsWith('\n') ? '' : '\n'
-  writeFileSync(file, `${text}${separator}${EXPORTS_DIR}/\n`, 'utf8')
+  project.appendText(file, `${separator}${EXPORTS_DIR}/\n`)
 }
 
-/** Replaces any earlier copy with the same name. Returns the file's path. */
-export function writeProjectExport(projectPath: string, fileName: string, data: string | Uint8Array): string {
-  if (!fileName || basename(fileName) !== fileName || fileName.startsWith('.')) {
-    throw new Error(`Not a plain file name: ${fileName}`)
+/**
+ * Writes `fileName` into `exports/` in `folder`, a folder of the project, replacing any
+ * earlier copy with the same name. Returns the real path written.
+ */
+export function writeProjectExport(project: Project, folder: string, fileName: string, data: string | Uint8Array): string {
+  if (!fileName || path.basename(fileName) !== fileName || fileName.startsWith('.') || pathProblem(fileName) !== null) {
+    throw new Error(`Not a plain file name: ${JSON.stringify(fileName)}`)
   }
-  const dir = join(projectPath, EXPORTS_DIR)
-  mkdirSync(dir, { recursive: true })
-  // A linked `exports` folder could point anywhere; only the project's own folder will do.
-  if (relative(realpathSync.native(projectPath), realpathSync.native(dir)) !== EXPORTS_DIR) {
-    throw new Error('The exports folder points outside the project')
+  const real = project.resolve(folder)
+  const dir = project.makeFolder(path.join(real, EXPORTS_DIR))
+  // Even a link that stays inside the project is refused: exports go in the plan's own folder.
+  if (path.relative(real, dir) !== EXPORTS_DIR) {
+    throw new Error(`the exports folder is a link to ${JSON.stringify(project.relative(dir))}: exports go into a plain exports folder beside the plan`)
   }
-  ensureIgnored(projectPath)
-  const target = join(dir, fileName)
-  atomicWriteFile(target, data)
-  return target
+  ensureIgnored(project, real)
+  return project.writeFile(path.join(dir, fileName), data)
 }

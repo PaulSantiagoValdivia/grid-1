@@ -3,17 +3,22 @@
  * through the core's exporters.
  *
  * Written into the `exports/` folder beside the plan, as the app's "Open in" does, or to
- * `--out`. DXF, OBJ and GLB hold one floor; IFC holds the whole building.
+ * `--out`. DXF, OBJ and GLB hold one floor; IFC holds the whole building. The tool server's
+ * `grid_export` runs the same code, without `--out`.
  */
-import { basename, dirname, extname } from 'path'
-import { EXPORT_FORMATS, exportPlan, isExportFormat, type ExportFormat, type PlanExport } from '@ongrid/floorplan/export'
-import { floorOption, type LoadedPlan } from './plan'
-import { UsageError, type OptionSpecs } from './options'
+import path from 'path'
+import { planFloors, resolveFloor } from '@ongrid/floorplan/geometry'
+import { EXPORT_FORMATS, exportFileName, exportPlan, isExportFormat, type ExportFormat, type PlanExport } from '@ongrid/floorplan/export'
+import { writeProjectExport } from '../export/projectExports'
+import { PathRefused, type Project } from '../fs/projectFiles'
+import { floorOption, loadPlan, type LoadedPlan } from './plan'
+import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
 export const EXPORT_OPTIONS: OptionSpecs = {
   '--format': { takesValue: true, help: `The file format: ${EXPORT_FORMATS.join(', ')}.` },
   '--floor': { takesValue: true, help: 'DXF, OBJ and GLB: the floor to export (a floor id from the plan). The lowest floor when left out.' },
-  '--out': { takesValue: true, help: 'The file to write, ending in the format\'s extension. exports/ beside the plan when left out.' },
+  '--out': { takesValue: true, help: 'The file to write, inside the project, ending in the format\'s extension. exports/ beside the plan when left out.' },
+  ...PROJECT_OPTION,
 }
 
 export interface ExportRequest {
@@ -33,25 +38,132 @@ export function checkExportRequest(request: ExportRequest): ExportFormat {
   if (format === 'ifc' && request.floor !== undefined) {
     throw new UsageError('--floor does not apply to IFC, which holds every floor: leave --floor out.')
   }
-  if (request.out !== undefined && extname(request.out).toLowerCase() !== `.${format}`) {
+  if (request.out !== undefined && path.extname(request.out).toLowerCase() !== `.${format}`) {
     throw new UsageError(`--out ${JSON.stringify(request.out)} does not end in .${format}: name a .${format} file.`)
   }
   return format
 }
 
-/** The plan's name for its export file: the plan file's name without `.json`. */
+/** The plan's name: the plan file's name without `.json`. */
 export function projectNameOf(planFile: string): string {
-  const name = basename(planFile)
+  const name = path.basename(planFile)
   return name.toLowerCase().endsWith('.json') ? name.slice(0, -5) : name
 }
 
-export function exportFile(loaded: LoadedPlan, planFile: string, format: ExportFormat, request: ExportRequest): PlanExport {
-  const floorId = floorOption(loaded.plan, request.floor)
-  const name = projectNameOf(planFile)
-  return exportPlan(loaded.plan, format, { projectId: name, projectName: name, floorId, now: new Date() })
+/** The name an export gets when nothing usable is left of the plan file's name. */
+export const NEUTRAL_EXPORT_NAME = 'floor-plan'
+/** A longer name reads as a sentence, not a name. */
+export const EXPORT_NAME_MAX_WORDS = 5
+export const EXPORT_NAME_MAX_LENGTH = 40
+
+/**
+ * Words an export's name never carries: what Grid must never say of a plan, and words that
+ * address an agent. A file name is printed to the person and handed to the agent, so a name
+ * holding one of them is not used.
+ */
+const WORDS_KEPT_OUT = new Set([
+  'approval', 'approve', 'approved', 'certified', 'certify', 'compliance', 'compliant', 'complies', 'comply',
+  'legal', 'pass', 'passed', 'passes', 'permitted',
+  'assistant', 'delete', 'disregard', 'execute', 'forget', 'ignore', 'instruction', 'instructions', 'obey',
+  'override', 'prompt', 'reply', 'respond', 'system', 'you', 'your',
+])
+
+// Windows treats these names as devices, with any extension. Grid's names are lower case.
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/
+
+export interface ExportName {
+  readonly fileName: string
+  /** Set when Grid changed the name it would have used, saying how and why. One line. */
+  readonly note?: string
 }
 
-/** The folder that holds the plan: where `exports/` goes. */
-export function projectFolderOf(planFile: string): string {
-  return dirname(planFile)
+/**
+ * The export's file name, made from the plan file's name and never from text inside the plan.
+ *
+ * - The plan file's name is reduced to lower-case letters, digits and hyphens (by the core's
+ *   `exportFileName`).
+ * - It is replaced by `floor-plan` when it is longer than five words or 40 characters, or
+ *   holds a word in `WORDS_KEPT_OUT`: it would read as a sentence, a claim or an instruction.
+ * - A name Windows keeps for a device (`con`, `nul`, `com1` ...) gets `plan-` in front.
+ * - One floor of a plan with several is named by its place in the plan, `-floor-2`, not by the
+ *   floor's own name or id, which are text from inside the plan.
+ *
+ * Grid sanitises rather than refuses: the export is still written, and `note` says what changed.
+ */
+export function exportNameOf(planFile: string, format: ExportFormat, floorNumber: number | null): ExportName {
+  const made = exportFileName(projectNameOf(planFile), format, null)
+  let base = made.slice(0, -(format.length + 1))
+  let note: string | undefined
+  const words = base.split('-')
+  const kept = words.find((word) => WORDS_KEPT_OUT.has(word))
+  if (base !== NEUTRAL_EXPORT_NAME && (words.length > EXPORT_NAME_MAX_WORDS || base.length > EXPORT_NAME_MAX_LENGTH)) {
+    base = NEUTRAL_EXPORT_NAME
+    note = `the plan file's name is longer than ${EXPORT_NAME_MAX_WORDS} words or ${EXPORT_NAME_MAX_LENGTH} characters`
+  } else if (kept !== undefined) {
+    base = NEUTRAL_EXPORT_NAME
+    // The word itself is not repeated: the note would then say it.
+    note = "the plan file's name reads as a claim about the plan or as an instruction"
+  }
+  if (floorNumber !== null) base = `${base}-floor-${floorNumber}`
+  if (WINDOWS_DEVICE.test(base)) {
+    note = `${base} is a name Windows keeps for a device`
+    base = `plan-${base}`
+  }
+  const fileName = `${base}.${format}`
+  return note === undefined ? { fileName } : { fileName, note: `Named the export ${fileName}: ${note}.` }
+}
+
+/** The floor's place in the plan, from 1, when an export holds one floor of several. */
+function floorNumberOf(loaded: LoadedPlan, format: ExportFormat, floorId: string | undefined): number | null {
+  if (format === 'ifc') return null
+  const floors = planFloors(loaded.plan)
+  if (floors.length <= 1) return null
+  const id = resolveFloor(loaded.plan, floorId)
+  return floors.findIndex((floor) => floor.id === id) + 1
+}
+
+export interface MadeExport extends PlanExport {
+  readonly name: ExportName
+}
+
+/** `planFile` is the path as given: a plan reached through a link is named after the link. */
+export function exportFile(loaded: LoadedPlan, planFile: string, format: ExportFormat, request: ExportRequest): MadeExport {
+  const floorId = floorOption(loaded.plan, request.floor)
+  const project = projectNameOf(planFile)
+  const made = exportPlan(loaded.plan, format, { projectId: project, projectName: project, floorId, now: new Date() })
+  return { ...made, name: exportNameOf(planFile, format, floorNumberOf(loaded, format, floorId)) }
+}
+
+/** Why an export could not be written. The message is one line. */
+export class ExportWriteFailed extends Error {
+  override readonly name = 'ExportWriteFailed'
+}
+
+export interface ExportDone {
+  readonly loaded: LoadedPlan
+  /** The real path written. */
+  readonly written: string
+  readonly note?: string
+}
+
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Reads the plan, makes the export and writes it into `exports/` beside the plan, all inside
+ * the project. The command and the tool server both call this; `--out` is the command's own.
+ */
+export function exportIntoProject(project: Project, planFile: string, format: ExportFormat, request: Omit<ExportRequest, 'out'>): ExportDone {
+  const loaded = loadPlan(project, planFile)
+  const made = exportFile(loaded, planFile, format, request)
+  let written: string
+  try {
+    // Beside the plan as it was named, as before: the folder that holds the name given.
+    written = writeProjectExport(project, path.dirname(planFile), made.name.fileName, made.data)
+  } catch (error) {
+    if (error instanceof PathRefused) throw error
+    throw new ExportWriteFailed(`Can't write the export beside ${planFile}: ${oneLine((error as Error).message)}`)
+  }
+  return made.name.note === undefined ? { loaded, written } : { loaded, written, note: made.name.note }
 }

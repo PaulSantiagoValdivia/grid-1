@@ -9,7 +9,7 @@ import { floorOf, type FloorPlan, type Issue } from '@ongrid/floorplan/geometry'
 import { checkLocalRules, GENERAL_GUIDANCE_LABEL, type RulesReport } from '@ongrid/rules'
 import { floorOption } from './plan'
 import type { LoadedPlan } from './plan'
-import { UsageError, type OptionSpecs } from './options'
+import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
 export const CHECK_OPTIONS: OptionSpecs = {
   '--floor': { takesValue: true, help: 'Only show what was found on this floor (a floor id from the plan).' },
@@ -18,6 +18,7 @@ export const CHECK_OPTIONS: OptionSpecs = {
     help: 'Where the plan will be built, as a two-letter code such as US or ES.',
   },
   '--json': { takesValue: false, help: 'Print the report as JSON.' },
+  ...PROJECT_OPTION,
 }
 
 export interface CheckRequest {

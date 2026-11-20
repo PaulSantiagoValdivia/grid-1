@@ -320,7 +320,8 @@ describe('grid serve', () => {
     })
     const reply = JSON.parse(replies.trim()) as { id: number; result: { tools: Array<{ name: string }> } }
     expect(reply.id).toBe(1)
-    expect(reply.result.tools.map((tool) => tool.name)).toEqual(['show_in_preview'])
+    // CMD-15 added grid_export, the first tool that takes a path.
+    expect(reply.result.tools.map((tool) => tool.name)).toEqual(['show_in_preview', 'grid_export'])
   }, 20_000)
 })
 

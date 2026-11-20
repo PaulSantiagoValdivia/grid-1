@@ -5,20 +5,22 @@
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
  * an agent's host talks to, from the same file.
  *
- * Exit codes: 0 when the command did its work, 1 when the plan was refused or a file could not
- * be written, 2 when the command line was refused. Every refusal is one line on standard
- * error, with its cause first.
+ * Every file a command reads or writes is inside the project folder: the folder named with
+ * `--project`, or else the folder it runs in. Any other path is refused (`fs/projectFiles.ts`).
+ *
+ * Exit codes: 0 when the command did its work, 1 when the plan or a path was refused or a file
+ * could not be written, 2 when the command line was refused. Every refusal is one line on
+ * standard error, with its cause first.
  */
-import { isAbsolute, relative } from 'path'
 import { planFloors } from '@ongrid/floorplan/geometry'
 import { version } from '../../package.json'
-import { writeProjectExport } from '../export/projectExports'
-import { atomicWriteFile } from '../fs/atomicWrite'
+import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { startToolServer } from '../mcp/serve'
+import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile } from './draw'
-import { checkExportRequest, EXPORT_OPTIONS, exportFile, projectFolderOf } from './export'
-import { helpText, onePlanFile, parseOptions, textOf, UsageError, type OptionSpecs } from './options'
+import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
+import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
 import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
 
 export const EXIT_OK = 0
@@ -40,24 +42,24 @@ const HELP_FLAG: OptionSpecs = { '--help': { takesValue: false, help: 'Show this
 
 const COMMANDS = {
   check: {
-    usage: 'grid check <plan.json> [--floor <id>] [--country <code>] [--json]',
+    usage: 'grid check <plan.json> [--floor <id>] [--country <code>] [--json] [--project <folder>]',
     summary: 'Checks a plan and prints the report: general guidance, not your local rules.',
     options: CHECK_OPTIONS,
   },
   draw: {
-    usage: 'grid draw <plan.json> [--png] [--out <file>] [--floor <id>] [--scale <n>]',
+    usage: 'grid draw <plan.json> [--png] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
     summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png.',
     options: DRAW_OPTIONS,
   },
   export: {
-    usage: 'grid export <plan.json> --format dxf|ifc|glb|obj [--floor <id>] [--out <file>]',
+    usage: 'grid export <plan.json> --format dxf|ifc|glb|obj [--floor <id>] [--out <file>] [--project <folder>]',
     summary: 'Writes the plan as a file for another program, into exports/ beside the plan unless --out names one.',
     options: EXPORT_OPTIONS,
   },
   serve: {
-    usage: 'grid serve',
+    usage: 'grid serve [--project <folder>]',
     summary: "Starts Grid's tool server on standard input and output, for an agent's host to talk to.",
-    options: {},
+    options: PROJECT_OPTION,
   },
 } as const satisfies Record<string, { usage: string; summary: string; options: OptionSpecs }>
 
@@ -75,21 +77,23 @@ const OVERVIEW = [
   '',
   'Run grid <command> --help for its options.',
   '',
+  'Grid reads and writes files only inside the project folder: the folder it runs in, or the',
+  'one named with --project. The top of a disk and the home folder are never a project folder.',
+  'A path outside it, also through a symbolic link, is refused, and so are web addresses,',
+  'network paths and names Windows keeps for devices, such as CON or NUL. A relative path',
+  'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
+  '',
 ].join('\n')
-
-function shown(io: CommandIo, file: string): string {
-  const path = relative(io.cwd, file)
-  return path && !path.startsWith('..') && !isAbsolute(path) ? path : file
-}
 
 function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
-function write(file: string, data: string | Uint8Array): void {
+function write(project: Project, file: string, data: string | Uint8Array): string {
   try {
-    atomicWriteFile(file, data)
+    return project.writeFile(file, data)
   } catch (error) {
+    if (error instanceof PathRefused) throw error
     const code = (error as NodeJS.ErrnoException).code
     if (code === 'ENOENT') throw new WriteFailed(`Can't write ${file}: its folder does not exist.`)
     if (code === 'EACCES' || code === 'EPERM') throw new WriteFailed(`Can't write ${file}: permission denied.`)
@@ -114,9 +118,21 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     return EXIT_OK
   }
 
+  const projectOption = textOf(parsed, '--project')
+
   if (name === 'serve') {
     if (parsed.positionals.length > 0) throw new UsageError(`serve takes no arguments: got ${parsed.positionals.join(', ')}.`)
-    startToolServer()
+    let project: Project | PathRefused
+    try {
+      project = openProject(projectOption, io.cwd, 'project')
+    } catch (error) {
+      // A folder named with --project must be right before the server starts. The folder it
+      // runs in may not be one, as when a host starts it at the top of the disk: then the
+      // preview still works and each file tool answers with the reason.
+      if (!(error instanceof PathRefused) || projectOption !== undefined) throw error
+      project = error
+    }
+    startToolServer(projectTools(project))
     return EXIT_OK
   }
 
@@ -124,7 +140,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
 
   if (name === 'check') {
     const json = parsed.values.has('--json')
-    const loaded = loadPlan(planFile)
+    const loaded = loadPlan(openProject(projectOption, io.cwd), planFile)
     const result = checkPlan(loaded, { floor: textOf(parsed, '--floor'), country: textOf(parsed, '--country') })
     io.stdout(json ? checkJson(result) : checkText(result, planFloors(loaded.plan).length))
     return EXIT_OK
@@ -141,35 +157,32 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     if (request.png && request.out === undefined && io.stdoutIsTerminal) {
       throw new UsageError('A PNG is not shown in a terminal: name a file with --out, or send the output to a file or another program.')
     }
-    const loaded = loadPlan(planFile)
+    const project = openProject(projectOption, io.cwd)
+    const loaded = loadPlan(project, planFile)
     const picture = await drawFile(loaded, request, scale)
     warnLeftOut(io, loaded)
     if (request.out === undefined) {
       io.stdout(picture)
     } else {
-      write(request.out, picture)
-      io.stdout(`Wrote ${shown(io, request.out)}\n`)
+      io.stdout(`Wrote ${project.shown(write(project, request.out, picture))}\n`)
     }
     return EXIT_OK
   }
 
   const request = { format: textOf(parsed, '--format'), floor: textOf(parsed, '--floor'), out: textOf(parsed, '--out') }
   const format = checkExportRequest(request)
-  const loaded = loadPlan(planFile)
+  const project = openProject(projectOption, io.cwd)
+  if (request.out === undefined) {
+    const done = exportIntoProject(project, planFile, format, request)
+    warnLeftOut(io, done.loaded)
+    if (done.note) io.stderr(`${done.note}\n`)
+    io.stdout(`Wrote ${project.shown(done.written)}\n`)
+    return EXIT_OK
+  }
+  const loaded = loadPlan(project, planFile)
   const made = exportFile(loaded, planFile, format, request)
   warnLeftOut(io, loaded)
-  let target: string
-  if (request.out === undefined) {
-    try {
-      target = writeProjectExport(projectFolderOf(planFile), made.fileName, made.data)
-    } catch (error) {
-      throw new WriteFailed(`Can't write the export beside ${planFile}: ${oneLine((error as Error).message)}`)
-    }
-  } else {
-    write(request.out, made.data)
-    target = request.out
-  }
-  io.stdout(`Wrote ${shown(io, target)}\n`)
+  io.stdout(`Wrote ${project.shown(write(project, request.out, made.data))}\n`)
   return EXIT_OK
 }
 
@@ -204,7 +217,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof WriteFailed) {
+    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof WriteFailed || error instanceof ExportWriteFailed) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }
