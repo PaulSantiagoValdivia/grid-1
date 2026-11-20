@@ -8,6 +8,7 @@ import {
   type BuildingElevations,
   type Scene3D
 } from '@ongrid/floorplan/geometry'
+import { OPENING_CAMERA, cameraPosition } from './camera'
 
 /**
  * The whole building in 3D, decided without Three:
@@ -124,7 +125,7 @@ type Vec3 = [number, number, number]
 export interface BuildingFrame {
   /** The orbit pivot: the footprint centre, at the building's middle or the focused base. */
   readonly target: Vec3
-  /** The camera, offset from the pivot by today's angle and distance. */
+  /** The camera, offset from the pivot by the opening view's angle and distance (`OPENING_CAMERA`). */
   readonly position: Vec3
   /** The building's box, from the lowest slab's underside to the roof's top. */
   readonly box: { readonly min: Vec3; readonly max: Vec3 }
@@ -174,7 +175,6 @@ export function buildingFrame(
     : elevations.roof.top
 
   const span = Math.max(width, depth, layout.single ? 0 : top - bottom, 1)
-  const distance = span * 1.4
 
   const focused = layout.storeys.find((s) => s.floorId === layout.focus)
   const pivotY = layout.single ? 0 : focused ? focused.base : (bottom + top) / 2
@@ -186,7 +186,7 @@ export function buildingFrame(
 
   return {
     target: [cx, pivotY, cz],
-    position: [cx + distance, pivotY + distance * 0.8, cz + distance],
+    position: cameraPosition(OPENING_CAMERA, [cx, pivotY, cz], span),
     box,
     span,
     shadow: shadowFor(box, [cx + 7, Math.max(SUN_HEIGHT, top + SUN_ABOVE_TOP), cz + 9])

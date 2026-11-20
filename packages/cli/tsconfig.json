@@ -1,7 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "lib": ["ESNext"],
+    // A 3D still (draw/drawStill.ts) mounts the viewer's React components, which are written
+    // in JSX and typed against the DOM's names. The command itself never touches a DOM.
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
     "types": ["node"]
   },
   "include": ["src/**/*"]

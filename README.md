@@ -17,8 +17,8 @@ is published yet and there is no release to install.
 |---|---|---|
 | `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
-| `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, and `planToSvg`: a picture of a plan as an SVG file, with no browser |
-| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `draw`, `export` and `serve` (the preview tool server). Also CAD program lookup and `drawPlan` (a plan as SVG or PNG) |
+| `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, `planToSvg` (a picture of a plan as an SVG file) and `planStill` (a still of the 3D model as pixels), with no browser |
+| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `draw`, `export` and `serve` (the preview tool server). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
 
 ## Development
 
@@ -48,9 +48,15 @@ local one is missing.
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid check [<plan>] [--floor <id>] [--country <code>] [--json]` | Prints the report. Every report is labelled "General guidance, not your local rules" |
-| `grid draw [<plan>] [--png] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`; to standard output unless `--out` names a file |
+| `grid draw [<plan>] [--png \| --3d] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid serve` | Starts the tool server on standard input and output: the preview tool and `grid_export` |
+
+`grid draw --3d` takes the 3D model as the app opens it: the same scene, from the same camera
+(south-east, about 29.5 degrees down, through a 45 degree lens). It needs no browser and no
+graphics card: the scene is drawn in software, each face lit flat, without shadows. With
+`--floor`, that floor is shown as a cutaway, as in the app; without it, the whole building.
+The PNG is 1200 by 800 pixels, times `--scale` (up to 4).
 
 Every command also takes `--project <folder>` (see below). An unknown, repeated or
 meaningless option is refused by name. The command exits 0 when it did its work, 1 when the
