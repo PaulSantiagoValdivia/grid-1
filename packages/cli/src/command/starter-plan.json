@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    { "id": "south", "start": [0, 0], "end": [7, 0], "thickness": 0.25, "height": 2.6, "kind": "exterior" },
+    { "id": "east", "start": [7, 0], "end": [7, 4.5], "thickness": 0.25, "height": 2.6, "kind": "exterior" },
+    { "id": "north", "start": [7, 4.5], "end": [0, 4.5], "thickness": 0.25, "height": 2.6, "kind": "exterior" },
+    { "id": "west", "start": [0, 4.5], "end": [0, 0], "thickness": 0.25, "height": 2.6, "kind": "exterior" },
+    { "id": "partition", "start": [4, 0], "end": [4, 4.5], "thickness": 0.1, "height": 2.6, "kind": "interior" }
+  ],
+  "rooms": [
+    { "id": "living", "name": "Living room", "use": "living", "boundary": ["south", "partition", "north", "west"] },
+    { "id": "bedroom", "name": "Bedroom", "use": "bedroom", "boundary": ["south", "east", "north", "partition"] }
+  ],
+  "openings": [
+    { "id": "front-door", "wall": "south", "type": "door", "offset": 1, "width": 0.9, "sill": 0, "height": 2.1, "hinge": "start", "swing": "left" },
+    { "id": "bedroom-door", "wall": "partition", "type": "door", "offset": 0.5, "width": 0.8, "sill": 0, "height": 2.1, "hinge": "start", "swing": "right" },
+    { "id": "living-window", "wall": "north", "type": "window", "offset": 4.5, "width": 1.5, "sill": 0.9, "height": 1.2 },
+    { "id": "bedroom-window", "wall": "east", "type": "window", "offset": 1.5, "width": 1.2, "sill": 0.9, "height": 1.2 }
+  ]
+}
