@@ -58,6 +58,68 @@ function courtyard(deg: number): Wall[] {
 }
 const room = (id: string, boundary: string[]): Room => ({ id, name: id, boundary })
 
+const CROSS: Point[] = [
+  [2, 0], [4, 0], [4, 2], [6, 2], [6, 4], [4, 4], [4, 6], [2, 6], [2, 4], [0, 4], [0, 2], [2, 2]
+]
+const H: Point[] = [
+  [0, 0], [2, 0], [2, 2], [4, 2], [4, 0], [6, 0], [6, 6], [4, 6], [4, 4], [2, 4], [2, 6], [0, 6]
+]
+const STEPS: Point[] = [[0, 0], [6, 0], [6, 2], [4, 2], [4, 4], [2, 4], [2, 6], [0, 6]]
+
+/**
+ * The lab's listing flat (AU2-3), whose plan keeps every room size. The outside walls are
+ * 0.3 m on centre lines 0.15 m outside the floor, so the floor starts at x = 0 and y = 0.
+ * Bedroom 1, the kitchen and the bathroom sit along the south side, the hall runs east to
+ * west above them, and the lounge and bedroom 2 sit along the north. The east side steps in
+ * above the hall, and the north side steps up over the lounge.
+ *
+ * The hall's outline, along the inner faces, has nine walls and three inside corners:
+ * y 3.30 above bedroom 1 to x 4.20, down to y 3.10 above the kitchen to x 6.70, down to
+ * y 2.10 above the bathroom to the east wall at x 8.40, up to y 4.40 and back west to x 0.
+ * The rectangle x 0 to 8.40 by y 2.10 to 4.40 is 19.32, less x 0 to 4.20 by y 2.10 to 3.30
+ * (5.04) and x 4.20 to 6.70 by y 2.10 to 3.10 (2.50): 11.78. Before ARE-1 Grid read 12.54.
+ * The six rooms add up to 60.07.
+ */
+function listingFlat(deg: number): Wall[] {
+  const w = (id: string, start: Point, end: Point, thickness: number): Wall => ({
+    id, start: turn(start, deg), end: turn(end, deg), thickness, height: 2.7, kind: thickness > 0.2 ? 'exterior' : 'partition'
+  })
+  return [
+    w('ext-s', [-0.15, -0.15], [8.55, -0.15], 0.3),
+    w('ext-e1', [8.55, -0.15], [8.55, 4.55], 0.3),
+    w('ext-step-e', [8.55, 4.55], [7.45, 4.55], 0.3),
+    w('ext-e2', [7.45, 4.55], [7.45, 7.75], 0.3),
+    w('ext-n2', [7.45, 7.75], [4.65, 7.75], 0.3),
+    w('ext-e3', [4.65, 7.75], [4.65, 8.25], 0.3),
+    w('ext-n1', [4.65, 8.25], [-0.15, 8.25], 0.3),
+    w('ext-w', [-0.15, 8.25], [-0.15, -0.15], 0.3),
+    w('bed1-n', [-0.15, 3.25], [4.15, 3.25], 0.1),
+    w('bed1-e', [4.15, -0.15], [4.15, 3.25], 0.1),
+    w('kit-n', [4.15, 3.05], [6.65, 3.05], 0.1),
+    w('kit-e', [6.65, -0.15], [6.65, 3.05], 0.1),
+    w('bath-n', [6.65, 2.05], [8.55, 2.05], 0.1),
+    w('hall-n', [-0.15, 4.45], [7.45, 4.45], 0.1),
+    w('lounge-e', [4.55, 4.45], [4.55, 7.75], 0.1)
+  ]
+}
+const LISTING_ROOMS: readonly Space[] = [
+  // x 0 to 4.10 by y 0 to 3.20.
+  { room: room('bed1', ['ext-s', 'bed1-e', 'bed1-n', 'ext-w']), seed: [2, 1.5], area: 13.12 },
+  // x 4.20 to 6.60 by y 0 to 3.00.
+  { room: room('kitchen', ['ext-s', 'kit-e', 'kit-n', 'bed1-e']), seed: [5.4, 1.5], area: 7.2 },
+  // x 6.70 to 8.40 by y 0 to 2.00.
+  { room: room('bath', ['ext-s', 'ext-e1', 'bath-n', 'kit-e']), seed: [7.5, 1], area: 3.4 },
+  {
+    room: room('hall', ['bed1-n', 'bed1-e', 'kit-n', 'kit-e', 'bath-n', 'ext-e1', 'ext-step-e', 'hall-n', 'ext-w']),
+    seed: [2, 3.9],
+    area: 11.78
+  },
+  // x 0 to 4.50 by y 4.50 to 8.10. The partition and the stepped outside wall share the face x = 4.50.
+  { room: room('lounge', ['hall-n', 'lounge-e', 'ext-e3', 'ext-n1', 'ext-w']), seed: [2, 6], area: 16.2 },
+  // x 4.60 to 7.30 by y 4.50 to 7.60.
+  { room: room('bed2', ['hall-n', 'ext-e2', 'ext-n2', 'lounge-e']), seed: [6, 6], area: 8.37 }
+]
+
 const CASES: readonly Case[] = [
   {
     // Inner outline 0.1 m in. The 5.8 x 2.8 band along the bottom, plus the 2.8 x 3.0 arm
@@ -138,6 +200,37 @@ const CASES: readonly Case[] = [
     name: 'rectangle with a stepped side',
     walls: ring(RUN, [0.3, 0.1, 0.2, 0.2, 0.2]),
     spaces: [{ room: r1(RUN), seed: [1, 1], area: 18.24 }]
+  },
+  {
+    // Four inside corners. The bar across, x 0.1 to 5.9 by y 2.1 to 3.9: 5.8 x 1.8 = 10.44.
+    // The bar up and down, x 2.1 to 3.9 by y 0.1 to 5.9, the same 10.44. They share the
+    // 1.8 x 1.8 = 3.24 in the middle. Together 17.64.
+    name: 'cross',
+    walls: ring(CROSS),
+    spaces: [{ room: r1(CROSS), seed: [3, 1], area: 17.64 }]
+  },
+  {
+    // Four inside corners. Each leg, x 0.1 to 1.9 (or 4.1 to 5.9) by y 0.1 to 5.9:
+    // 1.8 x 5.8 = 10.44, twice. The bar between them, x 1.9 to 4.1 by y 2.1 to 3.9:
+    // 2.2 x 1.8 = 3.96. Together 24.84.
+    name: 'H',
+    walls: ring(H),
+    spaces: [{ room: r1(H), seed: [1, 1], area: 24.84 }]
+  },
+  {
+    // Two inside corners, as a flight of steps. In bands of y: 0.1 to 1.9 runs x 0.1 to 5.9,
+    // 5.8 x 1.8 = 10.44; 1.9 to 3.9 runs x 0.1 to 3.9, 3.8 x 2.0 = 7.60; 3.9 to 5.9 runs
+    // x 0.1 to 1.9, 1.8 x 2.0 = 3.60. Together 21.64.
+    name: 'steps',
+    walls: ring(STEPS),
+    spaces: [{ room: r1(STEPS), seed: [1, 1], area: 21.64 }]
+  },
+  {
+    // A flat of six rooms whose hall has nine sides and three inside corners (lab AU2-3).
+    // Outside walls 0.3 m on their centre lines; partitions 0.1 m. See `listingFlat`.
+    name: 'flat with a nine-sided hall',
+    walls: listingFlat,
+    spaces: LISTING_ROOMS
   }
 ]
 

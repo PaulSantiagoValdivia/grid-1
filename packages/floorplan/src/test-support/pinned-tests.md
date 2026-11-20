@@ -84,10 +84,12 @@ in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the di
 
 From the lab's entry Z-7. None of these is built here.
 
-- **An independent area referee.** Started here: `test-support/referee.ts` and the table in
-  `room-areas.test.ts`. It does not yet measure virtual walls, angled rooms or whole plans.
-- **Generated room plans.** Randomised tests exist for triangulation, storey stacks and the
-  plan comparison, but none for rooms, areas or validation (MS-20).
+- **An independent area referee.** Started here: `test-support/referee.ts`, the table in
+  `room-areas.test.ts` and the generated rooms in `room-shapes.test.ts`. It does not yet
+  measure virtual walls, angled rooms or whole plans.
+- **Generated room plans.** `room-shapes.test.ts` builds 300 rooms shaped L, T, U, Z and
+  cross from a fixed seed and checks their areas. There are none yet for validation or for
+  whole plans (MS-20).
 - **Timing guards.** Only the plan comparison has one. The door-swing check needs one (SC-2,
   SC-3); its lab probe ran 400 rooms in about a third of a second, so it is not a failure today.
 - **Pictures and real readers.** Nothing compares what the 2D or 3D view draws, and exported
