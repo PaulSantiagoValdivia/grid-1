@@ -4,12 +4,13 @@
  * Dimension lines live in metres, but every label is drawn at a fixed size in screen pixels,
  * so whether a number lands on a room's name or area depends on the zoom. This works it out
  * for the current zoom, in plan metres (y up): text boxes are estimated from the font sizes
- * in plan.css, the number slides along its own dimension line to the clear spot
+ * in plan.css (`estimateTextWidth`), the number slides along its own dimension line to the clear spot
  * nearest the middle, and with no clear spot it is hidden (the line stays).
  *
  * Pure: no DOM measuring, so it runs in tests and on every render without layout reads.
  */
 import type { Dimension, Vec2 } from '@ongrid/floorplan/geometry'
+import { TEXT_PX } from '../picture/look'
 
 export interface Box {
   readonly minX: number
@@ -18,18 +19,28 @@ export interface Box {
   readonly maxY: number
 }
 
-// Font sizes and offsets from plan.css and Canvas2D.tsx, in screen pixels.
-const ROOM_NAME_PX = 13
-const ROOM_AREA_PX = 11
-const ROOM_AREA_DY = 16
-const DIMENSION_PX = { room: 10, other: 11 }
-const DIMENSION_DY = -5
+// Font sizes and offsets, in screen pixels.
+const ROOM_NAME_PX = TEXT_PX.roomName
+const ROOM_AREA_PX = TEXT_PX.roomArea
+export const ROOM_AREA_DY = 16
+const DIMENSION_PX = { room: TEXT_PX.roomDimension, other: TEXT_PX.dimension }
+export const DIMENSION_DY = -5
 // A generous average glyph width and the usual ascent/descent split, plus breathing room.
 const CHAR_WIDTH = 0.62
 const ASCENT = 0.75
 const DESCENT = 0.25
 const PADDING_PX = 2
 const SEARCH_STEPS = 48
+
+/**
+ * How wide a line of text is, in pixels, without measuring it: every character counts as
+ * 0.62 of the font size. That is a little wider than the average letter of a sans-serif face,
+ * so a box built on it errs on the side of keeping text apart. The same in a browser, a test
+ * and a picture, whatever fonts the machine has.
+ */
+export function estimateTextWidth(text: string, fontPx: number): number {
+  return text.length * fontPx * CHAR_WIDTH
+}
 
 export function formatArea(area: number): string {
   return `${area.toFixed(2)} m²`
@@ -41,7 +52,7 @@ export function roomLabelBox(
   metersPerPixel: number
 ): Box {
   const area = room.areaText ?? formatArea(room.area)
-  const width = Math.max(room.name.length * ROOM_NAME_PX, area.length * ROOM_AREA_PX) * CHAR_WIDTH
+  const width = Math.max(estimateTextWidth(room.name, ROOM_NAME_PX), estimateTextWidth(area, ROOM_AREA_PX))
   const top = ASCENT * ROOM_NAME_PX + PADDING_PX
   const bottom = ROOM_AREA_DY + DESCENT * ROOM_AREA_PX + PADDING_PX
   const half = width / 2 + PADDING_PX
@@ -56,7 +67,7 @@ export function roomLabelBox(
 /** A dimension's number anchored at `at`, drawn 5 px above it and centred. */
 export function dimensionTextBox(at: Vec2, dim: Pick<Dimension, 'kind' | 'value'>, metersPerPixel: number): Box {
   const px = dim.kind === 'room' ? DIMENSION_PX.room : DIMENSION_PX.other
-  const half = (dim.value.toFixed(2).length * px * CHAR_WIDTH) / 2 + PADDING_PX
+  const half = estimateTextWidth(dim.value.toFixed(2), px) / 2 + PADDING_PX
   // Screen y grows down and plan y up: 5 px above the line is +5 px in the plan.
   const baseline = -DIMENSION_DY
   return {

@@ -2,7 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { Canvas2D } from '../Canvas2D'
-import { installResizeObserver, mixedPlan } from './canvas-test-utils'
+import { installResizeObserver, mixedPlan, withoutPaint } from './canvas-test-utils'
 
 /**
  * The canvas without the diff and viewport inputs.
@@ -10,6 +10,10 @@ import { installResizeObserver, mixedPlan } from './canvas-test-utils'
  * The snapshot below was recorded before the shapes moved into shared
  * components, and again guards every later change: without the new inputs the
  * canvas must draw exactly the DOM it drew before, attribute for attribute.
+ *
+ * Since the canvas draws through the picture's scene (VEW-1) every element also carries its
+ * paint as presentation attributes. Those are taken off before comparing, so the snapshot is
+ * still the one recorded then; the paint itself is checked in `picture.dom.test.tsx`.
  */
 
 beforeAll(() => {
@@ -21,7 +25,7 @@ afterEach(cleanup)
 describe('the plain canvas', () => {
   it('draws the same DOM as before the diff layer existed', () => {
     const { container } = render(<Canvas2D floorPlan={mixedPlan()} />)
-    expect(container.firstChild).toMatchSnapshot()
+    expect(withoutPaint(container.firstChild as Element)).toMatchSnapshot()
   })
 
   it('has no diff attribute anywhere', () => {

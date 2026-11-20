@@ -2,7 +2,7 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 import { Canvas2D } from '../Canvas2D'
-import { installResizeObserver, mixedPlan } from './canvas-test-utils'
+import { installResizeObserver, mixedPlan, withoutPaint } from './canvas-test-utils'
 import { house } from './fixtures'
 
 /**
@@ -11,7 +11,8 @@ import { house } from './fixtures'
  *
  * The snapshots below were recorded before the restyle, with every `class` stripped, so
  * they hold what the canvas draws (shapes, coordinates, `data-*`) and nothing about how
- * it is styled.
+ * it is styled. The paint the picture's scene writes on each element (VEW-1) is taken off
+ * as well, for the same reason.
  */
 
 beforeAll(() => {
@@ -23,7 +24,7 @@ afterEach(cleanup)
 function geometryOf(container: HTMLElement): string {
   const svg = container.querySelector('svg')
   if (!svg) throw new Error('no canvas drawn')
-  const copy = svg.cloneNode(true) as SVGSVGElement
+  const copy = withoutPaint(svg)
   for (const node of [copy, ...copy.querySelectorAll('*')]) node.removeAttribute('class')
   return copy.outerHTML
 }

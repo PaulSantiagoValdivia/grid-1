@@ -1,4 +1,5 @@
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { PAINT_ATTRIBUTES } from '../../picture/scene'
 
 /**
  * Shared set-up for the Canvas2D jsdom tests.
@@ -88,4 +89,17 @@ export function mixedPlan(): FloorPlan {
       { id: 'o2', wall: 'w3', type: 'window', offset: 1, width: 1.2, sill: 0.9, height: 1.2 }
     ]
   }
+}
+
+/**
+ * A copy of a drawn element without the paint the picture writes on every element (`fill`,
+ * `stroke`, `font-size`, …). What is left is what the canvas drew before it had any: shapes,
+ * coordinates and `data-*`. The snapshots recorded before then compare against this.
+ */
+export function withoutPaint<T extends Element>(element: T): T {
+  const copy = element.cloneNode(true) as T
+  for (const node of [copy, ...copy.querySelectorAll('*')]) {
+    for (const name of PAINT_ATTRIBUTES) node.removeAttribute(name)
+  }
+  return copy
 }

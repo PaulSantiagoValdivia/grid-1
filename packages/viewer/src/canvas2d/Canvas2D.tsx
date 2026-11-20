@@ -1,18 +1,15 @@
 // 2D floor plan: walls as lines, rooms as polygons, dimensions
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import type { AreaDelta, Bounds, Dimension, DiffStatusMap, Vec2 } from '@ongrid/floorplan/geometry'
+import type { AreaDelta, Bounds, DiffStatusMap } from '@ongrid/floorplan/geometry'
 import {
-  boundsWithDimensions,
   boundsWithGhosts,
   buildDimensions,
   buildFloorPlan,
   ghostsOf,
   planForFloor,
-  resolveFloor,
-  traceWall,
-  validateDoorSweeps
+  resolveFloor
 } from '@ongrid/floorplan/geometry'
 import type { PlaybackClock } from '../preview/playback'
 import type { PlanBuild } from '../preview/useBuildFrame'
@@ -24,7 +21,6 @@ import {
   fitTo,
   lerpView,
   pan,
-  pathOf,
   reframe,
   sharedFrom,
   unproject,
@@ -32,13 +28,14 @@ import {
   viewportFrom,
   zoomAt
 } from './viewport'
-import { OpeningShape, RoomShape, WallShape } from './shapes'
-import type { ShapeAttrs } from './shapes'
 import { retainSelection } from './selection'
-import { formatArea, placeDimensionLabel, roomLabelBox } from './labelPlacement'
-import { dimensionKey, dimensionsProgress, openingAt, stripAcross } from './buildFrame'
-import { doorHandingOf } from './doorHanding'
-import { doorSymbolOf } from './doorSymbol'
+import { dimensionKey, dimensionsProgress } from './buildFrame'
+import { toReact } from './toReact'
+import type { PlanLook } from '../picture/look'
+import { LIGHT_LOOK } from '../picture/look'
+import { planScene } from '../picture/scene'
+import { doorWarningsOf, framingOf, handingsOf, warningMessages } from '../picture/planSvg'
+import type { Attrs as ShapeAttrs, SvgNode } from '../picture/svgNode'
 import { progressOf, removalProgress } from '../preview/progress'
 import { pulseAt } from '../preview/pulse'
 import { CLICK_SLOP } from '../preview/click'
@@ -67,10 +64,12 @@ function statusContent(status: DiffStatusMap): string {
  * The plan canvas: the surface the plan is drawn on and worked over. Wheel to
  * zoom, drag to pan, click to select, double click or `f` to frame.
  *
- * It emits structure, not style. Every element carries stable data attributes
- * — data-part, data-type, data-exposure, data-id — which do not go through the
- * CSS Modules hashing, so the plan's finish is defined entirely from the
- * stylesheet without touching this file.
+ * What it draws comes from `planScene` (picture/scene.ts), the same elements a
+ * picture of the plan has (`planToSvg`). Every element carries stable data
+ * attributes — data-part, data-type, data-exposure, data-id — and the picture's
+ * light colours as SVG presentation attributes. In the app the stylesheet still
+ * defines the plan's finish: CSS wins over presentation attributes, so plan.css
+ * and the review's sheets restyle it without touching this file.
  */
 
 /** A room's net area in each version, as the plan diff computed it (`PlanDiff.areas`). */
@@ -128,14 +127,13 @@ interface Canvas2DProps {
   viewport?: SharedViewport
   /** Called with the new view after a zoom, a pan or a request to frame the plan. */
   onViewportChange?: (viewport: SharedViewport) => void
+  /**
+   * The colours and font written on the drawn elements, as a picture of the plan has them
+   * (`planToSvg`). Light by default. The stylesheets still win over them in the app.
+   */
+  look?: PlanLook
 }
 
-
-/** The pulse's size on screen, whatever the zoom. */
-const PULSE_RADIUS_PX = 6
-
-/** The door-sweep warning mark's size on screen, whatever the zoom. */
-const WARNING_RADIUS_PX = 5
 
 /** How long the view takes to zoom out when a live build grows past the edge. */
 const ZOOM_OUT_MS = 300
@@ -152,7 +150,8 @@ export function Canvas2D({
   build = null,
   diff: diffProp,
   viewport,
-  onViewportChange
+  onViewportChange,
+  look = LIGHT_LOOK
 }: Canvas2DProps): JSX.Element {
   const hostRef = useRef<SVGSVGElement | null>(null)
   const [size, setSize] = useState({ width: 1, height: 1 })
@@ -176,29 +175,17 @@ export function Canvas2D({
 
   // Which way each door opens, where the plan says so. A door that
   // doesn't say draws as a plain gap.
-  const handings = useMemo(
-    () => new Map(plan.openings.map((opening) => [opening.id, doorHandingOf(opening)])),
-    [plan]
-  )
+  const handings = useMemo(() => handingsOf(plan), [plan])
 
   // Doors whose swing runs into something: a wall, or another door. The
   // warnings that only say a value is missing don't get a mark: that door has
   // no symbol, so there is nothing to point at.
-  const doorWarnings = useMemo(() => {
-    const byDoor = new Map<string, { messages: string[]; hits: Set<string> }>()
-    for (const issue of validateDoorSweeps(plan, doorHandingOf)) {
-      if (issue.hits.length === 0) continue
-      const entry = byDoor.get(issue.id) ?? { messages: [], hits: new Set<string>() }
-      if (!entry.messages.includes(issue.message)) entry.messages.push(issue.message)
-      issue.hits.forEach((id) => entry.hits.add(id))
-      byDoor.set(issue.id, entry)
-    }
-    return byDoor
-  }, [plan])
+  const doorWarnings = useMemo(() => doorWarningsOf(plan), [plan])
+  const warningText = useMemo(() => warningMessages(doorWarnings), [doorWarnings])
   const [hoveredWarning, setHoveredWarning] = useState<string | null>(null)
   const hitIds = (hoveredWarning && doorWarnings.get(hoveredWarning)?.hits) || null
   /** Lit while the user hovers the warning of a door that runs into this. */
-  const hit = (id: string): { 'data-hit'?: 'true' } => (hitIds?.has(id) ? { 'data-hit': 'true' } : {})
+  const hit = (id: string): ShapeAttrs => (hitIds?.has(id) ? { 'data-hit': 'true' } : {})
 
   // Where the build starts and ends. The end is what gets framed and
   // dimensioned, so neither changes on every step.
@@ -266,7 +253,7 @@ export function Canvas2D({
   // Dimensions sit outside the walls, so framing on the plan bounds alone
   // would clip them.
   const framedKey = useMemo(() => {
-    const own = boundsWithDimensions(target, dimensions)
+    const own = framingOf(target, dimensions)
     // Ghosts can lie outside the current plan (a wall that moved away), and
     // would otherwise be clipped from the first view.
     return JSON.stringify(ghosts ? boundsWithGhosts(own, ghosts) : own)
@@ -498,7 +485,7 @@ export function Canvas2D({
     setSelectedId(target?.getAttribute('data-id') ?? null)
   }
 
-  // What the frame changes per animation frame, read in the markup below.
+  // What the frame changes per animation frame, read by the scene below.
   const leaving = removalProgress(frame?.inFlight)
   const removing = new Set(
     frame?.inFlight.filter((f) => f.step.kind === 'remove').map((f) => f.step.id) ?? []
@@ -542,7 +529,7 @@ export function Canvas2D({
     'data-diff': 'before',
     'data-ghost-of': id,
     'data-focus': focused.has(id) ? 'true' : undefined,
-    pointerEvents: 'none'
+    'pointer-events': 'none'
   })
 
   // A room that changed size says so in place of its area, with the numbers the
@@ -563,16 +550,46 @@ export function Canvas2D({
   // of a building. Each label is scaled by how many meters a pixel measures:
   // the CSS still rules and the text keeps its on-screen size.
   const metersPerPixel = view.width / size.width
-  // Room numbers slide off the room names and areas at this zoom, or hide.
-  // Measured from the text actually drawn, so a wider "before → after" area
-  // still keeps the numbers off it.
-  const labelBlocks = drawing.rooms.map((room) => {
-    const change = areaChanges.get(room.id)
-    const areaText = change
-      ? `${change.before.toFixed(2)} → ${change.after.toFixed(2)} m²`
-      : formatArea(room.area)
-    return roomLabelBox({ ...room, areaText }, metersPerPixel)
+
+  // The drawing itself is the picture's: the same elements `planToSvg` writes,
+  // with what the app shows on top (a build, a review, selection, hover).
+  const scene = planScene({
+    drawing,
+    handings,
+    doorWarnings: warningText,
+    dimensions,
+    metersPerPixel,
+    look,
+    live: {
+      leaving: leaving !== null && prevDrawing ? { drawing: prevDrawing, ids: removing, progress: leaving } : null,
+      ghosts,
+      removedRooms,
+      selectedId,
+      marks,
+      ghostAttrs,
+      hit,
+      roomFill: (id) => progressOf(frame?.inFlight, 'room', id),
+      wallTrace: (id) => progressOf(frame?.inFlight, 'wall', id),
+      wallOffset: moveOffset,
+      openingOpen: (id) => progressOf(frame?.inFlight, 'opening', id),
+      dimensionShown: (dim) => (steadyDimensions?.has(dimensionKey(dim)) ? 1 : dimensionsShown),
+      labelOpacity,
+      areaChange: (id) => areaChanges.get(id),
+      hoveredWarning,
+      pulse
+    }
   })
+
+  // Hovering a warning mark is the only thing it does; a click passes on to
+  // selection as anywhere else.
+  const handlers = (node: SvgNode): Record<string, unknown> | undefined => {
+    if (node.attrs['data-part'] !== 'door-warning') return undefined
+    const id = String(node.attrs['data-opening'])
+    return {
+      onPointerEnter: () => setHoveredWarning(id),
+      onPointerLeave: () => setHoveredWarning(null)
+    }
+  }
 
   return (
     <svg
@@ -599,333 +616,7 @@ export function Canvas2D({
         if (event.key === 'f') fit()
       }}
     >
-      {leaving !== null && prevDrawing && (
-        // Removed parts, drawn from the plan before, fading out. Not
-        // clickable: they are already gone from the plan.
-        <g data-leaving="true" opacity={1 - leaving} pointerEvents="none">
-          {prevDrawing.rooms
-            .filter((room) => removing.has(room.id))
-            .map((room) => (
-              <path key={room.id} d={pathOf(room.polygon)} data-part="room" data-id={room.id} />
-            ))}
-          {prevDrawing.walls
-            .filter((wall) => removing.has(wall.id))
-            .map((wall) =>
-              wall.virtual ? (
-                <path
-                  key={wall.id}
-                  d={`M${wall.centerline.map((p) => `${p.x},${-p.y}`).join('L')}`}
-                  data-part="virtual"
-                  data-id={wall.id}
-                />
-              ) : (
-                wall.slices.map((slice, index) => (
-                  <path
-                    key={`${wall.id}:${index}`}
-                    d={pathOf(slice)}
-                    data-part="wall"
-                    data-id={wall.id}
-                    data-exposure={wall.exposure}
-                  />
-                ))
-              )
-            )}
-          {prevDrawing.openings
-            .filter((opening) => removing.has(opening.id))
-            .map((opening) => (
-              <path
-                key={opening.id}
-                d={pathOf(stripAcross(opening.from, opening.to, opening.normal, opening.thickness))}
-                data-part="opening"
-                data-type={opening.type}
-                data-id={opening.id}
-              />
-            ))}
-        </g>
-      )}
-
-      {/* A ghost room lies under the current rooms, like a floor that used to be there. */}
-      {ghosts?.rooms.map((room) => (
-        <RoomShape key={`ghost-room-${room.id}`} room={room} attrs={ghostAttrs(room.id)} />
-      ))}
-
-      {drawing.rooms.map((room) => {
-        const filling = progressOf(frame?.inFlight, 'room', room.id)
-        return (
-          <path
-            key={room.id}
-            d={pathOf(room.polygon)}
-            data-part="room"
-            data-id={room.id}
-            data-selectable="true"
-            data-selected={room.id === selectedId}
-            opacity={filling ?? undefined}
-            {...marks(room.id)}
-          />
-        )
-      })}
-
-      {/* Ghost walls and openings go over the room fills, which are opaque: a removed
-          partition or a wall that moved outward lies inside a current room. They stay
-          under the current walls, so a wall that kept its place covers its own ghost. */}
-      {ghosts?.walls.map((wall) => (
-        <WallShape key={`ghost-wall-${wall.id}`} wall={wall} attrs={ghostAttrs(wall.id)} />
-      ))}
-      {ghosts?.openings.map((opening) => (
-        <OpeningShape
-          key={`ghost-opening-${opening.id}`}
-          opening={opening}
-          attrs={ghostAttrs(opening.id)}
-        />
-      ))}
-
-      {drawing.walls.map((wall) => {
-        const tracing = progressOf(frame?.inFlight, 'wall', wall.id)
-        const offset = moveOffset(wall.id)
-        const transform = offset ? `translate(${offset.x} ${-offset.y})` : undefined
-
-        if (wall.virtual) {
-          const [start, end] = wall.centerline
-          const reach =
-            tracing === null
-              ? end
-              : { x: start.x + (end.x - start.x) * tracing, y: start.y + (end.y - start.y) * tracing }
-          return (
-            <path
-              key={wall.id}
-              d={`M${[start, reach].map((p) => `${p.x},${-p.y}`).join('L')}`}
-              data-part="virtual"
-              data-id={wall.id}
-              data-moving={offset ? wall.id : undefined}
-              transform={transform}
-              {...marks(wall.id)}
-            />
-          )
-        }
-
-        const slices = tracing === null ? wall.slices : traceWall(wall, tracing)
-        return (
-          <g key={wall.id} data-moving={offset ? wall.id : undefined} transform={transform}>
-            {slices.map((slice, index) => (
-              <path
-                key={index}
-                d={pathOf(slice)}
-                data-part="wall"
-                data-id={wall.id}
-                data-exposure={wall.exposure}
-                data-selectable="true"
-                data-selected={wall.id === selectedId}
-                {...marks(wall.id)}
-                {...hit(wall.id)}
-              />
-            ))}
-          </g>
-        )
-      })}
-
-      {drawing.openings.map((opening) => {
-        const opened = progressOf(frame?.inFlight, 'opening', opening.id)
-        const span = opened === null ? opening : openingAt(opening, opened)
-        const exposure = drawing.walls.find((wall) => wall.id === opening.wallId)?.exposure
-        const door = doorSymbolOf(opening, handings.get(opening.id))
-        return (
-          <Fragment key={opening.id}>
-            {opened !== null &&
-              // The part of the gap not yet open is still wall, so the wall
-              // parts from the opening's centre outwards.
-              [
-                [opening.from, span.from],
-                [span.to, opening.to]
-              ].map(([a, b], index) => (
-                <path
-                  key={index}
-                  d={pathOf(stripAcross(a, b, opening.normal, opening.thickness))}
-                  data-part="wall"
-                  data-exposure={exposure}
-                  data-closing="true"
-                  pointerEvents="none"
-                />
-              ))}
-            <path
-              d={pathOf(stripAcross(span.from, span.to, opening.normal, opening.thickness))}
-              data-part="opening"
-              data-type={opening.type}
-              data-id={opening.id}
-              data-selectable="true"
-              data-selected={opening.id === selectedId}
-              {...marks(opening.id)}
-              data-swing={door ? 'true' : undefined}
-              {...hit(opening.id)}
-            />
-            {door && (
-              // Drawing, not a target: clicks reach the gap or room underneath.
-              <g
-                data-part="door-symbol"
-                data-opening={opening.id}
-                pointerEvents="none"
-                aria-hidden="true"
-                opacity={opened ?? undefined}
-              >
-                {door.jambs.map(([a, b], index) => (
-                  <line key={index} data-part="jamb" x1={a.x} y1={a.y} x2={b.x} y2={b.y} />
-                ))}
-                <line
-                  data-part="door-leaf"
-                  x1={door.leaf[0].x}
-                  y1={door.leaf[0].y}
-                  x2={door.leaf[1].x}
-                  y2={door.leaf[1].y}
-                />
-                <path data-part="door-arc" d={door.arc} />
-              </g>
-            )}
-          </Fragment>
-        )
-      })}
-
-      {dimensions.map((dim) => {
-        const shown = steadyDimensions?.has(dimensionKey(dim)) ? 1 : dimensionsShown
-        if (shown <= 0) return null
-        return (
-          <DimensionMark
-            key={dim.id}
-            dim={dim}
-            scale={metersPerPixel}
-            labelAt={dim.kind === 'room' ? placeDimensionLabel(dim, labelBlocks, metersPerPixel) : dim.labelAt}
-            opacity={shown < 1 ? shown : undefined}
-          />
-        )
-      })}
-
-      {drawing.rooms.map((room) => {
-        const change = areaChanges.get(room.id)
-        return (
-          <g
-            key={room.id}
-            transform={`translate(${room.labelAt.x} ${-room.labelAt.y}) scale(${metersPerPixel})`}
-            opacity={labelOpacity(room.id)}
-          >
-            <text data-part="label">{room.name}</text>
-            <text data-part="area" dy="16">
-              {change ? (
-                <>
-                  {change.before.toFixed(2)} → {change.after.toFixed(2)} m²
-                </>
-              ) : (
-                <>{room.area.toFixed(2)} m²</>
-              )}
-            </text>
-          </g>
-        )
-      })}
-
-      {/* After the current labels, so the plan's own fills never cover it. Styled,
-          faded and hidden on collision by the stylesheet through the ghost's attributes. */}
-      {removedRooms.map((room) => (
-        <g
-          key={`ghost-label-${room.id}`}
-          transform={`translate(${room.labelAt.x} ${-room.labelAt.y}) scale(${metersPerPixel})`}
-          {...ghostAttrs(room.id)}
-        >
-          <text data-part="label">{`${room.name} · ${formatArea(room.area)} · removed`}</text>
-        </g>
-      ))}
-
-      {drawing.openings.map((opening) => {
-        const warning = doorWarnings.get(opening.id)
-        if (!warning) return null
-        const message = warning.messages.join(' ')
-        const at = { x: (opening.from.x + opening.to.x) / 2, y: -(opening.from.y + opening.to.y) / 2 }
-        return (
-          // Sized in screen pixels like the labels. Hovering it is the only
-          // thing it does; a click passes on to selection as anywhere else.
-          <g
-            key={`warning:${opening.id}`}
-            data-part="door-warning"
-            data-opening={opening.id}
-            role="img"
-            aria-label={message}
-            transform={`translate(${at.x} ${at.y}) scale(${metersPerPixel})`}
-            onPointerEnter={() => setHoveredWarning(opening.id)}
-            onPointerLeave={() => setHoveredWarning(null)}
-          >
-            <circle data-part="door-warning-dot" r={WARNING_RADIUS_PX} />
-            {hoveredWarning === opening.id && (
-              <text data-part="door-warning-text" x={WARNING_RADIUS_PX + 6} dy="4">
-                {message}
-              </text>
-            )}
-          </g>
-        )
-      })}
-
-      {pulse && (
-        // Presentation only: not part of the plan, its bounds or selection,
-        // and clicks pass through to what's under it.
-        <circle
-          data-part="pulse"
-          className="animate-grid-pulse"
-          cx={pulse.x}
-          cy={-pulse.y}
-          r={PULSE_RADIUS_PX * metersPerPixel}
-          pointerEvents="none"
-          aria-hidden="true"
-        />
-      )}
+      {scene.map((node) => toReact(node, handlers))}
     </svg>
-  )
-}
-
-/**
- * One dimension: the dimension line, the two extension lines that tie it to
- * what it measures, and the number.
- *
- * The geometry module says what is measured and where the line goes; the tick
- * marks, line weights and typography come from the stylesheet.
- */
-function DimensionMark({
-  dim,
-  scale,
-  labelAt,
-  opacity
-}: {
-  dim: Dimension
-  scale: number
-  /** Where the number goes; `null` hides it and keeps the line. */
-  labelAt: Vec2 | null
-  opacity?: number
-}): JSX.Element {
-  const shift = { x: dim.normal.x * dim.offset, y: dim.normal.y * dim.offset }
-  const a = { x: dim.from.x + shift.x, y: dim.from.y + shift.y }
-  const b = { x: dim.to.x + shift.x, y: dim.to.y + shift.y }
-
-  // Extension lines overshoot the dimension line a little, as on a drawing.
-  const overshoot = 0.08
-  const tipA = { x: a.x + dim.normal.x * overshoot, y: a.y + dim.normal.y * overshoot }
-  const tipB = { x: b.x + dim.normal.x * overshoot, y: b.y + dim.normal.y * overshoot }
-
-  return (
-    <g data-part="dimension" data-kind={dim.kind} data-id={dim.id} opacity={opacity}>
-      {dim.offset !== 0 && (
-        <>
-          <line
-            data-part="extension"
-            x1={dim.from.x}
-            y1={-dim.from.y}
-            x2={tipA.x}
-            y2={-tipA.y}
-          />
-          <line data-part="extension" x1={dim.to.x} y1={-dim.to.y} x2={tipB.x} y2={-tipB.y} />
-        </>
-      )}
-      <line data-part="dimension-line" x1={a.x} y1={-a.y} x2={b.x} y2={-b.y} />
-      {labelAt && (
-        <g transform={`translate(${labelAt.x} ${-labelAt.y}) scale(${scale})`}>
-          <text data-part="dimension-text" dy="-5">
-            {dim.value.toFixed(2)}
-          </text>
-        </g>
-      )}
-    </g>
   )
 }
