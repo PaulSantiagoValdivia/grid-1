@@ -18,7 +18,7 @@ is published yet and there is no release to install.
 | `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
 | `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, and `planToSvg`: a picture of a plan as an SVG file, with no browser |
-| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `check`, `draw`, `export` and `serve` (the preview tool server). Also CAD program lookup and `drawPlan` (a plan as SVG or PNG) |
+| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `draw`, `export` and `serve` (the preview tool server). Also CAD program lookup and `drawPlan` (a plan as SVG or PNG) |
 
 ## Development
 
@@ -46,9 +46,10 @@ local one is missing.
 
 | Command | What it does |
 |---|---|
-| `grid check <plan> [--floor <id>] [--country <code>] [--json]` | Prints the report. Every report is labelled "General guidance, not your local rules" |
-| `grid draw <plan> [--png] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`; to standard output unless `--out` names a file |
-| `grid export <plan> --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
+| `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
+| `grid check [<plan>] [--floor <id>] [--country <code>] [--json]` | Prints the report. Every report is labelled "General guidance, not your local rules" |
+| `grid draw [<plan>] [--png] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`; to standard output unless `--out` names a file |
+| `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid serve` | Starts the tool server on standard input and output: the preview tool and `grid_export` |
 
 Every command also takes `--project <folder>` (see below). An unknown, repeated or
@@ -56,6 +57,38 @@ meaningless option is refused by name. The command exits 0 when it did its work,
 plan or a path was refused or a file could not be written, and 2 when the command line was
 refused. A refusal is one line on standard error. Findings in a report are not a refusal:
 `grid check` still exits 0.
+
+### Starting a project: `grid init`
+
+```bash
+npx --no grid init demo
+cd demo
+npx --no grid check
+npx --no grid export --format dxf
+```
+
+`grid init demo` makes the folder `demo` (the folder above it must exist) and writes:
+
+| Path | What it is |
+|---|---|
+| `grid.json` | Marks the folder as a Grid project, and holds the project's id |
+| `plan.json` | A starter plan: a two-room flat with its room uses and door swings stated, to change |
+| `exports/` | Where `grid export` writes |
+| `.gitignore` | The line `exports/`, added when it isn't there |
+
+With no folder, `grid init` starts the project in the folder it runs in. A folder is a Grid
+project when it holds `grid.json`. In a Grid project (the folder Grid runs in, or the one
+named with `--project`), `check`, `draw` and `export` read `plan.json` when no plan file is
+named, and `export` writes into `exports/`. A plan file named on the command line is used
+instead. Outside a Grid project a plan file must be named.
+
+`grid init` never replaces a file. It refuses, changing nothing, a folder that already
+holds `grid.json` (a second `grid init`) or `plan.json`, or a file named `exports`. Any
+other folder is fine, empty or not: `grid init` only adds its own files.
+
+The rules store (`@ongrid/rules/store`) keeps a project's build location and rules sheet on
+this computer, outside the project folder, so a copy of the project never carries them. It
+names them by the id in `grid.json`.
 
 ### The project folder
 
@@ -82,7 +115,8 @@ folder:
   ending in a dot or a space, and control or direction-override characters.
 
 These hold on every system, so a path in a plan means the same wherever the plan goes; `\`
-and `/` both separate folders. Grid creates no folder on the way, except `exports/`.
+and `/` both separate folders. Grid creates no folder on the way, except `exports/` and the
+one folder `grid init` is asked to make.
 
 An export's file name comes from the plan file's name, never from text inside the plan.
 Grid sanitises it rather than refusing it, and says so on standard error: a name Windows
