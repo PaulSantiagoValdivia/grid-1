@@ -167,6 +167,21 @@ describe('grid draw --out: writing a picture', () => {
     expect(size('two.png')).toEqual([width * 2, height * 2])
   })
 
+  it('writes a 3D still as a PNG with --3d, twice as large with --scale 2', () => {
+    const one = grid('draw', 'two-bed-flat.json', '--3d', '--out', 'model.png')
+    const two = grid('draw', 'two-bed-flat.json', '--3d', '--scale', '2', '--out', 'model-2.png')
+    expect([one.status, two.status, one.err, two.err]).toEqual([0, 0, '', ''])
+    expect(one.out).toBe('Wrote model.png\n')
+    const size = (file: string): [number, number] => {
+      const bytes = readFileSync(join(dir, file))
+      expect([...bytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      return [bytes.readUInt32BE(16), bytes.readUInt32BE(20)]
+    }
+    expect(size('model.png')).toEqual([1200, 800])
+    expect(size('model-2.png')).toEqual([2400, 1600])
+    expect(filesIn(dir)).toEqual(['model-2.png', 'model.png', 'two-bed-flat.json'])
+  })
+
   it('refuses a folder that does not exist, and writes nothing', () => {
     expectRefusal(grid('draw', 'two-bed-flat.json', '--out', join('missing', 'plan.svg')), 1, 'does not exist')
     expect(filesIn(dir)).toEqual(['two-bed-flat.json'])
@@ -233,6 +248,12 @@ describe('grid draw to standard output', () => {
     expect(run.out.startsWith('<svg ')).toBe(true)
   })
 
+  it('prints the 3D still when the output goes to a program', () => {
+    const run = grid('draw', 'two-bed-flat.json', '--3d')
+    expect(run.status).toBe(0)
+    expect([...run.stdout.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47])
+  })
+
   it('prints the PNG bytes when the output goes to a program', () => {
     const run = grid('draw', 'two-bed-flat.json', '--png')
     expect(run.status).toBe(0)
@@ -275,6 +296,11 @@ describe('options: each command refuses what it does not take, by name', () => {
     [['draw', 'two-bed-flat.json', '--png', '--scale', '0'], '--scale takes a number above 0'],
     [['draw', 'two-bed-flat.json', '--png', '--scale', 'big'], '--scale takes a number above 0'],
     [['draw', 'two-bed-flat.json', '--out', 'plan.png'], 'add --png'],
+    [['draw', 'two-bed-flat.json', '--3d', '--png'], '--png does nothing with --3d'],
+    [['draw', 'two-bed-flat.json', '--3d=yes'], '--3d is a switch and takes no value'],
+    [['draw', 'two-bed-flat.json', '--3d', '--out', 'model.svg'], 'does not end in .png: name a .png file'],
+    [['draw', 'two-bed-flat.json', '--3d', '--scale', '5'], '--scale takes a number above 0 and up to 4 with --3d'],
+    [['draw', 'two-bed-flat.json', '--3d', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['export', 'two-bed-flat.json', '--format', 'ifc', '--floor', 'ground'], '--floor does not apply to IFC'],
     [['export', 'two-bed-flat.json', '--format', 'dxf', '--out', 'plan.obj'], 'does not end in .dxf'],
     [['export', 'two-bed-flat.json'], 'export needs --format'],

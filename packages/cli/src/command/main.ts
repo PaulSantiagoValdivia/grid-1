@@ -55,8 +55,8 @@ const COMMANDS = {
     options: CHECK_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
-    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png.',
+    usage: 'grid draw [<plan.json>] [--png | --3d] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png. With --3d, draws the 3D model as the app opens it, as a PNG.',
     options: DRAW_OPTIONS,
   },
   export: {
@@ -178,12 +178,13 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   if (name === 'draw') {
     const request = {
       png: parsed.values.has('--png'),
+      threeD: parsed.values.has('--3d'),
       out: textOf(parsed, '--out'),
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
     }
     const { scale } = checkDrawRequest(request)
-    if (request.png && request.out === undefined && io.stdoutIsTerminal) {
+    if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {
       throw new UsageError('A PNG is not shown in a terminal: name a file with --out, or send the output to a file or another program.')
     }
     const project = openProject(projectOption, io.cwd)
