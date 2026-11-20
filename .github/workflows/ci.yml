@@ -36,3 +36,9 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run check:licenses
+      # The lab data in scoreboard/ holds no machine paths and no personal data.
+      - run: npm run check:data
+      # The five counts of scoreboard/README.md. Fails when any count is worse than the
+      # figures stored in scoreboard/current.json. A full run takes seconds.
+      - run: npm run scoreboard
+        timeout-minutes: 10
