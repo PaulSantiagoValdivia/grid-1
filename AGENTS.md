@@ -18,13 +18,17 @@ Notes for agents and people changing this repository.
   adding or changing a rule.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own.
-- `packages/cli`: the building blocks for the `grid` and `ongrid` commands. The commands
-  themselves are not built yet.
+- `packages/cli`: the `grid` command (`ongrid` runs the same file): `check`, `draw`, `export`
+  and `serve`, in `src/command/`. `npm run build` bundles it with esbuild into
+  `packages/cli/dist/grid.mjs`, which is git-ignored. Its end-to-end tests run that file as a
+  child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
+  meaningless one is refused by name.
 
 ## Commands
 
 ```bash
 npm install
+npm run build
 npm run typecheck
 npm run lint
 npm test

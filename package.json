@@ -12,8 +12,10 @@
     "packages/*"
   ],
   "scripts": {
+    "build": "npm run build --workspace ongrid",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts",
     "lint": "eslint packages scripts",
+    "pretest": "npm run build",
     "test": "vitest run",
     "check:licenses": "node scripts/check-licenses.mjs"
   },

@@ -29,6 +29,9 @@ jobs:
           cache: npm
 
       - run: npm ci
+      # The end-to-end tests run the built command, packages/cli/dist/grid.mjs. npm test builds
+      # it too (pretest); building here first makes a build failure its own red step.
+      - run: npm run build
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test

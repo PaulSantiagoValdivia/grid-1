@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -135,5 +135,26 @@ describe('check-licenses script', () => {
     })
     expect(result.stderr).toBe('')
     expect(result.status).toBe(0)
+  })
+})
+
+describe('the grid command', () => {
+  // Not only "not copyleft": the tool that builds dist/grid.mjs, and what the file carries or
+  // loads, must be under a permissive licence, named outright.
+  const PERMISSIVE = new Set(['MIT', 'Apache-2.0', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', '0BSD'])
+  const lock = JSON.parse(readFileSync(resolve(__dirname, '../../package-lock.json'), 'utf8')) as {
+    packages: Record<string, { license?: unknown }>
+  }
+  const entries = (pattern: RegExp) =>
+    Object.entries(lock.packages).filter(([path]) => pattern.test(path.replace(/^.*node_modules\//, '')))
+
+  it.each([
+    ['esbuild, which builds it', /^(esbuild|@esbuild\/.+)$/],
+    ['zod, which it carries', /^zod$/],
+    ['@napi-rs/canvas, which it loads for a PNG', /^@napi-rs\/canvas(-.+)?$/],
+  ])('%s, is under a permissive licence', (_what, pattern) => {
+    const found = entries(pattern)
+    expect(found.length).toBeGreaterThan(0)
+    for (const [path, entry] of found) expect([path, PERMISSIVE.has(String(entry.license))]).toEqual([path, true])
   })
 })

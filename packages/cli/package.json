@@ -4,7 +4,12 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
+  "bin": {
+    "grid": "dist/grid.mjs",
+    "ongrid": "dist/grid.mjs"
+  },
   "scripts": {
+    "build": "node build.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
