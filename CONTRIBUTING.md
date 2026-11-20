@@ -16,6 +16,7 @@ npm install
 npm run typecheck
 npm run lint
 npm test
+npm run check:licenses
 ```
 
 Use [conventional commits](https://www.conventionalcommits.org/) for commit messages.

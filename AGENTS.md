@@ -40,6 +40,8 @@ Run the type check and the tests before calling a change done.
 - Grid is licensed under Apache-2.0. See `LICENSE` and `NOTICE`.
 - Every `package.json` has `"license": "Apache-2.0"` and keeps `"private": true` until
   publishing is approved. A test checks both.
+- No dependency may be under a GPL, LGPL, AGPL, MPL or EPL licence. `npm run check:licenses`
+  checks `package-lock.json`, and CI runs it.
 - Never commit secrets, `.env` files, personal data or paths from your own machine.
 
 ## Rules and standards
