@@ -49,7 +49,7 @@ settle them:
   only when the plan has several` in the same file pins today's names (`my-house-first-floor.obj`,
   `casa-nandu-2o.ifc`, `floor-plan.glb`); a fix that changes those is changing a pinned figure.
 - **AR-1 and DR-2.** `agrees with the area` in dimensions.test.ts reads the shared fixture,
-  whose three rooms are four-sided. The inside-corner fix should leave it green; it is the
+  whose three rooms are four-sided. The inside-corner fix (ARE-1) left it green; it is the
   first test to break if a room with an inside corner is added to that fixture.
 
 ## Expected failures in the suite today
@@ -59,9 +59,7 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| AR-1, AR-14, AR-2 (measuring) | `geometry/__tests__/conventions.test.ts` |
-| AR-1, AR-14, MS-7 (hand-worked rooms) | `geometry/__tests__/room-areas.test.ts`, listed in `GRID_DISAGREES` |
-| AR-4, AR-12, AR-13, MS-2, MS-3, MS-7, MS-8, MS-9, MS-10, MS-15, MS-16, MS-17 | `geometry/__tests__/validation.test.ts` |
+| AR-4, MS-2, MS-3, MS-8, MS-9, MS-10, MS-15, MS-16, MS-17 | `geometry/__tests__/validation.test.ts` |
 | AR-2 (schema), Z-5, MS-1 | `types/__tests__/floorplan.test.ts` |
 | VE-2 | `geometry/__tests__/elevations.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
@@ -69,6 +67,18 @@ test fails, and `it.fails` becomes `it`.
 | CH-6 | `packages/rules/src/checks/__tests__/rules-check.test.ts` |
 
 Paths without a package are under `packages/floorplan/src/`.
+
+## Expected failures that have been fixed
+
+| Lab entry | Fixed by | Now a normal test in |
+| --- | --- | --- |
+| AR-1, AR-14, AR-2 (measuring) | ARE-1 | `geometry/__tests__/conventions.test.ts` |
+| AR-1, AR-14, MS-7 (29 hand-worked cases) | ARE-1 | `geometry/__tests__/room-areas.test.ts`; `GRID_DISAGREES` is empty |
+| AR-12, AR-13, MS-7 | ARE-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-1" |
+
+ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
+in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
+4.10 m by 3.0 m instead of 4.05 m, because a virtual wall has no width.
 
 ## Kinds of test the suite does not have yet
 

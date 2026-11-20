@@ -4,123 +4,526 @@
  * A room carries no coordinates of its own: it carries a list of the walls
  * around it. Turning that list into a polygon is what this module does.
  *
- * The key is how the polygon is built. Wall endpoints are never joined;
- * instead the LINES of their inner faces are intersected, pairwise and in
- * order. That has two consequences worth knowing:
+ * The polygon is built in two passes.
  *
- *  - One wall can border several rooms along different stretches without
- *    having to be split, because only its line is used, never its endpoints.
- *  - Walls of different thickness produce the right corner on their own, with
- *    no special cases.
+ *  1. The outline along the wall AXES. Wall endpoints are never joined;
+ *     the LINES of neighbouring walls are intersected, in the order listed.
+ *     One wall can therefore border several rooms along different stretches
+ *     without being split, because only its line is used.
+ *  2. The outline along the inner FACES. Which face of a wall looks into the
+ *     room follows from the way the axis outline turns: going round a
+ *     counter-clockwise outline the room is always on the left. Each wall is
+ *     moved half its thickness to that side and neighbours are intersected
+ *     again.
+ *
+ * The face is decided wall by wall, from the direction the outline travels
+ * along that wall. It is NOT decided from one reference point inside the room:
+ * a room with an inside corner (an L, a T, a U) has walls that such a point
+ * lies behind, and the room then came out too large by the thickness of those
+ * walls, by an amount that changed when the plan was turned.
+ *
+ * Two more things follow from working wall by wall:
+ *
+ *  - Walls of different thickness produce the right corner on their own.
+ *  - Walls in a row with different thickness (a party wall that carries on as
+ *    a partition, a solid wall that carries on as a virtual line) are one
+ *    straight side of the room with a step in it. The step sits at the end of
+ *    the wall that stands further into the room.
  */
 
 import type { PlanIndex, Room, Wall } from './plan'
 import type { Line, Vec2 } from './vec2'
-import { EPS, area, centroid, cross, intersectLines, isCounterClockwise, lerp, sub } from './vec2'
+import { EPS, area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
+import type { WallAxis } from './wall'
 import { wallAxis, wallFaces } from './wall'
 
 /**
- * The wall face looking into the room.
+ * Why a room has no usable outline. `code` is the validation code the fault is
+ * reported under.
  *
- * It is decided by which side an interior reference point falls on, not by the
- * order of `boundary`. That way a boundary listed clockwise produces the same
- * polygon as one listed counter-clockwise.
+ *  - `room/unclosed`: the wall list cannot be closed at all.
+ *  - `room/out-of-order`: it closes, but not round the walls it names.
+ *  - `room/inside-out`: the walls are thicker than the gap between them.
  */
-function innerFace(wall: Wall, inside: Vec2): Line {
-  const axis = wallAxis(wall)
-  const faces = wallFaces(wall)
-  // cross > 0 means the point falls to the left of the wall direction, which
-  // is where the normal points.
-  return cross(axis.dir, sub(inside, axis.start)) > 0 ? faces.left : faces.right
+export type RoomFaultCode = 'room/unclosed' | 'room/out-of-order' | 'room/inside-out'
+
+export class RoomOutlineError extends Error {
+  readonly code: RoomFaultCode
+
+  constructor(code: RoomFaultCode, message: string) {
+    super(message)
+    this.name = 'RoomOutlineError'
+    this.code = code
+  }
+}
+
+/** A corner of the outline, and how far it lies from the two walls that make it. */
+export interface RoomCorner {
+  /** Where the two wall axes cross. */
+  readonly at: Vec2
+  readonly wallA: string
+  readonly wallB: string
+  /** Distance from `at` to each wall's own axis segment. 0 when the wall reaches the corner. */
+  readonly offA: number
+  readonly offB: number
+}
+
+export interface RoomSide {
+  readonly wallId: string
+  /** The face of the wall that looks into the room. */
+  readonly face: 'left' | 'right'
+}
+
+export interface RoomOutline {
+  /** Along the inner faces, counter-clockwise. */
+  readonly polygon: Vec2[]
+  /** One entry per wall in `boundary`, in the same order. */
+  readonly sides: readonly RoomSide[]
+  /** One per corner of the axis outline. */
+  readonly corners: readonly RoomCorner[]
+  /** Set when the outline is not one a room can have. `roomPolygon` throws it. */
+  readonly fault: RoomOutlineError | null
+}
+
+/** A virtual wall is a line: it has no substance and takes no floor. */
+function thicknessOf(wall: Wall): number {
+  return wall.virtual ? 0 : wall.thickness
 }
 
 /**
- * The corners of the room along the wall axes: where each wall's line meets the
- * next one's. Null when two neighbours are parallel and make no corner, or fewer
- * than three distinct lines are left.
- *
- * Neighbours on one line are a single side, as in `mergeCollinear`.
+ * How far a corner may lie from a wall that is still said to reach it: the
+ * thicker of the two walls, plus one tolerance. A wall drawn up to its
+ * neighbour's face instead of its axis stops half a thickness short, more at
+ * a sharp angle.
  */
-function axisCorners(walls: readonly Wall[]): Vec2[] | null {
-  const lines: Line[] = []
-  for (const wall of walls) {
-    const axis = wallAxis(wall)
-    const line = { point: axis.start, dir: axis.dir }
-    const previous = lines[lines.length - 1]
-    if (!previous || !sameLine(previous, line)) lines.push(line)
-  }
-  while (lines.length > 1 && sameLine(lines[lines.length - 1]!, lines[0]!)) lines.pop()
-  if (lines.length < 3) return null
-
-  const corners: Vec2[] = []
-  for (let i = 0; i < lines.length; i++) {
-    const corner = intersectLines(lines[i]!, lines[(i + 1) % lines.length]!)
-    if (!corner) return null
-    corners.push(corner)
-  }
-  return corners
+export function cornerReach(a: Wall, b: Wall): number {
+  return Math.max(thicknessOf(a), thicknessOf(b)) + EPS
 }
 
 /**
- * Interior reference point: the middle of the room's corners along the wall
- * axes.
- *
- * It is not the middle of the walls. A wall can run past the room it borders,
- * and then its midpoint drags the average away, or onto another wall's axis,
- * where `innerFace` cannot tell which side is the room. The corners do not
- * depend on how far a wall extends. When the walls make no corners (the
- * boundary is out of order), the midpoints are the fallback and the error
- * comes from the intersection that follows.
+ * A corner further than this from BOTH its walls is not a corner of the room:
+ * the two walls do not meet there, their lines merely cross. One metre, or the
+ * reach when the walls are thicker than that.
  */
-function approximateInterior(walls: readonly Wall[]): Vec2 {
-  const corners = axisCorners(walls)
-  if (corners) return centroid(corners)
-  return centroid(
-    walls.map((wall) => {
-      const axis = wallAxis(wall)
-      return lerp(axis.start, axis.end, 0.5)
-    })
-  )
-}
+const STRAY_CORNER = 1
 
-interface Side {
+/** Sine of 15 degrees. Neighbours closer to parallel than this can be one straight side. */
+const NEARLY_PARALLEL = 0.2588
+
+/** One wall of the boundary, with what the outline needs to know about it. */
+interface Piece {
   readonly wall: Wall
-  readonly face: Line
-}
-
-/** The same line: parallel, and no further apart than `EPS`. */
-function sameLine(a: Line, b: Line): boolean {
-  return Math.abs(cross(a.dir, b.dir)) < 1e-9 && Math.abs(cross(a.dir, sub(b.point, a.point))) < EPS
+  readonly axis: WallAxis
+  readonly line: Line
+  /** Filled in once the direction of travel is known. */
+  face: Line
+  side: 'left' | 'right'
 }
 
 /**
- * One straight wall drawn as two pieces has one inner face, not two. Two
- * neighbours on the same line are not a corner, so they count as one side.
- * The first piece of a run stands for it, which keeps the wall named
- * in an error the one the reader sees first. Parallel faces that sit apart are
- * not merged: that is a step the boundary does not describe.
+ * Two walls in a row that show the room exactly one face. Deliberately tight:
+ * faces a few millimetres apart are joined by a step of that size, so the
+ * floor between them is neither lost nor counted twice.
  */
-function mergeCollinear(sides: readonly Side[]): Side[] {
-  const merged: Side[] = []
-  for (const side of sides) {
-    const previous = merged[merged.length - 1]
-    if (!previous || !sameLine(previous.face, side.face)) merged.push(side)
+function sameFace(a: Line, b: Line): boolean {
+  return Math.abs(cross(a.dir, b.dir)) < 1e-9 && Math.abs(cross(a.dir, sub(b.point, a.point))) < 1e-6
+}
+
+/** One edge of the face outline: a wall's inner face, or a step between two of them. */
+interface Edge {
+  readonly line: Line
+  /** The way the outline travels along it. A face edge that runs the other way has been crossed. */
+  readonly dir: Vec2
+  readonly wall: Wall
+  /** Not to be judged by its direction: a step, or a side of no length. */
+  readonly fixed: boolean
+}
+
+function distanceToSegment(p: Vec2, a: Vec2, b: Vec2): number {
+  const ab = sub(b, a)
+  const len2 = dot(ab, ab)
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, dot(sub(p, a), ab) / len2))
+  return Math.hypot(p.x - (a.x + ab.x * t), p.y - (a.y + ab.y * t))
+}
+
+/**
+ * Two neighbours that are one straight side of the room.
+ *
+ * Exactly parallel: on one line, or so close that their bodies touch. One
+ * straight wall drawn as two pieces is the first case; a thick wall carrying on
+ * as a thin one with one face flush is the second. Parallel walls that sit
+ * further apart than that are a step the boundary does not describe.
+ *
+ * Nearly parallel (a surveyed building is never square): the same two cases,
+ * when the walls touch end to end but their lines cross somewhere else, away
+ * from those two ends. Such a crossing is not a corner of the room.
+ */
+function inRow(a: Piece, b: Piece): boolean {
+  const sine = Math.abs(cross(a.line.dir, b.line.dir))
+  const bodies = (thicknessOf(a.wall) + thicknessOf(b.wall)) / 2 + EPS
+  if (sine < 1e-9) {
+    const apart = Math.abs(cross(a.line.dir, sub(b.line.point, a.line.point)))
+    return apart < EPS || apart <= bodies
   }
-  // The run can wrap around the end of the boundary.
-  while (merged.length > 1 && sameLine(merged[merged.length - 1]!.face, merged[0]!.face)) {
-    merged.pop()
+  if (sine > NEARLY_PARALLEL) return false
+  // The two ends that face each other, and how far the lines' crossing is from them.
+  let gap = Infinity
+  let ends: [Vec2, Vec2] = [a.axis.end, b.axis.start]
+  for (const p of [a.axis.start, a.axis.end]) {
+    for (const q of [b.axis.start, b.axis.end]) {
+      const d = Math.hypot(p.x - q.x, p.y - q.y)
+      if (d < gap) {
+        gap = d
+        ends = [p, q]
+      }
+    }
   }
-  return merged
+  if (gap > bodies) return false
+  const crossing = intersectLines(a.line, b.line)!
+  const limit = cornerReach(a.wall, b.wall)
+  return ends.every((end) => Math.hypot(crossing.x - end.x, crossing.y - end.y) > limit)
+}
+
+/**
+ * The first pair of edges of a closed polygon that properly cross, or null.
+ * Edges that only touch, or share a corner, do not count.
+ */
+function selfCrossing(points: readonly Vec2[]): [number, number] | null {
+  const n = points.length
+  const side = (a: Vec2, b: Vec2, c: Vec2): number => {
+    const value = cross(sub(b, a), sub(c, a))
+    return Math.abs(value) < 1e-9 ? 0 : Math.sign(value)
+  }
+  for (let i = 0; i < n; i++) {
+    const a = points[i]!
+    const b = points[(i + 1) % n]!
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue // neighbours across the end of the list
+      const c = points[j]!
+      const d = points[(j + 1) % n]!
+      if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0) return [i, j]
+    }
+  }
+  return null
 }
 
 function resolveWalls(room: Room, index: PlanIndex): Wall[] {
   return room.boundary.map((wallId) => {
     const wall = index.wallsById.get(wallId)
     if (!wall) {
-      throw new Error(`Room ${room.id} references wall ${wallId}, which does not exist`)
+      throw new RoomOutlineError(
+        'room/unclosed',
+        `Room ${room.id} references wall ${wallId}, which does not exist`
+      )
     }
     return wall
   })
+}
+
+const metres = (value: number): string =>
+  value >= 1000 ? `${(value / 1000).toFixed(1)} km` : `${value.toFixed(2)} m`
+
+/**
+ * How the inner faces of two neighbouring walls join, going round the room
+ * from `a` to `b`.
+ *
+ * Usually they simply cross, and that point is the corner: nothing is returned
+ * and the caller intersects the two faces. But a face stops where its wall
+ * stops. When the crossing lies beyond the end of one of the walls, the outline
+ * follows that wall's end instead, across to the other face: a step. That is
+ * what happens where a thick wall carries on as a thin one, or as a virtual
+ * line, whether the two are exactly in line or a few millimetres off.
+ *
+ * A crossing that overshoots an end by no more than two wall thicknesses is
+ * still the corner. Two walls that end at one point leave a small notch between
+ * their square ends, on the inside of an inside corner and wherever a thick
+ * wall turns into a thin one; a built corner has no such notch.
+ *
+ * Returns the step as an edge, `null` for a plain corner, `'none'` when the
+ * faces are parallel and no step joins them.
+ */
+function joint(
+  a: Piece,
+  forwardA: Vec2,
+  b: Piece,
+  forwardB: Vec2
+): Edge | null | 'none' {
+  const along = (p: Vec2, dir: Vec2): number => dot(p, dir)
+  const endA = along(a.axis.end, forwardA) > along(a.axis.start, forwardA) ? a.axis.end : a.axis.start
+  const startB = along(b.axis.start, forwardB) < along(b.axis.end, forwardB) ? b.axis.start : b.axis.end
+  const crossing = intersectLines(a.face, b.face)
+  if (crossing) {
+    const pastA = dot(sub(crossing, endA), forwardA) > EPS
+    const beforeB = dot(sub(startB, crossing), forwardB) > EPS
+    if (!pastA && !beforeB) return null
+    // A corner made good: a crossing this close to the end it overshoots is the corner.
+    const near = 2 * Math.max(thicknessOf(a.wall), thicknessOf(b.wall)) + EPS
+    const off = (p: Vec2): number => Math.hypot(crossing.x - p.x, crossing.y - p.y)
+    if ((!pastA || off(endA) <= near) && (!beforeB || off(startB) <= near)) return null
+  }
+  // The end of wall A, as a line square to it; then the same for the start of B.
+  // The step is real only if the other wall's face crosses that end within the
+  // wall's own thickness.
+  const ends: [Piece, Vec2][] = [
+    [a, endA],
+    [b, startB]
+  ]
+  for (const [wall, end] of ends) {
+    const cap: Line = { point: end, dir: wall.axis.normal }
+    const from = intersectLines(a.face, cap)
+    const to = intersectLines(cap, b.face)
+    const met = wall === a ? to : from
+    if (!from || !to || !met) continue
+    if (Math.abs(dot(sub(met, end), wall.axis.normal)) > thicknessOf(wall.wall) / 2 + EPS) continue
+    const span = sub(to, from)
+    const length = Math.hypot(span.x, span.y)
+    if (length < 1e-9) return null
+    return { line: cap, dir: scale(span, 1 / length), wall: wall.wall, fixed: true }
+  }
+  return crossing ? null : 'none'
+}
+
+/**
+ * The room's outline and how it was reached.
+ *
+ * Throws `RoomOutlineError` when the wall list cannot be closed at all. An
+ * outline that closes but cannot be a room (out of order, inside out) comes
+ * back with `fault` set, so a caller that reports problems still has the
+ * corners to point at; `roomPolygon` throws that fault.
+ */
+export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
+  const walls = resolveWalls(room, index)
+  if (walls.length < 3) {
+    throw new RoomOutlineError(
+      'room/unclosed',
+      `Room ${room.id} has ${walls.length} walls; at least 3 are needed to close`
+    )
+  }
+
+  const pieces: Piece[] = walls.map((wall) => {
+    const axis = wallAxis(wall)
+    const line = { point: axis.start, dir: axis.dir }
+    return { wall, axis, line, face: line, side: 'left' }
+  })
+
+  // 1 · Straight runs. Neighbours in a row are one side of the room.
+  const runs: Piece[][] = []
+  for (const piece of pieces) {
+    const run = runs[runs.length - 1]
+    if (run && inRow(run[run.length - 1]!, piece)) run.push(piece)
+    else runs.push([piece])
+  }
+  // A run can wrap around the end of the boundary.
+  while (runs.length > 1 && inRow(runs[runs.length - 1]!.at(-1)!, runs[0]![0]!)) {
+    const tail = runs.pop()!
+    runs[0] = [...tail, ...runs[0]!]
+  }
+  if (runs.length < 3) {
+    throw new RoomOutlineError(
+      'room/unclosed',
+      `Room ${room.id} has ${runs.length} distinct sides; at least 3 are needed to close`
+    )
+  }
+
+  // 2 · The outline along the axes: where each run's line meets the next one's.
+  const count = runs.length
+  const axisCorners: Vec2[] = []
+  const corners: RoomCorner[] = []
+  for (let r = 0; r < count; r++) {
+    const a = runs[r]!.at(-1)!
+    const b = runs[(r + 1) % count]![0]!
+    const at = intersectLines(a.line, b.line)
+    if (!at) {
+      throw new RoomOutlineError(
+        'room/unclosed',
+        `In room ${room.id}, walls ${a.wall.id} and ${b.wall.id} are parallel and form no ` +
+          `corner. The boundary may be out of order.`
+      )
+    }
+    axisCorners.push(at)
+    corners.push({
+      at,
+      wallA: a.wall.id,
+      wallB: b.wall.id,
+      offA: distanceToSegment(at, a.axis.start, a.axis.end),
+      offB: distanceToSegment(at, b.axis.start, b.axis.end)
+    })
+  }
+
+  // 3 · Which way the outline turns decides which face of each wall is inside.
+  const turn = signedArea(axisCorners)
+  const counterClockwise = turn > 0
+  const middle = centroid(axisCorners)
+  const travels: Vec2[] = []
+  for (let r = 0; r < count; r++) {
+    const travel = sub(axisCorners[r]!, axisCorners[(r + count - 1) % count]!)
+    travels.push(travel)
+    for (const piece of runs[r]!) {
+      const along = dot(travel, piece.axis.dir)
+      // A side of no length has no direction of travel. Which side the middle
+      // of the corners falls on is the best that is left.
+      const roomOnLeft =
+        Math.abs(along) < 1e-9
+          ? cross(piece.axis.dir, sub(middle, piece.axis.start)) > 0
+          : along > 0 === counterClockwise
+      const faces = wallFaces(piece.wall)
+      piece.side = roomOnLeft ? 'left' : 'right'
+      piece.face = roomOnLeft ? faces.left : faces.right
+    }
+  }
+
+  // 4 · The outline along the faces: one edge per face, and one per step
+  // where a face stops at the end of its wall (see `joint`).
+  const ordered: { piece: Piece; forward: Vec2; fixed: boolean }[] = []
+  for (let r = 0; r < count; r++) {
+    for (const piece of runs[r]!) {
+      const along = dot(travels[r]!, piece.axis.dir)
+      const fixed = Math.abs(along) < 1e-9
+      ordered.push({ piece, forward: along < 0 ? scale(piece.axis.dir, -1) : piece.axis.dir, fixed })
+    }
+  }
+  // One straight wall drawn as two pieces shows the room one face, not two.
+  // The first piece of such a group stands for it; the step out of the group
+  // is taken from its last piece, the one that meets the next wall.
+  const groups: { first: (typeof ordered)[number]; last: (typeof ordered)[number] }[] = []
+  for (const entry of ordered) {
+    const group = groups[groups.length - 1]
+    if (group && sameFace(group.last.piece.face, entry.piece.face)) group.last = entry
+    else groups.push({ first: entry, last: entry })
+  }
+  const edges: Edge[] = []
+  for (let g = 0; g < groups.length; g++) {
+    const { first, last } = groups[g]!
+    const next = groups[(g + 1) % groups.length]!.first
+    edges.push({ line: first.piece.face, dir: first.forward, wall: first.piece.wall, fixed: first.fixed })
+    const step = joint(last.piece, last.forward, next.piece, next.forward)
+    if (step === 'none') {
+      throw new RoomOutlineError(
+        'room/unclosed',
+        `In room ${room.id}, walls ${last.piece.wall.id} and ${next.piece.wall.id} are parallel ` +
+          `and form no corner. The boundary may be out of order.`
+      )
+    }
+    if (step) edges.push(step)
+  }
+  // Never null: every pair of neighbours left here has been shown to cross.
+  let vertices: Vec2[] = edges.map(
+    (edge, i) => intersectLines(edge.line, edges[(i + 1) % edges.length]!.line)!
+  )
+
+  const sides: RoomSide[] = pieces.map((piece) => ({ wallId: piece.wall.id, face: piece.side }))
+  const done = (fault: RoomOutlineError | null): RoomOutline => ({
+    polygon: counterClockwise ? vertices : [...vertices].reverse(),
+    sides,
+    corners,
+    fault
+  })
+
+  // 5 · An outline that closes, but not round the walls it names.
+  //
+  // Lines always cross somewhere unless they are exactly parallel, so a wall
+  // list in the wrong order still "closes": two walls on opposite sides of a
+  // room that is a few centimetres out of square meet kilometres away, and that
+  // point becomes a corner. A corner of a real room lies on its walls.
+  let stray: RoomCorner | null = null
+  for (let r = 0; r < count; r++) {
+    const corner = corners[r]!
+    const limit = Math.max(
+      STRAY_CORNER,
+      cornerReach(runs[r]!.at(-1)!.wall, runs[(r + 1) % count]![0]!.wall)
+    )
+    const off = Math.min(corner.offA, corner.offB)
+    if (off > limit && (!stray || off > Math.min(stray.offA, stray.offB))) stray = corner
+  }
+  if (stray) {
+    return done(
+      new RoomOutlineError(
+        'room/out-of-order',
+        `In room ${room.id}, walls ${stray.wallA} and ${stray.wallB} are listed one after the ` +
+          `other but do not meet: their lines cross ${metres(Math.min(stray.offA, stray.offB))} ` +
+          `away from both. The boundary is out of order, or a wall between them is missing. ` +
+          `List the walls in the order they are met going round the room.`
+      )
+    )
+  }
+  const crossing = selfCrossing(axisCorners)
+  if (crossing) {
+    const first = runs[(crossing[0] + 1) % count]![0]!.wall.id
+    const second = runs[(crossing[1] + 1) % count]![0]!.wall.id
+    return done(
+      new RoomOutlineError(
+        'room/out-of-order',
+        `In room ${room.id}, the outline crosses itself: the side along wall ${first} cuts ` +
+          `through the side along wall ${second}. The boundary is out of order. List the walls ` +
+          `in the order they are met going round the room.`
+      )
+    )
+  }
+
+  // 6 · Faces that cross.
+  //
+  // Moving every wall in by half its thickness can turn a side round: the
+  // corners at its two ends swap places and the side runs backwards. Between
+  // two outward corners that means the faces of its neighbours met before they
+  // reached it. Either the side is simply hidden (a short splay behind two
+  // thick walls), and the neighbours then meet each other; or the neighbours
+  // never meet on the room's side at all, because they are thicker than the gap
+  // between them, and there is no floor.
+  //
+  // The sign of the area alone does not tell these apart. A room narrower than
+  // its walls in one direction flips; one narrower in both flips twice and
+  // looks sound again.
+  const insideOut = (a: Wall, b: Wall): RoomOutline =>
+    done(
+      new RoomOutlineError(
+        'room/inside-out',
+        `Room ${room.id} has no floor: walls ${a.id} and ${b.id} are thicker than the gap ` +
+          `between them, so their inner faces cross. Move the walls apart or make them thinner.`
+      )
+    )
+  let live = edges
+  let squeezed: [Wall, Wall] | null = null
+  for (;;) {
+    const n = live.length
+    let hidden = -1
+    for (let i = 0; i < n && hidden < 0; i++) {
+      const edge = live[i]!
+      if (edge.fixed) continue
+      if (dot(sub(vertices[i]!, vertices[(i + n - 1) % n]!), edge.dir) >= -1e-9) continue
+      const outwardBefore = cross(live[(i + n - 1) % n]!.dir, edge.dir) > 0 === counterClockwise
+      const outwardAfter = cross(edge.dir, live[(i + 1) % n]!.dir) > 0 === counterClockwise
+      if (outwardBefore && outwardAfter) hidden = i
+    }
+    if (hidden < 0) break
+    const before = live[(hidden + n - 1) % n]!
+    const after = live[(hidden + 1) % n]!
+    squeezed ??= [before.wall, after.wall]
+    live = live.filter((_, i) => i !== hidden)
+    if (live.length < 3) return insideOut(...squeezed)
+    const next: (Vec2 | null)[] = live.map((edge, i) =>
+      intersectLines(edge.line, live[(i + 1) % live.length]!.line)
+    )
+    if (next.some((vertex) => vertex === null)) return insideOut(before.wall, after.wall)
+    vertices = next as Vec2[]
+  }
+  const faceTurn = signedArea(vertices)
+  if (Math.abs(faceTurn) >= 1e-6) {
+    if (faceTurn > 0 !== counterClockwise) {
+      const pair = squeezed ?? [runs[0]![0]!.wall, runs[Math.floor(count / 2)]![0]!.wall]
+      return insideOut(pair[0], pair[1])
+    }
+    if (selfCrossing(vertices)) {
+      return done(
+        new RoomOutlineError(
+          'room/inside-out',
+          `Part of room ${room.id} has no floor: somewhere its walls are thicker than the gap ` +
+            `between them, so their inner faces cross. Move the walls apart or make them thinner.`
+        )
+      )
+    }
+  }
+
+  return done(null)
 }
 
 /**
@@ -131,36 +534,9 @@ function resolveWalls(room: Room, index: PlanIndex): Wall[] {
  * malformed, which during most of development is always.
  */
 export function roomPolygon(room: Room, index: PlanIndex): Vec2[] {
-  const walls = resolveWalls(room, index)
-  if (walls.length < 3) {
-    throw new Error(`Room ${room.id} has ${walls.length} walls; at least 3 are needed to close`)
-  }
-
-  const inside = approximateInterior(walls)
-  const sides = mergeCollinear(walls.map((wall) => ({ wall, face: innerFace(wall, inside) })))
-  if (sides.length < 3) {
-    throw new Error(
-      `Room ${room.id} has ${sides.length} distinct sides; at least 3 are needed to close`
-    )
-  }
-
-  const vertices: Vec2[] = []
-  for (let i = 0; i < sides.length; i++) {
-    const current = sides[i]!
-    const next = sides[(i + 1) % sides.length]!
-    const corner = intersectLines(current.face, next.face)
-    if (!corner) {
-      const wallA = current.wall
-      const wallB = next.wall
-      throw new Error(
-        `In room ${room.id}, walls ${wallA.id} and ${wallB.id} are parallel and form no ` +
-          `corner. The boundary may be out of order.`
-      )
-    }
-    vertices.push(corner)
-  }
-
-  return isCounterClockwise(vertices) ? vertices : vertices.reverse()
+  const outline = roomOutline(room, index)
+  if (outline.fault) throw outline.fault
+  return outline.polygon
 }
 
 /** Same as `roomPolygon`, but returns `null` instead of throwing. */
@@ -193,6 +569,10 @@ export function roomArea(room: Room, index: PlanIndex): number {
  * perimeter wall can border several rooms and still face the outside, because
  * all of them fall on the same side. What makes a wall interior is having
  * rooms on BOTH sides of its axis.
+ *
+ * Which side a room is on is read from its outline: the face of this wall the
+ * room looks at. The middle of the room's corners is not used. In a room with
+ * an inside corner that point can lie on the wall's line or behind it.
  */
 export type WallExposure = 'exterior' | 'interior' | 'detached'
 
@@ -201,16 +581,22 @@ export function wallExposure(index: PlanIndex, wallId: string): WallExposure {
   const wall = index.wallsById.get(wallId)
   if (!wall || !rooms || rooms.length === 0) return 'detached'
 
-  const axis = wallAxis(wall)
   let left = false
   let right = false
 
   for (const room of rooms) {
-    const polygon = tryRoomPolygon(room, index)
-    if (!polygon) continue
-    const side = cross(axis.dir, sub(centroid(polygon), axis.start))
-    if (side > 0) left = true
-    else if (side < 0) right = true
+    let outline: RoomOutline
+    try {
+      outline = roomOutline(room, index)
+    } catch {
+      continue
+    }
+    if (outline.fault) continue
+    for (const side of outline.sides) {
+      if (side.wallId !== wallId) continue
+      if (side.face === 'left') left = true
+      else right = true
+    }
   }
 
   if (left && right) return 'interior'

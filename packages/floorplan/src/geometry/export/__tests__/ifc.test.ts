@@ -1714,9 +1714,9 @@ describe('spaces', () => {
     })
 
     expect(wallsOf(doc).map((e) => str(e.args[2]))).toEqual(['o1', 'o2', 'o3'])
-    // The divider's own faces still close the outline: west face at x = 0.05.
+    // The divider is a line with no width: the room runs to it, at x = 0.
     expect(Math.abs(signedAreaXY(bodyOf(doc, spaceByName(doc, 'Open plan')).base))).toBeCloseTo(
-      4.05 * 3.0,
+      4.1 * 3.0,
       8
     )
   })

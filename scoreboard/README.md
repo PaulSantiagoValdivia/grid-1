@@ -86,25 +86,42 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (today's `main`) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after ARE-1) | The lab's own figure |
 |---|---:|---:|---:|
-| Rooms measured wrong | 1,975 | 1,975 | 829 + 1,145 = 1,974 |
-| Damage that passes in silence | 560 | 560 | 560 |
+| Rooms measured wrong | 1,975 | 200 | baseline 829 + 1,145 = 1,974 |
+| Damage that passes in silence | 560 | 538 | baseline 560 |
 | Turns answered | 15 | 15 | 15 |
 | Design mistakes named | 2 | 2 | 2 |
 | Checks the plan can feed | 5 | 5 | 5 |
-| Guard: rooms Grid does not measure | 1,284 | 1,284 | – |
+| Guard: rooms Grid does not measure | 1,284 | 712 | – |
 | Guard: sound plans with a warning | 70 | 70 | 70 |
 
 The baseline is commit `76caeb8`, the roadmap's reference point from before the week's work.
 It was built and run once in a temporary `git worktree` outside the repository, with this same
-runner and data, and is stored in `baseline.json`. It matches today's figures. That is expected:
-since `76caeb8` nothing has changed in Grid's geometry or rules code except the lists of what
-is not checked, which every plan gets alike.
+runner and data, and is stored in `baseline.json`. Until ARE-1 the current figures matched it,
+because nothing had changed in Grid's geometry or rules code since `76caeb8` except the lists
+of what is not checked, which every plan gets alike.
 
-Rooms measured wrong is one room above the lab's figure. One lab plan sets a wall thickness of
-1e308, and Grid gives its room an area that is not a finite number. The lab's harness saved
-that area to JSON as `null` and so left the room out. Here it counts as wrong.
+At the baseline, rooms measured wrong is one room above the lab's figure. One lab plan sets a
+wall thickness of 1e308, and Grid gives its room an area that is not a finite number. The
+lab's harness saved that area to JSON as `null` and so left the room out. Here it counts as
+wrong.
+
+ARE-1 (each wall's face chosen from the outline, dividing lines with no width, steps between
+walls in a row, and the refusals `room/inside-out` and `room/out-of-order`) moved three
+counts:
+
+- Rooms measured wrong, 1,975 to 200: lab plans 830 to 197, generated plans 1,145 to 3. No
+  room that was right became wrong. The lab's own run of the same change (entry V-1) found
+  191 on the lab plans. The 6 between are copies of one co-living corridor that is exactly
+  0.01 m² (one corner square) off the referee: `referee.json.gz` stores the referee's
+  figures to six decimals, which puts that difference a hair over the 0.01 m² line.
+- Damage that passes in silence, 560 to 538: rooms that could not be drawn before are now
+  measured, so damage to them changes an area and gets named.
+- Rooms Grid does not measure, 1,284 to 712: 555 generated and 22 lab rooms with walls in a
+  row of different thickness are measured now, less 5 lab rooms newly refused, each of which
+  Grid had measured wrong: 2 out of order, 2 empty, and the room beside the 1e308 m wall,
+  which is now inside out.
 
 The damage outcomes match the lab's plan for plan: 1,512 named, 305 something else, 560
 silent, 117 no effect, 506 refused. The printout's `plansWhoseOutcomeDiffersNow` says how many

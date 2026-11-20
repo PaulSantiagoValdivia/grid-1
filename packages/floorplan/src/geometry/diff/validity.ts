@@ -23,6 +23,8 @@ import type { DiffIssue, EntityRef } from './types'
 /** Faults that follow from something else (a room's outline, a wall it rests on), not from the entity's own data. */
 const FOLLOW_ON_FAULTS = new Set([
   'room/unclosed',
+  'room/out-of-order',
+  'room/inside-out',
   'room/empty',
   'room/broken-wall',
   'opening/broken-wall'

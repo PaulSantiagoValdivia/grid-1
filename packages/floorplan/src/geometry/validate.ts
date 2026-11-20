@@ -18,7 +18,7 @@ import { indexPlan, openingsOf } from './plan'
 import { floorOf, planFloors } from './floors'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
-import { roomPolygon } from './room'
+import { RoomOutlineError, roomPolygon } from './room'
 
 export type EntityKind = 'wall' | 'room' | 'opening' | 'plan'
 
@@ -459,7 +459,8 @@ export function validatePlan(
         issue(
           'room',
           room.id,
-          'room/unclosed',
+          // The outline says why it failed: not closable, out of order or inside out.
+          error instanceof RoomOutlineError ? error.code : 'room/unclosed',
           error instanceof Error ? error.message : String(error)
         )
       )

@@ -144,28 +144,16 @@ const CASES: readonly Case[] = [
 const TURNS = [0, 1, 45, 180] as const
 
 /**
- * Where Grid's area disagrees with the hand figure today, and the lab entry it shows.
- * Remove a line when its fix lands: the test then runs as a normal test.
+ * Where Grid's area disagrees with the hand figure today, and the lab entry it shows, keyed
+ * "case / room / turn". Such a case runs as an expected failure. Remove its line when its
+ * fix lands: the test then runs as a normal test.
  *
- * AR-1: a room with an inside corner takes the outer face of some walls, so it reads too
- * large (the L 25.80, the T 16.64, the U 22.80, each courtyard room 28.14).
- * AR-14: how far off it reads depends on how the plan is turned (the L 25.80 as drawn,
- * 25.24 at 1° and 180°, right only at 45°).
- * MS-7: two walls in line with different thicknesses make no corner, so the room cannot be
- * measured at all.
+ * Empty since ARE-1. It listed 29 cases of AR-1 (a room with an inside corner took the
+ * outer face of some walls and read too large), AR-14 (how far off it read depended on how
+ * the plan was turned) and MS-7 (two walls in line with different thicknesses made no
+ * corner). Each wall's face is now chosen from the outline.
  */
-const disagree = (name: string, room: string, turns: readonly number[], entry: string) =>
-  turns.map((deg) => [`${name} / ${room} / ${deg}`, entry] as const)
-const GRID_DISAGREES: Readonly<Record<string, string>> = Object.fromEntries([
-  ...disagree('L', 'r1', [0, 1, 180], 'AR-1, AR-14'),
-  ...disagree('T', 'r1', [0, 1, 45, 180], 'AR-1'),
-  ...disagree('U', 'r1', [0, 1, 45, 180], 'AR-1'),
-  ...disagree('courtyard', 'west', [0, 1, 45, 180], 'AR-1'),
-  ...disagree('courtyard', 'east', [0, 1, 45, 180], 'AR-1'),
-  ...disagree('thick-walled L', 'r1', [0, 1, 180], 'AR-1, AR-14'),
-  ...disagree('L with two wall thicknesses', 'r1', [0, 1, 180], 'AR-1, AR-14'),
-  ...disagree('rectangle with a stepped side', 'r1', [0, 1, 45, 180], 'MS-7')
-])
+const GRID_DISAGREES: Readonly<Record<string, string>> = {}
 
 describe.each(CASES)('$name', ({ name, walls, spaces }) => {
   describe.each(spaces)('room $room.id, $area m² by hand', ({ room, seed, area }) => {

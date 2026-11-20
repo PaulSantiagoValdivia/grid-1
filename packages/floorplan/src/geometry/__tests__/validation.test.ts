@@ -4,8 +4,6 @@ import { planFloors, planForFloor } from '../floors'
 import { buildFloorPlan } from '../floorplan'
 import { buildScene } from '../scene3d'
 import { validatePlan } from '../validate'
-import { indexPlan } from '../plan'
-import { roomArea } from '../room'
 import { parseFloorPlan } from '../../types/floorplan'
 import { outline } from '../../test-support/outline'
 
@@ -474,20 +472,6 @@ describe('known failures (expected to fail until fixed)', () => {
     expect(issuesOf(planOf({ walls, rooms: [room, { ...room, id: 'r2', name: 'Again' }] })).length).toBeGreaterThan(0)
   })
 
-  it.fails('AR-12 a room narrower than its walls is an issue, not an area', () => {
-    const { walls, room } = outline([[0, 0], [3, 0], [3, 0.3], [0, 0.3]], { thickness: [0.4, 0.4, 0.4, 0.4] })
-    expect(issuesOf(planOf({ walls, rooms: [room] })).length).toBeGreaterThan(0)
-  })
-
-  // Lab AR-13: a 20 m² room reads 345 m², with no issue.
-  it.fails('AR-13 two swapped boundary entries in a room 3 cm out of square are reported', () => {
-    const { walls, room } = outline([[0, 0], [5, 0], [5.03, 4], [0, 4.02]])
-    const plan = planOf({ walls, rooms: [{ ...room, boundary: ['w1', 'w3', 'w2', 'w4'] }] })
-    const reported = issuesOf(plan).length > 0
-    const area = reported ? 0 : roomArea(plan.rooms[0]!, indexPlan(plan))
-    expect({ reported, area: Math.round(area) }).toEqual({ reported: true, area: 0 })
-  })
-
   it.fails('MS-2 a 1.5 m gap in a room outline is reported', () => {
     const { walls, room } = outline(RECT)
     walls[1] = { ...walls[1]!, start: [5, 1.5] }
@@ -498,11 +482,6 @@ describe('known failures (expected to fail until fixed)', () => {
     const { walls, room } = outline(RECT)
     walls[0] = { ...walls[0]!, height: 27 }
     expect(issuesOf(planOf({ walls, rooms: [room] })).length).toBeGreaterThan(0)
-  })
-
-  it.fails('MS-7 two walls in a row with different thickness still make a room', () => {
-    const { walls, room } = outline([[0, 0], [2.5, 0], [5, 0], [5, 4], [0, 4]], { thickness: [0.3, 0.1, 0.2, 0.2, 0.2] })
-    expect(validatePlan(planOf({ walls, rooms: [room] })).broken.has('r1')).toBe(false)
   })
 
   it.fails('MS-8 a door on a virtual wall is reported', () => {
@@ -550,5 +529,31 @@ describe('known failures (expected to fail until fixed)', () => {
     const { walls, room } = outline(RECT)
     const cut = { id: 'cut', start: [2.5, 0], end: [2.5, 4], thickness: 0.1, height: 2.7, kind: 'partition' }
     expect(issuesOf(planOf({ walls: [...walls, cut], rooms: [room] })).length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * Known failures from the lab (entry Z-4) that ARE-1 fixed. They ran as expected failures
+ * above until each wall's face was chosen from the outline.
+ */
+describe('lab failures fixed by ARE-1', () => {
+  const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
+  const codesOf = (plan: FloorPlan) => validatePlan(plan).issues.map((i) => i.code)
+
+  it('AR-12 a room narrower than its walls is an issue, not an area', () => {
+    const { walls, room } = outline([[0, 0], [3, 0], [3, 0.3], [0, 0.3]], { thickness: [0.4, 0.4, 0.4, 0.4] })
+    expect(codesOf(planOf({ walls, rooms: [room] }))).toEqual(['room/inside-out'])
+  })
+
+  // Lab AR-13: a 20 m² room read 345 m², with no issue.
+  it('AR-13 two swapped boundary entries in a room 3 cm out of square are reported', () => {
+    const { walls, room } = outline([[0, 0], [5, 0], [5.03, 4], [0, 4.02]])
+    const plan = planOf({ walls, rooms: [{ ...room, boundary: ['w1', 'w3', 'w2', 'w4'] }] })
+    expect(codesOf(plan)).toEqual(['room/out-of-order'])
+  })
+
+  it('MS-7 two walls in a row with different thickness still make a room', () => {
+    const { walls, room } = outline([[0, 0], [2.5, 0], [5, 0], [5, 4], [0, 4]], { thickness: [0.3, 0.1, 0.2, 0.2, 0.2] })
+    expect(validatePlan(planOf({ walls, rooms: [room] })).broken.has('r1')).toBe(false)
   })
 })

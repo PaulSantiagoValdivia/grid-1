@@ -46,7 +46,9 @@ export function pointAlong(axis: WallAxis, s: number): Vec2 {
  */
 export function wallFaces(wall: Wall): { left: Line; right: Line } {
   const axis = wallAxis(wall)
-  const half = wall.thickness / 2
+  // A virtual wall is a line with no substance: both faces lie on its axis, so
+  // the rooms either side of it meet there and no floor is lost between them.
+  const half = wall.virtual ? 0 : wall.thickness / 2
   return {
     left: { point: add(axis.start, scale(axis.normal, half)), dir: axis.dir },
     right: { point: add(axis.start, scale(axis.normal, -half)), dir: axis.dir }

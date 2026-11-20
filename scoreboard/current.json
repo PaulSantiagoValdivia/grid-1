@@ -1,28 +1,28 @@
 {
  "what": "The counts the build must not fall below. Update them in the commit that moves them, and say why.",
  "counts": {
-  "roomsMeasuredWrong": 1975,
-  "damageSilent": 560,
+  "roomsMeasuredWrong": 200,
+  "damageSilent": 538,
   "turnsAnswered": 15,
   "mistakesNamed": 2,
   "checksFed": 5,
-  "roomsNotMeasured": 1284,
+  "roomsNotMeasured": 712,
   "soundPlansWithAlarm": 70
  },
  "detail": {
   "areas:lab": {
    "plans": 1121,
    "plansGridCannotRead": 25,
-   "compared": 16432,
-   "wrong": 830,
-   "notMeasured": 729
+   "compared": 16449,
+   "wrong": 197,
+   "notMeasured": 712
   },
   "areas:generated": {
    "plans": 2300,
    "plansGridCannotRead": 0,
-   "compared": 4048,
-   "wrong": 1145,
-   "notMeasured": 555
+   "compared": 4603,
+   "wrong": 3,
+   "notMeasured": 0
   },
   "areas:sound": {
    "plans": 400,
@@ -33,11 +33,11 @@
   },
   "damage": {
    "plans": 3000,
-   "caught: names the damaged part": 1512,
-   "silent: result changed, nothing said": 560,
+   "caught: names the damaged part": 1603,
+   "silent: result changed, nothing said": 538,
    "refused: schema names the place": 506,
    "no effect at all": 117,
-   "caught vaguely: names something else": 305
+   "caught vaguely: names something else": 236
   },
   "damage:lab": {
    "caught: names the damaged part": 1512,
@@ -45,7 +45,7 @@
    "refused: schema names the place": 506,
    "no effect at all": 117,
    "caught vaguely: names something else": 305,
-   "plansWhoseOutcomeDiffersNow": 0
+   "plansWhoseOutcomeDiffersNow": 111
   },
   "sound": {
    "plans": 442,
