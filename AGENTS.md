@@ -24,6 +24,10 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
+- `scoreboard/`: the lab's plans, damage sets and expected figures, and the runner behind
+  `npm run scoreboard`. It prints five counts and fails when one is worse than
+  `scoreboard/current.json`. Its `README.md` defines the counts. A change that moves a count
+  stores the new figures in the same commit.
 - Every file the command or the tool server reads or writes goes through
   `packages/cli/src/fs/projectFiles.ts`, which keeps it inside the project folder. Nothing else
   in `packages/cli` imports `fs`: `src/__tests__/fileAccess.test.ts` fails if it does.
@@ -36,9 +40,10 @@ npm run build
 npm run typecheck
 npm run lint
 npm test
+npm run scoreboard
 ```
 
-Run the type check and the tests before calling a change done.
+Run the type check, the tests and the scoreboard before calling a change done.
 
 ## Rules
 

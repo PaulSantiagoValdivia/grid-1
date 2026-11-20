@@ -1,0 +1,141 @@
+{
+ "what": "The counts the build must not fall below. Update them in the commit that moves them, and say why.",
+ "counts": {
+  "roomsMeasuredWrong": 1975,
+  "damageSilent": 560,
+  "turnsAnswered": 15,
+  "mistakesNamed": 2,
+  "checksFed": 5,
+  "roomsNotMeasured": 1284,
+  "soundPlansWithAlarm": 70
+ },
+ "detail": {
+  "areas:lab": {
+   "plans": 1121,
+   "plansGridCannotRead": 25,
+   "compared": 16432,
+   "wrong": 830,
+   "notMeasured": 729
+  },
+  "areas:generated": {
+   "plans": 2300,
+   "plansGridCannotRead": 0,
+   "compared": 4048,
+   "wrong": 1145,
+   "notMeasured": 555
+  },
+  "areas:sound": {
+   "plans": 400,
+   "plansGridCannotRead": 0,
+   "compared": 4991,
+   "wrong": 0,
+   "notMeasured": 0
+  },
+  "damage": {
+   "plans": 3000,
+   "caught: names the damaged part": 1512,
+   "silent: result changed, nothing said": 560,
+   "refused: schema names the place": 506,
+   "no effect at all": 117,
+   "caught vaguely: names something else": 305
+  },
+  "damage:lab": {
+   "caught: names the damaged part": 1512,
+   "silent: result changed, nothing said": 560,
+   "refused: schema names the place": 506,
+   "no effect at all": 117,
+   "caught vaguely: names something else": 305,
+   "plansWhoseOutcomeDiffersNow": 0
+  },
+  "sound": {
+   "plans": 442,
+   "plansWithAWarning": 70,
+   "warnings": 91
+  },
+  "turns": {
+   "turns": 67,
+   "answered": 15,
+   "labAnsweredFully": 15
+  },
+  "checks": {
+   "checks": 42,
+   "fed": 5,
+   "labYes": 5
+  },
+  "capabilities": {
+   "read-plan": "yes",
+   "room-areas": "yes",
+   "plan-2d": "yes",
+   "view-3d": "yes",
+   "compare": "yes",
+   "rules-report": "yes",
+   "door-check": "yes",
+   "room-use": "yes",
+   "floors": "yes",
+   "door-height": "yes",
+   "export-dxf": "yes",
+   "export-ifc": "yes",
+   "export-pdf": "no",
+   "export-dwg": "no",
+   "export-jpg": "no",
+   "export-table": "no",
+   "north": "no",
+   "site": "no",
+   "stairs": "no",
+   "ramps": "no",
+   "roof": "no",
+   "fixtures": "no",
+   "furniture": "no",
+   "door-leaves": "no",
+   "clear-width": "no",
+   "threshold": "no",
+   "fire-rating": "no",
+   "occupancy": "no",
+   "existing-new": "no",
+   "outdoor-space": "no",
+   "flats": "no",
+   "ceiling-height": "no",
+   "gross-area": "no",
+   "area-table": "no",
+   "room-width": "no",
+   "route-length": "no",
+   "take-offs": "no",
+   "opening-schedule": "no",
+   "clearance": "no",
+   "turning-space": "no",
+   "inside-view": "no",
+   "drawing-key": "no",
+   "drawing-style": "no",
+   "sheet": "no",
+   "imperial-units": "no",
+   "marks-on-plan": "no",
+   "note-reasons": "no",
+   "compare-notes": "no",
+   "layout-help": "no",
+   "repeat-floor": "no",
+   "local-rules": "no",
+   "permission": "no",
+   "openable-part": "no",
+   "services": "no",
+   "exit-side": "no",
+   "lift": "no",
+   "parking": "no",
+   "materials": "no",
+   "shading": "no",
+   "accessible-mark": "no"
+  },
+  "mistakes": {
+   "mistakes": 9,
+   "named": 2,
+   "mistake 1": "not named",
+   "mistake 2": "not named",
+   "mistake 3": "not named",
+   "mistake 4": "not named",
+   "mistake 5": "not named",
+   "mistake 6": "named",
+   "mistake 7": "named",
+   "mistake 8": "not named",
+   "mistake 9": "not named"
+  }
+ }
+}

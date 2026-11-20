@@ -13,12 +13,13 @@
   ],
   "scripts": {
     "build": "npm run build --workspace ongrid",
-    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts",
-    "lint": "eslint packages scripts",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts && tsc -p scoreboard",
+    "lint": "eslint packages scripts scoreboard",
     "pretest": "npm run build",
     "test": "vitest run",
     "check:licenses": "node scripts/check-licenses.mjs",
-    "check:data": "node scripts/check-data.mjs"
+    "check:data": "node scripts/check-data.mjs",
+    "scoreboard": "node scoreboard/build.mjs && node scoreboard/dist/scoreboard.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
