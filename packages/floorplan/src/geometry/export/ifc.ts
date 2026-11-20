@@ -418,7 +418,7 @@ function analyseFloor(plan: FloorPlan, floor: Floor): FloorModel {
   try {
     const slice = planForFloor(plan, floor.id)
     const index = indexPlan(slice)
-    const broken = new Set(validatePlan(slice, index).broken)
+    const broken = new Set(validatePlan(slice, index, { spaces: false }).broken)
 
     // Validation judges shape, not whether a number is a number: a NaN passes
     // every comparison it is put through. Such an element would be written as

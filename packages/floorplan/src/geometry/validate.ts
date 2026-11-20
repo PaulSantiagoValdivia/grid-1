@@ -19,8 +19,11 @@ import { floorOf, planFloors } from './floors'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
 import { RoomOutlineError, roomPolygon } from './room'
+import type { FloorPiece, FloorSpaces, RoomMismatch } from './spaces'
+import { SPACE_AREA_TOLERANCE, planSpaces, spacesKnown } from './spaces'
 
-export type EntityKind = 'wall' | 'room' | 'opening' | 'plan'
+/** `floor` issues are about a floor as a whole; their id is the floor's id. */
+export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor'
 
 /**
  * `error` is something that cannot be drawn and gets skipped.
@@ -413,10 +416,137 @@ function validateFloors(
   }
 }
 
+/**
+ * Square metres to two decimals, a half rounded up. Read to twelve figures first, so that an
+ * area of exactly 13.585 that the arithmetic left at 13.58499999… still reads 13.59.
+ */
+const two = (value: number): string => (Math.round(Number((value * 100).toPrecision(12))) / 100).toFixed(2)
+const m2 = (value: number): string => `${two(value)} m²`
+const at = (p: { readonly x: number; readonly y: number }): string => `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`
+
+/** `a, b and c`, or the first few and how many more. */
+function names(ids: readonly string[], most = 6): string {
+  const shown = ids.length > most ? [...ids.slice(0, most), `${ids.length - most} more`] : [...ids]
+  return shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}`
+}
+
+function unclaimedMessage(floor: string, piece: FloorPiece): string {
+  const walls = piece.walls.length > 0 ? `, between walls ${names(piece.walls)}` : ''
+  return (
+    `Floor ${floor} has ${m2(piece.area)} of enclosed floor that no room claims, around ` +
+    `${at(piece.at)}${walls}. It is in no room's area. If it is a room, draw it as one.`
+  )
+}
+
+/**
+ * A refused room that lists the walls around a piece of unclaimed floor: most likely the room
+ * meant to claim it. Its own issue already says why it was left out, so the piece is not
+ * reported a second time. "Lists the walls" means that every wall it lists is around the piece
+ * (a wall list with one missing), or that it lists every wall around the piece (a wall list out
+ * of order, or with a wall too many).
+ */
+function refusedRoomFor(floor: string, piece: FloorPiece, plan: FloorPlan, broken: ReadonlySet<string>): boolean {
+  const around = new Set(piece.walls)
+  if (around.size === 0) return false
+  return plan.rooms.some((room) => {
+    if (!broken.has(room.id) || floorOf(room) !== floor || room.boundary.length === 0) return false
+    const listed = new Set(room.boundary)
+    return [...listed].every((id) => around.has(id)) || [...around].every((id) => listed.has(id))
+  })
+}
+
+function mismatchMessage(m: RoomMismatch): string {
+  if (m.enclosed < SPACE_AREA_TOLERANCE) {
+    return (
+      `Room ${m.room} is not enclosed by its walls: none of its ${m2(m.area)} is floor that ` +
+      `walls close off. Its outline is closed only by carrying the walls' lines on until they ` +
+      `meet. Check that its walls reach each other.`
+    )
+  }
+  const parts: string[] = []
+  const unlisted = m.onWalls.filter((w) => !w.listed)
+  const listed = m.onWalls.filter((w) => w.listed)
+  const sum = (list: readonly { area: number }[]): number => list.reduce((s, w) => s + w.area, 0)
+  if (unlisted.length > 0) {
+    parts.push(`${m2(sum(unlisted))} of it lies on ${unlisted.length === 1 ? 'wall' : 'walls'} ${names(unlisted.map((w) => w.wall))}, which its wall list leaves out`)
+  }
+  if (listed.length > 0) {
+    parts.push(`${m2(sum(listed))} lies on its own ${listed.length === 1 ? 'wall' : 'walls'} ${names(listed.map((w) => w.wall))}`)
+  }
+  if (m.outside >= SPACE_AREA_TOLERANCE) parts.push(`${m2(m.outside)} lies outside the walls`)
+  if (m.spaces.length > 1) {
+    const lines = m.lines.length > 0
+      ? `, split by ${m.lines.length === 1 ? 'dividing line' : 'dividing lines'} ${names(m.lines)}, which its wall list leaves out`
+      : ''
+    parts.push(`it covers parts of ${m.spaces.length} enclosed spaces (${names(m.spaces.map(two), 4)} m²)${lines}`)
+  }
+  if (m.sharedWith.length > 0) {
+    parts.push(
+      `it lies in one enclosed space with ${m.sharedWith.length === 1 ? 'room' : 'rooms'} ` +
+        `${names(m.sharedWith)}, and no wall or dividing line divides that space between them`
+    )
+  }
+  return (
+    `Room ${m.room} does not match the space its walls enclose. Its outline measures ` +
+    `${m2(m.area)}: ${parts.join('; ')}. Its area counts all of it. Check its wall list.`
+  )
+}
+
+/**
+ * The spaces the walls enclose, floor by floor (`spaces.ts`): floor no room claims, and rooms
+ * whose outline is not the space their walls enclose. Warnings only: nothing is skipped.
+ */
+function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  let floors: ReturnType<typeof planSpaces>
+  try {
+    floors = planSpaces(plan, { index, broken })
+  } catch {
+    return
+  }
+  for (const result of floors) {
+    if (!spacesKnown(result)) {
+      issues.push(
+        issue(
+          'floor',
+          result.floor,
+          'floor/spaces-unknown',
+          `The spaces the walls enclose on floor ${result.floor} could not be worked out: ` +
+            `${result.reason}. Floor that no room claims is not looked for there.`,
+          'warning'
+        )
+      )
+      continue
+    }
+    reportSpaces(plan, result, broken, issues)
+  }
+}
+
+function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<string>, issues: Issue[]): void {
+  for (const piece of result.unclaimed) {
+    if (refusedRoomFor(result.floor, piece, plan, broken)) continue
+    issues.push(issue('floor', result.floor, 'floor/unclaimed', unclaimedMessage(result.floor, piece), 'warning'))
+  }
+  for (const m of result.mismatches) {
+    const code = m.enclosed < SPACE_AREA_TOLERANCE ? 'room/not-enclosed' : 'room/space-mismatch'
+    issues.push(issue('room', m.room, code, mismatchMessage(m), 'warning'))
+  }
+}
+
+export interface ValidateOptions {
+  /**
+   * Whether to work out the spaces the walls enclose and report floor no room claims and rooms
+   * that do not match their space (`validateSpaces`). On by default. Those lines are warnings
+   * and never change `broken`, so a caller that only needs `broken` can leave them out: joining
+   * every wall of a floor costs more than every other check together.
+   */
+  readonly spaces?: boolean
+}
+
 /** Checks the whole plan. Never throws. */
 export function validatePlan(
   plan: FloorPlan,
-  index: PlanIndex = indexPlan(plan)
+  index: PlanIndex = indexPlan(plan),
+  options: ValidateOptions = {}
 ): ValidationResult {
   const issues: Issue[] = []
   const broken = new Set<string>()
@@ -469,6 +599,8 @@ export function validatePlan(
       broken.add(room.id)
     }
   }
+
+  if (options.spaces !== false) validateSpaces(plan, index, broken, issues)
 
   return { issues, broken }
 }

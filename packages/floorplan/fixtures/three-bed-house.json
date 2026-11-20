@@ -1,0 +1,417 @@
+{
+ "version": "1",
+ "units": "m",
+ "walls": [
+  {
+   "id": "ext-s",
+   "start": [
+    0.15,
+    0.15
+   ],
+   "end": [
+    8.85,
+    0.15
+   ],
+   "thickness": 0.3,
+   "kind": "exterior"
+  },
+  {
+   "id": "ext-e",
+   "start": [
+    8.85,
+    0.15
+   ],
+   "end": [
+    8.85,
+    11.85
+   ],
+   "thickness": 0.3,
+   "kind": "exterior"
+  },
+  {
+   "id": "ext-n",
+   "start": [
+    8.85,
+    11.85
+   ],
+   "end": [
+    0.15,
+    11.85
+   ],
+   "thickness": 0.3,
+   "kind": "exterior"
+  },
+  {
+   "id": "ext-w",
+   "start": [
+    0.15,
+    11.85
+   ],
+   "end": [
+    0.15,
+    0.15
+   ],
+   "thickness": 0.3,
+   "kind": "exterior"
+  },
+  {
+   "id": "lk",
+   "start": [
+    5.95,
+    0.15
+   ],
+   "end": [
+    5.95,
+    4.81
+   ],
+   "thickness": 0.1
+  },
+  {
+   "id": "front-n",
+   "start": [
+    0.15,
+    4.81
+   ],
+   "end": [
+    8.85,
+    4.81
+   ],
+   "thickness": 0.1
+  },
+  {
+   "id": "corr-w",
+   "start": [
+    3.9,
+    4.81
+   ],
+   "end": [
+    3.9,
+    11.85
+   ],
+   "thickness": 0.1
+  },
+  {
+   "id": "corr-e",
+   "start": [
+    5.1,
+    4.81
+   ],
+   "end": [
+    5.1,
+    11.85
+   ],
+   "thickness": 0.1
+  },
+  {
+   "id": "bed1-n",
+   "start": [
+    0.15,
+    8.29
+   ],
+   "end": [
+    3.9,
+    8.29
+   ],
+   "thickness": 0.1
+  },
+  {
+   "id": "bed2-n",
+   "start": [
+    5.1,
+    7.73
+   ],
+   "end": [
+    8.85,
+    7.73
+   ],
+   "thickness": 0.1
+  },
+  {
+   "id": "bed3-n",
+   "start": [
+    5.1,
+    10.37
+   ],
+   "end": [
+    8.85,
+    10.37
+   ],
+   "thickness": 0.1
+  },
+  {
+   "id": "util-n",
+   "start": [
+    0.15,
+    9.95
+   ],
+   "end": [
+    3.9,
+    9.95
+   ],
+   "thickness": 0.1
+  }
+ ],
+ "rooms": [
+  {
+   "id": "living",
+   "name": "Living room",
+   "use": "living",
+   "boundary": [
+    "ext-s",
+    "lk",
+    "front-n",
+    "ext-w"
+   ]
+  },
+  {
+   "id": "kitchen",
+   "name": "Kitchen",
+   "use": "kitchen",
+   "boundary": [
+    "ext-s",
+    "ext-e",
+    "front-n",
+    "lk"
+   ]
+  },
+  {
+   "id": "corridor",
+   "name": "Corridor",
+   "use": "corridor",
+   "boundary": [
+    "front-n",
+    "corr-e",
+    "ext-n",
+    "corr-w"
+   ]
+  },
+  {
+   "id": "bed1",
+   "name": "Bedroom 1",
+   "use": "bedroom",
+   "boundary": [
+    "front-n",
+    "corr-w",
+    "bed1-n",
+    "ext-w"
+   ]
+  },
+  {
+   "id": "bath1",
+   "name": "Bathroom 1",
+   "use": "bathroom",
+   "boundary": [
+    "util-n",
+    "corr-w",
+    "ext-n",
+    "ext-w"
+   ]
+  },
+  {
+   "id": "bed2",
+   "name": "Bedroom 2",
+   "use": "bedroom",
+   "boundary": [
+    "front-n",
+    "ext-e",
+    "bed2-n",
+    "corr-e"
+   ]
+  },
+  {
+   "id": "bed3",
+   "name": "Bedroom 3",
+   "use": "bedroom",
+   "boundary": [
+    "bed2-n",
+    "ext-e",
+    "bed3-n",
+    "corr-e"
+   ]
+  },
+  {
+   "id": "bath2",
+   "name": "Bathroom 2",
+   "use": "bathroom",
+   "boundary": [
+    "bed3-n",
+    "ext-e",
+    "ext-n",
+    "corr-e"
+   ]
+  },
+  {
+   "id": "utility",
+   "name": "Utility",
+   "use": "storage",
+   "boundary": [
+    "bed1-n",
+    "corr-w",
+    "util-n",
+    "ext-w"
+   ]
+  }
+ ],
+ "openings": [
+  {
+   "id": "d-entrance",
+   "wall": "ext-n",
+   "type": "door",
+   "offset": 3.9,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "d-living",
+   "wall": "front-n",
+   "type": "door",
+   "offset": 3.9,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "o-kitchen",
+   "wall": "lk",
+   "type": "opening",
+   "offset": 1.5,
+   "width": 1.5,
+   "height": 2.1
+  },
+  {
+   "id": "d-bed1",
+   "wall": "corr-w",
+   "type": "door",
+   "offset": 0.3,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "d-bath1",
+   "wall": "corr-w",
+   "type": "door",
+   "offset": 5.5,
+   "width": 0.7,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "d-bed2",
+   "wall": "corr-e",
+   "type": "door",
+   "offset": 0.3,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "d-bed3",
+   "wall": "corr-e",
+   "type": "door",
+   "offset": 3.2,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "d-bath2",
+   "wall": "corr-e",
+   "type": "door",
+   "offset": 5.8,
+   "width": 0.7,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "w-living-s",
+   "wall": "ext-s",
+   "type": "window",
+   "offset": 1.5,
+   "width": 2.0,
+   "sill": 0.6,
+   "height": 1.5
+  },
+  {
+   "id": "w-living-w",
+   "wall": "ext-w",
+   "type": "window",
+   "offset": 8.35,
+   "width": 1.5,
+   "sill": 0.9,
+   "height": 1.3
+  },
+  {
+   "id": "w-kitchen",
+   "wall": "ext-e",
+   "type": "window",
+   "offset": 1.5,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "w-bed1",
+   "wall": "ext-w",
+   "type": "window",
+   "offset": 4.6,
+   "width": 1.4,
+   "sill": 0.9,
+   "height": 1.3
+  },
+  {
+   "id": "w-bath1",
+   "wall": "ext-w",
+   "type": "window",
+   "offset": 0.7,
+   "width": 0.6,
+   "sill": 1.4,
+   "height": 0.7
+  },
+  {
+   "id": "w-bed2",
+   "wall": "ext-e",
+   "type": "window",
+   "offset": 5.45,
+   "width": 1.4,
+   "sill": 0.9,
+   "height": 1.3
+  },
+  {
+   "id": "w-bed3",
+   "wall": "ext-e",
+   "type": "window",
+   "offset": 8.2,
+   "width": 1.4,
+   "sill": 0.9,
+   "height": 1.3
+  },
+  {
+   "id": "w-bath2",
+   "wall": "ext-e",
+   "type": "window",
+   "offset": 10.6,
+   "width": 0.6,
+   "sill": 1.4,
+   "height": 0.7
+  },
+  {
+   "id": "d-utility",
+   "wall": "corr-w",
+   "type": "door",
+   "offset": 3.8,
+   "width": 0.7,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  }
+ ]
+}

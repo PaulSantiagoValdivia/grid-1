@@ -3,3 +3,18 @@ Copyright 2026 The Grid authors
 
 This product is licensed under the Apache License, Version 2.0.
 See the LICENSE file for the full text.
+
+Third-party software
+
+packages/floorplan depends on polygon-clipping 0.15.7 (https://github.com/mfogel/polygon-clipping),
+under the MIT License, Copyright (c) 2018 Mike Fogel and Copyright (c) 2016 Alexander Milevski.
+Grid uses it to join wall footprints into the spaces they enclose
+(packages/floorplan/src/geometry/spaces.ts). It is a dependency, not copied code. The bundled
+`grid` command includes it, and with it its two dependencies:
+
+- splaytree (https://github.com/w8r/splay-tree), under the MIT License,
+  Copyright (c) 2019 Alexander Milevski;
+- robust-predicates (https://github.com/mourner/robust-predicates), by Vladimir Agafonkin,
+  released into the public domain under the Unlicense.
+
+Their full licence texts are in their packages.

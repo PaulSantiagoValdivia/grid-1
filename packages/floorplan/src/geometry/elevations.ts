@@ -105,7 +105,7 @@ export interface BuildingElevations {
 function tallestDrawnWall(plan: FloorPlan, floor: Floor): number {
   try {
     const slice = planForFloor(plan, floor.id)
-    const broken = new Set(validatePlan(slice, indexPlan(slice)).broken)
+    const broken = new Set(validatePlan(slice, indexPlan(slice), { spaces: false }).broken)
     let tallest = 0
     for (const wall of slice.walls) {
       if (isDrawnWall(wall, broken) && wall.height > tallest) tallest = wall.height

@@ -116,7 +116,7 @@ export function drawable(storey: FloorPlan): {
   storey: FloorPlan
   leftOut: { rooms: Set<string>; openings: Set<string> }
 } {
-  const { broken } = validatePlan(storey)
+  const { broken } = validatePlan(storey, undefined, { spaces: false })
   const rooms = new Set(storey.rooms.filter((r) => broken.has(r.id)).map((r) => r.id))
   const openings = new Set(
     storey.openings.filter((o) => broken.has(o.id) || broken.has(o.wall)).map((o) => o.id)

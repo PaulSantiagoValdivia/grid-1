@@ -472,12 +472,6 @@ describe('known failures (expected to fail until fixed)', () => {
     expect(issuesOf(planOf({ walls, rooms: [room, { ...room, id: 'r2', name: 'Again' }] })).length).toBeGreaterThan(0)
   })
 
-  it.fails('MS-2 a 1.5 m gap in a room outline is reported', () => {
-    const { walls, room } = outline(RECT)
-    walls[1] = { ...walls[1]!, start: [5, 1.5] }
-    expect(issuesOf(planOf({ walls, rooms: [room] })).length).toBeGreaterThan(0)
-  })
-
   it.fails('MS-3 a wall 27 m high in a house is worth a warning', () => {
     const { walls, room } = outline(RECT)
     walls[0] = { ...walls[0]!, height: 27 }
@@ -491,7 +485,9 @@ describe('known failures (expected to fail until fixed)', () => {
       rooms: [room],
       openings: [{ id: 'd', wall: 'v', type: 'door', offset: 1, width: 0.9, height: 2.1 }]
     })
-    expect(issuesOf(plan).length).toBeGreaterThan(0)
+    // About the door itself. The dividing line also splits the room, which ARE-4 reports as a
+    // room that does not match its space; that line is not what this probe asks for.
+    expect(issuesOf(plan).some((i) => i.entity === 'opening' && i.id === 'd')).toBe(true)
   })
 
   it.fails('MS-9 two ids that differ only by a trailing space are reported', () => {
@@ -524,11 +520,33 @@ describe('known failures (expected to fail until fixed)', () => {
     const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 4.0, width: 0.9, height: 2.1 }] })
     expect(issuesOf(plan)).toEqual([])
   })
+})
 
-  it.fails('MS-17 a wall that cuts a room in two without being listed is reported', () => {
+/**
+ * Known failures from the lab (entry Z-4) that ARE-4 fixed. They ran as expected failures above
+ * until Grid worked out the spaces the walls enclose and set each room against them.
+ */
+describe('lab failures fixed by ARE-4', () => {
+  type P = [number, number]
+  const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+  const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
+  const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
+
+  it('MS-2 a 1.5 m gap in a room outline is reported', () => {
+    const { walls, room } = outline(RECT)
+    walls[1] = { ...walls[1]!, start: [5, 1.5] }
+    const issues = issuesOf(planOf({ walls, rooms: [room] }))
+    expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['room/not-enclosed', 'r1', 'warning']])
+    expect(issues[0]!.message).toMatch(/not enclosed by its walls/)
+  })
+
+  it('MS-17 a wall that cuts a room in two without being listed is reported', () => {
     const { walls, room } = outline(RECT)
     const cut = { id: 'cut', start: [2.5, 0], end: [2.5, 4], thickness: 0.1, height: 2.7, kind: 'partition' }
-    expect(issuesOf(planOf({ walls: [...walls, cut], rooms: [room] })).length).toBeGreaterThan(0)
+    const issues = issuesOf(planOf({ walls: [...walls, cut], rooms: [room] }))
+    expect(issues.map((i) => [i.code, i.id])).toEqual([['room/space-mismatch', 'r1']])
+    expect(issues[0]!.message).toMatch(/lies on wall cut, which its wall list leaves out/)
+    expect(issues[0]!.message).toMatch(/covers parts of 2 enclosed spaces/)
   })
 })
 

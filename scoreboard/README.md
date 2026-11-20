@@ -3,7 +3,8 @@
 `npm run scoreboard` runs the Grid lab's plans through Grid and prints five counts. Each is
 compared with the figures stored in `current.json`. When any count is worse than the stored
 figure, the run exits with code 1 and CI fails. It runs in CI on Ubuntu and Windows. A full run
-takes about 7 seconds.
+takes about 25 seconds (7 before ARE-4, which works out the spaces the walls enclose each time
+the drawing's checks run).
 
 ```bash
 npm run scoreboard                          # run, print, compare with current.json
@@ -86,10 +87,10 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after ARE-2) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after ARE-4) | The lab's own figure |
 |---|---:|---:|---:|
 | Rooms measured wrong | 1,975 | 203 | baseline 829 + 1,145 = 1,974 |
-| Damage that passes in silence | 560 | 538 | baseline 560 |
+| Damage that passes in silence | 560 | 468 | baseline 560 |
 | Turns answered | 15 | 15 | 15 |
 | Design mistakes named | 2 | 2 | 2 |
 | Checks the plan can feed | 5 | 5 | 5 |
@@ -134,6 +135,26 @@ one count:
   referee stops at the line, 4.50 m². That is a wall list that does not match the space (lab
   entry V-9), for the unclaimed-floor checks, not a measuring fault. The lab's probe only asked
   that the plan be accepted.
+
+ARE-4 (the spaces the walls enclose, worked out per floor, with floor no room claims and rooms
+that do not match their space reported as warnings) moved one count:
+
+- Damage that passes in silence, 538 to 468. 70 damaged plans that changed Grid's results in
+  silence now get a new line: 36 plus 9 with one coordinate scaled (a wall pulled off its
+  corner leaves a room no longer enclosed by its walls, or floor no room claims), 13 plus 7
+  with a room deleted (its floor is now unclaimed), and 5 with an id reference or a number
+  changed. Another 48 that were caught vaguely now name the damaged part. None moved the other
+  way.
+- Rooms measured wrong stays 203. ARE-4 measures no room differently: it reports, and does not
+  correct. Of the 200 wrong lab rooms, 174 are reported (171 as a room that does not match its
+  space, 3 by unclaimed floor beside them), 6 are in plans too far from the origin to work out,
+  which say so, and 20 are one corner square off the referee (lab entry V-10).
+  `reviews/ARE-4.md` lists all 200.
+- Sound plans with a warning stays 70: no sound plan gets a new line.
+
+The runner's calls of `validatePlan` that only read which rooms are broken pass
+`{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The
+reference commit ignores the argument.
 
 The damage outcomes match the lab's plan for plan: 1,512 named, 305 something else, 560
 silent, 117 no effect, 506 refused. The printout's `plansWhoseOutcomeDiffersNow` says how many

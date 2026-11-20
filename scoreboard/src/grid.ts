@@ -20,6 +20,12 @@ import { checkLocalRules, planNotes } from '@ongrid/rules'
 const sha1 = (data: string | Uint8Array): string => createHash('sha1').update(data).digest('hex')
 const message = (error: unknown): string => (error instanceof Error ? error.message : String(error))
 const FIXED_NOW = new Date('2026-01-01T00:00:00Z')
+/**
+ * For the calls that only read which rooms are broken. Since ARE-4 `validatePlan` also works out
+ * the spaces the walls enclose, which adds warnings and never changes `broken`; this leaves that
+ * out where nothing reads it. The reference commit ignores the argument.
+ */
+const BROKEN_ONLY = { spaces: false } as const
 
 export interface Line {
   readonly code: string
@@ -96,7 +102,7 @@ export function runGrid(raw: unknown, options: { exports?: boolean } = {}): Grid
     for (const floor of floors) {
       const slice = planForFloor(plan, floor.id)
       const index = indexPlan(slice)
-      const broken = validatePlan(slice, index).broken
+      const broken = validatePlan(slice, index, BROKEN_ONLY).broken
       for (const room of slice.rooms) {
         if (broken.has(room.id)) {
           areas.push(`${room.id}:null`)
@@ -175,7 +181,7 @@ export function roomAreas(raw: unknown): RoomAreas | null {
   let broken: ReadonlySet<string>
   try {
     index = indexPlan(plan)
-    broken = validatePlan(plan, index).broken
+    broken = validatePlan(plan, index, BROKEN_ONLY).broken
   } catch {
     for (const room of plan.rooms) out.set(`${room.floor ?? 'ground'}|${room.id}`, null)
     return out

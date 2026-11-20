@@ -9,6 +9,8 @@ import { CAPABILITIES } from '../src/capabilities'
 import { compareCounts, COUNTS, type Counts } from '../src/counts'
 import { basePlans, damageSet, fingerprint, soundPlans } from '../src/damage'
 import * as data from '../src/data'
+import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { indexPlan, planSpaces, spacesKnown, validatePlan } from '@ongrid/floorplan/geometry'
 
 const HERE = fileURLToPath(new URL('..', import.meta.url))
 const stored = (name: string): { counts: Counts } => JSON.parse(readFileSync(join(HERE, name), 'utf8')) as { counts: Counts }
@@ -63,6 +65,35 @@ describe('the stored data', () => {
       expect(Object.keys(stored(file).counts).sort()).toEqual(Object.keys(COUNTS).sort())
     }
   })
+})
+
+// ARE-4. The sound plans are the scoreboard's rectangular control plans: the 42 bases and the
+// 400 seeded buildings of rectangles (lab entry W-4), on one or two floors, their walls drawn
+// whole or in pieces.
+describe('the spaces the walls enclose, on every sound plan', () => {
+  const examples = data.benchExamples()
+  const sound = soundPlans(basePlans(examples.twoBedFlat, examples.minimal))
+
+  it('balance floor by floor: net room area + wall area + unclaimed floor = the outline, within 1e-6 m²', () => {
+    let floors = 0
+    const off: string[] = []
+    for (const { name, plan: raw } of sound) {
+      const plan = parseFloorPlan(raw)
+      const index = indexPlan(plan)
+      for (const result of planSpaces(plan, { index, broken: validatePlan(plan, index, { spaces: false }).broken })) {
+        if (!spacesKnown(result)) {
+          off.push(`${name} ${result.floor}: ${result.reason}`)
+          continue
+        }
+        floors++
+        const gap = result.roomArea + result.wallArea + result.unclaimedArea - result.outlineArea
+        if (Math.abs(gap) > 1e-6) off.push(`${name} ${result.floor}: ${gap}`)
+        if (result.unclaimed.length > 0 || result.mismatches.length > 0) off.push(`${name} ${result.floor}: reports something`)
+      }
+    }
+    expect(off).toEqual([])
+    expect(floors).toBeGreaterThan(sound.length)
+  }, 60_000)
 })
 
 describe('comparing with the stored figures', () => {

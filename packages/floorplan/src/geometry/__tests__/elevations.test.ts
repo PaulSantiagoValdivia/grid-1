@@ -338,7 +338,10 @@ describe('known failures (expected to fail until fixed)', () => {
     const tall = { id: 'p', start: [2.5, 0], end: [2.5, 2], thickness: 0.1, height: 27, kind: 'partition' }
     const plan: FloorPlan = parseFloorPlan({ walls: [...walls, tall], rooms: [room] })
     const storey = [...floorElevations(plan).floors.values()][0]!
-    const quiet = validatePlan(plan).issues.length === 0
+    // A line about the height. The partition also stands inside the room without being in its
+    // wall list, which ARE-4 reports as a room that does not match its space; that line says
+    // nothing about 27 m, so it does not count here.
+    const quiet = !validatePlan(plan).issues.some((i) => /\b27\b|high|tall/.test(i.message))
     expect(quiet && JSON.stringify(storey).includes('27')).toBe(false)
   })
 })

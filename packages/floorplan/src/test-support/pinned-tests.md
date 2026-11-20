@@ -59,7 +59,7 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| AR-4, MS-2, MS-3, MS-8, MS-9, MS-10, MS-15, MS-16, MS-17 | `geometry/__tests__/validation.test.ts` |
+| AR-4, MS-3, MS-8, MS-9, MS-10, MS-15, MS-16 | `geometry/__tests__/validation.test.ts` |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | VE-2 | `geometry/__tests__/elevations.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
@@ -76,10 +76,18 @@ Paths without a package are under `packages/floorplan/src/`.
 | AR-1, AR-14, MS-7 (29 hand-worked cases) | ARE-1 | `geometry/__tests__/room-areas.test.ts`; `GRID_DISAGREES` is empty |
 | AR-12, AR-13, MS-7 | ARE-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-1" |
 | AR-2 (schema), Z-5 | ARE-2 | `types/__tests__/floorplan.test.ts`, "a virtual wall"; Z-5 also in `types/__tests__/every-plan-parses.test.ts` |
+| MS-2, MS-17 | ARE-4 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-4" |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
 4.10 m by 3.0 m instead of 4.05 m, because a virtual wall has no width.
+
+ARE-4 made two expected failures pass by accident, and they were tightened so that they still
+ask for their own fix. `MS-8 a door on a virtual wall is reported` now asks for a line about
+the door; its dividing line also splits the room, which ARE-4 reports. `VE-2 one partition
+typed 27 instead of 2.7 …` (elevations.test.ts) now asks for a line about the height; its
+partition also stands inside the room without being in the wall list, which ARE-4 reports.
+Both are still expected failures.
 
 ## Kinds of test the suite does not have yet
 
