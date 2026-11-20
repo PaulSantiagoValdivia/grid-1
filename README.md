@@ -58,6 +58,22 @@ plan or a path was refused or a file could not be written, and 2 when the comman
 refused. A refusal is one line on standard error. Findings in a report are not a refusal:
 `grid check` still exits 0.
 
+### Floor no room claims
+
+Besides the findings, `grid check` lists problems in the drawing. Some of them come from the
+spaces the walls enclose: once per floor, Grid joins the wall footprints and takes the spaces
+they close off, without looking at any room, and then sets each room's outline against them.
+Each of these is a warning ("worth a look"); nothing is left out because of it.
+
+| Code | What it says |
+|---|---|
+| `floor/unclaimed` | Enclosed floor that no room claims: its area, a point inside it and the walls around it. A forgotten room no longer makes the total smaller in silence |
+| `room/space-mismatch` | A room whose outline is not the space its walls enclose: how much of it lies on walls it does not list (a pod, a column, furniture drawn as walls), outside the walls, or across a wall or dividing line into another space |
+| `room/not-enclosed` | A room its walls do not close off at all, because they leave a gap |
+| `floor/spaces-unknown` | A floor whose spaces could not be worked out, with the reason |
+
+The joining uses `polygon-clipping` (MIT), named in `NOTICE`.
+
 ### Starting a project: `grid init`
 
 ```bash
