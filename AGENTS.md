@@ -18,9 +18,11 @@ Notes for agents and people changing this repository.
   adding or changing a rule.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own.
-- `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `check`, `draw`,
-  `export` and `serve`, in `src/command/`. A folder holding `grid.json` (`grid init` writes it)
-  is a Grid project: there `check`, `draw` and `export` read its `plan.json` when no plan is named. `npm run build` bundles it with esbuild into
+- `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `check`,
+  `describe`, `draw`, `export` and `serve`, in `src/command/`. `describe` (VEW-5, `src/describe/`)
+  prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`). A
+  folder holding `grid.json` (`grid init` writes it) is a Grid project: there `check`,
+  `describe`, `draw` and `export` read its `plan.json` when no plan is named. `npm run build` bundles it with esbuild into
   `packages/cli/dist/grid.mjs`, which is git-ignored. The `grid` and `ongrid` bins point to
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
