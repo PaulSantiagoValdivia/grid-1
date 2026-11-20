@@ -1,0 +1,45 @@
+{
+  "version": "1",
+  "units": "m",
+  "floors": [{"id": "p4", "name": "Planta 4ª", "level": 4}],
+  "walls": [
+    {"id": "fachada", "start": [0.0, 0.0], "end": [10.0, 0.0], "thickness": 0.3, "height": 2.6, "kind": "exterior", "floor": "p4"},
+    {"id": "med-e", "start": [10.0, 0.0], "end": [10.0, 9.0], "thickness": 0.25, "height": 2.6, "kind": "interior", "floor": "p4"},
+    {"id": "med-n", "start": [10.0, 9.0], "end": [0.0, 9.0], "thickness": 0.25, "height": 2.6, "kind": "interior", "floor": "p4"},
+    {"id": "med-w", "start": [0.0, 9.0], "end": [0.0, 0.0], "thickness": 0.25, "height": 2.6, "kind": "interior", "floor": "p4"},
+    {"id": "patio-s", "start": [0.0, 4.0], "end": [2.4, 4.0], "thickness": 0.2, "height": 2.6, "kind": "exterior", "floor": "p4"},
+    {"id": "tab-s", "start": [2.4, 4.0], "end": [10.0, 4.0], "thickness": 0.1, "height": 2.6, "kind": "partition", "floor": "p4"},
+    {"id": "patio-e", "start": [2.4, 4.0], "end": [2.4, 6.4], "thickness": 0.2, "height": 2.6, "kind": "exterior", "floor": "p4"},
+    {"id": "patio-n", "start": [0.0, 6.4], "end": [2.4, 6.4], "thickness": 0.2, "height": 2.6, "kind": "exterior", "floor": "p4"},
+    {"id": "tab-cn", "start": [2.4, 6.4], "end": [5.2, 6.4], "thickness": 0.1, "height": 2.6, "kind": "partition", "floor": "p4"},
+    {"id": "x64", "start": [6.4, 0.0], "end": [6.4, 9.0], "thickness": 0.1, "height": 2.6, "kind": "partition", "floor": "p4"},
+    {"id": "x52", "start": [5.2, 4.0], "end": [5.2, 9.0], "thickness": 0.1, "height": 2.6, "kind": "partition", "floor": "p4"},
+    {"id": "bn", "start": [6.4, 6.0], "end": [10.0, 6.0], "thickness": 0.1, "height": 2.6, "kind": "partition", "floor": "p4"},
+    {"id": "an", "start": [6.4, 7.5], "end": [10.0, 7.5], "thickness": 0.1, "height": 2.6, "kind": "partition", "floor": "p4"}
+  ],
+  "rooms": [
+    {"id": "salon", "name": "Salón-comedor", "boundary": ["fachada", "x64", "tab-s", "patio-s", "med-w"], "use": "living", "floor": "p4"},
+    {"id": "dorm1", "name": "Dormitorio principal", "boundary": ["fachada", "med-e", "tab-s", "x64"], "use": "bedroom", "floor": "p4"},
+    {"id": "patio", "name": "Patio de luces", "boundary": ["patio-s", "patio-e", "patio-n", "med-w"], "use": "other", "floor": "p4"},
+    {"id": "cocina", "name": "Cocina", "boundary": ["tab-s", "x52", "tab-cn", "patio-e"], "use": "kitchen", "floor": "p4"},
+    {"id": "dorm2", "name": "Dormitorio 2", "boundary": ["patio-n", "tab-cn", "x52", "med-n", "med-w"], "use": "bedroom", "floor": "p4"},
+    {"id": "pasillo", "name": "Pasillo", "boundary": ["tab-s", "x64", "med-n", "x52"], "use": "corridor", "floor": "p4"},
+    {"id": "bano", "name": "Baño", "boundary": ["tab-s", "med-e", "bn", "x64"], "use": "bathroom", "floor": "p4"},
+    {"id": "aseo", "name": "Aseo", "boundary": ["bn", "med-e", "an", "x64"], "use": "bathroom", "floor": "p4"},
+    {"id": "despensa", "name": "Despensa", "boundary": ["an", "med-e", "med-n", "x64"], "use": "storage", "floor": "p4"}
+  ],
+  "openings": [
+    {"id": "d-entrada", "wall": "med-n", "type": "door", "offset": 3.75, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "d-salon", "wall": "tab-s", "type": "door", "offset": 2.95, "width": 0.8, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "d-dorm1", "wall": "x64", "type": "door", "offset": 2.8, "width": 0.8, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "d-cocina", "wall": "x52", "type": "door", "offset": 0.8, "width": 0.8, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "d-dorm2", "wall": "x52", "type": "door", "offset": 3.0, "width": 0.8, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "d-bano", "wall": "x64", "type": "door", "offset": 4.6, "width": 0.7, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "d-aseo", "wall": "x64", "type": "door", "offset": 6.3, "width": 0.7, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "d-despensa", "wall": "x64", "type": "door", "offset": 7.8, "width": 0.7, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "v-salon", "wall": "fachada", "type": "window", "offset": 1.0, "width": 2.0, "sill": 0.1, "height": 2.1},
+    {"id": "v-dorm1", "wall": "fachada", "type": "window", "offset": 7.4, "width": 1.4, "sill": 0.9, "height": 1.3},
+    {"id": "v-cocina", "wall": "patio-e", "type": "window", "offset": 0.6, "width": 1.0, "sill": 1.0, "height": 1.1},
+    {"id": "v-dorm2", "wall": "patio-n", "type": "window", "offset": 0.5, "width": 1.2, "sill": 0.9, "height": 1.2}
+  ]
+}
