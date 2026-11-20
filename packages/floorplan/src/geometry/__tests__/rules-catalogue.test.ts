@@ -60,4 +60,8 @@ describe('the report', () => {
     expect(report.limits.length).toBeGreaterThan(0)
     for (const line of report.limits) expect(line).not.toMatch(/\b(comply|complies|approved|passes)\b/i)
   })
+
+  it('says it does not know which walls carry load', () => {
+    expect(checkLocalRules(empty()).limits).toContainEqual(expect.stringMatching(/^Which walls carry load is not known\b/))
+  })
 })

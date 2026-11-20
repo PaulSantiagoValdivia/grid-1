@@ -87,4 +87,11 @@ describe('the report', () => {
     expect(checkLocalRules(empty()).limits).toEqual([...LIMITS, ...FIGURE_LIMITS])
     for (const line of FIGURE_LIMITS) expect(line).not.toMatch(/\b(comply|complies|approved|passes)\b/i)
   })
+
+  it('lists ceiling height, and which walls carry load, as never looked at', () => {
+    const limits = checkLocalRules(empty()).limits
+    expect(limits).toContainEqual(expect.stringMatching(/^Ceiling height is not checked\b/))
+    expect(limits).toContainEqual(expect.stringMatching(/^Which walls carry load is not known\b/))
+    expect(limits.filter((line) => /ceiling height|carry load/i.test(line))).toHaveLength(2)
+  })
 })

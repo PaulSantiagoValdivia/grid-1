@@ -186,6 +186,14 @@ describe('grid check', () => {
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)
   })
 
+  it('lists ceiling height and load-bearing walls among what the checks never look at', () => {
+    const run = grid('check', 'two-bed-flat.json')
+    expect(run.status).toBe(0)
+    const never = run.out.slice(run.out.indexOf('What these checks never look at'))
+    expect(never).toMatch(/^ {2}- Ceiling height is not checked\b/m)
+    expect(never).toMatch(/^ {2}- Which walls carry load is not known\b/m)
+  })
+
   it('gives the same bytes through node, grid and ongrid', () => {
     const direct = grid('check', 'two-bed-flat.json')
     const viaGrid = shim('grid', 'check', 'two-bed-flat.json')

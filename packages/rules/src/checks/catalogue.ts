@@ -70,5 +70,7 @@ export const HABITABLE_USES: readonly RoomUse[] = ['bedroom', 'living', 'dining'
 export const FIGURE_LIMITS: readonly string[] = [
   'Windows are measured as drawn: the part that opens may be smaller',
   'Where an escape window or door leads, and basements without a bedroom, are not checked',
-  'The shortest side of a room, and the total size of a home, are not checked'
+  'The shortest side of a room, and the total size of a home, are not checked',
+  // Until a ceiling-height check exists, which needs each room's own height and the roof plane over a slope.
+  'Ceiling height is not checked, in any room or under a sloping roof'
 ]

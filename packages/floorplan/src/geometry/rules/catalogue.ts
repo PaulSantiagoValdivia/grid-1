@@ -37,9 +37,11 @@ export const RULES: readonly Rule[] = [
   }
 ]
 
-/** What the route checks never look at. Shown with every report. */
+/** What the plan checks never look at. Shown with every report. */
 export const LIMITS: readonly string[] = [
   'A route counts whatever it goes through: a bedroom, a bathroom, a kitchen or a garage',
   'The length of a route and the number of ways out are not checked',
-  'Which way a door opens, and how wide doors and corridors are, are not checked'
+  'Which way a door opens, and how wide doors and corridors are, are not checked',
+  // The plan file says nothing about structure, so no check can tell a load-bearing wall from a partition.
+  'Which walls carry load is not known: the plan does not record it, so nothing here looks at structure'
 ]
