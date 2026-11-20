@@ -60,7 +60,7 @@ test fails, and `it.fails` becomes `it`.
 | Lab entry | Where |
 | --- | --- |
 | AR-4, MS-2, MS-3, MS-8, MS-9, MS-10, MS-15, MS-16, MS-17 | `geometry/__tests__/validation.test.ts` |
-| AR-2 (schema), Z-5, MS-1 | `types/__tests__/floorplan.test.ts` |
+| MS-1 | `types/__tests__/floorplan.test.ts` |
 | VE-2 | `geometry/__tests__/elevations.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
 | CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
@@ -75,6 +75,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | AR-1, AR-14, AR-2 (measuring) | ARE-1 | `geometry/__tests__/conventions.test.ts` |
 | AR-1, AR-14, MS-7 (29 hand-worked cases) | ARE-1 | `geometry/__tests__/room-areas.test.ts`; `GRID_DISAGREES` is empty |
 | AR-12, AR-13, MS-7 | ARE-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-1" |
+| AR-2 (schema), Z-5 | ARE-2 | `types/__tests__/floorplan.test.ts`, "a virtual wall"; Z-5 also in `types/__tests__/every-plan-parses.test.ts` |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,

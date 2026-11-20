@@ -204,22 +204,69 @@ describe('a room’s use', () => {
  * right behaviour and fails today; when its fix lands, vitest reports it, and `it.fails`
  * becomes `it`. Each title starts with its lab entry ID.
  */
+/** A dividing line (ARE-2): a virtual wall has no material, so 0 is what it may state and gets. */
+describe('a virtual wall', () => {
+  const line = (extra: object = {}) => ({ id: 'v', start: [0, 0], end: [1, 0], virtual: true, ...extra })
+  const problems = (raw: unknown) => FloorPlanSchema.safeParse(raw).error?.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+
+  // Lab AR-2, an expected failure until ARE-2.
+  it('AR-2 a virtual wall may state thickness 0', () => {
+    expect(() => parseFloorPlan({ walls: [line({ thickness: 0 })] })).not.toThrow()
+  })
+
+  // Lab Z-5: the plan nine test files read with JSON.parse was refused here, because its
+  // dividing line has thickness 0 and height 0. An expected failure until ARE-2.
+  it('Z-5 the shared fixture plan passes the schema', () => {
+    const fixture: unknown = JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures/floor-plan.json'), 'utf8'))
+    expect(safeParseFloorPlan(fixture)).not.toBeNull()
+  })
+
+  it('may state height 0', () => {
+    expect(parseFloorPlan({ walls: [line({ thickness: 0, height: 0 })] }).walls[0]).toMatchObject({ thickness: 0, height: 0 })
+  })
+
+  it('gets thickness 0 and height 0 when it states neither', () => {
+    expect(parseFloorPlan({ walls: [line()] }).walls[0]).toMatchObject({ thickness: 0, height: 0 })
+  })
+
+  it('keeps a thickness it states, which measuring ignores', () => {
+    expect(parseFloorPlan({ walls: [line({ thickness: 0.1 })] }).walls[0]!.thickness).toBe(0.1)
+  })
+
+  it('is refused with a negative thickness or height, by name', () => {
+    expect(problems({ walls: [line({ thickness: -0.1 })] })).toEqual(['walls.0.thickness: Number must be greater than or equal to 0'])
+    expect(problems({ walls: [line({ height: -1 })] })).toEqual(['walls.0.height: Number must be greater than or equal to 0'])
+  })
+})
+
+describe('a solid wall', () => {
+  const solid = (extra: object = {}) => ({ id: 's', start: [0, 0], end: [1, 0], ...extra })
+  const problems = (raw: unknown) => FloorPlanSchema.safeParse(raw).error?.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+
+  it('still gets 0.2 m and 2.7 m when it states neither', () => {
+    expect(parseFloorPlan({ walls: [solid()] }).walls[0]).toMatchObject({ thickness: 0.2, height: 2.7 })
+    expect(parseFloorPlan({ walls: [solid({ virtual: false })] }).walls[0]).toMatchObject({ thickness: 0.2, height: 2.7 })
+  })
+
+  it('is still refused with thickness or height 0, with the same words as before', () => {
+    expect(problems({ walls: [solid({ thickness: 0 })] })).toEqual(['walls.0.thickness: Number must be greater than 0'])
+    expect(problems({ walls: [solid({ height: 0 })] })).toEqual(['walls.0.height: Number must be greater than 0'])
+    expect(problems({ walls: [solid({ thickness: -1, height: 0 })] })).toEqual([
+      'walls.0.thickness: Number must be greater than 0',
+      'walls.0.height: Number must be greater than 0'
+    ])
+  })
+
+  it('is refused with a thickness that is not a number', () => {
+    expect(problems({ walls: [solid({ thickness: '0.2' })] })).toEqual(['walls.0.thickness: Expected number, received string'])
+  })
+})
+
 describe('known failures (expected to fail until fixed)', () => {
   const rect = (extra: object = {}) =>
     ([[0, 0], [5, 0], [5, 4], [0, 4]] as const).map((start, i, all) => ({
       id: `w${i + 1}`, start, end: all[(i + 1) % 4], thickness: 0.2, height: 2.7, kind: 'exterior', ...extra
     }))
-
-  it.fails('AR-2 a virtual wall may state thickness 0', () => {
-    expect(() => parseFloorPlan({ walls: [{ id: 'v', start: [0, 0], end: [1, 0], virtual: true, thickness: 0 }] })).not.toThrow()
-  })
-
-  // Lab Z-5: the plan nine test files read with JSON.parse is refused here, because its
-  // dividing line has thickness 0 and height 0. That is the schema half of AR-2.
-  it.fails('Z-5 the shared fixture plan passes the schema', () => {
-    const fixture: unknown = JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures/floor-plan.json'), 'utf8'))
-    expect(safeParseFloorPlan(fixture)).not.toBeNull()
-  })
 
   // Lab MS-1: `thick` instead of `thickness` is dropped and the wall gets the 0.2 m default.
   it.fails('MS-1 a misspelt field is not dropped in silence', () => {

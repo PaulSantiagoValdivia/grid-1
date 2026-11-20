@@ -86,9 +86,9 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after ARE-1) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after ARE-2) | The lab's own figure |
 |---|---:|---:|---:|
-| Rooms measured wrong | 1,975 | 200 | baseline 829 + 1,145 = 1,974 |
+| Rooms measured wrong | 1,975 | 203 | baseline 829 + 1,145 = 1,974 |
 | Damage that passes in silence | 560 | 538 | baseline 560 |
 | Turns answered | 15 | 15 | 15 |
 | Design mistakes named | 2 | 2 | 2 |
@@ -122,6 +122,18 @@ counts:
   row of different thickness are measured now, less 5 lab rooms newly refused, each of which
   Grid had measured wrong: 2 out of order, 2 empty, and the room beside the 1e308 m wall,
   which is now inside out.
+
+ARE-2 (a virtual wall may have thickness and height 0, and gets 0 when it states neither) moved
+one count:
+
+- Rooms measured wrong, 200 to 203. Five lab plans that give a dividing line thickness 0 were
+  refused by the schema and are read now (unreadable lab plans 25 to 20, rooms compared 16,449
+  to 16,463). 11 of their 14 rooms agree with the referee. The other 3 are one probe in three
+  copies, `v-wall-4-virtual-zero-thickness`: a dividing line runs through the middle of the
+  bedroom and is in no room's wall list. Grid measures the bedroom its walls list, 9.00 m²; the
+  referee stops at the line, 4.50 m². That is a wall list that does not match the space (lab
+  entry V-9), for the unclaimed-floor checks, not a measuring fault. The lab's probe only asked
+  that the plan be accepted.
 
 The damage outcomes match the lab's plan for plan: 1,512 named, 305 something else, 560
 silent, 117 no effect, 506 refused. The printout's `plansWhoseOutcomeDiffersNow` says how many

@@ -51,21 +51,59 @@ export const FloorSchema = z.object({
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
 
-export const WallSchema = z.object({
-  id: z.string(),
-  start: Vec2,
-  end: Vec2,
-  // C1: grows thickness/2 on each side of the start→end axis
-  thickness: z.number().positive().default(0.2),
-  height: z.number().positive().default(2.7),
-  // Explicit field — do not infer from thickness; an interior wall can be thick
-  kind: WallKindSchema.default('interior'),
-  // Boundary wall with no physical material (open-plan room contour, e.g. kitchen open to dining)
-  virtual: z.boolean().optional(),
-  // C5: unstated means the ground floor. Optional, not defaulted — a plan written
-  // before floors existed must round-trip with no key added to it.
-  floor: z.string().min(1).optional(),
-})
+/**
+ * What a wall that does not state its thickness or height gets. A virtual wall is a
+ * dividing line on the floor (an open-plan room contour, e.g. a kitchen open to the
+ * dining room): it has no material, so it takes no floor and stands no height, and
+ * 0 is both what it may state and what it gets.
+ */
+export const WALL_DEFAULTS = {
+  solid: { thickness: 0.2, height: 2.7 },
+  virtual: { thickness: 0, height: 0 },
+} as const
+
+/** Fills the thickness and height a wall leaves out, by whether it is virtual. */
+function withWallDefaults(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const wall = raw as Record<string, unknown>
+  const defaults = wall.virtual === true ? WALL_DEFAULTS.virtual : WALL_DEFAULTS.solid
+  return {
+    ...wall,
+    thickness: wall.thickness === undefined ? defaults.thickness : wall.thickness,
+    height: wall.height === undefined ? defaults.height : wall.height,
+  }
+}
+
+export const WallSchema = z.preprocess(
+  withWallDefaults,
+  z
+    .object({
+      id: z.string(),
+      start: Vec2,
+      end: Vec2,
+      // C1: grows thickness/2 on each side of the start→end axis. A virtual wall's
+      // written thickness is never used: it is a line, measured on its axis.
+      thickness: z.number(),
+      height: z.number(),
+      // Explicit field — do not infer from thickness; an interior wall can be thick
+      kind: WallKindSchema.default('interior'),
+      // Boundary wall with no physical material (open-plan room contour, e.g. kitchen open to dining)
+      virtual: z.boolean().optional(),
+      // C5: unstated means the ground floor. Optional, not defaulted — a plan written
+      // before floors existed must round-trip with no key added to it.
+      floor: z.string().min(1).optional(),
+    })
+    .superRefine((wall, ctx) => {
+      // A solid wall needs some thickness and height; a dividing line may have none.
+      const virtual = wall.virtual === true
+      for (const key of ['thickness', 'height'] as const) {
+        const value = wall[key]
+        if (virtual ? value >= 0 : value > 0) continue
+        // The same issue `.positive()` gave before, so its message and path do not change.
+        ctx.addIssue({ code: z.ZodIssueCode.too_small, type: 'number', minimum: 0, inclusive: virtual, exact: false, path: [key] })
+      }
+    }),
+)
 
 // What a room is for. Explicit, like `Wall.kind`: nothing infers it from the
 // room's name, shape or area.

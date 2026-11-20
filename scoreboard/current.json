@@ -1,7 +1,7 @@
 {
  "what": "The counts the build must not fall below. Update them in the commit that moves them, and say why.",
  "counts": {
-  "roomsMeasuredWrong": 200,
+  "roomsMeasuredWrong": 203,
   "damageSilent": 538,
   "turnsAnswered": 15,
   "mistakesNamed": 2,
@@ -12,9 +12,9 @@
  "detail": {
   "areas:lab": {
    "plans": 1121,
-   "plansGridCannotRead": 25,
-   "compared": 16449,
-   "wrong": 197,
+   "plansGridCannotRead": 20,
+   "compared": 16463,
+   "wrong": 200,
    "notMeasured": 712
   },
   "areas:generated": {
