@@ -24,6 +24,9 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
+- Every file the command or the tool server reads or writes goes through
+  `packages/cli/src/fs/projectFiles.ts`, which keeps it inside the project folder. Nothing else
+  in `packages/cli` imports `fs`: `src/__tests__/fileAccess.test.ts` fails if it does.
 
 ## Commands
 
