@@ -337,6 +337,17 @@ describe('speed', () => {
   }, 30_000)
 })
 
+describe('the launcher npm links as grid and ongrid', () => {
+  it('is named by both bins, and says so when the command is not built yet', () => {
+    const manifest = JSON.parse(readFileSync(join(cli, 'package.json'), 'utf8')) as { bin: Record<string, string> }
+    expect(manifest.bin).toEqual({ grid: 'bin/grid.mjs', ongrid: 'bin/grid.mjs' })
+    mkdirSync(join(dir, 'bin'))
+    writeFileSync(join(dir, 'bin', 'grid.mjs'), readFileSync(join(cli, 'bin', 'grid.mjs')))
+    const run = result(spawnSync(process.execPath, [join(dir, 'bin', 'grid.mjs'), 'check', 'two-bed-flat.json'], { cwd: dir }))
+    expectRefusal(run, 1, 'run npm run build')
+  })
+})
+
 describe('the built file', () => {
   it('starts with a shebang and is one file', () => {
     expect(readFileSync(bundle, 'utf8').startsWith('#!/usr/bin/env node\n')).toBe(true)

@@ -20,7 +20,8 @@ Notes for agents and people changing this repository.
   computes geometry of its own.
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `check`, `draw`, `export`
   and `serve`, in `src/command/`. `npm run build` bundles it with esbuild into
-  `packages/cli/dist/grid.mjs`, which is git-ignored. Its end-to-end tests run that file as a
+  `packages/cli/dist/grid.mjs`, which is git-ignored. The `grid` and `ongrid` bins point to
+  `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
 
