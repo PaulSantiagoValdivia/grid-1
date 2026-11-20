@@ -1,0 +1,14 @@
+{
+  "about": "The design mistakes an agent made in the lab's 15 design attempts (cluster I, PE-2), each with the plan it is in and the ids of the parts that are wrong. Grid names a mistake when anything it says (a drawing issue, a door warning or a rules finding) is about one of those parts. The lab counted 9 mistakes and said Grid's notes pointed at 2. Mistakes 8 and 9 are our reading of the lab's notes; the lab does not list the nine one by one.",
+  "mistakes": [
+    { "n": 1, "plan": "I/scenarios/s1-room-list/attempt-1.json", "mistake": "the floor left over went into the bathroom, far bigger than asked", "ids": ["bath1", "bed1-n"] },
+    { "n": 2, "plan": "I/scenarios/s1-room-list/attempt-2.json", "mistake": "the bathroom window runs across the new utility-room partition", "ids": ["w-bath1", "util-n"] },
+    { "n": 3, "plan": "I/scenarios/s2-described-sketch/attempt-1.json", "mistake": "the bedroom door sits past the end of the hall and joins bedroom to bathroom", "ids": ["d-bedroom", "hall-w", "hall-n"] },
+    { "n": 4, "plan": "I/scenarios/s2-described-sketch/attempt-2.json", "mistake": "the same door now straddles the hall's end wall", "ids": ["d-bedroom", "hall-n"] },
+    { "n": 5, "plan": "I/scenarios/s3-tape-survey/attempt-2-as-taped.json", "mistake": "a wall typed 10 cm off: the hall too narrow, the bathroom too wide", "ids": ["hall-bath", "hall", "bath"] },
+    { "n": 6, "plan": "I/scenarios/s5-plot/attempt-1-with-plot.json", "mistake": "the plot drawn as a room of four dividing lines", "ids": ["plot", "plot-s", "plot-e", "plot-n", "plot-w"] },
+    { "n": 7, "plan": "I/scenarios/s5-plot/attempt-1-with-plot.json", "mistake": "a bedroom with no outside wall", "ids": ["bed3", "bed23", "spine-w"] },
+    { "n": 8, "plan": "I/scenarios/s7-photo-or-scan/traced.json", "mistake": "a window's sill and height guessed wrong from a picture", "ids": ["w-living-s"] },
+    { "n": 9, "plan": "I/scenarios/s8-someone-elses-plan/attempt-1-walls-only.json", "mistake": "moved partitions left two windows and an opening cut by the walls", "ids": ["w-dining", "w-kitchen", "o-dining", "s11", "s15"] }
+  ]
+}

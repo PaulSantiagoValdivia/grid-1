@@ -17,7 +17,8 @@
     "lint": "eslint packages scripts",
     "pretest": "npm run build",
     "test": "vitest run",
-    "check:licenses": "node scripts/check-licenses.mjs"
+    "check:licenses": "node scripts/check-licenses.mjs",
+    "check:data": "node scripts/check-data.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",

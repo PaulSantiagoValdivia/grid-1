@@ -1,0 +1,2 @@
+# The scoreboard data is compressed: never convert line endings in it.
+scoreboard/data/*.gz binary
