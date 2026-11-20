@@ -37,8 +37,9 @@ Run the type check and the tests before calling a change done.
 - Node 22, npm, TypeScript in strict mode.
 - English in code, comments and docs.
 - Conventional commits.
-- Every `package.json` keeps `"private": true`, and none has a `license` field, until the
-  licence is chosen. See `LICENSE-PENDING.md`.
+- Grid is licensed under Apache-2.0. See `LICENSE` and `NOTICE`.
+- Every `package.json` has `"license": "Apache-2.0"` and keeps `"private": true` until
+  publishing is approved. A test checks both.
 - Never commit secrets, `.env` files, personal data or paths from your own machine.
 
 ## Rules and standards
@@ -62,4 +63,6 @@ own words.
 - A short quote that a rules lookup collects, with its address, is saved in the user's own
   project. It never belongs in this repository.
 - Do not copy code from another project unless its licence allows it. When you do, say where
-  it came from and under which licence.
+  it came from and under which licence. Copied code keeps its own licence and copyright
+  notice: leave its header in place, and add the notice to `NOTICE` when its licence asks
+  for that.

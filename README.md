@@ -33,4 +33,5 @@ npm test
 
 ## Licence
 
-The licence has not been chosen yet. See [LICENSE-PENDING.md](LICENSE-PENDING.md).
+Grid is licensed under the [Apache License 2.0](LICENSE) (`Apache-2.0`). See also
+[NOTICE](NOTICE). To suggest a change, see [CONTRIBUTING.md](CONTRIBUTING.md).

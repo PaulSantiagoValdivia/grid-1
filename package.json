@@ -2,6 +2,7 @@
   "name": "ongrid-workspace",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "description": "Grid (ongrid): floor plans and plan checks for architects",
   "type": "module",
   "engines": {
@@ -11,8 +12,8 @@
     "packages/*"
   ],
   "scripts": {
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "eslint packages",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts",
+    "lint": "eslint packages scripts",
     "test": "vitest run"
   },
   "devDependencies": {
