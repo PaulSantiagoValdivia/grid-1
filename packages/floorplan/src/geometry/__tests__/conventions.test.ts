@@ -9,6 +9,8 @@ import { buildScene } from '../scene3d'
 import { roomArea, wallExposure } from '../room'
 import { openingSpan, wallPolygon } from '../wall'
 import { validatePlan } from '../validate'
+import { parseFloorPlan } from '../../types/floorplan'
+import { insideArea, outline, type Point } from '../../test-support/outline'
 
 /**
  * The five conventions the team closed, one test each. If someone changes one
@@ -186,5 +188,56 @@ describe('C5 · every floor rises from z = 0', () => {
     expect(buildFloorPlan(planForFloor(plan, 'ground')).walls).toHaveLength(
       buildFloorPlan(plan).walls.length
     )
+  })
+})
+
+/**
+ * Known failures from the lab (entry Z-4), as expected failures. Each states the right
+ * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
+ * `it`. The hand-worked table in room-areas.test.ts holds more cases of the same faults.
+ */
+describe('C3 · known failures (expected to fail until fixed)', () => {
+  const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
+  const areaOf = (p: FloorPlan, id = 'r1') => roomArea(p.rooms.find((r) => r.id === id)!, indexPlan(p))
+  const L_DEEP: Point[] = [[0, 0], [6, 0], [6, 2], [2, 2], [2, 6], [0, 6]] // 6 x 6 less a 4 x 4 piece
+  const L_ROUND: Point[] = [[0, 0], [6, 0], [6, 3], [3, 3], [3, 6], [0, 6]] // 6 x 6 less a 3 x 3 piece
+  const L_GLTF: Point[] = [[0, 0], [4, 0], [4, 2], [2, 2], [2, 4], [0, 4]] // the L in gltf.test.ts
+
+  // Lab AR-1: reads 19.20 m² against 17.64.
+  it.fails('AR-1 an L room with a deep cut measures between its inner faces', () => {
+    const { walls, room } = outline(L_DEEP)
+    expect(areaOf(planOf({ walls, rooms: [room] }))).toBeCloseTo(insideArea(L_DEEP), 4)
+  })
+
+  // Lab AR-1: reads 11.20 m² against 10.44.
+  it.fails('AR-1 the L room already used in gltf.test.ts measures between its inner faces', () => {
+    const { walls, room } = outline(L_GLTF)
+    expect(areaOf(planOf({ walls, rooms: [room] }))).toBeCloseTo(insideArea(L_GLTF), 4)
+  })
+
+  // Lab AR-14: reads 25.80, 25.24, 24.64 and 25.24 m² at 0, 1, 45 and 180 degrees.
+  it.fails('AR-14 the 6 x 6 L with a 3 x 3 cut measures 24.64 m² turned by 0, 1, 45 and 180 degrees', () => {
+    const at = (deg: number) => {
+      const { walls, room } = outline(L_ROUND, { rotate: deg })
+      return areaOf(planOf({ walls, rooms: [room] }))
+    }
+    expect([0, 1, 45, 180].map((d) => at(d).toFixed(2))).toEqual(['24.64', '24.64', '24.64', '24.64'])
+  })
+
+  // Lab AR-2: through the schema the dividing line gets 0.2 m, and the halves add up to
+  // 17.48 m² against 18.24.
+  it.fails('AR-2 a virtual dividing line takes no floor away', () => {
+    const { walls, room } = outline([[0, 0], [5, 0], [5, 4], [0, 4]])
+    const whole = areaOf(planOf({ walls, rooms: [room] }))
+    const divider = { id: 'v', start: [2.5, 0], end: [2.5, 4], virtual: true, height: 2.7 }
+    const plan = planOf({
+      walls: [...walls, divider],
+      rooms: [
+        { id: 'a', name: 'A', boundary: ['w1', 'v', 'w3', 'w4'] },
+        { id: 'b', name: 'B', boundary: ['w1', 'w2', 'w3', 'v'] }
+      ]
+    })
+    expect(validatePlan(plan).issues).toEqual([])
+    expect(areaOf(plan, 'a') + areaOf(plan, 'b')).toBeCloseTo(whole, 4)
   })
 })

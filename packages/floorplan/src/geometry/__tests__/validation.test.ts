@@ -4,6 +4,10 @@ import { planFloors, planForFloor } from '../floors'
 import { buildFloorPlan } from '../floorplan'
 import { buildScene } from '../scene3d'
 import { validatePlan } from '../validate'
+import { indexPlan } from '../plan'
+import { roomArea } from '../room'
+import { parseFloorPlan } from '../../types/floorplan'
+import { outline } from '../../test-support/outline'
 
 /**
  * What the AI is going to get wrong.
@@ -450,5 +454,101 @@ describe('floor ids that differ only by case or spacing', () => {
 
   it('says nothing when the ids are properly distinct', () => {
     expect(codes(twoFloorPlan())).not.toContain('plan/similar-floor-id')
+  })
+})
+
+/**
+ * Known failures from the lab (entry Z-4), as expected failures. Each states the right
+ * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
+ * `it`. Each title starts with its lab entry ID.
+ */
+describe('known failures (expected to fail until fixed)', () => {
+  type P = [number, number]
+  const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+  const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
+  const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
+  const divider = { id: 'v', start: [2.5, 0] as P, end: [2.5, 4] as P, virtual: true, height: 2.7 }
+
+  it.fails('AR-4 a room listed twice is reported', () => {
+    const { walls, room } = outline(RECT)
+    expect(issuesOf(planOf({ walls, rooms: [room, { ...room, id: 'r2', name: 'Again' }] })).length).toBeGreaterThan(0)
+  })
+
+  it.fails('AR-12 a room narrower than its walls is an issue, not an area', () => {
+    const { walls, room } = outline([[0, 0], [3, 0], [3, 0.3], [0, 0.3]], { thickness: [0.4, 0.4, 0.4, 0.4] })
+    expect(issuesOf(planOf({ walls, rooms: [room] })).length).toBeGreaterThan(0)
+  })
+
+  // Lab AR-13: a 20 m² room reads 345 m², with no issue.
+  it.fails('AR-13 two swapped boundary entries in a room 3 cm out of square are reported', () => {
+    const { walls, room } = outline([[0, 0], [5, 0], [5.03, 4], [0, 4.02]])
+    const plan = planOf({ walls, rooms: [{ ...room, boundary: ['w1', 'w3', 'w2', 'w4'] }] })
+    const reported = issuesOf(plan).length > 0
+    const area = reported ? 0 : roomArea(plan.rooms[0]!, indexPlan(plan))
+    expect({ reported, area: Math.round(area) }).toEqual({ reported: true, area: 0 })
+  })
+
+  it.fails('MS-2 a 1.5 m gap in a room outline is reported', () => {
+    const { walls, room } = outline(RECT)
+    walls[1] = { ...walls[1]!, start: [5, 1.5] }
+    expect(issuesOf(planOf({ walls, rooms: [room] })).length).toBeGreaterThan(0)
+  })
+
+  it.fails('MS-3 a wall 27 m high in a house is worth a warning', () => {
+    const { walls, room } = outline(RECT)
+    walls[0] = { ...walls[0]!, height: 27 }
+    expect(issuesOf(planOf({ walls, rooms: [room] })).length).toBeGreaterThan(0)
+  })
+
+  it.fails('MS-7 two walls in a row with different thickness still make a room', () => {
+    const { walls, room } = outline([[0, 0], [2.5, 0], [5, 0], [5, 4], [0, 4]], { thickness: [0.3, 0.1, 0.2, 0.2, 0.2] })
+    expect(validatePlan(planOf({ walls, rooms: [room] })).broken.has('r1')).toBe(false)
+  })
+
+  it.fails('MS-8 a door on a virtual wall is reported', () => {
+    const { walls, room } = outline(RECT)
+    const plan = planOf({
+      walls: [...walls, divider],
+      rooms: [room],
+      openings: [{ id: 'd', wall: 'v', type: 'door', offset: 1, width: 0.9, height: 2.1 }]
+    })
+    expect(issuesOf(plan).length).toBeGreaterThan(0)
+  })
+
+  it.fails('MS-9 two ids that differ only by a trailing space are reported', () => {
+    const { walls, room } = outline(RECT)
+    const plan = planOf({ walls: [...walls, { ...walls[0]!, id: 'w1 ', start: [10, 10], end: [12, 10] }], rooms: [room] })
+    expect(issuesOf(plan).length).toBeGreaterThan(0)
+  })
+
+  // Lab MS-10 (as corrected by the lab): with a floors list the warning already fires
+  // ('a floor nobody declared', above); without one it does not.
+  it.fails('MS-10 a misspelt floor is reported when the plan lists no floors', () => {
+    const { walls, room } = outline(RECT)
+    const plan = planOf({
+      walls: walls.map((w, i) => ({ ...w, floor: i === 0 ? 'frist' : 'first' })),
+      rooms: [{ ...room, floor: 'first' }]
+    })
+    expect(issuesOf(plan).some((i) => /frist/.test(i.message))).toBe(true)
+  })
+
+  it.fails('MS-15 a copy of a wall under a new id is reported', () => {
+    const { walls, room } = outline(RECT)
+    expect(issuesOf(planOf({ walls: [...walls, { ...walls[0]!, id: 'copy' }], rooms: [room] })).length).toBeGreaterThan(0)
+  })
+
+  // Lab MS-16: the wall is 4.8996 m long, so the door "runs from 4.00 to 4.90" only by rounding.
+  it.fails('MS-16 a door flush with the end of an angled wall is accepted', () => {
+    const len = 4.8996
+    const a = (33 * Math.PI) / 180
+    const wall = { id: 'w', start: [0, 0], end: [len * Math.cos(a), len * Math.sin(a)], thickness: 0.2, height: 2.7, kind: 'exterior' }
+    const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 4.0, width: 0.9, height: 2.1 }] })
+    expect(issuesOf(plan)).toEqual([])
+  })
+
+  it.fails('MS-17 a wall that cuts a room in two without being listed is reported', () => {
+    const { walls, room } = outline(RECT)
+    const cut = { id: 'cut', start: [2.5, 0], end: [2.5, 4], thickness: 0.1, height: 2.7, kind: 'partition' }
+    expect(issuesOf(planOf({ walls: [...walls, cut], rooms: [room] })).length).toBeGreaterThan(0)
   })
 })

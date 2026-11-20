@@ -3,7 +3,7 @@ import { planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { floorGraph } from '@ongrid/floorplan/geometry/rules/graph'
 import { checkLocalRules } from '..'
 import type { RuleFinding } from '..'
-import { door, edit, flat, twoFloorHouse, withOpening, withoutOpening } from './fixtures'
+import { door, edit, exterior, flat, twoFloorHouse, withOpening, withoutOpening } from './fixtures'
 
 /** What was not checked about routes: the fixtures state no room use, which has its own tests. */
 const routeNotes = (report: ReturnType<typeof checkLocalRules>) =>
@@ -230,5 +230,25 @@ describe('what the full check does not need to be told', () => {
       for (const item of [...report.findings, ...report.notChecked]) expect(item.message).not.toMatch(forbidden)
       for (const line of report.limits) expect(line).not.toMatch(forbidden)
     }
+  })
+})
+
+/**
+ * Known failures from the lab (entry Z-4), as expected failures. Each states the right
+ * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
+ * `it`. Each title starts with its lab entry ID.
+ */
+describe('known failures (expected to fail until fixed)', () => {
+  it.fails('CH-6 a 5 cm hole in the outside wall is not a way out', () => {
+    const corners: [number, number][] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+    const walls = corners.map((start, i) => exterior(`w${i + 1}`, start, corners[(i + 1) % 4]!))
+    const plan: FloorPlan = {
+      version: '1',
+      units: 'm',
+      walls,
+      rooms: [{ id: 'r1', name: 'Room', boundary: walls.map((w) => w.id), use: 'living' }],
+      openings: [door('d', 'w1', 1, 0.05)]
+    }
+    expect(checkLocalRules(plan).findings.some((f) => f.code === 'no_exit')).toBe(true)
   })
 })

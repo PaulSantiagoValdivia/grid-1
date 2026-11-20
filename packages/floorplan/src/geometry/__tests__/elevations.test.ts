@@ -10,6 +10,9 @@ import {
   type StoreyLevel,
   type Wall
 } from '..'
+import { validatePlan } from '../validate'
+import { parseFloorPlan } from '../../types/floorplan'
+import { outline } from '../../test-support/outline'
 
 /**
  * Storey stacking: where each level stands, derived from its walls because the
@@ -319,5 +322,23 @@ describe('floorElevations', () => {
       for (const s of result.floors.values()) expect(Number.isFinite(s?.floorLevel)).toBe(true)
       expect(Number.isFinite(result.roof.top)).toBe(true)
     }
+  })
+})
+
+/**
+ * Known failures from the lab (entry Z-4), as expected failures. Each states the right
+ * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
+ * `it`. Each title starts with its lab entry ID.
+ */
+describe('known failures (expected to fail until fixed)', () => {
+  // Lab VE-2. 'stands each storey on the tallest wall below it' pins the rule this probe
+  // questions; a warning would satisfy both (see test-support/pinned-tests.md).
+  it.fails('VE-2 one partition typed 27 instead of 2.7 does not make a 27 m storey in silence', () => {
+    const { walls, room } = outline([[0, 0], [5, 0], [5, 4], [0, 4]])
+    const tall = { id: 'p', start: [2.5, 0], end: [2.5, 2], thickness: 0.1, height: 27, kind: 'partition' }
+    const plan: FloorPlan = parseFloorPlan({ walls: [...walls, tall], rooms: [room] })
+    const storey = [...floorElevations(plan).floors.values()][0]!
+    const quiet = validatePlan(plan).issues.length === 0
+    expect(quiet && JSON.stringify(storey).includes('27')).toBe(false)
   })
 })

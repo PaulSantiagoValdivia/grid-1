@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_FLOOR_ID,
@@ -195,4 +197,39 @@ describe('a room’s use', () => {
       })
     }
   )
+})
+
+/**
+ * Known failures from the lab (entries Z-4 and Z-5), as expected failures. Each states the
+ * right behaviour and fails today; when its fix lands, vitest reports it, and `it.fails`
+ * becomes `it`. Each title starts with its lab entry ID.
+ */
+describe('known failures (expected to fail until fixed)', () => {
+  const rect = (extra: object = {}) =>
+    ([[0, 0], [5, 0], [5, 4], [0, 4]] as const).map((start, i, all) => ({
+      id: `w${i + 1}`, start, end: all[(i + 1) % 4], thickness: 0.2, height: 2.7, kind: 'exterior', ...extra
+    }))
+
+  it.fails('AR-2 a virtual wall may state thickness 0', () => {
+    expect(() => parseFloorPlan({ walls: [{ id: 'v', start: [0, 0], end: [1, 0], virtual: true, thickness: 0 }] })).not.toThrow()
+  })
+
+  // Lab Z-5: the plan nine test files read with JSON.parse is refused here, because its
+  // dividing line has thickness 0 and height 0. That is the schema half of AR-2.
+  it.fails('Z-5 the shared fixture plan passes the schema', () => {
+    const fixture: unknown = JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures/floor-plan.json'), 'utf8'))
+    expect(safeParseFloorPlan(fixture)).not.toBeNull()
+  })
+
+  // Lab MS-1: `thick` instead of `thickness` is dropped and the wall gets the 0.2 m default.
+  it.fails('MS-1 a misspelt field is not dropped in silence', () => {
+    const raw = { walls: rect({ thickness: undefined, thick: 0.4 }) }
+    let said = false
+    try {
+      said = parseFloorPlan(raw).walls[0]!.thickness === 0.4
+    } catch {
+      said = true
+    }
+    expect(said).toBe(true)
+  })
 })

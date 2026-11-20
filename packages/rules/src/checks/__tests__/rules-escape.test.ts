@@ -263,3 +263,19 @@ describe('order in the report', () => {
     expect(codes.map(group)).toEqual([...codes.map(group)].sort((a, b) => a - b))
   })
 })
+
+/**
+ * Known failures from the lab (entry Z-4), as expected failures. Each states the right
+ * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
+ * `it`. Each title starts with its lab entry ID.
+ */
+describe('known failures (expected to fail until fixed)', () => {
+  // Lab CH-3: "USA" is read as another country, so the US escape rule is skipped in silence.
+  // rules-figures.test.ts 'is false for any other country' lists ES, GB, DE, IT and Spain,
+  // never USA, so a fix need not change it.
+  it.fails('CH-3 "USA" is read as the same place as "US", or refused', () => {
+    const plan = bedroom([])
+    const codes = (country: string) => checkLocalRules(plan, { country }).findings.map((f) => f.code)
+    expect(codes('USA')).toEqual(codes('US'))
+  })
+})

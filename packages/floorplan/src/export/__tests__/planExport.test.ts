@@ -111,3 +111,19 @@ describe('exportFileName', () => {
     expect(exportPlan(twoFloors(), 'dxf', { ...ids, floorId: 'first' }).fileName).toBe('my-house-first.dxf')
   })
 })
+
+/**
+ * Known failures from the lab (entry Z-4), as expected failures. Each states the right
+ * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
+ * `it`. Each title starts with its lab entry ID.
+ */
+describe('known failures (expected to fail until fixed)', () => {
+  it.fails('EX-4 floors named "Level 1" and "level-1" get different file names', () => {
+    expect(exportFileName('house', 'dxf', 'Level 1')).not.toBe(exportFileName('house', 'dxf', 'level-1'))
+  })
+
+  // "House in Tokyo" written in Japanese, and "house" in Russian: today both become floor-plan.dxf.
+  it.fails('EX-4 a project named in a non-Latin script keeps a name of its own', () => {
+    expect(exportFileName('\u6771\u4eac\u306e\u5bb6', 'dxf', null)).not.toBe(exportFileName('\u0414\u043e\u043c', 'dxf', null))
+  })
+})
