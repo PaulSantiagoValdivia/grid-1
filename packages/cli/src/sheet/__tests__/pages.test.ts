@@ -11,7 +11,10 @@ import type { LoadedPlan } from '../../command/plan'
 import { GROSS_NOT_KNOWN, planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
 import { planPicture } from '@ongrid/viewer/src/picture'
-import { floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, sheetPages, type SheetPicture } from '../pages'
+import { buildFloorPlan, planForFloor } from '@ongrid/floorplan/geometry'
+import { pointInPolygon } from '@ongrid/floorplan/geometry/innerPoint'
+import type { Picture } from '@ongrid/viewer/src/picture'
+import { floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, planPictureOptions, sheetPages, type SheetPicture } from '../pages'
 
 function fixture(name: string): LoadedPlan {
   const plan = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures', name), 'utf8')))
@@ -263,14 +266,14 @@ const LAB_SAMPLE = [
   'A/scenarios/probes/townhouse-v1-id-clash.json',
 ]
 
-function labPlans(): Map<string, LoadedPlan> {
+function labPlans(names: readonly string[] = LAB_SAMPLE): Map<string, LoadedPlan> {
   const repo = resolve(__dirname, '../../../../..')
   const lines = gunzipSync(readFileSync(resolve(repo, 'scoreboard/data/lab-plans.ndjson.gz'))).toString('utf8').split('\n')
   const found = new Map<string, LoadedPlan>()
   for (const line of lines) {
     if (!line) continue
     const row = JSON.parse(line) as { name: string; text: string }
-    if (!LAB_SAMPLE.includes(row.name)) continue
+    if (!names.includes(row.name)) continue
     const plan = FloorPlanSchema.parse(JSON.parse(row.text))
     const { issues, broken } = validatePlan(plan)
     found.set(row.name, { file: row.name, plan, issues, broken })
@@ -367,6 +370,70 @@ describe('small things a sheet says (VEW-7)', () => {
     for (const loaded of [house, brokenStudy(), { file: 'shut', plan: shutPlan, issues, broken }]) {
       const whole = checkPlan(loaded, {})
       for (const floor of planFloors(loaded.plan)) expect(checkOnFloor(loaded, whole, floor.id)).toEqual(checkPlan(loaded, { floor: floor.id }))
+    }
+  })
+})
+
+/** Where each room's label is drawn on a picture, in plan metres (Y up), by room id. */
+function labelsOf(picture: Picture): Map<string, { x: number; y: number }> {
+  const found = new Map<string, { x: number; y: number }>()
+  for (const node of picture.nodes) {
+    if (!node.key?.startsWith('label:')) continue
+    const at = /^translate\((\S+) (\S+)\)/.exec(String(node.attrs['transform']))!
+    found.set(node.key.slice('label:'.length), { x: Number(at[1]), y: -Number(at[2]) })
+  }
+  return found
+}
+
+describe('room labels on a floor page (VEW-7)', () => {
+  // Labels moved into other rooms on these (the outside test): a tall townhouse, and long names with ids.
+  const TOWNHOUSE = 'A/scenarios/probes/townhouse-stair-misaligned.json'
+  const plans = labPlans([TOWNHOUSE, 'D/scenarios/d2-door-to-air-floor3.json', ...LAB_SAMPLE])
+
+  function pictures(loaded: LoadedPlan, layout: 'client' | 'check') {
+    return sheetPages(loaded, null, layout, { name: 'x', date }).pages.flatMap((page) => {
+      if (page.picture?.kind !== 'plan') return []
+      const { options, grow } = planPictureOptions(page.picture)
+      const rooms = buildFloorPlan(planForFloor(loaded.plan, page.picture.floor)).rooms
+      return [{
+        rooms, grow,
+        sheet: planPicture(loaded.plan, options),
+        draw: planPicture(loaded.plan, { floor: page.picture.floor, ...(options.labels ? { labels: options.labels } : {}) }),
+      }]
+    })
+  }
+  const inside = (at: { x: number; y: number } | undefined, polygon: readonly { x: number; y: number }[]) => at !== undefined && pointInPolygon(at, polygon)
+
+  it.each(['client', 'check'] as const)('draws each room\'s label inside that room on the townhouse (%s)', (layout) => {
+    const floors = pictures(plans.get(TOWNHOUSE)!, layout)
+    for (const { rooms, sheet } of [floors[0]!, floors[2]!]) {
+      const labels = labelsOf(sheet)
+      for (const room of rooms) expect(inside(labels.get(room.id), room.polygon), room.id).toBe(true)
+    }
+  })
+
+  it.each(['client', 'check'] as const)('puts every label where grid draw puts it, at the same size against the rooms (%s)', (layout) => {
+    for (const [name, loaded] of plans) {
+      for (const { rooms, sheet, draw } of pictures(loaded, layout)) {
+        expect((sheet.view.width / sheet.width) / (draw.view.width / draw.width), name).toBeCloseTo(1, 9)
+        const ours = labelsOf(sheet)
+        const theirs = labelsOf(draw)
+        expect([...ours.keys()].sort(), name).toEqual([...theirs.keys()].sort())
+        for (const room of rooms) {
+          const [a, b] = [ours.get(room.id), theirs.get(room.id)]
+          if (!a || !b) continue
+          expect(Math.hypot(a.x - b.x, a.y - b.y), `${name} ${room.id}`).toBeLessThan(1e-6)
+        }
+      }
+    }
+  })
+
+  it.each(['client', 'check'] as const)('draws every floor at one scale on the paper, a little past its frame (%s)', (layout) => {
+    for (const [name, loaded] of plans) {
+      const floors = pictures(loaded, layout)
+      const metresPerPoint = floors.map(({ sheet, grow }) => sheet.view.width / (PLAN_BOX.width * grow))
+      for (const each of metresPerPoint) expect(each / metresPerPoint[0]!, name).toBeCloseTo(1, 9)
+      for (const { grow } of floors) { expect(grow).toBeGreaterThanOrEqual(1); expect(grow).toBeLessThan(1.05) }
     }
   })
 })

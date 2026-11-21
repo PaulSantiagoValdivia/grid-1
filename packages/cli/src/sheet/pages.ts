@@ -9,8 +9,8 @@ import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geom
 import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
-import { FRAME_MARGIN } from '@ongrid/viewer/src/canvas2d/viewport'
-import { planPicture } from '@ongrid/viewer/src/picture'
+import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
+import { pictureView, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
@@ -24,6 +24,41 @@ export const SHEET_LAYOUTS: readonly SheetLayout[] = ['client', 'check']
 /** The drawing box on a floor page, in PDF points: what the frames are fitted to. */
 export const PLAN_BOX = { width: 700, height: 640 } as const
 
+/** `PLAN_BOX`'s shape in the fewest whole pixels. */
+const SHAPE = (() => {
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
+  const g = gcd(PLAN_BOX.width, PLAN_BOX.height)
+  return { width: PLAN_BOX.width / g, height: PLAN_BOX.height / g }
+})()
+
+/**
+ * How `pdf.ts` draws a floor page's picture: what it asks `drawPlan` for, and how many times
+ * the box's size the picture is drawn at, centred on the box and cut to it.
+ *
+ * Labels are sized in pixels, so the picture has as many pixels as make one pixel measure what
+ * it does in `grid draw`'s picture of the floor (`metresPerPixel`): each label is as large
+ * against the rooms as there, and goes where `grid draw` puts it. Drawn at the box's own size,
+ * labels were up to a few times larger and pushed into other rooms. Pixels come whole and the
+ * box keeps its shape, so the picture shows a little more than the frame (at most one step of
+ * `SHAPE`) at the frame's scale; what is beyond the frame is cut, as it always was.
+ */
+export function planPictureOptions(picture: Extract<SheetPicture, { kind: 'plan' }>): { options: PictureOptions; grow: number } {
+  const shown = fitTo(picture.frame, PLAN_BOX.width / PLAN_BOX.height)
+  const steps = Math.max(1, Math.ceil(shown.width / picture.metresPerPixel / SHAPE.width))
+  const width = steps * SHAPE.width
+  const grow = (width * picture.metresPerPixel) / shown.width
+  const { min, max } = picture.frame
+  const cx = (min.x + max.x) / 2
+  const cy = (min.y + max.y) / 2
+  const w = picture.frame.width * grow
+  const h = picture.frame.height * grow
+  const frame: Bounds = { min: { x: cx - w / 2, y: cy - h / 2 }, max: { x: cx + w / 2, y: cy + h / 2 }, width: w, height: h }
+  return {
+    options: { floor: picture.floor, frame, width, height: steps * SHAPE.height, ...(picture.ids ? { labels: { ids: true } } : {}) },
+    grow,
+  }
+}
+
 export interface SheetFigure { readonly value: string; readonly label: string }
 export interface SheetRow { readonly name: string; readonly detail: string | null; readonly area: string }
 /**
@@ -32,7 +67,11 @@ export interface SheetRow { readonly name: string; readonly detail: string | nul
  */
 export interface SheetTable { readonly heading: string; readonly rows: readonly SheetRow[]; readonly total: SheetRow | null; readonly note: string | null }
 export type SheetPicture =
-  | { readonly kind: 'plan'; readonly floor: string; readonly frame: Bounds; readonly ids: boolean }
+  /**
+   * `frame` is what the box shows, in plan metres. `metresPerPixel` is what one pixel measures
+   * in `grid draw`'s picture of the floor: the zoom its labels are placed at (`planPictureOptions`).
+   */
+  | { readonly kind: 'plan'; readonly floor: string; readonly frame: Bounds; readonly metresPerPixel: number; readonly ids: boolean }
   | { readonly kind: 'model' }
 export interface SheetPage {
   readonly kind: 'cover' | 'floor' | 'summary'
@@ -71,7 +110,7 @@ function dateText(date: Date): string {
 export function floorFrames(loaded: LoadedPlan): ReadonlyMap<string, Bounds> {
   const views = planFloors(loaded.plan).map((floor) => ({
     floor: floor.id,
-    view: planPicture(loaded.plan, { floor: floor.id, width: PLAN_BOX.width, height: PLAN_BOX.height }).view,
+    view: pictureView(loaded.plan, { floor: floor.id, width: PLAN_BOX.width, height: PLAN_BOX.height }).view,
   }))
   const grow = 1 + 2 * FRAME_MARGIN
   const width = Math.max(...views.map((v) => v.view.width)) / grow
@@ -82,6 +121,12 @@ export function floorFrames(loaded: LoadedPlan): ReadonlyMap<string, Bounds> {
     const frame: Bounds = { min: { x: cx - width / 2, y: cy - height / 2 }, max: { x: cx + width / 2, y: cy + height / 2 }, width, height }
     return [floor, frame]
   }))
+}
+
+/** A floor page's picture, with the zoom of `grid draw`'s picture of that floor. */
+function floorPicture(loaded: LoadedPlan, frames: ReadonlyMap<string, Bounds>, floor: string, ids: boolean): SheetPicture {
+  const drawn = pictureView(loaded.plan, { floor })
+  return { kind: 'plan', floor, frame: frames.get(floor)!, metresPerPixel: drawn.view.width / drawn.width, ids }
 }
 
 function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {
@@ -140,7 +185,7 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
       kind: 'floor', topLine: `${title} / ${floor.name}`, title: floor.name, subtitle: null,
       paragraphs: words?.floors?.[floor.id] ?? [], figures: [],
       table: floorAreas ? areaTable(floorAreas, false) : null,
-      picture: { kind: 'plan', floor: floor.id, frame: frames.get(floor.id)!, ids: false },
+      picture: floorPicture(loaded, frames, floor.id, false),
       notes: leftOut ? [...limits, LEFT_OUT_LIMIT] : limits,
     }
   })
@@ -194,7 +239,7 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
       kind: 'floor', topLine: `${name} / ${floor.name}`, title: floor.name, subtitle: null,
       paragraphs: [], figures: [],
       table: floorAreas ? areaTable(floorAreas, true) : null,
-      picture: { kind: 'plan', floor: floor.id, frame: frames.get(floor.id)!, ids: true },
+      picture: floorPicture(loaded, frames, floor.id, true),
       notes: shown,
     }
   })

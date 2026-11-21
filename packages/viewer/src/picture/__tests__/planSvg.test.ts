@@ -5,7 +5,7 @@ import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { mixedPlan } from '../../canvas2d/__tests__/canvas-test-utils'
 import { house } from '../../canvas2d/__tests__/fixtures'
 import { DARK_LOOK, LIGHT_LOOK, LINE_PX, lengthText } from '../look'
-import { DEFAULT_WIDTH, planPicture, planToSvg } from '../planSvg'
+import { DEFAULT_WIDTH, pictureView, planPicture, planToSvg } from '../planSvg'
 
 /**
  * A picture of a plan in plain Node: no browser, no DOM, no stylesheet.
@@ -27,6 +27,13 @@ const attrsOf = (svg: string, part: string): string[] =>
   [...svg.matchAll(new RegExp(`<[a-z]+ [^>]*data-part="${part}"[^>]*>`, 'g'))].map((m) => m[0])
 
 describe('planToSvg', () => {
+  it('gives the size and view of a picture without drawing it (pictureView)', () => {
+    for (const options of [{}, { width: 700, height: 640 }, { showDimensions: false }, { frame: { min: { x: 0, y: 0 }, max: { x: 3, y: 2 }, width: 3, height: 2 } }]) {
+      const { width, height, view } = planPicture(house(), options)
+      expect(pictureView(house(), options)).toEqual({ width, height, view })
+    }
+  })
+
   it('runs without a browser', () => {
     expect(typeof document).toBe('undefined')
     expect(typeof window).toBe('undefined')

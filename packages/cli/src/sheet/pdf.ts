@@ -14,7 +14,7 @@ import { loadCanvas } from '../draw/canvas'
 import { drawPlan } from '../draw/drawPlan'
 import { drawStill } from '../draw/drawStill'
 import { SANS, SERIF, registerSheetFonts } from './fonts'
-import { PLAN_BOX, type Sheet, type SheetPage, type SheetRow, type SheetTable } from './pages'
+import { PLAN_BOX, planPictureOptions, type Sheet, type SheetPage, type SheetRow, type SheetTable } from './pages'
 
 export const A3 = { width: 1191, height: 842 } as const
 const MARGIN = 48
@@ -275,12 +275,15 @@ export async function floorPictureBox(sheet: Sheet): Promise<{ top: number; widt
 async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, box: { top: number; width: number; height: number }): Promise<void> {
   if (page.picture?.kind !== 'plan') return
   // The frame is in plan metres and the box has one size on every floor: one scale throughout.
-  const png = await drawPlan(plan, {
-    format: 'png', scale: PLAN_SCALE, floor: page.picture.floor, frame: page.picture.frame,
-    width: PLAN_BOX.width, height: PLAN_BOX.height,
-    ...(page.picture.ids ? { labels: { ids: true } } : {}),
-  })
-  ctx.drawImage(await canvas.loadImage(Buffer.from(png)), MARGIN, box.top, box.width, box.height)
+  // The picture is `grow` times the box, cut to it; its PNG has `PLAN_SCALE` pixels per point.
+  const { options, grow } = planPictureOptions(page.picture)
+  const png = await drawPlan(plan, { format: 'png', scale: (PLAN_SCALE * PLAN_BOX.width * grow) / options.width!, ...options })
+  const w = box.width * grow
+  const h = box.height * grow
+  ctx.save()
+  ctx.beginPath(); ctx.rect(MARGIN, box.top, box.width, box.height); ctx.clip()
+  ctx.drawImage(await canvas.loadImage(Buffer.from(png)), MARGIN - (w - box.width) / 2, box.top - (h - box.height) / 2, w, h)
+  ctx.restore()
 }
 
 async function drawCover(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, flowing: readonly Piece[]): Promise<void> {

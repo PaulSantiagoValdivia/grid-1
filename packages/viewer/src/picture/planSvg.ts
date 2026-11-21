@@ -126,14 +126,27 @@ function sizeOf(framed: Bounds, options: PictureOptions): { width: number; heigh
   return { width, height: Math.max(1, Math.round(width * clamped)) }
 }
 
-/** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
-export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
+function framePicture(plan: FloorPlan, options: PictureOptions) {
   const slice = planForFloor(plan, resolveFloor(plan, options.floor))
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
   const framed = options.frame ?? framingOf(drawing, dimensions)
   const { width, height } = sizeOf(framed, options)
-  const view = fitTo(framed, width / height)
+  return { slice, drawing, dimensions, width, height, view: fitTo(framed, width / height) }
+}
+
+/**
+ * The size of the picture `planPicture` makes with these options, and the part of the plan it
+ * shows, without drawing it: no labels are placed, so it is quick on a large plan.
+ */
+export function pictureView(plan: FloorPlan, options: PictureOptions = {}): Pick<Picture, 'width' | 'height' | 'view'> {
+  const { width, height, view } = framePicture(plan, options)
+  return { width, height, view }
+}
+
+/** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
+export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
+  const { slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
   const look = lookOf(options.look)
   const nodes = planScene({
     drawing,
