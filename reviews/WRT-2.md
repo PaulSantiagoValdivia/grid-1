@@ -124,7 +124,13 @@ damaged stamp never refuses a plan. The sheet's coverage table says it is not sh
    from a room's corner, not by their neighbours. It loses nothing and an edit is plain, but
    moving one room does not carry its neighbours. A read-back that chains rooms ("north of
    kitchen") is a possible follow-up.
-9. **Sizes to centre lines or outside faces** take off the walls each side turns out to have:
+9. **A key rooms text cannot say is never dropped.** The read-back checks itself by writing the
+   text again and comparing every key of every wall, room and opening, so a field a later step
+   adds without a rooms spelling (as LVL-7's `floorOffset` was until this merge) puts that floor
+   in Grid's own terms instead of losing it. LVL-7's step is spelt `floor <m>` on a room line
+   (`room genkan "Genkan" corridor 2 x 1.5 floor -0.15`). *Owner:* this is the first field
+   designed in both spellings after the fact; WRT-1 asks for both at once from now on.
+10. **Sizes to centre lines or outside faces** take off the walls each side turns out to have:
    Grid places the rooms, looks at the walls, and places them again until every side has the
    wall it was taken to have (at most eight rounds).
 
@@ -133,8 +139,9 @@ damaged stamp never refuses a plan. The sheet's coverage table says it is not sh
 - Of the hand-drawn originals, the four-flats plan's floor reads back in raw lines: its mirrored
   flats list their boundaries in an order rooms text does not give. It still writes back with 0
   changes. Every plan written rooms first reads back rooms first.
-- Curved walls, rooms with holes (ARE-6, in parallel) and steps inside a floor (LVL-7, in
-  parallel) have no rooms spelling yet; they read back as raw lines, losslessly.
+- Curved walls and rooms with holes (ARE-6, in parallel) have no rooms spelling yet; they read
+  back as raw lines, losslessly. ARE-6's new field, when it lands on `main`, needs its rooms
+  spelling the same way `floorOffset` got one here.
 - AB-2's third fix ("resize-room follows a side made of several walls") belongs to the edit
   tools, not to this card.
 - The language takes the lab's words as they were; WRT-1's "both spellings designed together"
@@ -142,4 +149,17 @@ damaged stamp never refuses a plan. The sheet's coverage table says it is not sh
 
 ## The checks
 
-To be filled in with what each printed.
+Run on the branch with `main` merged in (LVL-7), each under a `timeout`:
+
+| Command | What it printed |
+|---|---|
+| `npm run build` | `node build.mjs`, exit 0 |
+| `npm run typecheck` | `tsc --noEmit` in each package, exit 0 |
+| `npm run lint` | `eslint packages scripts scoreboard`, no problems, exit 0 |
+| `npm run check:licenses` | "Checked 363 licences in package-lock.json: none is GPL, LGPL, AGPL, MPL, EPL.", exit 0 |
+| `npx vitest run --exclude '.claude/**'` | 187 test files, 4124 tests passed, exit 0 |
+| `npm run scoreboard` | Every count the same as the stored figures (197, 386, 15, 2, 5, 727, 95), "Same as the stored figures.", exit 0 |
+
+An earlier full run, while four sessions were testing at once (load average over 100), lost
+three tests to the 60 s timeout; two of them were real (`describe`'s help text and the server's
+tool count, both updated here) and all three pass run again.
