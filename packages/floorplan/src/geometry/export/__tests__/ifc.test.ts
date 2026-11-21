@@ -8,6 +8,7 @@ import { floorElevations, SLAB_THICKNESS } from '../../elevations'
 import { createGuidIssuer, ifcGuid, ifcString, toIfc } from '../ifc'
 import { indexPlan } from '../../plan'
 import { wallExposure } from '../../exposure'
+import { ballroomWithStage, genkanFlat } from '../../../test-support/plans'
 
 /**
  * IFC export.
@@ -2476,5 +2477,55 @@ describe('SHT-2 joined corners in the IFC file', () => {
     const ys = bodyOf(doc, spine).base.map((p) => p[1])
     expect(Math.min(...ys)).toBeCloseTo(0.15, 9)
     expect(Math.max(...ys)).toBeCloseTo(7.45, 9)
+  })
+})
+
+/**
+ * LVL-7: a room set off its storey stands at its own level in the IFC file. A genkan 0.18 m up is a
+ * space and a slab 0.18 m up (lab R-4); a 0.6 m stage is a space and a slab at 0.6 m, and no wall
+ * (S-17).
+ */
+describe('LVL-7 a step inside a floor in the IFC file', () => {
+  const slabNamed = (doc: Doc, name: string): Entity => {
+    const found = ofType(doc, 'IFCSLAB').filter((e) => str(e.args[2]) === name)
+    expect(found, name).toHaveLength(1)
+    return found[0]!
+  }
+  const zRange = (solid: WorldSolid): [number, number] => {
+    const zs = [...solid.base, ...solid.top].map((p) => p[2])
+    return [Math.min(...zs), Math.max(...zs)]
+  }
+
+  it('raises the genkan\'s space 0.18 m, up to the storey\'s ceiling, and leaves the hall on the floor', () => {
+    const doc = parseDoc(toIfc(genkanFlat()))
+    const [low, high] = zRange(bodyOf(doc, spaceByName(doc, 'Genkan')))
+    expect(low).toBeCloseTo(0.18, 9)
+    expect(high).toBeCloseTo(2.7, 9)
+    expect(zRange(bodyOf(doc, spaceByName(doc, 'Hall')))[0]).toBeCloseTo(0, 9)
+  })
+
+  it('puts the top of the genkan\'s slab at 0.18 m, solid down to the storey\'s slab', () => {
+    const doc = parseDoc(toIfc(genkanFlat()))
+    const [low, high] = zRange(bodyOf(doc, slabNamed(doc, 'Genkan floor slab')))
+    expect(high).toBeCloseTo(0.18, 9)
+    expect(low).toBeCloseTo(-SLAB_THICKNESS, 9)
+    expect(zRange(bodyOf(doc, slabNamed(doc, 'Hall floor slab')))).toEqual([-SLAB_THICKNESS, 0])
+  })
+
+  it('lowers a sunken genkan\'s space and slab 0.18 m', () => {
+    const doc = parseDoc(toIfc(genkanFlat(-0.18)))
+    expect(zRange(bodyOf(doc, spaceByName(doc, 'Genkan')))[0]).toBeCloseTo(-0.18, 9)
+    const [low, high] = zRange(bodyOf(doc, slabNamed(doc, 'Genkan floor slab')))
+    expect(high).toBeCloseTo(-0.18, 9)
+    expect(low).toBeCloseTo(-0.18 - SLAB_THICKNESS, 9)
+  })
+
+  it('writes the stage as a space 0.6 m up with its 32 m², and no wall', () => {
+    const doc = parseDoc(toIfc(ballroomWithStage()))
+    const stage = bodyOf(doc, spaceByName(doc, 'Stage'))
+    expect(zRange(stage)).toEqual([expect.closeTo(0.6, 9), expect.closeTo(5, 9)])
+    expect(Math.abs(signedAreaXY(stage.base))).toBeCloseTo(32, 9)
+    expect(wallsOf(doc).map((w) => str(w.args[2])).sort()).toEqual(['hall-e', 'hall-n', 'hall-s', 'hall-w'])
+    expect(zRange(bodyOf(doc, slabNamed(doc, 'Stage floor slab')))[1]).toBeCloseTo(0.6, 9)
   })
 })

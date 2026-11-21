@@ -370,6 +370,37 @@ function floorHeightQuestions(floors: readonly Floor[], building: 'any' | 'home'
   }
 }
 
+/**
+ * A room set far off its storey (LVL-7): more likely a floor of its own, or a slipped digit or
+ * sign. The limit is Grid's own (`floorOffsetLargest`). Where the room's floor states its height,
+ * a room raised to its ceiling is asked about too.
+ */
+function floorOffsetQuestions(plan: FloorPlan, floors: readonly Floor[], broken: ReadonlySet<string>, issues: Issue[]): void {
+  const largest = limit('floorOffsetLargest')
+  for (const room of plan.rooms) {
+    const offset = room.floorOffset
+    if (offset === undefined || !Number.isFinite(offset) || broken.has(room.id)) continue
+    const storey = floors.find((floor) => floor.id === floorOf(room))?.height
+    const toCeiling = storey !== undefined && offset >= storey
+    if (Math.abs(offset) <= largest && !toCeiling) continue
+    const way = offset > 0 ? 'above' : 'below'
+    const why = toCeiling
+      ? `which reaches the ${m(storey)} its floor ${quoted(floorOf(room))} states it is high`
+      : `and Grid asks about a room set more than ${m(largest)} off its storey`
+    issues.push(
+      issue(
+        'room',
+        room.id,
+        'room/offset-question',
+        `Room ${quoted(room.id)} stands ${m(Math.abs(offset))} ${way} its storey's floor: is that meant? It is ` +
+          `drawn and counted at that level, ${why}. A level that far off may be a floor of its own: ` +
+          `give it its own entry in the floor list with its elevation. The limit is Grid's own, for ` +
+          `catching a slipped digit or unit, and no rule.`
+      )
+    )
+  }
+}
+
 /** The checks on levels and heights, in the order they are listed in the README. */
 export function levelIssues(
   plan: FloorPlan,
@@ -387,5 +418,6 @@ export function levelIssues(
   }
   wallsAboveStorey(plan, floors, broken, issues)
   floorHeightQuestions(floors, building, issues)
+  floorOffsetQuestions(plan, floors, broken, issues)
   return issues
 }

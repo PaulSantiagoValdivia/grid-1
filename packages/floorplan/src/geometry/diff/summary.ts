@@ -135,6 +135,9 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
       const said = (value: unknown): string => (value === null ? 'not stated' : `${metres(Number(value))} m`)
       parts.push(`height ${said(height.before)} → ${said(height.after)}`)
     }
+    // LVL-7: how far its floor stands off its storey's, 0 when unstated.
+    const floorOffset = prop(change, 'floorOffset')
+    if (floorOffset) parts.push(`floor offset ${metres(Number(floorOffset.before))} → ${metres(Number(floorOffset.after))} m`)
     return `${subject} ${parts.join('; ')}`
   }
 
