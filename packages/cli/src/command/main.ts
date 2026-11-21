@@ -1,5 +1,6 @@
 /**
- * The `grid` command, which `ongrid` runs too: `init`, `check`, `draw`, `export` and `serve`.
+ * The `grid` command, which `ongrid` runs too: `init`, `check`, `describe`, `draw`, `export` and
+ * `serve`.
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -8,7 +9,8 @@
  * Every file a command reads or writes is inside the project folder: the folder named with
  * `--project`, or else the folder it runs in. Any other path is refused (`fs/projectFiles.ts`).
  * A project folder that holds `grid.json`, as `grid init` makes it, is a Grid project: there
- * `check`, `draw` and `export` read its `plan.json` when no plan file is named (`init.ts`).
+ * `check`, `describe`, `draw` and `export` read its `plan.json` when no plan file is named
+ * (`init.ts`).
  *
  * Exit codes: 0 when the command did its work, 1 when the plan or a path was refused or a file
  * could not be written, 2 when the command line was refused. Every refusal is one line on
@@ -20,6 +22,7 @@ import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
+import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan } from './describe'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
@@ -54,6 +57,11 @@ const COMMANDS = {
     summary: 'Checks a plan and prints the report: general guidance, not your local rules.',
     options: CHECK_OPTIONS,
   },
+  describe: {
+    usage: 'grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--project <folder>]',
+    summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls. --for agent adds the ids.',
+    options: DESCRIBE_OPTIONS,
+  },
   draw: {
     usage: 'grid draw [<plan.json>] [--png | --3d] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
     summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png. With --3d, draws the 3D model as the app opens it, as a PNG.',
@@ -81,7 +89,8 @@ const OVERVIEW = [
   'Usage: grid <command> [options]   (ongrid does the same)',
   '',
   'Commands:',
-  ...Object.entries(COMMANDS).map(([name, command]) => `  ${name.padEnd(8)}${command.summary}`),
+  // A name of eight letters or more (describe) still gets a space before its summary.
+  ...Object.entries(COMMANDS).map(([name, command]) => `  ${name.length < 8 ? name.padEnd(8) : `${name} `}${command.summary}`),
   '',
   'Run grid <command> --help for its options.',
   '',
@@ -92,8 +101,8 @@ const OVERVIEW = [
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
   '',
   `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
-  `check, draw and export read ${PROJECT_PLAN} when no plan file is named, and export writes into`,
-  'exports/. grid init never replaces a file: it refuses a folder that already holds',
+  `check, describe, draw and export read ${PROJECT_PLAN} when no plan file is named, and export`,
+  'writes into exports/. grid init never replaces a file: it refuses a folder that already holds',
   `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
 ].join('\n')
@@ -172,6 +181,12 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const loaded = loadPlan(openProject(projectOption, io.cwd), planFile)
     const result = checkPlan(loaded, { floor: textOf(parsed, '--floor'), country: textOf(parsed, '--country') })
     io.stdout(json ? checkJson(result) : checkText(result, planFloors(loaded.plan).length))
+    return EXIT_OK
+  }
+
+  if (name === 'describe') {
+    const { length, audience } = checkDescribeRequest({ length: textOf(parsed, '--length'), for: textOf(parsed, '--for') })
+    io.stdout(describePlan(loadPlan(openProject(projectOption, io.cwd), planFile), length, audience))
     return EXIT_OK
   }
 

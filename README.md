@@ -48,6 +48,7 @@ local one is missing.
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid check [<plan>] [--floor <id>] [--country <code>] [--json]` | Prints the report. Every report is labelled "General guidance, not your local rules" |
+| `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below) |
 | `grid draw [<plan>] [--png \| --3d] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid serve` | Starts the tool server on standard input and output: the preview tool and `grid_export` |
@@ -57,6 +58,26 @@ local one is missing.
 graphics card: the scene is drawn in software, each face lit flat, without shadows. With
 `--floor`, that floor is shown as a cutaway, as in the app; without it, the whole building.
 The PNG is 1200 by 800 pixels, times `--scale` (up to 4).
+
+### Describing a plan: `grid describe`
+
+`grid describe` is a short account of the plan, for an agent to check its own work without
+reading the file: a front door that opens into a bedroom, or a bathroom reached only through
+the study, shows on the first read. It answers in three lengths:
+
+| `--length` | What it holds |
+|---|---|
+| `line` | One line: floors, rooms, bedrooms and bathrooms (by the `use` a room states, never its name), the area inside, and which rooms the doors from outside lead into |
+| `rooms` (the default) | The line, then each room's inside size, position and the rooms next to it, and every opening in it with the room on its other side and its distance to the two inside corners of that side |
+| `walls` | The rooms, then every wall with its openings, each with the rooms on its two sides |
+
+`--for person` (the default) names rooms and floors by their names and never prints an id.
+`--for agent` is terse and carries every id, the offsets along each wall and a key line, so an
+agent can edit the plan from it. A floor laid out like an earlier one is said once. Wall and
+sill heights are one line: the usual height and the exceptions. What the plan cannot say,
+such as where north is, the kind of building, how floors connect when it holds no stairs and
+which rooms make each flat, is said as such. Directions are on the drawing, with north at the
+top. The card checks nothing; it ends with the label "General guidance, not your local rules".
 
 Every command also takes `--project <folder>` (see below). An unknown, repeated or
 meaningless option is refused by name. The command exits 0 when it did its work, 1 when the
@@ -128,8 +149,8 @@ npx --no grid export --format dxf
 
 With no folder, `grid init` starts the project in the folder it runs in. A folder is a Grid
 project when it holds `grid.json`. In a Grid project (the folder Grid runs in, or the one
-named with `--project`), `check`, `draw` and `export` read `plan.json` when no plan file is
-named, and `export` writes into `exports/`. A plan file named on the command line is used
+named with `--project`), `check`, `describe`, `draw` and `export` read `plan.json` when no
+plan file is named, and `export` writes into `exports/`. A plan file named on the command line is used
 instead. Outside a Grid project a plan file must be named.
 
 `grid init` never replaces a file. It refuses, changing nothing, a folder that already
