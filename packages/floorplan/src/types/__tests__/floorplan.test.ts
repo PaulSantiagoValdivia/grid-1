@@ -302,3 +302,25 @@ describe('known failures (expected to fail until fixed)', () => {
     expect(said).toBe(true)
   })
 })
+
+describe('the project id (QAR-5)', () => {
+  it('is absent from an old plan, which gains no key', () => {
+    const parsed = parseFloorPlan(v1Plan)
+    expect('projectId' in parsed).toBe(false)
+    expect(JSON.parse(JSON.stringify(parsed))).toEqual(v1Plan)
+  })
+
+  it('round-trips when stated', () => {
+    const plan = { ...v1Plan, projectId: '6f1c2a9e-0b7d-4c55-9e0a-3d2f1b8c7a64' }
+    expect(parseFloorPlan(plan).projectId).toBe('6f1c2a9e-0b7d-4c55-9e0a-3d2f1b8c7a64')
+    expect(JSON.parse(JSON.stringify(parseFloorPlan(plan)))).toEqual(plan)
+  })
+
+  it('is refused when empty, not text, or not one line', () => {
+    for (const projectId of ['', 7, 'two\nlines']) {
+      const result = FloorPlanSchema.safeParse({ ...v1Plan, projectId })
+      expect(result.success, JSON.stringify(projectId)).toBe(false)
+      if (!result.success) expect(result.error.issues[0]!.path).toEqual(['projectId'])
+    }
+  })
+})

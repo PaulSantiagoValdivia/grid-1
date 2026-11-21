@@ -441,7 +441,7 @@ npx --no grid export --format dxf
 | Path | What it is |
 |---|---|
 | `grid.json` | Marks the folder as a Grid project, and holds the project's id |
-| `plan.json` | A starter plan: a two-room flat with its room uses and door swings stated, to change |
+| `plan.json` | A starter plan: a two-room flat with its room uses and door swings stated, to change. It stores the same project id |
 | `exports/` | Where `grid export` writes |
 | `.gitignore` | The line `exports/`, added when it isn't there |
 
@@ -492,6 +492,13 @@ Grid sanitises it rather than refusing it, and says so on standard error: a name
 keeps for a device gets `plan-` in front (`plan-con.dxf`); a name longer than five words or
 40 characters, or one that reads as a claim about the plan or an instruction, becomes
 `floor-plan`; one floor of several is named by its place in the plan (`house-floor-2.dxf`).
+
+Every export writes the plan's walls, rooms and openings in id order (`w2` before `w10`), so the
+same building gives the same bytes whatever order its file lists them in, and two exports can be
+compared line by line. The IFC gives each element an identity made from the plan's `projectId`
+with the element's kind, floor and id, so a re-export is recognised as the same model whatever
+the plan file is called; keep those ids stable. A plan with no `projectId` falls back to the
+plan file's name.
 
 ## Licence
 

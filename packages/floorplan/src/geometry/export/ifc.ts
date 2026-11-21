@@ -20,6 +20,7 @@
 
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall } from '../plan'
 import { planFloors, planForFloor } from '../floors'
+import { inIdOrder } from '../order'
 import { indexPlan, openingsOf } from '../plan'
 import {
   isDrawnWall,
@@ -40,7 +41,8 @@ export interface IfcOptions {
    * Seeds every element's GlobalId, so a BIM tool can recognise an updated
    * export of the same project. Plan ids such as `w1` repeat across projects:
    * without a seed, two Grid models linked in one Revit session would share
-   * element ids. When the caller passes none, `IFC_DEFAULT_PROJECT_ID` is used.
+   * element ids. The id the plan stores (`FloorPlan.projectId`, QAR-5) wins over
+   * this one; when neither is there, `IFC_DEFAULT_PROJECT_ID` is used.
    */
   readonly projectId?: string
   readonly projectName?: string
@@ -184,14 +186,21 @@ export function ifcGuid(seed: string): string {
 }
 
 export interface GuidIssuer {
-  /** The GlobalId of one element of the plan, unique among all this issuer gave. */
-  issue(kind: string, id: string): string
+  /**
+   * The GlobalId of one element of the plan, unique among all this issuer gave.
+   * `floor` is the floor the element is on, or null for what the whole building
+   * shares (the project, the site, a storey, a door style).
+   */
+  issue(kind: string, id: string, floor?: string | null): string
 }
 
 /**
- * Issues GlobalIds for one document, from `projectId:kind:id`.
+ * Issues GlobalIds for one document, from the project id, the element's kind,
+ * its floor and its id (QAR-5), written as one JSON array so that no two of
+ * them read as the same text, whatever the ids hold.
  *
- * Seeded by the project because plan ids such as `w1` repeat across projects.
+ * Seeded by the project because plan ids such as `w1` repeat across projects,
+ * and by the floor so that identities stay apart if ids ever become per floor.
  * An id already issued gets a counter appended and is hashed again: the hash
  * makes a collision astronomically unlikely, and this makes it impossible.
  */
@@ -199,8 +208,8 @@ export function createGuidIssuer(projectId: string): GuidIssuer {
   const used = new Set<string>()
 
   return {
-    issue(kind, id) {
-      const seed = `${projectId}:${kind}:${id}`
+    issue(kind, id, floor = null) {
+      const seed = JSON.stringify([projectId, kind, floor, id])
       let guid = ifcGuid(seed)
       for (let n = 1; used.has(guid); n++) guid = ifcGuid(`${seed}#${n}`)
       used.add(guid)
@@ -263,7 +272,14 @@ interface Context {
   readonly materials: WallMaterials
   /** Doors typed by their swing, by operation type, in the order they were written. */
   readonly doorsByOperation: Map<DoorOperation, number[]>
+  /** The GlobalId of an element of this context's floor, or of the building's. */
   guid(kind: string, id: string): string
+  readonly issuer: GuidIssuer
+}
+
+/** The same context, issuing the identities of one floor's elements. */
+function onFloor(c: Context, floorId: string): Context {
+  return { ...c, guid: (kind, id) => c.issuer.issue(kind, id, floorId) }
 }
 
 function isoSeconds(date: Date): string {
@@ -941,7 +957,7 @@ function writeSlab(
  * storey (a storey may contain elements through several), so adding slabs left
  * every earlier entity of the file as it was.
  */
-function writeSlabs(c: Context, storeys: readonly Storey[]): void {
+function writeSlabs(building: Context, storeys: readonly Storey[]): void {
   if (storeys.length === 0) return
   const levels = storeys.map((storey) => storey.model.floor.level)
   const lowest = Math.min(...levels)
@@ -949,6 +965,7 @@ function writeSlabs(c: Context, storeys: readonly Storey[]): void {
 
   for (const storey of storeys) {
     const { index, broken, floor } = storey.model
+    const c = onFloor(building, floor.id)
     const slabs: number[] = []
 
     for (const room of index.plan.rooms) {
@@ -973,8 +990,9 @@ function writeSlabs(c: Context, storeys: readonly Storey[]): void {
 }
 
 /** Writes everything a floor holds, and links it to its storey. */
-function writeStoreyContents(c: Context, storey: Storey): void {
+function writeStoreyContents(building: Context, storey: Storey): void {
   const { index, broken } = storey.model
+  const c = onFloor(building, storey.model.floor.id)
   const contained: number[] = []
   const joints = wallJoints(storey.model.walls)
 
@@ -1023,12 +1041,21 @@ function writeStoreyContents(c: Context, storey: Storey): void {
   aggregate(c, `spaces:${storey.model.floor.id}`, storey.id, spaces)
 }
 
-function buildDocument(plan: FloorPlan, options: IfcOptions): string {
+/** The id the plan stores (QAR-5), else the caller's, else the default. */
+function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
+  const stored: unknown = plan.projectId
+  if (typeof stored === 'string' && stored !== '') return stored
+  return options.projectId ?? IFC_DEFAULT_PROJECT_ID
+}
+
+function buildDocument(given: FloorPlan, options: IfcOptions): string {
   const timestamp = usableTimestamp(options.timestamp)
   const projectName = options.projectName ?? DEFAULT_PROJECT_NAME
+  // QAR-5: the parts in id order, so the file does not hang on the order they are listed in.
+  const plan = inIdOrder(given)
 
   const w = new StepWriter()
-  const issuer = createGuidIssuer(options.projectId ?? IFC_DEFAULT_PROJECT_ID)
+  const issuer = createGuidIssuer(projectIdOf(plan, options))
   const owner = writeOwnerHistory(w, timestamp)
   const units = writeUnits(w)
   const { model: context, shared } = writeModelContext(w)
@@ -1038,7 +1065,8 @@ function buildDocument(plan: FloorPlan, options: IfcOptions): string {
     shared,
     materials: { material: null, byThickness: new Map() },
     doorsByOperation: new Map(),
-    guid: (kind, id) => issuer.issue(kind, id)
+    guid: (kind, id) => issuer.issue(kind, id),
+    issuer
   }
 
   // The fixed entities (project, site, building) use their own kind as the id.
@@ -1132,7 +1160,8 @@ function buildDocument(plan: FloorPlan, options: IfcOptions): string {
  * The plan as an IFC2x3 document.
  *
  * Pure and total: it never throws, never reads the clock or the filesystem, and
- * the same plan, project identity and timestamp give byte-identical output.
+ * the same plan, project identity and timestamp give byte-identical output,
+ * whatever order the plan lists its walls, rooms and openings in (QAR-5).
  * Lines end in LF: ISO 10303-21 accepts any line terminator, and LF keeps the
  * bytes identical wherever the string is written.
  */
@@ -1141,7 +1170,13 @@ export function toIfc(plan: FloorPlan, options: IfcOptions = {}): string {
     return buildDocument(plan, options)
   } catch {
     // Whatever the plan did to the exporter, the caller still gets a valid
-    // document: the empty one.
-    return buildDocument({ version: '1', units: 'm', walls: [], rooms: [], openings: [] }, options)
+    // document: the empty one, under the project's own identity when it can be read.
+    let projectId = options.projectId
+    try {
+      projectId = projectIdOf(plan, options)
+    } catch {
+      // Left as the caller's.
+    }
+    return buildDocument({ version: '1', units: 'm', walls: [], rooms: [], openings: [] }, { ...options, projectId })
   }
 }
