@@ -2,7 +2,10 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'f
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
+import { NAME_MAX } from '../../command/planText'
+import { SHEET_HEADLINE_MAX, SHEET_PARAGRAPH_MAX, SHEET_PARAGRAPHS_MAX } from '@ongrid/floorplan/types/sheet'
 import { openProject } from '../../fs/projectFiles'
+import { bench } from './replay/harness'
 import { GRID_TOOLS } from '../serveTools'
 
 /** VEW-7: grid_sheet writes the plan as a PDF sheet into exports/. */
@@ -22,6 +25,42 @@ function context() {
 
 const tool = GRID_TOOLS.find((t) => t.name === 'grid_sheet')!
 const call = async (args: Record<string, unknown>, ctx = context()) => (await tool.run(args, ctx.context)) as { text: string; data: Record<string, unknown> }
+
+describe('the sheet argument, through the server (VEW-7)', () => {
+  const b = bench({ 'plan.json': JSON.parse(readFileSync(sample, 'utf8')) })
+  afterAll(() => b.close())
+
+  it('advertises the limits of the sheet schema', () => {
+    const schema = tool.args['sheet'] as unknown as { schema: { properties: Record<string, Record<string, unknown>> } }
+    interface Limits { maxLength?: number; maxItems?: number; items?: Limits; additionalProperties?: Limits }
+    const { name, headline, intro, floors } = schema.schema.properties as Record<string, Limits>
+    expect(name.maxLength).toBe(NAME_MAX)
+    expect(headline.maxLength).toBe(SHEET_HEADLINE_MAX)
+    expect(intro.maxItems).toBe(SHEET_PARAGRAPHS_MAX)
+    expect(intro.items?.maxLength).toBe(SHEET_PARAGRAPH_MAX)
+    expect(floors.additionalProperties?.maxItems).toBe(SHEET_PARAGRAPHS_MAX)
+    expect(floors.additionalProperties?.items?.maxLength).toBe(SHEET_PARAGRAPH_MAX)
+    expect(schema.schema).not.toHaveProperty('$schema')
+  })
+
+  it.each([['text', 'sheet takes an object.'], [[], 'sheet takes an object.']])('refuses sheet %j in one line', async (sheet, line) => {
+    const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'client', sheet })
+    expect(reply).toMatchObject({ isError: true, text: line })
+  })
+
+  it('refuses an unknown field in one line, at the toolkit, without repeating the text', async () => {
+    const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'client', sheet: { version: '1', 'bad field\n': 'secret' } })
+    expect(reply.isError).toBe(true)
+    expect(reply.text).toMatch(/^The sheet words: /)
+    expect(reply.text).not.toContain('secret')
+    expect(reply.text).not.toContain('\n')
+  })
+
+  it('refuses a limit breach naming the field and the limit', async () => {
+    const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'client', sheet: { version: '1', headline: 'x'.repeat(SHEET_HEADLINE_MAX + 1) } })
+    expect(reply).toMatchObject({ isError: true, text: `The sheet words: headline is longer than ${SHEET_HEADLINE_MAX} characters.` })
+  })
+})
 
 describe('grid_sheet (VEW-7)', () => {
   it('writes a check sheet and lists its pages', async () => {

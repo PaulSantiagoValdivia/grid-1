@@ -5,7 +5,7 @@
  * direction character or lone surrogate. One paragraph is one string. A refusal names the
  * field and the limit, never the text.
  */
-import { z } from 'zod'
+import { z } from 'zod/v4'
 import { NAME_MAX, quoted, UNSAFE_TEXT } from './planText'
 
 export const SHEET_HEADLINE_MAX = 200
@@ -48,8 +48,11 @@ const FIELDS = new Set(['version', 'name', 'headline', 'intro', 'floors'])
 /** A key short and plain enough to print back; anything else is named without its text. */
 const PLAIN_KEY = /^[A-Za-z0-9_.-]{1,64}$/
 
-/** Null when the words are fine; else one line naming the field and the limit. */
-export function sheetWordsProblem(raw: unknown, floorIds: readonly string[]): string | null {
+/**
+ * Null when the words are fine; else one line naming the field and the limit. With `floorIds`
+ * null only the shape and limits are checked: the caller does not know the plan's floors yet.
+ */
+export function sheetWordsProblem(raw: unknown, floorIds: readonly string[] | null): string | null {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return 'it must be a JSON object'
   const given = raw as Record<string, unknown>
   for (const key of Object.keys(given)) {
@@ -72,7 +75,7 @@ export function sheetWordsProblem(raw: unknown, floorIds: readonly string[]): st
     const floors = given['floors']
     if (typeof floors !== 'object' || floors === null || Array.isArray(floors)) return 'floors must be an object keyed by floor id'
     for (const [id, paragraphs] of Object.entries(floors)) {
-      if (!floorIds.includes(id)) {
+      if (floorIds !== null && !floorIds.includes(id)) {
         return PLAIN_KEY.test(id) ? `floors names ${quoted(id)}, which is not a floor of the plan` : 'floors names a floor the plan does not have'
       }
       const problem = paragraphsProblem(`floors[${quoted(id)}]`, paragraphs)
@@ -82,13 +85,15 @@ export function sheetWordsProblem(raw: unknown, floorIds: readonly string[]): st
   return null
 }
 
+const PARAGRAPHS = z.array(z.string().min(1).max(SHEET_PARAGRAPH_MAX)).max(SHEET_PARAGRAPHS_MAX)
+
 export const SheetWordsSchema = z
   .object({
     version: z.literal('1'),
-    name: z.string().optional(),
-    headline: z.string().optional(),
-    intro: z.array(z.string()).optional(),
-    floors: z.record(z.array(z.string())).optional(),
+    name: z.string().min(1).max(NAME_MAX).optional(),
+    headline: z.string().min(1).max(SHEET_HEADLINE_MAX).optional(),
+    intro: PARAGRAPHS.optional(),
+    floors: z.record(z.string(), PARAGRAPHS).optional(),
   })
   .strict()
 
@@ -97,4 +102,11 @@ export function parseSheetWords(raw: unknown, floorIds: readonly string[]): Shee
   const problem = sheetWordsProblem(raw, floorIds)
   if (problem !== null) throw new SheetWordsRefused(problem)
   return SheetWordsSchema.parse(raw) as SheetWords
+}
+
+/** The schema of a sheet file as JSON Schema, for a tool that takes the words as an argument. */
+export function sheetWordsJsonSchema(): Record<string, unknown> {
+  const schema = z.toJSONSchema(SheetWordsSchema) as Record<string, unknown>
+  delete schema['$schema']
+  return schema
 }

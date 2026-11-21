@@ -176,8 +176,14 @@ describe('npx -y ongrid mcp, from the packed tarball in an empty folder', () => 
 
   it('draws no picture without the optional canvas, and says so in one line', async () => {
     const dir = withPlans(folder('empty-no-canvas'))
-    const replies = await exchange(...npx(), dir, [...INITIALIZE, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'grid_view', arguments: { plan: 'two-bed-flat.json', kind: 'plan' } } }])
+    const replies = await exchange(...npx(), dir, [...INITIALIZE, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'grid_view', arguments: { plan: 'two-bed-flat.json', kind: 'plan' } } }, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'grid_sheet', arguments: { plan: 'two-bed-flat.json', layout: 'check' } } }])
     expect(replies[1]?.result).toMatchObject({ isError: true, content: [{ type: 'text', text: expect.stringMatching(/^Drawing a PNG needs the optional package @napi-rs\/canvas/) }] })
+    // VEW-7: a sheet fails with the same one line, and writes nothing.
+    const sheetReply = replies[2]?.result as { isError?: boolean; content: Array<{ text: string }> }
+    expect(sheetReply.isError).toBe(true)
+    expect(sheetReply.content[0]?.text).toMatch(/^Drawing a PNG needs the optional package @napi-rs\/canvas/)
+    expect(sheetReply.content[0]?.text).not.toContain('\n')
+    expect(existsSync(join(dir, 'exports'))).toBe(false)
   }, 120_000)
 
   it('keeps no hidden state: two plans, in either order, give the same answers', async () => {

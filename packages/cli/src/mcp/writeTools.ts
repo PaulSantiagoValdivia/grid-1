@@ -13,8 +13,7 @@ import { checkExportRequest, ExportWriteFailed, exportIntoProject } from '../com
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type Mirror, type Patch } from '../edit/edits'
-import { NAME_MAX } from '../command/planText'
-import { parseSheetWords, SHEET_HEADLINE_MAX, SHEET_PARAGRAPH_MAX, SHEET_PARAGRAPHS_MAX, SheetWordsRefused } from '@ongrid/floorplan/types/sheet'
+import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { comparePlans } from '../quantities/compare'
@@ -136,8 +135,6 @@ const previewTool: GridTool = {
 
 export const SHEET_TOOL_NAME = 'grid_sheet'
 
-const PARAGRAPHS = { type: 'array', maxItems: SHEET_PARAGRAPHS_MAX, items: { type: 'string', maxLength: SHEET_PARAGRAPH_MAX } }
-
 const sheetTool: GridTool = {
   name: SHEET_TOOL_NAME,
   title: 'Make a PDF sheet',
@@ -153,20 +150,13 @@ const sheetTool: GridTool = {
       type: 'object',
       description: 'Client only: the words, as sheet.json holds them. sheet.json beside the plan is read when left out.',
       examples: [{ version: '1', name: 'Solace House', headline: 'A private retreat for one', intro: ['A two-storey home for work and rest.'], floors: { ground: ['The study sits beside the entry.'] } }],
-      schema: {
-        type: 'object',
-        properties: {
-          version: { const: '1' },
-          name: { type: 'string', maxLength: NAME_MAX },
-          headline: { type: 'string', maxLength: SHEET_HEADLINE_MAX },
-          intro: PARAGRAPHS,
-          floors: { type: 'object', additionalProperties: PARAGRAPHS },
-        },
-        required: ['version'],
-        additionalProperties: false,
+      schema: sheetWordsJsonSchema(),
+      // The shape and limits here; the plan's floor ids in run(), where the plan is known.
+      read: (value) => {
+        const problem = sheetWordsProblem(value, null)
+        if (problem !== null) throw new ToolRefusal(`The sheet words: ${problem}.`)
+        return value
       },
-      // Checked against the plan's floors in run(), where the plan is known.
-      read: (value) => value,
     },
   },
   outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: { type: 'object' } }, note: { type: ['string', 'null'] } }),
@@ -187,7 +177,7 @@ const sheetTool: GridTool = {
       if (done.note) lines.push(done.note)
       return { text: lines.join('\n'), data: { written, layout, pages: done.pages, note: done.note ?? null } }
     } catch (error) {
-      if (error instanceof SheetWordsRefused) throw new ToolRefusal(`sheet is not a sheet: ${error.message}.`)
+      if (error instanceof SheetWordsRefused) throw new ToolRefusal(`The sheet words: ${error.message}.`)
       if (error instanceof UsageError) throw new ToolRefusal(error.message.replace(/--(layout|sheet)\b/g, '$1'))
       throw asRefusal(error)
     }
