@@ -176,6 +176,23 @@ What it needs from the library is there and tested:
 - "As the first step after an import": the importer can call `tidyPlan` with no ids.
 - A tool for `grid serve` (`grid_tidy`, a changing tool) would take the same ids.
 
+## Done since: `grid tidy` (lane B)
+
+`packages/cli/src/command/tidy.ts`. `grid tidy [plan]` lists `wallFaults` (quoted id, message, and
+"No fix is offered" where there is none) under the label, with the command that makes the first
+fix. `grid tidy --apply <id,…>` or `--apply all` reads the plan file as raw JSON, calls
+`tidyPlan(raw, ids, parseFloorPlan)`, writes the result through `projectFiles.ts` (to `--out`
+when given, a `.json` file), and prints what was applied, what was skipped and why, and how many
+faults are left. Nothing is written when no fix was made. `--json` prints either as JSON. Options
+are strict: `--out` without `--apply`, an empty or multi-line `--apply` are refused by name.
+Tests: `packages/cli/src/command/__tests__/tidy.test.ts` (a sound plan gives none; a wall 1.5 m
+short is named with the gap and the fix, fixed with `--apply`, and gone after; other keys kept).
+
+On the sample flat, the north wall 1.5 m short of its corner gets no fix: moving its start resets
+its openings' offsets, and its windows would then leave the wall. The tests use the east wall
+1.5 m short instead. Not done: `grid_tidy` for `grid serve` (it would add a fourteenth tool and
+change the tool order test); the faults already reach an agent through `grid_check`.
+
 ## Still open
 
 - 54 of the 333 slipped ends stay unnamed, for the reasons above.

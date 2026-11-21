@@ -18,7 +18,7 @@ is published yet and there is no release to install.
 | `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
 | `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, `planToSvg` (a picture of a plan as an SVG file) and `planStill` (a still of the 3D model as pixels), with no browser |
-| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `describe`, `draw`, `export` and `serve` (the tool server an agent uses). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
+| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `describe`, `draw`, `export`, `tidy` and `serve` (the tool server an agent uses). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
 
 ## Development
 
@@ -82,7 +82,21 @@ A tool that names no plan reads the project's `plan.json` in a folder `grid init
 or room the plan does not have is refused with the ones it has, and the word sent is never
 repeated back. A request line over 1 MiB and an id over 64 characters are refused, naming the
 limit. A change that would leave the drawing with a new problem is refused and nothing is
-written; otherwise only the change is written back, and keys Grid does not know stay.
+written; otherwise only the change is written back, and keys Grid does not know stay. The
+answer to a change also names every door or doorless opening that now joins other rooms, read
+from where it stands: `bath-door joined bath and lounge; it now joins kitchen and lounge.`
+
+### Walls that do not meet: `grid tidy`
+
+`grid tidy [plan.json]` lists the faults where walls meet (a wall short of its corner, a gap in a
+straight side, a wall running past its last corner, a copy lying on its original, a dividing
+line on a solid wall, a wall listed twice, a wall across a room that does not list it, walls
+standing inside a room), each with the fix Grid offers or why it offers none. A fix is offered
+only after it was tried and left every room it touches with an outline. `grid tidy --apply
+<id>,<id>` makes the fixes named, and `--apply all` every one offered; the faults are looked for
+again before each fix, and one an earlier fix took care of is skipped and said so. The plan file
+is changed as read, keys Grid does not know included; `--out <file.json>` writes the tidied plan
+there instead. `--json` prints the list or what was applied as JSON.
 
 `grid draw --3d` takes the 3D model as the app opens it: the same scene, from the same camera
 (south-east, about 29.5 degrees down, through a 45 degree lens). It needs no browser and no
