@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { checkLocalRules } from '..'
-import { edit, flat, twoFloorHouse, withoutOpening } from './fixtures'
+import { edit, flat, twoFloorHouse, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 /** A deterministic shuffle (mulberry32), so a failure can be replayed. */
 function shuffled(plan: FloorPlan, seed: number): FloorPlan {
@@ -46,7 +46,8 @@ describe('the report', () => {
   it('lists findings by storey, then code', () => {
     const plan = withoutOpening(withoutOpening(twoFloorHouse(), 'd_up'), 'd_hb')
     const findings = checkLocalRules(plan).findings
-    expect(findings.map((f) => f.floor)).toEqual(['ground', 'ground', 'first'])
+    // LVL-1: the second finding upstairs is the balcony door, 2.95 m up (lab VE-8).
+    expect(findings.map((f) => f.floor)).toEqual(['ground', 'ground', 'first', 'first'])
   })
 })
 

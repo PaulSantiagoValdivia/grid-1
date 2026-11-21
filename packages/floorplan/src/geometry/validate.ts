@@ -30,13 +30,15 @@ import { quoted, quotedList } from '../types/planText'
 import { validatePlausibility } from './plausible'
 import { wallFaults } from './wallFaults'
 import { kindDisagreements } from './exposure'
+import { levelIssues, unknownFloorIssues } from './levels'
+import { buildingKind } from './plausible'
 
 /** `floor` issues are about a floor as a whole; their id is the floor's id. */
 export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor'
 
 /**
- * `error` is something that cannot be drawn and gets skipped.
- * `warning` still gets drawn, but is worth a look.
+ * `error` is something that cannot be drawn, or sits on a floor the plan does not know, and gets
+ * skipped. `warning` still gets drawn, but is worth a look.
  */
 export type Severity = 'error' | 'warning'
 
@@ -444,35 +446,11 @@ function validateFloors(
     declared.add(floor.id)
   }
 
-  // With no registry there is nothing for a floor to be absent from.
-  if (declared.size > 0) {
-    for (const wall of plan.walls) {
-      const floor = floorOf(wall)
-      if (declared.has(floor)) continue
-      issues.push(
-        issue(
-          'wall',
-          wall.id,
-          'wall/unknown-floor',
-          `Wall ${quoted(wall.id)} sits on floor ${quoted(floor)}, which the plan does not list`,
-          'warning'
-        )
-      )
-    }
-
-    for (const room of plan.rooms) {
-      const floor = floorOf(room)
-      if (declared.has(floor)) continue
-      issues.push(
-        issue(
-          'room',
-          room.id,
-          'room/unknown-floor',
-          `Room ${quoted(room.id)} sits on floor ${quoted(floor)}, which the plan does not list`,
-          'warning'
-        )
-      )
-    }
+  // LVL-1 (lab MS-10): a part on a floor id the plan does not know is left out, with the nearest
+  // id it does know. Without a floor list, only an id spelt like a more used one is unknown.
+  for (const found of unknownFloorIssues(plan, declared)) {
+    issues.push(found)
+    if (found.severity === 'error') broken.add(found.id)
   }
 
   // Runs whether or not there is a registry: a room and its walls must agree.
@@ -768,7 +746,8 @@ export interface ValidateOptions {
    * that do not match their space (`validateSpaces`), rooms that overlap (`validateRoomOverlaps`)
    * rooms marked `inside` that no room holds (`validateNesting`), the wall faults
    * (`validateWallFaults`) and walls whose stated kind disagrees with the rooms on their sides
-   * (`validateKinds`). On by default. Those lines
+   * (`validateKinds`), and the checks on floor levels and heights (`levelIssues`, LVL-1), which
+   * read the whole plan: run them on the plan, not on one floor's slice. On by default. Those lines
    * are warnings and never change `broken`, so a caller that only needs `broken` can leave them
    * out: joining every wall of a floor costs more than every other check together.
    */
@@ -847,6 +826,8 @@ export function validatePlan(
   }
 
   validatePlausibility(plan, index, broken, issues)
+
+  if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
 
   if (options.spaces !== false) {
     validateSpaces(plan, index, broken, issues)

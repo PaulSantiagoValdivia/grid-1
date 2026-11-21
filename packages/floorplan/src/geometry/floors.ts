@@ -135,7 +135,7 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
   const wallIds = new Set(walls.map((wall) => wall.id))
   const collided = collidingWallIds(plan)
 
-  return {
+  const slice: FloorPlan = {
     ...plan,
     walls,
     rooms: plan.rooms.filter((room) => floorOf(room) === floorId),
@@ -143,6 +143,20 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
       (opening) => wallIds.has(opening.wall) && !collided.has(opening.wall)
     )
   }
+  slices.add(slice)
+  return slice
+}
+
+/** Every plan `planForFloor` returned, held weakly: nothing about the slice itself changes. */
+const slices = new WeakSet<FloorPlan>()
+
+/**
+ * Whether `plan` is one floor's slice (`planForFloor`). A slice keeps the whole floor list but
+ * only one floor's parts, so a check that sets floors against each other (LVL-1: an empty top
+ * floor) would read the others as empty. Such checks run on the whole plan only.
+ */
+export function isFloorSlice(plan: FloorPlan): boolean {
+  return slices.has(plan)
 }
 
 /** Whether the floor has anything to draw. Cheaper than slicing. */

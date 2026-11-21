@@ -22,9 +22,9 @@
  * Nothing else in `packages/cli` may import `fs`: a test fails if it does.
  */
 import fs from 'fs'
-import { randomBytes } from 'crypto'
 import { homedir } from 'os'
 import path from 'path'
+import { atomicWriteFile } from '@ongrid/rules/atomicWrite'
 import { decodeText, TextNotDecoded } from './textEncoding'
 
 /** Why a path was refused. The message is one line and names the path and the project folder. */
@@ -334,7 +334,7 @@ export class Project {
    */
   writeFile(given: string, data: string | Uint8Array): string {
     const real = this.writable(given)
-    atomicWrite(real, data)
+    atomicWriteFile(real, data)
     return real
   }
 
@@ -474,25 +474,4 @@ export function startProjectFolder(given: string | undefined, cwd: string): { re
     if (code !== 'EEXIST') throw error
   }
   return { project: openProject(given, cwd), made }
-}
-
-/** Open with O_EXCL beside the target, flush, then rename over it. */
-function atomicWrite(target: string, data: string | Uint8Array): void {
-  // A short name of its own, so a long file name still fits once the temporary name is added.
-  const temporary = path.join(path.dirname(target), `.grid-${randomBytes(6).toString('hex')}.tmp`)
-  let fd: number | undefined = fs.openSync(temporary, 'wx', 0o600)
-  try {
-    fs.writeFileSync(fd, data)
-    fs.fsyncSync(fd)
-    fs.closeSync(fd)
-    fd = undefined
-    fs.renameSync(temporary, target)
-  } catch (error) {
-    try {
-      if (fd !== undefined) fs.closeSync(fd)
-    } finally {
-      fs.rmSync(temporary, { force: true })
-    }
-    throw error
-  }
 }

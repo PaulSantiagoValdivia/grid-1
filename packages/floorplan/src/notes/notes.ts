@@ -102,6 +102,12 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           title: [words('A door from '), name(roomName(room!)), words(' leads to a space that is not drawn')],
           detail: [words("If that space is a shared landing or a stair, draw it as a room, or mark the wall as exterior if the door leads outside.")]
         }
+      case 'door_to_outside_above_ground':
+        return {
+          ...base,
+          title: [words('A door from '), name(roomName(room!)), words(' opens outside above the ground')],
+          detail: [words('It is not counted as a way out. If it opens onto a balcony, a terrace or an outside stair, draw that as a room.')]
+        }
     }
   }
 

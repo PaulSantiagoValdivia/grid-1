@@ -24,13 +24,13 @@ export function slabShape(slab: SceneSlab): THREE.Shape {
   return shape
 }
 
-/** The room's polygon extruded from `from` up to `from + SLAB_THICKNESS`, in Three's frame. */
-function slabBetween(slab: SceneSlab, from: number): THREE.BufferGeometry {
+/** The room's polygon extruded from `from` up `depth`, in Three's frame. */
+function slabBetween(slab: SceneSlab, from: number, depth = SLAB_THICKNESS): THREE.BufferGeometry {
   // The polygon is counter-clockwise and the axis conversion keeps orientation,
   // so the extrusion's faces point outward on their own.
   const shape = slabShape(slab)
   const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: SLAB_THICKNESS,
+    depth,
     bevelEnabled: false,
     steps: 1
   })
@@ -39,9 +39,16 @@ function slabBetween(slab: SceneSlab, from: number): THREE.BufferGeometry {
   return geometry
 }
 
-/** A storey's floor slab: its top at the floor level, going down under the room. */
+/**
+ * A storey's floor slab: its top at the room's floor, going down under the room. A room set off
+ * its storey (LVL-7) has its top at its `offset`: a raised one is solid down to the storey's
+ * floor and its slab under it, so a stage reads as a platform; a sunken one is a slab of the
+ * usual thickness, lower down.
+ */
 export function floorSlabGeometry(slab: SceneSlab): THREE.BufferGeometry {
-  return slabBetween(slab, -SLAB_THICKNESS)
+  const top = slab.offset ?? 0
+  const bottom = Math.min(top, 0) - SLAB_THICKNESS
+  return slabBetween(slab, bottom, top - bottom)
 }
 
 /** The roof over a room of the top storey, lying on its walls (`clearHeight` up). */

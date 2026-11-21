@@ -11,7 +11,7 @@ import {
   type RuleFigures
 } from '..'
 import { basisOf } from '../check'
-import { edit, flat, madeVirtual, twoFloorHouse, longWallStrip, withoutOpening } from './fixtures'
+import { edit, flat, madeVirtual, twoFloorHouse, longWallStrip, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 const source = { url: 'https://www.boe.es/x', quote: 'sample passage: at least 30 m2', retrievedAt: '2026-11-14T10:00:00.000Z' }
 

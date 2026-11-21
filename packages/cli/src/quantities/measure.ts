@@ -210,9 +210,9 @@ export interface RoomHeight {
 
 /**
  * The rule for a room's height (ARE-10): a height the room states wins; else the lowest solid
- * wall its boundary or its holes list (ARE-6), because a level ceiling rests on every one of them. A wall that
- * states no height gets the schema's 2.7 m, which cannot be told from a stated 2.7 m (AU3);
- * LVL-1's floor heights are the place to change that.
+ * wall its boundary or its holes list (ARE-6), because a level ceiling rests on every one of
+ * them. A wall that states no height takes its floor's stated height (LVL-1), else the schema's
+ * 2.7 m, which cannot be told from a stated 2.7 m (AU3).
  */
 export function roomHeight(plan: FloorPlan, roomId: string): RoomHeight {
   const room = plan.rooms.find((r) => r.id === roomId)

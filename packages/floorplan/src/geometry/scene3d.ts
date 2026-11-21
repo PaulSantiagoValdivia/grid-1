@@ -21,6 +21,7 @@ import { SQUARE_ENDS, openingSpan, wallAxis } from './wall'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { tryRoomShape } from './room'
+import { roomFloorOffset } from './steps'
 import { wallExposure } from './exposure'
 import { wallRevision } from './revision'
 import type { Bounds } from './floorplan'
@@ -124,6 +125,13 @@ export interface SceneSlab {
   readonly polygon: readonly Vec2[]
   /** The room's holes (ARE-6), clockwise: the floor is open there. Empty for a room with none. */
   readonly holes: readonly (readonly Vec2[])[]
+  /**
+   * How far the room's floor stands above its storey's floor level, in metres (LVL-7), when it
+   * states an offset other than 0; absent, it stands on the storey's floor. The slab's top is at
+   * this height, and a raised room's slab is solid down to the storey's floor, so a stage reads
+   * as a platform.
+   */
+  readonly offset?: number
 }
 
 /**
@@ -214,7 +222,8 @@ export function wallBasis(wall: Wall): WallBasis {
 export function roomSlab(room: Room, index: PlanIndex): SceneSlab | null {
   const shape = tryRoomShape(room, index)
   if (!shape) return null
-  return { roomId: room.id, name: room.name, polygon: shape.polygon, holes: shape.holes }
+  const offset = roomFloorOffset(room)
+  return { roomId: room.id, name: room.name, polygon: shape.polygon, holes: shape.holes, ...(offset !== 0 && { offset }) }
 }
 
 /**

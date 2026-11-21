@@ -166,6 +166,7 @@ function paints(look: PlanLook, mpp: number) {
         : { stroke: look.wall, 'stroke-width': px(LINE_PX.opening) })
     }),
     jamb: { stroke: look.wall, 'stroke-width': px(LINE_PX.jamb) } as Attrs,
+    step: { stroke: look.wall, 'stroke-width': px(LINE_PX.step), 'stroke-linecap': 'butt' } as Attrs,
     doorLeaf: { stroke: look.wall, 'stroke-width': px(LINE_PX.doorLeaf), 'stroke-linecap': 'square' } as Attrs,
     doorArc: { fill: 'none', stroke: look.wall, 'stroke-width': px(LINE_PX.doorArc) } as Attrs,
     extension: { stroke: look.dimension, 'stroke-width': px(LINE_PX.extension) } as Attrs,
@@ -541,6 +542,32 @@ export function planScene(input: SceneInput): SvgNode[] {
         )
       )
     }
+  }
+
+  // A step between rooms at different levels (LVL-7): a solid line in the wall's ink across the
+  // opening, on top of the gap, or over a dividing line, which then reads as an edge. Drawing,
+  // not a target: clicks reach the gap or room underneath.
+  for (const step of drawing.steps) {
+    out.push(
+      el(
+        'line',
+        {
+          'data-part': 'step',
+          'data-wall': step.wallId,
+          'data-opening': step.openingId ?? undefined,
+          'data-upper': step.upper,
+          'data-lower': step.lower,
+          'pointer-events': 'none',
+          x1: step.from.x,
+          y1: -step.from.y,
+          x2: step.to.x,
+          y2: -step.to.y,
+          ...paint.step
+        },
+        [],
+        `step:${step.wallId}:${step.openingId ?? ''}:${step.from.x},${step.from.y}`
+      )
+    )
   }
 
   // Each label goes to a spot in its room clear of door swings, walls and the other labels,
