@@ -86,10 +86,12 @@ export function wallRevisions(
 export function roomRevision(
   roomId: string,
   boundary: readonly string[],
-  wallKeys: ReadonlyMap<string, string>
+  wallKeys: ReadonlyMap<string, string>,
+  holes: readonly (readonly string[])[] = []
 ): string {
-  const walls = boundary.map((id) => wallKeys.get(id) ?? `?${id}`).join('|')
-  return `${roomId}#${walls}`
+  const key = (ids: readonly string[]): string => ids.map((id) => wallKeys.get(id) ?? `?${id}`).join('|')
+  // Each hole (ARE-6) after the outline; a room with none keeps the key it always had.
+  return `${roomId}#${key(boundary)}${holes.map((hole) => `#${key(hole)}`).join('')}`
 }
 
 /**
@@ -129,7 +131,7 @@ export function planRevision(plan: FloorPlan): string {
 
   const roomPart = [...plan.rooms]
     .sort((a, b) => a.id.localeCompare(b.id))
-    .map((room) => roomRevision(room.id, room.boundary, walls))
+    .map((room) => roomRevision(room.id, room.boundary, walls, room.holes))
     .join('|')
 
   return `${plan.version}#${wallPart}#${roomPart}#${floorPart(plan)}`

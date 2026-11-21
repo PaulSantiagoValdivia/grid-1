@@ -25,6 +25,7 @@
  */
 
 import type { FloorPlan, Opening, Room, Wall } from '../plan'
+import { roomWallIds } from '../plan'
 import { DEFAULT_FLOOR, floorOf } from '../floors'
 import { compareIssues } from './order'
 import { openingProps, roomProps, wallProps } from './props'
@@ -217,11 +218,11 @@ export function changesOutsideScope(
 
   const walls = new Set<string>()
   for (const room of roomsIn) {
-    if (namedRooms.has(room.id)) for (const id of room.boundary) walls.add(id)
+    if (namedRooms.has(room.id)) for (const id of roomWallIds(room)) walls.add(id)
   }
   const rooms = new Set(namedRooms)
   for (const room of roomsIn) {
-    if (room.boundary.some((id) => walls.has(id))) rooms.add(room.id)
+    if (roomWallIds(room).some((id) => walls.has(id))) rooms.add(room.id)
   }
   const openings = new Set<string>()
   for (const opening of [...base.openings, ...head.openings]) {

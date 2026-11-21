@@ -111,9 +111,9 @@ export function wallMesh(wall: SceneWall): Mesh | null {
   return storable({ points, faces })
 }
 
-/** A room's floor: a flat surface at z = 0, facing up. */
+/** A room's floor: a flat surface at z = 0, facing up, open over its holes (ARE-6). */
 export function floorMesh(floor: SceneSlab): Mesh | null {
-  const { vertices, triangles } = triangulate(floor.polygon)
+  const { vertices, triangles } = triangulate(floor.polygon, floor.holes)
   if (triangles.length === 0) return null
   return storable({ points: vertices.map((v) => ({ x: v.x, y: v.y, z: 0 })), faces: triangles })
 }

@@ -14,11 +14,21 @@ import { MODEL_TO_THREE } from './convert'
  * storey changing height never rebuilds its slabs.
  */
 
+/**
+ * A room's floor as a Three shape: its polygon, open over each of its holes (ARE-6), as the
+ * floor mesh the exports write is.
+ */
+export function slabShape(slab: SceneSlab): THREE.Shape {
+  const shape = new THREE.Shape(slab.polygon.map((p) => new THREE.Vector2(p.x, p.y)))
+  for (const hole of slab.holes) shape.holes.push(new THREE.Path(hole.map((p) => new THREE.Vector2(p.x, p.y))))
+  return shape
+}
+
 /** The room's polygon extruded from `from` up to `from + SLAB_THICKNESS`, in Three's frame. */
 function slabBetween(slab: SceneSlab, from: number): THREE.BufferGeometry {
   // The polygon is counter-clockwise and the axis conversion keeps orientation,
   // so the extrusion's faces point outward on their own.
-  const shape = new THREE.Shape(slab.polygon.map((p) => new THREE.Vector2(p.x, p.y)))
+  const shape = slabShape(slab)
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: SLAB_THICKNESS,
     bevelEnabled: false,

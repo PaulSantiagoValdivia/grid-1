@@ -36,7 +36,7 @@ import {
   placeDimensionLabel,
   placeRoomLabels
 } from '../canvas2d/labelPlacement'
-import { FRAME_MARGIN, pathOf } from '../canvas2d/viewport'
+import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { PlanLook } from './look'
 import { LINE_PX, TEXT_PX, lengthText } from './look'
 import type { Attrs, SvgNode } from './svgNode'
@@ -214,7 +214,7 @@ const labelTransform = (at: Vec2, mpp: number): string => `translate(${at.x} ${-
  * to the review, which only the app shows, and its stylesheets alone decide their look.
  */
 function roomShape(room: PlanRoom, attrs: Attrs, key?: string): SvgNode {
-  return el('path', { d: pathOf(room.polygon), 'data-part': 'room', ...attrs }, [], key)
+  return el('path', { d: roomPathOf(room), 'data-part': 'room', ...attrs }, [], key)
 }
 
 /** A solid wall is one path per run between its openings; a virtual wall is a line. */
@@ -324,7 +324,7 @@ export function planScene(input: SceneInput): SvgNode[] {
     const children: SvgNode[] = []
     for (const room of before.rooms) {
       if (!ids.has(room.id)) continue
-      children.push(el('path', { d: pathOf(room.polygon), 'data-part': 'room', 'data-id': room.id, ...paint.room }, [], room.id))
+      children.push(el('path', { d: roomPathOf(room), 'data-part': 'room', 'data-id': room.id, ...paint.room }, [], room.id))
     }
     for (const wall of before.walls) {
       if (!ids.has(wall.id)) continue
@@ -381,7 +381,7 @@ export function planScene(input: SceneInput): SvgNode[] {
       el(
         'path',
         {
-          d: pathOf(room.polygon),
+          d: roomPathOf(room),
           'data-part': 'room',
           'data-id': room.id,
           'data-selectable': 'true',
@@ -581,7 +581,7 @@ export function planScene(input: SceneInput): SvgNode[] {
   const padX = Math.max(framed.width, 0.001) * FRAME_MARGIN
   const padY = Math.max(framed.height, 0.001) * FRAME_MARGIN
   const labels = placeRoomLabels(
-    drawing.rooms.map((room, index) => ({ id: room.id, polygon: room.polygon, name: names[index]!, areaText: areaText(room) })),
+    drawing.rooms.map((room, index) => ({ id: room.id, polygon: room.polygon, holes: room.holes, name: names[index]!, areaText: areaText(room) })),
     { swings, walls: drawing.walls.filter((wall) => !wall.virtual).flatMap((wall) => wall.slices), dimensions: dimensionBlocks },
     mpp,
     { minX: framed.min.x - padX, maxX: framed.max.x + padX, minY: framed.min.y - padY, maxY: framed.max.y + padY }
@@ -629,7 +629,7 @@ export function planScene(input: SceneInput): SvgNode[] {
     out.push(
       el(
         'g',
-        { transform: labelTransform(poleOfInaccessibility(room.polygon).point, mpp), ...live.ghostAttrs(room.id) },
+        { transform: labelTransform(poleOfInaccessibility(room.polygon, undefined, room.holes).point, mpp), ...live.ghostAttrs(room.id) },
         [el('text', { 'data-part': 'label' }, [`${room.name} · ${formatArea(room.area, decimals)} · removed`])],
         `ghost-label-${room.id}`
       )

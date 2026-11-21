@@ -83,15 +83,26 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
         const problem = textProblem(value, kind)
         if (problem) return `${list}[${i}].${field} ${problem}`
       }
-      if (list === 'rooms' && Array.isArray(part['boundary'])) {
-        const boundary: unknown[] = part['boundary']
-        if (boundary.length > BOUNDARY_MAX) {
-          return `rooms[${i}].boundary lists ${boundary.length.toLocaleString('en-US')} walls; a room may list at most ${BOUNDARY_MAX.toLocaleString('en-US')}`
+      if (list === 'rooms') {
+        // The room's own walls, then each of its holes' (ARE-6).
+        const lists: [string, unknown][] = [[`rooms[${i}].boundary`, part['boundary']]]
+        const holes = part['holes']
+        if (Array.isArray(holes)) {
+          if (holes.length > PARTS_MAX) {
+            return `rooms[${i}].holes has ${holes.length.toLocaleString('en-US')} entries; a plan may have at most ${PARTS_MAX.toLocaleString('en-US')} holes in one room`
+          }
+          holes.forEach((hole, h) => lists.push([`rooms[${i}].holes[${h}]`, hole]))
         }
-        for (let k = 0; k < boundary.length; k++) {
-          const id = boundary[k]
-          const problem = typeof id === 'string' ? textProblem(id, 'id') : null
-          if (problem) return `rooms[${i}].boundary[${k}] ${problem}`
+        for (const [where, walls] of lists) {
+          if (!Array.isArray(walls)) continue
+          if (walls.length > BOUNDARY_MAX) {
+            return `${where} lists ${walls.length.toLocaleString('en-US')} walls; a room may list at most ${BOUNDARY_MAX.toLocaleString('en-US')}`
+          }
+          for (let k = 0; k < walls.length; k++) {
+            const id: unknown = walls[k]
+            const problem = typeof id === 'string' ? textProblem(id, 'id') : null
+            if (problem) return `${where}[${k}] ${problem}`
+          }
         }
       }
     }

@@ -33,7 +33,7 @@
  */
 
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
-import { indexPlan, openingsOf } from './plan'
+import { indexPlan, openingsOf, roomWallIds } from './plan'
 import { floorOf } from './floors'
 import type { RoomOutline } from './room'
 import { roomNesting, roomOutline } from './room'
@@ -320,7 +320,8 @@ function fixHolds(ctx: Context, edits: readonly WallEdit[]): boolean {
     if (e.op === 'set-boundary') rooms.add(e.room)
     if (e.op === 'add-room') rooms.add(e.room.id)
   }
-  for (const { room } of ctx.traced) if (room.boundary.some((id) => walls.has(id))) rooms.add(room.id)
+  // A room is held to its holes' walls too (ARE-6): a fix that moves one must leave it sound.
+  for (const { room } of ctx.traced) if (roomWallIds(room).some((id) => walls.has(id))) rooms.add(room.id)
   const before = new Map(ctx.traced.map((t) => [t.room.id, t.outline.fault === null]))
   for (const room of after.rooms) {
     if (!rooms.has(room.id)) continue
@@ -642,7 +643,7 @@ function sharedStretch(a: Seg, b: Seg): [number, number] | null {
 function overlapFaults(ctx: Context, out: Map<string, WallFault>): void {
   const order = new Map(ctx.plan.walls.map((w, i) => [w.id, i]))
   // Two walls of a room narrower than they are thick overlap; that room's refusal says so.
-  const squeezed = ctx.traced.filter((t) => t.outline.fault?.code === 'room/inside-out').map((t) => new Set(t.room.boundary))
+  const squeezed = ctx.traced.filter((t) => t.outline.fault?.code === 'room/inside-out').map((t) => new Set(roomWallIds(t.room)))
   for (const [p, q] of nearPairs([...ctx.segs.values()])) {
     if (Math.abs(cross(p.dir, q.dir)) >= tolerance('nearlyParallel')) continue
     if (squeezed.some((walls) => walls.has(p.wall.id) && walls.has(q.wall.id))) continue
@@ -823,7 +824,8 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
   const nesting = roomNesting(ctx.index)
   for (const { room, outline } of ctx.traced) {
     if (outline.fault !== null) continue
-    const listed = new Set(room.boundary)
+    // The walls round its holes are its own too (ARE-6).
+    const listed = new Set(roomWallIds(room))
     const polygon = outline.polygon
     const box = polygon.reduce(
       (b, p) => ({ x0: Math.min(b.x0, p.x), y0: Math.min(b.y0, p.y), x1: Math.max(b.x1, p.x), y1: Math.max(b.y1, p.y) }),
@@ -836,8 +838,16 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
       // The walls of a room that sits inside this one stand in it by right (ARE-5).
       if (listing(ctx, s.wall.id).some((r) => r.id !== room.id && sitsWithin(nesting, r.id, room.id))) continue
       const stretches = insideStretches(s, polygon)
-      const inside = stretches.reduce((sum, [d0, d1]) => sum + d1 - d0, 0)
+      const length = (list: readonly [number, number][]): number => list.reduce((sum, [d0, d1]) => sum + d1 - d0, 0)
+      // What stands in a hole (ARE-6) stands in no part of the room: the holes lie inside the
+      // outline, so their stretches come off its.
+      const inHoles = outline.holes.reduce((sum, hole) => sum + length(insideStretches(s, hole.polygon)), 0)
+      const inside = length(stretches) - inHoles
       if (inside <= tolerance('lineInside')) continue
+      if (inHoles > 0) {
+        standing.push({ s, inside })
+        continue
+      }
       // A wall that runs from one side of the room to another divides it. One that stops inside
       // it (a stub, a column, a pod, a piece of furniture drawn as a wall) stands in it.
       const onEdge = (d: number): boolean => toBoundary(at(s, d), polygon) <= tolerance('gap')

@@ -57,7 +57,7 @@ export function indexPlan(plan: FloorPlan): PlanIndex {
 
   const roomsByWall = new Map<string, Room[]>()
   for (const room of plan.rooms) {
-    for (const wallId of new Set(room.boundary)) {
+    for (const wallId of new Set(roomWallIds(room))) {
       const list = roomsByWall.get(wallId)
       if (list) list.push(room)
       else roomsByWall.set(wallId, [room])
@@ -65,6 +65,12 @@ export function indexPlan(plan: FloorPlan): PlanIndex {
   }
 
   return { plan, wallsById, openingsByWall, roomsByWall }
+}
+
+/** Every wall a room lists: round its outline, then round each of its holes (ARE-6). */
+export function roomWallIds(room: Room): string[] {
+  const holes = room.holes ?? []
+  return holes.length === 0 ? room.boundary : [...room.boundary, ...holes.flat()]
 }
 
 export function openingsOf(index: PlanIndex, wallId: string): readonly Opening[] {

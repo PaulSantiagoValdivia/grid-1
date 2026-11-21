@@ -307,6 +307,32 @@ outline of the room around it stays whole; only its area changes.
 | `room/overlap-unknown` | Two rooms that could not be compared, with the reason |
 | `floor/overlaps-unknown` | A floor whose rooms were not all compared: the plan has more than 200,000 pairs of rooms lying over each other (thousands of copies piled in one place), and Grid stopped there |
 
+### Rooms with holes
+
+A ring gallery round a courtyard, or a car park round a core, is one room with a hole in it. Its
+`boundary` lists the walls round the outside, as for any room, and `holes` lists the walls round
+each hole, one list per hole, in the order they are met going round it:
+
+```json
+{ "id": "ring", "name": "Ring gallery", "boundary": ["os", "oe", "on", "ow"], "holes": [["cw", "cn", "ce", "cs"]] }
+```
+
+The room's floor is its outline less each hole, measured to the faces of the hole's walls that
+look into the room, so those walls are not floor either. That one area is what the room's area,
+the 2D drawing, the size check and the comparison of two plans give. Its label goes on its
+floor, never in a hole; the 3D floor, the OBJ and GLB floors, the IFC space and slabs (as a
+profile with voids) and the DXF (one more closed outline on the rooms layer) all leave each hole
+open. A door in a hole's wall leads from the room to whatever is in the hole: a room drawn
+there, or the outside. A plan with no `holes` reads and measures as before.
+
+| Code | What it says |
+|---|---|
+| `room/hole-outside` | A hole that does not lie inside its room with floor all round it: it reaches or crosses the outline. The room is not drawn |
+| `room/holes-overlap` | Two holes of one room that overlap or touch. The room is not drawn |
+
+A hole whose wall list cannot close, or is out of order, gets the same codes as an outline
+(`room/unclosed`, `room/out-of-order`, `room/inside-out`), and the line names the hole.
+
 ### Wall faults, each with its fix
 
 A room's outline is made by crossing the lines of its walls, so where a wall ends does not

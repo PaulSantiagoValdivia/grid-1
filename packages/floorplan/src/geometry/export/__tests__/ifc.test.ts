@@ -8,6 +8,7 @@ import { floorElevations, SLAB_THICKNESS } from '../../elevations'
 import { createGuidIssuer, ifcGuid, ifcString, toIfc } from '../ifc'
 import { indexPlan } from '../../plan'
 import { wallExposure } from '../../exposure'
+import { parseFloorPlan } from '../../../types/floorplan'
 
 /**
  * IFC export.
@@ -2463,5 +2464,68 @@ describe('SHT-2 joined corners in the IFC file', () => {
     const ys = bodyOf(doc, spine).base.map((p) => p[1])
     expect(Math.min(...ys)).toBeCloseTo(0.15, 9)
     expect(Math.max(...ys)).toBeCloseTo(7.45, 9)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// ARE-6: a room with a hole
+// ---------------------------------------------------------------------------
+
+describe('a room with a hole (ARE-6)', () => {
+  const ring = (): FloorPlan =>
+    parseFloorPlan(JSON.parse(readFileSync(resolve(__dirname, '../../../../fixtures/ring-gallery.json'), 'utf8')))
+
+  /** The outer curve and the inner curves of a product's swept profile, in the profile's own plane. */
+  function profileRings(doc: Doc, product: Entity): { type: string; outer: [number, number][]; inner: [number, number][][] } {
+    const shape = entity(doc, ref(product.args[6]))
+    const body = refs(shape.args[2])
+      .map((id) => entity(doc, id))
+      .find((r) => str(r.args[1]) === 'Body')!
+    const solid = entity(doc, refs(body.args[3])[0]!)
+    expect(solid.type).toBe('IFCEXTRUDEDAREASOLID')
+    const profile = entity(doc, ref(solid.args[0]))
+    const curve = (id: number): [number, number][] => {
+      const polyline = entity(doc, id)
+      expect(polyline.type).toBe('IFCPOLYLINE')
+      const points = refs(polyline.args[0]).map((p) => nums(entity(doc, p).args[0]) as [number, number])
+      expect(points[0]).toEqual(points[points.length - 1])
+      return points.slice(0, -1)
+    }
+    // IfcArbitraryProfileDefWithVoids(ProfileType, ProfileName, OuterCurve, InnerCurves)
+    const inner = profile.type === 'IFCARBITRARYPROFILEDEFWITHVOIDS' ? refs(profile.args[3]).map(curve) : []
+    return { type: profile.type, outer: curve(ref(profile.args[2])), inner }
+  }
+
+  const ringArea2 = (points: readonly [number, number][]): number => ringArea(points.map(([x, y]): Pair => [x, y]))
+
+  it('writes the space with the courtyard as a void: 94.09 less 18.49, 75.60 m²', () => {
+    const doc = exported(ring())
+    const space = spaceByName(doc, 'Ring gallery')
+    const { type, outer, inner } = profileRings(doc, space)
+    expect(type).toBe('IFCARBITRARYPROFILEDEFWITHVOIDS')
+    expect(ringArea2(outer)).toBeCloseTo(94.09, 8)
+    expect(inner).toHaveLength(1)
+    expect(ringArea2(inner[0]!)).toBeCloseTo(18.49, 8)
+    expect(ringArea2(outer) - ringArea2(inner[0]!)).toBeCloseTo(75.6, 8)
+    // The void is the core to the faces of its walls that look into the gallery.
+    const xs = inner[0]!.map(([x]) => x)
+    expect(Math.min(...xs)).toBeCloseTo(2.85, 8)
+    expect(Math.max(...xs)).toBeCloseTo(7.15, 8)
+  })
+
+  it('leaves the courtyard open in the floor slab and the roof too', () => {
+    const doc = exported(ring())
+    const slabs = ofType(doc, 'IFCSLAB')
+    expect(slabs).toHaveLength(2)
+    for (const slab of slabs) {
+      const { type, inner } = profileRings(doc, slab)
+      expect(type).toBe('IFCARBITRARYPROFILEDEFWITHVOIDS')
+      expect(inner.map((curve) => ringArea2(curve))).toEqual([expect.closeTo(18.49, 8)])
+    }
+  })
+
+  it('writes a room with no hole as it always did', () => {
+    const doc = exported(samplePlan())
+    expect(ofType(doc, 'IFCARBITRARYPROFILEDEFWITHVOIDS')).toHaveLength(0)
   })
 })

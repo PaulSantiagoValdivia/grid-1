@@ -300,7 +300,7 @@ function layoutOf(storey: FloorPlan): { key: string; ids: string[] } {
   const entries: Array<[string, string]> = [
     ...storey.walls.map((wall): [string, string] => [`w${wallKey.get(wall.id)}`, wall.id]),
     ...storey.rooms.map((room): [string, string] => [
-      `r${JSON.stringify([room.name, room.use ?? '', room.boundary.map((id) => wallKey.get(id) ?? '?')])}`,
+      `r${JSON.stringify([room.name, room.use ?? '', room.boundary.map((id) => wallKey.get(id) ?? '?'), ...(room.holes ?? []).map((hole) => hole.map((id) => wallKey.get(id) ?? '?'))])}`,
       room.id,
     ]),
     ...storey.openings.map((o): [string, string] => [

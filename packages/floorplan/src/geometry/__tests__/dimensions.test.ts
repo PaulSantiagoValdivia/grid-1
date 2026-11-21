@@ -82,6 +82,7 @@ describe('room dimensions', () => {
         { x: 0.4, y: 3 },
         { x: 0, y: 3 }
       ],
+      holes: [],
       area: 1.2,
       labelAt: { x: 0.2, y: 1.5 }
     }

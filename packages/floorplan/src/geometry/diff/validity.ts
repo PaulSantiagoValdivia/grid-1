@@ -25,6 +25,8 @@ const FOLLOW_ON_FAULTS = new Set([
   'room/unclosed',
   'room/out-of-order',
   'room/inside-out',
+  'room/hole-outside',
+  'room/holes-overlap',
   'room/empty',
   'room/broken-wall',
   'opening/broken-wall'
