@@ -1,0 +1,29 @@
+plan "Small office"
+walls outside 0.3 inside 0.12 partition height 3.0
+walltype 0.15 interior
+windows sill 0.9 height 1.5
+wall between store and wc1 0.15
+
+# Grid has no word for reception, office, meeting room or toilet: '-' means no use stated
+room reception   "Reception"              -       4.79 x 2.79   at 0.15,0.15
+room store       "Store"                  storage 3.865 x 2.79  east of reception
+room open-office "Open office (12 desks)" -       * x 5.79      north of reception until store
+room wc1         "WC (accessible)"        -       2.365 x 2.29  east of store
+room wc2         "WC"                     -       2.29 x 2.29   east of wc1
+room kitchenette "Kitchenette"            kitchen * x 2.88      north of wc1 until wc2
+room meeting     "Meeting room (8)"       -       4.775 x *     north of kitchenette until open-office
+
+door entrance in reception south, 1.35 from west, 1.0 wide, opens in, hinged west
+door d-office  between reception and open-office, 1.85 from west, 0.9 wide, opens into open-office, hinged west
+door d-store   between reception and store, 0.85 from south, 0.8 wide, opens into reception, hinged south
+door d-meeting between meeting and open-office, 0.64 from south, 0.9 wide, opens into open-office, hinged south
+opening o-kitchen between kitchenette and open-office, 0.94 from south, 1.2 wide
+door d-wc1 between kitchenette and wc1, 0.725 from west, 0.9 wide, opens into wc1, hinged west
+door d-wc2 between kitchenette and wc2, 0.94 from west of wc2, 0.8 wide, opens into wc2, hinged west
+window win-rec  in reception south, 2.85 from west, 1.5 wide
+window win-wc2  in wc2 south, 0.84 from west, 0.8 wide, sill 1.6, height 0.6
+window win-meet in meeting north, 1.85 from east, 2.0 wide
+window win-off1 in open-office north, 0.925 from east, 2.0 wide
+window win-off2 in open-office north, 4.425 from east, 2.0 wide
+window win-off3 in open-office west, 1.35 from north, 2.0 wide
+window win-kit  in kitchenette east, 0.64 from south, 1.2 wide, sill 1.1, height 1.2

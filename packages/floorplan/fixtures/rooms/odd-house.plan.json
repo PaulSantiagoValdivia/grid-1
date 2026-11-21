@@ -1,0 +1,46 @@
+{
+  "version": "1",
+  "units": "m",
+  "floors": [
+    {"id": "ground", "name": "Ground floor", "level": 0},
+    {"id": "first", "name": "First floor", "level": 1}
+  ],
+  "walls": [
+    {"id": "g-s", "start": [0, 0], "end": [10, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior", "floor": "ground"},
+    {"id": "g-e", "start": [10, 0], "end": [10, 6], "thickness": 0.3, "height": 2.7, "kind": "exterior", "floor": "ground"},
+    {"id": "g-ne", "start": [10, 6], "end": [8, 8], "thickness": 0.3, "height": 2.7, "kind": "exterior", "floor": "ground"},
+    {"id": "g-n", "start": [8, 8], "end": [0, 8], "thickness": 0.3, "height": 2.7, "kind": "exterior", "floor": "ground"},
+    {"id": "g-w", "start": [0, 8], "end": [0, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior", "floor": "ground"},
+    {"id": "g-y4", "start": [0, 4], "end": [5, 4], "thickness": 0.12, "height": 2.7, "kind": "interior", "floor": "ground"},
+    {"id": "g-x5", "start": [5, 4], "end": [5, 8], "thickness": 0.12, "height": 2.7, "kind": "interior", "floor": "ground"},
+    {"id": "g-x3", "start": [3, 0], "end": [3, 4], "thickness": 0.12, "height": 2.7, "kind": "interior", "floor": "ground"},
+    {"id": "f-s", "start": [0, 0], "end": [5, 0], "thickness": 0.3, "height": 2.5, "kind": "exterior", "floor": "first"},
+    {"id": "f-e", "start": [5, 0], "end": [5, 8], "thickness": 0.3, "height": 2.5, "kind": "exterior", "floor": "first"},
+    {"id": "f-n", "start": [5, 8], "end": [0, 8], "thickness": 0.3, "height": 2.5, "kind": "exterior", "floor": "first"},
+    {"id": "f-w", "start": [0, 8], "end": [0, 0], "thickness": 0.3, "height": 2.5, "kind": "exterior", "floor": "first"},
+    {"id": "f-y4", "start": [0, 4], "end": [5, 4], "thickness": 0.12, "height": 2.5, "kind": "interior", "floor": "first"},
+    {"id": "f-x3", "start": [3, 0], "end": [3, 4], "thickness": 0.12, "height": 2.5, "kind": "interior", "floor": "first"}
+  ],
+  "rooms": [
+    {"id": "g-stair", "name": "Hall and stair", "use": "stair", "floor": "ground", "boundary": ["g-s", "g-x3", "g-y4", "g-w"]},
+    {"id": "g-kitchen", "name": "Kitchen", "use": "kitchen", "floor": "ground", "boundary": ["g-y4", "g-x5", "g-n", "g-w"]},
+    {"id": "g-living", "name": "Living", "use": "living", "floor": "ground", "boundary": ["g-s", "g-e", "g-ne", "g-n", "g-x5", "g-y4", "g-x3"]},
+    {"id": "f-landing", "name": "Landing", "use": "stair", "floor": "first", "boundary": ["f-s", "f-x3", "f-y4", "f-w"]},
+    {"id": "f-bath", "name": "Bathroom", "use": "bathroom", "floor": "first", "boundary": ["f-s", "f-e", "f-y4", "f-x3"]},
+    {"id": "f-bed", "name": "Bedroom 1", "use": "bedroom", "floor": "first", "boundary": ["f-y4", "f-e", "f-n", "f-w"]}
+  ],
+  "openings": [
+    {"id": "entrance", "wall": "g-s", "type": "door", "offset": 1.0, "width": 1.0, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "liv-win-s", "wall": "g-s", "type": "window", "offset": 5.0, "width": 2.0, "sill": 0.9, "height": 1.3},
+    {"id": "liv-win-e", "wall": "g-e", "type": "window", "offset": 2.0, "width": 1.5, "sill": 0.9, "height": 1.3},
+    {"id": "liv-win-bay", "wall": "g-ne", "type": "window", "offset": 0.6, "width": 1.5, "sill": 0.6, "height": 1.6},
+    {"id": "kit-win", "wall": "g-n", "type": "window", "offset": 3.5, "width": 1.2, "sill": 1.0, "height": 1.1},
+    {"id": "kit-pass", "wall": "g-x5", "type": "opening", "offset": 1.0, "width": 1.2, "height": 2.1},
+    {"id": "hall-liv", "wall": "g-x3", "type": "door", "offset": 1.0, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "land-bed", "wall": "f-y4", "type": "door", "offset": 1.0, "width": 0.8, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "land-bath", "wall": "f-x3", "type": "door", "offset": 1.5, "width": 0.8, "height": 2.1, "hinge": "end", "swing": "left"},
+    {"id": "bed-win", "wall": "f-n", "type": "window", "offset": 1.0, "width": 1.4, "sill": 0.9, "height": 1.2},
+    {"id": "bath-win", "wall": "f-e", "type": "window", "offset": 1.5, "width": 0.6, "sill": 1.5, "height": 0.6},
+    {"id": "land-win", "wall": "f-w", "type": "window", "offset": 5.5, "width": 1.0, "sill": 0.9, "height": 1.2}
+  ]
+}

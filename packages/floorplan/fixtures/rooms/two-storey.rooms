@@ -1,0 +1,20 @@
+plan "Two-storey house"
+walls outside 0.3 inside 0.1 height 2.7
+
+floor ground "Ground floor" level 0
+room living  "Living"  living  2.8 x 4.7 at 0.15,0.15
+room kitchen "Kitchen" kitchen 2.8 x 4.7 east of living
+door door in living south, 0.85 from west, 0.9 wide, opens in, hinged west
+opening pass between living and kitchen, 1.85 from south, 1.2 wide
+
+floor first "First floor" level 1 height 2.5
+copy ground
+rename living bed "Bedroom" bedroom
+rename kitchen bath "Bath" -
+# the original leaves this door's swing undecided
+door door between bed and bath, 1.85 from south, 0.8 wide, no-swing
+window win in bed west, 1.35 from north, 1.4 wide
+# the original's two faulty windows, kept as they are: one runs past the end of its wall,
+# one names a wall the plan does not have. Grid's check names both.
+raw opening {"id": "too-wide", "wall": "first-ext-east", "type": "window", "offset": 4.5, "width": 1.4, "sill": 0.9, "height": 1.2}
+raw opening {"id": "ghost", "wall": "nope", "type": "window", "offset": 0, "width": 1, "sill": 0.9, "height": 1.2}
