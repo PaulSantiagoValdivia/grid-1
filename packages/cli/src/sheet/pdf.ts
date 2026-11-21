@@ -1,8 +1,11 @@
 /**
  * VEW-7: a sheet drawn as an A3 landscape PDF, with Skia's PDF writer through
- * `@napi-rs/canvas` (MIT). Text stays vector; the floor drawings and the 3D picture are images.
+ * `@napi-rs/canvas` (MIT). Text stays vector; the floor drawings (PNG at 4x, about 288 dpi) and
+ * the 3D picture are images.
  *
- * This file only places what `pages.ts` decided. Every picture comes from `drawPlan` or
+ * `pages.ts` decides what is on each page; this file decides what fits. `layoutSheet` measures
+ * every block with the real fonts and moves whatever does not fit above the footer onto
+ * continuation pages, so no text runs off a page. Every picture comes from `drawPlan` or
  * `drawStill`, never drawn here.
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
@@ -10,8 +13,8 @@ import type { SKRSContext2D } from '@napi-rs/canvas'
 import { loadCanvas } from '../draw/canvas'
 import { drawPlan } from '../draw/drawPlan'
 import { drawStill } from '../draw/drawStill'
-import { SANS, SERIF, useSheetFonts } from './fonts'
-import { PLAN_BOX, type Sheet, type SheetPage } from './pages'
+import { SANS, SERIF, registerSheetFonts } from './fonts'
+import { PLAN_BOX, type Sheet, type SheetPage, type SheetRow, type SheetTable } from './pages'
 
 export const A3 = { width: 1191, height: 842 } as const
 const MARGIN = 48
@@ -19,8 +22,14 @@ const INK = '#2f2f2b'
 const QUIET = '#77746c'
 const PAPER = '#f8f7f3'
 const RULE = '#d9d6ce'
+const TEXT_WIDTH = A3.width - 2 * MARGIN
 const SIDE_X = MARGIN + PLAN_BOX.width + 40
 const SIDE_WIDTH = A3.width - SIDE_X - MARGIN
+/** Nothing is drawn below this: the footer's rule is at `A3.height - MARGIN`. */
+const LIMIT = A3.height - MARGIN - 6
+const COVER_IMAGE = { min: 220, max: 430 } as const
+const AREA_COLUMN = 64
+const PLAN_SCALE = 4
 
 type Ctx = SKRSContext2D
 type Canvas = typeof import('@napi-rs/canvas')
@@ -29,21 +38,176 @@ function font(ctx: Ctx, family: string, size: number, weight: 400 | 600 = 400): 
   ctx.font = `${weight} ${size}px "${family}"`
 }
 
-/** Wraps a paragraph to a width, by the font's own measure. Returns the y below it. */
-function paragraph(ctx: Ctx, text: string, x: number, y: number, width: number, lineHeight: number): number {
+/** Breaks a word that is wider than a line, by characters. */
+function breakWord(ctx: Ctx, word: string, width: number): string[] {
+  const parts: string[] = []
+  let part = ''
+  for (const char of word) {
+    if (part && ctx.measureText(part + char).width > width) { parts.push(part); part = char } else part += char
+  }
+  if (part) parts.push(part)
+  return parts
+}
+
+/** Wraps text to a width, by the current font's own measure. */
+export function wrapLines(ctx: Ctx, text: string, width: number): string[] {
+  const lines: string[] = []
   let line = ''
   for (const word of text.split(' ')) {
-    const next = line ? `${line} ${word}` : word
-    if (ctx.measureText(next).width > width && line) {
-      ctx.fillText(line, x, y)
-      y += lineHeight
-      line = word
-    } else {
-      line = next
+    const parts = ctx.measureText(word).width > width ? breakWord(ctx, word, width) : [word]
+    for (const [i, part] of parts.entries()) {
+      const joined = line ? `${line} ${part}` : part
+      if (i === 0 && ctx.measureText(joined).width <= width) { line = joined; continue }
+      if (line) lines.push(line)
+      line = part
     }
   }
-  if (line) { ctx.fillText(line, x, y); y += lineHeight }
+  if (line) lines.push(line)
+  return lines
+}
+
+/** The words of a block that flows: what `layoutSheet` moves from page to page. */
+type Piece =
+  | { readonly type: 'heading'; readonly text: string }
+  | { readonly type: 'row' | 'total'; readonly row: SheetRow }
+  | { readonly type: 'tableNote' | 'paragraph' | 'note'; readonly text: string }
+
+function piecesOf(page: SheetPage): Piece[] {
+  const pieces: Piece[] = []
+  const table = page.table
+  if (table) {
+    if (table.rows.length > 0 || table.total) pieces.push({ type: 'heading', text: table.heading })
+    for (const row of table.rows) pieces.push({ type: 'row', row })
+    if (table.total) pieces.push({ type: 'total', row: table.total })
+    if (table.note !== null) pieces.push({ type: 'tableNote', text: table.note })
+  }
+  for (const text of page.paragraphs) pieces.push({ type: 'paragraph', text })
+  for (const text of page.notes) pieces.push({ type: 'note', text })
+  return pieces
+}
+
+function rowText(row: SheetRow): string {
+  return row.detail ? `${row.name} · ${row.detail}` : row.name
+}
+
+function setPieceFont(ctx: Ctx, piece: Piece): void {
+  switch (piece.type) {
+    case 'heading': case 'tableNote': case 'note': font(ctx, SANS, 9); break
+    case 'row': font(ctx, SANS, 11); break
+    case 'total': font(ctx, SANS, 11, 600); break
+    case 'paragraph': font(ctx, SANS, 12); break
+  }
+}
+
+/** Lines of a piece at a column width, and the height it takes, trailing space included. */
+function measurePiece(ctx: Ctx, piece: Piece, width: number): { lines: string[]; height: number } {
+  setPieceFont(ctx, piece)
+  switch (piece.type) {
+    case 'heading': return { lines: [piece.text.toUpperCase()], height: 20 }
+    case 'row': case 'total': {
+      const lines = wrapLines(ctx, rowText(piece.row), width - AREA_COLUMN)
+      return { lines, height: (lines.length - 1) * 14 + 24 }
+    }
+    case 'tableNote': { const lines = wrapLines(ctx, piece.text, width); return { lines, height: 6 + lines.length * 12 + 12 } }
+    case 'paragraph': { const lines = wrapLines(ctx, piece.text, width); return { lines, height: lines.length * 17 + 8 } }
+    case 'note': { const lines = wrapLines(ctx, piece.text, width); return { lines, height: lines.length * 12 + 6 } }
+  }
+}
+
+/** Draws (or only measures) the page's top lines and title. Returns the y below them. */
+function header(ctx: Ctx, page: SheetPage, draw: boolean): number {
+  font(ctx, SANS, 10)
+  ctx.fillStyle = QUIET
+  let y = MARGIN
+  const top = wrapLines(ctx, page.topLine.toUpperCase(), TEXT_WIDTH)
+  for (const [i, line] of top.entries()) { if (draw) ctx.fillText(line, MARGIN, y + i * 13) }
+  y += (top.length - 1) * 13 + 40
+  if (page.title) {
+    font(ctx, SERIF, 34); ctx.fillStyle = INK
+    const lines = wrapLines(ctx, page.title, TEXT_WIDTH)
+    if (draw) lines.forEach((line, i) => ctx.fillText(line, MARGIN, y + i * 40))
+    y += (lines.length - 1) * 40 + 22
+  }
+  if (page.subtitle) {
+    font(ctx, SANS, 13); ctx.fillStyle = QUIET
+    const lines = wrapLines(ctx, page.subtitle, TEXT_WIDTH)
+    if (draw) lines.forEach((line, i) => ctx.fillText(line, MARGIN, y + i * 17))
+    y += (lines.length - 1) * 17 + 16
+  }
   return y
+}
+
+/** Where the flowing blocks start, and in which column, for a page with the given head. */
+function region(ctx: Ctx, page: SheetPage, imageHeight: number): { x: number; width: number; y: number } {
+  const head = header(ctx, page, false)
+  if (page.kind === 'cover' && page.picture) return { x: MARGIN, width: TEXT_WIDTH, y: head + 16 + imageHeight + 100 }
+  if (page.picture?.kind === 'plan') return { x: SIDE_X, width: SIDE_WIDTH, y: head + 20 }
+  return { x: MARGIN, width: TEXT_WIDTH, y: head + (page.figures.length > 0 ? 90 : 20) }
+}
+
+function continuation(page: SheetPage, pieces: readonly Piece[], base: SheetPage): SheetPage {
+  const rows = pieces.filter((p) => p.type === 'row').map((p) => (p as { row: SheetRow }).row)
+  const total = pieces.find((p) => p.type === 'total')
+  const note = pieces.find((p) => p.type === 'tableNote')
+  const table: SheetTable | null = base.table && (rows.length > 0 || total || note)
+    ? { heading: base.table.heading, rows, total: total ? (total as { row: SheetRow }).row : null, note: note ? (note as { text: string }).text : null }
+    : null
+  const texts = (type: Piece['type']): string[] => pieces.filter((p) => p.type === type).map((p) => (p as { text: string }).text)
+  return { ...page, table, paragraphs: texts('paragraph'), notes: texts('note') }
+}
+
+/**
+ * Splits each page's flowing blocks at the footer. A page that overflows keeps what fits and
+ * hands the rest to continuation pages (same kind and top line, title "(continued)", no
+ * picture or figures); a table is cut between rows only. Footers are numbered across the result.
+ */
+export async function layoutSheet(sheet: Sheet): Promise<Sheet> {
+  const canvas = await loadCanvas()
+  registerSheetFonts(canvas)
+  const ctx = canvas.createCanvas(10, 10).getContext('2d')
+  const out: SheetPage[] = []
+  for (const page of sheet.pages) {
+    const all = piecesOf(page)
+    let queue = all
+    let current = page
+    let first = true
+    for (;;) {
+      const area = region(ctx, current, first && page.picture ? COVER_IMAGE.min : 0)
+      const placed: Piece[] = []
+      let y = area.y
+      let i = 0
+      while (i < queue.length) {
+        const piece = queue[i]!
+        const carried: Piece[] = []
+        if (placed.length === 0 && (piece.type === 'row' || piece.type === 'total')) {
+          const heading = all.find((p) => p.type === 'heading')
+          if (heading) carried.push(heading)
+        }
+        const group = [...carried, piece]
+        // A heading is never left alone at the foot of a page.
+        if (piece.type === 'heading' && queue[i + 1]) group.push(queue[i + 1]!)
+        const height = group.reduce((sum, p) => sum + measurePiece(ctx, p, area.width).height, 0)
+        if (y + height > LIMIT && placed.length > 0) break
+        if (carried.length > 0) placed.push(...carried)
+        placed.push(piece)
+        y += measurePiece(ctx, piece, area.width).height + carried.reduce((sum, p) => sum + measurePiece(ctx, p, area.width).height, 0)
+        i++
+      }
+      const rest = queue.slice(i)
+      out.push(continuation(current, placed, page))
+      if (rest.length === 0) break
+      queue = rest
+      first = false
+      current = {
+        ...current,
+        kind: page.kind,
+        title: page.title === null ? null : `${page.title} (continued)`,
+        subtitle: null, figures: [], picture: null, paragraphs: [], notes: [], table: null,
+      }
+    }
+  }
+  const pages = out.map((page, i): SheetPage => ({ ...page, footer: { ...page.footer, page: i + 1, pages: out.length } }))
+  return { ...sheet, pages }
 }
 
 function footer(ctx: Ctx, page: SheetPage): void {
@@ -59,98 +223,82 @@ function footer(ctx: Ctx, page: SheetPage): void {
   ctx.textAlign = 'left'
 }
 
-function header(ctx: Ctx, page: SheetPage): number {
-  font(ctx, SANS, 10)
-  ctx.fillStyle = QUIET
-  ctx.fillText(page.topLine.toUpperCase(), MARGIN, MARGIN)
-  let y = MARGIN + 40
-  if (page.title) { font(ctx, SERIF, 34); ctx.fillStyle = INK; ctx.fillText(page.title, MARGIN, y); y += 22 }
-  if (page.subtitle) { font(ctx, SANS, 13); ctx.fillStyle = QUIET; ctx.fillText(page.subtitle, MARGIN, y); y += 16 }
-  return y
-}
-
-function side(ctx: Ctx, page: SheetPage, top: number): void {
+function flow(ctx: Ctx, pieces: readonly Piece[], x: number, width: number, top: number): void {
   let y = top
-  if (page.table) {
-    font(ctx, SANS, 9); ctx.fillStyle = QUIET; ctx.fillText(page.table.heading.toUpperCase(), SIDE_X, y); y += 20
-    for (const row of [...page.table.rows, page.table.total]) {
-      font(ctx, SANS, 11, row === page.table.total ? 600 : 400)
-      ctx.fillStyle = INK
-      ctx.fillText(row.detail ? `${row.name} · ${row.detail}` : row.name, SIDE_X, y)
-      ctx.textAlign = 'right'; ctx.fillText(row.area, SIDE_X + SIDE_WIDTH, y); ctx.textAlign = 'left'
-      ctx.strokeStyle = RULE; ctx.beginPath(); ctx.moveTo(SIDE_X, y + 8); ctx.lineTo(SIDE_X + SIDE_WIDTH, y + 8); ctx.stroke()
-      y += 24
+  for (const piece of pieces) {
+    const { lines, height } = measurePiece(ctx, piece, width)
+    ctx.fillStyle = piece.type === 'row' || piece.type === 'total' || piece.type === 'paragraph' ? INK : QUIET
+    switch (piece.type) {
+      case 'heading': ctx.fillText(lines[0]!, x, y); break
+      case 'row': case 'total':
+        lines.forEach((line, i) => ctx.fillText(line, x, y + i * 14))
+        ctx.textAlign = 'right'; ctx.fillText(piece.row.area, x + width, y); ctx.textAlign = 'left'
+        ctx.strokeStyle = RULE
+        ctx.beginPath(); ctx.moveTo(x, y + (lines.length - 1) * 14 + 8); ctx.lineTo(x + width, y + (lines.length - 1) * 14 + 8); ctx.stroke()
+        break
+      case 'tableNote': lines.forEach((line, i) => ctx.fillText(line, x, y + 6 + i * 12)); break
+      case 'paragraph': lines.forEach((line, i) => ctx.fillText(line, x, y + i * 17)); break
+      case 'note': lines.forEach((line, i) => ctx.fillText(line, x, y + i * 12)); break
     }
-    font(ctx, SANS, 9); ctx.fillStyle = QUIET
-    y = paragraph(ctx, page.table.note, SIDE_X, y + 6, SIDE_WIDTH, 12) + 12
+    y += height
   }
-  font(ctx, SANS, 12); ctx.fillStyle = INK
-  for (const text of page.paragraphs) y = paragraph(ctx, text, SIDE_X, y, SIDE_WIDTH, 17) + 8
-  font(ctx, SANS, 9); ctx.fillStyle = QUIET
-  for (const note of page.notes) y = paragraph(ctx, note, SIDE_X, y, SIDE_WIDTH, 12) + 6
 }
 
-async function drawFloorPage(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage): Promise<void> {
-  const top = header(ctx, page) + 10
-  if (page.picture?.kind === 'plan') {
-    // The frame is in plan metres and the box has one size on every floor: one scale throughout.
-    const svg = await drawPlan(plan, {
-      format: 'svg', floor: page.picture.floor, frame: page.picture.frame,
-      width: PLAN_BOX.width, height: PLAN_BOX.height,
-      ...(page.picture.ids ? { labels: { ids: true } } : {}),
-    })
-    const image = await canvas.loadImage(Buffer.from(svg))
-    ctx.drawImage(image, MARGIN, top, PLAN_BOX.width, PLAN_BOX.height)
-  }
-  side(ctx, page, top + 10)
+async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, top: number): Promise<void> {
+  if (page.picture?.kind !== 'plan') return
+  // The frame is in plan metres and the box has one size on every floor: one scale throughout.
+  const png = await drawPlan(plan, {
+    format: 'png', scale: PLAN_SCALE, floor: page.picture.floor, frame: page.picture.frame,
+    width: PLAN_BOX.width, height: PLAN_BOX.height,
+    ...(page.picture.ids ? { labels: { ids: true } } : {}),
+  })
+  ctx.drawImage(await canvas.loadImage(Buffer.from(png)), MARGIN, top, PLAN_BOX.width, PLAN_BOX.height)
 }
 
-async function drawCover(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage): Promise<void> {
-  const top = header(ctx, page) + 16
-  const width = A3.width - 2 * MARGIN
-  const height = 430
-  const still = await drawStill(plan, { width: Math.round(width), height, scale: 2 })
-  ctx.drawImage(await canvas.loadImage(Buffer.from(still)), MARGIN, top, width, height)
-  let y = top + height + 50
-  const column = width / Math.max(1, page.figures.length)
+async function drawCover(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, flowing: readonly Piece[]): Promise<void> {
+  const top = header(ctx, page, true) + 16
+  const room = flowing.reduce((sum, p) => sum + measurePiece(ctx, p, TEXT_WIDTH).height, 0)
+  const height = Math.max(COVER_IMAGE.min, Math.min(COVER_IMAGE.max, LIMIT - top - 100 - room))
+  const still = await drawStill(plan, { width: Math.round(TEXT_WIDTH), height, scale: 2 })
+  ctx.drawImage(await canvas.loadImage(Buffer.from(still)), MARGIN, top, TEXT_WIDTH, height)
+  const y = top + height + 50
+  const column = TEXT_WIDTH / Math.max(1, page.figures.length)
   page.figures.forEach((figure, i) => {
     font(ctx, SERIF, 30); ctx.fillStyle = INK; ctx.fillText(figure.value, MARGIN + i * column, y)
     font(ctx, SANS, 11); ctx.fillStyle = QUIET; ctx.fillText(figure.label, MARGIN + i * column, y + 18)
   })
-  y += 50
-  font(ctx, SANS, 12); ctx.fillStyle = INK
-  for (const text of page.paragraphs) y = paragraph(ctx, text, MARGIN, y, width, 17) + 6
+  flow(ctx, flowing, MARGIN, TEXT_WIDTH, y + 50)
 }
 
-function drawSummary(ctx: Ctx, page: SheetPage): void {
-  let y = header(ctx, page) + 30
-  const width = A3.width - 2 * MARGIN
+function drawSummaryFigures(ctx: Ctx, page: SheetPage, y: number): void {
   page.figures.forEach((figure, i) => {
     font(ctx, SERIF, 26); ctx.fillStyle = INK; ctx.fillText(figure.value, MARGIN + i * 200, y)
     font(ctx, SANS, 10); ctx.fillStyle = QUIET; ctx.fillText(figure.label, MARGIN + i * 200, y + 16)
   })
-  y += 60
-  font(ctx, SANS, 12); ctx.fillStyle = INK
-  for (const text of page.paragraphs) y = paragraph(ctx, text, MARGIN, y, width, 17) + 10
-  font(ctx, SANS, 9); ctx.fillStyle = QUIET
-  for (const note of page.notes) y = paragraph(ctx, note, MARGIN, y, width, 12) + 6
 }
 
-export async function sheetPdf(plan: FloorPlan, sheet: Sheet): Promise<Uint8Array> {
+async function drawPage(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage): Promise<void> {
+  const flowing = piecesOf(page)
+  if (page.kind === 'cover' && page.picture) return drawCover(ctx, canvas, plan, page, flowing)
+  const head = header(ctx, page, true)
+  const at = region(ctx, page, 0)
+  if (page.picture?.kind === 'plan') await drawFloorPicture(ctx, canvas, plan, page, head + 10)
+  else if (page.figures.length > 0) drawSummaryFigures(ctx, page, head + 30)
+  flow(ctx, flowing, at.x, at.width, at.y)
+}
+
+/** The PDF, and the laid-out sheet whose pages match the PDF's one for one. */
+export async function sheetPdf(plan: FloorPlan, sheet: Sheet): Promise<{ pdf: Uint8Array; sheet: Sheet }> {
+  const laid = await layoutSheet(sheet)
   const canvas = await loadCanvas()
-  // Not a React hook: the name only starts with "use".
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  useSheetFonts(canvas)
-  const doc = new canvas.PDFDocument({ title: sheet.name, creator: 'Grid', producer: 'Grid' })
-  for (const page of sheet.pages) {
-    const ctx = doc.beginPage(A3.width, A3.height)
+  const doc = new canvas.PDFDocument({ title: laid.name, creator: 'Grid', producer: 'Grid' })
+  for (const page of laid.pages) {
+    const ctx = doc.beginPage(A3.width, A3.height) as Ctx
     ctx.fillStyle = PAPER
     ctx.fillRect(0, 0, A3.width, A3.height)
-    if (page.kind === 'cover') await drawCover(ctx, canvas, plan, page)
-    else if (page.kind === 'summary') drawSummary(ctx, page)
-    else await drawFloorPage(ctx, canvas, plan, page)
+    await drawPage(ctx, canvas, plan, page)
     footer(ctx, page)
     doc.endPage()
   }
-  return new Uint8Array(doc.close())
+  return { pdf: new Uint8Array(doc.close()), sheet: laid }
 }

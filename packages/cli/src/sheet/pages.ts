@@ -26,7 +26,11 @@ export const PLAN_BOX = { width: 700, height: 640 } as const
 
 export interface SheetFigure { readonly value: string; readonly label: string }
 export interface SheetRow { readonly name: string; readonly detail: string | null; readonly area: string }
-export interface SheetTable { readonly heading: string; readonly rows: readonly SheetRow[]; readonly total: SheetRow; readonly note: string }
+/**
+ * `pdf.ts` may split a long table across pages: a part has no `total` until the part that holds
+ * it, and no `note` until the part that holds that.
+ */
+export interface SheetTable { readonly heading: string; readonly rows: readonly SheetRow[]; readonly total: SheetRow | null; readonly note: string | null }
 export type SheetPicture =
   | { readonly kind: 'plan'; readonly floor: string; readonly frame: Bounds; readonly ids: boolean }
   | { readonly kind: 'model' }

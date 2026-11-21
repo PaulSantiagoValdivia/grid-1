@@ -27,7 +27,7 @@ const CANDIDATES = ['./fonts/', '../fonts/', '../../fonts/']
 let registered = false
 
 /** Registers the four fonts once. Throws FontsMissing when none of the folders holds them. */
-export function useSheetFonts(canvas: typeof import('@napi-rs/canvas')): void {
+export function registerSheetFonts(canvas: typeof import('@napi-rs/canvas')): void {
   if (registered) return
   for (const candidate of CANDIDATES) {
     const folder = fileURLToPath(new URL(candidate, import.meta.url))
