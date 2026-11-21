@@ -69,7 +69,7 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; text or CSV |
 | `grid_measure` | A room's sizes and widest circle, whether a box or a circle fits, the way between rooms with every door passed, and what is narrower than the person's own figure |
-| `grid_view` | A floor plan (light, dark or black and white, with or without sizes), the model from a side, or an eye-level view in a room with the window sills against the eye |
+| `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe` |
 | `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
 | `grid_preview` | Points the live preview at a floor or room of the plan |
@@ -85,6 +85,9 @@ limit. A change that would leave the drawing with a new problem is refused and n
 written; otherwise only the change is written back, and keys Grid does not know stay. The
 answer to a change also names every door or doorless opening that now joins other rooms, read
 from where it stands: `bath-door joined bath and lounge; it now joins kitchen and lounge.`
+
+`grid draw --ids` draws the same check view for a person: each room's id in brackets after its
+name, and each door's and window's id beside it, upright.
 
 ### Walls that do not meet: `grid tidy`
 

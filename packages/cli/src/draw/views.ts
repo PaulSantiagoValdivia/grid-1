@@ -42,9 +42,11 @@ export interface PlanView {
   readonly pxPerMetre: number
 }
 
-export async function planView(plan: FloorPlan, options: { floor?: string; look: LookName; dimensions: boolean }): Promise<PlanView> {
-  const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions })
-  const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions })
+export async function planView(plan: FloorPlan, options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean }): Promise<PlanView> {
+  // VEW-2's check view: every room, door and window carries its id.
+  const labels = options.ids ? { labels: { ids: true } } : {}
+  const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions, ...labels })
+  const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...labels })
   return { png, width: picture.width, height: picture.height, pxPerMetre: picture.width / picture.view.width }
 }
 

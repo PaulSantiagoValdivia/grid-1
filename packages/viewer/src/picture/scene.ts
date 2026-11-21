@@ -203,6 +203,9 @@ type Paints = ReturnType<typeof paints>
 const virtualPath = (points: readonly Vec2[]): string => `M${points.map((p) => `${p.x},${-p.y}`).join('L')}`
 
 /** A label group: placed in metres, then scaled so its contents are in pixels. */
+/** How far an opening's id sits off its wall's face, in screen pixels. */
+const OPENING_ID_PX = 12
+
 const labelTransform = (at: Vec2, mpp: number): string => `translate(${at.x} ${-at.y}) scale(${mpp})`
 
 /**
@@ -555,7 +558,10 @@ export function planScene(input: SceneInput): SvgNode[] {
       ? [change.before.toFixed(decimals), ' → ', change.after.toFixed(decimals), ' m²']
       : [room.area.toFixed(decimals), ' m²']
   }
-  const names = drawing.rooms.map((room, index) => labelName(room.name, index, style))
+  const names = drawing.rooms.map((room, index) => {
+    const name = labelName(room.name, index, style)
+    return style.ids ? `${name} [${room.id}]` : name
+  })
   const swings: Box[] = []
   for (const opening of drawing.openings) {
     const box = doorSwingBox(opening, handings.get(opening.id), mpp)
@@ -627,6 +633,26 @@ export function planScene(input: SceneInput): SvgNode[] {
         `ghost-label-${room.id}`
       )
     )
+  }
+
+  // The check view: each opening's id just off the middle of its wall, on the side its normal
+  // points to, upright and sized in screen pixels like the labels.
+  if (style.ids) {
+    for (const opening of drawing.openings) {
+      const reach = opening.thickness / 2
+      const at = {
+        x: (opening.from.x + opening.to.x) / 2 + opening.normal.x * reach,
+        y: (opening.from.y + opening.to.y) / 2 + opening.normal.y * reach
+      }
+      out.push(
+        el(
+          'g',
+          { 'data-part': 'opening-id', 'data-opening': opening.id, transform: labelTransform(at, mpp) },
+          [el('text', { x: opening.normal.x * OPENING_ID_PX, y: -opening.normal.y * OPENING_ID_PX + 4, ...paint.area }, [opening.id])],
+          `opening-id:${opening.id}`
+        )
+      )
+    }
   }
 
   for (const opening of drawing.openings) {

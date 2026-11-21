@@ -58,6 +58,12 @@ export interface LabelStyle {
   readonly numbered?: boolean
   /** How many decimals the area keeps: 0, 1 or 2 (the default). */
   readonly areaDecimals?: 0 | 1 | 2
+  /**
+   * The check view (VEW-2): each room's id after its name, in brackets, and each door's and
+   * window's id beside it, as the plan file holds them, so a picture and the text that comes
+   * with it name the parts the same way. All of it upright.
+   */
+  readonly ids?: boolean
 }
 
 export function formatArea(area: number, decimals: 0 | 1 | 2 = 2): string {
