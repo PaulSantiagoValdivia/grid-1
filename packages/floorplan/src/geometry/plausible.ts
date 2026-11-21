@@ -16,6 +16,7 @@ import { area } from './vec2'
 import { tryRoomPolygon } from './room'
 import type { BuildingKind, ToleranceName } from './tolerances'
 import { limit } from './tolerances'
+import { fixedText } from './rounding'
 import type { Issue } from './validate'
 
 /** The room uses that make a plan a home. */
@@ -43,7 +44,7 @@ function median(values: readonly number[]): number | null {
 
 /** A size to two decimals, or to three significant figures below a metre, so 0.0015 stays 0.0015. */
 function size(value: number): string {
-  if (Math.abs(value) >= 1 || value === 0) return value.toFixed(2)
+  if (Math.abs(value) >= 1 || value === 0) return fixedText(value, 2)
   const shown = Number(value.toPrecision(3)).toString()
   return /^-?0\.\d$/.test(shown) ? `${shown}0` : shown
 }

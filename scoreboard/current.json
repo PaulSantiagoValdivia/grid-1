@@ -2,7 +2,7 @@
  "what": "The counts the build must not fall below. Update them in the commit that moves them, and say why.",
  "counts": {
   "roomsMeasuredWrong": 197,
-  "damageSilent": 388,
+  "damageSilent": 387,
   "turnsAnswered": 15,
   "mistakesNamed": 2,
   "checksFed": 5,
@@ -34,10 +34,10 @@
   "damage": {
    "plans": 3000,
    "caught: names the damaged part": 1907,
-   "silent: result changed, nothing said": 388,
+   "silent: result changed, nothing said": 387,
    "refused: schema names the place": 506,
    "caught vaguely: names something else": 109,
-   "no effect at all": 90
+   "no effect at all": 91
   },
   "damage:lab": {
    "caught: names the damaged part": 1512,
@@ -45,7 +45,7 @@
    "refused: schema names the place": 506,
    "no effect at all": 117,
    "caught vaguely: names something else": 305,
-   "plansWhoseOutcomeDiffersNow": 410
+   "plansWhoseOutcomeDiffersNow": 411
   },
   "sound": {
    "plans": 442,

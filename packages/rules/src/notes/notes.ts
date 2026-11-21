@@ -7,7 +7,16 @@
  * parsing text. Pure.
  */
 
-import { GENERAL_GUIDANCE_LABEL, planFloors, type FindingCode as PlanFindingCode, type FloorPlan } from '@ongrid/floorplan/geometry'
+import {
+  GENERAL_GUIDANCE_LABEL,
+  areaText,
+  figureText,
+  metresText,
+  planFloors,
+  rounded,
+  type FindingCode as PlanFindingCode,
+  type FloorPlan
+} from '@ongrid/floorplan/geometry'
 import { planNotes as planCheckNotes, type NoteText, type PlanNote as PlanCheckNote } from '@ongrid/floorplan/notes'
 import type { VerificationStatus } from '../checks/figures'
 import type { AppliedFigure, FigureFindingCode, RuleFinding, RulesReport } from '../checks/types'
@@ -48,9 +57,15 @@ const name = (text: string): NoteText => ({ text, name: true })
 const words = (text: string): NoteText => ({ text })
 const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`)
 
-/** A length in metres, to the millimetre, without trailing zeros past the centimetre. */
-const metres = (value: number): string => (Number.isInteger(Math.round(value * 1000) / 10) ? value.toFixed(2) : value.toFixed(3))
-const centimetres = (value: number): string => `${Math.round(value * 1000) / 10} cm`
+/**
+ * A length in metres as drawn: to the millimetre, without trailing zeros past the centimetre,
+ * and with the digits that set it apart from `against`, the figure it was checked against
+ * (ARE-7). The rounding is the core's (`metresText`).
+ */
+const metres = (value: number, against?: number): string =>
+  metresText(value, Number.isInteger(rounded(value * 100, 1)) ? 2 : 3, against)
+/** A figure in centimetres, as it was given (ARE-7): 0.775 m is 77.5 cm. */
+const centimetres = (value: number): string => `${figureText(value * 100)} cm`
 
 /** How far a figure has been checked, as a reader is told. */
 const STATUS: Record<VerificationStatus, string> = {
@@ -102,7 +117,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
     const figure = (key: AppliedFigure['key']): AppliedFigure | undefined => figures.find((f) => f.key === key)
     switch (finding.code) {
       case 'room_too_small': {
-        const measured = finding.area === undefined ? '' : `It measures ${finding.area.toFixed(2)} m². `
+        const measured = finding.area === undefined ? '' : `It measures ${areaText(finding.area, 2, finding.minimum)} m². `
         const need = finding.minimum === undefined ? '' : `Rooms people sleep or live in need at least ${finding.minimum} m².`
         return {
           ...base,
@@ -122,7 +137,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
         const width = figure('escapeOpeningMinWidth')
         const height = figure('escapeOpeningMinHeight')
         const needs = [
-          ...(finding.minimum === undefined ? [] : [`${finding.minimum.toFixed(2)} m²`]),
+          ...(finding.minimum === undefined ? [] : [`${figureText(finding.minimum)} m²`]),
           ...(width === undefined ? [] : [`${centimetres(width.value)} wide`]),
           ...(height === undefined ? [] : [`${centimetres(height.value)} tall`])
         ]
@@ -131,16 +146,16 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ...base,
           tag: 'Escape',
           title: [name(shown), words("'s window is too small to escape through")],
-          detail: [words(`It opens ${(finding.area ?? 0).toFixed(2)} m² as drawn.${need}${basis}`)]
+          detail: [words(`It opens ${areaText(finding.area ?? 0, 2, finding.minimum)} m² as drawn.${need}${basis}`)]
         }
       }
       case 'escape_window_too_high': {
-        const need = finding.maximum === undefined ? '' : ` It needs to be ${metres(finding.maximum)} m or lower.`
+        const need = finding.maximum === undefined ? '' : ` It needs to be ${figureText(finding.maximum)} m or lower.`
         return {
           ...base,
           tag: 'Escape',
           title: [name(shown), words("'s window is too high to escape through")],
-          detail: [words(`Its sill is ${metres(finding.sill ?? 0)} m above the floor as drawn.${need}${basis}`)]
+          detail: [words(`Its sill is ${metres(finding.sill ?? 0, finding.maximum)} m above the floor as drawn.${need}${basis}`)]
         }
       }
     }

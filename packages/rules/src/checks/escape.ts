@@ -7,7 +7,7 @@
  * drawn", and a window that opens only in part needs a bigger frame than these figures.
  */
 
-import { indexPlan, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
+import { indexPlan, overFigure, rounded, shownAgainst, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
 import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { ESCAPE_TOP_LEVEL } from './figures'
 import { messages } from './messages'
@@ -26,10 +26,6 @@ export interface EscapeFigures {
 /** Whether there is anything to test a window against. */
 export const hasEscapeFigures = (figures: EscapeFigures): boolean => Object.values(figures).some((f) => f !== null)
 
-/** Lengths to the millimetre and areas to 0.01 m² before comparing, so a note shows what was compared. */
-const toThousandths = (value: number): number => Math.round(value * 1000) / 1000
-const toHundredths = (value: number): number => Math.round(value * 100) / 100
-
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 interface Measured {
@@ -40,13 +36,24 @@ interface Measured {
   readonly area: number
 }
 
+/** A window as drawn, compared as it is and never rounded first (ARE-7). */
 const measure = (opening: Opening): Measured => ({
   id: opening.id,
-  width: toThousandths(opening.width),
-  height: toThousandths(opening.height),
-  sill: toThousandths(opening.sill),
-  area: toHundredths(opening.width * opening.height)
+  width: opening.width,
+  height: opening.height,
+  sill: opening.sill,
+  area: opening.width * opening.height
 })
+
+/**
+ * What a finding carries: lengths to the millimetre and areas to 0.01 m², or to the digits
+ * that keep each on its side of the figure it was checked against, so a note shows what was
+ * compared and never hides a shortfall.
+ */
+const length = (value: number, figure: AppliedFigure | null): number =>
+  figure === null ? rounded(value, 3) : shownAgainst(value, figure.value, 3, 'm')
+const surface = (value: number, figure: AppliedFigure | null): number =>
+  figure === null ? rounded(value, 2) : shownAgainst(value, figure.value, 2, 'm²')
 
 /** Largest by area, then by id: the window a note describes. */
 const largest = (windows: readonly Measured[]): Measured =>
@@ -71,10 +78,10 @@ export function escapeCheck(
   const minArea = level === 0 ? (figures.minAreaGrade ?? figures.minArea) : figures.minArea
   const { minWidth, minHeight, maxSill } = figures
   const bigEnough = (w: Measured): boolean =>
-    (minWidth === null || w.width >= minWidth.value) &&
-    (minHeight === null || w.height >= minHeight.value) &&
-    (minArea === null || w.area >= minArea.value)
-  const lowEnough = (w: Measured): boolean => maxSill === null || w.sill <= maxSill.value
+    (minWidth === null || !underFigure(w.width, minWidth.value, 'm')) &&
+    (minHeight === null || !underFigure(w.height, minHeight.value, 'm')) &&
+    (minArea === null || !underFigure(w.area, minArea.value, 'm²'))
+  const lowEnough = (w: Measured): boolean => maxSill === null || !overFigure(w.sill, maxSill.value, 'm')
 
   // Windows and doors to the outside, by the rooms on their sides: on a wall stated exterior, or
   // with a room on one side only and no enclosed floor on the other (MSG-13, `outsideTest`).
@@ -125,7 +132,7 @@ export function escapeCheck(
         code: 'escape_window_too_high',
         openings: [w.id],
         message: messages.escapeWindowTooHigh(roomName(room.id)),
-        sill: w.sill,
+        sill: length(w.sill, maxSill),
         maximum: maxSill.value,
         figures: [maxSill]
       })
@@ -137,10 +144,10 @@ export function escapeCheck(
       code: 'escape_window_too_small',
       openings: [w.id],
       message: messages.escapeWindowTooSmall(roomName(room.id)),
-      area: w.area,
+      area: surface(w.area, minArea),
       ...(minArea === null ? {} : { minimum: minArea.value }),
-      width: w.width,
-      height: w.height,
+      width: length(w.width, minWidth),
+      height: length(w.height, minHeight),
       figures: present([minArea, minWidth, minHeight])
     })
   }

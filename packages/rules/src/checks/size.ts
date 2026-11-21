@@ -6,7 +6,7 @@
  * not checked.
  */
 
-import { indexPlan, roomFloorArea, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { indexPlan, roomFloorArea, shownAgainst, underFigure, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { HABITABLE_USES } from './catalogue'
@@ -18,9 +18,6 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 /** A plan built by hand, unparsed, can still carry a value the schema would drop. */
 const stated = (use: unknown): RoomUse | null =>
   (ROOM_USES as readonly unknown[]).includes(use) ? (use as RoomUse) : null
-
-/** Rounded to 0.01 m² before comparing, so a note can never read "It measures 6.50 m²". */
-const toHundredths = (value: number): number => Math.round(value * 100) / 100
 
 export function sizeCheck(
   storey: FloorPlan,
@@ -48,8 +45,9 @@ export function sizeCheck(
     }
     if (!HABITABLE_USES.includes(use)) continue
     // Net of any room marked `inside` that sits in it, as Grid measures every room (ARE-5).
-    const net = toHundredths(roomFloorArea(room, index, outline.polygon))
-    if (net >= minimum.value) continue
+    // Compared as measured, never rounded first (ARE-7): 6.4951 m² is under 6.5 m².
+    const net = roomFloorArea(room, index, outline.polygon)
+    if (!underFigure(net, minimum.value, 'm²')) continue
     findings.push({
       code: 'room_too_small',
       ruleId: 'habitable-room-area',
@@ -57,7 +55,8 @@ export function sizeCheck(
       rooms: [room.id],
       openings: [],
       message: messages.roomTooSmall(roomName(room.id), minimum.value),
-      area: net,
+      // To 0.01 m², or to the digits that keep it under the minimum: 6.495, never 6.50.
+      area: shownAgainst(net, minimum.value, 2, 'm²'),
       minimum: minimum.value,
       figures: [minimum]
     })

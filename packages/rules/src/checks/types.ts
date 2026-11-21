@@ -81,7 +81,9 @@ export interface RuleFinding extends Omit<PlanRuleFinding, 'code'> {
   readonly code: FindingCode
   /**
    * On `room_too_small`: the room's net area in m², rounded to 0.01. On `escape_window_too_small`:
-   * the window's area as drawn, rounded the same way. Optional, like `through`.
+   * the window's area as drawn, rounded the same way. Either keeps more digits when at 0.01 it
+   * would read as its minimum (ARE-7): 6.4951 m² against 6.5 is 6.495. The check compares the
+   * area as measured, never this figure. Optional, like `through`.
    */
   readonly area?: number
   /**
@@ -89,10 +91,13 @@ export interface RuleFinding extends Omit<PlanRuleFinding, 'code'> {
    * minimum window area for that floor, in m², when there is one.
    */
   readonly minimum?: number
-  /** Only on `escape_window_too_small`: the window's width and height as drawn, in m, to 0.001. */
+  /**
+   * Only on `escape_window_too_small`: the window's width and height as drawn, in m, to 0.001,
+   * or to more digits when at 0.001 they would read as their figure (ARE-7).
+   */
   readonly width?: number
   readonly height?: number
-  /** Only on `escape_window_too_high`: the window's sill as drawn, in m, to 0.001, and the maximum. */
+  /** Only on `escape_window_too_high`: the window's sill as drawn, in m, to 0.001 or past it as above, and the maximum. */
   readonly sill?: number
   readonly maximum?: number
   /**

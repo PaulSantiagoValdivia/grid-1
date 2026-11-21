@@ -139,10 +139,11 @@ describe('small rooms people live or sleep in', () => {
     expect(sizeFindings(plan(box('b', 'Bedroom', [0, 0], 2.5, 2.6, 'bedroom')))).toEqual([])
   })
 
-  it('leave an area that rounds up to 6.50 m² alone', () => {
-    // 2.5 × 2.5984 = 6.496 m²
-    expect(sizeFindings(plan(box('l', 'Living', [0, 0], 2.5, 2.5984, 'living')))).toEqual([])
-    // …but 6.494 m² rounds to 6.49 and is reported.
+  it('report an area that would round up to 6.50 m², with the digit that shows it is under (ARE-7, CH-11)', () => {
+    // 2.5 × 2.5984 = 6.496 m². Until ARE-7 the area was rounded before it was compared and
+    // this room passed; it is under 6.5 m², so it is reported, as 6.496 m².
+    expect(sizeFindings(plan(box('l', 'Living', [0, 0], 2.5, 2.5984, 'living')))).toMatchObject([{ area: 6.496 }])
+    // 6.494 m² reads as 6.49 and is reported.
     expect(sizeFindings(plan(box('l', 'Living', [0, 0], 2.5, 2.5976, 'living')))).toMatchObject([{ area: 6.49 }])
   })
 

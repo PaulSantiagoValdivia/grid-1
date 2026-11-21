@@ -393,6 +393,15 @@ export const TOLERANCES = {
       'a direction of travel this short is rounding noise.',
     basis: own
   },
+  lengthEqual: {
+    kind: 'arithmetic',
+    value: 1e-9,
+    unit: 'm',
+    decides:
+      'A length this close to the figure it is checked against is that figure (ARE-7): a width ' +
+      'drawn at exactly the figure is never read as a hair under it. Areas use `areaEqual`.',
+    basis: own
+  },
   noArea: {
     kind: 'arithmetic',
     value: 1e-12,

@@ -9,15 +9,16 @@
 
 import type { FloorPlan } from '../plan'
 import { planFloors } from '../floors'
+import { fixedText, metresText } from '../rounding'
 import type { PlanChange, PropChange, WallMotion } from './types'
 
 function metres(value: number): string {
-  // `abs` keeps a rounded-to-zero negative from printing as -0.00.
-  return Math.abs(value).toFixed(2)
+  // A distance, so without its sign; the rounding is the core's one way (ARE-7).
+  return metresText(Math.abs(value))
 }
 
 function degrees(value: number): string {
-  return Math.abs(value).toFixed(1).replace(/\.0$/, '')
+  return fixedText(Math.abs(value), 1).replace(/\.0$/, '')
 }
 
 function text(value: unknown): string {

@@ -25,6 +25,7 @@ import type { RoomOverlap } from './overlaps'
 import { MAX_CUTS, roomOverlaps } from './overlaps'
 import type { ToleranceChanges } from './tolerances'
 import { tolerance, withTolerances } from './tolerances'
+import { fixedText, metresText } from './rounding'
 import { validatePlausibility } from './plausible'
 import { wallFaults } from './wallFaults'
 import { kindDisagreements } from './exposure'
@@ -87,7 +88,7 @@ function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
         'plan',
         'plan',
         'plan/far-from-origin',
-        `The plan reaches ${farthest.toFixed(0)} m from the origin. The origin is where the ` +
+        `The plan reaches ${fixedText(farthest, 0)} m from the origin. The origin is where the ` +
           `3D rises from; at this distance there is most likely a scale or unit error.`,
         'warning'
       )
@@ -505,12 +506,12 @@ function validateFloors(
 /** A length in millimetres, to a tenth where that is what tells it apart. */
 function millimetres(metres: number): string {
   const mm = metres * 1000
-  return `${mm >= 10 ? mm.toFixed(0) : Number(mm.toPrecision(2)).toString()} mm`
+  return `${mm >= 10 ? fixedText(mm, 0) : Number(mm.toPrecision(2)).toString()} mm`
 }
 
-const two = (value: number): string => (Math.round(Number((value * 100).toPrecision(12))) / 100).toFixed(2)
+const two = (value: number): string => fixedText(value, 2)
 const m2 = (value: number): string => `${two(value)} m²`
-const at = (p: { readonly x: number; readonly y: number }): string => `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`
+const at = (p: { readonly x: number; readonly y: number }): string => `(${metresText(p.x)}, ${metresText(p.y)})`
 
 /** `a, b and c`, or the first few and how many more. */
 function names(ids: readonly string[], most = 6): string {
@@ -749,7 +750,7 @@ function validateWallFaults(plan: FloorPlan, index: PlanIndex, broken: ReadonlyS
 function validateKinds(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
   for (const sides of kindDisagreements(plan, index)) {
     if (broken.has(sides.wall) || sides.differs === null) continue
-    const length = `${sides.differs.length.toFixed(2)} m`
+    const length = `${metresText(sides.differs.length)} m`
     const inside = [...new Set(sides.stretches.filter((s) => s.worked === 'interior').flatMap((s) => [...s.left, ...s.right]))]
     const facing = [...new Set(sides.stretches.filter((s) => s.worked === 'exterior').flatMap((s) => [...s.left, ...s.right]))]
     const message =

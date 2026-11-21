@@ -19,6 +19,7 @@ import type { Vec2 } from '../vec2'
 import type { PlanDrawing } from '../floorplan'
 import { doorSwing, type SwingArc } from '../door'
 import { TOLERANCES } from '../tolerances'
+import { areaText } from '../rounding'
 
 /**
  * Layer names are the only organisation a DXF carries, so they are part of the
@@ -295,7 +296,7 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
         w,
         DXF_LAYERS.labels,
         { x: room.labelAt.x, y: room.labelAt.y - TEXT_HEIGHT * 1.4 },
-        `${room.area.toFixed(2)} m2`
+        `${areaText(room.area)} m2`
       )
     }
   }

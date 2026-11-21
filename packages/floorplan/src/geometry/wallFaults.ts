@@ -39,6 +39,7 @@ import type { RoomOutline } from './room'
 import { roomNesting, roomOutline } from './room'
 import { sitsWithin } from './nesting'
 import { tolerance } from './tolerances'
+import { areaText, metresText } from './rounding'
 import type { Vec2 } from './vec2'
 import { area, cross, dot, sub } from './vec2'
 import { wallAxis } from './wall'
@@ -174,7 +175,7 @@ const pair = (p: Vec2): [number, number] => [tidy(p.x), tidy(p.y)]
 
 /** A length to the millimetre, with at least two decimals: 1.50, 0.025. */
 export function wallMetres(value: number): string {
-  const fixed = (Math.round(Number((value * 1000).toPrecision(12))) / 1000).toFixed(3)
+  const fixed = metresText(value, 3)
   return fixed.endsWith('0') ? fixed.slice(0, -1) : fixed
 }
 const m = (value: number): string => `${wallMetres(value)} m`
@@ -850,8 +851,8 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
       const name = s.wall.virtual === true ? `Dividing line ${s.wall.id}` : `Wall ${s.wall.id}`
       const fix = fixOf(
         ctx,
-        `split room ${room.id} along it, into ${split.ids[0]} (${split.areas[0].toFixed(2)} m²) and ` +
-          `${split.ids[1]} (${split.areas[1].toFixed(2)} m²), each listing it. If it should not be there, remove it instead.`,
+        `split room ${room.id} along it, into ${split.ids[0]} (${areaText(split.areas[0])} m²) and ` +
+          `${split.ids[1]} (${areaText(split.areas[1])} m²), each listing it. If it should not be there, remove it instead.`,
         split.edits
       )
       out.set(id, {

@@ -16,7 +16,7 @@
  * Pure: no DOM measuring, so it runs in tests and on every render without layout reads.
  */
 import type { Dimension, PlanOpening, Rect, Vec2 } from '@ongrid/floorplan/geometry'
-import { doorSwing, poleOfInaccessibility, rectOf, rectTouchesPolygon, spotsInside, tolerance } from '@ongrid/floorplan/geometry'
+import { areaText, doorSwing, metresText, poleOfInaccessibility, rectOf, rectTouchesPolygon, spotsInside, tolerance } from '@ongrid/floorplan/geometry'
 import { TEXT_PX } from '../picture/look'
 import type { DoorHanding } from './doorHanding'
 
@@ -66,8 +66,14 @@ export interface LabelStyle {
   readonly ids?: boolean
 }
 
+/** A room's area as its tag prints it, rounded the core's one way (ARE-7). */
 export function formatArea(area: number, decimals: 0 | 1 | 2 = 2): string {
-  return `${area.toFixed(decimals)} m²`
+  return `${areaText(area, decimals)} m²`
+}
+
+/** A dimension's number as it is drawn: metres to the millimetre, then to the centimetre (ARE-7). */
+export function dimensionText(value: number): string {
+  return metresText(value)
 }
 
 /** The first line of a room's tag, as `style` asks. `index` is the room's place on its floor. */
@@ -97,7 +103,7 @@ export function roomLabelBox(
 /** A dimension's number anchored at `at`, drawn 5 px above it and centred. */
 export function dimensionTextBox(at: Vec2, dim: Pick<Dimension, 'kind' | 'value'>, metersPerPixel: number): Box {
   const px = dim.kind === 'room' ? DIMENSION_PX.room : DIMENSION_PX.other
-  const half = estimateTextWidth(dim.value.toFixed(2), px) / 2 + PADDING_PX
+  const half = estimateTextWidth(dimensionText(dim.value), px) / 2 + PADDING_PX
   // Screen y grows down and plan y up: 5 px above the line is +5 px in the plan.
   const baseline = -DIMENSION_DY
   return {

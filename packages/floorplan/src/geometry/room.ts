@@ -35,6 +35,7 @@ import type { PlanIndex, Room, Wall } from './plan'
 import type { Line, Vec2 } from './vec2'
 import { area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
 import { tolerance, tolerancesAsStated } from './tolerances'
+import { fixedText, metresText } from './rounding'
 import type { WallAxis } from './wall'
 import { wallAxis, wallFaces } from './wall'
 import type { RoomNesting } from './nesting'
@@ -215,7 +216,7 @@ function resolveWalls(room: Room, index: PlanIndex): Wall[] {
 }
 
 const metres = (value: number): string =>
-  value >= 1000 ? `${(value / 1000).toFixed(1)} km` : `${value.toFixed(2)} m`
+  value >= 1000 ? `${fixedText(value / 1000, 1)} km` : `${metresText(value)} m`
 
 /**
  * How the inner faces of two neighbouring walls join, going round the room

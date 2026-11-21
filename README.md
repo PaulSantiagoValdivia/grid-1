@@ -287,7 +287,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `swingContact` | tolerance | 0.01 m | How far a wall must reach into a door's swing, or two swings overlap, to be in the way |
 | `stepPastFace` | tolerance | 0.05 m | How far past a wall's face the route check steps through a door |
 | `areaReported` | tolerance | 0.01 m² | The smallest area a message names; a room "wholly inside" another may have this much outside it |
-| `areaEqual` | tolerance | 0.000001 m² | Two areas closer than this are the same; a room with less has no floor |
+| `areaEqual` | tolerance | 0.000001 m² | Two areas closer than this are the same, so an area at a figure a check applies is that figure (ARE-7); a room with less has no floor |
 | `wallShare` | tolerance | 0.001 m² | Wall under a room below this is not named wall by wall |
 | `touch` | tolerance | 0.002 m | How close a wall must come to a piece of floor to be one of its walls |
 | `touchLength` | tolerance | 0.02 m | How long that contact must be |

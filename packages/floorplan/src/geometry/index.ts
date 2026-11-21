@@ -9,6 +9,7 @@
 
 export * from './vec2'
 export * from './tolerances'
+export * from './rounding'
 export * from './plan'
 export * from './floors'
 export * from './elevations'

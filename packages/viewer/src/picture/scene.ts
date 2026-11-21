@@ -19,7 +19,7 @@
  * Pure: no DOM, no React.
  */
 import type { Dimension, Ghosts, PlanDrawing, PlanOpening, PlanRoom, PlanWall, Vec2 } from '@ongrid/floorplan/geometry'
-import { boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
+import { areaText as areaFigure, boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import { openingAt, stripAcross } from '../canvas2d/strip'
@@ -27,6 +27,7 @@ import type { Box, LabelStyle } from '../canvas2d/labelPlacement'
 import {
   DIMENSION_DY,
   ROOM_AREA_DY,
+  dimensionText,
   dimensionTextBox,
   doorSwingBox,
   formatArea,
@@ -283,7 +284,7 @@ function dimensionMark(
     children.push(
       el('g', { transform: labelTransform(labelAt, mpp) }, [
         el('text', { 'data-part': 'dimension-text', dy: String(DIMENSION_DY), ...paint.dimensionText(room) }, [
-          dim.value.toFixed(2)
+          dimensionText(dim.value)
         ])
       ])
     )
@@ -548,15 +549,15 @@ export function planScene(input: SceneInput): SvgNode[] {
   const areaText = (room: PlanRoom): string => {
     const change = live.areaChange(room.id)
     return change
-      ? `${change.before.toFixed(decimals)} → ${change.after.toFixed(decimals)} m²`
+      ? `${areaFigure(change.before, decimals)} → ${areaFigure(change.after, decimals)} m²`
       : formatArea(room.area, decimals)
   }
   // The same text in the pieces the app has always drawn it in, one text node each.
   const areaPieces = (room: PlanRoom): string[] => {
     const change = live.areaChange(room.id)
     return change
-      ? [change.before.toFixed(decimals), ' → ', change.after.toFixed(decimals), ' m²']
-      : [room.area.toFixed(decimals), ' m²']
+      ? [areaFigure(change.before, decimals), ' → ', areaFigure(change.after, decimals), ' m²']
+      : [areaFigure(room.area, decimals), ' m²']
   }
   const names = drawing.rooms.map((room, index) => {
     const name = labelName(room.name, index, style)
