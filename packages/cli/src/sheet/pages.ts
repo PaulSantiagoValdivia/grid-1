@@ -10,8 +10,11 @@ import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/roundi
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { planPicture } from '@ongrid/viewer/src/picture'
+import { checkPlan } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
+import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
+import { quoted } from '../fs/projectFiles'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
 import { surveyPlan } from '../quantities/survey'
 
@@ -128,6 +131,45 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   return [cover, ...pages]
 }
 
+function issueLine(issue: { severity: string; entity: string; id: string; message: string }): string {
+  return `${issue.severity === 'error' ? 'Left out' : 'Worth a look'}, ${issue.entity} ${quoted(issue.id)}: ${issue.message}`
+}
+
+function checkBodies(loaded: LoadedPlan, name: string): Body[] {
+  const areas = planAreas(surveyPlan(loaded.plan))
+  const floors = planFloors(loaded.plan)
+  const frames = floorFrames(loaded)
+  const whole = checkPlan(loaded, {})
+  const figures: SheetFigure[] = [
+    { value: String(whole.report.findings.length), label: 'findings' },
+    { value: String(whole.issues.length), label: 'problems in the drawing' },
+    { value: `${areaText(areas.net, 1)} m²`, label: 'net area' },
+  ]
+  if (areas.grossInternal !== null) figures.push({ value: `${areaText(areas.grossInternal, 1)} m²`, label: 'gross internal area' })
+  if (areas.grossExternal !== null) figures.push({ value: `${areaText(areas.grossExternal, 1)} m²`, label: 'gross external area' })
+  const summary: Body = {
+    kind: 'summary', topLine: `${name} / Check set`, title: 'Check set', subtitle: null,
+    paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person').trim()],
+    figures, table: null, picture: null,
+    notes: [AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal, ...whole.report.limits],
+  }
+  const pages = floors.map((floor): Body => {
+    const result = checkPlan(loaded, { floor: floor.id })
+    const floorAreas = areas.floors.find((f) => f.floor === floor.id)
+    const findings = result.report.findings.map((finding) => finding.message)
+    return {
+      kind: 'floor', topLine: `${name} / ${floor.name}`, title: floor.name, subtitle: null,
+      paragraphs: [], figures: [],
+      table: floorAreas ? areaTable(floorAreas, true) : null,
+      picture: { kind: 'plan', floor: floor.id, frame: frames.get(floor.id)!, ids: true },
+      notes: findings.length + result.issues.length === 0
+        ? ['These checks found nothing on this floor. That is not a statement that it meets any rule.']
+        : [...findings, ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine)],
+    }
+  })
+  return [summary, ...pages]
+}
+
 export function sheetPages(loaded: LoadedPlan, words: SheetWords | null, layout: SheetLayout, options: SheetOptions): Sheet {
   // A check sheet takes nothing from sheet.json, not even its name.
   const name = layout === 'client' ? words?.name ?? options.name : options.name
@@ -138,10 +180,4 @@ export function sheetPages(loaded: LoadedPlan, words: SheetWords | null, layout:
     footer: { label: GENERAL_GUIDANCE_LABEL, page: i + 1, pages: bodies.length, date },
   }))
   return { layout, name, pages }
-}
-
-/** Task 4 replaces this. */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function checkBodies(_loaded: LoadedPlan, _name: string): Body[] {
-  return []
 }

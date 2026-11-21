@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { validatePlan } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { checkPlan } from '../../command/check'
 import type { LoadedPlan } from '../../command/plan'
 import { planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
@@ -82,5 +83,38 @@ describe('one scale for every floor (VEW-7)', () => {
       expect(frame.width).toBeCloseTo(frames[0]!.width, 9)
       expect(frame.height).toBeCloseTo(frames[0]!.height, 9)
     }
+  })
+})
+
+describe('the check layout (VEW-7)', () => {
+  const sheet = sheetPages(house, words, 'check', { name: 'two-floor-house', date })
+
+  it('is a summary, then one page per floor', () => {
+    expect(sheet.pages.map((p) => p.kind)).toEqual(['summary', 'floor', 'floor'])
+  })
+
+  it('takes nothing from sheet.json', () => {
+    const text = JSON.stringify(sheet)
+    for (const word of ['Solace House', 'A retreat', 'Intro.', 'Ground words.']) expect(text).not.toContain(word)
+  })
+
+  it('draws ids, and gives each room its use', () => {
+    const floor = sheet.pages[1]!
+    expect(floor.picture).toMatchObject({ kind: 'plan', ids: true })
+    expect(floor.table!.rows.every((row) => row.detail !== undefined)).toBe(true)
+  })
+
+  it('lists every finding on its own floor', () => {
+    for (const page of sheet.pages.slice(1)) {
+      const floorId = page.picture?.kind === 'plan' ? page.picture.floor : ''
+      const result = checkPlan(house, { floor: floorId })
+      for (const finding of result.report.findings) expect(page.notes).toContain(finding.message)
+    }
+  })
+
+  it('says how many findings there are, and never that the plan passes', () => {
+    const summary = sheet.pages[0]!
+    expect(summary.figures.map((f) => f.label)).toContain('findings')
+    expect(JSON.stringify(sheet)).not.toMatch(/\b(complies|compliant|approved|passes)\b/i)
   })
 })
