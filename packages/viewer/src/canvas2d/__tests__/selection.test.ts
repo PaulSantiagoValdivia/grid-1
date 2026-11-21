@@ -9,9 +9,10 @@ import { retainSelection } from '../selection'
  * Nothing resets it when the floor changes or the assistant rewrites the plan;
  * instead it is checked against what is actually being drawn. Pure on purpose:
  * the rule is worth pinning on its own, independently of any component that
- * happens to call it. (A component test could also reach it now that test files
- * can opt into jsdom with `// @vitest-environment jsdom`, but that would be
- * testing the wiring, not the rule.)
+ * happens to call it. (A component test could also reach it, in a test file that
+ * asks Vitest for the browser stand-in, but that would be testing the wiring, not
+ * the rule. The switch is not named here: Vitest reads it from a file's comments,
+ * so naming it would turn it on.)
  */
 
 const plan: FloorPlan = {

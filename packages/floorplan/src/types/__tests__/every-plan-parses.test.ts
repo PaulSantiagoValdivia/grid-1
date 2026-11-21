@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { FloorPlanSchema } from '../floorplan'
-import { flat, longWallStrip, madeVirtual, twoFloorHouse } from '../../geometry/__tests__/rules-fixtures'
+import { flat, longWallStrip, madeVirtual, twoFloorHouse } from '../../test-support/plans'
 import { sixRoomHouse, twoFloorPlan, twoRoomBox } from '../../geometry/__tests__/diff-fixtures'
 
 /**

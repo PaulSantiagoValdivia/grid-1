@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { checkLocalRules } from '..'
-import { edit, flat, twoFloorHouse, withoutOpening } from './fixtures'
+import { edit, flat, twoFloorHouse, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 /** A deterministic shuffle (mulberry32), so a failure can be replayed. */
 function shuffled(plan: FloorPlan, seed: number): FloorPlan {

@@ -9,7 +9,7 @@ import type { FloorPlan, Opening, Wall } from '../plan'
 import { checkLocalRules } from '../rules'
 import { doorsThatChangedRooms } from '../rules/doors'
 import { floorGraph } from '../rules/graph'
-import { door, edit, exterior, room, twoFloorHouse, wall } from './rules-fixtures'
+import { door, edit, exterior, room, twoFloorHouse, wall } from '../../test-support/plans'
 
 const plan = (parts: Partial<FloorPlan> & Pick<FloorPlan, 'walls'>): FloorPlan => ({ version: '1', units: 'm', rooms: [], openings: [], ...parts })
 

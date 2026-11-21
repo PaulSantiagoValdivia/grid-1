@@ -1,8 +1,10 @@
-import type { FloorPlan, Opening, Room, Wall } from '@ongrid/floorplan/geometry'
+import type { FloorPlan, Opening, Room, Wall } from '../geometry/plan'
 
 /**
- * Plans for the checks, drawn the way an assistant draws them: one wall per room
- * edge, exterior walls 0.2 m, interior 0.1 m. The same plans the core's own tests use.
+ * Plans for the local rules check, drawn the way the assistant draws them: one
+ * wall per room edge, exterior walls 0.2 m, interior 0.1 m. The one copy (QAR-6):
+ * the core's tests and the rules package's import them from here, the rules
+ * package as `@ongrid/floorplan/test-support/plans`.
  */
 
 export function wall(

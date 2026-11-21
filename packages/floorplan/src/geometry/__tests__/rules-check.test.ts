@@ -4,7 +4,7 @@ import { checkLocalRules } from '../rules'
 import type { RuleFinding } from '../rules'
 import { floorGraph } from '../rules/graph'
 import { planForFloor } from '../floors'
-import { door, edit, flat, twoFloorHouse, wall, withOpening, withoutOpening } from './rules-fixtures'
+import { door, edit, flat, twoFloorHouse, wall, withOpening, withoutOpening } from '../../test-support/plans'
 
 const summary = (plan: FloorPlan) =>
   checkLocalRules(plan).findings.map((f) => `${f.code} ${f.floor} ${f.rooms.join('+')}`)

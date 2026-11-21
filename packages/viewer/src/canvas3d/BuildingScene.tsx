@@ -11,8 +11,8 @@ type BuildClock = PlaybackClock<PlanBuild>
 const NO_BUILDS: ReadonlyMap<string, BuildClock> = new Map()
 
 /**
- * The ground grid under the building, as the app draws it with drei's `Grid`. A still draws
- * the same lines from these figures, since it has no shader to run.
+ * The ground grid under the building. The app draws it with three's grid helper and a still
+ * draws the same lines itself, both from these figures.
  */
 export const GROUND_GRID = {
   /** Just under the ground, where it reads as ground; basements go below it. */
