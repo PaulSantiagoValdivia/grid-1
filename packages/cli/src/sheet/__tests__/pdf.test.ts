@@ -6,7 +6,8 @@ import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { loadCanvas } from '../../draw/canvas'
 import { registerSheetFonts, SANS, SERIF } from '../fonts'
 import { sheetPages, type Sheet, type SheetPage } from '../pages'
-import { A3, layoutSheet, sheetPdf, wrapLines } from '../pdf'
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { A3, floorPictureBox, layoutSheet, sheetPdf, wrapLines } from '../pdf'
 
 const plan = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures/two-floor-house.json'), 'utf8')))
 const loaded = { file: 'two-floor-house.json', plan, ...validatePlan(plan) }
@@ -79,4 +80,52 @@ describe('the sheet as a PDF (VEW-7)', () => {
     const sheet = sheetPages(loaded, words, 'client', { name: 'x', date })
     expect(pageCount((await sheetPdf(plan, sheet)).pdf)).toBe((await layoutSheet(sheet)).pages.length)
   }, 60_000)
+
+  it('keeps every floor picture above the footer, at one size, when a floor title wraps', async () => {
+    const base = checkSheet()
+    const long = 'Wide floor name '.repeat(8).slice(0, 120)
+    const sheet = { ...base, pages: base.pages.map((p, i) => (i === 1 ? { ...p, title: long } : p)) }
+    const box = await floorPictureBox(await layoutSheet(sheet))
+    expect(box.top + box.height).toBeLessThanOrEqual(A3.height - 48)
+    expect(box.height).toBeLessThan(640)
+    expect(box.width / box.height).toBeCloseTo(700 / 640, 5)
+    const same = await floorPictureBox(await layoutSheet(base))
+    expect(same.height).toBeGreaterThanOrEqual(box.height)
+    expect(pageCount((await sheetPdf(plan, sheet)).pdf)).toBeGreaterThan(0)
+  }, 60_000)
+
+  it('cuts a note taller than a page by its lines, each kept once and in order', async () => {
+    const base = checkSheet()
+    const words = Array.from({ length: 8000 }, (_, i) => `w${i}`)
+    const note = words.join(' ')
+    const sheet = { ...base, pages: base.pages.map((p, i) => (i === 0 ? { ...p, notes: [note] } : p)) }
+    const laid = await layoutSheet(sheet)
+    expect(laid.pages.length).toBeGreaterThan(base.pages.length + 1)
+    const shown = laid.pages.slice(0, laid.pages.length - (base.pages.length - 1)).flatMap((p) => p.notes)
+    expect(shown.length).toBeGreaterThan(2)
+    expect(shown.join(' ')).toBe(note)
+    expect(pageCount((await sheetPdf(plan, sheet)).pdf)).toBe(laid.pages.length)
+  }, 60_000)
+
+  it('splits a long table between rows, repeating its heading and ending with the total', async () => {
+    const base = checkSheet()
+    const rows = Array.from({ length: 60 }, (_, i) => ({ name: `Room ${i}`, detail: 'bedroom', area: `${i}.0` }))
+    const total = { name: 'Net area', detail: null, area: '999.0' }
+    const table = { heading: 'Rooms / m²', rows, total, note: 'Net area note.' }
+    const sheet = { ...base, pages: base.pages.map((p, i) => (i === 1 ? { ...p, table } : p)) }
+    const laid = await layoutSheet(sheet)
+    const parts = laid.pages.filter((p) => p.title?.startsWith(base.pages[1]!.title!)).map((p) => p.table).filter((t) => t !== null)
+    expect(parts.length).toBeGreaterThan(1)
+    expect(parts.flatMap((t) => t.rows)).toEqual(rows)
+    expect(parts.flatMap((t) => (t.total ? [t.total] : []))).toEqual([total])
+    expect(parts[parts.length - 1]!.total).toEqual(total)
+    for (const part of parts) expect(part.heading).toBe('Rooms / m²')
+    expect(parts.slice(1).every((t) => t.rows.length > 0 || t.total || t.note)).toBe(true)
+  }, 60_000)
+
+  it('puts the general guidance label in the footer of every page', async () => {
+    for (const sheet of [crowded().sheet, clientSheet()]) {
+      for (const page of (await layoutSheet(sheet)).pages) expect(page.footer.label).toBe(GENERAL_GUIDANCE_LABEL)
+    }
+  }, 30_000)
 })

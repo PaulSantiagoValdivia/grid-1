@@ -177,7 +177,7 @@ export async function layoutSheet(sheet: Sheet): Promise<Sheet> {
       let y = area.y
       let i = 0
       while (i < queue.length) {
-        const piece = queue[i]!
+        let piece = queue[i]!
         const carried: Piece[] = []
         if (placed.length === 0 && (piece.type === 'row' || piece.type === 'total')) {
           const heading = all.find((p) => p.type === 'heading')
@@ -188,6 +188,16 @@ export async function layoutSheet(sheet: Sheet): Promise<Sheet> {
         if (piece.type === 'heading' && queue[i + 1]) group.push(queue[i + 1]!)
         const height = group.reduce((sum, p) => sum + measurePiece(ctx, p, area.width).height, 0)
         if (y + height > LIMIT && placed.length > 0) break
+        if (y + height > LIMIT && (piece.type === 'paragraph' || piece.type === 'note' || piece.type === 'tableNote')) {
+          // Taller than an empty page: cut it by wrapped lines, so the rest goes on.
+          const { lines } = measurePiece(ctx, piece, area.width)
+          const step = piece.type === 'paragraph' ? 17 : 12
+          const fit = Math.max(1, Math.floor((LIMIT - y - (piece.type === 'tableNote' ? 6 : 0)) / step) - 1)
+          if (fit < lines.length) {
+            piece = { type: piece.type, text: lines.slice(0, fit).join(' ') }
+            queue = [...queue.slice(0, i), piece, { type: piece.type, text: lines.slice(fit).join(' ') }, ...queue.slice(i + 1)]
+          }
+        }
         if (carried.length > 0) placed.push(...carried)
         placed.push(piece)
         y += measurePiece(ctx, piece, area.width).height + carried.reduce((sum, p) => sum + measurePiece(ctx, p, area.width).height, 0)
@@ -244,7 +254,22 @@ function flow(ctx: Ctx, pieces: readonly Piece[], x: number, width: number, top:
   }
 }
 
-async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, top: number): Promise<void> {
+/**
+ * Where every floor picture goes: one top, and one size for all, so every floor keeps one scale.
+ * The top is set by the tallest header of any floor page (a long title wraps), and the picture
+ * shrinks, aspect kept, when what is left above the footer is less than `PLAN_BOX.height`.
+ */
+export async function floorPictureBox(sheet: Sheet): Promise<{ top: number; width: number; height: number }> {
+  const canvas = await loadCanvas()
+  registerSheetFonts(canvas)
+  const ctx = canvas.createCanvas(10, 10).getContext('2d')
+  const heads = sheet.pages.filter((p) => p.picture?.kind === 'plan').map((p) => header(ctx, p, false))
+  const top = Math.max(0, ...heads) + 10
+  const scale = Math.min(1, (LIMIT - top) / PLAN_BOX.height)
+  return { top, width: PLAN_BOX.width * scale, height: PLAN_BOX.height * scale }
+}
+
+async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, box: { top: number; width: number; height: number }): Promise<void> {
   if (page.picture?.kind !== 'plan') return
   // The frame is in plan metres and the box has one size on every floor: one scale throughout.
   const png = await drawPlan(plan, {
@@ -252,7 +277,7 @@ async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page:
     width: PLAN_BOX.width, height: PLAN_BOX.height,
     ...(page.picture.ids ? { labels: { ids: true } } : {}),
   })
-  ctx.drawImage(await canvas.loadImage(Buffer.from(png)), MARGIN, top, PLAN_BOX.width, PLAN_BOX.height)
+  ctx.drawImage(await canvas.loadImage(Buffer.from(png)), MARGIN, box.top, box.width, box.height)
 }
 
 async function drawCover(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, flowing: readonly Piece[]): Promise<void> {
@@ -277,12 +302,12 @@ function drawSummaryFigures(ctx: Ctx, page: SheetPage, y: number): void {
   })
 }
 
-async function drawPage(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage): Promise<void> {
+async function drawPage(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, box: { top: number; width: number; height: number }): Promise<void> {
   const flowing = piecesOf(page)
   if (page.kind === 'cover' && page.picture) return drawCover(ctx, canvas, plan, page, flowing)
   const head = header(ctx, page, true)
   const at = region(ctx, page, 0)
-  if (page.picture?.kind === 'plan') await drawFloorPicture(ctx, canvas, plan, page, head + 10)
+  if (page.picture?.kind === 'plan') await drawFloorPicture(ctx, canvas, plan, page, box)
   else if (page.figures.length > 0) drawSummaryFigures(ctx, page, head + 30)
   flow(ctx, flowing, at.x, at.width, at.y)
 }
@@ -290,13 +315,14 @@ async function drawPage(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPa
 /** The PDF, and the laid-out sheet whose pages match the PDF's one for one. */
 export async function sheetPdf(plan: FloorPlan, sheet: Sheet): Promise<{ pdf: Uint8Array; sheet: Sheet }> {
   const laid = await layoutSheet(sheet)
+  const box = await floorPictureBox(laid)
   const canvas = await loadCanvas()
   const doc = new canvas.PDFDocument({ title: laid.name, creator: 'Grid', producer: 'Grid' })
   for (const page of laid.pages) {
     const ctx = doc.beginPage(A3.width, A3.height) as Ctx
     ctx.fillStyle = PAPER
     ctx.fillRect(0, 0, A3.width, A3.height)
-    await drawPage(ctx, canvas, plan, page)
+    await drawPage(ctx, canvas, plan, page, box)
     footer(ctx, page)
     doc.endPage()
   }
