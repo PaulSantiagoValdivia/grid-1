@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { pathProblem } from '../../fs/projectFiles'
 import { T1_PLAN_TEXT } from '../../fs/__tests__/attackCases'
-import { exportNameOf } from '../export'
+import { exportBaseOf, exportNameOf } from '../export'
 
 describe('export file names: sanitised, never refused', () => {
   it('keeps a plain plan file name, as before', () => {
@@ -45,4 +45,9 @@ describe('export file names: sanitised, never refused', () => {
       expect(pathProblem(fileName)).toBeNull()
     }
   })
+})
+
+it('gives the base a sheet is named after (VEW-7)', () => {
+  expect(exportBaseOf('My House.json')).toEqual({ base: 'my-house' })
+  expect(exportBaseOf('approved-plan.json').base).toBe('floor-plan')
 })

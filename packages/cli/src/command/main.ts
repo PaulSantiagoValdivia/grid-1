@@ -23,6 +23,8 @@ import { version } from '../../package.json'
 import { CanvasMissing } from '../draw/canvas'
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
+import { FontsMissing } from '../sheet/fonts'
+import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
@@ -32,6 +34,7 @@ import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, Expo
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
 import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
+import { SHEET_OPTIONS } from './sheet'
 import { checkTidyRequest, TIDY_OPTIONS, tidyAppliedText, tidyFile, tidyList, tidyListText } from './tidy'
 
 export const EXIT_OK = 0
@@ -77,6 +80,11 @@ const COMMANDS = {
     summary: 'Writes the plan as a file for another program, into exports/ beside the plan unless --out names one.',
     options: EXPORT_OPTIONS,
   },
+  sheet: {
+    usage: 'grid sheet [<plan.json>] --layout client|check [--sheet <sheet.json>] [--out <file.pdf>] [--project <folder>]',
+    summary: 'Writes the plan as an A3 PDF for people: client (with the words of sheet.json) or check (ids and findings).',
+    options: SHEET_OPTIONS,
+  },
   tidy: {
     usage: 'grid tidy [<plan.json>] [--apply <ids>|all] [--out <file.json>] [--json] [--project <folder>]',
     summary: 'Lists the faults where walls meet, each with the fix Grid offers. With --apply, makes the fixes chosen on the plan file.',
@@ -116,7 +124,7 @@ const OVERVIEW = [
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
   '',
   `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
-  `check, describe, draw, export and tidy read ${PROJECT_PLAN} when no plan file is named, and export`,
+  `check, describe, draw, export, sheet and tidy read ${PROJECT_PLAN} when no plan file is named, and export`,
   'writes into exports/. grid init never replaces a file: it refuses a folder that already holds',
   `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
@@ -248,6 +256,17 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     return EXIT_OK
   }
 
+  if (name === 'sheet') {
+    const request = { layout: textOf(parsed, '--layout'), sheet: textOf(parsed, '--sheet'), out: textOf(parsed, '--out') }
+    const layout = checkSheetRequest(request)
+    const project = openProject(projectOption, io.cwd)
+    const words = layout === 'client' ? readSheetWords(project, planFile, loadPlan(project, planFile), request.sheet) : null
+    const done = await sheetIntoProject(project, planFile, layout, words, request.out)
+    if (done.note) io.stderr(`${done.note}\n`)
+    io.stdout(`Wrote ${project.shown(done.written)}\n`)
+    return EXIT_OK
+  }
+
   const request = { format: textOf(parsed, '--format'), floor: textOf(parsed, '--floor'), out: textOf(parsed, '--out') }
   const format = checkExportRequest(request)
   const project = openProject(projectOption, io.cwd)
@@ -296,7 +315,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof CanvasMissing) {
+    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

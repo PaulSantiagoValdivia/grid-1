@@ -90,9 +90,9 @@ export interface ExportName {
  *
  * Grid sanitises rather than refuses: the export is still written, and `note` says what changed.
  */
-export function exportNameOf(planFile: string, format: ExportFormat, floorNumber: number | null): ExportName {
-  const made = exportFileName(projectNameOf(planFile), format, null)
-  let base = made.slice(0, -(format.length + 1))
+/** The plan file's name made safe to name a file after: no claim, no instruction, no device. */
+export function exportBaseOf(planFile: string): { base: string; note?: string } {
+  let base = exportFileName(projectNameOf(planFile), 'dxf', null).slice(0, -'.dxf'.length)
   let note: string | undefined
   const words = base.split('-')
   const kept = words.find((word) => WORDS_KEPT_OUT.has(word))
@@ -104,6 +104,13 @@ export function exportNameOf(planFile: string, format: ExportFormat, floorNumber
     // The word itself is not repeated: the note would then say it.
     note = "the plan file's name reads as a claim about the plan or as an instruction"
   }
+  return note === undefined ? { base } : { base, note }
+}
+
+export function exportNameOf(planFile: string, format: ExportFormat, floorNumber: number | null): ExportName {
+  const made = exportBaseOf(planFile)
+  let base = made.base
+  let note = made.note
   if (floorNumber !== null) base = `${base}-floor-${floorNumber}`
   if (WINDOWS_DEVICE.test(base)) {
     note = `${base} is a name Windows keeps for a device`
