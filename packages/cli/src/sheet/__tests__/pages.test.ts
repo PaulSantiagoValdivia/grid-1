@@ -76,22 +76,55 @@ describe('the client layout (VEW-7)', () => {
   })
 })
 
+/** The house with its first floor larger and shifted, so the two floors differ in size and place. */
+function skewedHouse(): LoadedPlan {
+  const plan = structuredClone(house.plan)
+  for (const wall of plan.walls) {
+    if (wall.floor !== 'first') continue
+    wall.start = [wall.start[0] * 1.5 + 3, wall.start[1] * 1.5 + 2]
+    wall.end = [wall.end[0] * 1.5 + 3, wall.end[1] * 1.5 + 2]
+  }
+  const { issues, broken } = validatePlan(plan)
+  return { file: 'skewed', plan, issues, broken }
+}
+
 describe('one scale for every floor (VEW-7)', () => {
-  it('frames every floor so planPicture shows the same size, with nothing cut off', () => {
-    const frames = floorFrames(house)
-    expect(frames.size).toBe(2)
-    const shown = [...frames].map(([floor, frame]) => ({
-      own: planPicture(house.plan, { floor, width: PLAN_BOX.width, height: PLAN_BOX.height }).view,
-      framed: planPicture(house.plan, { floor, width: PLAN_BOX.width, height: PLAN_BOX.height, frame }).view,
-    }))
-    for (const { own, framed } of shown) {
+  const skewed = skewedHouse()
+  const box = { width: PLAN_BOX.width, height: PLAN_BOX.height }
+  const shown = [...floorFrames(skewed)].map(([floor, frame]) => ({
+    frame,
+    own: planPicture(skewed.plan, { floor, ...box }).view,
+    framed: planPicture(skewed.plan, { floor, ...box, frame }).view,
+  }))
+
+  it('has floors of different size and place', () => {
+    expect(shown[1]!.own.width).not.toBeCloseTo(shown[0]!.own.width, 3)
+  })
+
+  it('shows every floor at one size', () => {
+    expect(shown.length).toBe(2)
+    for (const { framed } of shown) {
       expect(framed.width).toBeCloseTo(shown[0]!.framed.width, 9)
       expect(framed.height).toBeCloseTo(shown[0]!.framed.height, 9)
-      const e = 1e-9
+    }
+  })
+
+  it('cuts nothing off', () => {
+    const e = 1e-9
+    for (const { own, framed } of shown) {
       expect(framed.x).toBeLessThanOrEqual(own.x + e)
       expect(framed.y).toBeLessThanOrEqual(own.y + e)
       expect(framed.x + framed.width).toBeGreaterThanOrEqual(own.x + own.width - e)
       expect(framed.y + framed.height).toBeGreaterThanOrEqual(own.y + own.height - e)
+    }
+  })
+
+  it('centres each frame on its own floor, Y up', () => {
+    const [a, b] = shown
+    expect(a!.frame.min.x + a!.frame.width / 2).not.toBeCloseTo(b!.frame.min.x + b!.frame.width / 2, 3)
+    for (const { frame, own } of shown) {
+      expect(frame.min.x + frame.width / 2).toBeCloseTo(own.x + own.width / 2, 9)
+      expect(frame.min.y + frame.height / 2).toBeCloseTo(-(own.y + own.height / 2), 9)
     }
   })
 })
@@ -108,10 +141,41 @@ describe('the check layout (VEW-7)', () => {
     for (const word of ['Solace House', 'A retreat', 'Intro.', 'Ground words.']) expect(text).not.toContain(word)
   })
 
-  it('draws ids, and gives each room its use', () => {
-    const floor = sheet.pages[1]!
-    expect(floor.picture).toMatchObject({ kind: 'plan', ids: true })
-    expect(floor.table!.rows.every((row) => row.detail !== undefined)).toBe(true)
+  it('draws ids', () => {
+    expect(sheet.pages[1]!.picture).toMatchObject({ kind: 'plan', ids: true })
+  })
+
+  it('gives each room its use, and the client cover counts bedrooms', () => {
+    const plan = structuredClone(house.plan)
+    const room = plan.rooms.find((r) => r.id === 'hall')!
+    room.use = 'bedroom'
+    const { issues, broken } = validatePlan(plan)
+    const withUse: LoadedPlan = { file: 'use', plan, issues, broken }
+    const check = sheetPages(withUse, null, 'check', { name: 'x', date })
+    const rows = check.pages.flatMap((p) => p.table?.rows ?? [])
+    expect(rows.find((r) => r.name === 'Hall')!.detail).toBe('bedroom')
+    const client = sheetPages(withUse, null, 'client', { name: 'x', date })
+    expect(client.pages[0]!.figures.find((f) => f.label === 'bedrooms')!.value).toBe('1')
+  })
+
+  it('lists a drawing problem on no floor once, on the summary', () => {
+    const issue = { code: 'test', entity: 'plan' as const, id: 'p', message: 'A plan-wide problem.', severity: 'warning' as const }
+    const loaded: LoadedPlan = { ...house, issues: [...house.issues, issue] }
+    const made = sheetPages(loaded, null, 'check', { name: 'x', date })
+    const line = 'Worth a look, plan "p": A plan-wide problem.'
+    expect(made.pages[0]!.notes).toContain(line)
+    for (const page of made.pages.slice(1)) expect(page.notes).not.toContain(line)
+  })
+
+  it('lists the notices of its floor, and the whole-plan ones once on the summary', () => {
+    const lines = (p: { notes: readonly string[] }) => p.notes.filter((n) => n.startsWith('Not checked: '))
+    const whole = checkPlan(house, {})
+    for (const page of sheet.pages.slice(1)) {
+      const floorId = page.picture?.kind === 'plan' ? page.picture.floor : ''
+      const own = whole.report.notChecked.filter((n) => n.floor === floorId)
+      expect(lines(page)).toEqual(own.map((n) => `Not checked: ${n.message}`))
+    }
+    expect(lines(sheet.pages[0]!)).toEqual(whole.report.notChecked.filter((n) => n.floor === '').map((n) => `Not checked: ${n.message}`))
   })
 
   it('lists every finding on its own floor', () => {

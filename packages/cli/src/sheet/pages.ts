@@ -139,6 +139,10 @@ function issueLine(issue: { severity: string; entity: string; id: string; messag
   return `${issue.severity === 'error' ? 'Left out' : 'Worth a look'}, ${issue.entity} ${quoted(issue.id)}: ${issue.message}`
 }
 
+function noticeLine(notice: { message: string }): string {
+  return `Not checked: ${notice.message}`
+}
+
 function checkBodies(loaded: LoadedPlan, name: string): Body[] {
   const areas = planAreas(surveyPlan(loaded.plan))
   const floors = planFloors(loaded.plan)
@@ -155,20 +159,30 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     kind: 'summary', topLine: `${name} / Check set`, title: 'Check set', subtitle: null,
     paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person').trim()],
     figures, table: null, picture: null,
-    notes: [AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal, ...whole.report.limits],
+    notes: [
+      AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
+      // What belongs to no floor is said once, here; each floor page says the rest.
+      ...whole.issues.filter((i) => i.entity === 'plan').map(issueLine),
+      ...whole.report.notChecked.filter((n) => n.floor === '').map(noticeLine),
+      ...whole.report.limits,
+    ],
   }
   const pages = floors.map((floor): Body => {
     const result = checkPlan(loaded, { floor: floor.id })
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
-    const findings = result.report.findings.map((finding) => finding.message)
+    const shown = [
+      ...result.report.findings.map((finding) => finding.message),
+      ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine),
+      ...result.report.notChecked.filter((n) => n.floor !== '').map(noticeLine),
+    ]
     return {
       kind: 'floor', topLine: `${name} / ${floor.name}`, title: floor.name, subtitle: null,
       paragraphs: [], figures: [],
       table: floorAreas ? areaTable(floorAreas, true) : null,
       picture: { kind: 'plan', floor: floor.id, frame: frames.get(floor.id)!, ids: true },
-      notes: findings.length + result.issues.length === 0
+      notes: shown.length === 0
         ? ['These checks found nothing on this floor. That is not a statement that it meets any rule.']
-        : [...findings, ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine)],
+        : shown,
     }
   })
   return [summary, ...pages]
