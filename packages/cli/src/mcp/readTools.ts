@@ -9,7 +9,7 @@
  */
 import { floorOf, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
-import { checkPlan, countsText, KIND_WORDS, thingText } from '../command/check'
+import { checkPlan, countsText, KIND_WORDS, partsText, thingText } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
@@ -758,6 +758,17 @@ const checkTool: GridTool = {
     findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
     notChecked: listSchema(objectSchema({ floor: STRING, message: STRING })),
     drawing: listSchema(objectSchema({ severity: STRING, entity: STRING, id: STRING, message: STRING })),
+    // MSG-2: what each check looked at and skipped, with the reason and a count (docs/result-contract.md).
+    coverage: listSchema(objectSchema({
+      ruleId: STRING,
+      title: STRING,
+      looksAt: STRING,
+      lookedAt: listSchema(objectSchema({ floor: STRING, ids: listSchema(STRING) })),
+      lookedAtCount: { type: 'number' },
+      skipped: listSchema(objectSchema({ floor: STRING, ids: listSchema(STRING), reason: STRING, why: STRING })),
+      skippedCount: { type: 'number' },
+      findings: { type: 'number' },
+    }, ['ruleId', 'title', 'looksAt', 'lookedAt', 'lookedAtCount', 'skipped', 'skippedCount', 'findings'])),
   }),
   run(args, context) {
     const { loaded } = readPlan(context, args['plan'])
@@ -782,9 +793,16 @@ const checkTool: GridTool = {
     for (const line of record.lines.slice(0, 12)) lines.push(`  ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Fix: ${line.fix} [${line.code}]`)
     if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
     if (record.counts.finding === 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
+    // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
+    const rooms = result.rooms
+    lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
+    for (const check of record.coverage) {
+      const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
+      lines.push(`  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}.`)
+    }
     return {
       text: lines.join('\n'),
-      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing },
+      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing, coverage: record.coverage },
     }
   },
 }

@@ -526,6 +526,19 @@ export const CODES = {
     found: (s) => `a plan for ${s.country}, and figures carried for the US only`,
     needed: fixed('figures for the place, looked up and given to the check'),
     fix: fixed('Look up the figures for the place and give them to the check, or read the local rules.')
+  },
+  // MSG-2: what a check skipped, said where it used to pass in silence.
+  'floor/not-checked-above-escape-storeys': {
+    says: (s) => wordingText(figureWordings.aboveEscapeStoreys(s.floorName, s.names.length)),
+    found: (s) => `bedrooms above the third storey: ${s.names.map(quoted).join(', ')}`,
+    needed: fixed('figures for escape from bedrooms above the third storey, which these checks do not carry'),
+    fix: fixed('Nothing to change in the plan: look up how escape from these bedrooms is set out where it will be built.')
+  },
+  'plan/not-checked-no-rooms': {
+    says: () => wordingText(figureWordings.noRooms()),
+    found: fixed('walls, and no rooms'),
+    needed: fixed('the rooms drawn on the walls, each with the walls round it and its use'),
+    fix: fixed('Add the rooms. Room sizes, doors, routes and escape openings are checked once there are rooms.')
   }
 } as const satisfies Record<string, CodeEntry>
 
