@@ -9,6 +9,7 @@
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
+import { inspectPlan } from '@ongrid/rules'
 import { checkExportRequest, ExportWriteFailed, exportIntoProject } from '../command/export'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
@@ -220,6 +221,8 @@ const EDIT_OUTPUT = objectSchema({
   changed: listSchema(STRING),
   verdict: STRING,
   drawingProblems: objectSchema({ before: { type: 'number' }, after: { type: 'number' } }),
+  // MSG-1: the result record's one count, before and after, as grid_check gives it.
+  toLookAt: objectSchema({ before: { type: 'number' }, after: { type: 'number' } }),
   // MSG-14: each door or doorless opening that joins other rooms after the change, in words.
   doors: listSchema(STRING),
 })
@@ -266,14 +269,15 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
   const verdict = comparePlans(before, surveyPlan(after), ['the plan before', 'the plan now']).verdict
   const doors = doorsThatChangedRooms(loaded.plan, after).map((change) => `${change.message}.`)
   const drawingProblems = { before: validatePlan(loaded.plan).issues.length, after: validatePlan(after).issues.length }
+  const toLookAt = { before: inspectPlan(loaded.plan).count, after: inspectPlan(after).count }
   const text = [
     ...patch.said,
     verdict,
     ...doors,
-    `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid_check for the notes.`,
+    `To look at: ${toLookAt.before} → ${toLookAt.after}, of them problems in the drawing ${drawingProblems.before} → ${drawingProblems.after}. grid_check lists them.`,
     `Wrote ${quoted(written)}.`,
   ].join('\n')
-  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, doors } }
+  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, toLookAt, doors } }
 }
 
 const changeOpeningTool: GridTool = {

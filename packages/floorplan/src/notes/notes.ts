@@ -1,18 +1,15 @@
 /**
- * The local rules check as notes a person reads on the plan.
+ * The plan checks as notes a person reads on the plan.
  *
- * Built from each finding's code and ids, never by rewording its `message`: that
- * string is the check's own, written for any reader. Names come back as their own
- * segments, so the list can set them apart without parsing text. Pure.
+ * A note's title is the finding's one wording (`geometry/rules/messages.ts`, MSG-1), the same
+ * words as the report's `message`, with the names as their own segments so the list can set
+ * them apart without parsing text. The detail says more, from the finding's code and ids. Pure.
  */
-import { planFloors, type RuleFinding, type RulesReport } from '../geometry'
+import { planCheckWordings as wordings, planFloors, type RuleFinding, type RulesReport, type WordingPart } from '../geometry'
 import type { FloorPlan } from '../types/floorplan'
 
 /** A run of text; `name` marks a room or floor name as the plan writes it. */
-export interface NoteText {
-  readonly text: string
-  readonly name?: true
-}
+export type NoteText = WordingPart
 
 export interface PlanNote {
   /** Stable for the same finding: code, floor, rooms and openings. */
@@ -58,6 +55,9 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
   const roomName = (id: string): string => roomNames.get(id) ?? id
   const floorName = (id: string): string => floorNames.get(id) ?? id
 
+  // A floor whose only door out leads to a space not drawn words its cut-off rooms the longer way.
+  const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
+
   const noteOf = (finding: RuleFinding): PlanNote => {
     const room = finding.rooms[0] ?? null
     const id = [finding.code, finding.floor, finding.rooms.join(','), finding.openings.join(',')].join(':')
@@ -75,7 +75,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
         const onlyDoor = through.length === 1 && doors.has(through[0]!.via)
         return {
           ...base,
-          title: [name(roomName(room!)), words(' has no way out')],
+          title: wayOutNotDrawn.has(finding.floor) ? wordings.noRouteToAnyDoorOut(roomName(room!)) : wordings.noRoute(roomName(room!)),
           // `through` is optional in the report: an older one, or a future code path, may lack it.
           detail: beyond.length === 0
             ? [words('None of its doors leads to a way out.')]
@@ -87,19 +87,19 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
       case 'room_without_door':
         return {
           ...base,
-          title: [name(roomName(room!)), words(' has no door')],
+          title: wordings.roomWithoutDoor(roomName(room!)),
           detail: [words('Nothing joins it to another room.')]
         }
       case 'no_exit':
         return {
           ...base,
-          title: [name(floorName(finding.floor)), words(' has no way out')],
+          title: wordings.noExit(floorName(finding.floor)),
           detail: [words('No door leads outside.')]
         }
       case 'door_to_undrawn_space':
         return {
           ...base,
-          title: [words('A door from '), name(roomName(room!)), words(' leads to a space that is not drawn')],
+          title: wordings.doorToUndrawnSpace(roomName(room!)),
           detail: [words("If that space is a shared landing or a stair, draw it as a room, or mark the wall as exterior if the door leads outside.")]
         }
     }

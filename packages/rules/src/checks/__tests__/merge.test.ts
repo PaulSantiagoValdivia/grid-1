@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkLocalRules as checkPlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity as checkPlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { FIGURE_RULES, checkLocalRules } from '..'
 import { door, edit, flat, longWallStrip, madeVirtual, twoFloorHouse, withOpening, withoutOpening } from './fixtures'
 

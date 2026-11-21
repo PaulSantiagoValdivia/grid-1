@@ -7,12 +7,12 @@
  * network.
  */
 
-import { checkLocalRules as checkPlan, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { FIGURE_LIMITS, FIGURE_RULES, RULE_FIGURES, type FigureRuleId } from './catalogue'
 import { escapeCheck, hasEscapeFigures, type EscapeFigures } from './escape'
 import { resolveFigure, type FigureKey } from './figures'
-import { messages } from './messages'
+import { messages, type FigureSubject } from './messages'
 import { sizeCheck } from './size'
 import type { AppliedFigure, FindingCode, NotChecked, RuleFigures, RuleFinding, RulesReport } from './types'
 import { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE } from './types'
@@ -25,7 +25,7 @@ const GROUP_OF = (code: FindingCode): number =>
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
 /** What a skipped check is called in its notice. */
-const SUBJECT: Record<FigureRuleId, string> = {
+const SUBJECT: Record<FigureRuleId, FigureSubject> = {
   'habitable-room-area': 'Room sizes',
   'escape-opening': 'Escape openings'
 }
@@ -64,7 +64,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   const applied = FIGURE_RULES.flatMap((rule) => RULE_FIGURES[rule.id].flatMap((key) => resolve(key) ?? []))
   const basis = basisOf(applied)
 
-  const base = checkPlan(plan)
+  const base = checkPlanSanity(plan)
   const floors = planFloors(plan)
   const level = new Map(floors.map((f) => [f.id, f.level] as const))
   const names = new Map(plan.rooms.map((r) => [r.id, r.name || r.id] as const))
@@ -81,7 +81,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     findings.push(...escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape))
     if (minRoomArea !== null) {
       // Sizes don't need stairs either: every floor is checked.
-      const sizes = sizeCheck(storey, leftOut.rooms, floor.id, floors.length > 1 ? floorName : null, roomName, minRoomArea)
+      const sizes = sizeCheck(storey, leftOut.rooms, floor.id, floorName, roomName, minRoomArea)
       findings.push(...sizes.findings)
       notChecked.push(...sizes.notChecked)
     }
@@ -91,6 +91,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     if (ran[rule.id]) continue
     notChecked.push({
       reason: 'no_figures_for_place',
+      ruleId: rule.id,
       floor: '',
       rooms: [],
       openings: [],

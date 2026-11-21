@@ -6,14 +6,14 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan, Opening, Wall } from '../plan'
-import { checkLocalRules } from '../rules'
+import { checkPlanSanity } from '../rules'
 import { doorsThatChangedRooms } from '../rules/doors'
 import { floorGraph } from '../rules/graph'
 import { door, edit, exterior, room, twoFloorHouse, wall } from './rules-fixtures'
 
 const plan = (parts: Partial<FloorPlan> & Pick<FloorPlan, 'walls'>): FloorPlan => ({ version: '1', units: 'm', rooms: [], openings: [], ...parts })
 
-const summary = (p: FloorPlan) => checkLocalRules(p).findings.map((f) => `${f.code} ${f.floor} ${f.rooms.join('+')}`)
+const summary = (p: FloorPlan) => checkPlanSanity(p).findings.map((f) => `${f.code} ${f.floor} ${f.rooms.join('+')}`)
 
 describe('CH-7 rooms that reach no way in, when the way out is not checked', () => {
   // The lab's M-8 flat: three 3.2 m rooms in a row. The front door is in the hall; the two
@@ -35,7 +35,7 @@ describe('CH-7 rooms that reach no way in, when the way out is not checked', () 
     })
 
   it('names both stores, though the front door leads to a landing not drawn', () => {
-    const report = checkLocalRules(flat(true))
+    const report = checkPlanSanity(flat(true))
     expect(report.findings.map((f) => [f.code, f.rooms, f.message])).toEqual([
       ['door_to_undrawn_space', ['hall'], 'A door from "Hall" leads to a space that is not drawn as a room'],
       ['no_route_to_exit', ['store1'], '"Store 1" has no route to a door to the outside, nor to a door into a space that is not drawn'],
@@ -104,7 +104,7 @@ describe('S-4 an open office split into four zones by two crossing lines', () =>
   })
 
   it('gives no false exit note: every zone and room reaches the entrance (S-4: 6 notes)', () => {
-    expect(checkLocalRules(office()).findings).toEqual([])
+    expect(checkPlanSanity(office()).findings).toEqual([])
   })
 })
 

@@ -19,7 +19,12 @@ Notes for agents and people changing this repository.
   are Grid's own drawing checks and cite no document.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
-  adding or changing a rule.
+  adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,
+  `src/result/`): one call that never throws and returns one record, one list with one count,
+  for `grid check` and `grid_check`. `docs/result-contract.md` is the record's contract, and a
+  test fails when it and `src/result/catalogue.ts` list different codes. A new message code
+  gets its one wording, what is needed and the fix in that catalogue, and a line in the
+  contract's code table and changelog.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own.
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `check`,

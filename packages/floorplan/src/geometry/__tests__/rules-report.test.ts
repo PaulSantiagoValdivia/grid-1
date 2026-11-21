@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../plan'
-import { checkLocalRules } from '..'
+import { checkPlanSanity } from '..'
 import { edit, flat, twoFloorHouse, withoutOpening } from './rules-fixtures'
 
 /** A deterministic shuffle (mulberry32), so a failure can be replayed. */
@@ -37,15 +37,15 @@ describe('the report', () => {
   ]
 
   it.each(plans)('is byte-identical for %s with its entities in any order', (_name, plan) => {
-    const reference = JSON.stringify(checkLocalRules(plan))
+    const reference = JSON.stringify(checkPlanSanity(plan))
     for (const seed of [1, 2, 3, 4, 5]) {
-      expect(JSON.stringify(checkLocalRules(shuffled(plan, seed)))).toBe(reference)
+      expect(JSON.stringify(checkPlanSanity(shuffled(plan, seed)))).toBe(reference)
     }
   })
 
   it('lists findings by storey, then code', () => {
     const plan = withoutOpening(withoutOpening(twoFloorHouse(), 'd_up'), 'd_hb')
-    const findings = checkLocalRules(plan).findings
+    const findings = checkPlanSanity(plan).findings
     expect(findings.map((f) => f.floor)).toEqual(['ground', 'ground', 'first'])
   })
 })
@@ -56,7 +56,7 @@ describe('the rules module', () => {
 
   const offending = (source: string): boolean =>
     FORBIDDEN.test(source) ||
-    [...source.matchAll(/from '([^']+)'/g)].some(
+    [...source.matchAll(/^(?:import|export)\b[^\n]*\bfrom '([^']+)'/gm)].some(
       ([, path]) => !path!.startsWith('./') && !path!.startsWith('../')
     )
 

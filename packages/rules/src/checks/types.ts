@@ -119,6 +119,8 @@ export type NotCheckedReason =
 
 export interface NotChecked extends Omit<PlanNotChecked, 'reason'> {
   readonly reason: NotCheckedReason
+  /** Only on `no_figures_for_place`: the check that did not run. Optional, like `through`. */
+  readonly ruleId?: string
 }
 
 export interface RulesReport extends Omit<PlanRulesReport, 'basis' | 'findings' | 'notChecked'> {

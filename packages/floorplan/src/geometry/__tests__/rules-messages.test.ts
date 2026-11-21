@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../plan'
-import { checkLocalRules } from '../rules'
+import { checkPlanSanity } from '../rules'
 import { door, edit, flat, twoFloorHouse, withOpening, withoutOpening } from './rules-fixtures'
 
 const unnamed = (plan: FloorPlan): FloorPlan =>
@@ -32,7 +32,7 @@ const FORBIDDEN = /\b(id|ids|virtual|boundary|entity|entities|complies|comply|pa
 
 describe.each(plans)('the messages for %s', (_name, plan) => {
   const lines = (p: FloorPlan) => {
-    const report = checkLocalRules(p)
+    const report = checkPlanSanity(p)
     return [...report.findings, ...report.notChecked].map((f) => f.message)
   }
 
@@ -46,12 +46,12 @@ describe.each(plans)('the messages for %s', (_name, plan) => {
   })
 
   it('name rooms by their names, or by what the plan calls them when they have none', () => {
-    const report = checkLocalRules(plan)
+    const report = checkPlanSanity(plan)
     const names = new Map(plan.rooms.map((r) => [r.id, r.name] as const))
     for (const item of [...report.findings, ...report.notChecked]) {
       for (const room of item.rooms) expect(item.message).toContain(names.get(room))
     }
-    const bare = checkLocalRules(unnamed(plan))
+    const bare = checkPlanSanity(unnamed(plan))
     for (const item of [...bare.findings, ...bare.notChecked]) {
       for (const room of item.rooms) expect(item.message).toContain(room)
     }

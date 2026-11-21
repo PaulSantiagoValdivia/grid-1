@@ -151,6 +151,7 @@ describe('a plan for a country the carried figures do not cover', () => {
     expect(report.notChecked.filter((n) => n.reason === 'no_figures_for_place')).toEqual([
       {
         reason: 'no_figures_for_place',
+        ruleId: 'habitable-room-area',
         floor: '',
         rooms: [],
         openings: [],
@@ -158,6 +159,7 @@ describe('a plan for a country the carried figures do not cover', () => {
       },
       {
         reason: 'no_figures_for_place',
+        ruleId: 'escape-opening',
         floor: '',
         rooms: [],
         openings: [],

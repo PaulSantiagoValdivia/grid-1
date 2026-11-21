@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { FloorPlanSchema, parseFloorPlan, type FloorPlan } from '../floorplan'
 import { ID_MAX, NAME_MAX, PARTS_MAX, quoted, textProblem } from '../planText'
-import { checkLocalRules } from '../../geometry/rules'
+import { checkPlanSanity } from '../../geometry/rules'
 import { validatePlan } from '../../geometry/validate'
 import { indexPlan } from '../../geometry/plan'
 import { diffPlans } from '../../geometry/diff/diff'
@@ -101,7 +101,7 @@ describe('MSG-9 Grid quotes the names and ids it writes', () => {
 
   it('quotes a room name and an approval sentence wherever the plan report writes it, and returns it apart', () => {
     const plan = hostile()
-    const report = checkLocalRules(plan)
+    const report = checkPlanSanity(plan)
     const lines = [...report.findings, ...report.notChecked]
     expect(lines.some((l) => l.message.includes(approval))).toBe(true)
     for (const line of lines) {
