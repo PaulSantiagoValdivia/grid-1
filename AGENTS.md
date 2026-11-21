@@ -23,7 +23,8 @@ Notes for agents and people changing this repository.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own.
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `check`,
-  `describe`, `draw`, `export` and `serve`, in `src/command/`. `describe` (VEW-5, `src/describe/`)
+  `describe`, `draw`, `export`, `tidy` and `serve`, in `src/command/`. `tidy` (MSG-12) lists the
+  library's wall faults and makes the chosen fixes on the plan file as read. `describe` (VEW-5, `src/describe/`)
   prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`). A
   folder holding `grid.json` (`grid init` writes it) is a Grid project: there `check`,
   `describe`, `draw` and `export` read its `plan.json` when no plan is named. `npm run build` bundles it with esbuild into

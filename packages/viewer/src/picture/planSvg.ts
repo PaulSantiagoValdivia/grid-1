@@ -45,6 +45,11 @@ export interface PictureOptions {
   readonly showDimensions?: boolean
   /** How the room tags read: capitals, room numbers, how the area is rounded. Plain by default. */
   readonly labels?: LabelStyle
+  /**
+   * The part of the floor to frame, in plan metres (VEW-6: a crop or a zoom onto one room). The
+   * whole floor and its dimensions when left out. Labels and lines keep their size in pixels.
+   */
+  readonly frame?: Bounds
 }
 
 /** A picture before it is written out. */
@@ -126,7 +131,7 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const slice = planForFloor(plan, resolveFloor(plan, options.floor))
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
-  const framed = framingOf(drawing, dimensions)
+  const framed = options.frame ?? framingOf(drawing, dimensions)
   const { width, height } = sizeOf(framed, options)
   const view = fitTo(framed, width / height)
   const look = lookOf(options.look)

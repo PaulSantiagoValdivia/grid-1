@@ -12,6 +12,7 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--3d': { takesValue: false, help: 'Draw the 3D model as the app opens it, as a PNG of 1200 by 800 pixels.' },
   '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png or --3d). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out. With --3d, that floor as a cutaway; the whole building when left out.' },
+  '--ids': { takesValue: false, help: 'The check view: draw the id of every room, door and window, as the plan file holds them. Not with --3d.' },
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8 (up to 4 with --3d). 1 when left out.' },
   ...PROJECT_OPTION,
 }
@@ -27,12 +28,15 @@ export interface DrawRequest {
   readonly out?: string
   readonly floor?: string
   readonly scale?: string
+  /** The check view: every room, door and window carries its id (VEW-2). */
+  readonly ids?: boolean
 }
 
 /** Checks the options against each other, before the plan is read. */
 export function checkDrawRequest(request: DrawRequest): { scale: number } {
   // A still is always a PNG, so --png would say nothing.
   if (request.threeD && request.png) throw new UsageError('--png does nothing with --3d, which always draws a PNG: leave --png out.')
+  if (request.threeD && request.ids) throw new UsageError('--ids draws the ids on a floor plan, not on the 3D model: leave --ids or --3d out.')
   const png = request.png || request.threeD === true
   const extension = png ? '.png' : '.svg'
   if (request.out !== undefined && !request.out.toLowerCase().endsWith(extension)) {
@@ -56,7 +60,8 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     const { drawStill } = await import('../draw/drawStill')
     return drawStill(loaded.plan, { focus: floor ?? null, scale })
   }
+  const labels = request.ids ? { labels: { ids: true } } : {}
   return request.png
-    ? drawPlan(loaded.plan, { format: 'png', floor, scale })
-    : drawPlan(loaded.plan, { format: 'svg', floor })
+    ? drawPlan(loaded.plan, { format: 'png', floor, scale, ...labels })
+    : drawPlan(loaded.plan, { format: 'svg', floor, ...labels })
 }

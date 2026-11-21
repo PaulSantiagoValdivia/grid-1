@@ -5,11 +5,12 @@
  * Every picture is the viewer's own drawing (`planPicture`, `stillScene`): only the camera and
  * the frame are chosen here. "North" is the top of the drawing, +y: a plan holds no north.
  */
-import { floorElevations, poleOfInaccessibility, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
+import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
 import { pictureToSvg, planPicture, PICTURE_FONT, type PlanLook } from '@ongrid/viewer/src/picture'
 import { GROUND_GRID } from '@ongrid/viewer/src/canvas3d/BuildingScene'
 import { LIGHT_COLORS_3D, rasterise, stillScene } from '@ongrid/viewer/src/still'
 import { drawPlan } from './drawPlan'
+import { partBounds, pixelBoxes, type PartBox } from './partBoxes'
 
 import type { LookName, Side } from './viewNames'
 
@@ -40,12 +41,20 @@ export interface PlanView {
   readonly width: number
   readonly height: number
   readonly pxPerMetre: number
+  /** Plan views: where each room, opening and wall is on the picture, in image pixels (VEW-6). */
+  readonly boxes?: readonly PartBox[]
 }
 
-export async function planView(plan: FloorPlan, options: { floor?: string; look: LookName; dimensions: boolean }): Promise<PlanView> {
-  const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions })
-  const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions })
-  return { png, width: picture.width, height: picture.height, pxPerMetre: picture.width / picture.view.width }
+export async function planView(
+  plan: FloorPlan,
+  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; frame?: Bounds },
+): Promise<PlanView> {
+  // VEW-2's check view: every room, door and window carries its id. VEW-6: a frame crops.
+  const extra = { ...(options.ids ? { labels: { ids: true } } : {}), ...(options.frame ? { frame: options.frame } : {}) }
+  const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
+  const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
+  const boxes = pixelBoxes(partBounds(plan, options.floor), picture)
+  return { png, width: picture.width, height: picture.height, pxPerMetre: picture.width / picture.view.width, boxes }
 }
 
 function escapeXml(text: string): string {

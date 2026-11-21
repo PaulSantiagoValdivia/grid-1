@@ -1,6 +1,6 @@
 /**
- * The `grid` command, which `ongrid` runs too: `init`, `check`, `describe`, `draw`, `export` and
- * `serve`.
+ * The `grid` command, which `ongrid` runs too: `init`, `check`, `describe`, `draw`, `export`,
+ * `tidy` and `serve`.
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -17,6 +17,7 @@
  * standard error, with its cause first.
  */
 import { planFloors } from '@ongrid/floorplan/geometry'
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { version } from '../../package.json'
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
@@ -29,6 +30,7 @@ import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, Expo
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
 import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
+import { checkTidyRequest, TIDY_OPTIONS, tidyAppliedText, tidyFile, tidyList, tidyListText } from './tidy'
 
 export const EXIT_OK = 0
 export const EXIT_REFUSED = 1
@@ -64,7 +66,7 @@ const COMMANDS = {
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    usage: 'grid draw [<plan.json>] [--png | --3d] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
     summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png. With --3d, draws the 3D model as the app opens it, as a PNG.',
     options: DRAW_OPTIONS,
   },
@@ -72,6 +74,11 @@ const COMMANDS = {
     usage: 'grid export [<plan.json>] --format dxf|ifc|glb|obj [--floor <id>] [--out <file>] [--project <folder>]',
     summary: 'Writes the plan as a file for another program, into exports/ beside the plan unless --out names one.',
     options: EXPORT_OPTIONS,
+  },
+  tidy: {
+    usage: 'grid tidy [<plan.json>] [--apply <ids>|all] [--out <file.json>] [--json] [--project <folder>]',
+    summary: 'Lists the faults where walls meet, each with the fix Grid offers. With --apply, makes the fixes chosen on the plan file.',
+    options: TIDY_OPTIONS,
   },
   serve: {
     usage: 'grid serve [--project <folder>]',
@@ -102,7 +109,7 @@ const OVERVIEW = [
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
   '',
   `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
-  `check, describe, draw and export read ${PROJECT_PLAN} when no plan file is named, and export`,
+  `check, describe, draw, export and tidy read ${PROJECT_PLAN} when no plan file is named, and export`,
   'writes into exports/. grid init never replaces a file: it refuses a folder that already holds',
   `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
@@ -198,6 +205,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       out: textOf(parsed, '--out'),
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
+      ids: parsed.values.has('--ids'),
     }
     const { scale } = checkDrawRequest(request)
     if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {
@@ -212,6 +220,24 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     } else {
       io.stdout(`Wrote ${project.shown(write(project, request.out, picture))}\n`)
     }
+    return EXIT_OK
+  }
+
+  if (name === 'tidy') {
+    const json = parsed.values.has('--json')
+    const out = textOf(parsed, '--out')
+    const ids = checkTidyRequest({ apply: textOf(parsed, '--apply'), out })
+    const project = openProject(projectOption, io.cwd)
+    const loaded = loadPlan(project, planFile)
+    if (ids === null) {
+      const list = tidyList(loaded)
+      io.stdout(json ? `${JSON.stringify(list, null, 2)}\n` : tidyListText(list))
+      return EXIT_OK
+    }
+    const done = tidyFile(project, planFile, ids)
+    const written = done.text === null ? null : project.shown(write(project, out ?? planFile, done.text))
+    const result = { label: GENERAL_GUIDANCE_LABEL, applied: done.applied, skipped: done.skipped, left: done.left, written }
+    io.stdout(json ? `${JSON.stringify(result, null, 2)}\n` : tidyAppliedText(result))
     return EXIT_OK
   }
 
