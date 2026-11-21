@@ -324,6 +324,26 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── A step inside a floor (LVL-7) ─────────────────────────────────────────────────────────
+  sameFloorLevel: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'Two rooms side by side whose floors stand closer than this in height share a level: no step ' +
+      'is drawn between them.',
+    basis: own
+  },
+  floorOffsetLargest: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'A room set further than this above or below its storey is asked about: so far off, it is more ' +
+      'likely a floor of its own, a half level or a mezzanine.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',

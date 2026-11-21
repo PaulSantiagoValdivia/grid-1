@@ -88,6 +88,16 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* A step between rooms at different levels (LVL-7): where the higher floor ends, across a gap or
+   over a dividing line, solid in the wall ink. */
+.canvas [data-part='step'] {
+  fill: none;
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 /* A door whose swing runs into something: a small orange dot on the gap.
    Hovering it outlines what the door hits and says why. */
 .canvas [data-part='door-warning'] {

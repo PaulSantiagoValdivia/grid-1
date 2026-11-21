@@ -46,6 +46,19 @@ function signedVolume(geometry: THREE.BufferGeometry): number {
 }
 
 describe('floorSlabGeometry', () => {
+  it('stands a raised room on a solid block from under the storey\'s floor up to its offset (LVL-7)', () => {
+    const [low, high] = range(vertices(floorSlabGeometry({ ...slab, offset: 0.6 })).map(([, y]) => y))
+    expect(high).toBeCloseTo(0.6, 5)
+    expect(low).toBeCloseTo(-SLAB_THICKNESS, 5)
+    expect(signedVolume(floorSlabGeometry({ ...slab, offset: 0.6 }))).toBeCloseTo(15 * (0.6 + SLAB_THICKNESS), 4)
+  })
+
+  it('lowers a sunken room\'s slab by its offset, as thick as any other (LVL-7)', () => {
+    const [low, high] = range(vertices(floorSlabGeometry({ ...slab, offset: -0.18 })).map(([, y]) => y))
+    expect(high).toBeCloseTo(-0.18, 5)
+    expect(low).toBeCloseTo(-0.18 - SLAB_THICKNESS, 5)
+  })
+
   it('goes from the floor level down 0.25 m', () => {
     const [low, high] = range(vertices(floorSlabGeometry(slab)).map(([, y]) => y))
     expect(high).toBeCloseTo(0, 5)

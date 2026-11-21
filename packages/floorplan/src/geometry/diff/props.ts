@@ -78,7 +78,9 @@ export function roomProps(before: Room, after: Room, epsilon: number): PropChang
     // ARE-5. Unstated and `false` are the same room.
     exact('inside', before.inside === true, after.inside === true),
     // ARE-10. Unstated is not a height: the room follows its walls.
-    optionalNumber('height', before.height, after.height, epsilon)
+    optionalNumber('height', before.height, after.height, epsilon),
+    // LVL-7. Unstated is the storey's own floor, so 0 and unstated are the same room.
+    number('floorOffset', before.floorOffset ?? 0, after.floorOffset ?? 0, epsilon)
   ])
 }
 
