@@ -1,0 +1,455 @@
+{
+ "version": "1",
+ "units": "m",
+ "walls": [
+  {
+   "id": "b0",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    6,
+    0
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "b1",
+   "start": [
+    6,
+    0
+   ],
+   "end": [
+    6,
+    5
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "b2",
+   "start": [
+    6,
+    5
+   ],
+   "end": [
+    0,
+    5
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "b3",
+   "start": [
+    0,
+    5
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "pod0",
+   "start": [
+    2,
+    1.5
+   ],
+   "end": [
+    4,
+    1.5
+   ],
+   "thickness": 0.1,
+   "height": 2.7,
+   "kind": "partition"
+  },
+  {
+   "id": "pod1",
+   "start": [
+    4,
+    1.5
+   ],
+   "end": [
+    4,
+    3.5
+   ],
+   "thickness": 0.1,
+   "height": 2.7,
+   "kind": "partition"
+  },
+  {
+   "id": "pod2",
+   "start": [
+    4,
+    3.5
+   ],
+   "end": [
+    2,
+    3.5
+   ],
+   "thickness": 0.1,
+   "height": 2.7,
+   "kind": "partition"
+  },
+  {
+   "id": "pod3",
+   "start": [
+    2,
+    3.5
+   ],
+   "end": [
+    2,
+    1.5
+   ],
+   "thickness": 0.1,
+   "height": 2.7,
+   "kind": "partition"
+  },
+  {
+   "id": "h0",
+   "start": [
+    10,
+    0
+   ],
+   "end": [
+    16,
+    0
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "h1",
+   "start": [
+    16,
+    0
+   ],
+   "end": [
+    16,
+    4
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "h2",
+   "start": [
+    16,
+    4
+   ],
+   "end": [
+    10,
+    4
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "h3",
+   "start": [
+    10,
+    4
+   ],
+   "end": [
+    10,
+    0
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "lift0",
+   "start": [
+    12,
+    1
+   ],
+   "end": [
+    13.6,
+    1
+   ],
+   "thickness": 0.2,
+   "height": 2.7,
+   "kind": "interior"
+  },
+  {
+   "id": "lift1",
+   "start": [
+    13.6,
+    1
+   ],
+   "end": [
+    13.6,
+    2.6
+   ],
+   "thickness": 0.2,
+   "height": 2.7,
+   "kind": "interior"
+  },
+  {
+   "id": "lift2",
+   "start": [
+    13.6,
+    2.6
+   ],
+   "end": [
+    12,
+    2.6
+   ],
+   "thickness": 0.2,
+   "height": 2.7,
+   "kind": "interior"
+  },
+  {
+   "id": "lift3",
+   "start": [
+    12,
+    2.6
+   ],
+   "end": [
+    12,
+    1
+   ],
+   "thickness": 0.2,
+   "height": 2.7,
+   "kind": "interior"
+  },
+  {
+   "id": "c0",
+   "start": [
+    20,
+    0
+   ],
+   "end": [
+    26,
+    0
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "c1",
+   "start": [
+    26,
+    0
+   ],
+   "end": [
+    26,
+    5
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "c2",
+   "start": [
+    26,
+    5
+   ],
+   "end": [
+    20,
+    5
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "c3",
+   "start": [
+    20,
+    5
+   ],
+   "end": [
+    20,
+    0
+   ],
+   "thickness": 0.3,
+   "height": 2.7,
+   "kind": "exterior"
+  },
+  {
+   "id": "wa",
+   "start": [
+    24,
+    3
+   ],
+   "end": [
+    26,
+    3
+   ],
+   "thickness": 0.1,
+   "height": 2.7,
+   "kind": "partition"
+  },
+  {
+   "id": "wb",
+   "start": [
+    24,
+    5
+   ],
+   "end": [
+    24,
+    3
+   ],
+   "thickness": 0.1,
+   "height": 2.7,
+   "kind": "partition"
+  }
+ ],
+ "rooms": [
+  {
+   "id": "bed",
+   "name": "Bedroom around pod",
+   "boundary": [
+    "b0",
+    "b1",
+    "b2",
+    "b3"
+   ],
+   "use": "bedroom"
+  },
+  {
+   "id": "ward",
+   "name": "Wardrobe pod",
+   "boundary": [
+    "pod0",
+    "pod1",
+    "pod2",
+    "pod3"
+   ],
+   "use": "storage",
+   "inside": true
+  },
+  {
+   "id": "hall",
+   "name": "Hall around lift",
+   "boundary": [
+    "h0",
+    "h1",
+    "h2",
+    "h3"
+   ],
+   "use": "corridor"
+  },
+  {
+   "id": "lift",
+   "name": "Lift shaft",
+   "boundary": [
+    "lift0",
+    "lift1",
+    "lift2",
+    "lift3"
+   ],
+   "use": "other",
+   "inside": true
+  },
+  {
+   "id": "bed2",
+   "name": "Bedroom with corner wardrobe (L)",
+   "boundary": [
+    "c0",
+    "c1",
+    "wa",
+    "wb",
+    "c2",
+    "c3"
+   ],
+   "use": "bedroom"
+  },
+  {
+   "id": "ward2",
+   "name": "Corner wardrobe",
+   "boundary": [
+    "wa",
+    "c1",
+    "c2",
+    "wb"
+   ],
+   "use": "storage"
+  }
+ ],
+ "openings": [
+  {
+   "id": "pod-door",
+   "wall": "pod0",
+   "type": "door",
+   "offset": 0.55,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "b-door",
+   "wall": "b0",
+   "type": "door",
+   "offset": 4.5,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "b-win",
+   "wall": "b2",
+   "type": "window",
+   "offset": 2,
+   "width": 1.5,
+   "height": 1.2,
+   "sill": 0.9
+  },
+  {
+   "id": "lift-door",
+   "wall": "lift0",
+   "type": "door",
+   "offset": 0.4,
+   "width": 0.8,
+   "height": 2.1
+  },
+  {
+   "id": "h-door",
+   "wall": "h0",
+   "type": "door",
+   "offset": 0.5,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "w2-door",
+   "wall": "wb",
+   "type": "door",
+   "offset": 0.6,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "c-door",
+   "wall": "c0",
+   "type": "door",
+   "offset": 1,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  }
+ ]
+}

@@ -124,6 +124,17 @@ describe('small rooms people live or sleep in', () => {
     expect(sizeFindings(plan(box('r', 'Room', [0, 0], 2, 2, use)))).toHaveLength(1)
   })
 
+  // ARE-5: a pod marked inside the bedroom takes its floor, with its walls, off the bedroom.
+  it('measure a bedroom less a wardrobe pod marked inside it', () => {
+    // The bedroom: 2.8 × 2.8 m inside, 7.84 m². The pod: 1 × 1 m inside, 1.4 × 1.4 m with its
+    // walls. Net, the bedroom is 7.84 − 1.96 = 5.88 m².
+    const bedroom = box('bed', 'Bedroom', [0, 0], 2.8, 2.8, 'bedroom')
+    const pod = box('pod', 'Wardrobe', [1.5, 1.5], 1, 1, 'storage')
+    expect(sizeFindings(plan(bedroom, pod))).toEqual([])
+    const marked = plan(bedroom, { ...pod, room: { ...pod.room, inside: true } })
+    expect(sizeFindings(marked).map((f) => [f.rooms, f.area])).toEqual([[['bed'], 5.88]])
+  })
+
   it('leave a bedroom exactly at the minimum alone', () => {
     expect(sizeFindings(plan(box('b', 'Bedroom', [0, 0], 2.5, 2.6, 'bedroom')))).toEqual([])
   })

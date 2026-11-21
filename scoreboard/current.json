@@ -33,11 +33,11 @@
   },
   "damage": {
    "plans": 3000,
-   "caught: names the damaged part": 1669,
+   "caught: names the damaged part": 1672,
    "silent: result changed, nothing said": 468,
    "refused: schema names the place": 506,
    "no effect at all": 117,
-   "caught vaguely: names something else": 240
+   "caught vaguely: names something else": 237
   },
   "damage:lab": {
    "caught: names the damaged part": 1512,
@@ -45,7 +45,7 @@
    "refused: schema names the place": 506,
    "no effect at all": 117,
    "caught vaguely: names something else": 305,
-   "plansWhoseOutcomeDiffersNow": 225
+   "plansWhoseOutcomeDiffersNow": 228
   },
   "sound": {
    "plans": 442,

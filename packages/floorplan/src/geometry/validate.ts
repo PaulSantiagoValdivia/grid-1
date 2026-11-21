@@ -18,9 +18,11 @@ import { indexPlan, openingsOf } from './plan'
 import { floorOf, planFloors } from './floors'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
-import { RoomOutlineError, roomPolygon } from './room'
+import { RoomOutlineError, roomNesting, roomPolygon } from './room'
 import type { FloorPiece, FloorSpaces, RoomMismatch } from './spaces'
 import { SPACE_AREA_TOLERANCE, planSpaces, spacesKnown } from './spaces'
+import type { RoomOverlap } from './overlaps'
+import { MAX_CUTS, roomOverlaps } from './overlaps'
 
 /** `floor` issues are about a floor as a whole; their id is the floor's id. */
 export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor'
@@ -532,12 +534,114 @@ function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<
   }
 }
 
+const quoted = (id: string): string => JSON.stringify(id)
+
+/**
+ * Rooms marked `inside` that no room on their floor holds (`nesting.ts`). Their floor is
+ * counted on its own and taken off nothing, which is what the plan said not to do.
+ */
+function validateNesting(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  const nesting = roomNesting(index)
+  const floors = new Map(plan.rooms.map((room) => [room.id, floorOf(room)] as const))
+  for (const inner of nesting.inner.values()) {
+    if (inner.host !== null || broken.has(inner.room)) continue
+    const floor = floors.get(inner.room) ?? ''
+    const why =
+      inner.reason !== undefined
+        ? `the room it sits in could not be worked out: ${inner.reason}`
+        : inner.nearest !== null
+          ? `${m2(inner.nearest.outside)} of it lies outside room ${inner.nearest.room}, the room that holds most of it`
+          : `no room on floor ${floor} covers any of it`
+    issues.push(
+      issue(
+        'room',
+        inner.room,
+        'room/inside-no-host',
+        `Room ${inner.room} is marked as inside another room, but no room on floor ${floor} holds ` +
+          `it: ${why}. Its floor is counted on its own and taken off no room. Draw it within the ` +
+          `room it sits in, or leave out ${quoted('inside')}.`,
+        'warning'
+      )
+    )
+  }
+}
+
+function overlapMessage(o: RoomOverlap): string {
+  const [a, b] = o.rooms
+  const [areaA, areaB] = o.areas
+  if (o.kind === 'same') {
+    const walls = o.sameWalls ? ' and list the same walls' : ''
+    return (
+      `Rooms ${a} and ${b} cover the same ${m2(o.shared)} of floor${walls}, so that floor is counted ` +
+      `twice, once in each. If one is a copy of the other, remove it; if not, check their wall lists.`
+    )
+  }
+  if (o.kind === 'inside') {
+    const [inner, outer] = areaA <= areaB ? [a, b] : [b, a]
+    const [innerArea, outerArea] = areaA <= areaB ? [areaA, areaB] : [areaB, areaA]
+    return (
+      `Room ${inner} (${m2(innerArea)}) lies wholly inside room ${outer} (${m2(outerArea)}), so ` +
+      `${m2(o.shared)} of floor around ${at(o.at)} is counted twice, once in each. If ${inner} ` +
+      `sits inside ${outer}, as a wardrobe pod or an en-suite does, mark ${inner} with ` +
+      `${quoted('inside')}: true and its floor is taken off ${outer}. If not, check the wall list ` +
+      `of ${outer}: it most likely names a wall it should not.`
+    )
+  }
+  return (
+    `Rooms ${a} (${m2(areaA)}) and ${b} (${m2(areaB)}) overlap: ${m2(o.shared)} of floor around ` +
+    `${at(o.at)} lies in both, so it is counted twice. Check their wall lists: one of them most ` +
+    `likely names a wall of the other.`
+  )
+}
+
+/**
+ * Rooms on one floor that cover the same floor (`overlaps.ts`). One line per pair, on the room
+ * whose area the shared floor most likely makes wrong: the larger of the two, which grew over
+ * the other, or the later when both are the same size. Warnings only: both rooms are still drawn
+ * and measured.
+ */
+function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  const found = roomOverlaps(plan, { index, broken })
+  for (const o of found.overlaps) {
+    const [a, b] = o.rooms
+    // The larger room; the later one when the two are the same size within the tolerance.
+    const on = o.kind === 'same' || o.areas[1] > o.areas[0] - SPACE_AREA_TOLERANCE ? b : a
+    issues.push(issue('room', on, 'room/overlap', overlapMessage(o), 'warning'))
+  }
+  for (const floor of found.stopped) {
+    issues.push(
+      issue(
+        'floor',
+        floor,
+        'floor/overlaps-unknown',
+        `The rooms on floor ${floor} were not all compared to see whether they overlap: the plan has ` +
+          `more than ${MAX_CUTS.toLocaleString('en')} pairs of rooms lying over each other, and Grid ` +
+          `stopped there. The overlaps it found are listed.`,
+        'warning'
+      )
+    )
+  }
+  for (const u of found.uncompared) {
+    const [a, b] = u.rooms
+    issues.push(
+      issue(
+        'room',
+        b,
+        'room/overlap-unknown',
+        `Rooms ${a} and ${b} could not be compared to see whether they overlap: ${u.reason}.`,
+        'warning'
+      )
+    )
+  }
+}
+
 export interface ValidateOptions {
   /**
    * Whether to work out the spaces the walls enclose and report floor no room claims and rooms
-   * that do not match their space (`validateSpaces`). On by default. Those lines are warnings
-   * and never change `broken`, so a caller that only needs `broken` can leave them out: joining
-   * every wall of a floor costs more than every other check together.
+   * that do not match their space (`validateSpaces`), rooms that overlap (`validateRoomOverlaps`)
+   * and rooms marked `inside` that no room holds (`validateNesting`). On by default. Those lines
+   * are warnings and never change `broken`, so a caller that only needs `broken` can leave them
+   * out: joining every wall of a floor costs more than every other check together.
    */
   readonly spaces?: boolean
 }
@@ -600,7 +704,11 @@ export function validatePlan(
     }
   }
 
-  if (options.spaces !== false) validateSpaces(plan, index, broken, issues)
+  if (options.spaces !== false) {
+    validateSpaces(plan, index, broken, issues)
+    validateNesting(plan, index, broken, issues)
+    validateRoomOverlaps(plan, index, broken, issues)
+  }
 
   return { issues, broken }
 }

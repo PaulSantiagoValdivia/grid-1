@@ -6,7 +6,7 @@
  * not checked.
  */
 
-import { area, indexPlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { indexPlan, roomFloorArea, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { HABITABLE_USES } from './catalogue'
@@ -32,7 +32,8 @@ export function sizeCheck(
   /** The minimum net area of a habitable room. */
   minimum: AppliedFigure
 ): { findings: RuleFinding[]; notChecked: NotChecked[] } {
-  const outlines = roomOutlines(storey, indexPlan(storey), leftOut)
+  const index = indexPlan(storey)
+  const outlines = roomOutlines(storey, index, leftOut)
   const findings: RuleFinding[] = []
   const unstated: string[] = []
 
@@ -46,7 +47,8 @@ export function sizeCheck(
       continue
     }
     if (!HABITABLE_USES.includes(use)) continue
-    const net = toHundredths(area([...outline.polygon]))
+    // Net of any room marked `inside` that sits in it, as Grid measures every room (ARE-5).
+    const net = toHundredths(roomFloorArea(room, index, outline.polygon))
     if (net >= minimum.value) continue
     findings.push({
       code: 'room_too_small',

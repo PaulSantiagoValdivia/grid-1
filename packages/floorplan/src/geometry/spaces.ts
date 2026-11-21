@@ -31,15 +31,28 @@ import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import { floorOf, planFloors } from './floors'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan } from './plan'
-import { tryRoomPolygon } from './room'
+import { roomNesting, tryRoomPolygon } from './room'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
+import type { Box } from './polygons'
+import {
+  AREA_TOLERANCE,
+  boxOfRings,
+  cornerFills,
+  intersectionArea,
+  multiArea,
+  overlaps,
+  pointInside,
+  polygonArea,
+  strip,
+  union
+} from './polygons'
 
 /**
  * Below this, in square metres, a difference in area is not reported: the same line the
  * scoreboard draws between two areas that "differ".
  */
-export const SPACE_AREA_TOLERANCE = 0.01
+export const SPACE_AREA_TOLERANCE = AREA_TOLERANCE
 
 /** How far each wall strip and line is lengthened at both ends, in metres. */
 const JOIN = 0.001
@@ -99,7 +112,7 @@ export interface Space extends FloorPiece {
 /** A room whose outline is not the space its walls enclose. */
 export interface RoomMismatch {
   readonly room: string
-  /** The room's area as Grid measures it, along its outline. */
+  /** The room's area as Grid measures it (`roomArea`): its outline, less any room inside it. */
   readonly area: number
   /** How much of that is enclosed floor. */
   readonly enclosed: number
@@ -145,56 +158,6 @@ export interface FloorSpacesUnknown {
   readonly reason: string
 }
 
-// ---------------------------------------------------------------------------------------------
-// Polygons as polygon-clipping takes them: rings of [x, y] pairs.
-
-interface Box {
-  readonly x0: number
-  readonly y0: number
-  readonly x1: number
-  readonly y1: number
-}
-
-function boxOfRings(rings: readonly (readonly Pair[])[]): Box {
-  let x0 = Infinity
-  let y0 = Infinity
-  let x1 = -Infinity
-  let y1 = -Infinity
-  for (const ring of rings) {
-    for (const [x, y] of ring) {
-      if (x < x0) x0 = x
-      if (x > x1) x1 = x
-      if (y < y0) y0 = y
-      if (y > y1) y1 = y
-    }
-  }
-  return { x0, y0, x1, y1 }
-}
-
-const overlaps = (a: Box, b: Box): boolean => a.x0 <= b.x1 && b.x0 <= a.x1 && a.y0 <= b.y1 && b.y0 <= a.y1
-
-const ringArea = (ring: readonly Pair[]): number => {
-  let sum = 0
-  for (let i = 0; i < ring.length; i++) {
-    const [ax, ay] = ring[i]!
-    const [bx, by] = ring[(i + 1) % ring.length]!
-    sum += ax * by - bx * ay
-  }
-  return Math.abs(sum / 2)
-}
-
-const polygonArea = (polygon: Polygon): number =>
-  polygon.reduce((sum, ring, i) => sum + (i === 0 ? ringArea(ring) : -ringArea(ring)), 0)
-
-const multiArea = (geom: MultiPolygon): number => geom.reduce((sum, polygon) => sum + polygonArea(polygon), 0)
-
-const union = (geoms: readonly Polygon[]): MultiPolygon =>
-  geoms.length === 0 ? [] : polygonClipping.union(geoms[0]!, ...geoms.slice(1))
-
-const intersectionArea = (a: Polygon, b: Polygon): number => multiArea(polygonClipping.intersection(a, b))
-
-// ---------------------------------------------------------------------------------------------
-
 /** A wall as a strip, and the rectangle around it that counts as being along it. */
 interface WallShape {
   readonly wall: Wall
@@ -207,16 +170,6 @@ interface WallShape {
   readonly reach: number
 }
 
-/** A strip along a segment: `half` either side of it, lengthened by `ends` at both ends. */
-function strip(start: Vec2, dir: Vec2, length: number, half: number, ends: number, snap: (v: number) => number): Polygon {
-  const a = { x: start.x - dir.x * ends, y: start.y - dir.y * ends }
-  const b = { x: start.x + dir.x * (length + ends), y: start.y + dir.y * (length + ends) }
-  const nx = -dir.y * half
-  const ny = dir.x * half
-  const p = (x: number, y: number): Pair => [snap(x), snap(y)]
-  return [[p(a.x - nx, a.y - ny), p(b.x - nx, b.y - ny), p(b.x + nx, b.y + ny), p(a.x + nx, a.y + ny)]]
-}
-
 function shapeOf(wall: Wall, lineHalf: number, snap: (v: number) => number): WallShape {
   const start = { x: wall.start[0], y: wall.start[1] }
   const dx = wall.end[0] - start.x
@@ -226,77 +179,6 @@ function shapeOf(wall: Wall, lineHalf: number, snap: (v: number) => number): Wal
   const half = wall.virtual ? lineHalf : wall.thickness / 2
   const body = strip(start, dir, length, half, JOIN, snap)
   return { wall, body, box: boxOfRings(strip(start, dir, length, half + TOUCH, JOIN + TOUCH, (v) => v)), start, dir, length, reach: half + TOUCH }
-}
-
-/** Ends of two walls closer than this, in metres, are one joint. */
-const JOINT = 1e-6
-
-/**
- * The corners made good. Where two solid walls end at one point at an angle, their square ends
- * leave a notch between them: outside an outside corner, and inside a room that wraps round an
- * inside corner. A built corner has no notch, and the room outline (`joint` in `room.ts`) leaves
- * none either, so it is filled: the smallest convex patch over both square ends and the points
- * where the faces of one wall cross the faces of the other, near the joint.
- *
- * Grid has not yet decided its corners once for drawing, 3D and outlines (lab entry V-10), and in
- * one case the room outline does not fill the corner: a thick wall ends where a cross wall ends,
- * and a thinner wall carries on. So floor in a fill is neither unclaimed nor a mismatch.
- */
-function cornerFills(walls: readonly WallShape[], inset: number, snap: (v: number) => number): Polygon[] {
-  interface End { readonly shape: number; readonly at: Vec2; readonly dir: Vec2; readonly half: number }
-  const ends: End[] = []
-  walls.forEach((s, i) => {
-    // A hair inside the wall's faces, so that no corner of the patch lies, but for rounding, on
-    // the edge of a strip: the polygon library cannot always tell which side such a point is on.
-    const half = Math.max(s.wall.thickness / 2 - inset, s.wall.thickness / 4)
-    ends.push({ shape: i, at: s.start, dir: s.dir, half })
-    ends.push({ shape: i, at: { x: s.start.x + s.dir.x * s.length, y: s.start.y + s.dir.y * s.length }, dir: s.dir, half })
-  })
-  // Sorted by x, so only ends that are close in x are compared.
-  ends.sort((a, b) => a.at.x - b.at.x)
-  const fills: Polygon[] = []
-  for (let i = 0; i < ends.length; i++) {
-    const p = ends[i]!
-    for (let j = i + 1; j < ends.length && ends[j]!.at.x - p.at.x <= JOINT; j++) {
-      const q = ends[j]!
-      if (p.shape === q.shape || Math.hypot(p.at.x - q.at.x, p.at.y - q.at.y) > JOINT) continue
-      const turn = p.dir.x * q.dir.y - p.dir.y * q.dir.x
-      if (Math.abs(turn) < 1e-9) continue
-      const face = (e: End, side: number): Vec2 => ({ x: e.at.x - e.dir.y * e.half * side, y: e.at.y + e.dir.x * e.half * side })
-      const reach = 4 * Math.max(p.half, q.half)
-      const points: Vec2[] = []
-      for (const s of [1, -1]) {
-        const a = face(p, s)
-        points.push(a, face(q, s))
-        for (const t of [1, -1]) {
-          const b = face(q, t)
-          // Where the face line of p through `a` crosses the face line of q through `b`.
-          const k = ((b.x - a.x) * q.dir.y - (b.y - a.y) * q.dir.x) / turn
-          const meet = { x: a.x + p.dir.x * k, y: a.y + p.dir.y * k }
-          if (Math.hypot(meet.x - p.at.x, meet.y - p.at.y) <= reach) points.push(meet)
-        }
-      }
-      const hull = convexHull(points)
-      if (hull.length >= 3) fills.push([hull.map((v): Pair => [snap(v.x), snap(v.y)])])
-    }
-  }
-  return fills
-}
-
-/** The convex hull, counter-clockwise, without repeated or in-line points. */
-function convexHull(points: readonly Vec2[]): Vec2[] {
-  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y)
-  const turn = (o: Vec2, a: Vec2, b: Vec2): number => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
-  const half = (list: readonly Vec2[]): Vec2[] => {
-    const out: Vec2[] = []
-    for (const p of list) {
-      while (out.length >= 2 && turn(out[out.length - 2]!, out[out.length - 1]!, p) <= 1e-12) out.pop()
-      out.push(p)
-    }
-    out.pop()
-    return out
-  }
-  return [...half(sorted), ...half([...sorted].reverse())]
 }
 
 /** How much of segment `a`–`b` runs inside the rectangle along `shape`, in metres. */
@@ -330,37 +212,6 @@ function contact(a: Pair, b: Pair, shape: WallShape): number {
   const dt = t1 - t0
   if (!clip(-ds, s0 - lo) || !clip(ds, hi - s0) || !clip(-dt, t0 + shape.reach) || !clip(dt, shape.reach - t0)) return 0
   return Math.max(0, u1 - u0) * Math.hypot(ds, dt)
-}
-
-/**
- * A point inside a polygon, away from its edges: the middle of the widest gap that a few
- * horizontal lines across it find. The centre of the corners can lie outside an L or in an
- * island, so it is not used.
- */
-function pointInside(polygon: Polygon, box: Box): Vec2 {
-  let best: Vec2 = { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 }
-  let widest = -Infinity
-  for (const t of [0.5, 0.3, 0.7, 0.15, 0.85]) {
-    const y = box.y0 + (box.y1 - box.y0) * t
-    const xs: number[] = []
-    for (const ring of polygon) {
-      for (let i = 0; i < ring.length; i++) {
-        const [ax, ay] = ring[i]!
-        const [bx, by] = ring[(i + 1) % ring.length]!
-        if (ay > y === by > y) continue
-        xs.push(ax + ((y - ay) * (bx - ax)) / (by - ay))
-      }
-    }
-    xs.sort((a, b) => a - b)
-    for (let i = 0; i + 1 < xs.length; i += 2) {
-      const width = xs[i + 1]! - xs[i]!
-      if (width > widest) {
-        widest = width
-        best = { x: (xs[i]! + xs[i + 1]!) / 2, y }
-      }
-    }
-  }
-  return best
 }
 
 function pieceOf(polygon: Polygon, shapes: readonly WallShape[]): FloorPiece {
@@ -439,6 +290,12 @@ export interface SpacesOptions {
 interface DrawnRoom {
   readonly room: Room
   readonly outline: readonly Vec2[]
+  /**
+   * A room with rooms marked `inside` in it: its outline less theirs (`nesting.ts`). It is set
+   * against the spaces by that floor, not by its outline.
+   */
+  readonly region?: MultiPolygon
+  /** As Grid measures it (`roomArea`): the outline's area, less any room inside it. */
   readonly area: number
 }
 
@@ -459,8 +316,10 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
   const outlineArea = multiArea(filled)
 
   const drawn = rooms.map((r) => {
-    const polygon: Polygon = [r.outline.map((p): Pair => [snap(p.x), snap(p.y)])]
-    return { ...r, polygon, box: boxOfRings(polygon) }
+    const polygon: MultiPolygon = r.region
+      ? r.region.map((piece) => piece.map((ring) => ring.map(([x, y]): Pair => [snap(x), snap(y)])))
+      : [[r.outline.map((p): Pair => [snap(p.x), snap(p.y)])]]
+    return { ...r, polygon, box: boxOfRings(polygon.flat()) }
   })
   const faceBoxes = faces.map(boxOfRings)
 
@@ -612,6 +471,7 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
   const far = farReason(walls)
   if (far) return { floor, reason: far }
 
+  const nesting = roomNesting(index)
   const rooms: DrawnRoom[] = []
   for (const room of plan.rooms) {
     if (floorOf(room) !== floor || broken.has(room.id)) continue
@@ -620,7 +480,8 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
     if (outline.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > FAR || Math.abs(p.y) > FAR)) {
       return { floor, reason: `room ${room.id} lies more than ${FAR / 1000} km from the origin` }
     }
-    rooms.push({ room, outline, area: Math.abs(signedArea(outline)) })
+    const host = nesting.hosts.get(room.id)
+    rooms.push(host ? { room, outline, region: host.region, area: host.area } : { room, outline, area: Math.abs(signedArea(outline)) })
   }
 
   let reach = 0

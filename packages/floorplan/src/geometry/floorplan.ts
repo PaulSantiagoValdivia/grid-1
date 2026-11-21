@@ -9,10 +9,10 @@
 import type { FloorPlan, Opening } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
-import { add, area, centroid, fromTuple, scale } from './vec2'
+import { add, centroid, fromTuple, scale } from './vec2'
 import { openingSpan, pointAlong, wallAxis, wallCenterline, wallPlanSlices } from './wall'
 import type { WallExposure } from './room'
-import { tryRoomPolygon, wallExposure } from './room'
+import { roomFloorArea, tryRoomPolygon, wallExposure } from './room'
 import type { Issue } from './validate'
 import { validatePlan } from './validate'
 
@@ -35,7 +35,10 @@ export interface PlanRoom {
   readonly id: string
   readonly name: string
   readonly polygon: readonly Vec2[]
-  /** Square meters, computed from the polygon. */
+  /**
+   * Square meters, computed from the polygon, less the floor of any room marked `inside` that
+   * sits in it (`roomArea`). The polygon stays the whole outline: the inner room is drawn over it.
+   */
   readonly area: number
   /** Where to place the name label. */
   readonly labelAt: Vec2
@@ -184,7 +187,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       id: room.id,
       name: room.name,
       polygon,
-      area: area(polygon),
+      // Less the floor of any room marked `inside` that sits in it (ARE-5).
+      area: roomFloorArea(room, index, polygon),
       labelAt: centroid(polygon)
     })
     extent.push(...polygon)

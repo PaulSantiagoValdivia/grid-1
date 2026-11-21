@@ -36,6 +36,8 @@ import type { Line, Vec2 } from './vec2'
 import { EPS, area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
 import type { WallAxis } from './wall'
 import { wallAxis, wallFaces } from './wall'
+import type { RoomNesting } from './nesting'
+import { NO_NESTING, nestRooms } from './nesting'
 
 /**
  * Why a room has no usable outline. `code` is the validation code the fault is
@@ -548,14 +550,49 @@ export function tryRoomPolygon(room: Room, index: PlanIndex): Vec2[] | null {
   }
 }
 
+/** Worked out once per index: which rooms sit inside which (`nesting.ts`). */
+const nestings = new WeakMap<PlanIndex, RoomNesting>()
+
 /**
- * Room area in square meters.
+ * Which rooms of the plan sit inside which, and what each host keeps (ARE-5). Only rooms marked
+ * `inside` are looked for; a plan with none costs nothing. Worked out once per index.
+ */
+export function roomNesting(index: PlanIndex): RoomNesting {
+  let found = nestings.get(index)
+  if (found === undefined) {
+    const rooms = index.plan.rooms
+    found = rooms.some((room) => room.inside === true)
+      ? nestRooms(
+          rooms.flatMap((room) => {
+            const outline = tryRoomPolygon(room, index)
+            return outline === null ? [] : [{ room, outline }]
+          }),
+          index.wallsById
+        )
+      : NO_NESTING
+    nestings.set(index, found)
+  }
+  return found
+}
+
+/**
+ * `roomArea` for a room whose outline is already traced: the outline's area, less the floor
+ * of the rooms that sit inside it, with their walls.
+ */
+export function roomFloorArea(room: Room, index: PlanIndex, outline: readonly Vec2[]): number {
+  return roomNesting(index).hosts.get(room.id)?.area ?? area(outline)
+}
+
+/**
+ * Room area in square meters: the area of its outline, less the floor of any room marked
+ * `inside` that sits in it, with that room's walls (ARE-5), so that each square metre is counted
+ * once. `area(roomPolygon(room, index))` is the outline's area alone.
  *
  * It is derived data and that is why it does not live in the plan file: it is
  * computed every time. Derived data that gets stored is data that drifts.
  */
 export function roomArea(room: Room, index: PlanIndex): number {
-  return area(roomPolygon(room, index))
+  return roomFloorArea(room, index, roomPolygon(room, index))
 }
 
 /**

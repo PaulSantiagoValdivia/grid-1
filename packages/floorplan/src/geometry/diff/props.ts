@@ -66,7 +66,9 @@ export function roomProps(before: Room, after: Room): PropChange[] {
     exact('name', before.name, after.name),
     // C3 gives the order meaning, so the same walls in another order are a change.
     sameBoundary ? null : { key: 'boundary', before: [...before.boundary], after: [...after.boundary] },
-    exact('floor', floorOf(before), floorOf(after))
+    exact('floor', floorOf(before), floorOf(after)),
+    // ARE-5. Unstated and `false` are the same room.
+    exact('inside', before.inside === true, after.inside === true)
   ])
 }
 

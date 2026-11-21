@@ -18,7 +18,7 @@ const SOURCE = resolve(PACKAGE, 'src')
 /** The only packages the core may use, and what for. */
 const ALLOWED: Readonly<Record<string, string>> = {
   zod: 'reading the plan file (types/floorplan.ts)',
-  'polygon-clipping': 'joining wall footprints into spaces (geometry/spaces.ts), MIT',
+  'polygon-clipping': 'joining wall footprints into spaces, and cutting room outlines against each other (geometry/polygons.ts), MIT',
 }
 
 /** Names that only a browser or a network client has. */

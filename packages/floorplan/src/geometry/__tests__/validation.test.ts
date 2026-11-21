@@ -467,11 +467,6 @@ describe('known failures (expected to fail until fixed)', () => {
   const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
   const divider = { id: 'v', start: [2.5, 0] as P, end: [2.5, 4] as P, virtual: true, height: 2.7 }
 
-  it.fails('AR-4 a room listed twice is reported', () => {
-    const { walls, room } = outline(RECT)
-    expect(issuesOf(planOf({ walls, rooms: [room, { ...room, id: 'r2', name: 'Again' }] })).length).toBeGreaterThan(0)
-  })
-
   it.fails('MS-3 a wall 27 m high in a house is worth a warning', () => {
     const { walls, room } = outline(RECT)
     walls[0] = { ...walls[0]!, height: 27 }
@@ -519,6 +514,28 @@ describe('known failures (expected to fail until fixed)', () => {
     const wall = { id: 'w', start: [0, 0], end: [len * Math.cos(a), len * Math.sin(a)], thickness: 0.2, height: 2.7, kind: 'exterior' }
     const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 4.0, width: 0.9, height: 2.1 }] })
     expect(issuesOf(plan)).toEqual([])
+  })
+})
+
+/**
+ * Known failures from the lab (entry Z-4) that ARE-5 fixed. It ran as an expected failure above
+ * until rooms on one floor were set against each other.
+ */
+describe('lab failures fixed by ARE-5', () => {
+  type P = [number, number]
+  const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+  const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
+  const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
+
+  it('AR-4 a room listed twice is reported', () => {
+    const { walls, room } = outline(RECT)
+    const issues = issuesOf(planOf({ walls, rooms: [room, { ...room, id: 'r2', name: 'Again' }] }))
+    expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['room/overlap', 'r2', 'warning']])
+    expect(issues[0]!.message).toBe(
+      'Rooms r1 and r2 cover the same 18.24 m² of floor and list the same walls, so that floor is ' +
+        'counted twice, once in each. If one is a copy of the other, remove it; if not, check their ' +
+        'wall lists.'
+    )
   })
 })
 

@@ -59,7 +59,7 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| AR-4, MS-3, MS-8, MS-9, MS-10, MS-15, MS-16 | `geometry/__tests__/validation.test.ts` |
+| MS-3, MS-8, MS-9, MS-10, MS-15, MS-16 | `geometry/__tests__/validation.test.ts` |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | VE-2 | `geometry/__tests__/elevations.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
@@ -77,6 +77,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | AR-12, AR-13, MS-7 | ARE-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-1" |
 | AR-2 (schema), Z-5 | ARE-2 | `types/__tests__/floorplan.test.ts`, "a virtual wall"; Z-5 also in `types/__tests__/every-plan-parses.test.ts` |
 | MS-2, MS-17 | ARE-4 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-4" |
+| AR-4 | ARE-5 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-5" |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
@@ -88,6 +89,10 @@ the door; its dividing line also splits the room, which ARE-4 reports. `VE-2 one
 typed 27 instead of 2.7 …` (elevations.test.ts) now asks for a line about the height; its
 partition also stands inside the room without being in the wall list, which ARE-4 reports.
 Both are still expected failures.
+
+ARE-5 fixed `AR-4 a room listed twice is reported` and moved it to a block named "lab
+failures fixed by ARE-5", asserting the code (`room/overlap`), the room it is on and the whole
+message instead of "some issue". No expected figure changed.
 
 ## Kinds of test the suite does not have yet
 

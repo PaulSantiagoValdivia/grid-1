@@ -133,6 +133,12 @@ export const RoomSchema = z.object({
   // unknown value is read as unstated instead of rejecting the whole plan: `use`
   // only feeds advisory checks, and a parse error means no preview at all.
   use: RoomUseSchema.optional().catch(undefined),
+  // ARE-5: the room sits inside another room on its floor, as a wardrobe pod, a lift shaft or
+  // an en-suite drawn inside a bedroom. The room it sits in is found from the outlines, never
+  // named here: the smallest room on the same floor that holds it. Its floor, with its own
+  // walls, is taken off that room, so every square metre is counted once. Optional and never
+  // defaulted, so a plan written before ARE-5 reads with no key added (version 1).
+  inside: z.boolean().optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])

@@ -90,7 +90,7 @@ export interface AreaDelta {
   /** Net m²; null when the room did not exist or could not close. */
   readonly before: number | null
   readonly after: number | null
-  /** The wall changes this one follows from. */
+  /** The wall changes this one follows from, and those of any room inside it (ARE-5). */
   readonly dependsOn: readonly string[]
 }
 

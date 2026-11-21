@@ -10,9 +10,9 @@
 
 import type { FloorPlan, Opening, PlanIndex, Wall } from '../plan'
 import { indexPlan } from '../plan'
-import { tryRoomPolygon } from '../room'
+import { roomNesting, tryRoomPolygon } from '../room'
 import type { Vec2 } from '../vec2'
-import { add, scale } from '../vec2'
+import { add, area, scale } from '../vec2'
 import { wallAxis } from '../wall'
 
 /** How far past a wall's face a point is taken to be in the room beyond it, in metres. */
@@ -56,6 +56,13 @@ function contains(polygon: readonly Vec2[], point: Vec2): boolean {
  * The rooms on the two sides of a point on a wall's axis, `[left, right]`:
  * `left` is the side the wall's normal points at. Only rooms that name the
  * wall are tried, so a room on another storey or across the plan never matches.
+ *
+ * Rooms inside rooms (ARE-5). Where more than one of those rooms holds the
+ * point, the smallest is the one there: an en-suite in the corner of a bedroom
+ * lists the bedroom's outer walls too, and its window is its own. And a room
+ * marked `inside` lists only its own walls, so on their far side, where none of
+ * the rooms that name the wall is, lies the room it sits in (`roomNesting`, found
+ * from the outlines): a door in a wardrobe pod opens into the bedroom.
  */
 export function sidesAt(
   wall: Wall,
@@ -69,8 +76,26 @@ export function sidesAt(
   const candidates = (index.roomsByWall.get(wall.id) ?? [])
     .map((room) => outlines.get(room.id))
     .filter((outline): outline is RoomOutline => outline !== undefined)
-  const roomAt = (point: Vec2): string | null =>
-    candidates.find((outline) => contains(outline.polygon, point))?.id ?? null
+  const nesting = roomNesting(index)
+  const roomAt = (point: Vec2): string | null => {
+    let found: RoomOutline | null = null
+    let foundArea = Infinity
+    for (const outline of candidates) {
+      if (!contains(outline.polygon, point)) continue
+      const size = area([...outline.polygon])
+      if (size < foundArea) {
+        found = outline
+        foundArea = size
+      }
+    }
+    if (found !== null) return found.id
+    for (const outline of candidates) {
+      const host = nesting.inner.get(outline.id)?.host ?? null
+      const around = host === null ? undefined : outlines.get(host)
+      if (around !== undefined && contains(around.polygon, point)) return around.id
+    }
+    return null
+  }
   return [roomAt(add(centre, scale(axis.normal, step))), roomAt(add(centre, scale(axis.normal, -step)))]
 }
 
@@ -117,6 +142,7 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new Set()): FloorGraph {
   const index = indexPlan(plan)
   const outlines = roomOutlines(plan, index, leftOut)
+  const nesting = roomNesting(index)
   const links: RouteLink[] = []
   const exits: OneSided[] = []
   const undrawn: OneSided[] = []
@@ -133,6 +159,9 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     if (room === null) return
     // The other side may be a room that was left out: no conclusion from what is not drawn.
     if ((index.roomsByWall.get(wall.id) ?? []).some((r) => !outlines.has(r.id))) return
+    // Nor when the room sits inside a room that was left out.
+    const host = nesting.inner.get(room)?.host ?? null
+    if (host !== null && !outlines.has(host)) return
     // `kind` is read as declared, never inferred.
     if (wall.kind === 'exterior') {
       exits.push({ room, opening: via })

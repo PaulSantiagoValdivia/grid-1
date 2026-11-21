@@ -11,15 +11,20 @@
 
 import type { FloorPlan, PlanIndex, Room } from '../plan'
 import { floorOf } from '../floors'
-import { tryRoomPolygon } from '../room'
-import { area } from '../vec2'
+import { roomFloorArea, roomNesting, tryRoomPolygon } from '../room'
 import { matchById } from './match'
 import type { AreaDelta, DiffIssue, PlanChange } from './types'
 
+/** As Grid measures the room (`roomArea`): less the floor of any room marked `inside` in it. */
 function netArea(room: Room | undefined, index: PlanIndex): number | null {
   if (room === undefined) return null
   const polygon = tryRoomPolygon(room, index)
-  return polygon === null ? null : area(polygon)
+  return polygon === null ? null : roomFloorArea(room, index, polygon)
+}
+
+/** The rooms that sit right inside a room (ARE-5), in either version. */
+function innerRooms(id: string, baseIndex: PlanIndex, headIndex: PlanIndex): string[] {
+  return [...new Set([baseIndex, headIndex].flatMap((index) => roomNesting(index).hosts.get(id)?.rooms ?? []))]
 }
 
 export interface RoomAreas {
@@ -48,10 +53,18 @@ export function roomAreas(
     if (before === null && after === null) return
 
     const boundary = new Set([...(earlier?.boundary ?? []), ...(later?.boundary ?? [])])
-    const causes = [...boundary]
-      .map((id) => wallChanges.get(id))
-      .filter((c): c is PlanChange => c !== undefined)
-    const dependsOn = causes.map((c) => c.id).sort()
+    // A room with rooms inside it also follows from them: their own changes, and their walls'.
+    const inner = innerRooms(room.id, baseIndex, headIndex)
+    for (const id of inner) {
+      for (const index of [baseIndex, headIndex]) {
+        for (const r of index.plan.rooms) if (r.id === id) r.boundary.forEach((wall) => boundary.add(wall))
+      }
+    }
+    const causes = [
+      ...[...boundary].map((id) => wallChanges.get(id)),
+      ...inner.map((id) => roomChanges.get(id))
+    ].filter((c): c is PlanChange => c !== undefined)
+    const dependsOn = [...new Set(causes.map((c) => c.id))].sort()
 
     // A room in both versions is only reported if something it comes from changed.
     if (earlier !== undefined && later !== undefined) {
