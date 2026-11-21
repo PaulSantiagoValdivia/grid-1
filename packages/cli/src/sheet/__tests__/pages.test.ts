@@ -8,7 +8,8 @@ import { checkPlan } from '../../command/check'
 import type { LoadedPlan } from '../../command/plan'
 import { planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
-import { floorFrames, sheetPages } from '../pages'
+import { planPicture } from '@ongrid/viewer/src/picture'
+import { floorFrames, PLAN_BOX, sheetPages } from '../pages'
 
 function fixture(name: string): LoadedPlan {
   const plan = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures', name), 'utf8')))
@@ -76,12 +77,21 @@ describe('the client layout (VEW-7)', () => {
 })
 
 describe('one scale for every floor (VEW-7)', () => {
-  it('frames every floor at the same size, so every floor page has the same scale', () => {
-    const frames = [...floorFrames(house).values()]
-    expect(frames.length).toBe(2)
-    for (const frame of frames) {
-      expect(frame.width).toBeCloseTo(frames[0]!.width, 9)
-      expect(frame.height).toBeCloseTo(frames[0]!.height, 9)
+  it('frames every floor so planPicture shows the same size, with nothing cut off', () => {
+    const frames = floorFrames(house)
+    expect(frames.size).toBe(2)
+    const shown = [...frames].map(([floor, frame]) => ({
+      own: planPicture(house.plan, { floor, width: PLAN_BOX.width, height: PLAN_BOX.height }).view,
+      framed: planPicture(house.plan, { floor, width: PLAN_BOX.width, height: PLAN_BOX.height, frame }).view,
+    }))
+    for (const { own, framed } of shown) {
+      expect(framed.width).toBeCloseTo(shown[0]!.framed.width, 9)
+      expect(framed.height).toBeCloseTo(shown[0]!.framed.height, 9)
+      const e = 1e-9
+      expect(framed.x).toBeLessThanOrEqual(own.x + e)
+      expect(framed.y).toBeLessThanOrEqual(own.y + e)
+      expect(framed.x + framed.width).toBeGreaterThanOrEqual(own.x + own.width - e)
+      expect(framed.y + framed.height).toBeGreaterThanOrEqual(own.y + own.height - e)
     }
   })
 })

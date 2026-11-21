@@ -9,6 +9,7 @@ import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geom
 import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { FRAME_MARGIN } from '@ongrid/viewer/src/canvas2d/viewport'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { checkPlan } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
@@ -56,19 +57,22 @@ function dateText(date: Date): string {
 }
 
 /**
- * Each floor's frame, all the same size: the largest framed view of any floor, centred on
- * each floor's own. Drawn into boxes of one size, every floor page has the same scale.
+ * Each floor's frame, in plan metres with Y up, as `planPicture` takes it in `frame` (before
+ * its margin). Every frame is sized so that `fitTo` grows it to the largest default view of
+ * any floor, centred on that floor's own: drawn into boxes of one size, every floor page has
+ * the same scale and nothing is cut off.
  */
 export function floorFrames(loaded: LoadedPlan): ReadonlyMap<string, Bounds> {
   const views = planFloors(loaded.plan).map((floor) => ({
     floor: floor.id,
     view: planPicture(loaded.plan, { floor: floor.id, width: PLAN_BOX.width, height: PLAN_BOX.height }).view,
   }))
-  const width = Math.max(...views.map((v) => v.view.width))
-  const height = Math.max(...views.map((v) => v.view.height))
+  const grow = 1 + 2 * FRAME_MARGIN
+  const width = Math.max(...views.map((v) => v.view.width)) / grow
+  const height = Math.max(...views.map((v) => v.view.height)) / grow
   return new Map(views.map(({ floor, view }) => {
     const cx = view.x + view.width / 2
-    const cy = view.y + view.height / 2
+    const cy = -(view.y + view.height / 2)
     const frame: Bounds = { min: { x: cx - width / 2, y: cy - height / 2 }, max: { x: cx + width / 2, y: cy + height / 2 }, width, height }
     return [floor, frame]
   }))
