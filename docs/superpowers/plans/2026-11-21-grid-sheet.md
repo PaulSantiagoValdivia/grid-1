@@ -35,7 +35,12 @@ License 1.1).
 - Printed figures go through `areaText`, `metresText` or `sumText` from
   `@ongrid/floorplan/geometry/rounding` (ARE-7). No `toFixed` in new code.
 - No dependency under GPL, LGPL, AGPL, MPL or EPL. The fonts are files, not npm packages, and
-  their licence is the SIL OFL 1.1.
+  their licence is the SIL OFL 1.1. Before committing a font file:
+  - read its release's licence and check it is the OFL 1.1 word for word, with no added terms;
+  - ship the files unchanged (no renaming inside the file, no subsetting, no editing);
+  - keep `OFL.txt` and the copyright lines beside them and in `NOTICE`;
+  - never offer the fonts on their own, apart from Grid.
+  If anything in the licence differs from this, stop and ask the owner.
 - Paper: A3 landscape, 1191 × 842 PDF points.
 - Text limits of `sheet.json`: `name` 120 characters (`NAME_MAX`), `headline` 200, each
   paragraph 1,200, at most 3 paragraphs in `intro` and in each floor.
