@@ -80,6 +80,14 @@ describe('grid sheet (VEW-7)', () => {
     expect(run.err).toMatch(/"roof"/)
     expect(run.err).not.toMatch(/secret words/)
   })
+  it('names the sheet.json it read beside the plan relative to the project, even for a plan named by its full path', () => {
+    mkdirSync(join(dir, 'house'))
+    writeFileSync(join(dir, 'house', 'plan.json'), readFileSync(join(cli, 'fixtures', 'two-floor-house.json')))
+    writeFileSync(join(dir, 'house', 'sheet.json'), JSON.stringify({ version: '1', floors: { roof: ['secret words'] } }))
+    const run = grid(['sheet', join(dir, 'house', 'plan.json'), '--layout', 'client'])
+    expect(run.status).toBe(1)
+    expect(run.err).toBe('grid: "house/sheet.json" is not a sheet: floors names "roof", which is not a floor of the plan.\n')
+  })
   it('ignores sheet.json with the check layout', () => {
     writeFileSync(join(dir, 'sheet.json'), '{ not json')
     expect(grid(['sheet', 'two-floor-house.json', '--layout', 'check']).status).toBe(0)

@@ -134,16 +134,30 @@ function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
+/** Why a file can't be written, in one line; a path outside the project keeps its own refusal. */
+function writeRefusal(file: string, error: unknown): unknown {
+  if (error instanceof PathRefused) return error
+  const code = (error as NodeJS.ErrnoException).code
+  if (code === 'ENOENT') return new WriteFailed(`Can't write ${file}: its folder does not exist.`)
+  if (code === 'EACCES' || code === 'EPERM') return new WriteFailed(`Can't write ${file}: permission denied.`)
+  if (code === 'EISDIR') return new WriteFailed(`Can't write ${file}: it is a folder.`)
+  return new WriteFailed(`Can't write ${file}: ${oneLine((error as Error).message)}`)
+}
+
 function write(project: Project, file: string, data: string | Uint8Array): string {
   try {
     return project.writeFile(file, data)
   } catch (error) {
-    if (error instanceof PathRefused) throw error
-    const code = (error as NodeJS.ErrnoException).code
-    if (code === 'ENOENT') throw new WriteFailed(`Can't write ${file}: its folder does not exist.`)
-    if (code === 'EACCES' || code === 'EPERM') throw new WriteFailed(`Can't write ${file}: permission denied.`)
-    if (code === 'EISDIR') throw new WriteFailed(`Can't write ${file}: it is a folder.`)
-    throw new WriteFailed(`Can't write ${file}: ${oneLine((error as Error).message)}`)
+    throw writeRefusal(file, error)
+  }
+}
+
+/** Refuses, as `write` would, a file whose folder is missing or whose name is a folder, writing nothing. */
+function checkWritable(project: Project, file: string): void {
+  try {
+    project.writable(file)
+  } catch (error) {
+    throw writeRefusal(file, error)
   }
 }
 
@@ -268,8 +282,11 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       io.stdout(`Wrote ${project.shown(done.written)}\n`)
       return EXIT_OK
     }
+    // Drawing a large plan takes seconds: a file that can't be written is refused first.
+    checkWritable(project, request.out)
     const made = await makeSheet(project, planFile, layout, words)
     warnLeftOut(io, made.loaded)
+    if (made.note) io.stderr(`${made.note}\n`)
     io.stdout(`Wrote ${project.shown(write(project, request.out, made.pdf))}\n`)
     return EXIT_OK
   }

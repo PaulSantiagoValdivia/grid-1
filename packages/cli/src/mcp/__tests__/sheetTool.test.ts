@@ -1,14 +1,20 @@
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { NAME_MAX } from '../../command/planText'
 import { SHEET_HEADLINE_MAX, SHEET_PARAGRAPH_MAX, SHEET_PARAGRAPHS_MAX } from '@ongrid/floorplan/types/sheet'
 import { openProject } from '../../fs/projectFiles'
 import { bench } from './replay/harness'
 import { FontsMissing } from '../../sheet/fonts'
 import { GRID_TOOLS, serverTool } from '../serveTools'
-import type { GridTool } from '../toolkit'
+import { readArgs, type GridTool } from '../toolkit'
+
+const requests = vi.hoisted(() => ({ count: 0 }))
+vi.mock('../../sheet/sheetFile', async (actual) => {
+  const real = await actual<typeof import('../../sheet/sheetFile')>()
+  return { ...real, checkSheetRequest: (...args: Parameters<typeof real.checkSheetRequest>) => { requests.count++; return real.checkSheetRequest(...args) } }
+})
 
 /** VEW-7: grid_sheet writes the plan as a PDF sheet into exports/. */
 
@@ -26,7 +32,8 @@ function context() {
 }
 
 const tool = GRID_TOOLS.find((t) => t.name === 'grid_sheet')!
-const call = async (args: Record<string, unknown>, ctx = context()) => (await tool.run(args, ctx.context)) as { text: string; data: Record<string, unknown> }
+/** A call as the server makes it: the arguments read against the tool's list, then the run. */
+const call = async (args: Record<string, unknown>, ctx = context()) => (await tool.run(readArgs(tool, args), ctx.context)) as { text: string; data: Record<string, unknown> }
 
 describe('the sheet argument, through the server (VEW-7)', () => {
   const b = bench({ 'plan.json': JSON.parse(readFileSync(sample, 'utf8')) })
@@ -75,6 +82,13 @@ describe('the sheet argument, through the server (VEW-7)', () => {
     const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'check', sheet })
     expect(reply).toMatchObject({ isError: true, text: 'sheet gives the words of a client sheet; a check sheet takes none: leave sheet out.' })
   })
+
+  it.each([[{ version: '1', name: 'Test House' }], [undefined]])('checks the layout once, not again in the run (sheet %j)', async (sheet) => {
+    requests.count = 0
+    const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'client', ...(sheet ? { sheet } : {}) })
+    expect(reply.isError).toBe(false)
+    expect(requests.count).toBeLessThanOrEqual(1)
+  }, 60_000)
 
   it('refuses a limit breach naming the field and the limit', async () => {
     const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'client', sheet: { version: '1', headline: 'x'.repeat(SHEET_HEADLINE_MAX + 1) } })

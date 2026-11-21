@@ -31,35 +31,42 @@ export function checkSheetRequest(request: SheetRequest): SheetLayout {
   return request.layout as SheetLayout
 }
 
-/** The file's text. A missing file is no words (null) when `mayBeMissing`, else a refusal. */
-function readSheetFile(project: Project, file: string, mayBeMissing: boolean): string | null {
+/**
+ * The file's text. A missing file is no words (null) when `mayBeMissing`, else a refusal. A
+ * refusal names the file as `shown`.
+ */
+function readSheetFile(project: Project, file: string, shown: string, mayBeMissing: boolean): string | null {
   try {
     return project.readText(file, SHEET_FILE_MAX_BYTES).text
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code === 'ENOENT' && mayBeMissing) return null
-    if (code === 'ENOENT') throw new PlanRefused(`There is no file ${quoted(file)}.`)
-    if (code === 'EISDIR') throw new PlanRefused(`${quoted(file)} is a folder, not a sheet file.`)
-    if (code === 'EFBIG') throw new PlanRefused(`${quoted(file)} is larger than ${SHEET_FILE_MAX_BYTES / 1024} KB, the most Grid reads in a sheet file.`)
+    if (code === 'ENOENT') throw new PlanRefused(`There is no file ${quoted(shown)}.`)
+    if (code === 'EISDIR') throw new PlanRefused(`${quoted(shown)} is a folder, not a sheet file.`)
+    if (code === 'EFBIG') throw new PlanRefused(`${quoted(shown)} is larger than ${SHEET_FILE_MAX_BYTES / 1024} KB, the most Grid reads in a sheet file.`)
     throw error
   }
 }
 
-/** The words for a client sheet: the file named, else `sheet.json` beside the plan, else none. */
+/**
+ * The words for a client sheet: the file named, else `sheet.json` beside the plan, else none.
+ * A file named is called what it was named; the one beside the plan, by its path in the project.
+ */
 export function readSheetWords(project: Project, planFile: string, loaded: LoadedPlan, given: string | undefined): SheetWords | null {
   const file = given ?? path.join(path.dirname(planFile), SHEET_FILE)
-  const text = readSheetFile(project, file, given === undefined)
+  const shown = given ?? project.relative(project.resolve(file))
+  const text = readSheetFile(project, file, shown, given === undefined)
   if (text === null) return null
   let raw: unknown
   try {
     raw = JSON.parse(text)
   } catch {
-    throw new PlanRefused(`${quoted(file)} is not JSON.`)
+    throw new PlanRefused(`${quoted(shown)} is not JSON.`)
   }
   try {
     return parseSheetWords(raw, planFloors(loaded.plan).map((floor) => floor.id))
   } catch (error) {
-    if (error instanceof SheetWordsRefused) throw new PlanRefused(`${quoted(file)} is not a sheet: ${error.message}.`)
+    if (error instanceof SheetWordsRefused) throw new PlanRefused(`${quoted(shown)} is not a sheet: ${error.message}.`)
     throw error
   }
 }
@@ -70,7 +77,7 @@ export interface MadeSheet {
   readonly pdf: Uint8Array
   /** What is on each page; a floor page, or its continuation, also says which floor. */
   readonly pages: readonly { readonly kind: string; readonly title: string | null; readonly floor?: string }[]
-  /** The name of the file in `exports/`, and why Grid changed it, when it did. */
+  /** The name of the file in `exports/`, and why Grid changed the sheet's name, when it did. */
   readonly fileName: string
   readonly note?: string
 }
@@ -86,7 +93,8 @@ export async function makeSheet(project: Project, planFile: string, layout: Shee
   const fileName = `${base}-${layout}.pdf`
   return note === undefined
     ? { loaded, pdf, pages, fileName }
-    : { loaded, pdf, pages, fileName, note: `Named the sheet ${fileName}: ${note}.` }
+    // The name the sheet shows and its file in exports/ start with: true of --out as well.
+    : { loaded, pdf, pages, fileName, note: `Named the sheet ${base}: ${note}.` }
 }
 
 export interface SheetDone {

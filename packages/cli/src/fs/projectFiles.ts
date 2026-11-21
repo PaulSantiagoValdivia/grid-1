@@ -333,10 +333,19 @@ export class Project {
    * files can be read only by their owner. Returns the real path written.
    */
   writeFile(given: string, data: string | Uint8Array): string {
+    const real = this.writable(given)
+    atomicWrite(real, data)
+    return real
+  }
+
+  /**
+   * Checks, writing nothing, what `writeFile` checks before it writes: the folder is there and
+   * the name is not a folder. Throws as `writeFile` does; returns the real path.
+   */
+  writable(given: string): string {
     const { real, missing } = this.locate(given)
     if (missing > 1) throw errno('ENOENT', `the folder of ${quoted(given)} does not exist`)
     if (missing === 0 && fs.statSync(real).isDirectory()) throw errno('EISDIR', `${quoted(given)} is a folder`)
-    atomicWrite(real, data)
     return real
   }
 

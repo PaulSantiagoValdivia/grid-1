@@ -190,7 +190,16 @@ export async function layoutSheet(sheet: Sheet): Promise<Sheet> {
         // A heading is never left alone at the foot of a page.
         if (piece.type === 'heading' && queue[i + 1]) group.push(queue[i + 1]!)
         const height = group.reduce((sum, p) => sum + measurePiece(ctx, p, area.width).height, 0)
-        if (y + height > LIMIT && placed.length > 0) break
+        if (y + height > LIMIT && placed.length > 0) {
+          // The total row never goes on alone: the last row goes with it, and its heading too
+          // when that would be left alone. Not when that empties a continuation page.
+          const keep = placed.length - (placed.at(-2)?.type === 'heading' ? 2 : 1)
+          if (piece.type === 'total' && placed.at(-1)?.type === 'row' && (keep > 0 || first)) {
+            // Last first, so each one taken back from the queue is the one before `i`.
+            for (const back of placed.splice(keep).reverse()) if (queue[i - 1] === back) i--
+          }
+          break
+        }
         if (y + height > LIMIT && (piece.type === 'paragraph' || piece.type === 'note' || piece.type === 'tableNote')) {
           // Taller than an empty page: cut it by wrapped lines, so the rest goes on.
           const { lines } = measurePiece(ctx, piece, area.width)

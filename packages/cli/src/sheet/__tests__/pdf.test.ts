@@ -124,6 +124,21 @@ describe('the sheet as a PDF (VEW-7)', () => {
     expect(parts.slice(1).every((t) => t.rows.length > 0 || t.total || t.note)).toBe(true)
   }, 60_000)
 
+  it('never leaves the total row alone on a page, whatever the number of rows', async () => {
+    const base = checkSheet()
+    const total = { name: 'Net area', detail: null, area: '999.0' }
+    const alone: number[] = []
+    for (let n = 20; n <= 140; n++) {
+      const rows = Array.from({ length: n }, (_, i) => ({ name: `Room ${i}`, detail: 'bedroom', area: `${i}.0` }))
+      const table = { heading: 'Rooms / m²', rows, total, note: 'Net area note.' }
+      const sheet = { ...base, pages: base.pages.map((p, i) => (i === 1 ? { ...p, table } : p)) }
+      const parts = (await layoutSheet(sheet)).pages.filter((p) => p.floor === base.pages[1]!.floor).map((p) => p.table)
+      if (parts.some((t) => t?.total && t.rows.length === 0)) alone.push(n)
+      expect(parts.flatMap((t) => t?.rows ?? [])).toEqual(rows)
+    }
+    expect(alone).toEqual([])
+  }, 120_000)
+
   it('puts the general guidance label in the footer of every page', async () => {
     for (const sheet of [crowded().sheet, clientSheet()]) {
       for (const page of (await layoutSheet(sheet)).pages) expect(page.footer.label).toBe(GENERAL_GUIDANCE_LABEL)

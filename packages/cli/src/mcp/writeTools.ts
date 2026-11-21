@@ -180,9 +180,9 @@ const sheetTool: GridTool = {
   },
   outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: objectSchema({ kind: STRING, title: NULLABLE_STRING, floor: STRING }, ['kind', 'title']) }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
   async run(args, context) {
-    const layoutArg = args['layout'] as string
+    // Already read: layout is one of the two, and words with a check sheet were refused there.
+    const layout = args['layout'] as SheetLayout
     const given = args['sheet'] as Record<string, unknown> | undefined
-    const layout = sheetLayoutOf(layoutArg, given !== undefined)
     try {
       const { project, file, loaded } = readPlan(context, args['plan'])
       const words = layout === 'check'
