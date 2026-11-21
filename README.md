@@ -18,7 +18,7 @@ is published yet and there is no release to install.
 | `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
 | `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, `planToSvg` (a picture of a plan as an SVG file) and `planStill` (a still of the 3D model as pixels), with no browser |
-| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `draw`, `export` and `serve` (the preview tool server). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
+| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `describe`, `draw`, `export` and `serve` (the tool server an agent uses). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
 
 ## Development
 
@@ -51,7 +51,38 @@ local one is missing.
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below) |
 | `grid draw [<plan>] [--png \| --3d] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
-| `grid serve` | Starts the tool server on standard input and output: the preview tool and `grid_export` |
+| `grid serve` | Starts the tool server on standard input and output, with the 13 tools below |
+
+### The tool server
+
+`grid serve` is an MCP server over standard input and output, for an agent's host to start.
+Its tools are listed in a fixed order: first those that read the plan, in the order of the
+requests people make most, then the preview and the export, and last the three that change the
+plan. Every tool has a title, a read-only or destructive hint, an input schema with an example
+and the allowed values of each argument, and an output schema. Each answer is short text with
+the same facts as data; a view also returns its picture. Units are metres.
+
+| Tool | Answers |
+|---|---|
+| `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
+| `grid_areas` | Each room's size and net area, totals by use, gross areas, in metres or feet, as text or CSV, with the measuring rule stated |
+| `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
+| `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; text or CSV |
+| `grid_measure` | A room's sizes and widest circle, whether a box or a circle fits, the way between rooms with every door passed, and what is narrower than the person's own figure |
+| `grid_view` | A floor plan (light, dark or black and white, with or without sizes), the model from a side, or an eye-level view in a room with the window sills against the eye |
+| `grid_describe` | The plan in room terms, as `grid describe` |
+| `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
+| `grid_preview` | Points the live preview at a floor or room of the plan |
+| `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/` |
+| `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into) or removes it |
+| `grid_move_room_side` | Moves one side of a room out or in; walls ending on it follow |
+| `grid_mirror` | Mirrors the plan left to right or top to bottom |
+
+A tool that names no plan reads the project's `plan.json` in a folder `grid init` made. A floor
+or room the plan does not have is refused with the ones it has, and the word sent is never
+repeated back. A request line over 1 MiB and an id over 64 characters are refused, naming the
+limit. A change that would leave the drawing with a new problem is refused and nothing is
+written; otherwise only the change is written back, and keys Grid does not know stay.
 
 `grid draw --3d` takes the 3D model as the app opens it: the same scene, from the same camera
 (south-east, about 29.5 degrees down, through a 45 degree lens). It needs no browser and no
@@ -172,7 +203,7 @@ Grid reads and writes files only inside one folder, the project folder:
 A relative path on the command line starts from the folder Grid runs in, as in any shell. A
 path given to a tool of `grid serve` starts from the project folder, since a host may start
 the server anywhere. `grid serve` started at the top of a disk or in the home folder still
-runs: the preview works, and each file tool answers that it needs `--project`.
+runs, and each tool answers that it needs `--project`.
 
 Symbolic links are followed, for the file and every folder above it, and the real path must
 be inside the real project folder. Refused, with a message naming the path and the project
