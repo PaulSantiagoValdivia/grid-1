@@ -119,7 +119,8 @@ function argSchema(spec: ArgSpec): Record<string, unknown> {
   const rest = { ...spec }
   delete rest.required
   if (rest.type === 'string') {
-    const { id, lines: _lines, ...string } = rest
+    const { id, ...string } = rest
+    delete string.lines
     return id ? { ...string, pattern: ID_PATTERN, maxLength: ID_MAX } : string
   }
   if (rest.type === 'array') {

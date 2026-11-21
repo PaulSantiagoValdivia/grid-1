@@ -154,7 +154,8 @@ describe('the parts Grid derives', () => {
     expect(issues[0]).toMatchObject({ id: 'hall', severity: 'error' })
     expect(issues[0]!.message).toContain('written rooms first')
     // A plan with no stamp is a hand-written one: its boundaries are its own.
-    const { written: _stamp, ...unstamped } = edited
+    const unstamped: FloorPlan = { ...edited }
+    delete unstamped.written
     expect(validatePlan(unstamped).issues.filter((i) => i.code === 'room/derived-edited')).toEqual([])
   })
 

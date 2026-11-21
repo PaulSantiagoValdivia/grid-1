@@ -41,7 +41,7 @@ import { ROOM_USES, WallKindSchema, type FloorPlan, type Opening, type Room, typ
 import { indexPlan } from '../geometry/plan'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
-import { f2, isNumberWord, metres, numberOf, pointOf, RoomsStop, wordsOf } from './words'
+import { f2, isNumberWord, numberOf, pointOf, RoomsStop, wordsOf } from './words'
 
 type P = readonly [number, number]
 type Box = readonly [number, number, number, number]

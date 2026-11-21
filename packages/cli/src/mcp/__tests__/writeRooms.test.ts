@@ -55,6 +55,17 @@ describe('writing a plan rooms first through the tool server', () => {
     expect(plan.rooms.map((r) => r.id)).toEqual(['living', 'kitchen', 'bed1', 'hall', 'bath', 'bed2'])
   })
 
+  it('keeps the boundaries derived through a mirror, which turns every one round', async () => {
+    await b.call('grid_write_rooms', { plan: 'mirror.json', rooms: FLAT })
+    const before = JSON.parse(readFileSync(join(b.folder, 'mirror.json'), 'utf8')) as { rooms: { boundary: string[] }[] }
+    const mirrored = await b.call('grid_mirror', { plan: 'mirror.json', how: 'left-right' })
+    expect(mirrored.isError, mirrored.text).toBe(false)
+    const after = JSON.parse(readFileSync(join(b.folder, 'mirror.json'), 'utf8')) as { rooms: { boundary: string[] }[] }
+    expect(after.rooms.map((r) => r.boundary.join())).not.toEqual(before.rooms.map((r) => r.boundary.join()))
+    const check = await b.call('grid_check', { plan: 'mirror.json' })
+    expect(check.text).not.toContain('changed by hand')
+  })
+
   it('refuses rooms text with every problem listed, writing nothing', async () => {
     const reply = await b.call('grid_write_rooms', { plan: 'bad.json', rooms: 'room a "A" lounge 3 x 3\n' })
     expect(reply.isError).toBe(true)

@@ -245,7 +245,8 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
     if (error instanceof EditRefused) throw new ToolRefusal(`${error.message} Nothing was written.`)
     throw error
   }
-  const after = applyPatch(loaded.plan as unknown as Record<string, unknown>, patch) as unknown as FloorPlan
+  // A plan written rooms first keeps its derived boundaries derived through Grid's own edits (WRT-2).
+  const after = keptDerived(loaded.plan.rooms, applyPatch(loaded.plan as unknown as Record<string, unknown>, patch)) as unknown as FloorPlan
   const oldErrors = errorsOf(loaded.plan)
   const newErrors = errorsOf(after)
   const known = new Set(oldErrors.map((e) => `${e.id}|${e.message}`))
@@ -262,7 +263,6 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
   }
   let written: string
   try {
-    // A plan written rooms first keeps its derived boundaries derived through Grid's own edits (WRT-2).
     const next = keptDerived(loaded.plan.rooms, applyPatch(raw, patch))
     written = project.relative(project.writeFile(out, `${JSON.stringify(next, null, 2)}\n`))
   } catch (error) {

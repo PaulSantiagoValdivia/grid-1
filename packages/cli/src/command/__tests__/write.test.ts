@@ -42,7 +42,14 @@ async function project(): Promise<string> {
   return dir
 }
 
-const planOf = (dir: string): Record<string, any> => JSON.parse(readFileSync(join(dir, 'plan.json'), 'utf8'))
+interface PlanFile {
+  walls: Array<{ height: number }>
+  rooms: Array<{ id: string; boundary: string[] }>
+  written?: unknown
+  projectId?: unknown
+}
+
+const planOf = (dir: string): PlanFile => JSON.parse(readFileSync(join(dir, 'plan.json'), 'utf8')) as PlanFile
 
 describe('grid write', () => {
   it('writes the project plan from rooms text over the starter plan, and says what it worked out', async () => {
@@ -54,7 +61,7 @@ describe('grid write', () => {
     expect(ran.out).toContain('1 floor, 6 rooms; 9 walls and their kinds worked out; 13 openings placed')
     expect(ran.out).toContain('Sizes are to the inside faces unless a room says otherwise (the default).')
     const plan = planOf(dir)
-    expect(plan.rooms.map((r: { id: string }) => r.id)).toEqual(['living', 'kitchen', 'bed1', 'hall', 'bath', 'bed2'])
+    expect(plan.rooms.map((r) => r.id)).toEqual(['living', 'kitchen', 'bed1', 'hall', 'bath', 'bed2'])
     expect(plan.written).toMatchObject({ from: 'rooms' })
     // grid init's project id is kept: rooms text does not hold it.
     expect(typeof plan.projectId).toBe('string')
@@ -67,7 +74,7 @@ describe('grid write', () => {
     const dir = await project()
     await grid(dir, 'write', 'plan.rooms')
     const plan = planOf(dir)
-    plan.walls[0].height = 3
+    plan.walls[0]!.height = 3
     writeFileSync(join(dir, 'plan.json'), JSON.stringify(plan, null, 2))
     const before = readFileSync(join(dir, 'plan.json'), 'utf8')
     const ran = await grid(dir, 'write', 'plan.rooms')
@@ -86,7 +93,7 @@ describe('grid write', () => {
     const dir = await project()
     await grid(dir, 'write', 'plan.rooms')
     const plan = planOf(dir)
-    plan.walls[0].height = 3
+    plan.walls[0]!.height = 3
     writeFileSync(join(dir, 'plan.json'), JSON.stringify(plan, null, 2))
     const back = await grid(dir, 'describe', '--as', 'rooms')
     expect(back.status).toBe(0)
@@ -96,10 +103,10 @@ describe('grid write', () => {
     const ran = await grid(dir, 'write', 'back.rooms')
     expect(ran.err).toBe('')
     expect(ran.out).toContain('is the same building as the plan before: every wall, opening and room is where it was.')
-    expect(planOf(dir).walls[0].height).toBe(3)
+    expect(planOf(dir).walls[0]!.height).toBe(3)
     // Read back from that version, it is refused once the plan changed again.
     const again = planOf(dir)
-    again.walls[1].height = 2.4
+    again.walls[1]!.height = 2.4
     writeFileSync(join(dir, 'plan.json'), JSON.stringify(again, null, 2))
     const stale = await grid(dir, 'write', 'back.rooms')
     expect(stale.status).toBe(1)
@@ -131,7 +138,7 @@ describe('grid write', () => {
     const dir = await project()
     await grid(dir, 'write', 'plan.rooms')
     const plan = planOf(dir)
-    plan.rooms[3].boundary.reverse()
+    plan.rooms[3]!.boundary.reverse()
     writeFileSync(join(dir, 'plan.json'), JSON.stringify(plan, null, 2))
     const check = JSON.parse((await grid(dir, 'check', '--json')).out)
     expect(JSON.stringify(check)).toContain('room/derived-edited')
