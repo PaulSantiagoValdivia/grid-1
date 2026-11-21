@@ -9,27 +9,24 @@
  * the package's `fonts/`, two folders up from this file.
  */
 import { fileURLToPath } from 'url'
+import { LAST_RESORT_FONT, SCRIPT_FONTS } from '../draw/scriptFonts'
 
 export const SERIF = 'Grid Sheet Serif'
 export const SANS = 'Grid Sheet Sans'
 
 /**
  * System fonts for the scripts the bundled fonts lack (Chinese, Japanese, Korean, Thai,
- * Devanagari, emoji), by the names macOS, Windows and Linux give them. The canvas takes each
+ * Devanagari, emoji): the pictures' own lists (`SCRIPT_FONTS`). The canvas takes each
  * character from the first font in a list that has it; without a list it falls back only to
  * the system's default font, which has none of these, and draws a box.
  */
-export const CJK_FONTS = [
-  'Hiragino Sans', 'Hiragino Sans GB', 'Apple SD Gothic Neo',
-  'Microsoft YaHei', 'Yu Gothic', 'Malgun Gothic',
-  'Noto Sans CJK SC', 'Noto Sans CJK JP', 'Noto Sans CJK KR', 'WenQuanYi Micro Hei',
-] as const
+export const CJK_FONTS = [...SCRIPT_FONTS.cjk, ...SCRIPT_FONTS.hangul] as const
 const FALLBACK_FONTS = [
   ...CJK_FONTS,
-  'Sukhumvit Set', 'Thonburi', 'Leelawadee UI', 'Noto Sans Thai',
-  'Kohinoor Devanagari', 'Nirmala UI', 'Noto Sans Devanagari',
-  'Arial Unicode MS',
-  'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji',
+  ...SCRIPT_FONTS.thai,
+  ...SCRIPT_FONTS.devanagari,
+  LAST_RESORT_FONT,
+  ...SCRIPT_FONTS.emoji,
 ]
 
 /** A canvas font: one of the sheet's families, then the system's fonts, then its default. */

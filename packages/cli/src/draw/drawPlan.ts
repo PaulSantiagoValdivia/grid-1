@@ -9,12 +9,15 @@
  *
  * Text is drawn in the first font of `PICTURE_FONT` the machine has, so a PNG's letters can
  * differ slightly between machines. Where labels go does not: it is worked out from a
- * fixed estimate of text width, never from the font.
+ * fixed estimate of text width, never from the font. In the PNG, a run of CJK, Thai,
+ * Devanagari or emoji is drawn in a system font that has it, and every text where a browser
+ * puts it (`forSkia`).
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { PictureOptions } from '@ongrid/viewer/src/picture'
 import { pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
 import { loadCanvas } from './canvas'
+import { forSkia } from './skiaText'
 
 export type { PictureOptions }
 
@@ -63,11 +66,12 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   if (width < 1 || height < 1) throw new RangeError(`A scale of ${scale} leaves no pixels to draw`)
 
   // Loaded only for a PNG: it is a native module, and an SVG needs none of it.
-  const { createCanvas, loadImage } = await loadCanvas()
+  const { createCanvas, loadImage, GlobalFonts } = await loadCanvas()
 
   // The SVG is written at the PNG's own size, so Skia draws it at full resolution rather than
-  // enlarging a smaller image.
-  const image = await loadImage(Buffer.from(pictureToSvg(picture, scale)))
+  // enlarging a smaller image. Its text is written the way Skia draws it right (`forSkia`).
+  const nodes = forSkia(picture.nodes, (family) => GlobalFonts.has(family))
+  const image = await loadImage(Buffer.from(pictureToSvg({ ...picture, nodes }, scale)))
 
   const canvas = createCanvas(width, height)
   const context = canvas.getContext('2d')

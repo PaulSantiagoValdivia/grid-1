@@ -7,11 +7,13 @@
  */
 import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
 import { pictureToSvg, planPicture, PICTURE_FONT, type PlanLook } from '@ongrid/viewer/src/picture'
+import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
 import { GROUND_GRID } from '@ongrid/viewer/src/canvas3d/BuildingScene'
 import { LIGHT_COLORS_3D, rasterise, stillScene } from '@ongrid/viewer/src/still'
 import { loadCanvas } from './canvas'
 import { drawPlan } from './drawPlan'
 import { partBounds, pixelBoxes, type PartBox } from './partBoxes'
+import { forSkia } from './skiaText'
 
 import type { LookName, Side } from './viewNames'
 
@@ -58,16 +60,15 @@ export async function planView(
   return { png, width: picture.width, height: picture.height, pxPerMetre: picture.width / picture.view.width, boxes }
 }
 
-function escapeXml(text: string): string {
-  return text.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c]!)
-}
-
 const SHEET_WIDTH = 2400
 const GAP = 40
 const TITLE = 48
 
 /** Several plans side by side, every one at the same scale, each under its title. */
 export async function sheetView(plans: readonly { plan: FloorPlan; title: string; floor?: string }[], look: LookName): Promise<PlanView> {
+  const { createCanvas, loadImage, GlobalFonts } = await loadCanvas()
+  // The pictures' text is written the way Skia draws it right (`forSkia`, VEW-7).
+  const installed = (family: string): boolean => GlobalFonts.has(family)
   const first = plans.map((p) => planPicture(p.plan, { floor: p.floor ?? null, look: lookOf(look) }))
   const metres = first.reduce((sum, picture) => sum + picture.view.width, 0)
   const pxPerMetre = (SHEET_WIDTH - GAP * (plans.length - 1)) / metres
@@ -78,9 +79,11 @@ export async function sheetView(plans: readonly { plan: FloorPlan; title: string
     const view = first[i]!.view
     const width = Math.max(1, Math.round(view.width * pxPerMetre))
     const height = Math.max(1, Math.round(view.height * pxPerMetre))
-    const svg = pictureToSvg(planPicture(p.plan, { floor: p.floor ?? null, look: lookOf(look), width, height }))
+    const picture = planPicture(p.plan, { floor: p.floor ?? null, look: lookOf(look), width, height })
+    const svg = pictureToSvg({ ...picture, nodes: forSkia(picture.nodes, installed) })
     parts.push(svg.replace(/^<svg /, `<svg x="${x}" y="${TITLE}" `))
-    parts.push(`<text x="${x + width / 2}" y="${TITLE - 14}" text-anchor="middle" font-family="${escapeXml(PICTURE_FONT)}" font-size="28" fill="#000000">${escapeXml(p.title)}</text>`)
+    const title = el('text', { x: x + width / 2, y: TITLE - 14, 'text-anchor': 'middle', 'font-family': PICTURE_FONT, 'font-size': 28, fill: '#000000' }, [p.title])
+    parts.push(toSvg(forSkia([title], installed)))
     x += width + GAP
     tallest = Math.max(tallest, height)
   })
@@ -88,7 +91,6 @@ export async function sheetView(plans: readonly { plan: FloorPlan; title: string
   const height = tallest + TITLE
   const paper = look === 'dark' ? '#15150f' : '#ffffff'
   const sheet = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="${paper}"/>${parts.join('')}</svg>`
-  const { createCanvas, loadImage } = await loadCanvas()
   const image = await loadImage(Buffer.from(sheet))
   const canvas = createCanvas(width, height)
   const context = canvas.getContext('2d')
