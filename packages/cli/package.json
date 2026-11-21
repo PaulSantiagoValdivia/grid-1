@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "node build.mjs",
+    "pack:local": "node pack.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

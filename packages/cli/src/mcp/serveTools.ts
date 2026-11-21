@@ -7,6 +7,7 @@
  * inside the project folder or refused, with a message naming the path and the folder. The
  * project folder is fixed when the server starts.
  */
+import { CanvasMissing } from '../draw/canvas'
 import type { PathRefused, Project } from '../fs/projectFiles'
 import type { ServerTool, ToolAnswer } from './protocol'
 import { READ_TOOLS } from './readTools'
@@ -28,7 +29,7 @@ async function answer(tool: GridTool, raw: unknown, context: ToolContext): Promi
     const result = await tool.run(readArgs(tool, raw), context)
     return { text: result.text, data: result.data, ...(result.image ? { image: result.image } : {}) }
   } catch (error) {
-    if (error instanceof ToolRefusal) return { text: error.message, isError: true }
+    if (error instanceof ToolRefusal || error instanceof CanvasMissing) return { text: error.message, isError: true }
     throw error
   }
 }

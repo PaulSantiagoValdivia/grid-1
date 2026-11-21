@@ -14,6 +14,7 @@
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { PictureOptions } from '@ongrid/viewer/src/picture'
 import { pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
+import { loadCanvas } from './canvas'
 
 export type { PictureOptions }
 
@@ -62,7 +63,7 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   if (width < 1 || height < 1) throw new RangeError(`A scale of ${scale} leaves no pixels to draw`)
 
   // Loaded only for a PNG: it is a native module, and an SVG needs none of it.
-  const { createCanvas, loadImage } = await import('@napi-rs/canvas')
+  const { createCanvas, loadImage } = await loadCanvas()
 
   // The SVG is written at the PNG's own size, so Skia draws it at full resolution rather than
   // enlarging a smaller image.

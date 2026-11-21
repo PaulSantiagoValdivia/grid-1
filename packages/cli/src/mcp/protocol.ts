@@ -8,6 +8,13 @@
  * Limits (T-3): a request line of more than `LINE_MAX_BYTES` is refused unread, and so is a
  * request id of more than `REQUEST_ID_MAX` characters. Neither is ever repeated in the answer.
  * Only protocol versions Grid knows are answered with; any other gets Grid's own.
+ *
+ * Two eras (CMD-9). An older client opens with `initialize` and Grid answers as it always has.
+ * A 2026-07-28 client sends no handshake: every request names its version and capabilities in
+ * `params._meta`, it starts with `server/discover`, and each result says it is complete. A
+ * request is served in the era its own `_meta` shows, so the server keeps no state between
+ * lines. A version Grid does not speak is refused with the ones it does (-32022), and so is a
+ * method it does not know: a client of neither era learns what to send.
  */
 
 export const SERVER_NAME = 'grid'
@@ -17,6 +24,29 @@ export const LINE_MAX_BYTES = 1_048_576
 export const REQUEST_ID_MAX = 64
 export const PROTOCOL_VERSIONS = ['2024-11-05', '2025-03-26', '2025-06-18'] as const
 const LATEST_PROTOCOL_VERSION = '2025-06-18'
+/** The versions served without a handshake, each request naming its own (2026-07-28). */
+export const PER_REQUEST_VERSIONS = ['2026-07-28'] as const
+
+const META_VERSION = 'io.modelcontextprotocol/protocolVersion'
+const META_CAPABILITIES = 'io.modelcontextprotocol/clientCapabilities'
+const META_SERVER_INFO = 'io.modelcontextprotocol/serverInfo'
+/** The 2026-07-28 error for a protocol version the server does not speak. */
+export const UNSUPPORTED_VERSION = -32022
+/** How long a client may keep the tool list and the discover answer: they never change while the server runs. */
+const CACHE_MS = 3_600_000
+const SERVER_INFO = { name: SERVER_NAME, version: '1' }
+/** Only a version shaped like one is repeated back; anything else is text from the client (T-3). */
+const VERSION_SHAPE = /^\d{4}-\d{2}-\d{2}$/
+
+function listOf(items: readonly string[]): string {
+  return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+/** The versions Grid speaks, in one sentence, for every refusal a client of another era may get. */
+export const VERSIONS_SPOKEN = `Grid's tool server speaks MCP ${listOf(PER_REQUEST_VERSIONS)}, with the version in each request's _meta and server/discover first, and ${listOf(PROTOCOL_VERSIONS)} after initialize.`
+
+/** What `server/discover` says about the tools, for an agent's host to show. */
+const INSTRUCTIONS = 'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. Every report carries the label General guidance, not your local rules.'
 
 type Id = string | number | null
 
@@ -61,14 +91,66 @@ function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
-async function runTool(id: Id, tool: ServerTool, args: unknown): Promise<string> {
+async function runTool(id: Id, tool: ServerTool, args: unknown, wrap: (result: Record<string, unknown>) => Record<string, unknown> = (result) => result): Promise<string> {
   let answer: ToolAnswer
   try {
     answer = await tool.call(args)
   } catch (error) {
     answer = { text: `Something went wrong inside Grid: ${oneLine(String((error as Error)?.message ?? error))}`, isError: true }
   }
-  return reply(id, toolResult(answer))
+  return reply(id, wrap(toolResult(answer)))
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** A 2026-07-28 result: marked complete, and saying which server answered. */
+function complete(result: Record<string, unknown>): Record<string, unknown> {
+  return { resultType: 'complete', ...result, _meta: { [META_SERVER_INFO]: SERVER_INFO } }
+}
+
+/** One request of a 2026-07-28 client, which names its version in its own `_meta`. */
+function perRequest(id: Id, method: unknown, params: Record<string, unknown>, tools: readonly ServerTool[]): string | Promise<string> {
+  const meta = isObject(params['_meta']) ? params['_meta'] : {}
+  const asked = meta[META_VERSION]
+  if (typeof asked !== 'string') {
+    return fail(id, -32602, `Invalid params: this request needs ${META_VERSION} in its _meta. ${VERSIONS_SPOKEN}`)
+  }
+  if (!(PER_REQUEST_VERSIONS as readonly string[]).includes(asked)) {
+    return JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      error: {
+        code: UNSUPPORTED_VERSION,
+        message: `Unsupported protocol version. ${VERSIONS_SPOKEN}`,
+        data: { supported: [...PER_REQUEST_VERSIONS], ...(VERSION_SHAPE.test(asked) ? { requested: asked } : {}) },
+      },
+    })
+  }
+  if (!isObject(meta[META_CAPABILITIES])) {
+    return fail(id, -32602, `Invalid params: this request needs ${META_CAPABILITIES} in its _meta; an empty object is enough.`)
+  }
+  switch (method) {
+    case 'server/discover':
+      return reply(id, complete({
+        supportedVersions: [...PER_REQUEST_VERSIONS],
+        capabilities: { tools: {} },
+        instructions: INSTRUCTIONS,
+        ttlMs: CACHE_MS,
+        cacheScope: 'public',
+      }))
+    case 'tools/list':
+      return reply(id, complete({ tools: tools.map((tool) => tool.definition), ttlMs: CACHE_MS, cacheScope: 'public' }))
+    case 'tools/call': {
+      const tool = tools.find((t) => t.definition.name === params['name'])
+      if (!tool) return fail(id, -32602, 'Unknown tool')
+      return runTool(id, tool, params['arguments'], complete)
+    }
+    default:
+      // initialize and ping are gone from this revision; anything else Grid does not offer.
+      return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+  }
 }
 
 function byteLength(line: string): number {
@@ -109,6 +191,11 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
     ? message['params']
     : {}) as Record<string, unknown>
 
+  // A request that names its version, or asks what the server speaks, is of the 2026-07-28 era.
+  if (message['method'] === 'server/discover' || (isObject(params['_meta']) && params['_meta'][META_VERSION] !== undefined)) {
+    return perRequest(id, message['method'], params, tools)
+  }
+
   switch (message['method']) {
     case 'initialize': {
       const asked = params['protocolVersion']
@@ -116,7 +203,7 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
       return reply(id, {
         protocolVersion: known ? asked : LATEST_PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: { name: SERVER_NAME, version: '1' },
+        serverInfo: SERVER_INFO,
       })
     }
     case 'ping':
@@ -129,6 +216,6 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
       return runTool(id, tool, params['arguments'])
     }
     default:
-      return fail(id, -32601, 'Method not found')
+      return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
   }
 }

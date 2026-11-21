@@ -23,7 +23,7 @@ Notes for agents and people changing this repository.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own.
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `check`,
-  `describe`, `draw`, `export`, `tidy` and `serve`, in `src/command/`. `tidy` (MSG-12) lists the
+  `describe`, `draw`, `export`, `tidy`, `serve` and `mcp`, in `src/command/`. `tidy` (MSG-12) lists the
   library's wall faults and makes the chosen fixes on the plan file as read. `describe` (VEW-5, `src/describe/`)
   prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`). A
   folder holding `grid.json` (`grid init` writes it) is a Grid project: there `check`,
@@ -41,6 +41,17 @@ Notes for agents and people changing this repository.
   title, hint, examples or output schema, or when the order changes; `replay/replay.test.ts`
   replays the lab's five Y conversations and holds the score. A description starts "Use this
   when…" and says when not to use the tool.
+- `grid mcp` is the same server under the name agents start it by: `npx -y ongrid mcp` (CMD-9).
+  `src/mcp/protocol.ts` answers both eras of the protocol: `initialize` for older clients, and
+  for 2026-07-28 clients the version in each request's `_meta` and `server/discover`; a version
+  it does not speak is refused with the ones it does. It keeps no state between lines.
+- Every way Grid is installed comes from one file, `packages/cli/src/distribution/listing.ts`:
+  the npm package's manifest, the registry's `server.json`, the plugin folder for Claude Code
+  and Codex with its marketplaces, the Cursor link, the set-up lines and the `.mcpb` manifest.
+  `npm run pack:local --workspace ongrid` (`pack.mjs`, after a build) writes them all into
+  `packages/cli/dist/release/` and publishes nothing; `src/distribution/__tests__/install.e2e.test.ts`
+  installs each from the packed tarball, offline, in an empty folder and makes a call. The README's
+  install section must match `installText()`: a test checks it. Publishing waits on CMD-8.
 - `scoreboard/`: the lab's plans, damage sets and expected figures, and the runner behind
   `npm run scoreboard`. It prints five counts and fails when one is worse than
   `scoreboard/current.json`. Its `README.md` defines the counts. A change that moves a count

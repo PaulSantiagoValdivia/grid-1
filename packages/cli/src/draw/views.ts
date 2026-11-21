@@ -9,6 +9,7 @@ import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, ty
 import { pictureToSvg, planPicture, PICTURE_FONT, type PlanLook } from '@ongrid/viewer/src/picture'
 import { GROUND_GRID } from '@ongrid/viewer/src/canvas3d/BuildingScene'
 import { LIGHT_COLORS_3D, rasterise, stillScene } from '@ongrid/viewer/src/still'
+import { loadCanvas } from './canvas'
 import { drawPlan } from './drawPlan'
 import { partBounds, pixelBoxes, type PartBox } from './partBoxes'
 
@@ -87,7 +88,7 @@ export async function sheetView(plans: readonly { plan: FloorPlan; title: string
   const height = tallest + TITLE
   const paper = look === 'dark' ? '#15150f' : '#ffffff'
   const sheet = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="${paper}"/>${parts.join('')}</svg>`
-  const { createCanvas, loadImage } = await import('@napi-rs/canvas')
+  const { createCanvas, loadImage } = await loadCanvas()
   const image = await loadImage(Buffer.from(sheet))
   const canvas = createCanvas(width, height)
   const context = canvas.getContext('2d')
@@ -106,7 +107,7 @@ const STILL_H = 800
 const DEG = Math.PI / 180
 
 async function png(image: { data: Uint8ClampedArray; width: number; height: number }): Promise<Uint8Array> {
-  const { createCanvas, ImageData } = await import('@napi-rs/canvas')
+  const { createCanvas, ImageData } = await loadCanvas()
   const canvas = createCanvas(image.width, image.height)
   canvas.getContext('2d').putImageData(new ImageData(image.data, image.width, image.height), 0, 0)
   return canvas.encode('png')
