@@ -178,6 +178,10 @@ export const RoomSchema = z.object({
   // walls, is taken off that room, so every square metre is counted once. Optional and never
   // defaulted, so a plan written before ARE-5 reads with no key added (version 1).
   inside: z.boolean().optional(),
+  // ARE-10: the room's height, floor to ceiling, in metres. Optional and never defaulted, so
+  // a plan written before it reads with no key added (version 1). Unstated, the room is as
+  // high as the lowest solid wall round it (`roomHeight` in the command's measuring).
+  height: finite().positive().optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])

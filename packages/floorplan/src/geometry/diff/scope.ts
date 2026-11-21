@@ -164,7 +164,7 @@ function idOnlyRenames(
     } else if (removed.type === 'room') {
       const was = find<Room>(base.rooms, removed.id)
       const is = find<Room>(head.rooms, added.id)
-      if (was && is && allTiny(residual(roomProps(was, is), renames), minMovement)) {
+      if (was && is && allTiny(residual(roomProps(was, is, 0), renames), minMovement)) {
         renames.set(removed.id, added.id)
       }
     }
