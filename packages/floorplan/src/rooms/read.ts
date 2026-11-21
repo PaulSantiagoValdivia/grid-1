@@ -40,7 +40,7 @@ const compassOf = (v: P, table: Readonly<Record<string, P>> = COMPASS): string =
 const floorOf = (part: { floor?: string | undefined }): string => part.floor ?? 'ground'
 const quote = (text: string): string => (text.includes('"') ? `'${text}'` : `"${text}"`)
 /** Lengths that agree to a tenth of a millimetre are the same length here. */
-const SAME = 0.0001
+const SAME = tolerance('roomsWritten')
 
 /** The most common value, the first one met winning a tie. */
 function mostCommon<T>(values: readonly T[], fallback: T): T {

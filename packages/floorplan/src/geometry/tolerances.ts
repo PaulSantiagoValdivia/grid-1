@@ -520,6 +520,15 @@ export const TOLERANCES = {
     decides: 'Ends of two walls closer than this are one joint, and two heights closer than this are one in the 3D build.',
     basis: own
   },
+  roomsWritten: {
+    kind: 'arithmetic',
+    value: 1e-4,
+    unit: 'm',
+    decides:
+      'Rooms text and the plans written from it hold lengths to a tenth of a millimetre, so two ' +
+      'lengths that agree to this are the same when a read-back is checked by writing it again.',
+    basis: own
+  },
   lineHalfWidth: {
     kind: 'arithmetic',
     value: 1e-9,

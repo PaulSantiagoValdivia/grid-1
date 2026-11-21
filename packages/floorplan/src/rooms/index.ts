@@ -4,4 +4,5 @@
  */
 export { compileRoomsText, SIZE_BASES, type DerivedWallFacts, type RoomFacts, type RoomsProblem, type RoomsResult, type SizeBasis } from './compile'
 export { readRoomsText, type ReadOptions, type RoomsReading } from './read'
+export { problemLines, roomsAnswer } from './answer'
 export { boundariesEdited, boundaryPrint, planRevision, restamped, stampFor, type WrittenStamp } from './stamp'
