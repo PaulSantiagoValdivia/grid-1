@@ -16,7 +16,9 @@ import type { FloorPlan, Opening, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
-import { openingSpan, wallAxis } from './wall'
+import type { WallEnds } from './wall'
+import { SQUARE_ENDS, openingSpan, wallAxis } from './wall'
+import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { tryRoomPolygon } from './room'
 import { wallExposure } from './exposure'
@@ -51,6 +53,23 @@ export interface WallElevation {
   readonly thickness: number
   readonly length: number
   readonly height: number
+  /**
+   * How far each face reaches past the ends of the axis where the wall meets others (SHT-2):
+   * the outline is the wall's elevation on its axis, and each face's ends move by these to
+   * the joint (`alongFace`). Zero at an end cut square.
+   */
+  readonly ends: WallEnds
+}
+
+/**
+ * Where a point of the elevation at `u` lies along the wall on one of its faces, once the
+ * corners are joined: a point at either end of the wall moves with that face's end. `left` is
+ * the face the wall's normal points at, the one at `−across`.
+ */
+export function alongFace(elevation: WallElevation, u: number, face: 'left' | 'right'): number {
+  if (u <= 0) return u - elevation.ends.start[face]
+  if (u >= elevation.length) return u + elevation.ends.end[face]
+  return u
 }
 
 /**
@@ -151,7 +170,8 @@ function holeFrom(opening: Opening): Vec2[] {
  */
 export function wallElevation(
   wall: Wall,
-  openings: readonly Opening[] = []
+  openings: readonly Opening[] = [],
+  ends: WallEnds = SQUARE_ENDS
 ): WallElevation | null {
   if (wall.virtual) return null
 
@@ -172,7 +192,8 @@ export function wallElevation(
     holes: openings.map(holeFrom),
     thickness: wall.thickness,
     length,
-    height
+    height,
+    ends
   }
 }
 
@@ -220,6 +241,8 @@ export function buildScene(plan: FloorPlan): Scene3D {
   const dividers: SceneDivider[] = []
   const extent: Vec2[] = []
   let height = 0
+  // The corners, joined as the drawing joins them (SHT-2).
+  const joints = wallJoints(plan.walls.filter((wall) => !broken.has(wall.id)))
 
   for (const wall of plan.walls) {
     if (broken.has(wall.id)) continue
@@ -232,7 +255,8 @@ export function buildScene(plan: FloorPlan): Scene3D {
     }
 
     const usable = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
-    const elevation = wallElevation(wall, usable)
+    const ends = joints.get(wall.id)
+    const elevation = wallElevation(wall, usable, ends)
     if (!elevation) continue
 
     walls.push({
@@ -240,7 +264,7 @@ export function buildScene(plan: FloorPlan): Scene3D {
       elevation,
       basis: wallBasis(wall),
       exposure: wallExposure(index, wall.id),
-      revision: wallRevision(wall, usable)
+      revision: wallRevision(wall, usable, ends)
     })
     if (wall.height > height) height = wall.height
   }

@@ -67,9 +67,14 @@ function writeFailed(project: Project, file: string, error: unknown): never {
   throw new InitRefused(`Can't write ${shown}: ${oneLine((error as Error).message)}`)
 }
 
-/** The starter plan as it is written: two spaces, a line break at the end. */
-export function starterPlanText(): string {
-  return `${JSON.stringify(starterPlan, null, 2)}\n`
+/**
+ * The starter plan as it is written: two spaces, a line break at the end. `projectId`, when
+ * given, is stored in the plan after its units (QAR-5): the IFC builds its identities from it.
+ */
+export function starterPlanText(projectId?: string): string {
+  const { version, units, ...parts } = starterPlan
+  const plan = projectId === undefined ? starterPlan : { version, units, projectId, ...parts }
+  return `${JSON.stringify(plan, null, 2)}\n`
 }
 
 export function initProject(folder: string | undefined, cwd: string): InitDone {
@@ -108,7 +113,9 @@ export function initProject(folder: string | undefined, cwd: string): InitDone {
       writeFailed(project, at(name), error)
     }
   }
-  create(PROJECT_PLAN, starterPlanText(), 'the plan: a starter two-room flat to change')
+  // One id for the project, in the plan (for its exports) and in grid.json (for the rules store).
+  const projectId = randomUUID()
+  create(PROJECT_PLAN, starterPlanText(projectId), 'the plan: a starter two-room flat to change')
   try {
     if (ensureExportsIgnored(project, project.folder)) {
       written.push({ real: at('.gitignore'), what: `keeps ${EXPORTS_DIR}/ out of version history` })
@@ -117,7 +124,7 @@ export function initProject(folder: string | undefined, cwd: string): InitDone {
     writeFailed(project, at('.gitignore'), error)
   }
   // Last, so a folder is a project only once everything else is there.
-  const marker = { version: '1', projectId: randomUUID() }
+  const marker = { version: '1', projectId }
   create(PROJECT_FILE, `${JSON.stringify(marker, null, 2)}\n`, 'marks the folder as a Grid project, with the id the rules store names it by')
   return { project, madeFolder: made, written }
 }

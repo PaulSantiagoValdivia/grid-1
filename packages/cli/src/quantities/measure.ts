@@ -1,12 +1,30 @@
 /**
- * Measuring in a person's terms: a room's sizes and the widest circle it holds, whether a box
- * or a circle fits in it, the way from one room to another with the doors it passes, and what
- * is narrower than a figure the person gives.
+ * Measuring in a person's terms: a room's sizes, height and the widest circle it holds, whether
+ * a box or a circle fits in it, the way from one room to another with the doors it passes, what
+ * is narrower than a figure the person gives, a wall's lengths, and the clear distance between
+ * two things (ARE-10).
  *
  * Every answer measures the empty room between its wall faces: the plan holds no furniture,
  * fixtures, radiators or door leaves, and says so.
  */
-import { planForFloor, poleOfInaccessibility, spotsInside, tolerance, type Vec2 } from '@ongrid/floorplan/geometry'
+import {
+  cross,
+  dot,
+  floorOf,
+  fromTuple,
+  planForFloor,
+  pointAlong,
+  poleOfInaccessibility,
+  spotsInside,
+  sub,
+  tolerance,
+  wallAxis,
+  wallSlicePolygon,
+  type FloorPlan,
+  type Opening,
+  type Vec2,
+  type Wall,
+} from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { floorGraph } from '@ongrid/floorplan/geometry/rules/graph'
 import { compassOf, type Compass } from '../describe/facts'
@@ -168,4 +186,186 @@ export function routeBetween(survey: Survey, from: string, to: string): Route | 
     if (narrowestRoom === null || circle < narrowestRoom.widestCircle) narrowestRoom = { room: id, widestCircle: circle }
   }
   return { from, to, rooms, steps, narrowestPassage, narrowestRoom }
+}
+
+// ---------------------------------------------------------------------------------------------
+// ARE-10: lengths, distances and a room's height, measured from faces as a person measures.
+
+export const FACES_RULE =
+  'Measured between faces, as a tape would be: a wall by its faces, a door or window by the edges of its hole in the wall, a room by its inside outline. Centre lines are used only for a wall\'s own length.'
+
+export const HEIGHT_RULE =
+  'A room is as high as the plan states for it. When it states none, the room is as high as the lowest solid wall round it, since a level ceiling rests on all of them; dividing lines stand no height and are left out.'
+
+/** A room's height and where it comes from. */
+export interface RoomHeight {
+  /** In metres; null when the plan states none and no solid wall bounds the room. */
+  readonly value: number | null
+  /** `room`: the room states it; `walls`: its solid walls agree; `lowest wall`: they differ and the lowest wins. */
+  readonly from: 'room' | 'walls' | 'lowest wall' | null
+  /** The solid walls round the room: the lowest and highest height, and the walls at the lowest, by id. Null when there are none. */
+  readonly walls: { readonly low: number; readonly high: number; readonly lowest: readonly string[] } | null
+}
+
+/**
+ * The rule for a room's height (ARE-10): a height the room states wins; else the lowest solid
+ * wall its boundary lists, because a level ceiling rests on every one of them. A wall that
+ * states no height takes its floor's stated height (LVL-1), else the schema's 2.7 m, which
+ * cannot be told from a stated 2.7 m (AU3).
+ */
+export function roomHeight(plan: FloorPlan, roomId: string): RoomHeight {
+  const room = plan.rooms.find((r) => r.id === roomId)
+  const byId = new Map(plan.walls.map((w) => [w.id, w]))
+  const solid = [...new Set(room?.boundary ?? [])]
+    .map((id) => byId.get(id))
+    .filter((w): w is Wall => w !== undefined && w.virtual !== true && w.height > 0)
+  let walls: RoomHeight['walls'] = null
+  if (solid.length > 0) {
+    const low = Math.min(...solid.map((w) => w.height))
+    const high = Math.max(...solid.map((w) => w.height))
+    walls = { low, high, lowest: solid.filter((w) => w.height - low < tolerance('joint')).map((w) => w.id) }
+  }
+  if (room?.height !== undefined) return { value: room.height, from: 'room', walls }
+  if (walls === null) return { value: null, from: null, walls }
+  return { value: walls.low, from: walls.high - walls.low < tolerance('joint') ? 'walls' : 'lowest wall', walls }
+}
+
+/** A wall's length on its centre line, and the stretch of each room's inside outline along it. */
+export interface WallLengths {
+  readonly id: string
+  readonly floor: string
+  readonly length: number
+  readonly thickness: number
+  readonly height: number
+  readonly virtual: boolean
+  readonly faces: ReadonlyArray<{ readonly room: string; readonly name: string; readonly length: number }>
+}
+
+export function wallLengths(survey: Survey, wall: Wall): WallLengths {
+  const faces = survey.rooms
+    .map((room) => ({
+      room: room.facts.id,
+      name: room.facts.name,
+      length: room.edges.filter((edge) => edge.wall?.id === wall.id).reduce((sum, edge) => sum + edge.length, 0),
+    }))
+    .filter((face) => face.length > tolerance('joint'))
+  return {
+    id: wall.id,
+    floor: floorOf(wall),
+    length: Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]),
+    thickness: wall.virtual === true ? 0 : wall.thickness,
+    height: wall.height,
+    virtual: wall.virtual === true,
+    faces,
+  }
+}
+
+/** Something to measure from: its kind, id, floor and outline in plan (a polygon, a line or a point). */
+export interface Thing {
+  readonly kind: 'wall' | 'opening' | 'room' | 'point'
+  readonly id: string | null
+  /** Null for a free point, which takes the floor of what it is measured to. */
+  readonly floor: string | null
+  readonly shape: readonly Vec2[]
+}
+
+/** A wall's footprint: its faces, or its line when it is a dividing line. */
+function wallShape(wall: Wall, from: number, to: number): Vec2[] {
+  const axis = wallAxis(wall)
+  if (wall.virtual === true) return [pointAlong(axis, from), pointAlong(axis, to)]
+  return wallSlicePolygon(wall, from, to)
+}
+
+export function wallThing(wall: Wall): Thing {
+  const length = Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
+  const shape = length < tolerance('noLength') ? [fromTuple(wall.start)] : wallShape(wall, 0, length)
+  return { kind: 'wall', id: wall.id, floor: floorOf(wall), shape }
+}
+
+/** An opening's hole through its wall: from its near edge to its far edge, face to face. */
+export function openingThing(opening: Opening, wall: Wall): Thing {
+  return { kind: 'opening', id: opening.id, floor: floorOf(wall), shape: wallShape(wall, opening.offset, opening.offset + opening.width) }
+}
+
+export function roomThing(room: SurveyRoom): Thing {
+  return { kind: 'room', id: room.facts.id, floor: room.facts.floor, shape: room.polygon }
+}
+
+export function pointThing(point: Vec2): Thing {
+  return { kind: 'point', id: null, floor: null, shape: [point] }
+}
+
+export interface Distance {
+  /** The clear distance in metres; 0 when the two touch or overlap. */
+  readonly distance: number
+  /** The nearest point of each, the first thing's first. */
+  readonly at: readonly [Vec2, Vec2]
+  /** Which way the second is from the first on the drawing; null when they touch. */
+  readonly toward: Compass | null
+}
+
+type Segment = readonly [Vec2, Vec2]
+
+function segmentsOf(shape: readonly Vec2[]): Segment[] {
+  if (shape.length === 1) return [[shape[0]!, shape[0]!]]
+  if (shape.length === 2) return [[shape[0]!, shape[1]!]]
+  return shape.map((p, i) => [p, shape[(i + 1) % shape.length]!] as const)
+}
+
+function nearestOnSegment(p: Vec2, [a, b]: Segment): Vec2 {
+  const ab = sub(b, a)
+  const span = dot(ab, ab)
+  if (span < tolerance('noLength') ** 2) return a
+  const t = Math.max(0, Math.min(1, dot(sub(p, a), ab) / span))
+  return { x: a.x + ab.x * t, y: a.y + ab.y * t }
+}
+
+/** Where two segments cross, when they cross away from each other's ends. */
+function crossing([a, b]: Segment, [c, d]: Segment): Vec2 | null {
+  const r = sub(b, a)
+  const s = sub(d, c)
+  const denominator = cross(r, s)
+  if (Math.abs(denominator) < tolerance('noLength')) return null
+  const t = cross(sub(c, a), s) / denominator
+  const u = cross(sub(c, a), r) / denominator
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null
+  return { x: a.x + r.x * t, y: a.y + r.y * t }
+}
+
+function holds(shape: readonly Vec2[], p: Vec2): boolean {
+  if (shape.length < 3) return false
+  let inside = false
+  for (let i = 0, j = shape.length - 1; i < shape.length; j = i++) {
+    const a = shape[i]!
+    const b = shape[j]!
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
+}
+
+/** The clear distance between two things, outline to outline. */
+export function distanceBetween(first: Thing, second: Thing): Distance {
+  const touching = (p: Vec2): Distance => ({ distance: 0, at: [p, p], toward: null })
+  if (holds(first.shape, second.shape[0]!)) return touching(second.shape[0]!)
+  if (holds(second.shape, first.shape[0]!)) return touching(first.shape[0]!)
+  let best: Distance | null = null
+  for (const a of segmentsOf(first.shape)) {
+    for (const b of segmentsOf(second.shape)) {
+      const met = crossing(a, b)
+      if (met !== null) return touching(met)
+      const pairs: Array<readonly [Vec2, Vec2]> = [
+        [a[0], nearestOnSegment(a[0], b)],
+        [a[1], nearestOnSegment(a[1], b)],
+        [nearestOnSegment(b[0], a), b[0]],
+        [nearestOnSegment(b[1], a), b[1]],
+      ]
+      for (const [p, q] of pairs) {
+        const d = Math.hypot(q.x - p.x, q.y - p.y)
+        if (best === null || d < best.distance) best = { distance: d, at: [p, q], toward: null }
+      }
+    }
+  }
+  const found = best!
+  if (found.distance < tolerance('joint')) return touching(found.at[0])
+  return { ...found, toward: compassOf(sub(found.at[1], found.at[0])) }
 }

@@ -129,6 +129,12 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
     if (prop(change, 'boundary')) parts.push('walls changed')
     const floor = prop(change, 'floor')
     if (floor) parts.push(`moved to ${quoted(floorName(text(floor.after)))}`)
+    // ARE-10: a room's own height, which it may leave unstated.
+    const height = prop(change, 'height')
+    if (height) {
+      const said = (value: unknown): string => (value === null ? 'not stated' : `${metres(Number(value))} m`)
+      parts.push(`height ${said(height.before)} → ${said(height.after)}`)
+    }
     return `${subject} ${parts.join('; ')}`
   }
 

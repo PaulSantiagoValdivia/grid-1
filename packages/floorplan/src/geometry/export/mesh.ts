@@ -16,6 +16,7 @@
 
 import type { Vec2 } from '../vec2'
 import type { SceneSlab, SceneWall, Vec3 } from '../scene3d'
+import { alongFace } from '../scene3d'
 import { triangulate } from '../triangulate'
 
 export type Face = readonly [number, number, number]
@@ -75,11 +76,16 @@ export function wallMesh(wall: SceneWall): Mesh | null {
   if (triangles.length === 0) return null
 
   const half = elevation.thickness / 2
-  const place = (p: Vec2, across: number): Vec3 => ({
-    x: basis.origin.x + basis.along.x * p.x + basis.up.x * p.y + basis.across.x * across,
-    y: basis.origin.y + basis.along.y * p.x + basis.up.y * p.y + basis.across.y * across,
-    z: basis.origin.z + basis.along.z * p.x + basis.up.z * p.y + basis.across.z * across
-  })
+  // `across` is the wall's right face (`−normal`): the front face is the right one. Each face's
+  // ends go where the corners put them (SHT-2).
+  const place = (p: Vec2, across: number): Vec3 => {
+    const u = alongFace(elevation, p.x, across > 0 ? 'right' : 'left')
+    return {
+      x: basis.origin.x + basis.along.x * u + basis.up.x * p.y + basis.across.x * across,
+      y: basis.origin.y + basis.along.y * u + basis.up.y * p.y + basis.across.y * across,
+      z: basis.origin.z + basis.along.z * u + basis.up.z * p.y + basis.across.z * across
+    }
+  }
 
   // Vertex i is on the front face; vertex n + i is the same point on the back.
   const n = vertices.length

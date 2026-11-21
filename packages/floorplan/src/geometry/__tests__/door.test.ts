@@ -84,11 +84,15 @@ describe('the leaf', () => {
     expect(dot(along, leaf)).toBeCloseTo(0, 9)
   })
 
-  it('hangs from the jamb the hinge names', () => {
+  // SHT-2 (lab DR-7): the hinge is on the face the door opens towards, half the 0.2 m wall
+  // from the axis, no longer on the centre line.
+  it('hangs from the jamb the hinge names, on the face it opens towards', () => {
     const opening = openingOf(wallPlan(3, 0))
+    const face = (p: Vec2, side: number): Vec2 => vec(p.x + opening.normal.x * 0.1 * side, p.y + opening.normal.y * 0.1 * side)
 
-    expect(doorSwing(opening, 'start', 'left')!.hinge).toEqual(opening.from)
-    expect(doorSwing(opening, 'end', 'left')!.hinge).toEqual(opening.to)
+    expect(distance(doorSwing(opening, 'start', 'left')!.hinge, face(opening.from, 1))).toBeCloseTo(0, 12)
+    expect(distance(doorSwing(opening, 'end', 'left')!.hinge, face(opening.to, 1))).toBeCloseTo(0, 12)
+    expect(distance(doorSwing(opening, 'start', 'right')!.hinge, face(opening.from, -1))).toBeCloseTo(0, 12)
   })
 })
 
@@ -111,14 +115,11 @@ describe('which side it opens to', () => {
     const left = doorSwing(opening, 'end', 'left')!
     const right = doorSwing(opening, 'end', 'right')!
 
-    expect(left.hinge).toEqual(right.hinge)
-    // Reflected across the axis: the two open tips are equidistant from it and
-    // their midpoint sits back on the wall.
-    const mid = {
-      x: (left.leaf[1].x + right.leaf[1].x) / 2,
-      y: (left.leaf[1].y + right.leaf[1].y) / 2
-    }
-    expect(distance(mid, left.hinge)).toBeCloseTo(0, 9)
+    // Reflected across the axis: the two hinges, on opposite faces since SHT-2, and the two
+    // open tips are each equidistant from it, and each pair's midpoint is the jamb on the axis.
+    const midOf = (a: Vec2, b: Vec2): Vec2 => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+    expect(distance(midOf(left.hinge, right.hinge), opening.to)).toBeCloseTo(0, 9)
+    expect(distance(midOf(left.leaf[1], right.leaf[1]), opening.to)).toBeCloseTo(0, 9)
   })
 })
 
@@ -142,8 +143,10 @@ describe('the arc', () => {
       y: swing.arc.center.y + swing.arc.radius * Math.sin(a)
     })
 
-    // Closed, the leaf lies in the opening, reaching the far jamb.
-    expect(distance(atAngle(swing.arc.from), opening.to)).toBeCloseTo(0, 9)
+    // Closed, the leaf lies across the opening on the face it opens to (SHT-2), reaching the
+    // far jamb there.
+    const farJamb = vec(opening.to.x + opening.normal.x * 0.1, opening.to.y + opening.normal.y * 0.1)
+    expect(distance(atAngle(swing.arc.from), farJamb)).toBeCloseTo(0, 9)
     expect(distance(atAngle(swing.arc.to), swing.leaf[1])).toBeCloseTo(0, 9)
   })
 

@@ -123,6 +123,17 @@ export const TOLERANCES = {
       'face. Faces further apart are joined by a step of that size.',
     basis: own
   },
+  mitreReach: {
+    kind: 'tolerance',
+    value: 4,
+    unit: 'ratio',
+    decides:
+      'How far a joined corner may reach along a wall from the point where the walls meet, in ' +
+      'half thicknesses of the thicker wall. Walls meeting at so sharp an angle that their faces ' +
+      'cross further out than this are left cut square there, as a drawing would bevel them, ' +
+      'instead of ending in a long spike.',
+    basis: own
+  },
   swingContact: {
     kind: 'tolerance',
     value: 0.01,

@@ -88,15 +88,15 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after MSG-14) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after SHT-2) | The lab's own figure |
 |---|---:|---:|---:|
 | Rooms measured wrong | 1,975 | 197 | baseline 829 + 1,145 = 1,974 |
-| Damage that passes in silence | 560 | 388 | baseline 560 |
+| Damage that passes in silence | 560 | 386 | baseline 560 |
 | Turns answered | 15 | 15 | 15 |
 | Design mistakes named | 2 | 2 | 2 |
 | Checks the plan can feed | 5 | 5 | 5 |
 | Guard: rooms Grid does not measure | 1,284 | 724 | – |
-| Guard: sound plans with a warning | 70 | 70 | 70 |
+| Guard: sound plans with a warning | 70 | 95 | 70 |
 
 The baseline is commit `76caeb8`, the roadmap's reference point from before the week's work.
 It was built and run once in a temporary `git worktree` outside the repository, with this same
@@ -213,6 +213,26 @@ leave the kind out, which the lab's own plans show (`reviews/MSG-13.md`). A full
 MSG-14 (rooms joined along the whole of a dividing line, cut-off rooms named when the way out is
 not checked, the "space not drawn" note on every floor) moved no count: the damage set's plans
 draw no dividing line that crosses another, and the damage outcomes are as they were.
+
+SHT-2 (walls joined at their corners, and door leaves hung from the face of the wall they open
+towards) moved two counts:
+
+- Guard: sound plans with a warning, 70 to 95 (warnings 91 to 135). All 44 new lines are
+  `opening/doors-collide`, none `opening/door-blocked`, and no line went away. Each leaf now
+  starts half its wall's thickness further into the room it opens into, so two doors that
+  open into one corner of a room, or towards each other across a hall, now overlap by a few
+  centimetres where their leaves from the centre lines missed. In `random 6`, for example, the
+  two 0.95 m leaves overlap across about 4 cm; from the centre lines they missed by about 13 cm.
+  The sound plans' generator placed its doors against the old reach. The guard rises for that
+  reason, and the figure is stored.
+- Damage that passes in silence, 387 to 386, and one more plan caught vaguely (109 to 110): a
+  damaged plan whose change now moves a door warning.
+- Rooms measured wrong stays 197: the room outlines are as they were (`reviews/SHT-2.md`).
+
+The same run stores two figures of the detail that had moved earlier without a count moving:
+since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435
+rooms are compared, not 16,451. SHT-2 changes neither: the schema reads the same 1,100 of the
+1,131 lab plans before and after it.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The

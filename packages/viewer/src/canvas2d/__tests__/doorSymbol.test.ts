@@ -49,12 +49,12 @@ describe('doorSymbolOf', () => {
 
   it('draws the hand-checked case: wall along +X, hinged at its start, opening to the left face', () => {
     // The opening runs from (1, 0) to (1.9, 0); the wall normal is +Y. In SVG
-    // the plan's Y is flipped.
+    // the plan's Y is flipped. The leaf hangs from the left face, y = 0.1 (SHT-2).
     const symbol = doorSymbolOf(doorOn(0), { hinge: 'start', swing: 'left' })!
-    close(symbol.leaf[0], { x: 1, y: 0 })
-    close(symbol.leaf[1], { x: 1, y: -0.9 })
+    close(symbol.leaf[0], { x: 1, y: -0.1 })
+    close(symbol.leaf[1], { x: 1, y: -1 })
     // From the leaf tip clockwise on screen (positive angle in SVG) back to the far jamb.
-    expect(symbol.arc).toBe('M1.0000,-0.9000A0.9000,0.9000 0 0 1 1.9000,0.0000')
+    expect(symbol.arc).toBe('M1.0000,-1.0000A0.9000,0.9000 0 0 1 1.9000,-0.1000')
     close(symbol.jambs[0][0], { x: 1, y: -0.1 })
     close(symbol.jambs[0][1], { x: 1, y: 0.1 })
     close(symbol.jambs[1][0], { x: 1.9, y: -0.1 })
@@ -78,8 +78,14 @@ describe('doorSymbolOf', () => {
         const door = doorOn(angle)
         const symbol = doorSymbolOf(door, { hinge, swing })!
         const flip = (p: { x: number; y: number }) => ({ x: p.x, y: -p.y })
-        const pivot = flip(hinge === 'start' ? door.from : door.to)
-        const far = flip(hinge === 'start' ? door.to : door.from)
+        // Both jambs on the face the door opens to, half the wall off the axis (SHT-2).
+        const side = swing === 'left' ? 1 : -1
+        const onFace = (p: { x: number; y: number }) => ({
+          x: p.x + (door.normal.x * door.thickness * side) / 2,
+          y: p.y + (door.normal.y * door.thickness * side) / 2
+        })
+        const pivot = flip(onFace(hinge === 'start' ? door.from : door.to))
+        const far = flip(onFace(hinge === 'start' ? door.to : door.from))
         const arc = readArc(symbol.arc)
 
         // The leaf hangs from the hinge jamb, as long as the door is wide.

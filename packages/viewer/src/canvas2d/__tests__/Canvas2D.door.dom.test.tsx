@@ -48,14 +48,15 @@ describe('Canvas2D: the door symbol', () => {
     expect(symbol.querySelectorAll('[data-part="jamb"]')).toHaveLength(2)
 
     // Front door on w1 (along +X), 1 m from its start, 0.9 m wide: the leaf
-    // stands on the start jamb and opens into the house (+Y, so up in SVG).
+    // stands on the start jamb and opens into the house (+Y, so up in SVG). It
+    // hangs from the inside face of the 0.2 m wall, y = 0.1 (SHT-2).
     const leaf = symbol.querySelector('[data-part="door-leaf"]')!
     expect(Number(leaf.getAttribute('x1'))).toBeCloseTo(1, 4)
-    expect(Number(leaf.getAttribute('y1'))).toBeCloseTo(0, 4)
+    expect(Number(leaf.getAttribute('y1'))).toBeCloseTo(-0.1, 4)
     expect(Number(leaf.getAttribute('x2'))).toBeCloseTo(1, 4)
-    expect(Number(leaf.getAttribute('y2'))).toBeCloseTo(-0.9, 4)
+    expect(Number(leaf.getAttribute('y2'))).toBeCloseTo(-1, 4)
     expect(symbol.querySelector('[data-part="door-arc"]')!.getAttribute('d')).toBe(
-      'M1.0000,-0.9000A0.9000,0.9000 0 0 1 1.9000,0.0000'
+      'M1.0000,-1.0000A0.9000,0.9000 0 0 1 1.9000,-0.1000'
     )
 
     // Its gap drops the outline along the wall faces.

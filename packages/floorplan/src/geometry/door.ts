@@ -42,7 +42,7 @@ export interface SwingArc {
 }
 
 export interface DoorSwing {
-  /** The pivot: the jamb the leaf hangs from. */
+  /** The pivot: the jamb the leaf hangs from, on the face of the wall it opens towards. */
   readonly hinge: Vec2
   /** The leaf in its open position, from the hinge outward. */
   readonly leaf: readonly [Vec2, Vec2]
@@ -76,12 +76,16 @@ export function doorSwing(
   // would hand back a direction that is not one.
   if (width <= 0) return null
 
-  const pivot = hinge === 'start' ? opening.from : opening.to
-  const farJamb = hinge === 'start' ? opening.to : opening.from
-
-  // Closed, the leaf lies in the opening and reaches the other jamb.
-  const closed = normalize(sub(farJamb, pivot))
   const open = side === 'left' ? opening.normal : scale(opening.normal, -1)
+  // The leaf hangs from the face of the wall it opens towards, not from the wall's centre line
+  // (SHT-2, lab DR-7): its reach is measured from there. A dividing line has no thickness, so a
+  // door in one hangs on the line.
+  const face = scale(open, opening.thickness / 2)
+  const pivot = add(hinge === 'start' ? opening.from : opening.to, face)
+  const farJamb = add(hinge === 'start' ? opening.to : opening.from, face)
+
+  // Closed, the leaf lies across the opening on that face and reaches the other jamb.
+  const closed = normalize(sub(farJamb, pivot))
 
   const tip = add(pivot, scale(open, width))
 

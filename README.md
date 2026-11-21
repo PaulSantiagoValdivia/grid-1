@@ -70,7 +70,7 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_areas` | Each room's size and net area, totals by use, gross areas, in metres or feet, as text or CSV, with the measuring rule stated |
 | `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; text or CSV |
-| `grid_measure` | A room's sizes and widest circle, whether a box or a circle fits, the way between rooms with every door passed, and what is narrower than the person's own figure |
+| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; and what is narrower than the person's own figure |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe` |
 | `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
@@ -82,8 +82,8 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |
 
 A tool that names no plan reads the project's `plan.json` in a folder `grid init` made. A floor
-or room the plan does not have is refused with the ones it has, and the word sent is never
-repeated back. A request line over 1 MiB and an id over 64 characters are refused, naming the
+or room the plan does not have is refused with the ones it has, a room, wall, door or window
+with the nearest id the plan has, and the word sent is never repeated back. A request line over 1 MiB and an id over 64 characters are refused, naming the
 limit. A change that would leave the drawing with a new problem is refused and nothing is
 written; otherwise only the change is written back, and keys Grid does not know stay. The
 answer to a change also names every door or doorless opening that now joins other rooms, read
@@ -91,6 +91,35 @@ from where it stands: `bath-door joined bath and lounge; it now joins kitchen an
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
+
+### Measuring from faces, and a room's height
+
+`grid_measure` measures as a person with a tape does, so an agent does no arithmetic of its own.
+`what=between` gives the clear distance from one wall, door, window, opening or room to another,
+or to a point given as `x` and `y` (the plan names no points): a wall by its faces, an opening
+by the edges of its hole in the wall, a room by its inside outline. A door's distance from the
+inside corner is the distance between the door and the wall at that corner: in a house whose
+entrance sits 1.00 m along the south wall's centre line, with a west wall 0.30 m thick, the
+answer is 0.85 m, not 1.00 m. Two things on different floors are refused. `what=wall` gives a
+wall's length on its centre line and the length of its face in each room beside it.
+
+A room may state its height, floor to ceiling, in metres:
+
+```json
+{ "id": "loft", "name": "Loft room", "boundary": ["l1", "l2", "l3", "l4"], "height": 2.3 }
+```
+
+`what=room` gives the height and where it comes from, by this rule:
+
+1. A height the room states wins, whatever its walls stand; the answer gives their heights beside it.
+2. Otherwise, when the solid walls round the room all stand one height, the room is that high.
+3. When they differ, the room is as high as the lowest of them, because a level ceiling rests on
+   every wall round it. The answer names the lowest walls and the highest height.
+4. Dividing lines stand no height and are left out. With no solid wall round it, the height is
+   not known.
+
+A wall that states no height gets 2.7 m, which cannot be told from a stated 2.7 m. The plan
+comparison in `@ongrid/floorplan` (`diffPlans`) reports a room height stated, changed or taken out.
 
 ### Installing Grid in an agent
 
@@ -391,6 +420,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `strayCorner` | tolerance | 1 m | A room corner further than this from both its walls is not a corner, and the wall list is out of order |
 | `nearlyParallel` | tolerance | 0.2588 sine | Neighbouring walls closer to parallel than 15 degrees may be one straight side |
 | `sameFace` | tolerance | 0.000001 m | Two faces in a row this close are one face; further apart they are joined by a step |
+| `mitreReach` | tolerance | 4 ratio | How far a joined corner may reach along a wall, in half thicknesses of the thicker wall; sharper corners are left cut square |
 | `swingContact` | tolerance | 0.01 m | How far a wall must reach into a door's swing, or two swings overlap, to be in the way |
 | `stepPastFace` | tolerance | 0.05 m | How far past a wall's face the route check steps through a door |
 | `areaReported` | tolerance | 0.01 m² | The smallest area a message names; a room "wholly inside" another may have this much outside it |
@@ -441,7 +471,7 @@ npx --no grid export --format dxf
 | Path | What it is |
 |---|---|
 | `grid.json` | Marks the folder as a Grid project, and holds the project's id |
-| `plan.json` | A starter plan: a two-room flat with its room uses and door swings stated, to change |
+| `plan.json` | A starter plan: a two-room flat with its room uses and door swings stated, to change. It stores the same project id |
 | `exports/` | Where `grid export` writes |
 | `.gitignore` | The line `exports/`, added when it isn't there |
 
@@ -492,6 +522,13 @@ Grid sanitises it rather than refusing it, and says so on standard error: a name
 keeps for a device gets `plan-` in front (`plan-con.dxf`); a name longer than five words or
 40 characters, or one that reads as a claim about the plan or an instruction, becomes
 `floor-plan`; one floor of several is named by its place in the plan (`house-floor-2.dxf`).
+
+Every export writes the plan's walls, rooms and openings in id order (`w2` before `w10`), so the
+same building gives the same bytes whatever order its file lists them in, and two exports can be
+compared line by line. The IFC gives each element an identity made from the plan's `projectId`
+with the element's kind, floor and id, so a re-export is recognised as the same model whatever
+the plan file is called; keep those ids stable. A plan with no `projectId` falls back to the
+plan file's name.
 
 ## Licence
 

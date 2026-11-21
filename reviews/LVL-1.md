@@ -166,3 +166,18 @@ vaguely; the silent count is unchanged.
 The first run found 5 damaged plans that threw: a floor level set to 1e9 made the gap check list
 every missing level. The check now walks only the levels the plan has, and names a long run as a
 range (`levels.test.ts`, "names a long run of missing levels as a range").
+
+### After merging `main` (`ffa73e0`: SHT-2, ARE-10, QAR-5)
+
+Main's stored figures already had 386 silent damaged plans, 95 sound plans with a warning (from
+SHT-2) and 25 unreadable lab plans. On the merged branch every count is main's, except the same
+guard: rooms Grid does not measure 724 → 727, for the reason above. Lab plans Grid cannot read
+25 → 23; damage named 1907 → 1916, refused by the schema 506 → 504, named vaguely 110 → 105. Stored
+in `scoreboard/current.json` with the merge.
+
+The merge had two conflicts, both text: `pinned-tests.md` keeps QAR-5's paragraph and this one,
+and `current.json` was stored again from the merged run. ARE-10's room height reads the heights
+of the walls round a room, so a room on a floor that states its height now follows it for walls
+that state none; its comment in `packages/cli/src/quantities/measure.ts` now says so. No IFC
+golden file conflicted or changed: a plan that states no level exports as before.
+

@@ -264,6 +264,28 @@ describe('a solid wall', () => {
   })
 })
 
+/** ARE-10: a room may state its height, floor to ceiling, in metres. */
+describe('a room’s height', () => {
+  const withHeight = (height: unknown) => ({ ...v1Plan, rooms: [{ id: 'r1', name: 'Living room', boundary: ['w1', 'w2'], height }] })
+  const problems = (raw: unknown) => FloorPlanSchema.safeParse(raw).error?.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+
+  it('is absent from an old plan’s rooms, which round-trip byte-stable', () => {
+    const parsed = parseFloorPlan(v1Plan)
+    expect('height' in parsed.rooms[0]!).toBe(false)
+    expect(JSON.stringify(parsed.rooms)).toBe(JSON.stringify(v1Plan.rooms))
+  })
+
+  it('keeps the height a room states', () => {
+    expect(parseFloorPlan(withHeight(2.55)).rooms[0]!.height).toBe(2.55)
+  })
+
+  it('is refused at 0, below it, or as text, by name', () => {
+    expect(problems(withHeight(0))).toEqual(['rooms.0.height: Number must be greater than 0'])
+    expect(problems(withHeight(-2.4))).toEqual(['rooms.0.height: Number must be greater than 0'])
+    expect(problems(withHeight('2.4'))).toEqual(['rooms.0.height: Expected number, received string'])
+  })
+})
+
 describe('known failures (expected to fail until fixed)', () => {
   const rect = (extra: object = {}) =>
     ([[0, 0], [5, 0], [5, 4], [0, 4]] as const).map((start, i, all) => ({
@@ -280,5 +302,27 @@ describe('known failures (expected to fail until fixed)', () => {
       said = true
     }
     expect(said).toBe(true)
+  })
+})
+
+describe('the project id (QAR-5)', () => {
+  it('is absent from an old plan, which gains no key', () => {
+    const parsed = parseFloorPlan(v1Plan)
+    expect('projectId' in parsed).toBe(false)
+    expect(JSON.parse(JSON.stringify(parsed))).toEqual(v1Plan)
+  })
+
+  it('round-trips when stated', () => {
+    const plan = { ...v1Plan, projectId: '6f1c2a9e-0b7d-4c55-9e0a-3d2f1b8c7a64' }
+    expect(parseFloorPlan(plan).projectId).toBe('6f1c2a9e-0b7d-4c55-9e0a-3d2f1b8c7a64')
+    expect(JSON.parse(JSON.stringify(parseFloorPlan(plan)))).toEqual(plan)
+  })
+
+  it('is refused when empty, not text, or not one line', () => {
+    for (const projectId of ['', 7, 'two\nlines']) {
+      const result = FloorPlanSchema.safeParse({ ...v1Plan, projectId })
+      expect(result.success, JSON.stringify(projectId)).toBe(false)
+      if (!result.success) expect(result.error.issues[0]!.path).toEqual(['projectId'])
+    }
   })
 })

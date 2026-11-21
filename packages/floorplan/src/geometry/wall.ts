@@ -3,7 +3,8 @@
  *
  * A wall arrives as a segment with no thickness (`start` → `end`) plus a
  * number (`thickness`). Here it becomes the shapes both views draw: a polygon
- * in plan, and a list of parts to raise in 3D.
+ * in plan, and a list of parts to raise in 3D. Its ends are cut as the joints
+ * with other walls decide (`joints.ts`), and square where it meets none.
  */
 
 import type { Opening, Wall } from './plan'
@@ -64,22 +65,55 @@ export function wallCenterline(wall: Wall): [Vec2, Vec2] {
 }
 
 /**
+ * How far each face of a wall reaches past one end of its axis, in metres: positive runs past
+ * the end, negative stops short of it. `left` is the face the normal points at. Both are 0 at an
+ * end cut square; where walls meet, `wallJoints` (joints.ts) decides them (SHT-2).
+ */
+export interface FaceReach {
+  readonly left: number
+  readonly right: number
+}
+
+/** The reach of a wall's faces at both ends. */
+export interface WallEnds {
+  readonly start: FaceReach
+  readonly end: FaceReach
+}
+
+/** A wall cut square at both ends: one that meets no other. */
+export const SQUARE_ENDS: WallEnds = { start: { left: 0, right: 0 }, end: { left: 0, right: 0 } }
+
+/**
  * Polygon of a run of the wall in plan, between `from` and `to` meters from
  * `start`. The four vertices come out in order, ready for a `<path>`.
+ *
+ * A run that reaches an end of the wall takes that end's corner from `ends`: each face runs
+ * to where the joint puts it. A run too short for its corner (a door hard against it) keeps
+ * the face no shorter than the run's other end.
  */
-export function wallSlicePolygon(wall: Wall, from: number, to: number): Vec2[] {
+export function wallSlicePolygon(wall: Wall, from: number, to: number, ends: WallEnds = SQUARE_ENDS): Vec2[] {
   const axis = wallAxis(wall)
   const half = wall.thickness / 2
   const offsetLeft = scale(axis.normal, half)
   const offsetRight = scale(axis.normal, -half)
-  const a = pointAlong(axis, from)
-  const b = pointAlong(axis, to)
-  return [add(a, offsetLeft), add(b, offsetLeft), add(b, offsetRight), add(a, offsetRight)]
+  const none = tolerance('noLength')
+  const atStart = from <= none
+  const atEnd = to >= axis.length - none
+  const leftFrom = atStart ? from - ends.start.left : from
+  const rightFrom = atStart ? from - ends.start.right : from
+  const leftTo = Math.max(atEnd ? to + ends.end.left : to, leftFrom)
+  const rightTo = Math.max(atEnd ? to + ends.end.right : to, rightFrom)
+  return [
+    add(pointAlong(axis, leftFrom), offsetLeft),
+    add(pointAlong(axis, leftTo), offsetLeft),
+    add(pointAlong(axis, rightTo), offsetRight),
+    add(pointAlong(axis, rightFrom), offsetRight)
+  ]
 }
 
-/** Polygon of the whole wall, with no openings taken out. */
-export function wallPolygon(wall: Wall): Vec2[] {
-  return wallSlicePolygon(wall, 0, wallAxis(wall).length)
+/** Polygon of the whole wall, with no openings taken out, its corners as `ends` puts them. */
+export function wallPolygon(wall: Wall, ends: WallEnds = SQUARE_ENDS): Vec2[] {
+  return wallSlicePolygon(wall, 0, wallAxis(wall).length, ends)
 }
 
 /** How far an opening reaches along the wall, measured from `start`. */
@@ -185,8 +219,8 @@ export function wallParts(wall: Wall, openings: readonly Opening[] = []): WallPa
  * A lintel is invisible from above — looking down at the house, a door is just
  * a gap — so the plan view only needs the `solid` pieces.
  */
-export function wallPlanSlices(wall: Wall, openings: readonly Opening[] = []): Vec2[][] {
+export function wallPlanSlices(wall: Wall, openings: readonly Opening[] = [], ends: WallEnds = SQUARE_ENDS): Vec2[][] {
   return wallParts(wall, openings)
     .filter((part) => part.kind === 'solid')
-    .map((part) => wallSlicePolygon(wall, part.from, part.to))
+    .map((part) => wallSlicePolygon(wall, part.from, part.to, ends))
 }

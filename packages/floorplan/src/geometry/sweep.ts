@@ -22,7 +22,9 @@ import { planFloors, planForFloor } from './floors'
 import type { Vec2 } from './vec2'
 import { tolerance } from './tolerances'
 import { add, cross, distance, dot, length, lerp, perp, scale, signedArea, sub, vec } from './vec2'
+import type { WallEnds } from './wall'
 import { wallParts, wallSlicePolygon } from './wall'
+import { wallJoints } from './joints'
 
 /** One door's swing, as the caller knows it. Either half may be missing. */
 export interface DoorSwingValues {
@@ -143,12 +145,13 @@ function reachesInto(frame: DoorFrame, rectangle: readonly Vec2[]): boolean {
  * The rectangles of a wall a door leaf can hit: the runs that stand on the
  * floor. Solid runs and the sill under a window count; a lintel is above the
  * leaf, and another wall's doorway is a gap the leaf swings into. Each one is
- * the axis ± thickness/2 (C1).
+ * the axis ± thickness/2 (C1), with its corners joined as the drawing joins
+ * them (SHT-2).
  */
-function standingParts(wall: Wall, openings: readonly Opening[]): Vec2[][] {
+function standingParts(wall: Wall, openings: readonly Opening[], ends: WallEnds | undefined): Vec2[][] {
   return wallParts(wall, openings)
     .filter((part) => part.zFrom <= tolerance('noLength'))
-    .map((part) => wallSlicePolygon(wall, part.from, part.to))
+    .map((part) => wallSlicePolygon(wall, part.from, part.to, ends))
 }
 
 /** How finely a sweep's arc is flattened for the door-against-door test. */
@@ -237,10 +240,11 @@ export function validateDoorSweeps(
     // Every real wall this storey draws, as the rectangles a leaf can hit.
     const blockers: { readonly id: string; readonly parts: readonly Vec2[][] }[] = []
     const drawnWalls = new Set(drawing.walls.map((w) => w.id))
+    const joints = wallJoints(slice.walls.filter((w) => drawnWalls.has(w.id)))
     for (const w of slice.walls) {
       if (w.virtual || !drawnWalls.has(w.id)) continue
       const openings = slice.openings.filter((o) => o.wall === w.id && drawnById.has(o.id))
-      blockers.push({ id: w.id, parts: standingParts(w, openings) })
+      blockers.push({ id: w.id, parts: standingParts(w, openings, joints.get(w.id)) })
     }
 
     // Plan order, not the drawing's (by wall, then offset): "the first door"

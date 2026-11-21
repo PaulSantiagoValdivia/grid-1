@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { floorOf, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkPlan } from '../command/check'
 import { describePlan } from '../command/describe'
@@ -17,7 +17,23 @@ import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
 import { LOOKS, SIDES, type LookName, type Side } from '../draw/viewNames'
 import { AREA_RULES, planAreas } from '../quantities/areas'
 import { comparePlans, optionRow, type Comparison, type OptionRow } from '../quantities/compare'
-import { EMPTY_ROOM_RULE, fitInRoom, measureRoom, routeBetween } from '../quantities/measure'
+import {
+  distanceBetween,
+  EMPTY_ROOM_RULE,
+  FACES_RULE,
+  fitInRoom,
+  HEIGHT_RULE,
+  measureRoom,
+  openingThing,
+  pointThing,
+  roomHeight,
+  roomThing,
+  routeBetween,
+  wallLengths,
+  wallThing,
+  type RoomHeight,
+  type Thing,
+} from '../quantities/measure'
 import { planSchedule } from '../quantities/schedule'
 import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
@@ -36,7 +52,9 @@ import {
   readPlan,
   roomArg,
   STRING,
+  thingArg,
   ToolRefusal,
+  wallArg,
   type ArgSpec,
   type GridTool,
   type ToolContext,
@@ -343,19 +361,50 @@ const scheduleTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_measure
 
+/** A room's height in words (ARE-10), with where it comes from. */
+function heightText(height: RoomHeight, L: (v: number) => string): string {
+  const { value, walls } = height
+  if (value === null || walls === null) {
+    return value === null ? 'Height not known: the plan states none for the room and no solid wall bounds it.' : `Height ${L(value)}, as the plan states for the room. No solid wall bounds it.`
+  }
+  const span = walls.high - walls.low < tolerance('joint') ? L(walls.low) : `${L(walls.low)} to ${L(walls.high)}`
+  if (height.from === 'room') return `Height ${L(value)}, as the plan states for the room. Its walls stand ${span}.`
+  if (height.from === 'walls') return `Height ${L(value)}, the height of its walls; the plan states none for the room.`
+  return `Height ${L(value)}, the lowest of its walls: ${walls.lowest.map(q).join(', ')}, the others up to ${L(walls.high)}. The plan states none for the room.`
+}
+
+/** A thing named in a measure between two, made ready to measure, with how to name it in the answer. */
+function thingOf(survey: Survey, named: ReturnType<typeof thingArg>): { thing: Thing; label: string } {
+  const { plan } = survey
+  if (named.kind === 'room') {
+    const room = survey.byId.get(named.id)
+    if (!room || room.polygon.length < 3) throw new ToolRefusal(`Room ${q(named.id)} has no outline Grid can measure; grid_check says why.`)
+    return { thing: roomThing(room), label: `room ${q(room.facts.name)}` }
+  }
+  if (named.kind === 'wall') return { thing: wallThing(plan.walls.find((w) => w.id === named.id)!), label: `wall ${q(named.id)}` }
+  const opening = plan.openings.find((o) => o.id === named.id)!
+  const wall = plan.walls.find((w) => w.id === opening.wall)
+  if (!wall) throw new ToolRefusal(`The wall of ${opening.type} ${q(opening.id)} is not in the plan; grid_check says so.`)
+  return { thing: openingThing(opening, wall), label: `${opening.type} ${q(opening.id)}` }
+}
+
 const measureTool: GridTool = {
   name: 'grid_measure',
-  title: 'Measure rooms and ways through',
+  title: 'Measure rooms, walls, distances and ways through',
   hint: 'read',
   description:
-    'Use this when the person asks will something fit, how wide or long a room is, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
-    + 'what=room gives a room\'s inside sizes, side by side, and the widest circle it holds; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under. '
+    'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
+    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under. '
     + 'It measures the empty room between wall faces: the plan holds no furniture, fixtures or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas) or for what a building code asks (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    what: { type: 'string', required: true, enum: ['room', 'fit', 'route', 'narrow'], description: 'What to measure: room, fit, route or narrow.', examples: ['fit', 'route'] },
+    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow'], description: 'What to measure: room, between, wall, fit, route or narrow.', examples: ['between', 'fit', 'route'] },
     room: { type: 'string', id: true, description: 'For room, fit and route: the room id, where the route starts.', examples: ['kitchen', 'hall'] },
-    to: { type: 'string', id: true, description: 'For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['bed1', 'outside'] },
+    from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening or room to measure from.', examples: ['front-door', 'w-west'] },
+    to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
+    x: { type: 'number', description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
+    y: { type: 'number', description: 'For between, with x: the point\'s y on the drawing in metres.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
+    wall: { type: 'string', id: true, description: 'For wall: the wall id.', examples: ['w-south'] },
     width: { type: 'number', description: 'For fit: the box\'s width in metres; a table of 1.8 × 0.9 m with 0.75 m round it for chairs is 3.3.', examples: [3.3, 1.2], minimum: 0.05, maximum: 100 },
     depth: { type: 'number', description: 'For fit: the box\'s depth in metres. It is tried both ways round.', examples: [2.4, 0.6], minimum: 0.05, maximum: 100 },
     diameter: { type: 'number', description: 'For fit: a circle instead of a box, such as 1.5 for a wheelchair turning circle.', examples: [1.5], minimum: 0.05, maximum: 100 },
@@ -365,11 +414,18 @@ const measureTool: GridTool = {
   outputSchema: objectSchema({ what: STRING, answer: { type: 'object' }, rule: STRING }),
   run(args, context) {
     const { survey } = load(context, args['plan'])
-    const what = args['what'] as 'room' | 'fit' | 'route' | 'narrow'
+    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow'
     const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
     const L = (v: number): string => lengthText(v, units)
-    const allowed: Record<string, readonly string[]> = { room: ['room'], fit: ['room', 'width', 'depth', 'diameter'], route: ['room', 'to'], narrow: ['under'] }
-    const stray = ['room', 'to', 'width', 'depth', 'diameter', 'under'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
+    const allowed: Record<string, readonly string[]> = {
+      room: ['room'],
+      between: ['from', 'to', 'x', 'y'],
+      wall: ['wall'],
+      fit: ['room', 'width', 'depth', 'diameter'],
+      route: ['room', 'to'],
+      narrow: ['under'],
+    }
+    const stray = ['room', 'from', 'to', 'x', 'y', 'wall', 'width', 'depth', 'diameter', 'under'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`what=${what} takes ${allowed[what]!.join(', ')}, not ${stray.join(', ')}.`)
     const roomOf = (): ReturnType<Survey['byId']['get']> & object => {
       if (args['room'] === undefined) throw new ToolRefusal(`what=${what} needs room: a room id.`)
@@ -383,9 +439,53 @@ const measureTool: GridTool = {
       const r = measureRoom(room)
       const size = r.rectangle ? `${L(r.across)} × ${L(r.up)}` : `${L(r.across)} across by ${L(r.up)} up the drawing at most`
       const sides = r.sides.map((s) => `${s.facing} ${L(s.length)}`).join(', ')
+      const height = roomHeight(survey.plan, r.id)
       return {
-        text: `${q(r.name)}: ${size}, ${areaText(r.area, units)}, perimeter ${L(r.perimeter)}. Sides, going round: ${sides}. The widest circle it holds is ${L(r.widestCircle)} across.\n${EMPTY_ROOM_RULE}`,
-        data: { what, answer: r, rule: EMPTY_ROOM_RULE },
+        text: `${q(r.name)}: ${size}, ${areaText(r.area, units)}, perimeter ${L(r.perimeter)}. Sides, going round: ${sides}. The widest circle it holds is ${L(r.widestCircle)} across.\n${heightText(height, L)}\n${EMPTY_ROOM_RULE}\n${HEIGHT_RULE}`,
+        data: { what, answer: { ...r, height }, rule: `${EMPTY_ROOM_RULE} ${HEIGHT_RULE}` },
+      }
+    }
+    if (what === 'between') {
+      if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening or room.')
+      const hasPoint = args['x'] !== undefined || args['y'] !== undefined
+      if (hasPoint === (args['to'] !== undefined)) throw new ToolRefusal('what=between takes to, or x and y for a point, after from.')
+      if (hasPoint && (args['x'] === undefined || args['y'] === undefined)) throw new ToolRefusal('A point needs both x and y.')
+      const first = thingOf(survey, thingArg(survey.plan, args['from'], 'from'))
+      const second = hasPoint
+        ? { thing: pointThing({ x: args['x'] as number, y: args['y'] as number }), label: `the point (${m(args['x'] as number)}, ${m(args['y'] as number)})` }
+        : thingOf(survey, thingArg(survey.plan, args['to'], 'to'))
+      if (second.thing.floor !== null && first.thing.floor !== second.thing.floor) {
+        throw new ToolRefusal('Both things of a measure must be on the same floor: the plan says nothing of the height between floors.')
+      }
+      const found = distanceBetween(first.thing, second.thing)
+      const said = found.distance === 0
+        ? `${first.label} and ${second.label} touch or overlap: 0 m between them.`
+        : `From ${first.label} to ${second.label}: ${L(found.distance)} clear, ${found.toward} on the drawing, from (${m(found.at[0].x)}, ${m(found.at[0].y)}) to (${m(found.at[1].x)}, ${m(found.at[1].y)}).`
+      return {
+        text: `${said.charAt(0).toUpperCase()}${said.slice(1)}\n${FACES_RULE}\n${EMPTY_ROOM_RULE}`,
+        data: {
+          what,
+          answer: {
+            from: { kind: first.thing.kind, id: first.thing.id },
+            to: { kind: second.thing.kind, id: second.thing.id },
+            floor: first.thing.floor,
+            distance: found.distance,
+            at: found.at,
+            toward: found.toward,
+          },
+          rule: `${FACES_RULE} ${EMPTY_ROOM_RULE}`,
+        },
+      }
+    }
+    if (what === 'wall') {
+      if (args['wall'] === undefined) throw new ToolRefusal('what=wall needs wall: a wall id.')
+      const wall = survey.plan.walls.find((w) => w.id === wallArg(survey.plan, args['wall']))!
+      const w = wallLengths(survey, wall)
+      const kind = w.virtual ? 'dividing line' : `${L(w.thickness)} thick, ${L(w.height)} high`
+      const faces = w.faces.length === 0 ? 'No room\'s outline runs along it.' : `Along its face in each room: ${w.faces.map((f) => `${q(f.name)} ${L(f.length)}`).join(', ')}.`
+      return {
+        text: `Wall ${q(w.id)}: ${L(w.length)} on its centre line, ${kind}. ${faces}\n${FACES_RULE}`,
+        data: { what, answer: w, rule: FACES_RULE },
       }
     }
     if (what === 'fit') {

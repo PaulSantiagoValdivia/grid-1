@@ -193,6 +193,10 @@ export const RoomSchema = z.object({
   // walls, is taken off that room, so every square metre is counted once. Optional and never
   // defaulted, so a plan written before ARE-5 reads with no key added (version 1).
   inside: z.boolean().optional(),
+  // ARE-10: the room's height, floor to ceiling, in metres. Optional and never defaulted, so
+  // a plan written before it reads with no key added (version 1). Unstated, the room is as
+  // high as the lowest solid wall round it (`roomHeight` in the command's measuring).
+  height: finite().positive().optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -262,6 +266,11 @@ function withFloorHeights(raw: unknown): unknown {
 export const FloorPlanFieldsSchema = z.object({
   version: z.literal('1').default('1'),
   units: z.literal('m').default('m'),
+  // QAR-5: the project's own id, which the IFC builds every element's identity from (with the
+  // element's kind, floor and id), so a re-export of the project is recognised as the same
+  // model whatever the file is called. `grid init` writes it. Keep it, and the parts' ids,
+  // stable: a new id reads as a new element. Optional and never defaulted (version 1).
+  projectId: text('id').pipe(z.string().min(1)).optional(),
   walls: parts(WallSchema, 'walls').default([]),
   rooms: parts(RoomSchema, 'rooms').default([]),
   openings: parts(OpeningSchema, 'openings').default([]),

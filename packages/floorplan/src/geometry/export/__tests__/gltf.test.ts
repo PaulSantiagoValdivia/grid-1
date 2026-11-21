@@ -383,12 +383,13 @@ describe('the shape of the walls', () => {
   })
 
   it('centres a wall drawn right to left on its axis', () => {
-    // w3 runs from (4, 3) to (0, 3): its axis is at plan y = 3, so z = -3.
+    // w3 runs from (4, 3) to (0, 3): its axis is at plan y = 3, so z = -3. Its outer face runs
+    // 0.1 m past both ends to the mitred corners (SHT-2).
     const box = extent(meshOf(samplePlan(), 'wall_w3'))
     expect(box.z[0]).toBeCloseTo(-3.1, 5)
     expect(box.z[1]).toBeCloseTo(-2.9, 5)
-    expect(box.x[0]).toBeCloseTo(0, 5)
-    expect(box.x[1]).toBeCloseTo(4, 5)
+    expect(box.x[0]).toBeCloseTo(-0.1, 5)
+    expect(box.x[1]).toBeCloseTo(4.1, 5)
   })
 
   it('leaves no face on the floor under a door whose sill is 0', () => {

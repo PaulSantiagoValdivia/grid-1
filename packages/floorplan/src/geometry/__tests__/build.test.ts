@@ -365,12 +365,14 @@ describe('traceWall: a wall drawn from its start to its end', () => {
     }
   })
 
+  // Until the wall is whole: since SHT-2 a mitred face runs past the end of the axis, and at
+  // t = 1 the whole wall is drawn, corners and all.
   it('never reaches past the traced point, so the end never comes before the start', () => {
     for (const w of drawnWalls()) {
       const [start, end] = w.centerline
       const axis = sub(end, start)
       const len2 = dot(axis, axis)
-      for (const t of ts) {
+      for (const t of ts.filter((t) => t < 1)) {
         for (const polygon of traceWall(w, t)) {
           for (const p of polygon) {
             expect(dot(sub(p, start), axis) / len2).toBeLessThanOrEqual(t + 1e-9)

@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import type { Pair, Polygon } from 'polygon-clipping'
+import { ringArea, union } from '../../polygons'
 import type { Floor, FloorPlan, Opening, Room, Wall } from '../../plan'
 import { floorElevations, SLAB_THICKNESS } from '../../elevations'
 import { createGuidIssuer, ifcGuid, ifcString, toIfc } from '../ifc'
@@ -704,7 +708,16 @@ describe('GlobalId', () => {
     expect(new Set(issued).size).toBe(50)
     for (const guid of issued) expect(guid).toHaveLength(22)
     // The first one is the plain hash: the counter only appears on a collision.
-    expect(issued[0]).toBe(ifcGuid('proj:wall:w1'))
+    // QAR-5: the seed is the project, the kind, the floor and the id, as one JSON array.
+    expect(issued[0]).toBe(ifcGuid(JSON.stringify(['proj', 'wall', null, 'w1'])))
+  })
+
+  it('QAR-5 depends on the floor, and reads no two seeds as one text', () => {
+    const issuer = createGuidIssuer('proj')
+    expect(issuer.issue('wall', 'w1', 'ground')).toBe(ifcGuid(JSON.stringify(['proj', 'wall', 'ground', 'w1'])))
+    expect(issuer.issue('wall', 'w1', 'first')).not.toBe(issuer.issue('wall', 'w1', 'ground'))
+    // With the parts joined by colons these two would hash the same text.
+    expect(createGuidIssuer('a:b').issue('wall', 'c')).not.toBe(createGuidIssuer('a').issue('b:wall', 'c'))
   })
 
   it('depends on the project identity', () => {
@@ -2437,5 +2450,31 @@ describe('door swing', () => {
     const span = bodyOf(doc, door).base.map((p) => dot3(p, dir))
     expect(Math.min(...span)).toBeCloseTo(0.5, 9)
     expect(Math.max(...span)).toBeCloseTo(1.4, 9)
+  })
+})
+
+/**
+ * SHT-2: the walls of the IFC file are joined at their corners as in the drawing (lab DR-1). Seen
+ * from above, the walls of the bench's two-bedroom flat cover its whole 9.5 × 7.9 m box; before,
+ * a 0.15 m square was missing at each outside corner.
+ */
+describe('SHT-2 joined corners in the IFC file', () => {
+  const flat = (): FloorPlan =>
+    JSON.parse(readFileSync(resolve(__dirname, '../../../../fixtures/two-bed-flat.json'), 'utf8')) as FloorPlan
+
+  it('covers the flat 75.05 m² outside, with no square missing at a corner (DR-1: 74.96)', () => {
+    const doc = parseDoc(toIfc(flat()))
+    const shapes: Polygon[] = wallsOf(doc).map((w) => [bodyOf(doc, w).base.map((p): Pair => [p[0], p[1]])])
+    const footprint = union(shapes)
+    expect(footprint).toHaveLength(1)
+    expect(ringArea(footprint[0]![0]!)).toBeCloseTo(75.05, 6)
+  })
+
+  it('stops each partition at the face of the wall it runs into', () => {
+    const doc = parseDoc(toIfc(flat()))
+    const spine = wallsOf(doc).find((w) => str(w.args[2]) === 'spine')!
+    const ys = bodyOf(doc, spine).base.map((p) => p[1])
+    expect(Math.min(...ys)).toBeCloseTo(0.15, 9)
+    expect(Math.max(...ys)).toBeCloseTo(7.45, 9)
   })
 })

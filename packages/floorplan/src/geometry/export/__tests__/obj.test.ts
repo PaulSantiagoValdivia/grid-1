@@ -234,13 +234,15 @@ describe('each wall is a closed solid', () => {
     }
   })
 
+  // Since SHT-2 the corners are mitred: each wall's outer face runs on to the outer face of
+  // the next, 0.1 m (half the 0.2 m wall) past the end of its axis, so a 4 m wall spans 4.2 m.
   it('puts each wall where the plan says, with its thickness centred on the axis', () => {
     const obj = objOf(samplePlan())
     const box = (id: string) => bounds(obj, obj.groups.find((g) => g.name === `wall_${id}`)!)
 
     const w1 = box('w1') // (0,0) → (4,0)
-    expect(w1.x[0]).toBeCloseTo(0, 6)
-    expect(w1.x[1]).toBeCloseTo(4, 6)
+    expect(w1.x[0]).toBeCloseTo(-0.1, 6)
+    expect(w1.x[1]).toBeCloseTo(4.1, 6)
     expect(w1.y[0]).toBeCloseTo(-0.1, 6)
     expect(w1.y[1]).toBeCloseTo(0.1, 6)
     expect(w1.z[0]).toBeCloseTo(0, 6)
@@ -249,12 +251,12 @@ describe('each wall is a closed solid', () => {
     const w2 = box('w2') // (4,0) → (4,3)
     expect(w2.x[0]).toBeCloseTo(3.9, 6)
     expect(w2.x[1]).toBeCloseTo(4.1, 6)
-    expect(w2.y[0]).toBeCloseTo(0, 6)
-    expect(w2.y[1]).toBeCloseTo(3, 6)
+    expect(w2.y[0]).toBeCloseTo(-0.1, 6)
+    expect(w2.y[1]).toBeCloseTo(3.1, 6)
 
     const w3 = box('w3') // (4,3) → (0,3), drawn right to left
-    expect(w3.x[0]).toBeCloseTo(0, 6)
-    expect(w3.x[1]).toBeCloseTo(4, 6)
+    expect(w3.x[0]).toBeCloseTo(-0.1, 6)
+    expect(w3.x[1]).toBeCloseTo(4.1, 6)
     expect(w3.y[0]).toBeCloseTo(2.9, 6)
     expect(w3.y[1]).toBeCloseTo(3.1, 6)
   })

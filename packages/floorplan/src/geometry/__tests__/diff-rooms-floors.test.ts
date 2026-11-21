@@ -53,6 +53,18 @@ describe('rooms', () => {
     ])
   })
 
+  it('lists a room height stated, changed or taken out (ARE-10), and nothing below the tolerance', () => {
+    const plan = twoRoomBox()
+    const stated = withRoom(plan, 'r_left', { height: 2.4 })
+    expect(diffPlans(plan, stated).changes[0]!).toMatchObject({
+      props: [{ key: 'height', before: null, after: 2.4 }],
+      summary: '"Left room" height not stated → 2.40 m',
+    })
+    expect(diffPlans(stated, withRoom(plan, 'r_left', { height: 2.6 })).changes[0]!.props).toEqual([{ key: 'height', before: 2.4, after: 2.6 }])
+    expect(diffPlans(stated, plan).changes[0]!.props).toEqual([{ key: 'height', before: 2.4, after: null }])
+    expect(diffPlans(stated, withRoom(plan, 'r_left', { height: 2.4 + 1e-6 })).changes).toEqual([])
+  })
+
   it('reads the same boundary in another order as a change, because C3 gives it meaning', () => {
     const plan = twoRoomBox()
     const next = withRoom(plan, 'r_left', { boundary: ['w_mid', 'w_n', 'w_w', 'w_s'] })
