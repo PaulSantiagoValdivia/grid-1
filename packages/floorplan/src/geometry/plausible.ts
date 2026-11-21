@@ -101,21 +101,26 @@ function unitsQuestion(typical: Typical): Issue | null {
   return null
 }
 
-function wallQuestions(wall: Wall, others: readonly Wall[], building: BuildingKind): string[] {
+function wallQuestions(wall: Wall, others: readonly Wall[], building: BuildingKind, storey: number | undefined): string[] {
   const asked: string[] = []
   const typicalHeight = others.length >= 3 ? median(others.map((w) => w.height)) : null
   const highest = limit('wallHighest', building)
+  // LVL-1: a floor that states its height keeps it, whatever its walls.
+  const stands =
+    storey === undefined
+      ? `Grid stands a storey on its tallest wall, so this one makes the storey ${size(wall.height)} m high.`
+      : `Its floor states it is ${size(storey)} m high, so the storey stays that high.`
   // Against the other walls first: that names what the wall most likely should be.
   if (typicalHeight !== null && wall.height >= typicalHeight * limit('wallHigherThanTypical')) {
     asked.push(
       `Wall ${quoted(wall.id)} is ${size(wall.height)} m high, the others on its floor typically ` +
-        `${size(typicalHeight)} m: is that meant? Grid stands a storey on its tallest wall, so this ` +
-        `one makes the storey ${size(wall.height)} m high.`
+        `${size(typicalHeight)} m: is that meant? ${stands}`
     )
   } else if (wall.height > highest) {
     asked.push(
       `Wall ${quoted(wall.id)} is ${size(wall.height)} m high: is that meant? Grid asks about walls higher ` +
-        `than ${size(highest)} m${inHome(building)}, and stands a storey on its tallest wall.`
+        `than ${size(highest)} m${inHome(building)}` +
+        (storey === undefined ? ', and stands a storey on its tallest wall.' : `. ${stands}`)
     )
   } else if (wall.height < limit('wallLowest', building)) {
     asked.push(
@@ -197,9 +202,16 @@ export function validatePlausibility(
     if (list) list.push(wall)
     else byFloor.set(floor, [wall])
   }
+  // The first entry for a floor is the one used, as in `planFloors`.
+  const storeys = new Map<string, number | undefined>()
+  for (const floor of plan.floors ?? []) {
+    if (storeys.has(floor.id)) continue
+    storeys.set(floor.id, floor.height !== undefined && Number.isFinite(floor.height) ? floor.height : undefined)
+  }
   for (const wall of solid) {
     const others = byFloor.get(floorOf(wall))!.filter((w) => w !== wall)
-    for (const message of wallQuestions(wall, others, building)) ask('wall', wall.id, 'wall/size-question', message)
+    const storey = storeys.get(floorOf(wall))
+    for (const message of wallQuestions(wall, others, building, storey)) ask('wall', wall.id, 'wall/size-question', message)
   }
 
   for (const opening of plan.openings) {

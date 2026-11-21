@@ -163,6 +163,7 @@ describe('a door into a space not drawn, off the ground floor', () => {
   it('is said on every floor, as on the ground (CH-7)', () => {
     const house = twoFloorHouse()
     const noLanding = { ...house, rooms: house.rooms.filter((r) => r.id !== 'landing') }
-    expect(summary(noLanding)).toEqual(['door_to_undrawn_space first study'])
+    // LVL-1: with the balcony door, 2.95 m up, named too (lab VE-8).
+    expect(summary(noLanding)).toEqual(['door_to_outside_above_ground first study', 'door_to_undrawn_space first study'])
   })
 })

@@ -23,5 +23,7 @@ export const messages = {
       ? `On ${quoted(floor)}, ${quotedList(rooms)} could not be drawn and ${rooms.length === 1 ? 'was' : 'were'} not checked`
       : `On ${quoted(floor)}, some doors could not be drawn and were not checked`,
   doorToUndrawnSpace: (room: string): string =>
-    `A door from ${quoted(room)} leads to a space that is not drawn as a room`
+    `A door from ${quoted(room)} leads to a space that is not drawn as a room`,
+  doorOutAboveGround: (room: string, height: string): string =>
+    `A door from ${quoted(room)} leads outside ${height} m above the ground, so it is not a way out`
 }

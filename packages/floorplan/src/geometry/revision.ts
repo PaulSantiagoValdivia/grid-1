@@ -110,7 +110,7 @@ function floorPart(plan: FloorPlan): string {
   const named = assignments.filter((entry) => !entry.endsWith('='))
 
   const registry = (plan.floors ?? []).map(
-    (floor) => `${floor.id}:${floor.name}:${floor.level}`
+    (floor) => `${floor.id}:${floor.name}:${floor.level}:${floor.elevation ?? ''}:${floor.height ?? ''}:${floor.slab ?? ''}`
   )
 
   if (named.length === 0 && registry.length === 0) return ''

@@ -10,6 +10,7 @@
 import type { Floor, Opening, Room, Wall } from '../plan'
 import { floorOf } from '../floors'
 import type { PropChange } from './types'
+import { tolerance } from '../tolerances'
 
 type Point = readonly [number, number]
 
@@ -81,10 +82,21 @@ export function roomProps(before: Room, after: Room, epsilon: number): PropChang
   ])
 }
 
+/** A number a part may leave out (LVL-1): stated and unstated differ, and `null` stands for unstated. */
+function optional(key: string, before: number | undefined, after: number | undefined, epsilon: number): PropChange | null {
+  if (before === undefined && after === undefined) return null
+  if (before === undefined || after === undefined) return { key, before: before ?? null, after: after ?? null }
+  return number(key, before, after, epsilon)
+}
+
 export function floorProps(before: Floor, after: Floor): PropChange[] {
+  const epsilon = tolerance('diffLength')
   return present([
     exact('name', before.name, after.name),
-    number('level', before.level, after.level, 0)
+    number('level', before.level, after.level, 0),
+    optional('elevation', before.elevation, after.elevation, epsilon),
+    optional('height', before.height, after.height, epsilon),
+    optional('slab', before.slab, after.slab, epsilon)
   ])
 }
 

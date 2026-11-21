@@ -266,6 +266,35 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
+  wallAboveStorey: {
+    kind: 'tolerance',
+    value: 0.001,
+    unit: 'm',
+    decides:
+      'How far a wall may rise past the height its floor states and still fit inside the storey. ' +
+      'Past it, the wall is named with both heights.',
+    basis: own
+  },
+  sameLevelOverlap: {
+    kind: 'tolerance',
+    value: 0.5,
+    unit: 'ratio',
+    decides:
+      'Two floors at one level stand one over the other when the boxes around their walls share ' +
+      'more than this share of the smaller box. Floors side by side at one level share less.',
+    basis: own
+  },
+  outsideDoorAboveGround: {
+    kind: 'limit',
+    value: 2,
+    unit: 'm',
+    decides:
+      'A door to the outside on a floor standing higher than this above the ground floor opens in ' +
+      'mid-air: it is named, and it is not a way out. Lower, a few steps outside can reach the ground.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',
