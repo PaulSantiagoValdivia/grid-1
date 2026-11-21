@@ -6,8 +6,10 @@
  * field and the limit, never the text.
  *
  * A text is taken in its composed form (NFC), and its length is counted in characters (code
- * points) of that form, as JSON Schema's `maxLength` counts: an emoji, or a letter written with
- * a combining accent, is one character, and the sheet prints the composed form.
+ * points) of that form: an emoji, or a letter written with a combining accent, is one
+ * character, and the sheet prints the composed form. JSON Schema's `maxLength` counts code
+ * points of the text as sent, so the schema a tool shows and this check agree for text already
+ * in NFC; a decomposed text may pass here and not there.
  */
 import { z } from 'zod'
 import { NAME_MAX, quoted, UNSAFE_TEXT } from './planText'

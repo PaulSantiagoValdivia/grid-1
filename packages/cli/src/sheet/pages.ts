@@ -11,6 +11,7 @@ import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 import { pictureView, type PictureOptions } from '@ongrid/viewer/src/picture'
+import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
 import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
@@ -23,6 +24,9 @@ export type SheetLayout = 'client' | 'check'
 export const SHEET_LAYOUTS: readonly SheetLayout[] = ['client', 'check']
 /** The drawing box on a floor page, in PDF points: what the frames are fitted to. */
 export const PLAN_BOX = { width: 700, height: 640 } as const
+
+/** The smallest a room name is printed, in points: below it a name on A3 can't be read. */
+export const MIN_LABEL_PT = 5
 
 /** `PLAN_BOX`'s shape in the fewest whole pixels. */
 const SHAPE = (() => {
@@ -38,7 +42,10 @@ const SHAPE = (() => {
  * Labels are sized in pixels, so the picture has as many pixels as make one pixel measure what
  * it does in `grid draw`'s picture of the floor (`metresPerPixel`): each label is as large
  * against the rooms as there, and goes where `grid draw` puts it. Drawn at the box's own size,
- * labels were up to a few times larger and pushed into other rooms. Pixels come whole and the
+ * labels were up to a few times larger and pushed into other rooms. Where `grid draw`'s zoom
+ * would print a name under `MIN_LABEL_PT`, the zoom is the one that prints it at that size, and
+ * the labels may go elsewhere than in `grid draw`; it also bounds the picture's width (at most
+ * 1,820 pixels and one step). Pixels come whole and the
  * box keeps its shape, so the picture shows a little more than the frame (at most one step of
  * `SHAPE`) at the frame's scale; what is beyond the frame is cut, as it always was.
  */
@@ -69,7 +76,8 @@ export interface SheetTable { readonly heading: string; readonly rows: readonly 
 export type SheetPicture =
   /**
    * `frame` is what the box shows, in plan metres. `metresPerPixel` is what one pixel measures
-   * in `grid draw`'s picture of the floor: the zoom its labels are placed at (`planPictureOptions`).
+   * in `grid draw`'s picture of the floor, or more where that would print names under
+   * `MIN_LABEL_PT`: the zoom its labels are placed at (`planPictureOptions`).
    */
   | { readonly kind: 'plan'; readonly floor: string; readonly frame: Bounds; readonly metresPerPixel: number; readonly ids: boolean }
   | { readonly kind: 'model' }
@@ -127,8 +135,13 @@ export function floorFrames(loaded: LoadedPlan): ReadonlyMap<string, Bounds> {
 
 /** A floor page's picture, with the zoom of `grid draw`'s picture of that floor. */
 function floorPicture(loaded: LoadedPlan, frames: ReadonlyMap<string, Bounds>, floor: string, ids: boolean): SheetPicture {
+  const frame = frames.get(floor)!
   const drawn = pictureView(loaded.plan, { floor })
-  return { kind: 'plan', floor, frame: frames.get(floor)!, metresPerPixel: drawn.view.width / drawn.width, ids }
+  // The zoom at which a room name is MIN_LABEL_PT on paper: pixels of a name, times metres per
+  // pixel, times points per metre of the box. `grid draw`'s zoom stands unless it is smaller.
+  const shown = fitTo(frame, PLAN_BOX.width / PLAN_BOX.height)
+  const readable = (MIN_LABEL_PT * shown.width) / (TEXT_PX.roomName * PLAN_BOX.width)
+  return { kind: 'plan', floor, frame, metresPerPixel: Math.max(drawn.view.width / drawn.width, readable), ids }
 }
 
 function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {

@@ -13,8 +13,10 @@ import { surveyPlan } from '../../quantities/survey'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { buildFloorPlan, planForFloor } from '@ongrid/floorplan/geometry'
 import { pointInPolygon } from '@ongrid/floorplan/geometry/innerPoint'
-import type { Picture } from '@ongrid/viewer/src/picture'
-import { findingLine, floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, planPictureOptions, sheetPages, type SheetPicture } from '../pages'
+import { pictureView, type Picture } from '@ongrid/viewer/src/picture'
+import { findingLine, floorFrames, LEFT_OUT_LIMIT, MIN_LABEL_PT, PLAN_BOX, planPictureOptions, sheetPages, type SheetPicture } from '../pages'
+import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
+import { fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 
 function fixture(name: string): LoadedPlan {
   const plan = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures', name), 'utf8')))
@@ -419,7 +421,14 @@ function labelsOf(picture: Picture): Map<string, { x: number; y: number }> {
 describe('room labels on a floor page (VEW-7)', () => {
   // Labels moved into other rooms on these (the outside test): a tall townhouse, and long names with ids.
   const TOWNHOUSE = 'A/scenarios/probes/townhouse-stair-misaligned.json'
-  const plans = labPlans([TOWNHOUSE, 'D/scenarios/d2-door-to-air-floor3.json', ...LAB_SAMPLE])
+  const DOOR_TO_AIR = 'D/scenarios/d2-door-to-air-floor3.json'
+  const plans = labPlans([TOWNHOUSE, DOOR_TO_AIR, ...LAB_SAMPLE])
+  // Where grid draw's zoom printed names smallest (an attic, a warehouse mezzanine, a shop), and empty floors.
+  const SMALL = [
+    'A/scenarios/probes/townhouse-ghost-floor.json', 'AU1/scenarios/AR-1/warehouse.json', 'C/scenarios/shop.json',
+    'AU1/scenarios/MS-10/f15b-room-floor-does-not-exist.json', 'H/scenarios/h11c-empty-roof-floor.json',
+  ]
+  const small = labPlans(SMALL)
 
   function pictures(loaded: LoadedPlan, layout: 'client' | 'check') {
     return sheetPages(loaded, null, layout, { name: 'x', date }).pages.flatMap((page) => {
@@ -427,7 +436,13 @@ describe('room labels on a floor page (VEW-7)', () => {
       const { options, grow } = planPictureOptions(page.picture)
       const rooms = buildFloorPlan(planForFloor(loaded.plan, page.picture.floor)).rooms
       return [{
-        rooms, grow,
+        rooms, grow, width: options.width!,
+        // A room name's size on paper: its pixels, at the box's points per picture pixel.
+        namePt: (TEXT_PX.roomName * PLAN_BOX.width * grow) / options.width!,
+        drawPt: (() => {
+          const drawn = pictureView(loaded.plan, { floor: page.picture.floor })
+          return (TEXT_PX.roomName * PLAN_BOX.width * (drawn.view.width / drawn.width)) / fitTo(page.picture.frame, PLAN_BOX.width / PLAN_BOX.height).width
+        })(),
         sheet: planPicture(loaded.plan, options),
         draw: planPicture(loaded.plan, { floor: page.picture.floor, ...(options.labels ? { labels: options.labels } : {}) }),
       }]
@@ -435,17 +450,50 @@ describe('room labels on a floor page (VEW-7)', () => {
   }
   const inside = (at: { x: number; y: number } | undefined, polygon: readonly { x: number; y: number }[]) => at !== undefined && pointInPolygon(at, polygon)
 
-  it.each(['client', 'check'] as const)('draws each room\'s label inside that room on the townhouse (%s)', (layout) => {
-    const floors = pictures(plans.get(TOWNHOUSE)!, layout)
+  it('draws each room\'s label inside that room on the townhouse (client)', () => {
+    const floors = pictures(plans.get(TOWNHOUSE)!, 'client')
     for (const { rooms, sheet } of [floors[0]!, floors[2]!]) {
       const labels = labelsOf(sheet)
       for (const room of rooms) expect(inside(labels.get(room.id), room.polygon), room.id).toBe(true)
     }
   })
 
-  it.each(['client', 'check'] as const)('puts every label where grid draw puts it, at the same size against the rooms (%s)', (layout) => {
+  it('never draws a label in another room on the townhouse (check): a name with its id that does not fit goes out, with a leader', () => {
+    // At 5 pt, "Landing [g-landing]" no longer fits the narrow landing, as at grid draw's smaller zoom.
+    for (const { rooms, sheet } of pictures(plans.get(TOWNHOUSE)!, 'check')) {
+      const labels = labelsOf(sheet)
+      for (const room of rooms) {
+        const at = labels.get(room.id)
+        if (inside(at, room.polygon)) continue
+        expect(sheet.nodes.some((node) => node.key === `leader:${room.id}`), room.id).toBe(true)
+        expect(rooms.filter((other) => inside(at, other.polygon)), room.id).toEqual([])
+      }
+    }
+  })
+
+  it('finds grid draw\'s zoom readable on the door-to-air plan, and too small on the townhouse', () => {
+    for (const { drawPt } of pictures(plans.get(DOOR_TO_AIR)!, 'check')) expect(drawPt).toBeGreaterThanOrEqual(MIN_LABEL_PT)
+    for (const { drawPt, namePt } of pictures(plans.get(TOWNHOUSE)!, 'check')) {
+      expect(drawPt).toBeLessThan(MIN_LABEL_PT)
+      expect(namePt).toBeCloseTo(MIN_LABEL_PT, 9)
+    }
+  })
+
+  it.each(['client', 'check'] as const)('prints every room name at least 5 pt, with a bounded picture, empty floors too (%s)', (layout) => {
+    expect(MIN_LABEL_PT).toBe(5)
+    for (const [name, loaded] of [...plans, ...small]) {
+      for (const { namePt, width } of pictures(loaded, layout)) {
+        expect(namePt, name).toBeGreaterThanOrEqual(MIN_LABEL_PT * (1 - 1e-9))
+        expect(width, name).toBeLessThanOrEqual((TEXT_PX.roomName * PLAN_BOX.width) / MIN_LABEL_PT + 35)
+      }
+    }
+    expect(small.size).toBe(SMALL.length)
+  })
+
+  it.each(['client', 'check'] as const)('puts every label where grid draw puts it, at the same size against the rooms, where that is readable (%s)', (layout) => {
     for (const [name, loaded] of plans) {
-      for (const { rooms, sheet, draw } of pictures(loaded, layout)) {
+      for (const { rooms, sheet, draw, drawPt } of pictures(loaded, layout)) {
+        if (drawPt < MIN_LABEL_PT) continue
         expect((sheet.view.width / sheet.width) / (draw.view.width / draw.width), name).toBeCloseTo(1, 9)
         const ours = labelsOf(sheet)
         const theirs = labelsOf(draw)
