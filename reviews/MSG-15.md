@@ -251,3 +251,48 @@ nothing.
   storey in feet and one in metres gets single questions, not a units question.
 - **The kind of building.** See the first decision above.
 - MSG-12 and SHT-2, which waited for this table, can start.
+
+## Done since: the command's and the views' literals (lane B)
+
+The six guards the review named, and the ones `grid serve` (CMD-5) added since, now read the
+table through `tolerance()`. Every swap keeps its value, so nothing a person or an agent sees
+moved, and the scoreboard is unchanged.
+
+| Where | Was | Now |
+|---|---|---|
+| `viewer` `labelPlacement.ts`, door swing box | `1e-12` | `noArea` |
+| `viewer` `labelPlacement.ts`, smallest label cell | `1e-6` | `joint` |
+| `viewer` `Canvas2D.tsx`, same bounds | `1e-6` | `joint` |
+| `viewer` `buildFrame3d.ts`, the pulse on a wall end | `1e-6` | `joint` |
+| `cli` `describe/facts.ts`, `quantities/survey.ts`, a side with no length | `1e-9` | `noLength` |
+| `cli` `quantities/schedule.ts`, `mcp/readTools.ts`, "narrower than" | `1e-9` | `noLength` |
+| `cli` `quantities/measure.ts`, a shape that fits | `1e-6` | `joint` |
+| `cli` `quantities/compare.ts`, same thickness and opening size | `1e-6` | `joint` |
+| `cli` `edit/edits.ts`, free stretches and changed sizes | `1e-9`, `1e-6` | `noLength`, `joint` |
+
+`packages/cli/src/__tests__/tolerances.test.ts` now fails on a small literal such as `1e-6` in
+the source of `packages/cli` or `packages/viewer`, unless it is listed there with why it stays.
+
+### What stays, and what the table needs (for lane A)
+
+- **A side along a wall.** `describe/facts.ts` and `quantities/survey.ts` take a side of a room's
+  outline to lie along a wall when the sine between them is under 1e-3. No entry fits: `parallel`
+  (1e-9) is far stricter and `nearlyParallel` (15 degrees) far looser. It is one named constant,
+  `ALONG_WALL_SINE`, until the table has an entry for it.
+- **Two cosines in the edits.** `edit/edits.ts` takes a side to face a direction when the cosine is
+  within 1e-3 of 1, and refuses to move a wall that would turn when it is more than 1e-6 off.
+  Both are angles written as cosines; an entry in radians or as a sine would serve both.
+- **The command's own drawing tolerances.** `describe/facts.ts` and `quantities/survey.ts` keep
+  `ON_FACE_M` (0.02 m: a point this close to a wall's face is on it) and `SHARED_M` (0.05 m: two
+  rooms on either side of a wall meet when their stretches of it overlap by more), and
+  `edit/edits.ts` refuses a wall shorter than 0.05 m after a move. They are tolerances, not
+  rounding guards, so a survey would want to loosen them with the rest. They belong in the table
+  as adjustable entries; the command would then read them the same way.
+- **Two figures that disagree.** `grid_compare` (`quantities/compare.ts`) calls two thicknesses or
+  opening sizes the same within 1e-6 m, while the plan comparison in floorplan uses `diffLength`
+  (1 mm). And the edit tools refuse an opening that runs past its wall by more than 1e-9 m, while
+  validation lets it run `openingOverrun` (1 mm) past. Aligning them changes behaviour, so it was
+  not done here; each is a one-line change once decided.
+- **Not tolerances.** The views' drawing constants (a minimum frame of 1 mm, the 3D lift of a
+  dividing line, the shadow bias, the tone map) and the half-centimetre below which `grid_compare`
+  does not say a wall moved (it prints to the centimetre) are left as they are.

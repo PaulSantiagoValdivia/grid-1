@@ -16,6 +16,7 @@ import {
   planForFloor,
   roomArea,
   sub,
+  tolerance,
   wallAxis,
   type Floor,
   type FloorPlan,
@@ -166,6 +167,11 @@ export interface PlanFacts {
 
 /** How far a point may be from a wall's face and still be on it, in metres. */
 const ON_FACE_M = 0.02
+/**
+ * A side of a room's outline lies along a wall when the sine of the angle between them is below
+ * this. Not yet in MSG-15's table (`reviews/MSG-15.md` asks for an entry); kept here, once.
+ */
+export const ALONG_WALL_SINE = 1e-3
 /** How much of a wall two rooms must share to be next to each other, in metres. */
 const SHARED_M = 0.05
 
@@ -211,8 +217,8 @@ function faceStretches(wall: Wall, polygon: readonly Vec2[], toward: 1 | -1): Ar
     const q = polygon[(i + 1) % polygon.length]!
     const edge = sub(q, p)
     const length = Math.hypot(edge.x, edge.y)
-    if (length < 1e-9) continue
-    if (Math.abs(cross(edge, axis.dir)) / length > 1e-3) continue
+    if (length < tolerance('noLength')) continue
+    if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
     if (Math.abs(off(p)) > ON_FACE_M || Math.abs(off(q)) > ON_FACE_M) continue
     const a = dot(sub(p, axis.start), axis.dir)
     const b = dot(sub(q, axis.start), axis.dir)
