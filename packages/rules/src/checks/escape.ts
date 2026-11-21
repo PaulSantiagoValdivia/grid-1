@@ -8,7 +8,7 @@
  */
 
 import { indexPlan, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
-import { openingSides, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
+import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { ESCAPE_TOP_LEVEL } from './figures'
 import { messages } from './messages'
 import type { AppliedFigure, RuleFinding } from './types'
@@ -76,12 +76,25 @@ export function escapeCheck(
     (minArea === null || w.area >= minArea.value)
   const lowEnough = (w: Measured): boolean => maxSill === null || w.sill <= maxSill.value
 
-  // Windows and doors on exterior walls, by the rooms on their sides.
+  // Windows and doors to the outside, by the rooms on their sides: on a wall stated exterior, or
+  // with a room on one side only and no enclosed floor on the other (MSG-13, `outsideTest`).
   const outside = new Map<string, Opening[]>()
+  const facesOutside = outsideTest(storey, index)
   for (const opening of storey.openings) {
     if (opening.type === 'opening') continue
-    if (index.wallsById.get(opening.wall)?.kind !== 'exterior') continue
-    for (const side of new Set(openingSides(opening, index, outlines))) {
+    const wall = index.wallsById.get(opening.wall)
+    if (wall === undefined) continue
+    const [left, right] = openingSides(opening, index, outlines)
+    const along = opening.offset + opening.width / 2
+    const rooms =
+      wall.kind === 'exterior'
+        ? [left, right]
+        : left !== null && right === null && facesOutside(wall, along, 'right')
+          ? [left]
+          : right !== null && left === null && facesOutside(wall, along, 'left')
+            ? [right]
+            : []
+    for (const side of new Set(rooms)) {
       if (side === null) continue
       const list = outside.get(side)
       if (list) list.push(opening)

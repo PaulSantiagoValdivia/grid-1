@@ -8,7 +8,10 @@ import { messages } from '../messages'
  *
  * A free-standing 3 × 3.5 m room on one floor at `level`. Its walls are exterior unless
  * `interiorBottom`, and listed counter-clockwise (C3). Openings go on the bottom wall
- * (`b-w0`, running +X, so the room is on its left side).
+ * (`b-w0`, running +X, so the room is on its left side). With `interiorBottom` a hall is drawn
+ * on the other side of that wall: since MSG-13 an inside wall is one with rooms on both sides,
+ * worked out from the outlines, and a wall that only says `interior` with nothing behind it
+ * faces outside.
  */
 function bedroom(
   openings: Omit<Opening, 'wall'>[],
@@ -27,12 +30,25 @@ function bedroom(
     })
   )
   const room = { id: 'b', name: 'Bedroom 2', boundary: walls.map((w) => w.id), floor: 'f', use } as Room
+  const hallCorners: [number, number][] = [[-0.1, -2.1], [3.1, -2.1], [3.1, -0.1], [-0.1, -0.1]]
+  const hallWalls: Wall[] = interiorBottom
+    ? [0, 1, 3].map((i) => ({
+        id: `h-w${i}`,
+        start: hallCorners[i]!,
+        end: hallCorners[(i + 1) % 4]!,
+        thickness: 0.2,
+        height: 2.7,
+        kind: 'exterior',
+        floor: 'f'
+      }))
+    : []
+  const hall = { id: 'h', name: 'Hall', boundary: ['h-w0', 'h-w1', 'b-w0', 'h-w3'], floor: 'f', use: 'corridor' } as Room
   return {
     version: '1',
     units: 'm',
     floors: [{ id: 'f', name: 'Floor', level }],
-    walls,
-    rooms: [room],
+    walls: [...walls, ...hallWalls],
+    rooms: interiorBottom ? [room, hall] : [room],
     openings: openings.map((o) => ({ ...o, wall: 'b-w0' }) as Opening)
   }
 }
@@ -88,6 +104,17 @@ describe('which bedrooms pass', () => {
 
   it('a small window on level 0 that would fail upstairs', () => {
     expect(escapes(bedroom([win('o1', 0.7, 0.7, 0.9)], { level: 0 }))).toEqual([])
+  })
+})
+
+describe('MS-11 a bedroom whose walls state no kind', () => {
+  // A wall that states no kind reads as interior. Since MSG-13 a window with the bedroom on one
+  // side and no room or enclosed floor on the other faces outside, whatever the kind says.
+  it('escapes through its window, as one with exterior walls does', () => {
+    const plan = bedroom([win('o1', 1.0, 1.2, 0.9)])
+    const unstated = { ...plan, walls: plan.walls.map((w) => ({ ...w, kind: 'interior' as const })) }
+    expect(escapes(unstated)).toEqual(escapes(plan))
+    expect(escapes(unstated)).toEqual([])
   })
 })
 

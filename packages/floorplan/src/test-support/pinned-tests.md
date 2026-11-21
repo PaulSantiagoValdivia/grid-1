@@ -114,6 +114,17 @@ a line on purpose: `MS-2 a 1.5 m gap in a room outline is reported` now also exp
 being listed is reported` now also expects `wall/crosses-room` on the partition. The room-level
 lines they asserted are unchanged. No expected figure changed.
 
+MSG-13 changed what four tests ask, on purpose, because the stated `kind` is no longer the
+answer to "is this an outside wall" (lab MS-11). `follows the declared kind, not how exposed the
+wall turns out to be` (ifc.test.ts) is now `follows how exposed the wall is, as the drawing and
+the DXF do, when no kind says exterior`. In "a flat drawn on its own" (rules-check.test.ts) a
+front door on a wall that says `interior` with nothing behind it is now a way out; the landing
+behind it is drawn as walls with no room, which keeps the "space not drawn" finding and notice
+those tests pin. `windows only onto the hall` (rules-escape.test.ts) now draws the hall. The
+Madrid and Berlin flats (room-rows-flats.test.ts) now expect one `wall/kind-differs` line for
+each wall stated exterior that a light well or a balcony drawn as a room lies against. No
+expected figure changed.
+
 ## Kinds of test the suite does not have yet
 
 From the lab's entry Z-7. None of these is built here.

@@ -4,7 +4,7 @@ import { checkLocalRules } from '../rules'
 import type { RuleFinding } from '../rules'
 import { floorGraph } from '../rules/graph'
 import { planForFloor } from '../floors'
-import { door, edit, flat, twoFloorHouse, withOpening, withoutOpening } from './rules-fixtures'
+import { door, edit, flat, twoFloorHouse, wall, withOpening, withoutOpening } from './rules-fixtures'
 
 const summary = (plan: FloorPlan) =>
   checkLocalRules(plan).findings.map((f) => `${f.code} ${f.floor} ${f.rooms.join('+')}`)
@@ -108,10 +108,27 @@ describe('floors other than the ground floor', () => {
 })
 
 describe('a flat drawn on its own', () => {
-  // The front door is on a wall that is not exterior: it leads to a landing nobody drew.
+  // MSG-13 (lab MS-11): whether a door leads outside is worked out from what lies past it. A wall
+  // that only says `interior` (which is also what a wall that states no kind reads as) with no
+  // room and no enclosed floor behind it faces outside, so the front door is a way out.
+  it('takes a front door with nothing behind it as a way out, though its wall says interior', () => {
+    const plan = edit(flat(), (copy) => {
+      copy.walls.find((w) => w.id === 's1')!.kind = 'interior'
+    })
+    expect(checkLocalRules(plan).findings).toEqual([])
+    expect(routeNotices(plan)).toEqual([])
+  })
+
+  // The front door opens onto a landing whose walls are drawn and which is not drawn as a room:
+  // floor the walls enclose and no room claims is a space not drawn, not the outside.
   const flatOffLanding = () =>
     edit(flat(), (copy) => {
       copy.walls.find((w) => w.id === 's1')!.kind = 'interior'
+      copy.walls.push(
+        wall('l1', [0, 0], [0, -2], { kind: 'exterior' }),
+        wall('l2', [0, -2], [4, -2], { kind: 'exterior' }),
+        wall('l3', [4, -2], [4, 0], { kind: 'exterior' })
+      )
     })
 
   it('is not told it has no way out: its entrance is reported as leading to a space not drawn', () => {

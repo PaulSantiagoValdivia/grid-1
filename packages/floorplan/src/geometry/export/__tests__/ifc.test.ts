@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Floor, FloorPlan, Opening, Room, Wall } from '../../plan'
 import { floorElevations, SLAB_THICKNESS } from '../../elevations'
 import { createGuidIssuer, ifcGuid, ifcString, toIfc } from '../ifc'
+import { indexPlan } from '../../plan'
+import { wallExposure } from '../../exposure'
 
 /**
  * IFC export.
@@ -1241,17 +1243,24 @@ describe('Pset_WallCommon', () => {
     expect(isExternal(doc, wallByName(doc, 'par'))).toBe(false)
   })
 
-  it('follows the declared kind, not how exposed the wall turns out to be', () => {
-    // Every wall of this room borders it on one side only, so by exposure they
-    // are all exterior; declared interior, they stay not external.
+  // MSG-13 (lab MS-11): `IsExternal` is the answer the drawing and the DXF give, worked out from
+  // the rooms on each wall's sides. Until then it followed the declared kind, and a plan that left
+  // the kind out (which reads as `interior`) had every wall not external while the DXF put them all
+  // on the exterior layer.
+  it('follows how exposed the wall is, as the drawing and the DXF do, when no kind says exterior', () => {
+    // Every wall of the sample's rooms with a room on one side only faces outside.
     const plan = samplePlan()
     const interior: FloorPlan = {
       ...plan,
       walls: plan.walls.map((wall) => ({ ...wall, kind: 'interior' as const }))
     }
+    const index = indexPlan(interior)
     const doc = exported(interior)
-
-    for (const wall of wallsOf(doc)) expect(isExternal(doc, wall)).toBe(false)
+    for (const wall of wallsOf(doc)) {
+      const id = str(wall.args[2])
+      expect(isExternal(doc, wall), id).toBe(wallExposure(index, id) === 'exterior')
+    }
+    expect(wallsOf(doc).some((wall) => isExternal(doc, wall))).toBe(true)
   })
 })
 

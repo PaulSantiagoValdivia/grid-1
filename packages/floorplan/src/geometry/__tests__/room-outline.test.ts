@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan, Wall } from '../plan'
 import { indexPlan } from '../plan'
-import { RoomOutlineError, roomArea, roomOutline, roomPolygon, tryRoomPolygon, wallExposure } from '../room'
+import { RoomOutlineError, roomArea, roomOutline, roomPolygon, tryRoomPolygon } from '../room'
+import { wallExposure } from '../exposure'
 import { validatePlan } from '../validate'
 
 /**

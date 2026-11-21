@@ -22,6 +22,7 @@ import { TOLERANCES } from './tolerances'
 import { centroid, dot, fromTuple, signedArea, sub } from './vec2'
 import { pointAlong, wallAxis } from './wall'
 import { tryRoomPolygon } from './room'
+import { wallExposure } from './exposure'
 
 export type StepKind = 'remove' | 'wall' | 'move' | 'raise' | 'opening' | 'room' | 'dimensions'
 
@@ -182,10 +183,11 @@ export function buildSteps(prev: FloorPlan, next: FloorPlan): BuildStep[] {
     if (goneWalls.has(wall.id)) steps.push({ kind: 'remove', id: wall.id, group: 0 })
   }
 
-  // Groups 1 and 2: outer walls, then everything else.
+  // Groups 1 and 2: outer walls (as the drawing shows them, `wallExposure`), then everything else.
+  const nextIndex = indexPlan(next)
   const wallStep = (wall: Wall): BuildStep | null => {
     const c = change.get(wall.id)
-    const group = wall.kind === 'exterior' && wall.virtual !== true ? 1 : 2
+    const group = wallExposure(nextIndex, wall.id) === 'exterior' && wall.virtual !== true ? 1 : 2
     const at = wallEnd(wall)
     if (c === 'new' || c === 'retrace') return { kind: 'wall', id: wall.id, group, at }
     if (c === 'move') return { kind: 'move', id: wall.id, group, at }

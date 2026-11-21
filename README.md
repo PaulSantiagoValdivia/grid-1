@@ -189,6 +189,29 @@ on offer when no ids are given, and looks for the faults again before each, so t
 fixed are gone afterwards. `applyWallEdits` makes a list of edits on a plan file as read and
 keeps every other key in it.
 
+### Inside and outside walls
+
+Whether a wall faces outside is worked out from the rooms on its two sides, stretch by stretch
+along it: where an edge of a room's outline runs along one face, that room is on that face. A
+stretch with rooms on both faces stands inside; one with a room on one face only faces outside,
+unless the walls enclose floor on the other face (a space no room claims is not the outside).
+A face with no listed room tries the point just past it, so the walls of a pod marked `inside`
+face the room around it. One wall can face an extension for part of its length and the outside
+for the rest, without being cut in pieces.
+
+The 2D drawing, the 3D scene, the DXF layers, the IFC `IsExternal` mark, the order a plan is
+built in, and the route and escape checks all read this one answer. A wall stated `exterior`
+stays an outside wall where rooms lie on both its sides (a courtyard, a balcony or a terrace
+drawn as a room). Every other kind is worked out, because `interior` is also what a wall that
+states no kind reads as. Where they disagree, one warning says so:
+
+| Code | What it says |
+|---|---|
+| `wall/kind-differs` | A wall stated exterior with rooms on both sides, kept as an outside wall; or a wall stated a partition that faces outside, treated as an outside wall. With how long, and the rooms |
+
+In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
+worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.
+
 ### Tolerances and limits
 
 Every check reads one table of tolerances and limits: `TOLERANCES` in

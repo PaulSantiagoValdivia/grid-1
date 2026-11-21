@@ -22,9 +22,9 @@ import { enclosedArea, type Point } from '../../test-support/referee'
 const fixture = (name: string): FloorPlan =>
   parseFloorPlan(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures', name), 'utf8')))
 
-function areas(plan: FloorPlan): Map<string, number> {
+function areas(plan: FloorPlan, said: [string, string][] = []): Map<string, number> {
   const index = indexPlan(plan)
-  expect(validatePlan(plan, index).issues).toEqual([])
+  expect(validatePlan(plan, index).issues.map((i) => [i.code, i.id])).toEqual(said)
   return new Map(plan.rooms.map((room) => [room.id, Math.abs(roomArea(room, index))]))
 }
 
@@ -36,7 +36,15 @@ const referee = (plan: FloorPlan, seed: Point): number =>
 
 describe('R-7 the Madrid flat: a light well whose walls carry on as partitions', () => {
   const plan = fixture('madrid-flat.json')
-  const byRoom = areas(plan)
+  // MSG-13: the light well is drawn as a room, so rooms lie on both sides of its three walls,
+  // which say they are exterior. They are kept as outside walls, as stated, and each gets one
+  // line saying so (lab R-9). The fourth side is the façade.
+  const lightWell: [string, string][] = [
+    ['wall/kind-differs', 'patio-s'],
+    ['wall/kind-differs', 'patio-e'],
+    ['wall/kind-differs', 'patio-n']
+  ]
+  const byRoom = areas(plan, lightWell)
 
   it('measures every room', () => {
     expect([...byRoom.keys()]).toEqual(plan.rooms.map((r) => r.id))
@@ -61,7 +69,7 @@ describe('R-7 the Madrid flat: a light well whose walls carry on as partitions',
       ...plan,
       walls: plan.walls.map((w) => (w.id === 'patio-s' || w.id === 'patio-n' ? { ...w, thickness: 0.1 } : w))
     })
-    expect(total(areas(thinned))).toBeCloseTo(81.10125, 9)
+    expect(total(areas(thinned, lightWell))).toBeCloseTo(81.10125, 9)
   })
 
   // The referee fills the corner square where the light well's east wall meets the row:
@@ -83,7 +91,9 @@ describe('R-7 the Madrid flat: a light well whose walls carry on as partitions',
 
 describe('R-7 the Berlin flat: a Berliner Zimmer whose court wall carries on thinner', () => {
   const plan = fixture('berlin-flat.json')
-  const byRoom = areas(plan)
+  // MSG-13: the balcony is drawn as a room against the court wall, which says it is exterior:
+  // kept as an outside wall, as stated, with one line saying so.
+  const byRoom = areas(plan, [['wall/kind-differs', 'sw']])
 
   it('measures every room', () => {
     expect([...byRoom.keys()]).toEqual(plan.rooms.map((r) => r.id))

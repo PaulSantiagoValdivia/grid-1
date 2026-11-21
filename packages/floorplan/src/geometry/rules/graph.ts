@@ -10,7 +10,10 @@
 
 import type { FloorPlan, Opening, PlanIndex, Wall } from '../plan'
 import { indexPlan } from '../plan'
+import { floorOf } from '../floors'
 import { roomNesting, tryRoomPolygon } from '../room'
+import type { FloorSpaces } from '../spaces'
+import { floorSpaces, spacesKnown } from '../spaces'
 import type { Vec2 } from '../vec2'
 import { add, area, scale } from '../vec2'
 import { wallAxis } from '../wall'
@@ -111,6 +114,40 @@ export function openingSides(
   return sidesAt(wall, opening.offset + opening.width / 2, index, outlines)
 }
 
+/**
+ * Whether the side of a wall with no room on it, at a point along the wall, is outside (MSG-13).
+ *
+ * A wall stated `exterior` faces outside, as stated. Any other wall is worked out: past a face
+ * with no room lies the outside, unless the walls enclose floor there, which is a space no room
+ * claims (a forgotten room, a courtyard not drawn), not the outside (ARE-4). The spaces of a
+ * floor are worked out only when first asked, and when they cannot be, the side is not taken to
+ * be outside, as before.
+ */
+export type OutsideTest = (wall: Wall, along: number, side: 'left' | 'right') => boolean
+
+export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
+  const spaces = new Map<string, FloorSpaces | null>()
+  const spacesOf = (floor: string): FloorSpaces | null => {
+    if (!spaces.has(floor)) {
+      const found = floorSpaces(plan, floor, { index })
+      spaces.set(floor, spacesKnown(found) ? found : null)
+    }
+    return spaces.get(floor) ?? null
+  }
+  return (wall, along, side) => {
+    if (wall.kind === 'exterior') return true
+    const found = spacesOf(floorOf(wall))
+    if (found === null) return false
+    const axis = wallAxis(wall)
+    const step = (wall.virtual === true ? 0 : wall.thickness / 2) + tolerance('stepPastFace')
+    const point = add(add(axis.start, scale(axis.dir, along)), scale(axis.normal, side === 'left' ? step : -step))
+    return !found.spaces.some((space) => {
+      const [outer, ...islands] = space.rings
+      return outer !== undefined && contains(outer, point) && !islands.some((ring) => contains(ring, point))
+    })
+  }
+}
+
 /** Two rooms a person can move between, in id order, and the opening or virtual wall between them. */
 export interface RouteLink {
   readonly rooms: readonly [string, string]
@@ -127,9 +164,9 @@ export interface FloorGraph {
   /** Every room that closes, by id. */
   readonly rooms: readonly string[]
   readonly links: readonly RouteLink[]
-  /** Doors and doorless openings to the outside, through an `exterior` wall. */
+  /** Doors and doorless openings to the outside: through a wall stated `exterior`, or with no room and no enclosed floor past it. */
   readonly exits: readonly OneSided[]
-  /** Doors and doorless openings with nothing drawn behind them, through any other wall. */
+  /** Doors and doorless openings into enclosed floor that no room claims. */
   readonly undrawn: readonly OneSided[]
 }
 
@@ -148,7 +185,8 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
   const exits: OneSided[] = []
   const undrawn: OneSided[] = []
 
-  const passage = (wall: Wall, via: string, sides: [string | null, string | null]): void => {
+  const outside = outsideTest(plan, index)
+  const passage = (wall: Wall, via: string, along: number, sides: [string | null, string | null]): void => {
     const [left, right] = sides
     if (left !== null && right !== null) {
       if (left !== right) {
@@ -163,8 +201,8 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     // Nor when the room sits inside a room that was left out.
     const host = nesting.inner.get(room)?.host ?? null
     if (host !== null && !outlines.has(host)) return
-    // `kind` is read as declared, never inferred.
-    if (wall.kind === 'exterior') {
+    // Outside as stated, or worked out: no room and no enclosed floor past that face (MSG-13).
+    if (outside(wall, along, left === null ? 'left' : 'right')) {
       exits.push({ room, opening: via })
     } else {
       undrawn.push({ room, opening: via })
@@ -176,12 +214,13 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     if (opening.type === 'window') continue
     const wall = index.wallsById.get(opening.wall)
     if (wall === undefined) continue
-    passage(wall, opening.id, openingSides(opening, index, outlines))
+    passage(wall, opening.id, opening.offset + opening.width / 2, openingSides(opening, index, outlines))
   }
   // A virtual wall is an open side: it joins the rooms it separates, tested at its middle.
   for (const wall of plan.walls) {
     if (wall.virtual !== true) continue
-    passage(wall, wall.id, sidesAt(wall, wallAxis(wall).length / 2, index, outlines))
+    const middle = wallAxis(wall).length / 2
+    passage(wall, wall.id, middle, sidesAt(wall, middle, index, outlines))
   }
 
   const bySide = (a: OneSided, b: OneSided): number => byText(a.room, b.room) || byText(a.opening, b.opening)

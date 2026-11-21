@@ -29,6 +29,7 @@ import {
   type StoreyLevel
 } from '../elevations'
 import { tryRoomPolygon } from '../room'
+import { wallExposure } from '../exposure'
 import { validatePlan } from '../validate'
 import { wallAxis } from '../wall'
 
@@ -598,7 +599,7 @@ function writeWall(c: Context, storey: Storey, wall: Wall): WallElement {
     NULL
   )
 
-  writeWallProperties(c, wall, id)
+  writeWallProperties(c, wall, id, wallExposure(storey.model.index, wall.id) === 'exterior')
   associateWallMaterial(c, wall, id)
   return { id, placement: wallPlacement, wall, length: axis.length }
 }
@@ -653,16 +654,16 @@ function writeWallMaterialAssociations(c: Context): void {
 }
 
 /**
- * `IsExternal` comes from the declared `kind`, never from the computed
- * exposure: the file says what the author meant, and a thick interior wall or a
- * thin exterior one is still what it was declared.
+ * `IsExternal` is the answer the drawing and the DXF give (`wallExposure`, MSG-13): worked out
+ * from the rooms on the wall's sides, and true for any wall stated `exterior`. A wall that faces
+ * outside for part of its length is external. Thickness decides nothing.
  */
-function writeWallProperties(c: Context, wall: Wall, element: number): void {
+function writeWallProperties(c: Context, wall: Wall, element: number, outside: boolean): void {
   const external = c.w.add(
     'IFCPROPERTYSINGLEVALUE',
     str('IsExternal'),
     NULL,
-    `IFCBOOLEAN(${en(wall.kind === 'exterior' ? 'T' : 'F')})`,
+    `IFCBOOLEAN(${en(outside ? 'T' : 'F')})`,
     NULL
   )
   const set = c.w.add(

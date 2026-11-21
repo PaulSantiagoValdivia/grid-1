@@ -3,8 +3,9 @@
 `npm run scoreboard` runs the Grid lab's plans through Grid and prints five counts. Each is
 compared with the figures stored in `current.json`. When any count is worse than the stored
 figure, the run exits with code 1 and CI fails. It runs in CI on Ubuntu and Windows. A full run
-takes about 35 seconds (7 before ARE-4, which works out the spaces the walls enclose each time
-the drawing's checks run, and 25 before MSG-12, which sets every wall against the others).
+takes about 45 seconds (7 before ARE-4, which works out the spaces the walls enclose each time
+the drawing's checks run, 25 before MSG-12, which sets every wall against the others, and 35
+before MSG-13, which works out the rooms on each side of every wall).
 
 ```bash
 npm run scoreboard                          # run, print, compare with current.json
@@ -87,7 +88,7 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after MSG-12) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after MSG-13) | The lab's own figure |
 |---|---:|---:|---:|
 | Rooms measured wrong | 1,975 | 197 | baseline 829 + 1,145 = 1,974 |
 | Damage that passes in silence | 560 | 388 | baseline 560 |
@@ -200,6 +201,14 @@ MSG-12 (wall faults named at the wall, each with its fix) moved one count:
   were silent. A number set wrong names its wall in 6 more plans (4 silent, 2 vague) and an id
   reference changed in 3 (vague).
 - Sound plans with a warning stays 70: none of the 442 sound plans gets a wall fault.
+
+MSG-13 (inside and outside worked out from the rooms on each side of a wall, used by the views,
+the exports and the checks) moved no count. The damage set and the sound plans state every
+wall's kind, and on them the worked-out kind agrees with the stated one: no sound plan gets a
+`wall/kind-differs` line, and the damage outcomes are as they were (the same totals, and the same
+410 plans whose outcome differs from the lab's). Its effect is on plans that
+leave the kind out, which the lab's own plans show (`reviews/MSG-13.md`). A full run takes about
+45 seconds.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The

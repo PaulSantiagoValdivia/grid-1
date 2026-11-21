@@ -27,6 +27,7 @@ import type { ToleranceChanges } from './tolerances'
 import { tolerance, withTolerances } from './tolerances'
 import { validatePlausibility } from './plausible'
 import { wallFaults } from './wallFaults'
+import { kindDisagreements } from './exposure'
 
 /** `floor` issues are about a floor as a whole; their id is the floor's id. */
 export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor'
@@ -740,12 +741,34 @@ function validateWallFaults(plan: FloorPlan, index: PlanIndex, broken: ReadonlyS
   }
 }
 
+/**
+ * Walls whose stated kind and worked-out kind disagree (`exposure.ts`, MSG-13), in one line each:
+ * a wall stated `exterior` with rooms on both sides keeps its kind; a wall stated `partition`
+ * that faces outside is treated as an outside wall.
+ */
+function validateKinds(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  for (const sides of kindDisagreements(plan, index)) {
+    if (broken.has(sides.wall) || sides.differs === null) continue
+    const length = `${sides.differs.length.toFixed(2)} m`
+    const inside = [...new Set(sides.stretches.filter((s) => s.worked === 'interior').flatMap((s) => [...s.left, ...s.right]))]
+    const facing = [...new Set(sides.stretches.filter((s) => s.worked === 'exterior').flatMap((s) => [...s.left, ...s.right]))]
+    const message =
+      sides.differs.stands === 'kept'
+        ? `Wall ${sides.wall} is stated exterior, but rooms lie on both its sides along ${length} ` +
+          `(${names(inside)}). It is kept as an outside wall, as stated; if it is an inside wall, leave out its kind.`
+        : `Wall ${sides.wall} is stated a partition, but faces outside along ${length}: room ` +
+          `${names(facing)} lies on one side and no room on the other. It is treated as an outside wall.`
+    issues.push(issue('wall', sides.wall, 'wall/kind-differs', message, 'warning'))
+  }
+}
+
 export interface ValidateOptions {
   /**
    * Whether to work out the spaces the walls enclose and report floor no room claims and rooms
    * that do not match their space (`validateSpaces`), rooms that overlap (`validateRoomOverlaps`)
-   * rooms marked `inside` that no room holds (`validateNesting`), and the wall faults
-   * (`validateWallFaults`). On by default. Those lines
+   * rooms marked `inside` that no room holds (`validateNesting`), the wall faults
+   * (`validateWallFaults`) and walls whose stated kind disagrees with the rooms on their sides
+   * (`validateKinds`). On by default. Those lines
    * are warnings and never change `broken`, so a caller that only needs `broken` can leave them
    * out: joining every wall of a floor costs more than every other check together.
    */
@@ -829,6 +852,7 @@ export function validatePlan(
     validateNesting(plan, index, broken, issues)
     validateRoomOverlaps(plan, index, broken, issues)
     validateWallFaults(plan, index, broken, issues)
+    validateKinds(plan, index, broken, issues)
   }
 
   return { issues, broken }
