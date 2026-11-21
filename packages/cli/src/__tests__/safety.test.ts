@@ -47,8 +47,17 @@ function text(data: string | Uint8Array): string {
 
 describe('T-9: what held', () => {
   it('keeps markup, forged lines and control characters in names out of the exports\' structure', () => {
-    // The library is given the plan directly: the command's reader would refuse these names.
-    const plan = parseFloorPlan(box(MARKUP, {}, ['s\nv 9 9 9\nmtllib evil.mtl', 'e', 'n', 'w']))
+    // Since MSG-9 the schema refuses these names on reading, as the command's reader does. A
+    // library caller can still hand the writers a plan it built without reading it, so the
+    // hostile text is put in after the read.
+    const forged = 's\nv 9 9 9\nmtllib evil.mtl'
+    expect(() => parseFloorPlan(box(MARKUP, {}, [forged, 'e', 'n', 'w']))).toThrow(/holds a line break/)
+    const read = parseFloorPlan(box('Room', {}, ['tmp', 'e', 'n', 'w']))
+    const plan = {
+      ...read,
+      walls: read.walls.map((w) => (w.id === 'tmp' ? { ...w, id: forged } : w)),
+      rooms: read.rooms.map((r) => ({ ...r, name: MARKUP, boundary: r.boundary.map((id) => (id === 'tmp' ? forged : id)) })),
+    }
     const plain = parseFloorPlan(box('Room'))
     for (const format of ['dxf', 'ifc', 'obj', 'glb'] as const) {
       const out = text(exportPlan(plan, format, OPTIONS).data)

@@ -34,11 +34,26 @@ const text = (plan: FloorPlan, format: ExportFormat, projectName = 'p'): string 
 }
 
 describe('names written to look like markup, file syntax or control characters', () => {
-  const MARKUP = '</text><script>alert(1)</script><text onload="x">&amp; "q" \u0001\u000c‮evil'
+  const MARKUP = '</text><script>alert(1)</script><text onload="x">&amp; "q" \u0001\u000c\u202eevil'
   const FORGED_OBJ = 's\nv 9 9 9\nmtllib evil.mtl'
   const FORGED_IFC = "x');\nENDSEC;\n0\nSECTION"
-  const hostile = parseFloorPlan(box(MARKUP, {}, [FORGED_OBJ, 'e', 'n', 'w']))
   const plain = parseFloorPlan(box('Bedroom'))
+  // Since MSG-9 the schema refuses this plan on reading (a line break in a wall id, control and
+  // direction characters in a name). A library caller can still hand the writers a plan it built
+  // without reading it, so the writers keep their own guard: the hostile text is put in after
+  // the read.
+  const hostile: FloorPlan = (() => {
+    const read = parseFloorPlan(box('Bedroom', {}, ['tmp', 'e', 'n', 'w']))
+    return {
+      ...read,
+      walls: read.walls.map((w) => (w.id === 'tmp' ? { ...w, id: FORGED_OBJ } : w)),
+      rooms: read.rooms.map((r) => ({ ...r, name: MARKUP, boundary: r.boundary.map((id) => (id === 'tmp' ? FORGED_OBJ : id)) })),
+    }
+  })()
+
+  it('are refused when the plan is read, naming the part (MSG-9)', () => {
+    expect(() => parseFloorPlan(box(MARKUP, {}, [FORGED_OBJ, 'e', 'n', 'w']))).toThrow(/holds a line break \(U\+000A\)/)
+  })
 
   it('stay one name in OBJ and GLB: the forged lines become part of a safe object name', () => {
     const obj = text(hostile, 'obj').split('\n')

@@ -34,10 +34,30 @@
  *   a height.
  */
 import { z } from 'zod'
+import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
 
-// MSG-9: the limits and the character rule for the plan's text, and how Grid quotes it. The
-// schema does not apply the limits yet; see reviews/MSG-9.md.
 export * from './planText'
+
+/**
+ * A name, an id or a path from the plan (MSG-9): one line, no control or direction characters,
+ * no lone half of a character pair, and no longer than its limit (`planText.ts`). A refusal
+ * names the part and the limit, never the text.
+ */
+const text = (kind: TextKind) =>
+  z.string().superRefine((value, ctx) => {
+    const problem = textProblem(value, kind)
+    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
+  })
+
+/** A list of parts, at most `PARTS_MAX` long (MSG-9). */
+const parts = <T extends z.ZodTypeAny>(item: T, noun: string) =>
+  z.array(item).superRefine((list, ctx) => {
+    if (list.length <= PARTS_MAX) return
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `has ${list.length.toLocaleString('en-US')} entries; a plan may have at most ${PARTS_MAX.toLocaleString('en-US')} ${noun}`,
+    })
+  })
 
 /**
  * Every number in a plan is finite (MSG-15, lab T-7). JSON reads a number too large to hold,
@@ -55,8 +75,8 @@ const Vec2 = z.tuple([finite(), finite()])
 export const DEFAULT_FLOOR_ID = 'ground'
 
 export const FloorSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').pipe(z.string().min(1)),
   // Ordering only: 0 = ground, 1 = the floor above it, -1 = basement.
   // NOT an elevation — 3D derives heights from the walls (C4/C5).
   level: finite().int().default(0),
@@ -91,7 +111,7 @@ export const WallSchema = z.preprocess(
   withWallDefaults,
   z
     .object({
-      id: z.string(),
+      id: text('id'),
       start: Vec2,
       end: Vec2,
       // C1: grows thickness/2 on each side of the start→end axis. A virtual wall's
@@ -104,7 +124,7 @@ export const WallSchema = z.preprocess(
       virtual: z.boolean().optional(),
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
-      floor: z.string().min(1).optional(),
+      floor: text('id').pipe(z.string().min(1)).optional(),
     })
     .superRefine((wall, ctx) => {
       // A solid wall needs some thickness and height; a dividing line may have none.
@@ -135,13 +155,19 @@ export const ROOM_USES = [
 export const RoomUseSchema = z.enum(ROOM_USES)
 
 export const RoomSchema = z.object({
-  id: z.string(),
-  name: z.string(),
+  id: text('id'),
+  name: text('name'),
   // C3: ordered wall IDs in counter-clockwise order (top view), inner-face contour
-  boundary: z.array(z.string()),
+  boundary: z.array(text('id')).superRefine((list, ctx) => {
+    if (list.length <= BOUNDARY_MAX) return
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `lists ${list.length.toLocaleString('en-US')} walls; a room may list at most ${BOUNDARY_MAX.toLocaleString('en-US')}`,
+    })
+  }),
   // C5: unstated means the ground floor. Every wall in `boundary` must be on this
   // same floor — a cross-floor boundary is a validation error.
-  floor: z.string().min(1).optional(),
+  floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
   // unknown value is read as unstated instead of rejecting the whole plan: `use`
   // only feeds advisory checks, and a parse error means no preview at all.
@@ -157,8 +183,8 @@ export const RoomSchema = z.object({
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
 
 export const OpeningSchema = z.object({
-  id: z.string(),
-  wall: z.string(),
+  id: text('id'),
+  wall: text('id'),
   type: OpeningTypeSchema,
   // C2: distance from wall.start to the NEAR edge of the opening, along the wall axis (m)
   offset: finite().nonnegative(),
@@ -178,7 +204,7 @@ export const OpeningSchema = z.object({
 
 export const ReferenceImageSchema = z.object({
   // Path relative to the project directory
-  path: z.string(),
+  path: text('path'),
   opacity: finite().min(0).max(1).default(0.4),
   // Bumped on every write. The destination filename is stable
   // (assets/reference.<ext>), so replacing an image with one of the same
@@ -190,13 +216,13 @@ export const ReferenceImageSchema = z.object({
 export const FloorPlanSchema = z.object({
   version: z.literal('1').default('1'),
   units: z.literal('m').default('m'),
-  walls: z.array(WallSchema).default([]),
-  rooms: z.array(RoomSchema).default([]),
-  openings: z.array(OpeningSchema).default([]),
+  walls: parts(WallSchema, 'walls').default([]),
+  rooms: parts(RoomSchema, 'rooms').default([]),
+  openings: parts(OpeningSchema, 'openings').default([]),
   // C5: names and orders the floors. Advisory — a floor named only by a wall or
   // room still counts as a floor of the plan, so geometry can never become
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
-  floors: z.array(FloorSchema).optional(),
+  floors: parts(FloorSchema, 'floors').optional(),
   referenceImage: ReferenceImageSchema.optional(),
 })
 

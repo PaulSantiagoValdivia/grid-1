@@ -96,11 +96,12 @@ stays on one line. Reading now refuses such a plan, so both use a one-line hosti
 expectations; the first also checks that the plan with the line break is refused on reading,
 naming `floors[0].name`. No expected figure changed.
 
-## Lane A's part: the messages done, the schema held back
+## Lane A's part: the schema and the messages
 
-Added after lane B's commit, in `packages/floorplan`, `packages/rules` and the scoreboard's tests.
-The schema limits and the quoting of the door-change line are written and tested, but held back
-as a patch, because each breaks one test in `packages/cli`, which another session owns (below).
+Added after lane B's commit, in `packages/floorplan`, `packages/rules`, the scoreboard's tests and
+two tests of `packages/cli`. It landed in two commits: the message quoting first, then, once
+`packages/cli` was free (after CMD-9 merged), the schema limits, the quoted door-change line and
+the two command tests they change.
 
 **One rule for the text, in the library.** `packages/floorplan/src/types/planText.ts` holds the
 limits (names 120, ids 64, the trace image's path 1,024, 50,000 walls, rooms, openings or floors
@@ -111,9 +112,10 @@ direction characters, lone surrogates) and `textProblem`, word for word what the
 
 **Every message quotes the plan's text.** `quoted` puts a name or id in double quotes, with any
 quote or backslash inside escaped (`JSON.stringify`). It is used in every template that names a
-part, except the door-change line (held, below):
+part:
 
-- the plan checks (`geometry/rules/messages.ts`);
+- the plan checks (`geometry/rules/messages.ts`) and the door-change line (`rules/doors.ts`,
+  `"door-living" joined "hall" and "living"; …`), which the edit tools print;
 - validation, plausibility questions, room outlines, wall faults, the spaces and overlap checks
   (`validate.ts`, `plausible.ts`, `room.ts`, `wallFaults.ts`, `spaces.ts`, `wall.ts`);
 - the comparison (`diff/summary.ts`): rooms and floors added, removed, renamed or moved;
@@ -125,30 +127,33 @@ The notes view keeps the name as its own segment (`{ text, name: true }`) and ad
 it was already a separate field. Each finding still returns the rooms and openings it is about
 as ids, and `grid_check` returns them with their names.
 
-### Held back: the schema limits and the door-change line
+### The schema takes the limits
 
-`MSG-9-schema-held.patch` in the session notes folder (it applies on top of this commit) makes
-`FloorPlanSchema` refuse a name, id or path that breaks the rule and a list that is too long,
+`FloorPlanSchema` refuses a name, id or path that breaks the rule and a list that is too long,
 with the same words as the command and the part as the issue's path
-(`rooms.0.name: is 50,000,000 characters long; a name may have at most 120`), and quotes the ids
-in the door-change line (`"door-living" joined "hall" and "living"; …`). It also holds their
-tests. With it applied, every test of the library and the scoreboard passed, and the scoreboard
-counts were the same as stored (five lab plans become unreadable, below), but two command tests
-failed:
+(`rooms.0.name: is 50,000,000 characters long; a name may have at most 120`). The viewer app and
+any library caller now get what the command gets. Ids keep any other character, markup is still
+text, and nothing is cleaned in place: the reasons are lane B's, above.
 
-- `packages/cli/src/mcp/__tests__/editDoors.test.ts` expects the door line word for word,
-  without quotes;
-- `packages/cli/src/__tests__/safety.test.ts` hands `parseFloorPlan` a plan with a line break in
-  a wall id and control characters in a name, on the premise that "the command's reader would
-  refuse these names" but the library would not.
+### Two command tests changed, and why
 
-`MSG-9-cli-tests.patch` in the same folder changes those two tests: the door line with quotes,
-and the safety test checking the refusal, then building the hostile plan after the read so it
-still tests the writers' own guard (the same change made here to
-`packages/floorplan/src/__tests__/safety.test.ts`). Applying the two patches together, with the
-command's owner agreeing, finishes points 1 and 2 below.
+- `packages/cli/src/mcp/__tests__/editDoors.test.ts` expected the door-change line word for word,
+  `bath-door joined bath and lounge; …`. The line now quotes its ids, so it expects
+  `"bath-door" joined "bath" and "lounge"; it now joins "kitchen" and "lounge".` The words are
+  otherwise the same.
+- `packages/cli/src/__tests__/safety.test.ts` handed `parseFloorPlan` a plan with a line break in a
+  wall id and control and direction characters in a name, on the premise that only the command's
+  reader would refuse them. The schema now refuses them too, so the test checks that refusal and
+  then builds the hostile plan after the read, to keep testing the export writers' own guard (a
+  library caller can still hand them such a plan). The same change was made to
+  `packages/floorplan/src/__tests__/safety.test.ts`.
 
-Lab plans the held schema refuses: five of the 1,121 in the scoreboard's data, none of the 2,300
+One more line in `packages/cli/src/mcp/__tests__/tools.test.ts`, found modified in the checkout
+and kept: an invisible U+202E character written literally in the source is now the escape
+`\u202E`. The string is the same at run time; the source no longer holds a hidden direction
+character.
+
+Lab plans the schema now refuses: five of the 1,121 in the scoreboard's data, none of the 2,300
 generated ones. All are probes written to test odd text:
 
 | Plan | Why |
@@ -159,7 +164,7 @@ generated ones. All are probes written to test odd text:
 | `L/scenarios/odd/text--room-name-dxf-look-alike.json` | a room name with a carriage return |
 
 SHT-5's label test (`viewer/src/picture/__tests__/labelsOnLabPlans.test.ts`) skips a plan the
-schema refuses, so it would no longer draw the 334-character label; the long-label case would
+schema refuses, so it no longer draws the 334-character label; the long-label case would
 need a probe of at most 120 characters on one line. The data files were not edited.
 
 ### Against done_when, now
@@ -169,12 +174,11 @@ need a probe of at most 120 characters on one line. The data files were not edit
    comparison: `types/__tests__/planText.test.ts` and
    `rules/src/checks/__tests__/rules-messages.test.ts` give every room a one-line name holding an
    approval sentence and an instruction, and check that in every line it appears only inside
-   quotes. The wall id with a line break is refused by the command (lane B) and, with the held
-   patch, by the schema.
+   quotes. The wall id with a line break is refused by the command (lane B) and by the schema
+   (`types/__tests__/planText.test.ts`, naming `walls.2.id`).
 2. *A 50,000,000-character name is refused naming the 120-character limit; control,
-   direction-override and line-separator characters are refused naming the part.* Done in the
-   command (lane B); in the schema with the held patch. The library's rule (`textProblem`) is in
-   this commit and tested.
+   direction-override and line-separator characters are refused naming the part.* Done, in the
+   command (lane B) and in the schema.
 3. Unchanged (lane B's reader).
 4. Unchanged: the T-9 cases still pass.
 
@@ -187,10 +191,9 @@ and the two escape window messages read "The window of "Bedroom 2" is…". Each 
 with quotes added; none was changed to make a test pass otherwise. No `it.fails` was about this,
 so none was flipped and `pinned-tests.md` is unchanged.
 
-### For the command (`packages/cli`, not touched here)
+### Still for the command
 
-- The two test changes in `MSG-9-cli-tests.patch`, together with `MSG-9-schema-held.patch`.
-- `src/command/planText.ts` can then import the limits, `UNSAFE_TEXT` and `textProblem` from
+- `src/command/planText.ts` can import the limits, `UNSAFE_TEXT` and `textProblem` from
   `@ongrid/floorplan/types/floorplan` and keep only what is its own (the file-size limit and the
   walk over the raw JSON before the schema). The two copies say the same today.
 - `grid check`'s own lines, the describe card, the edit answers and the tool answers that paste a
@@ -201,7 +204,9 @@ so none was flipped and `pinned-tests.md` is unchanged.
 `npm run build`, `npm run typecheck`, `npm run lint`, `npx vitest run`, `npm run check:licenses`
 and `npm run scoreboard` pass; the scoreboard is the same as the stored figures.
 
-For lane A's commit (the message quoting), the same six checks pass: 3,714 tests in 160 files,
-and the scoreboard is the same as the stored figures. Run with the held patch applied as well,
-the library and scoreboard tests passed, the two command tests named above failed, and the
-scoreboard counts were again the same as stored (lab plans unreadable 20 to 25, the five probes).
+For lane A's commits, the same six checks pass; the figures are below.
+
+| Commit | Tests | Scoreboard |
+|---|---|---|
+| Message quoting (14aef7e) | 3,714 in 160 files pass | same as stored |
+| Schema limits, door line, two command tests | 3,771 in 163 files pass | same as stored; lab plans unreadable 20 to 25 (the five probes), lab rooms compared 16,451 to 16,435 |

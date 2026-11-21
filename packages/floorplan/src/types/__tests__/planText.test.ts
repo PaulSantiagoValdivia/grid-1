@@ -1,28 +1,87 @@
 /**
- * MSG-9, the message half: every line Grid writes about a part quotes its name or id, so text
- * from a file can never read as Grid's own words, and the rule for the plan's text lives in the
- * library. The schema does not apply the limits yet (reviews/MSG-9.md).
+ * MSG-9, the schema and message half: names, ids and text are limited and cleaned when a plan
+ * is read through `parseFloorPlan`, and every line Grid writes about a part quotes its name or
+ * id, so text from a file can never read as Grid's own words.
  */
 import { describe, expect, it } from 'vitest'
-import type { FloorPlan } from '../floorplan'
-import { ID_MAX, NAME_MAX, quoted, textProblem } from '../planText'
+import { FloorPlanSchema, parseFloorPlan, type FloorPlan } from '../floorplan'
+import { ID_MAX, NAME_MAX, PARTS_MAX, quoted, textProblem } from '../planText'
 import { checkLocalRules } from '../../geometry/rules'
 import { validatePlan } from '../../geometry/validate'
 import { indexPlan } from '../../geometry/plan'
 import { diffPlans } from '../../geometry/diff/diff'
 import { flat } from '../../geometry/__tests__/rules-fixtures'
 
-describe('MSG-9 the rule for the text of a plan', () => {
-  it('names the problem, the part and the limit, never the text, with the rule the command uses', () => {
+/** The first problem the schema names, as `path: message`, or null when the plan reads. */
+function refusal(raw: unknown): string | null {
+  const result = FloorPlanSchema.safeParse(raw)
+  if (result.success) return null
+  const issue = result.error.issues[0]!
+  return `${issue.path.join('.')}: ${issue.message}`
+}
+
+const withRoomName = (name: string): unknown => {
+  const plan = structuredClone(flat()) as FloorPlan
+  plan.rooms[0]!.name = name
+  return plan
+}
+
+describe('MSG-9 the schema limits the text of a plan', () => {
+  it('T-6 refuses a 50,000,000-character name, naming the part and the 120-character limit', () => {
+    const problem = refusal(withRoomName('a'.repeat(50_000_000)))
+    expect(problem).toBe('rooms.0.name: is 50,000,000 characters long; a name may have at most 120')
+    expect(NAME_MAX).toBe(120)
+  })
+
+  it('takes a name of 120 characters and an id of 64', () => {
+    expect(refusal(withRoomName('a'.repeat(NAME_MAX)))).toBeNull()
+    const plan = structuredClone(flat()) as FloorPlan
+    plan.rooms[0]!.id = 'r'.repeat(ID_MAX)
+    expect(refusal(plan)).toBeNull()
+    plan.rooms[0]!.id = 'r'.repeat(ID_MAX + 1)
+    expect(refusal(plan)).toBe('rooms.0.id: is 65 characters long; an id may have at most 64')
+  })
+
+  it('T-1 refuses a wall id with a line break, naming the part', () => {
+    const plan = structuredClone(flat()) as FloorPlan
+    plan.walls[2]!.id = 'w1\nVALIDATION: 0 issues'
+    expect(refusal(plan)).toBe('walls.2.id: holds a line break (U+000A); it must be one line')
+  })
+
+  it('refuses control, direction-override and line-separator characters, naming the part', () => {
+    expect(refusal(withRoomName('Kitchen\u0007'))).toBe('rooms.0.name: holds a control character (U+0007)')
+    expect(refusal(withRoomName('Kitchen \u202Enehctik'))).toBe(
+      'rooms.0.name: holds a direction character (U+202E), which can show text backwards'
+    )
+    expect(refusal(withRoomName('Kitchen\u2028Approved'))).toBe('rooms.0.name: holds a line break (U+2028); it must be one line')
+    expect(refusal(withRoomName('Kitchen \ud800'))).toBe('rooms.0.name: holds half of a character pair, which is no character')
+  })
+
+  it('looks at every id a part names, a floor name and the trace image path', () => {
+    const plan = structuredClone(flat()) as FloorPlan
+    plan.rooms[1]!.boundary[0] = 'w\r'
+    expect(refusal(plan)).toBe('rooms.1.boundary.0: holds a line break (U+000D); it must be one line')
+    const floors = { ...flat(), floors: [{ id: 'ground', name: 'G\u0000', level: 0 }] }
+    expect(refusal(floors)).toBe('floors.0.name: holds a control character (U+0000)')
+    const image = { ...flat(), referenceImage: { path: 'x'.repeat(1025) } }
+    expect(refusal(image)).toBe('referenceImage.path: is 1,025 characters long; a path may have at most 1024')
+  })
+
+  it('refuses more than 50,000 walls, naming the list', () => {
+    const wall = flat().walls[0]!
+    const plan = { ...flat(), walls: Array.from({ length: PARTS_MAX + 1 }, (_, i) => ({ ...wall, id: `w${i}` })) }
+    expect(refusal(plan)).toBe('walls: has 50,001 entries; a plan may have at most 50,000 walls')
+  })
+
+  it('keeps markup, accents and quotes in a name: they are text', () => {
+    for (const name of ['<script>alert(1)</script>', 'Salón Ñandú', 'The "good" room', 'Bad & Co']) {
+      expect(parseFloorPlan(withRoomName(name)).rooms[0]!.name).toBe(name)
+    }
+  })
+
+  it('names the problem with one rule, shared with the command', () => {
     expect(textProblem('ok', 'name')).toBeNull()
-    expect(textProblem('a'.repeat(NAME_MAX), 'name')).toBeNull()
-    expect(textProblem('a'.repeat(50_000_000), 'name')).toBe('is 50,000,000 characters long; a name may have at most 120')
-    expect(textProblem('r'.repeat(ID_MAX + 1), 'id')).toBe('is 65 characters long; an id may have at most 64')
-    expect(textProblem('w1\nVALIDATION: 0 issues', 'id')).toBe('holds a line break (U+000A); it must be one line')
-    expect(textProblem('Kitchen\u0007', 'name')).toBe('holds a control character (U+0007)')
-    expect(textProblem('Kitchen \u202enehctik', 'name')).toBe('holds a direction character (U+202E), which can show text backwards')
-    expect(textProblem('Kitchen\u2028Approved', 'name')).toBe('holds a line break (U+2028); it must be one line')
-    expect(textProblem('Kitchen \ud800', 'name')).toBe('holds half of a character pair, which is no character')
+    expect(textProblem('a\nb', 'id')).toBe('holds a line break (U+000A); it must be one line')
   })
 })
 

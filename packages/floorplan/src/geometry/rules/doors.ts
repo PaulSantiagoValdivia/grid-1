@@ -13,6 +13,7 @@ import { indexPlan } from '../plan'
 import { floorOf, planFloors, planForFloor } from '../floors'
 import { drawable } from './check'
 import { openingSides, outsideTest, roomOutlines } from './graph'
+import { quoted } from '../../types/planText'
 
 /** What lies on one side of a door: a room by id, the outside, or floor nobody drew. */
 export type DoorFace = { readonly room: string } | { readonly outside: true } | { readonly undrawn: true }
@@ -23,12 +24,12 @@ export interface DoorRoomsChange {
   /** The two sides before and after, in a stable order: rooms by id, then the outside, then floor not drawn. */
   readonly before: readonly [DoorFace, DoorFace]
   readonly after: readonly [DoorFace, DoorFace]
-  /** "door-living joined hall and living; it now joins hall and kitchen" */
+  /** `"door-living" joined "hall" and "living"; it now joins "hall" and "kitchen"` */
   readonly message: string
 }
 
 const sideName = (side: DoorFace): string =>
-  'room' in side ? side.room : 'outside' in side ? 'the outside' : 'a space that is not drawn'
+  'room' in side ? quoted(side.room) : 'outside' in side ? 'the outside' : 'a space that is not drawn'
 
 const sideKey = (side: DoorFace): string => ('room' in side ? `0${side.room}` : 'outside' in side ? '1' : '2')
 
@@ -81,7 +82,7 @@ export function doorsThatChangedRooms(earlier: FloorPlan, later: FloorPlan): Doo
       floor: is.floor,
       before: was.sides,
       after: is.sides,
-      message: `${opening.id} joined ${joins(was.sides)}; it now joins ${joins(is.sides)}`
+      message: `${quoted(opening.id)} joined ${joins(was.sides)}; it now joins ${joins(is.sides)}`
     })
   }
   return changes

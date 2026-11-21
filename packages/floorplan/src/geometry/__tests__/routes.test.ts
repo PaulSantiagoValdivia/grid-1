@@ -139,7 +139,7 @@ describe('WR-3 a wall moved 1 m under a door', () => {
         floor: 'ground',
         before: [{ room: 'hall' }, { room: 'living' }],
         after: [{ room: 'hall' }, { room: 'kitchen' }],
-        message: 'door-living joined hall and living; it now joins hall and kitchen'
+        message: '"door-living" joined "hall" and "living"; it now joins "hall" and "kitchen"'
       }
     ])
   })
@@ -152,9 +152,9 @@ describe('WR-3 a wall moved 1 m under a door', () => {
     const before = house(5)
     const roomless = { ...before, rooms: before.rooms.filter((r) => r.id !== 'hall') }
     expect(doorsThatChangedRooms(before, roomless).map((c) => c.message)).toEqual([
-      'front joined hall and the outside; it now joins the outside and a space that is not drawn',
-      'door-living joined hall and living; it now joins living and a space that is not drawn',
-      'door-kitchen joined hall and kitchen; it now joins kitchen and a space that is not drawn'
+      '"front" joined "hall" and the outside; it now joins the outside and a space that is not drawn',
+      '"door-living" joined "hall" and "living"; it now joins "living" and a space that is not drawn',
+      '"door-kitchen" joined "hall" and "kitchen"; it now joins "kitchen" and a space that is not drawn'
     ])
   })
 })

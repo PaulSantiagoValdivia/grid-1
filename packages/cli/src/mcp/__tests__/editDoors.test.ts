@@ -31,8 +31,8 @@ describe('the answer to an edit', () => {
     const dir = project()
     const answer = await tool('grid_move_room_side').run({ plan: 'plan.json', room: 'bath', side: 'east', by: -2, out: 'moved.json' }, { project: openProject(dir, dir) })
     const data = answer.data as { doors: string[] }
-    expect(data.doors).toEqual(['bath-door joined bath and lounge; it now joins kitchen and lounge.'])
-    expect(answer.text.split('\n')).toContain('bath-door joined bath and lounge; it now joins kitchen and lounge.')
+    expect(data.doors).toEqual(['"bath-door" joined "bath" and "lounge"; it now joins "kitchen" and "lounge".'])
+    expect(answer.text.split('\n')).toContain('"bath-door" joined "bath" and "lounge"; it now joins "kitchen" and "lounge".')
   })
 
   it('says nothing about doors when none joins other rooms', async () => {
