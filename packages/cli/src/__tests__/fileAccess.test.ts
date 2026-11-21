@@ -18,6 +18,9 @@ const ALLOWED: Readonly<Record<string, string>> = {
   'src/apps/systemLookup.ts':
     "looks for CAD programs in the system's program folders and registry, never at a path from a plan, "
     + 'an agent or a command line; no command or tool imports it (checked below)',
+  'src/sheet/fonts.ts':
+    "registers Grid's own bundled fonts from its install folder (VEW-7), never a path from a plan, "
+    + 'an agent or a command line',
   'bin/grid.mjs': 'the launcher checks that its own built file, next to it, exists',
   'build.mjs': 'the build script, run by developers and CI, writes dist/',
   'pack.mjs': 'packs the built command and its install files into dist/release/ (CMD-9), run by developers and CI',
