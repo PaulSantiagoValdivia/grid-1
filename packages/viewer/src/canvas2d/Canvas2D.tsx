@@ -33,6 +33,7 @@ import { dimensionKey, dimensionsProgress } from './buildFrame'
 import { toReact } from './toReact'
 import type { PlanLook } from '../picture/look'
 import { LIGHT_LOOK } from '../picture/look'
+import type { LabelStyle } from './labelPlacement'
 import { planScene } from '../picture/scene'
 import { doorWarningsOf, framingOf, handingsOf, warningMessages } from '../picture/planSvg'
 import type { Attrs as ShapeAttrs, SvgNode } from '../picture/svgNode'
@@ -132,6 +133,8 @@ interface Canvas2DProps {
    * (`planToSvg`). Light by default. The stylesheets still win over them in the app.
    */
   look?: PlanLook
+  /** How the room tags read, as a picture of the plan has them (`PictureOptions.labels`). */
+  labels?: LabelStyle
 }
 
 
@@ -151,7 +154,8 @@ export function Canvas2D({
   diff: diffProp,
   viewport,
   onViewportChange,
-  look = LIGHT_LOOK
+  look = LIGHT_LOOK,
+  labels
 }: Canvas2DProps): JSX.Element {
   const hostRef = useRef<SVGSVGElement | null>(null)
   const [size, setSize] = useState({ width: 1, height: 1 })
@@ -560,6 +564,7 @@ export function Canvas2D({
     dimensions,
     metersPerPixel,
     look,
+    labels,
     live: {
       leaving: leaving !== null && prevDrawing ? { drawing: prevDrawing, ids: removing, progress: leaving } : null,
       ghosts,

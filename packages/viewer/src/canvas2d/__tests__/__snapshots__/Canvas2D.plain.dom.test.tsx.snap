@@ -253,7 +253,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       y2="-2.9"
     />
     <g
-      transform="translate(1.05 -1.7041666666666666) scale(0.015659999999999997)"
+      transform="translate(1.05 -1.7625) scale(0.015659999999999997)"
     >
       <text
         data-part="dimension-text"
@@ -310,7 +310,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
     </g>
   </g>
   <g
-    transform="translate(2 -1.5) scale(0.015659999999999997)"
+    transform="translate(2 -1.57047) scale(0.015659999999999997)"
   >
     <text
       data-part="label"
@@ -326,7 +326,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
     </text>
   </g>
   <g
-    transform="translate(8 -1.5) scale(0.015659999999999997)"
+    transform="translate(8 -1.57047) scale(0.015659999999999997)"
   >
     <text
       data-part="label"

@@ -19,6 +19,7 @@ import {
   validateDoorSweeps
 } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
+import type { LabelStyle } from '../canvas2d/labelPlacement'
 import { doorHandingOf } from '../canvas2d/doorHanding'
 import type { Viewport } from '../canvas2d/viewport'
 import { fitTo, viewBoxOf } from '../canvas2d/viewport'
@@ -42,6 +43,8 @@ export interface PictureOptions {
   readonly look?: 'light' | 'dark' | PlanLook
   /** The overall and room dimensions. On by default. */
   readonly showDimensions?: boolean
+  /** How the room tags read: capitals, room numbers, how the area is rounded. Plain by default. */
+  readonly labels?: LabelStyle
 }
 
 /** A picture before it is written out. */
@@ -133,7 +136,8 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     doorWarnings: warningMessages(doorWarningsOf(slice)),
     dimensions,
     metersPerPixel: view.width / width,
-    look
+    look,
+    labels: options.labels
   })
   return { width, height, view, look, rooms: drawing.rooms.length, nodes }
 }

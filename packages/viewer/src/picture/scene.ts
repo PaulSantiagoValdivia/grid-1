@@ -19,12 +19,23 @@
  * Pure: no DOM, no React.
  */
 import type { Dimension, Ghosts, PlanDrawing, PlanOpening, PlanRoom, PlanWall, Vec2 } from '@ongrid/floorplan/geometry'
-import { traceWall } from '@ongrid/floorplan/geometry'
+import { boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import { openingAt, stripAcross } from '../canvas2d/strip'
-import { DIMENSION_DY, ROOM_AREA_DY, formatArea, placeDimensionLabel, roomLabelBox } from '../canvas2d/labelPlacement'
-import { pathOf } from '../canvas2d/viewport'
+import type { Box, LabelStyle } from '../canvas2d/labelPlacement'
+import {
+  DIMENSION_DY,
+  ROOM_AREA_DY,
+  dimensionTextBox,
+  doorSwingBox,
+  formatArea,
+  labelName,
+  lineBox,
+  placeDimensionLabel,
+  placeRoomLabels
+} from '../canvas2d/labelPlacement'
+import { FRAME_MARGIN, pathOf } from '../canvas2d/viewport'
 import type { PlanLook } from './look'
 import { LINE_PX, TEXT_PX, lengthText } from './look'
 import type { Attrs, SvgNode } from './svgNode'
@@ -121,6 +132,8 @@ export interface SceneInput {
   /** How many metres one pixel of the picture measures: the zoom. */
   readonly metersPerPixel: number
   readonly look: PlanLook
+  /** How the room tags read: capitals, numbers, how the area is rounded. */
+  readonly labels?: LabelStyle
   readonly live?: Partial<SceneLive>
 }
 
@@ -168,6 +181,7 @@ function paints(look: PlanLook, mpp: number) {
         ? text(look.dimensionSoftText, TEXT_PX.roomDimension)
         : text(look.dimensionText, TEXT_PX.dimension),
     label: text(look.label, TEXT_PX.roomName),
+    leader: { stroke: look.labelSoft, 'stroke-width': px(LINE_PX.leader) } as Attrs,
     area: text(look.labelSoft, TEXT_PX.roomArea),
     // In a group scaled to pixels, so these widths are pixels.
     warningDot: { fill: look.warning, stroke: look.paper, 'stroke-width': LINE_PX.warningRing } as Attrs,
@@ -274,9 +288,25 @@ function dimensionMark(
   return el('g', { 'data-part': 'dimension', 'data-kind': dim.kind, 'data-id': dim.id, opacity }, children, dim.id)
 }
 
+/** The label boxes a dimension's number could meet anywhere along its line. */
+function blocksNear(dim: Dimension, blocks: readonly Box[], mpp: number): Box[] {
+  const shift = { x: dim.normal.x * dim.offset, y: dim.normal.y * dim.offset }
+  const line = lineBox({ x: dim.from.x + shift.x, y: dim.from.y + shift.y }, { x: dim.to.x + shift.x, y: dim.to.y + shift.y }, mpp)
+  const text = dimensionTextBox({ x: 0, y: 0 }, dim, mpp)
+  const reach: Box = {
+    minX: line.minX + text.minX,
+    maxX: line.maxX + text.maxX,
+    minY: line.minY + text.minY,
+    maxY: line.maxY + text.maxY
+  }
+  return blocks.filter((block) => block.minX < reach.maxX && reach.minX < block.maxX && block.minY < reach.maxY && reach.minY < block.maxY)
+}
+
 /** The plan's elements, back to front: what goes inside the `<svg>`. */
 export function planScene(input: SceneInput): SvgNode[] {
   const { drawing, handings, doorWarnings, dimensions, metersPerPixel: mpp, look } = input
+  const style = input.labels ?? {}
+  const decimals = style.areaDecimals ?? 2
   const live: SceneLive = { ...STILL, ...input.live }
   const paint = paints(look, mpp)
   const out: SvgNode[] = []
@@ -509,49 +539,91 @@ export function planScene(input: SceneInput): SvgNode[] {
     }
   }
 
-  // Room numbers slide off the room names and areas at this zoom, or hide. Measured from the
-  // text actually drawn, so a wider "before → after" area still keeps the numbers off it.
+  // Each label goes to a spot in its room clear of door swings, walls and the other labels,
+  // or out of the room with a leader. Measured from the text actually drawn, so a wider
+  // "before → after" area still gets the room it needs.
   const areaText = (room: PlanRoom): string => {
     const change = live.areaChange(room.id)
-    return change ? `${change.before.toFixed(2)} → ${change.after.toFixed(2)} m²` : formatArea(room.area)
+    return change
+      ? `${change.before.toFixed(decimals)} → ${change.after.toFixed(decimals)} m²`
+      : formatArea(room.area, decimals)
   }
   // The same text in the pieces the app has always drawn it in, one text node each.
   const areaPieces = (room: PlanRoom): string[] => {
     const change = live.areaChange(room.id)
     return change
-      ? [change.before.toFixed(2), ' → ', change.after.toFixed(2), ' m²']
-      : [room.area.toFixed(2), ' m²']
+      ? [change.before.toFixed(decimals), ' → ', change.after.toFixed(decimals), ' m²']
+      : [room.area.toFixed(decimals), ' m²']
   }
-  const labelBlocks = drawing.rooms.map((room) => roomLabelBox({ ...room, areaText: areaText(room) }, mpp))
+  const names = drawing.rooms.map((room, index) => labelName(room.name, index, style))
+  const swings: Box[] = []
+  for (const opening of drawing.openings) {
+    const box = doorSwingBox(opening, handings.get(opening.id), mpp)
+    if (box) swings.push(box)
+  }
+  // The dimension lines, and the numbers that never move: a label keeps off them when it can.
+  const dimensionBlocks: Box[] = []
+  for (const dim of dimensions) {
+    const shift = { x: dim.normal.x * dim.offset, y: dim.normal.y * dim.offset }
+    dimensionBlocks.push(lineBox({ x: dim.from.x + shift.x, y: dim.from.y + shift.y }, { x: dim.to.x + shift.x, y: dim.to.y + shift.y }, mpp))
+    if (dim.kind !== 'room') dimensionBlocks.push(dimensionTextBox(dim.labelAt, dim, mpp))
+  }
+  // A label moved out of its room stays where a framed view of the plan, or a picture of it,
+  // always shows: the drawing and its dimensions, and the margin `fitTo` leaves round them.
+  const framed = boundsWithDimensions(drawing, dimensions)
+  const padX = Math.max(framed.width, 0.001) * FRAME_MARGIN
+  const padY = Math.max(framed.height, 0.001) * FRAME_MARGIN
+  const labels = placeRoomLabels(
+    drawing.rooms.map((room, index) => ({ id: room.id, polygon: room.polygon, name: names[index]!, areaText: areaText(room) })),
+    { swings, walls: drawing.walls.filter((wall) => !wall.virtual).flatMap((wall) => wall.slices), dimensions: dimensionBlocks },
+    mpp,
+    { minX: framed.min.x - padX, maxX: framed.max.x + padX, minY: framed.min.y - padY, maxY: framed.max.y + padY }
+  )
+  const labelBlocks = labels.flatMap((label) => (label ? [label.box] : []))
 
   for (const dim of dimensions) {
     const shown = live.dimensionShown(dim)
     if (shown <= 0) continue
-    const labelAt = dim.kind === 'room' ? placeDimensionLabel(dim, labelBlocks, mpp) : dim.labelAt
+    const labelAt = dim.kind === 'room' ? placeDimensionLabel(dim, blocksNear(dim, labelBlocks, mpp), mpp) : dim.labelAt
     out.push(dimensionMark(dim, mpp, labelAt, shown < 1 ? shown : undefined, paint))
   }
 
-  for (const room of drawing.rooms) {
+  drawing.rooms.forEach((room, index) => {
+    const label = labels[index]
+    // No clear spot at this zoom: the label waits for the user to zoom in.
+    if (!label) return
+    const opacity = live.labelOpacity(room.id)
+    if (label.leader) {
+      const [a, b] = label.leader
+      out.push(
+        el(
+          'line',
+          { 'data-part': 'label-leader', 'data-room': room.id, x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, opacity, ...paint.leader },
+          [],
+          `leader:${room.id}`
+        )
+      )
+    }
     out.push(
       el(
         'g',
-        { transform: labelTransform(room.labelAt, mpp), opacity: live.labelOpacity(room.id) },
+        { transform: labelTransform(label.at, mpp), opacity },
         [
-          el('text', { 'data-part': 'label', ...paint.label }, [room.name]),
+          el('text', { 'data-part': 'label', ...paint.label }, [names[index]!]),
           el('text', { 'data-part': 'area', dy: String(ROOM_AREA_DY), ...paint.area }, areaPieces(room))
         ],
         `label:${room.id}`
       )
     )
-  }
+  })
 
   // After the current labels, so the plan's own fills never cover it. A ghost, so no paint.
   for (const room of live.removedRooms) {
     out.push(
       el(
         'g',
-        { transform: labelTransform(room.labelAt, mpp), ...live.ghostAttrs(room.id) },
-        [el('text', { 'data-part': 'label' }, [`${room.name} · ${formatArea(room.area)} · removed`])],
+        { transform: labelTransform(poleOfInaccessibility(room.polygon).point, mpp), ...live.ghostAttrs(room.id) },
+        [el('text', { 'data-part': 'label' }, [`${room.name} · ${formatArea(room.area, decimals)} · removed`])],
         `ghost-label-${room.id}`
       )
     )
