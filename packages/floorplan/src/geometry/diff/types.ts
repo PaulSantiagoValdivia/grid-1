@@ -7,16 +7,18 @@
  * AI, and nothing is a class instance or a Map.
  */
 
+import { TOLERANCES } from '../tolerances'
+
 export const PLAN_DIFF_SCHEMA_VERSION = 1 as const
 
 /**
  * Two lengths closer than this are the same length. Ten times
  * coarser than `revision.ts`, so whatever it calls unchanged is unchanged here.
  */
-export const LENGTH_TOLERANCE_M = 0.001
+export const LENGTH_TOLERANCE_M = TOLERANCES.diffLength.value
 
-/** Two areas closer than this are the same area. */
-export const AREA_TOLERANCE_M2 = 0.01
+/** Two areas closer than this are the same area (`areaReported`). */
+export const AREA_TOLERANCE_M2 = TOLERANCES.areaReported.value
 
 export type EntityType = 'floor' | 'wall' | 'opening' | 'room'
 export type ChangeKind = 'added' | 'removed' | 'modified'
@@ -141,7 +143,7 @@ export interface ScopeTargets {
 }
 
 export interface ScopeOptions {
-  /** Metres. A change whose numbers all moved less than this is ignored. Default 0.01. */
+  /** Metres. A change whose numbers all moved less than this is ignored. Default `diffMovement` (0.01). */
   readonly minMovement?: number
 }
 

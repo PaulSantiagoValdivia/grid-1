@@ -1,21 +1,21 @@
 {
  "what": "The counts the build must not fall below. Update them in the commit that moves them, and say why.",
  "counts": {
-  "roomsMeasuredWrong": 203,
-  "damageSilent": 468,
+  "roomsMeasuredWrong": 197,
+  "damageSilent": 447,
   "turnsAnswered": 15,
   "mistakesNamed": 2,
   "checksFed": 5,
-  "roomsNotMeasured": 712,
+  "roomsNotMeasured": 724,
   "soundPlansWithAlarm": 70
  },
  "detail": {
   "areas:lab": {
    "plans": 1121,
    "plansGridCannotRead": 20,
-   "compared": 16463,
-   "wrong": 200,
-   "notMeasured": 712
+   "compared": 16451,
+   "wrong": 194,
+   "notMeasured": 724
   },
   "areas:generated": {
    "plans": 2300,
@@ -33,11 +33,11 @@
   },
   "damage": {
    "plans": 3000,
-   "caught: names the damaged part": 1672,
-   "silent: result changed, nothing said": 468,
+   "caught: names the damaged part": 1721,
+   "silent: result changed, nothing said": 447,
    "refused: schema names the place": 506,
    "no effect at all": 117,
-   "caught vaguely: names something else": 237
+   "caught vaguely: names something else": 209
   },
   "damage:lab": {
    "caught: names the damaged part": 1512,
@@ -45,7 +45,7 @@
    "refused: schema names the place": 506,
    "no effect at all": 117,
    "caught vaguely: names something else": 305,
-   "plansWhoseOutcomeDiffersNow": 228
+   "plansWhoseOutcomeDiffersNow": 275
   },
   "sound": {
    "plans": 442,

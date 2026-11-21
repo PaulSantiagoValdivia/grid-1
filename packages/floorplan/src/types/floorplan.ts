@@ -35,8 +35,17 @@
  */
 import { z } from 'zod'
 
+/**
+ * Every number in a plan is finite (MSG-15, lab T-7). JSON reads a number too large to hold,
+ * such as 1e400, as infinity; `z.number()` alone would accept it, and every area and export
+ * built on it would hold "Infinity". How large a finite number may be is the geometry's
+ * question (`largest` in `geometry/tolerances.ts`), not the schema's.
+ */
+const finite = (): z.ZodNumber =>
+  z.number().finite({ message: 'Expected a finite number: this one is too large to hold and reads as infinity' })
+
 // Coordinate pair [x, y] in meters (floor plan space, see C4)
-const Vec2 = z.tuple([z.number(), z.number()])
+const Vec2 = z.tuple([finite(), finite()])
 
 /** C5: the floor an entity belongs to when it does not name one. */
 export const DEFAULT_FLOOR_ID = 'ground'
@@ -46,7 +55,7 @@ export const FloorSchema = z.object({
   name: z.string().min(1),
   // Ordering only: 0 = ground, 1 = the floor above it, -1 = basement.
   // NOT an elevation — 3D derives heights from the walls (C4/C5).
-  level: z.number().int().default(0),
+  level: finite().int().default(0),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -83,8 +92,8 @@ export const WallSchema = z.preprocess(
       end: Vec2,
       // C1: grows thickness/2 on each side of the start→end axis. A virtual wall's
       // written thickness is never used: it is a line, measured on its axis.
-      thickness: z.number(),
-      height: z.number(),
+      thickness: finite(),
+      height: finite(),
       // Explicit field — do not infer from thickness; an interior wall can be thick
       kind: WallKindSchema.default('interior'),
       // Boundary wall with no physical material (open-plan room contour, e.g. kitchen open to dining)
@@ -148,11 +157,11 @@ export const OpeningSchema = z.object({
   wall: z.string(),
   type: OpeningTypeSchema,
   // C2: distance from wall.start to the NEAR edge of the opening, along the wall axis (m)
-  offset: z.number().nonnegative(),
-  width: z.number().positive(),
+  offset: finite().nonnegative(),
+  width: finite().positive(),
   // Height from the floor to the bottom of the opening; 0 for doors (sill at floor)
-  sill: z.number().nonnegative().default(0),
-  height: z.number().positive(),
+  sill: finite().nonnegative().default(0),
+  height: finite().positive(),
   // Doors only. Optional and never defaulted: absent means "not decided",
   // and an undecided door draws no swing. `hinge` names the end of the opening
   // along the wall axis; `start` is the end nearer wall.start (the C2 datum).
@@ -166,12 +175,12 @@ export const OpeningSchema = z.object({
 export const ReferenceImageSchema = z.object({
   // Path relative to the project directory
   path: z.string(),
-  opacity: z.number().min(0).max(1).default(0.4),
+  opacity: finite().min(0).max(1).default(0.4),
   // Bumped on every write. The destination filename is stable
   // (assets/reference.<ext>), so replacing an image with one of the same
   // extension changes no other field — without this the renderer would keep
   // showing the previous picture until a reload.
-  updatedAt: z.number().optional(),
+  updatedAt: finite().optional(),
 })
 
 export const FloorPlanSchema = z.object({

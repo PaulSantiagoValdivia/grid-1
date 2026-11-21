@@ -38,11 +38,12 @@
 
 import type { Vec2 } from './vec2'
 import { cross, dot, signedArea, sub } from './vec2'
+import { TOLERANCES } from './tolerances'
 
-/** Metres. Far below any real feature, far above float noise at plan scale. */
-const TOL = 1e-9
-const ANGLE_EPS = 1e-9
-const AREA_EPS = 1e-12
+/** Metres. Far below any real feature, far above float noise at plan scale. Fixed entries. */
+const TOL = TOLERANCES.samePoint.value
+const ANGLE_EPS = TOLERANCES.sameAngle.value
+const AREA_EPS = TOLERANCES.noArea.value
 const TWO_PI = Math.PI * 2
 
 export interface Triangulation {

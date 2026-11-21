@@ -8,7 +8,7 @@
  * `inside: true`. This module finds the room it sits in and takes it off.
  *
  *  - **The host is found from the outlines.** It is the smallest room on the same floor whose
- *    outline holds the inner room's outline, all but `AREA_TOLERANCE`. The door graph is not
+ *    outline holds the inner room's outline, all but `areaReported`. The door graph is not
  *    used: it hands a door to the first room it finds on each side, which is not a way to tell
  *    which room holds which.
  *  - **What the host loses** is the inner room's footprint: its outline, the strips of the solid
@@ -29,8 +29,9 @@ import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import { floorOf } from './floors'
 import type { Room, Wall } from './plan'
 import type { Vec2 } from './vec2'
+import { TOLERANCES, tolerance } from './tolerances'
 import type { Box, WallRun } from './polygons'
-import { AREA_TOLERANCE, boxOfRings, cornerFills, intersectionArea, multiArea, overlaps, polygonArea, strip, union } from './polygons'
+import { boxOfRings, cornerFills, intersectionArea, multiArea, overlaps, polygonArea, strip, union } from './polygons'
 
 /** A room whose outline closes, with that outline (`roomPolygon`). */
 export interface TracedRoom {
@@ -78,7 +79,7 @@ export const NO_NESTING: RoomNesting = { inner: new Map(), hosts: new Map() }
  * The polygon library can fail to close a ring when two edges almost coincide. As in
  * `spaces.ts`, the work is tried as drawn first, then with every point rounded to these grids.
  */
-const GRIDS = [0, 1e-9, 1e-7, 1e-6, 1e-5] as const
+const GRIDS = TOLERANCES.joinGrids.values
 /**
  * The most outlines one plan cuts against each other to find hosts. Many rooms marked `inside`
  * piled in one place would otherwise cost the square of their number; past this, the rest are
@@ -86,7 +87,7 @@ const GRIDS = [0, 1e-9, 1e-7, 1e-6, 1e-5] as const
  */
 export const MAX_HOST_CUTS = 200_000
 /** How far inside a wall's faces a corner fill is built, in metres (see `cornerFills`). */
-const FILL_INSET = 1e-9
+const FILL_INSET = TOLERANCES.noLength.value
 
 interface Traced {
   readonly room: Room
@@ -146,7 +147,7 @@ function nest(traced: readonly Traced[], marked: readonly Traced[], wallsById: R
       cuts++
       const shared = intersectionArea(r.polygon, c.polygon)
       if (shared <= 0) continue
-      const holds = shared >= r.area - AREA_TOLERANCE && c.area > r.area + AREA_TOLERANCE
+      const holds = shared >= r.area - tolerance('areaReported') && c.area > r.area + tolerance('areaReported')
       if (holds) {
         if (host === null || c.area < host.area) host = c
       } else if (nearest === null || shared > nearest.shared) {

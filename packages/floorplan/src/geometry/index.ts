@@ -8,12 +8,14 @@
  */
 
 export * from './vec2'
+export * from './tolerances'
 export * from './plan'
 export * from './floors'
 export * from './elevations'
 export * from './wall'
 export * from './room'
 export * from './validate'
+export * from './plausible'
 export * from './floorplan'
 export * from './scene3d'
 export * from './triangulate'

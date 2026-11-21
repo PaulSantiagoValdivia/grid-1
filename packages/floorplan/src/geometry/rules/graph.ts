@@ -14,9 +14,10 @@ import { roomNesting, tryRoomPolygon } from '../room'
 import type { Vec2 } from '../vec2'
 import { add, area, scale } from '../vec2'
 import { wallAxis } from '../wall'
+import { TOLERANCES, tolerance } from '../tolerances'
 
-/** How far past a wall's face a point is taken to be in the room beyond it, in metres. */
-export const STEP_PAST_FACE_M = 0.05
+/** How far past a wall's face a point is taken to be in the room beyond it, in metres (`stepPastFace`). */
+export const STEP_PAST_FACE_M = TOLERANCES.stepPastFace.value
 
 export interface RoomOutline {
   readonly id: string
@@ -72,7 +73,7 @@ export function sidesAt(
 ): [string | null, string | null] {
   const axis = wallAxis(wall)
   const centre = add(axis.start, scale(axis.dir, along))
-  const step = wall.thickness / 2 + STEP_PAST_FACE_M
+  const step = wall.thickness / 2 + tolerance('stepPastFace')
   const candidates = (index.roomsByWall.get(wall.id) ?? [])
     .map((room) => outlines.get(room.id))
     .filter((outline): outline is RoomOutline => outline !== undefined)

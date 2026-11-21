@@ -326,14 +326,13 @@ describe('floorElevations', () => {
 })
 
 /**
- * Known failures from the lab (entry Z-4), as expected failures. Each states the right
- * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
- * `it`. Each title starts with its lab entry ID.
+ * Known failures from the lab (entry Z-4) that MSG-15 fixed. It ran as an expected failure until
+ * Grid asked about sizes far outside a building's.
  */
-describe('known failures (expected to fail until fixed)', () => {
+describe('lab failures fixed by MSG-15', () => {
   // Lab VE-2. 'stands each storey on the tallest wall below it' pins the rule this probe
-  // questions; a warning would satisfy both (see test-support/pinned-tests.md).
-  it.fails('VE-2 one partition typed 27 instead of 2.7 does not make a 27 m storey in silence', () => {
+  // questions; the warning MSG-15 added satisfies both (see test-support/pinned-tests.md).
+  it('VE-2 one partition typed 27 instead of 2.7 does not make a 27 m storey in silence', () => {
     const { walls, room } = outline([[0, 0], [5, 0], [5, 4], [0, 4]])
     const tall = { id: 'p', start: [2.5, 0], end: [2.5, 2], thickness: 0.1, height: 27, kind: 'partition' }
     const plan: FloorPlan = parseFloorPlan({ walls: [...walls, tall], rooms: [room] })

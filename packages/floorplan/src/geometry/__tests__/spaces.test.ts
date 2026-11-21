@@ -13,6 +13,7 @@ import { roomArea, roomPolygon } from '../room'
 import type { FloorSpaces } from '../spaces'
 import { floorSpaces, planSpaces, spacesKnown } from '../spaces'
 import { validatePlan } from '../validate'
+import { TOLERANCES } from '../tolerances'
 import type { Vec2 } from '../vec2'
 import { outline, type Point } from '../../test-support/outline'
 
@@ -271,8 +272,9 @@ describe('rooms that do not match the space their walls enclose', () => {
     expect(result.spaces).toHaveLength(1)
     expect(result.mismatches.map((m) => [m.room, m.sharedWith])).toEqual([['a', ['b']], ['b', ['a']]])
     // The strip where the partition is missing belongs to neither room: 0.1 m wide, from the
-    // partition's end (lengthened by the millimetre every wall is) to the face of the far wall.
-    expect(result.unclaimed.map((u) => u.area.toFixed(4))).toEqual([(0.1 * (2.9 - 1.001)).toFixed(4)])
+    // partition's end (lengthened by the `gap` every wall is, 1 mm before MSG-15 and 2 cm since)
+    // to the face of the far wall.
+    expect(result.unclaimed.map((u) => u.area.toFixed(4))).toEqual([(0.1 * (2.9 - 1 - TOLERANCES.gap.value)).toFixed(4)])
     const issues = spaceIssues(p)
     expect(issues.map((i) => [i.code, i.id])).toEqual([['floor/unclaimed', 'ground'], ['room/space-mismatch', 'a'], ['room/space-mismatch', 'b']])
     expect(issues[1]!.message).toBe(
@@ -350,12 +352,22 @@ describe('what is not reported twice, and what cannot be worked out', () => {
     expect([...quick.broken]).toEqual([...full.broken])
   })
 
+  // Since MSG-15 validation refuses such walls (`largest`), so the check meets them only when it
+  // is asked directly.
   it('says so when the walls lie too far out to join', () => {
     const { walls, room: r } = outline([[0, 0], [5, 0], [5, 4], [0, 4]])
     const far = walls.map((w) => ({ ...w, start: [w.start[0] + 2e7, w.start[1]] as Point, end: [w.end[0] + 2e7, w.end[1]] as Point }))
-    const issues = spaceIssues(plan(far, [r]))
-    expect(issues.map((i) => [i.code, i.entity, i.id])).toEqual([['floor/spaces-unknown', 'floor', 'ground']])
-    expect(issues[0]!.message).toMatch(/could not be worked out: wall w1 lies more than 10000 km from the origin/)
+    const result = floorSpaces(plan(far, [r]), 'ground')
+    expect(spacesKnown(result)).toBe(false)
+    expect(spacesKnown(result) ? '' : result.reason).toBe('wall w1 lies more than 10000 km from the origin')
+    expect(spaceIssues(plan(far, [r]))).toEqual([])
+    expect(validatePlan(plan(far, [r])).issues.map((i) => i.code)).toEqual([
+      'wall/too-large',
+      'wall/too-large',
+      'wall/too-large',
+      'wall/too-large',
+      'room/broken-wall'
+    ])
   })
 
   it('works out surveyed coordinates, millions of metres from the origin', () => {

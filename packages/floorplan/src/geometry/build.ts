@@ -18,6 +18,7 @@ import type { FloorPlan, Opening, Room, Wall } from './plan'
 import { indexPlan } from './plan'
 import type { PlanWall } from './floorplan'
 import type { Vec2 } from './vec2'
+import { TOLERANCES } from './tolerances'
 import { centroid, dot, fromTuple, signedArea, sub } from './vec2'
 import { pointAlong, wallAxis } from './wall'
 import { tryRoomPolygon } from './room'
@@ -46,7 +47,8 @@ export interface BuildStep {
 
 const DIMENSIONS_ID = 'dimensions'
 
-const EPS = 1e-6
+/** Two heights or lengths closer than `joint` are one (a fixed entry of the tolerance table). */
+const EPS = TOLERANCES.joint.value
 
 const near = (a: number, b: number): boolean => Math.abs(a - b) < EPS
 
@@ -322,7 +324,7 @@ export function traceWall(wall: PlanWall, t: number): Vec2[][] {
   const out: Vec2[][] = []
   for (const slice of wall.slices) {
     const clipped = clipBehind(slice, start, axis, limit)
-    if (clipped.length >= 3 && Math.abs(signedArea(clipped)) > 1e-12) out.push(clipped)
+    if (clipped.length >= 3 && Math.abs(signedArea(clipped)) > TOLERANCES.noArea.value) out.push(clipped)
   }
   return out
 }

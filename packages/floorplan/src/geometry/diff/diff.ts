@@ -26,7 +26,8 @@ import type {
   PropChange,
   WallMotion
 } from './types'
-import { AREA_TOLERANCE_M2, LENGTH_TOLERANCE_M, PLAN_DIFF_SCHEMA_VERSION } from './types'
+import { PLAN_DIFF_SCHEMA_VERSION } from './types'
+import { tolerance } from '../tolerances'
 
 
 /**
@@ -106,8 +107,8 @@ export function diffPlans(
   later: FloorPlan,
   options: DiffOptions = {}
 ): PlanDiff {
-  const epsilon = options.epsilon ?? LENGTH_TOLERANCE_M
-  const areaEpsilon = options.areaEpsilon ?? AREA_TOLERANCE_M2
+  const epsilon = options.epsilon ?? tolerance('diffLength')
+  const areaEpsilon = options.areaEpsilon ?? tolerance('areaReported')
 
   // What is itself invalid on either side is left out and named in the issues.
   const assessments = { base: assess(earlier), head: assess(later) }

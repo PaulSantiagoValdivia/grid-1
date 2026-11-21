@@ -5,13 +5,12 @@
  * objects because the geometry reads much better that way.
  */
 
+import { tolerance } from './tolerances'
+
 export interface Vec2 {
   readonly x: number
   readonly y: number
 }
-
-/** Default tolerance, in meters. One centimeter. */
-export const EPS = 0.01
 
 export function vec(x: number, y: number): Vec2 {
   return { x, y }
@@ -79,7 +78,8 @@ export function lerp(a: Vec2, b: Vec2, t: number): Vec2 {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
 }
 
-export function equals(a: Vec2, b: Vec2, tol: number = EPS): boolean {
+/** Whether two points are within `tol` of each other on both axes; `wallContact` by default. */
+export function equals(a: Vec2, b: Vec2, tol: number = tolerance('wallContact')): boolean {
   return Math.abs(a.x - b.x) <= tol && Math.abs(a.y - b.y) <= tol
 }
 
@@ -98,7 +98,7 @@ export interface Line {
  */
 export function intersectLines(a: Line, b: Line): Vec2 | null {
   const denom = cross(a.dir, b.dir)
-  if (Math.abs(denom) < 1e-9) return null
+  if (Math.abs(denom) < tolerance('parallel')) return null
   const t = cross(sub(b.point, a.point), b.dir) / denom
   return add(a.point, scale(a.dir, t))
 }

@@ -34,7 +34,8 @@ settle them:
 - **VE-2.** The probe `VE-2 one partition typed 27 instead of 2.7 does not make a 27 m storey
   in silence` (elevations.test.ts) questions the tallest-wall rule that `stands each storey on
   the tallest wall below it` pins. The probe is satisfied either by a different storey height
-  or by a warning, so a fix that only warns leaves the pinned test as it is.
+  or by a warning. MSG-15 settled it with a warning (`wall/size-question`), so the pinned test
+  is as it was.
 - **MS-1.** The probe `MS-1 a misspelt field is not dropped in silence` (floorplan.test.ts)
   asks that an unknown field is reported. The pinned room-use test reads an unknown *value* as
   not stated, on purpose, so that one bad value does not stop the preview. The two can live
@@ -59,9 +60,8 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| MS-3, MS-8, MS-9, MS-10, MS-15, MS-16 | `geometry/__tests__/validation.test.ts` |
+| MS-8, MS-9, MS-10, MS-15 | `geometry/__tests__/validation.test.ts` |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
-| VE-2 | `geometry/__tests__/elevations.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
 | CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
 | CH-6 | `packages/rules/src/checks/__tests__/rules-check.test.ts` |
@@ -78,6 +78,8 @@ Paths without a package are under `packages/floorplan/src/`.
 | AR-2 (schema), Z-5 | ARE-2 | `types/__tests__/floorplan.test.ts`, "a virtual wall"; Z-5 also in `types/__tests__/every-plan-parses.test.ts` |
 | MS-2, MS-17 | ARE-4 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-4" |
 | AR-4 | ARE-5 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-5" |
+| MS-3, MS-16 | MSG-15 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-15" |
+| VE-2 | MSG-15 | `geometry/__tests__/elevations.test.ts`, "lab failures fixed by MSG-15" |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
@@ -93,6 +95,15 @@ Both are still expected failures.
 ARE-5 fixed `AR-4 a room listed twice is reported` and moved it to a block named "lab
 failures fixed by ARE-5", asserting the code (`room/overlap`), the room it is on and the whole
 message instead of "some issue". No expected figure changed.
+
+MSG-15 fixed `MS-3 a wall 27 m high in a house is worth a warning`, `MS-16 a door flush with the
+end of an angled wall is accepted` and `VE-2 one partition typed 27 instead of 2.7 …`, and moved
+them to blocks named "lab failures fixed by MSG-15". MS-3 now asserts the code
+(`wall/size-question`) and the whole question. Two figures in `spaces.test.ts` changed with the
+table, both recorded in `reviews/MSG-15.md`: the strip of unclaimed floor in `two rooms side by
+side in one space` follows the `gap` (every wall is lengthened by 2 cm, not 1 mm), and `says so
+when the walls lie too far out to join` asks the spaces check directly, because validation now
+refuses walls past `largest` before the spaces are worked out.
 
 ## Kinds of test the suite does not have yet
 

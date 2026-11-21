@@ -4,6 +4,7 @@ import { planFloors, planForFloor } from '../floors'
 import { buildFloorPlan } from '../floorplan'
 import { buildScene } from '../scene3d'
 import { validatePlan } from '../validate'
+import { wallParts } from '../wall'
 import { parseFloorPlan } from '../../types/floorplan'
 import { outline } from '../../test-support/outline'
 
@@ -467,12 +468,6 @@ describe('known failures (expected to fail until fixed)', () => {
   const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
   const divider = { id: 'v', start: [2.5, 0] as P, end: [2.5, 4] as P, virtual: true, height: 2.7 }
 
-  it.fails('MS-3 a wall 27 m high in a house is worth a warning', () => {
-    const { walls, room } = outline(RECT)
-    walls[0] = { ...walls[0]!, height: 27 }
-    expect(issuesOf(planOf({ walls, rooms: [room] })).length).toBeGreaterThan(0)
-  })
-
   it.fails('MS-8 a door on a virtual wall is reported', () => {
     const { walls, room } = outline(RECT)
     const plan = planOf({
@@ -506,14 +501,206 @@ describe('known failures (expected to fail until fixed)', () => {
     const { walls, room } = outline(RECT)
     expect(issuesOf(planOf({ walls: [...walls, { ...walls[0]!, id: 'copy' }], rooms: [room] })).length).toBeGreaterThan(0)
   })
+})
+
+/**
+ * Known failures from the lab (entry Z-4) that MSG-15 fixed, and the lab entries behind its table
+ * of tolerances and limits (MS-16, MS-3, T-7, AE-6). MS-3 and MS-16 ran as expected failures
+ * above until the table was there.
+ */
+describe('lab failures fixed by MSG-15', () => {
+  type P = [number, number]
+  const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+  const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
+  const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
+  const codesOf = (plan: FloorPlan) => issuesOf(plan).map((i) => [i.code, i.id])
+
+  it('MS-3 a wall 27 m high in a house is worth a warning', () => {
+    const { walls, room } = outline(RECT)
+    walls[0] = { ...walls[0]!, height: 27 }
+    const issues = issuesOf(planOf({ walls, rooms: [room] }))
+    expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['wall/size-question', 'w1', 'warning']])
+    expect(issues[0]!.message).toBe(
+      'Wall w1 is 27.00 m high, the others on its floor typically 2.70 m: is that meant? Grid stands ' +
+        'a storey on its tallest wall, so this one makes the storey 27.00 m high. The limit is ' +
+        "Grid's own, for catching a slipped digit or unit, and no rule."
+    )
+  })
 
   // Lab MS-16: the wall is 4.8996 m long, so the door "runs from 4.00 to 4.90" only by rounding.
-  it.fails('MS-16 a door flush with the end of an angled wall is accepted', () => {
+  it('MS-16 a door flush with the end of an angled wall is accepted', () => {
     const len = 4.8996
     const a = (33 * Math.PI) / 180
     const wall = { id: 'w', start: [0, 0], end: [len * Math.cos(a), len * Math.sin(a)], thickness: 0.2, height: 2.7, kind: 'exterior' }
     const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 4.0, width: 0.9, height: 2.1 }] })
     expect(issuesOf(plan)).toEqual([])
+  })
+
+  // Lab L-5: wall ends rounded to the millimetre, each door placed to finish at the wall's
+  // intended end. 208 of 400 were refused before.
+  it('MS-16 accepts 400 doors flush with the end of walls whose ends were rounded to the millimetre', () => {
+    let seed = 7
+    const random = (): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      return seed / 2147483648
+    }
+    const mm = (v: number): number => Math.round(v * 1000) / 1000
+    let refused = 0
+    let overran = 0
+    for (let i = 0; i < 400; i++) {
+      const length = 2 + random() * 6
+      const angle = random() * 2 * Math.PI
+      const start: P = [mm(random() * 20), mm(random() * 20)]
+      const end: P = [mm(start[0] + length * Math.cos(angle)), mm(start[1] + length * Math.sin(angle))]
+      const width = 0.9
+      const wall = { id: 'w', start, end, thickness: 0.2, height: 2.7, kind: 'exterior' }
+      const opening = { id: 'd', wall: 'w', type: 'door', offset: length - width, width, height: 2.1 }
+      const drawn = Math.hypot(end[0] - start[0], end[1] - start[1])
+      if (length > drawn) overran++
+      if (issuesOf(planOf({ walls: [wall], openings: [opening] })).length > 0) refused++
+    }
+    expect(overran).toBeGreaterThan(150)
+    expect(refused).toBe(0)
+  })
+
+  it('MS-16 refuses an overrun past the millimetre, stating it and the offset that fits', () => {
+    const wall = { id: 'w', start: [0, 0], end: [4.8996, 0], thickness: 0.2, height: 2.7 }
+    const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 4.01, width: 0.9, height: 2.1 }] })
+    const issues = issuesOf(plan)
+    expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['opening/out-of-wall', 'd', 'error']])
+    expect(issues[0]!.message).toBe(
+      'Opening d runs from 4.01 to 4.91 m on wall w, which is 4.8996 m long: it runs 10 mm past ' +
+        'the end of the wall, more than the 1 mm Grid allows. An offset from 0.00 to 3.9996 m fits.'
+    )
+  })
+
+  it('MS-16 says so when the opening is wider than its wall', () => {
+    const wall = { id: 'w', start: [0, 0], end: [0.8, 0], thickness: 0.2, height: 2.7 }
+    const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 0, width: 0.9, height: 2.1 }] })
+    expect(issuesOf(plan)[0]!.message).toMatch(/runs 100 mm past the end of the wall, more than the 1 mm Grid allows\. It is 100 mm wider than the wall is long\.$/)
+  })
+
+  it('MS-16 draws a door that runs a hair past its wall within the wall', () => {
+    const wall = { id: 'w', start: [0, 0], end: [4.8996, 0], thickness: 0.2, height: 2.7 }
+    const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 4.0, width: 0.9, height: 2.1 }] })
+    expect(validatePlan(plan).broken.size).toBe(0)
+    const parts = wallParts(plan.walls[0]!, plan.openings)
+    expect(Math.max(...parts.map((p) => p.to))).toBeCloseTo(4.8996, 9)
+    expect(parts.map((p) => p.kind)).toEqual(['solid', 'lintel'])
+    expect(buildScene(plan).walls).toHaveLength(1)
+  })
+
+  it('MS-3 asks whether a flat typed in feet is in feet', () => {
+    const feet = 1 / 0.3048
+    const { walls, room } = outline([[0, 0], [5, 0], [5, 4], [0, 4]].map(([x, y]) => [x! * feet, y! * feet] as P), {
+      thickness: [0.2 * feet, 0.2 * feet, 0.2 * feet, 0.2 * feet]
+    })
+    const tall = walls.map((w) => ({ ...w, height: 2.7 * feet }))
+    const plan = planOf({
+      walls: tall,
+      rooms: [{ ...room, use: 'bedroom' }],
+      openings: [{ id: 'd', wall: 'w1', type: 'door', offset: 1, width: 0.9 * feet, height: 2.1 * feet }]
+    })
+    const issues = issuesOf(plan)
+    expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['plan/units-question', 'plan', 'warning']])
+    expect(issues[0]!.message).toBe(
+      'Is this plan in feet? Its walls are typically 8.86 m high and 0.656 m thick, and its doors ' +
+        '2.95 m wide: read as feet, those are 2.70 m, 0.20 m and 0.90 m. Grid reads every size as ' +
+        'metres. If the plan was typed in feet, multiply every length by 0.3048 (wall points, ' +
+        'thickness and height; opening offset, width, sill and height).'
+    )
+  })
+
+  it('MS-3 asks about millimetres as well, and says nothing about a plan in metres', () => {
+    const { walls, room } = outline(RECT)
+    const inMm = walls.map((w) => ({
+      ...w,
+      start: [w.start[0] * 1000, w.start[1] * 1000] as P,
+      end: [w.end[0] * 1000, w.end[1] * 1000] as P,
+      thickness: w.thickness * 1000,
+      height: w.height * 1000
+    }))
+    const codes = issuesOf(planOf({ walls: inMm, rooms: [room] })).map((i) => i.code)
+    expect(codes).toContain('plan/units-question')
+    expect(issuesOf(planOf({ walls: inMm, rooms: [room] })).find((i) => i.code === 'plan/units-question')!.message).toMatch(/^Is this plan in millimetres\?/)
+    expect(issuesOf(planOf({ walls, rooms: [room] }))).toEqual([])
+  })
+
+  it('MS-3 asks about a wall far higher than any home has, where the plan says it is a home', () => {
+    const { walls, room } = outline(RECT)
+    const high = walls.map((w) => ({ ...w, height: 12 }))
+    expect(codesOf(planOf({ walls: high, rooms: [{ ...room, use: 'storage' }] }))).toEqual([])
+    const issues = issuesOf(planOf({ walls: high, rooms: [{ ...room, use: 'bedroom' }] }))
+    expect(issues.map((i) => i.code)).toEqual(['wall/size-question', 'wall/size-question', 'wall/size-question', 'wall/size-question'])
+    expect(issues[0]!.message).toMatch(
+      /^Wall w1 is 12\.00 m high: is that meant\? Grid asks about walls higher than 10\.00 m in a home \(a room in this plan is a bedroom or a living room\)/
+    )
+  })
+
+  it('MS-3 asks about a door one nanometre wide, and still counts it as a way through', () => {
+    const { walls, room } = outline(RECT)
+    const plan = planOf({ walls, rooms: [room], openings: [{ id: 'd', wall: 'w1', type: 'door', offset: 1, width: 1e-9, height: 2.1 }] })
+    const issues = issuesOf(plan)
+    expect(issues.map((i) => [i.code, i.id])).toEqual([['opening/size-question', 'd']])
+    expect(issues[0]!.message).toMatch(/^Door d is 1e-9 m wide: is that meant\? Grid asks about openings narrower than 0\.20 m\. It still counts as a way through\./)
+  })
+
+  // Lab T-7: JSON reads 1e400 as infinity, and the schema used to accept it.
+  it('T-7 refuses a number too big to hold', () => {
+    const { walls, room } = outline(RECT)
+    const text = JSON.stringify({ walls, rooms: [room] }).replace('"thickness":0.2', '"thickness":1e400')
+    const raw: unknown = JSON.parse(text)
+    expect(() => parseFloorPlan(raw)).toThrow(/finite number: this one is too large to hold and reads as infinity/)
+    const infinite = JSON.parse(JSON.stringify({ walls, rooms: [room] }).replace('"end":[5,0]', '"end":[1e400,0]')) as unknown
+    expect(() => parseFloorPlan(infinite)).toThrow(/finite number/)
+  })
+
+  it('T-7 refuses a wall 1e9 m thick, and every size past 10,000 km', () => {
+    const { walls, room } = outline(RECT)
+    walls[0] = { ...walls[0]!, thickness: 1e9 }
+    const result = validatePlan(planOf({ walls, rooms: [room] }))
+    expect(result.issues.map((i) => [i.code, i.id, i.severity])).toEqual([
+      ['wall/too-large', 'w1', 'error'],
+      ['room/broken-wall', 'r1', 'error']
+    ])
+    expect(result.issues[0]!.message).toBe(
+      'Wall w1: its thickness is 1000000000 m, past the 10,000 km Grid accepts. A number this large ' +
+        'is no building: most likely a digit or a unit slipped. Give every size in metres.'
+    )
+    expect(result.broken.has('w1')).toBe(true)
+    const door = { id: 'd', wall: 'w1', type: 'door', offset: 1, width: 0.9, height: 2e7 }
+    const { walls: fresh } = outline(RECT)
+    expect(codesOf(planOf({ walls: fresh, openings: [door] })).filter(([, id]) => id === 'd')).toEqual([['opening/too-large', 'd']])
+  })
+
+  it('T-7 refuses infinity in a plan built in code, which never met the schema', () => {
+    const { walls, room } = outline(RECT)
+    const built: FloorPlan = { version: '1', units: 'm', walls: [{ ...walls[0]!, end: [Infinity, 0] }, ...walls.slice(1)], rooms: [room], openings: [] }
+    const issues = issuesOf(built)
+    expect(issues[0]!.code).toBe('wall/too-large')
+    expect(issues[0]!.message).toMatch(/^Wall w1: a coordinate of its end is not a finite number\./)
+  })
+
+  // Lab AE-6: a 0.0015 m partition from a scan passed with no issue.
+  it('AE-6 questions a partition 1.5 mm thick, and not a 3 cm glass wall', () => {
+    const { walls, room } = outline(RECT)
+    const thin = { id: 'p', start: [2.5, 0], end: [2.5, 4], thickness: 0.0015, height: 2.7, kind: 'partition' }
+    const issues = issuesOf(planOf({ walls: [...walls, thin], rooms: [room] })).filter((i) => i.code === 'wall/size-question')
+    expect(issues.map((i) => i.id)).toEqual(['p'])
+    expect(issues[0]!.message).toBe(
+      'Wall p is 0.0015 m thick: is that meant? Grid asks about solid walls thinner than 0.02 m. If ' +
+        'it is a line on the floor with no substance, mark it virtual. The limit is Grid\'s own, for ' +
+        'catching a slipped digit or unit, and no rule.'
+    )
+    const glass = { ...thin, thickness: 0.03 }
+    expect(issuesOf(planOf({ walls: [...walls, glass], rooms: [room] })).filter((i) => i.code === 'wall/size-question')).toEqual([])
+  })
+
+  it('takes a survey\'s looser tolerances for one check', () => {
+    const wall = { id: 'w', start: [0, 0], end: [4.8996, 0], thickness: 0.2, height: 2.7 }
+    const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 4.01, width: 0.9, height: 2.1 }] })
+    expect(validatePlan(plan, undefined, { tolerances: { openingOverrun: 0.02 } }).issues).toEqual([])
+    expect(validatePlan(plan).issues.map((i) => i.code)).toEqual(['opening/out-of-wall'])
   })
 })
 

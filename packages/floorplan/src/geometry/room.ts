@@ -33,7 +33,8 @@
 
 import type { PlanIndex, Room, Wall } from './plan'
 import type { Line, Vec2 } from './vec2'
-import { EPS, area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
+import { area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
+import { tolerance, tolerancesAsStated } from './tolerances'
 import type { WallAxis } from './wall'
 import { wallAxis, wallFaces } from './wall'
 import type { RoomNesting } from './nesting'
@@ -99,18 +100,8 @@ function thicknessOf(wall: Wall): number {
  * a sharp angle.
  */
 export function cornerReach(a: Wall, b: Wall): number {
-  return Math.max(thicknessOf(a), thicknessOf(b)) + EPS
+  return Math.max(thicknessOf(a), thicknessOf(b)) + tolerance('wallContact')
 }
-
-/**
- * A corner further than this from BOTH its walls is not a corner of the room:
- * the two walls do not meet there, their lines merely cross. One metre, or the
- * reach when the walls are thicker than that.
- */
-const STRAY_CORNER = 1
-
-/** Sine of 15 degrees. Neighbours closer to parallel than this can be one straight side. */
-const NEARLY_PARALLEL = 0.2588
 
 /** One wall of the boundary, with what the outline needs to know about it. */
 interface Piece {
@@ -128,7 +119,7 @@ interface Piece {
  * floor between them is neither lost nor counted twice.
  */
 function sameFace(a: Line, b: Line): boolean {
-  return Math.abs(cross(a.dir, b.dir)) < 1e-9 && Math.abs(cross(a.dir, sub(b.point, a.point))) < 1e-6
+  return Math.abs(cross(a.dir, b.dir)) < tolerance('parallel') && Math.abs(cross(a.dir, sub(b.point, a.point))) < tolerance('sameFace')
 }
 
 /** One edge of the face outline: a wall's inner face, or a step between two of them. */
@@ -162,12 +153,13 @@ function distanceToSegment(p: Vec2, a: Vec2, b: Vec2): number {
  */
 function inRow(a: Piece, b: Piece): boolean {
   const sine = Math.abs(cross(a.line.dir, b.line.dir))
-  const bodies = (thicknessOf(a.wall) + thicknessOf(b.wall)) / 2 + EPS
-  if (sine < 1e-9) {
+  const contact = tolerance('wallContact')
+  const bodies = (thicknessOf(a.wall) + thicknessOf(b.wall)) / 2 + contact
+  if (sine < tolerance('parallel')) {
     const apart = Math.abs(cross(a.line.dir, sub(b.line.point, a.line.point)))
-    return apart < EPS || apart <= bodies
+    return apart < contact || apart <= bodies
   }
-  if (sine > NEARLY_PARALLEL) return false
+  if (sine > tolerance('nearlyParallel')) return false
   // The two ends that face each other, and how far the lines' crossing is from them.
   let gap = Infinity
   let ends: [Vec2, Vec2] = [a.axis.end, b.axis.start]
@@ -194,7 +186,7 @@ function selfCrossing(points: readonly Vec2[]): [number, number] | null {
   const n = points.length
   const side = (a: Vec2, b: Vec2, c: Vec2): number => {
     const value = cross(sub(b, a), sub(c, a))
-    return Math.abs(value) < 1e-9 ? 0 : Math.sign(value)
+    return Math.abs(value) < tolerance('onLine') ? 0 : Math.sign(value)
   }
   for (let i = 0; i < n; i++) {
     const a = points[i]!
@@ -255,11 +247,12 @@ function joint(
   const startB = along(b.axis.start, forwardB) < along(b.axis.end, forwardB) ? b.axis.start : b.axis.end
   const crossing = intersectLines(a.face, b.face)
   if (crossing) {
-    const pastA = dot(sub(crossing, endA), forwardA) > EPS
-    const beforeB = dot(sub(startB, crossing), forwardB) > EPS
+    const contact = tolerance('wallContact')
+    const pastA = dot(sub(crossing, endA), forwardA) > contact
+    const beforeB = dot(sub(startB, crossing), forwardB) > contact
     if (!pastA && !beforeB) return null
     // A corner made good: a crossing this close to the end it overshoots is the corner.
-    const near = 2 * Math.max(thicknessOf(a.wall), thicknessOf(b.wall)) + EPS
+    const near = 2 * Math.max(thicknessOf(a.wall), thicknessOf(b.wall)) + contact
     const off = (p: Vec2): number => Math.hypot(crossing.x - p.x, crossing.y - p.y)
     if ((!pastA || off(endA) <= near) && (!beforeB || off(startB) <= near)) return null
   }
@@ -276,10 +269,10 @@ function joint(
     const to = intersectLines(cap, b.face)
     const met = wall === a ? to : from
     if (!from || !to || !met) continue
-    if (Math.abs(dot(sub(met, end), wall.axis.normal)) > thicknessOf(wall.wall) / 2 + EPS) continue
+    if (Math.abs(dot(sub(met, end), wall.axis.normal)) > thicknessOf(wall.wall) / 2 + tolerance('wallContact')) continue
     const span = sub(to, from)
     const length = Math.hypot(span.x, span.y)
-    if (length < 1e-9) return null
+    if (length < tolerance('noLength')) return null
     return { line: cap, dir: scale(span, 1 / length), wall: wall.wall, fixed: true }
   }
   return crossing ? null : 'none'
@@ -365,7 +358,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
       // A side of no length has no direction of travel. Which side the middle
       // of the corners falls on is the best that is left.
       const roomOnLeft =
-        Math.abs(along) < 1e-9
+        Math.abs(along) < tolerance('noLength')
           ? cross(piece.axis.dir, sub(middle, piece.axis.start)) > 0
           : along > 0 === counterClockwise
       const faces = wallFaces(piece.wall)
@@ -380,7 +373,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
   for (let r = 0; r < count; r++) {
     for (const piece of runs[r]!) {
       const along = dot(travels[r]!, piece.axis.dir)
-      const fixed = Math.abs(along) < 1e-9
+      const fixed = Math.abs(along) < tolerance('noLength')
       ordered.push({ piece, forward: along < 0 ? scale(piece.axis.dir, -1) : piece.axis.dir, fixed })
     }
   }
@@ -431,7 +424,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
   for (let r = 0; r < count; r++) {
     const corner = corners[r]!
     const limit = Math.max(
-      STRAY_CORNER,
+      tolerance('strayCorner'),
       cornerReach(runs[r]!.at(-1)!.wall, runs[(r + 1) % count]![0]!.wall)
     )
     const off = Math.min(corner.offA, corner.offB)
@@ -491,7 +484,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
     for (let i = 0; i < n && hidden < 0; i++) {
       const edge = live[i]!
       if (edge.fixed) continue
-      if (dot(sub(vertices[i]!, vertices[(i + n - 1) % n]!), edge.dir) >= -1e-9) continue
+      if (dot(sub(vertices[i]!, vertices[(i + n - 1) % n]!), edge.dir) >= -tolerance('noLength')) continue
       const outwardBefore = cross(live[(i + n - 1) % n]!.dir, edge.dir) > 0 === counterClockwise
       const outwardAfter = cross(edge.dir, live[(i + 1) % n]!.dir) > 0 === counterClockwise
       if (outwardBefore && outwardAfter) hidden = i
@@ -509,7 +502,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
     vertices = next as Vec2[]
   }
   const faceTurn = signedArea(vertices)
-  if (Math.abs(faceTurn) >= 1e-6) {
+  if (Math.abs(faceTurn) >= tolerance('areaEqual')) {
     if (faceTurn > 0 !== counterClockwise) {
       const pair = squeezed ?? [runs[0]![0]!.wall, runs[Math.floor(count / 2)]![0]!.wall]
       return insideOut(pair[0], pair[1])
@@ -558,7 +551,10 @@ const nestings = new WeakMap<PlanIndex, RoomNesting>()
  * `inside` are looked for; a plan with none costs nothing. Worked out once per index.
  */
 export function roomNesting(index: PlanIndex): RoomNesting {
-  let found = nestings.get(index)
+  // Worked out under changed tolerances (`withTolerances`), the answer is not the stated one,
+  // so it is neither kept nor taken from what was kept.
+  const stated = tolerancesAsStated()
+  let found = stated ? nestings.get(index) : undefined
   if (found === undefined) {
     const rooms = index.plan.rooms
     found = rooms.some((room) => room.inside === true)
@@ -570,7 +566,7 @@ export function roomNesting(index: PlanIndex): RoomNesting {
           index.wallsById
         )
       : NO_NESTING
-    nestings.set(index, found)
+    if (stated) nestings.set(index, found)
   }
   return found
 }

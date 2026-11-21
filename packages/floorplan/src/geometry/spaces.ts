@@ -34,9 +34,9 @@ import { indexPlan } from './plan'
 import { roomNesting, tryRoomPolygon } from './room'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
+import { TOLERANCES, tolerance } from './tolerances'
 import type { Box } from './polygons'
 import {
-  AREA_TOLERANCE,
   boxOfRings,
   cornerFills,
   intersectionArea,
@@ -48,46 +48,41 @@ import {
   union
 } from './polygons'
 
+// The figures come from the tolerance table (`tolerances.ts`), read when the spaces are worked
+// out so that a survey's changes reach them.
+/** How far each wall strip and line is lengthened at both ends (`gap`), in metres. */
+const JOIN = (): number => tolerance('gap')
+/** Half the width a dividing line is given near the origin (`lineHalfWidth`), in metres. */
+const LINE_HALF_WIDTH = TOLERANCES.lineHalfWidth.value
+/** How close a wall must come to a piece of floor to be named as one of its walls (`touch`). */
+const TOUCH = (): number => tolerance('touch')
+/** How long that contact must be (`touchLength`). */
+const TOUCH_LENGTH = (): number => tolerance('touchLength')
 /**
- * Below this, in square metres, a difference in area is not reported: the same line the
- * scoreboard draws between two areas that "differ".
- */
-export const SPACE_AREA_TOLERANCE = AREA_TOLERANCE
-
-/** How far each wall strip and line is lengthened at both ends, in metres. */
-const JOIN = 0.001
-/**
- * Half the width a dividing line is given near the origin, in metres. It grows with the
- * distance from the origin, so that it never falls below what a number there can tell apart,
- * and with the grid points are rounded to (see `GRIDS`).
- */
-const LINE_HALF_WIDTH = 1e-9
-/** How close a wall must come to a piece of floor to be named as one of its walls, in metres. */
-const TOUCH = 0.002
-/** How long that contact must be, in metres. */
-const TOUCH_LENGTH = 0.02
-/**
- * Half the width of a slit that does not join two spaces, in metres. Two rooms are only said to
+ * Half the width of a slit that does not join two spaces (`slit`). Two rooms are only said to
  * lie in one space when they still do with every wall and line widened by this much: a line
  * drawn on the face of a wall, a fraction of a millimetre off after the plan was turned, leaves
  * a slit between them that is not a way from one space to the other.
  */
-const SLIT = 0.003
-/** Shortest stretch of a dividing line inside a room that is named, in metres. */
-const LINE_INSIDE = 0.05
-/** Wall area under a room below this, in square metres, is not named wall by wall. */
-const WALL_SHARE = SPACE_AREA_TOLERANCE / 10
+const SLIT = (): number => tolerance('slit')
+/** Shortest stretch of a dividing line inside a room that is named (`lineInside`). */
+const LINE_INSIDE = (): number => tolerance('lineInside')
+/** Below this a difference in area is not reported (`areaReported`), in square metres. */
+const REPORTED = (): number => tolerance('areaReported')
+/** Wall area under a room below this is not named wall by wall (`wallShare`). */
+const WALL_SHARE = (): number => tolerance('wallShare')
 /**
- * Coordinates and thicknesses past this, in metres, are not a building. Joining strips that
- * large loses the precision the comparison needs, so such a floor's spaces are not worked out.
+ * Coordinates and thicknesses past `largest` are not a building, and validation refuses them.
+ * Joining strips that large loses the precision the comparison needs, so such a floor's spaces
+ * are not worked out either.
  */
-const FAR = 1e7
+const FAR = (): number => tolerance('largest')
 /**
  * The polygon library can fail to close a ring when two edges almost, but not quite, coincide
  * (rounding noise such as 2.8999999999999995 beside 2.9). The join is tried as drawn first, then
- * with every point rounded to these grids, in metres, coarsest last.
+ * with every point rounded to these grids, in metres, coarsest last (`joinGrids`).
  */
-const GRIDS = [0, 1e-9, 1e-7, 1e-6, 1e-5] as const
+const GRIDS = TOLERANCES.joinGrids.values
 
 /** A piece of floor: one connected area, with any islands of wall cut out of it. */
 export interface FloorPiece {
@@ -147,7 +142,7 @@ export interface FloorSpaces {
   /** Enclosed floor that no room covers, every piece counted. */
   readonly unclaimedArea: number
   readonly spaces: readonly Space[]
-  /** The pieces of unclaimed floor of at least `SPACE_AREA_TOLERANCE`, largest first. */
+  /** The pieces of unclaimed floor of at least `areaReported`, largest first. */
   readonly unclaimed: readonly FloorPiece[]
   readonly mismatches: readonly RoomMismatch[]
 }
@@ -177,8 +172,8 @@ function shapeOf(wall: Wall, lineHalf: number, snap: (v: number) => number): Wal
   const length = Math.hypot(dx, dy)
   const dir = { x: dx / length, y: dy / length }
   const half = wall.virtual ? lineHalf : wall.thickness / 2
-  const body = strip(start, dir, length, half, JOIN, snap)
-  return { wall, body, box: boxOfRings(strip(start, dir, length, half + TOUCH, JOIN + TOUCH, (v) => v)), start, dir, length, reach: half + TOUCH }
+  const body = strip(start, dir, length, half, JOIN(), snap)
+  return { wall, body, box: boxOfRings(strip(start, dir, length, half + TOUCH(), JOIN() + TOUCH(), (v) => v)), start, dir, length, reach: half + TOUCH() }
 }
 
 /** How much of segment `a`–`b` runs inside the rectangle along `shape`, in metres. */
@@ -192,12 +187,12 @@ function contact(a: Pair, b: Pair, shape: WallShape): number {
   const [s0, t0] = local(a)
   const [s1, t1] = local(b)
   // Liang–Barsky: the part of the segment inside s in [lo, hi] and t in [-reach, reach].
-  const lo = -(JOIN + TOUCH)
-  const hi = shape.length + JOIN + TOUCH
+  const lo = -(JOIN() + TOUCH())
+  const hi = shape.length + JOIN() + TOUCH()
   let u0 = 0
   let u1 = 1
   const clip = (p: number, q: number): boolean => {
-    if (Math.abs(p) < 1e-15) return q >= 0
+    if (Math.abs(p) < TOLERANCES.noSlope.value) return q >= 0
     const r = q / p
     if (p < 0) {
       if (r > u1) return false
@@ -223,7 +218,7 @@ function pieceOf(polygon: Polygon, shapes: readonly WallShape[]): FloorPiece {
     for (const ring of polygon) {
       for (let i = 0; i + 1 < ring.length; i++) along += contact(ring[i]!, ring[i + 1]!, shape)
     }
-    if (along >= TOUCH_LENGTH) walls.push(shape.wall.id)
+    if (along >= TOUCH_LENGTH()) walls.push(shape.wall.id)
   }
   return {
     rings: polygon.map((ring) => ring.slice(0, -1).map(([x, y]) => ({ x, y }))),
@@ -244,7 +239,7 @@ function lengthInside(a: Vec2, b: Vec2, polygon: readonly Vec2[]): number {
     const q = polygon[(i + 1) % polygon.length]!
     const e = { x: q.x - p.x, y: q.y - p.y }
     const denom = d.x * e.y - d.y * e.x
-    if (Math.abs(denom) < 1e-12) continue
+    if (Math.abs(denom) < TOLERANCES.noArea.value) continue
     const t = ((p.x - a.x) * e.y - (p.y - a.y) * e.x) / denom
     const u = ((p.x - a.x) * d.y - (p.y - a.y) * d.x) / denom
     if (t > 0 && t < 1 && u >= 0 && u <= 1) ts.push(t)
@@ -271,11 +266,11 @@ function lengthInside(a: Vec2, b: Vec2, polygon: readonly Vec2[]): number {
 /** Why the spaces of this floor cannot be worked out, or null when they can. */
 function farReason(walls: readonly Wall[]): string | null {
   for (const wall of walls) {
-    if ([...wall.start, ...wall.end].some((v) => !Number.isFinite(v) || Math.abs(v) > FAR)) {
-      return `wall ${wall.id} lies more than ${FAR / 1000} km from the origin`
+    if ([...wall.start, ...wall.end].some((v) => !Number.isFinite(v) || Math.abs(v) > FAR())) {
+      return `wall ${wall.id} lies more than ${FAR() / 1000} km from the origin`
     }
-    if (!wall.virtual && (!Number.isFinite(wall.thickness) || wall.thickness > FAR)) {
-      return `wall ${wall.id} is more than ${FAR / 1000} km thick`
+    if (!wall.virtual && (!Number.isFinite(wall.thickness) || wall.thickness > FAR())) {
+      return `wall ${wall.id} is more than ${FAR() / 1000} km thick`
     }
   }
   return null
@@ -303,7 +298,7 @@ interface DrawnRoom {
 function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoom[], grid: number, reach: number): FloorSpaces {
   const steps = grid === 0 ? 0 : Math.round(1 / grid)
   const snap = grid === 0 ? (v: number) => v : (v: number) => Math.round(v * steps) / steps
-  const lineHalf = Math.max(LINE_HALF_WIDTH, 5 * grid, reach * 1e-14)
+  const lineHalf = Math.max(LINE_HALF_WIDTH, 5 * grid, reach * TOLERANCES.farNoise.value)
   const shapes = walls.map((wall) => shapeOf(wall, lineHalf, snap))
   const solidShapes = shapes.filter((s) => !s.wall.virtual)
   const lineShapes = shapes.filter((s) => s.wall.virtual)
@@ -334,14 +329,14 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
       if (area <= 0) return
       shares[fi]!.push({ room: ri, area })
       enclosedOf[ri] += area
-      if (area >= SPACE_AREA_TOLERANCE) covered[ri]!.push(area)
+      if (area >= REPORTED()) covered[ri]!.push(area)
     })
   })
 
   const spaces: Space[] = faces.map((face, fi) => ({
     ...pieceOf(face, shapes),
     rooms: shares[fi]!
-      .filter((s) => s.area >= SPACE_AREA_TOLERANCE)
+      .filter((s) => s.area >= REPORTED())
       .map((s) => ({ room: drawn[s.room]!.room.id, area: s.area }))
   }))
 
@@ -359,19 +354,19 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
     for (const piece of rest) {
       const area = polygonArea(piece)
       left += area
-      if (area >= SPACE_AREA_TOLERANCE) unclaimed.push(over.length === 0 ? spaces[fi]! : pieceOf(piece, shapes))
+      if (area >= REPORTED()) unclaimed.push(over.length === 0 ? spaces[fi]! : pieceOf(piece, shapes))
     }
     unclaimedArea += left
-    const sharing = over.filter((s) => s.area >= SPACE_AREA_TOLERANCE)
+    const sharing = over.filter((s) => s.area >= REPORTED())
     const overlap = over.reduce((sum, s) => sum + s.area, 0) - (polygonArea(face) - left)
-    if (sharing.length > 1 && overlap < SPACE_AREA_TOLERANCE) candidates.push(sharing.map((s) => s.room))
+    if (sharing.length > 1 && overlap < REPORTED()) candidates.push(sharing.map((s) => s.room))
   })
   unclaimed.sort((a, b) => b.area - a.area)
   if (candidates.length > 0) {
     // The same spaces with every wall and line widened by `SLIT`: rooms that still share one of
     // them lie side by side in one space.
     const wide = union([
-      ...shapes.map((s) => strip(s.start, s.dir, s.length, (s.wall.virtual ? 0 : s.wall.thickness / 2) + SLIT, JOIN + SLIT, snap)),
+      ...shapes.map((s) => strip(s.start, s.dir, s.length, (s.wall.virtual ? 0 : s.wall.thickness / 2) + SLIT(), JOIN() + SLIT(), snap)),
       ...fills.map((f) => f.polygon)
     ])
     const wideFaces = polygonClipping.difference(filled, wide)
@@ -383,7 +378,7 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
         found = new Set()
         const r = drawn[ri]!
         wideFaces.forEach((face, wi) => {
-          if (overlaps(r.box, wideBoxes[wi]!) && intersectionArea(face, r.polygon) >= SPACE_AREA_TOLERANCE) found!.add(wi)
+          if (overlaps(r.box, wideBoxes[wi]!) && intersectionArea(face, r.polygon) >= REPORTED()) found!.add(wi)
         })
         homes.set(ri, found)
       }
@@ -405,22 +400,22 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
     let off = r.area - enclosedOf[ri]!
     // A corner made good that the room's outline takes in counts as the room's (see
     // `cornerFills`): it is neither a mismatch nor wall.
-    const nearFills = off > 1e-9 ? fills.filter((f) => overlaps(r.box, f.box)).map((f) => f.polygon) : []
+    const nearFills = off > TOLERANCES.noLength.value ? fills.filter((f) => overlaps(r.box, f.box)).map((f) => f.polygon) : []
     if (nearFills.length > 0) {
       const onFills = multiArea(polygonClipping.intersection(r.polygon, union(nearFills)))
       roomOnFills += onFills
       off = Math.max(0, off - onFills)
     }
     const beside = [...sharedWith[ri]!]
-    if (off < SPACE_AREA_TOLERANCE && spans.length <= 1 && beside.length === 0) return
+    if (off < REPORTED() && spans.length <= 1 && beside.length === 0) return
     const near = solidShapes.filter((s) => overlaps(r.box, s.box))
     const onWalls: { wall: string; area: number; listed: boolean }[] = []
     let outside = off
-    if (off >= SPACE_AREA_TOLERANCE && near.length > 0) {
+    if (off >= REPORTED() && near.length > 0) {
       const listed = new Set(r.room.boundary)
       for (const shape of near) {
         const area = intersectionArea(r.polygon, shape.body)
-        if (area >= WALL_SHARE) onWalls.push({ wall: shape.wall.id, area, listed: listed.has(shape.wall.id) })
+        if (area >= WALL_SHARE()) onWalls.push({ wall: shape.wall.id, area, listed: listed.has(shape.wall.id) })
       }
       const body = union([...near.map((s) => s.body), ...nearFills])
       outside = Math.max(0, r.area - enclosedOf[ri]! - multiArea(polygonClipping.intersection(r.polygon, body)))
@@ -431,7 +426,7 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
             .filter((s) => !r.room.boundary.includes(s.wall.id) && overlaps(r.box, s.box))
             .filter((s) => {
               const end = { x: s.start.x + s.dir.x * s.length, y: s.start.y + s.dir.y * s.length }
-              return lengthInside(s.start, end, r.outline) >= LINE_INSIDE
+              return lengthInside(s.start, end, r.outline) >= LINE_INSIDE()
             })
             .map((s) => s.wall.id)
         : []
@@ -477,8 +472,8 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
     if (floorOf(room) !== floor || broken.has(room.id)) continue
     const outline = tryRoomPolygon(room, index)
     if (!outline || outline.length < 3) continue
-    if (outline.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > FAR || Math.abs(p.y) > FAR)) {
-      return { floor, reason: `room ${room.id} lies more than ${FAR / 1000} km from the origin` }
+    if (outline.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > FAR() || Math.abs(p.y) > FAR())) {
+      return { floor, reason: `room ${room.id} lies more than ${FAR() / 1000} km from the origin` }
     }
     const host = nesting.hosts.get(room.id)
     rooms.push(host ? { room, outline, region: host.region, area: host.area } : { room, outline, area: Math.abs(signedArea(outline)) })

@@ -18,6 +18,7 @@
 import type { Vec2 } from '../vec2'
 import type { PlanDrawing } from '../floorplan'
 import { doorSwing, type SwingArc } from '../door'
+import { TOLERANCES } from '../tolerances'
 
 /**
  * Layer names are the only organisation a DXF carries, so they are part of the
@@ -205,8 +206,15 @@ function writeTables(w: DxfWriter): void {
   w.pair(0, 'ENDSEC')
 }
 
+/**
+ * Whether every number can be written as one. Validation refuses sizes that large before they
+ * get here; this is the last guard, so that the file never holds "Infinity" or "NaN".
+ */
+const writable = (...values: readonly number[]): boolean => values.every(Number.isFinite)
+const writablePoints = (points: readonly Vec2[]): boolean => points.every((p) => writable(p.x, p.y))
+
 function writePolygon(w: DxfWriter, layer: string, points: readonly Vec2[]): void {
-  if (points.length < 2) return
+  if (points.length < 2 || !writablePoints(points)) return
 
   w.pair(0, 'POLYLINE')
   w.pair(8, layer)
@@ -227,6 +235,7 @@ function writePolygon(w: DxfWriter, layer: string, points: readonly Vec2[]): voi
 }
 
 function writeLine(w: DxfWriter, layer: string, from: Vec2, to: Vec2): void {
+  if (!writablePoints([from, to])) return
   w.pair(0, 'LINE')
   w.pair(8, layer)
   w.point(from.x, from.y)
@@ -238,7 +247,7 @@ function degrees(radians: number): number {
   const d = (radians * 180) / Math.PI
   const wrapped = ((d % 360) + 360) % 360
   // Rounding noise must not turn 0° into 359.999999.
-  return Math.abs(wrapped - 360) < 1e-9 ? 0 : wrapped
+  return Math.abs(wrapped - 360) < TOLERANCES.relativeNoise.value ? 0 : wrapped
 }
 
 /**
@@ -247,6 +256,7 @@ function degrees(radians: number): number {
  */
 function writeArc(w: DxfWriter, layer: string, arc: SwingArc): void {
   const [start, end] = arc.counterClockwise ? [arc.from, arc.to] : [arc.to, arc.from]
+  if (!writable(arc.center.x, arc.center.y, arc.radius, start, end)) return
   w.pair(0, 'ARC')
   w.pair(8, layer)
   w.point(arc.center.x, arc.center.y)
@@ -257,7 +267,7 @@ function writeArc(w: DxfWriter, layer: string, arc: SwingArc): void {
 
 function writeText(w: DxfWriter, layer: string, at: Vec2, text: string): void {
   const value = sanitizeText(text)
-  if (value.length === 0) return
+  if (value.length === 0 || !writablePoints([at])) return
 
   w.pair(0, 'TEXT')
   w.pair(8, layer)
@@ -280,12 +290,14 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
   for (const room of drawing.rooms) {
     writePolygon(w, DXF_LAYERS.rooms, room.polygon)
     writeText(w, DXF_LAYERS.labels, room.labelAt, room.name)
-    writeText(
-      w,
-      DXF_LAYERS.labels,
-      { x: room.labelAt.x, y: room.labelAt.y - TEXT_HEIGHT * 1.4 },
-      `${room.area.toFixed(2)} m2`
-    )
+    if (writable(room.area)) {
+      writeText(
+        w,
+        DXF_LAYERS.labels,
+        { x: room.labelAt.x, y: room.labelAt.y - TEXT_HEIGHT * 1.4 },
+        `${room.area.toFixed(2)} m2`
+      )
+    }
   }
 
   for (const wall of drawing.walls) {

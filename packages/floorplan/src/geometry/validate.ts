@@ -20,9 +20,12 @@ import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
 import { RoomOutlineError, roomNesting, roomPolygon } from './room'
 import type { FloorPiece, FloorSpaces, RoomMismatch } from './spaces'
-import { SPACE_AREA_TOLERANCE, planSpaces, spacesKnown } from './spaces'
+import { planSpaces, spacesKnown } from './spaces'
 import type { RoomOverlap } from './overlaps'
 import { MAX_CUTS, roomOverlaps } from './overlaps'
+import type { ToleranceChanges } from './tolerances'
+import { tolerance, withTolerances } from './tolerances'
+import { validatePlausibility } from './plausible'
 
 /** `floor` issues are about a floor as a whole; their id is the floor's id. */
 export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor'
@@ -63,20 +66,20 @@ function issue(
  *
  * C4 · the origin is the point the 3D rises from, same as SketchUp's: the plan
  * lives on XY and z=0 is floor level. A plan that shows up hundreds of meters
- * away is still drawable, but it almost always means the agent lost the scale.
+ * away (`farFromOrigin`) is still drawable, but it almost always means the agent
+ * lost the scale.
  */
-const ORIGIN_WARNING_DISTANCE = 500
-
 function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
   let farthest = 0
   for (const wall of plan.walls) {
     for (const [x, y] of [wall.start, wall.end]) {
       const distance = Math.hypot(x, y)
-      if (distance > farthest) farthest = distance
+      // A number past `largest` is refused on its own wall (`validateWall`).
+      if (distance > farthest && distance <= tolerance('largest')) farthest = distance
     }
   }
 
-  if (farthest > ORIGIN_WARNING_DISTANCE) {
+  if (farthest > tolerance('farFromOrigin')) {
     issues.push(
       issue(
         'plan',
@@ -90,7 +93,68 @@ function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
   }
 }
 
+/**
+ * A length as stated, to as many decimals as it takes (at least two, at most six), so that two
+ * lengths that differ are never printed alike: 4.8996, not 4.90.
+ */
+export function exactMetres(value: number): string {
+  const fixed = value.toFixed(6).replace(/0+$/, '')
+  const [whole, decimals = ''] = fixed.split('.')
+  return `${whole}.${decimals.padEnd(2, '0')}`
+}
+
+/** Whether a number is one Grid accepts: finite, and no larger than `largest`. */
+const held = (value: number): boolean => Math.abs(value) <= tolerance('largest')
+
+const kilometres = (metres: number): string => `${(metres / 1000).toLocaleString('en')} km`
+
+function tooLarge(what: string, value: number): string {
+  return Number.isFinite(value)
+    ? `${what} is ${String(value)} m, past the ${kilometres(tolerance('largest'))} Grid accepts`
+    : `${what} is not a finite number`
+}
+
+const REFUSED_NUMBER =
+  'A number this large is no building: most likely a digit or a unit slipped. Give every size in metres.'
+
+/**
+ * Coordinates and sizes past `largest`, and numbers that are not finite (a plan built in code
+ * skips the schema, which refuses those). The part is refused: past that size the arithmetic
+ * loses the precision the checks need, and a sum of two such numbers can stop being a number.
+ */
+function validateWallNumbers(wall: Wall, issues: Issue[]): boolean {
+  const named: [string, number][] = [
+    ['a coordinate of its start', wall.start[0]],
+    ['a coordinate of its start', wall.start[1]],
+    ['a coordinate of its end', wall.end[0]],
+    ['a coordinate of its end', wall.end[1]],
+    ['its thickness', wall.thickness],
+    ['its height', wall.height]
+  ]
+  const bad = named.find(([, value]) => !held(value))
+  if (bad === undefined) return true
+  issues.push(issue('wall', wall.id, 'wall/too-large', `Wall ${wall.id}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`))
+  return false
+}
+
+function validateOpeningNumbers(opening: Opening, issues: Issue[]): boolean {
+  const named: [string, number][] = [
+    ['its offset', opening.offset],
+    ['its width', opening.width],
+    ['its height', opening.height],
+    ['its sill', opening.sill]
+  ]
+  const bad = named.find(([, value]) => !held(value))
+  if (bad === undefined) return true
+  issues.push(
+    issue('opening', opening.id, 'opening/too-large', `Opening ${opening.id}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`)
+  )
+  return false
+}
+
 function validateWall(wall: Wall, issues: Issue[]): boolean {
+  if (!validateWallNumbers(wall, issues)) return false
+
   const [sx, sy] = wall.start
   const [ex, ey] = wall.end
 
@@ -160,6 +224,8 @@ function validateOpening(
     return false
   }
 
+  if (!validateOpeningNumbers(opening, issues)) return false
+
   let ok = true
 
   if (opening.width <= 0 || opening.height <= 0) {
@@ -176,15 +242,27 @@ function validateOpening(
 
   const span = openingSpan(opening)
   const wallLength = wallAxis(wall).length
+  // MS-16: a wall whose ends were rounded to the millimetre is a hair shorter than meant, so an
+  // opening may run `openingOverrun` past it and still fit.
+  const overrun = tolerance('openingOverrun')
+  const before = -span.from
+  const after = span.to - wallLength
 
-  if (span.from < -1e-9 || span.to > wallLength + 1e-9) {
+  if (before > overrun || after > overrun) {
+    const past = after >= before ? `${millimetres(after)} past the end of the wall` : `${millimetres(before)} before its start`
+    const fits = wallLength - opening.width
+    const fix =
+      fits >= 0
+        ? `An offset from 0.00 to ${exactMetres(fits)} m fits.`
+        : `It is ${millimetres(-fits)} wider than the wall is long.`
     issues.push(
       issue(
         'opening',
         opening.id,
         'opening/out-of-wall',
-        `Opening ${opening.id} runs from ${span.from.toFixed(2)} to ${span.to.toFixed(2)} m ` +
-          `on a wall ${wallLength.toFixed(2)} m long`
+        `Opening ${opening.id} runs from ${exactMetres(span.from)} to ${exactMetres(span.to)} m ` +
+          `on wall ${wall.id}, which is ${exactMetres(wallLength)} m long: it runs ${past}, more ` +
+          `than the ${millimetres(overrun)} Grid allows. ${fix}`
       )
     )
     ok = false
@@ -193,20 +271,20 @@ function validateOpening(
   // A dividing line stands no height (0 unless it says otherwise), so a gap in it cannot be
   // too tall for it.
   const head = opening.sill + opening.height
-  if (!wall.virtual && head > wall.height + 1e-9) {
+  if (!wall.virtual && head > wall.height + overrun) {
     issues.push(
       issue(
         'opening',
         opening.id,
         'opening/too-tall',
-        `Opening ${opening.id} reaches ${head.toFixed(2)} m on a wall ` +
-          `${wall.height.toFixed(2)} m high`
+        `Opening ${opening.id} reaches ${exactMetres(head)} m on a wall ` +
+          `${exactMetres(wall.height)} m high`
       )
     )
     ok = false
   }
 
-  if (opening.sill < -1e-9) {
+  if (opening.sill < -overrun) {
     issues.push(
       issue(
         'opening',
@@ -235,7 +313,7 @@ function validateOverlaps(index: PlanIndex, broken: Set<string>, issues: Issue[]
       .map(openingSpan)
     let kept = spans[0]
     for (const current of spans.slice(1)) {
-      if (current.from < kept!.to - 1e-9) {
+      if (current.from < kept!.to - tolerance('openingOverrun')) {
         issues.push(
           issue(
             'opening',
@@ -422,6 +500,12 @@ function validateFloors(
  * Square metres to two decimals, a half rounded up. Read to twelve figures first, so that an
  * area of exactly 13.585 that the arithmetic left at 13.58499999… still reads 13.59.
  */
+/** A length in millimetres, to a tenth where that is what tells it apart. */
+function millimetres(metres: number): string {
+  const mm = metres * 1000
+  return `${mm >= 10 ? mm.toFixed(0) : Number(mm.toPrecision(2)).toString()} mm`
+}
+
 const two = (value: number): string => (Math.round(Number((value * 100).toPrecision(12))) / 100).toFixed(2)
 const m2 = (value: number): string => `${two(value)} m²`
 const at = (p: { readonly x: number; readonly y: number }): string => `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`
@@ -458,7 +542,7 @@ function refusedRoomFor(floor: string, piece: FloorPiece, plan: FloorPlan, broke
 }
 
 function mismatchMessage(m: RoomMismatch): string {
-  if (m.enclosed < SPACE_AREA_TOLERANCE) {
+  if (m.enclosed < tolerance('areaReported')) {
     return (
       `Room ${m.room} is not enclosed by its walls: none of its ${m2(m.area)} is floor that ` +
       `walls close off. Its outline is closed only by carrying the walls' lines on until they ` +
@@ -475,7 +559,7 @@ function mismatchMessage(m: RoomMismatch): string {
   if (listed.length > 0) {
     parts.push(`${m2(sum(listed))} lies on its own ${listed.length === 1 ? 'wall' : 'walls'} ${names(listed.map((w) => w.wall))}`)
   }
-  if (m.outside >= SPACE_AREA_TOLERANCE) parts.push(`${m2(m.outside)} lies outside the walls`)
+  if (m.outside >= tolerance('areaReported')) parts.push(`${m2(m.outside)} lies outside the walls`)
   if (m.spaces.length > 1) {
     const lines = m.lines.length > 0
       ? `, split by ${m.lines.length === 1 ? 'dividing line' : 'dividing lines'} ${names(m.lines)}, which its wall list leaves out`
@@ -529,7 +613,7 @@ function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<
     issues.push(issue('floor', result.floor, 'floor/unclaimed', unclaimedMessage(result.floor, piece), 'warning'))
   }
   for (const m of result.mismatches) {
-    const code = m.enclosed < SPACE_AREA_TOLERANCE ? 'room/not-enclosed' : 'room/space-mismatch'
+    const code = m.enclosed < tolerance('areaReported') ? 'room/not-enclosed' : 'room/space-mismatch'
     issues.push(issue('room', m.room, code, mismatchMessage(m), 'warning'))
   }
 }
@@ -605,7 +689,7 @@ function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: Readonl
   for (const o of found.overlaps) {
     const [a, b] = o.rooms
     // The larger room; the later one when the two are the same size within the tolerance.
-    const on = o.kind === 'same' || o.areas[1] > o.areas[0] - SPACE_AREA_TOLERANCE ? b : a
+    const on = o.kind === 'same' || o.areas[1] > o.areas[0] - tolerance('areaEqual') ? b : a
     issues.push(issue('room', on, 'room/overlap', overlapMessage(o), 'warning'))
   }
   for (const floor of found.stopped) {
@@ -644,14 +728,26 @@ export interface ValidateOptions {
    * out: joining every wall of a floor costs more than every other check together.
    */
   readonly spaces?: boolean
+  /**
+   * Entries of the tolerance table changed for this check, for a survey or a scan that is less
+   * exact than a drawing (`withTolerances` in `tolerances.ts`).
+   */
+  readonly tolerances?: ToleranceChanges
 }
 
-/** Checks the whole plan. Never throws. */
+/**
+ * Checks the whole plan. Never throws, except for a `tolerances` change that is not one
+ * (`withTolerances`).
+ */
 export function validatePlan(
   plan: FloorPlan,
   index: PlanIndex = indexPlan(plan),
   options: ValidateOptions = {}
 ): ValidationResult {
+  if (options.tolerances !== undefined && Object.keys(options.tolerances).length > 0) {
+    const { tolerances, ...rest } = options
+    return withTolerances(tolerances, () => validatePlan(plan, index, rest))
+  }
   const issues: Issue[] = []
   const broken = new Set<string>()
 
@@ -686,7 +782,7 @@ export function validatePlan(
 
     try {
       const polygon = roomPolygon(room, index)
-      if (area(polygon) < 1e-6) {
+      if (area(polygon) < tolerance('areaEqual')) {
         issues.push(issue('room', room.id, 'room/empty', `Room ${room.id} encloses zero area`))
         broken.add(room.id)
       }
@@ -703,6 +799,8 @@ export function validatePlan(
       broken.add(room.id)
     }
   }
+
+  validatePlausibility(plan, index, broken, issues)
 
   if (options.spaces !== false) {
     validateSpaces(plan, index, broken, issues)

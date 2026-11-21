@@ -20,7 +20,8 @@ import { doorSwing } from './door'
 import { buildFloorPlan } from './floorplan'
 import { planFloors, planForFloor } from './floors'
 import type { Vec2 } from './vec2'
-import { EPS, add, cross, distance, dot, length, lerp, perp, scale, signedArea, sub, vec } from './vec2'
+import { tolerance } from './tolerances'
+import { add, cross, distance, dot, length, lerp, perp, scale, signedArea, sub, vec } from './vec2'
 import { wallParts, wallSlicePolygon } from './wall'
 
 /** One door's swing, as the caller knows it. Either half may be missing. */
@@ -46,8 +47,8 @@ const MESSAGES = {
 
 type SweepCode = keyof typeof MESSAGES
 
-/** Below this a polygon is a line or a point: shapes that only touch. */
-const NO_AREA = 1e-12
+/** Below `noArea` a polygon is a line or a point: shapes that only touch. */
+const noArea = (polygon: readonly Vec2[]): boolean => Math.abs(signedArea(polygon)) < tolerance('noArea')
 
 /**
  * A door's sweep in its own frame: `u` along the closed leaf, `v` along the
@@ -109,12 +110,12 @@ function distanceFromOrigin(polygon: readonly Vec2[]): number {
 }
 
 /**
- * Whether a wall rectangle reaches more than `EPS` into the sweep. Exact: the
+ * Whether a wall rectangle reaches more than `swingContact` into the sweep. Exact: the
  * arc is never flattened.
  *
- * "More than `EPS` in" is the sweep shrunk by `EPS` (the points at least that
- * far inside it), which in the door's frame is
- * `x > EPS, y > EPS, x² + y² < (radius − EPS)²`: touching the jamb, resting
+ * "More than `swingContact` (c) in" is the sweep shrunk by c (the points at least
+ * that far inside it), which in the door's frame is
+ * `x > c, y > c, x² + y² < (radius − c)²`: touching the jamb, resting
  * against the open leaf or brushing the arc does not count.
  *
  * The two straight sides are half-planes, so the rectangle is clipped to them
@@ -124,16 +125,17 @@ function distanceFromOrigin(polygon: readonly Vec2[]): number {
  * sweep and the sweep inside it, with no special case where they meet.
  */
 function reachesInto(frame: DoorFrame, rectangle: readonly Vec2[]): boolean {
-  const reach = frame.radius - EPS
-  // The shrunk sweep's corner is (EPS, EPS): past that, nothing is left.
-  if (reach <= EPS * Math.SQRT2) return false
+  const contact = tolerance('swingContact')
+  const reach = frame.radius - contact
+  // The shrunk sweep's corner is (c, c): past that, nothing is left.
+  if (reach <= contact * Math.SQRT2) return false
 
   let part = rectangle.map((p) => inFrame(frame, p))
-  part = clipBy(part, (p) => p.x - EPS)
-  part = clipBy(part, (p) => p.y - EPS)
-  if (part.length < 3 || Math.abs(signedArea(part)) < NO_AREA) return false
+  part = clipBy(part, (p) => p.x - contact)
+  part = clipBy(part, (p) => p.y - contact)
+  if (part.length < 3 || noArea(part)) return false
 
-  // Both sides keep x and y above EPS, so the hinge is never inside `part`.
+  // Both sides keep x and y above c, so the hinge is never inside `part`.
   return distanceFromOrigin(part) < reach
 }
 
@@ -145,7 +147,7 @@ function reachesInto(frame: DoorFrame, rectangle: readonly Vec2[]): boolean {
  */
 function standingParts(wall: Wall, openings: readonly Opening[]): Vec2[][] {
   return wallParts(wall, openings)
-    .filter((part) => part.zFrom <= 1e-9)
+    .filter((part) => part.zFrom <= tolerance('noLength'))
     .map((part) => wallSlicePolygon(wall, part.from, part.to))
 }
 
@@ -161,7 +163,7 @@ function sweepPolygon(swing: DoorSwing): Vec2[] {
   const { center, radius, from, to } = swing.arc
   // The quarter turn, signed the way the door goes (`counterClockwise`).
   const turn = Math.atan2(Math.sin(to - from), Math.cos(to - from))
-  const steps = Math.max(1, Math.ceil(Math.abs(turn) / FLATTEN_STEP - 1e-9))
+  const steps = Math.max(1, Math.ceil(Math.abs(turn) / FLATTEN_STEP - tolerance('relativeNoise')))
   const points: Vec2[] = [center]
   for (let i = 0; i <= steps; i++) {
     const angle = from + (turn * i) / steps
@@ -190,12 +192,12 @@ function overlapOf(a: readonly Vec2[], b: readonly Vec2[]): Vec2[] {
  * bounding box would call a thin diagonal sliver wide.
  */
 function narrowestWidth(polygon: readonly Vec2[]): number {
-  if (polygon.length < 3 || Math.abs(signedArea(polygon)) < NO_AREA) return 0
+  if (polygon.length < 3 || noArea(polygon)) return 0
   let narrowest = Infinity
   for (let i = 0; i < polygon.length; i++) {
     const edge = sub(polygon[(i + 1) % polygon.length]!, polygon[i]!)
     const len = length(edge)
-    if (len < 1e-9) continue
+    if (len < tolerance('noLength')) continue
     const across = scale(perp(edge), 1 / len)
     let lo = Infinity
     let hi = -Infinity
@@ -292,7 +294,7 @@ export function validateDoorSweeps(
         const second = sweeps[j]!
         // Two discs this far apart cannot overlap: skip the clip.
         if (distance(first.hinge, second.hinge) >= first.radius + second.radius) continue
-        if (narrowestWidth(overlapOf(first.polygon, second.polygon)) > EPS) {
+        if (narrowestWidth(overlapOf(first.polygon, second.polygon)) > tolerance('swingContact')) {
           issues.push(warning('opening/doors-collide', first.id, [second.id]))
         }
       }

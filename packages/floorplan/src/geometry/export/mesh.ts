@@ -59,6 +59,16 @@ export function makeNamer(): (prefix: string, id: string) => string {
  * edge is also the wall's bottom edge, so it is no boundary, and a wall under
  * an open door must not get a face.
  */
+/**
+ * Whether every point can be written as a number: finite, and within what a 32-bit float (the
+ * GLB's) holds. Validation refuses sizes that large before they get here; this is the last
+ * guard, so that no export ever writes "Infinity" or a bound that is not a number.
+ */
+function storable(mesh: Mesh): Mesh | null {
+  const fits = (v: number): boolean => Number.isFinite(Math.fround(v))
+  return mesh.points.every((p) => fits(p.x) && fits(p.y) && fits(p.z)) ? mesh : null
+}
+
 export function wallMesh(wall: SceneWall): Mesh | null {
   const { elevation, basis } = wall
   const { vertices, triangles, rings } = triangulate(elevation.outline, elevation.holes)
@@ -92,12 +102,12 @@ export function wallMesh(wall: SceneWall): Mesh | null {
     }
   }
 
-  return { points, faces }
+  return storable({ points, faces })
 }
 
 /** A room's floor: a flat surface at z = 0, facing up. */
 export function floorMesh(floor: SceneSlab): Mesh | null {
   const { vertices, triangles } = triangulate(floor.polygon)
   if (triangles.length === 0) return null
-  return { points: vertices.map((v) => ({ x: v.x, y: v.y, z: 0 })), faces: triangles }
+  return storable({ points: vertices.map((v) => ({ x: v.x, y: v.y, z: 0 })), faces: triangles })
 }

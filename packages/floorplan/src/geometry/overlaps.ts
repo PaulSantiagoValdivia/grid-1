@@ -8,7 +8,7 @@
  * The rooms of each floor are set against each other, pair by pair, exactly: the area both
  * cover is the area of the intersection of their two polygons, from `polygon-clipping` (MIT),
  * the library ARE-4 brought in for the spaces. Two rooms are only said to overlap when they
- * share at least `AREA_TOLERANCE` (0.01 m²). Rooms that meet face to face share an edge at most,
+ * share at least `areaReported` (0.01 m²). Rooms that meet face to face share an edge at most,
  * along a dividing line, or nothing at all, across a wall: an area of 0, or rounding noise far
  * below the line.
  *
@@ -16,7 +16,7 @@
  * `inside` that sits in it (`nesting.ts`). A room inside a room is therefore never said to
  * overlap the room it sits in, nor any room further out that holds both.
  *
- * Only pairs whose boxes overlap by at least `AREA_TOLERANCE` are cut, found by sweeping the
+ * Only pairs whose boxes overlap by at least `areaReported` are cut, found by sweeping the
  * rooms in order of their left edge, so a floor of thousands of rooms in a row costs a few
  * thousand cuts, not millions.
  */
@@ -28,9 +28,10 @@ import type { FloorPlan, PlanIndex, Room } from './plan'
 import { indexPlan } from './plan'
 import { roomNesting, tryRoomPolygon } from './room'
 import type { Vec2 } from './vec2'
+import { TOLERANCES, tolerance } from './tolerances'
 import { sitsWithin } from './nesting'
 import type { Box } from './polygons'
-import { AREA_TOLERANCE, boxOfRings, multiArea, pointInside, polygonArea } from './polygons'
+import { boxOfRings, multiArea, pointInside, polygonArea } from './polygons'
 
 /** How two rooms that overlap lie. */
 export type OverlapKind =
@@ -87,7 +88,7 @@ export interface OverlapOptions {
 export const MAX_CUTS = 200_000
 
 /** As in `spaces.ts`: the cut is tried as drawn, then with points rounded to these grids. */
-const GRIDS = [0, 1e-9, 1e-7, 1e-6] as const
+const GRIDS = TOLERANCES.overlapGrids.values
 
 interface Measured {
   readonly room: Room
@@ -139,7 +140,7 @@ function shared(a: Measured, b: Measured): { area: number; at: Vec2 } {
 }
 
 /**
- * Every pair of rooms on the same floor that share at least `AREA_TOLERANCE` of floor, and
+ * Every pair of rooms on the same floor that share at least `areaReported` of floor, and
  * any pair the polygon library could not compare. Never throws.
  */
 export function roomOverlaps(plan: FloorPlan, options: OverlapOptions = {}): RoomOverlaps {
@@ -155,7 +156,7 @@ export function roomOverlaps(plan: FloorPlan, options: OverlapOptions = {}): Roo
     const host = nesting.hosts.get(room.id)
     const geom: MultiPolygon = host?.region ?? [[outline.map((p): Pair => [p.x, p.y])]]
     const area = host?.area ?? polygonArea(geom[0]!)
-    if (!(area >= AREA_TOLERANCE)) return
+    if (!(area >= tolerance('areaReported'))) return
     const floor = floorOf(room)
     const list = byFloor.get(floor) ?? []
     list.push({ room, floor, geom, area, box: boxOfRings(geom.flat()), order })
@@ -176,7 +177,7 @@ export function roomOverlaps(plan: FloorPlan, options: OverlapOptions = {}): Roo
       const p = rooms[i]!
       for (let j = i + 1; j < rooms.length && rooms[j]!.box.x0 < p.box.x1; j++) {
         const q = rooms[j]!
-        if (boxShare(p.box, q.box) < AREA_TOLERANCE) continue
+        if (boxShare(p.box, q.box) < tolerance('areaReported')) continue
         if (sitsWithin(nesting, p.room.id, q.room.id) || sitsWithin(nesting, q.room.id, p.room.id)) continue
         if (cuts >= MAX_CUTS) {
           stopped.push(floor)
@@ -191,11 +192,11 @@ export function roomOverlaps(plan: FloorPlan, options: OverlapOptions = {}): Roo
           uncompared.push({ floor, rooms: [a.room.id, b.room.id], reason: error instanceof Error ? error.message : String(error) })
           continue
         }
-        if (cut.area < AREA_TOLERANCE) continue
+        if (cut.area < tolerance('areaReported')) continue
         const larger = Math.max(a.area, b.area)
         const smaller = Math.min(a.area, b.area)
         const kind: OverlapKind =
-          cut.area >= larger - AREA_TOLERANCE ? 'same' : cut.area >= smaller - AREA_TOLERANCE ? 'inside' : 'part'
+          cut.area >= larger - tolerance('areaReported') ? 'same' : cut.area >= smaller - tolerance('areaReported') ? 'inside' : 'part'
         overlaps.push({
           floor,
           rooms: [a.room.id, b.room.id],

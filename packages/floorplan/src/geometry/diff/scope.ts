@@ -29,6 +29,7 @@ import { DEFAULT_FLOOR, floorOf } from '../floors'
 import { compareIssues } from './order'
 import { openingProps, roomProps, wallProps } from './props'
 import { assess, assessmentIssues } from './validity'
+import { TOLERANCES, tolerance } from '../tolerances'
 import type {
   DiffIssue,
   EntityRef,
@@ -42,7 +43,7 @@ import type {
 } from './types'
 
 /** A centimetre: below this, a movement is rounding, not an edit. */
-export const MIN_MOVEMENT_M = 0.01
+export const MIN_MOVEMENT_M = TOLERANCES.diffMovement.value
 
 /** How far a numeric property moved, or null if it is not a number or a point. */
 function distanceOf(before: PropValue, after: PropValue): number | null {
@@ -198,7 +199,7 @@ export function changesOutsideScope(
   const floors = new Set(targets.floors ?? [])
   if (named.length === 0 && floors.size === 0) return { checked: false, changes: [], issues: [] }
 
-  const minMovement = options.minMovement ?? MIN_MOVEMENT_M
+  const minMovement = options.minMovement ?? tolerance('diffMovement')
   const issues: DiffIssue[] = []
 
   // The named rooms, as either version has them.

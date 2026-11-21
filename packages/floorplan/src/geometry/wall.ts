@@ -8,6 +8,7 @@
 
 import type { Opening, Wall } from './plan'
 import type { Line, Vec2 } from './vec2'
+import { tolerance } from './tolerances'
 import { add, fromTuple, length, normalize, perp, scale, sub } from './vec2'
 
 export interface WallAxis {
@@ -127,20 +128,26 @@ export function wallParts(wall: Wall, openings: readonly Opening[] = []): WallPa
   if (wall.virtual) return []
 
   const total = wallAxis(wall).length
-  const spans = openings.map(openingSpan).sort((a, b) => a.from - b.from)
+  // An opening may run `openingOverrun` past an end of its wall (validate.ts); it is drawn
+  // within the wall, so nothing pokes out of it.
+  const spans = openings
+    .map(openingSpan)
+    .map((span) => ({ ...span, from: Math.max(0, span.from), to: Math.min(total, span.to) }))
+    .sort((a, b) => a.from - b.from)
   const parts: WallPart[] = []
+  const none = tolerance('noLength')
 
   let cursor = 0
   for (const span of spans) {
     // The solid run left before this opening.
-    if (span.from - cursor > 1e-9) {
+    if (span.from - cursor > none) {
       parts.push({ kind: 'solid', from: cursor, to: span.from, zFrom: 0, zTo: wall.height })
     }
 
     const { opening } = span
     const head = opening.sill + opening.height
 
-    if (opening.sill > 1e-9) {
+    if (opening.sill > none) {
       parts.push({
         kind: 'sill',
         from: span.from,
@@ -150,7 +157,7 @@ export function wallParts(wall: Wall, openings: readonly Opening[] = []): WallPa
         opening
       })
     }
-    if (wall.height - head > 1e-9) {
+    if (wall.height - head > none) {
       parts.push({
         kind: 'lintel',
         from: span.from,
@@ -164,7 +171,7 @@ export function wallParts(wall: Wall, openings: readonly Opening[] = []): WallPa
     cursor = Math.max(cursor, span.to)
   }
 
-  if (total - cursor > 1e-9) {
+  if (total - cursor > none) {
     parts.push({ kind: 'solid', from: cursor, to: total, zFrom: 0, zTo: wall.height })
   }
 

@@ -15,17 +15,16 @@ import { tryRoomPolygon } from '../room'
 import { area, centroid, cross, distance, dot, fromTuple, normalize, sub } from '../vec2'
 import { matchById } from './match'
 import type { DiffIssue, EntityRef } from './types'
+import { TOLERANCES, tolerance } from '../tolerances'
 
-/** Walls overlap by this share of the longer one, along a shared line. */
-export const WALL_OVERLAP = 0.9
-/** How far off the longer wall's line the shorter one's ends may be, in metres. */
-const SAME_LINE = 0.01
-/** Openings on the same wall closer than this, in metres, are the same place. */
-export const OPENING_OFFSET = 0.05
-/** Rooms whose areas differ by less than this share of the larger are the same size. */
-export const ROOM_AREA_SHARE = 0.1
-/** Rooms whose centres are closer than this, in metres, are in the same place. */
-export const ROOM_CENTRE = 0.1
+/** Walls overlap by this share of the longer one, along a shared line (`diffWallOverlap`). */
+export const WALL_OVERLAP = TOLERANCES.diffWallOverlap.value
+/** Openings on the same wall closer than this, in metres, are the same place (`diffOpeningOffset`). */
+export const OPENING_OFFSET = TOLERANCES.diffOpeningOffset.value
+/** Rooms whose areas differ by less than this share of the larger are the same size (`diffRoomAreaShare`). */
+export const ROOM_AREA_SHARE = TOLERANCES.diffRoomAreaShare.value
+/** Rooms whose centres are closer than this, in metres, are in the same place (`diffRoomCentre`). */
+export const ROOM_CENTRE = TOLERANCES.diffRoomCentre.value
 
 /** Share of the longer wall covered by the shorter one, 0 if they are not on one line. */
 function wallOverlap(a: Wall, b: Wall): number {
@@ -37,7 +36,8 @@ function wallOverlap(a: Wall, b: Wall): number {
   const start = fromTuple(longer.start)
   const dir = normalize(sub(fromTuple(longer.end), start))
   const off = (p: [number, number]): number => Math.abs(cross(dir, sub(fromTuple(p), start)))
-  if (off(shorter.start) > SAME_LINE || off(shorter.end) > SAME_LINE) return 0
+  const sameLine = tolerance('diffSameLine')
+  if (off(shorter.start) > sameLine || off(shorter.end) > sameLine) return 0
 
   const along = [shorter.start, shorter.end]
     .map((p) => dot(dir, sub(fromTuple(p), start)))
@@ -93,7 +93,7 @@ export function idChurn(
   for (const removed of walls.removed) {
     for (const added of addedByFloor.get(floorOf(removed)) ?? []) {
       if (Math.abs(removed.thickness - added.thickness) > epsilon) continue
-      if (wallOverlap(removed, added) < WALL_OVERLAP) continue
+      if (wallOverlap(removed, added) < tolerance('diffWallOverlap')) continue
       if (!renamed.has(removed.id)) renamed.set(removed.id, added.id)
       issues.push(issue('Wall', { type: 'wall', id: removed.id }, { type: 'wall', id: added.id }))
     }
@@ -110,7 +110,7 @@ export function idChurn(
   }
   for (const removed of openings.removed) {
     for (const added of addedByHost.get(hostOf(removed.wall)) ?? []) {
-      if (Math.abs(removed.offset - added.offset) > OPENING_OFFSET) continue
+      if (Math.abs(removed.offset - added.offset) > tolerance('diffOpeningOffset')) continue
       issues.push(
         issue('Opening', { type: 'opening', id: removed.id }, { type: 'opening', id: added.id })
       )
@@ -132,8 +132,8 @@ export function idChurn(
         const larger = Math.max(was.area, is.area)
         sameSpot =
           larger > 0 &&
-          Math.abs(was.area - is.area) <= ROOM_AREA_SHARE * larger &&
-          distance(was.centre, is.centre) <= ROOM_CENTRE
+          Math.abs(was.area - is.area) <= tolerance('diffRoomAreaShare') * larger &&
+          distance(was.centre, is.centre) <= tolerance('diffRoomCentre')
       }
       if (sameWalls || sameSpot) {
         issues.push(issue('Room', { type: 'room', id: removed.id }, { type: 'room', id: added.id }))

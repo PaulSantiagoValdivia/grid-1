@@ -14,6 +14,7 @@
  */
 
 import type { Vec2 } from './vec2'
+import { TOLERANCES } from './tolerances'
 
 /** An axis-aligned box in plan metres. */
 export interface Rect {
@@ -217,7 +218,7 @@ function areaCentre(polygon: readonly Vec2[]): Vec2 | null {
  * along its border or touching a corner does not count.
  */
 function segmentCrossesRect(a: Vec2, b: Vec2, rect: Rect): boolean {
-  const tiny = 1e-9 * Math.max(1, Math.abs(rect.maxX - rect.minX), Math.abs(rect.maxY - rect.minY))
+  const tiny = TOLERANCES.relativeNoise.value * Math.max(1, Math.abs(rect.maxX - rect.minX), Math.abs(rect.maxY - rect.minY))
   const minX = rect.minX + tiny
   const minY = rect.minY + tiny
   const maxX = rect.maxX - tiny

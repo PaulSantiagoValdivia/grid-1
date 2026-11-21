@@ -7,12 +7,7 @@
 import polygonClipping from 'polygon-clipping'
 import type { Geom, MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import type { Vec2 } from './vec2'
-
-/**
- * Below this, in square metres, a difference in area is not reported: the same line the
- * scoreboard draws between two areas that "differ".
- */
-export const AREA_TOLERANCE = 0.01
+import { TOLERANCES } from './tolerances'
 
 export interface Box {
   readonly x0: number
@@ -69,8 +64,8 @@ export function strip(start: Vec2, dir: Vec2, length: number, half: number, ends
   return [[p(a.x - nx, a.y - ny), p(b.x - nx, b.y - ny), p(b.x + nx, b.y + ny), p(a.x + nx, a.y + ny)]]
 }
 
-/** Ends of two walls closer than this, in metres, are one joint. */
-export const JOINT = 1e-6
+/** Ends of two walls closer than this, in metres, are one joint (a fixed entry). */
+export const JOINT = TOLERANCES.joint.value
 
 /**
  * The corners made good. Where two solid walls end at one point at an angle, their square ends
@@ -110,7 +105,7 @@ export function cornerFills(walls: readonly WallRun[], inset: number, snap: (v: 
       const q = ends[j]!
       if (p.shape === q.shape || Math.hypot(p.at.x - q.at.x, p.at.y - q.at.y) > JOINT) continue
       const turn = p.dir.x * q.dir.y - p.dir.y * q.dir.x
-      if (Math.abs(turn) < 1e-9) continue
+      if (Math.abs(turn) < TOLERANCES.parallel.value) continue
       const face = (e: End, side: number): Vec2 => ({ x: e.at.x - e.dir.y * e.half * side, y: e.at.y + e.dir.x * e.half * side })
       const reach = 4 * Math.max(p.half, q.half)
       const points: Vec2[] = []
@@ -139,7 +134,7 @@ export function convexHull(points: readonly Vec2[]): Vec2[] {
   const half = (list: readonly Vec2[]): Vec2[] => {
     const out: Vec2[] = []
     for (const p of list) {
-      while (out.length >= 2 && turn(out[out.length - 2]!, out[out.length - 1]!, p) <= 1e-12) out.pop()
+      while (out.length >= 2 && turn(out[out.length - 2]!, out[out.length - 1]!, p) <= TOLERANCES.noArea.value) out.pop()
       out.push(p)
     }
     out.pop()

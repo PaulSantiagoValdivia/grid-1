@@ -10,12 +10,13 @@ import type { Wall } from '../plan'
 import type { Vec2 } from '../vec2'
 import { cross, dot, fromTuple, length, normalize, perp, sub } from '../vec2'
 import type { WallMotion } from './types'
+import { TOLERANCES } from '../tolerances'
 
 /**
  * Below this, a pair of rotated segments has a pivot so far away that its
  * position is noise: the wall is reshaped, not rotated about the horizon.
  */
-const MIN_ROTATION_DETERMINANT = 1e-6
+const MIN_ROTATION_DETERMINANT = TOLERANCES.noTurn.value
 
 function within(v: Vec2, epsilon: number): boolean {
   return Math.abs(v.x) <= epsilon && Math.abs(v.y) <= epsilon
@@ -73,7 +74,7 @@ export function wallMotion(before: Wall, after: Wall, epsilon: number): WallMoti
   if (Math.abs(length1 - length0) <= epsilon) {
     const radians = Math.atan2(cross(dir0, dir1), dot(dir0, dir1))
     let angleDeg = (radians * 180) / Math.PI
-    if (angleDeg <= -180 + 1e-9) angleDeg = 180
+    if (angleDeg <= -180 + TOLERANCES.relativeNoise.value) angleDeg = 180
 
     if (startFixed) return { kind: 'rotated', pivot: tuple(s0), angleDeg }
     if (endFixed) return { kind: 'rotated', pivot: tuple(e0), angleDeg }
