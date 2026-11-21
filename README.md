@@ -47,20 +47,67 @@ local one is missing.
 | Command | What it does |
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
+| `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see below) |
 | `grid check [<plan>] [--floor <id>] [--country <code>] [--json]` | Prints the report. Every report is labelled "General guidance, not your local rules" |
-| `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below) |
+| `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 14 tools below |
+| `grid serve` | Starts the tool server on standard input and output, with the 15 tools below |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
+
+### Writing a plan rooms first
+
+The main way to write a plan, for an agent or a person: name the rooms with their inside sizes
+and where each goes, and the doors and windows by the rooms they join. Grid works out the walls,
+whether each is an outside or an inside wall, each room's boundary and where each opening sits,
+and writes them into the plan file.
+
+```
+walls outside 0.3 inside 0.1 height 2.6
+room living  "Living room" living   4.4 x 4.2
+room kitchen "Kitchen"     kitchen  4.4 x 3.0  north of living
+room hall    "Hall"        corridor 1.3 x *    east of living until kitchen
+door d-living between hall and living, 0.1 from south, 0.8 wide, opens into living
+door front    in hall north, centred, 0.9 wide, opens in, hinged east
+window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
+```
+
+- A size is east-west by north-south, to the inside faces. `3 x 4 centre` measures to the walls'
+  centre lines and `8 x 10 outside` to the outside faces; `sizes outside` makes that the
+  default. The answer states for each room what its size measured to, and its inside size.
+- `*` stretches a side as far as the room named after `until`. `inside <room> corner ne` cuts a
+  room out of another's corner. `unit`, `place`, `repeat` and `mirror` write a group of rooms
+  once; `copy <floor>` starts a floor from another.
+- Rooms that overlap, that touch with no wall between them (unless one is `open` to the other),
+  or that leave a gap that is neither a wall nor a room are refused in plain words naming both
+  rooms. Every refusal has a code, such as `rooms/overlap`.
+- What rooms cannot say is written raw, one line of the plan file's own JSON:
+  `raw wall {...}`, `raw room {...}`, `raw opening {...}`. Free-standing walls, curved or
+  out-of-the-way walls and rooms with holes are written that way.
+- The full language is in the header of `packages/floorplan/src/rooms/compile.ts`.
+
+**The plan file is the source of truth.** Its walls stay in it, and they can still be changed
+there or with the tools; rooms text is a way of writing the plan and of reading it.
+`grid describe --as rooms` reads any plan back as rooms text, and writing that text again
+changes nothing: the walls line comes with every exception the plan holds (a wall's height,
+thickness, kind, id or direction), and a floor that rooms text cannot give back as it is comes in
+the plan's own terms. So that nothing is lost unseen, `grid write` refuses, with the difference,
+rooms text read from an earlier version of the plan (its `based on` line) and rooms text written
+over a plan changed some other way since Grid last wrote it; `--replace` writes over it anyway.
+
+Some parts are derived: Grid works them out and no one writes them. In a plan written rooms
+first (it records this in `written`), each room's boundary is derived, and one edited by hand is
+refused by the check with its own code, `room/derived-edited`. Grid's own edits keep it derived.
+Change the rooms and write them again, or take `written` out to keep the plan as a hand-written
+one.
 
 ### The tool server
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, then the preview, the export and the sheet, and last the three that
-change the plan. Every tool has a title, a read-only or destructive hint, an input schema with an example
+requests people make most, then the preview, the export and the sheet, and last the four that
+change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Units are metres.
 
@@ -72,11 +119,12 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; text or CSV |
 | `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; and what is narrower than the person's own figure |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
-| `grid_describe` | The plan in room terms, as `grid describe` |
+| `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
 | `grid_preview` | Points the live preview at a floor or room of the plan |
 | `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/` |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
+| `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into) or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in; walls ending on it follow |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |
