@@ -204,6 +204,12 @@ export const RoomSchema = z.object({
   // a plan written before it reads with no key added (version 1). Unstated, the room is as
   // high as the lowest solid wall round it (`roomHeight` in the command's measuring).
   height: finite().positive().optional(),
+  // LVL-7: how far the room's floor stands above (positive) or below (negative) its storey's
+  // floor level, in metres: a genkan, a sunken wet area, a stage. A platform inside a room is
+  // a room marked `inside` with its own offset, so one field says both. The step is drawn at
+  // the openings to rooms at another level, and along a dividing line between them. Optional
+  // and never defaulted: unstated, the room stands on its storey's floor (version 1).
+  floorOffset: finite().optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])

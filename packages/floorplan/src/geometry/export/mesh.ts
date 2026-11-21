@@ -111,9 +111,29 @@ export function wallMesh(wall: SceneWall): Mesh | null {
   return storable({ points, faces })
 }
 
-/** A room's floor: a flat surface at z = 0, facing up. */
+/**
+ * A room's floor: a flat surface at its height, facing up. That is z = 0, or the room's `offset`
+ * when it is set off its storey (LVL-7). Then a band of quads runs round its edge down (or up) to
+ * the storey's floor, so a stage is a platform with sides and a sunken room has a sill round it,
+ * facing into the room.
+ */
 export function floorMesh(floor: SceneSlab): Mesh | null {
   const { vertices, triangles } = triangulate(floor.polygon)
   if (triangles.length === 0) return null
-  return storable({ points: vertices.map((v) => ({ x: v.x, y: v.y, z: 0 })), faces: triangles })
+  const top = floor.offset ?? 0
+  const points: Vec3[] = vertices.map((v) => ({ x: v.x, y: v.y, z: top }))
+  const faces: Face[] = [...triangles]
+  if (top !== 0) {
+    // The polygon winds counter-clockwise, so its outside lies to the right of each edge. With
+    // the top above the base these faces point out of the platform, with it below into the room.
+    const n = floor.polygon.length
+    const base = points.length
+    for (const p of floor.polygon) points.push({ x: p.x, y: p.y, z: 0 }, { x: p.x, y: p.y, z: top })
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n
+      const [p0, p1, q0, q1] = [base + 2 * i, base + 2 * i + 1, base + 2 * j, base + 2 * j + 1]
+      faces.push([p0, q0, q1], [p0, q1, p1])
+    }
+  }
+  return storable({ points, faces })
 }

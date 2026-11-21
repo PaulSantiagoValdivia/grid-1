@@ -78,6 +78,8 @@ export const LINE_PX = {
   virtualDash: [7, 5],
   opening: 1,
   jamb: 1,
+  /** A step between rooms at different levels (LVL-7). */
+  step: 1.5,
   doorLeaf: 1.5,
   doorArc: 0.75,
   dimension: 1,

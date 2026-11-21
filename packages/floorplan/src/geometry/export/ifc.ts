@@ -30,6 +30,7 @@ import {
   type StoreyLevel
 } from '../elevations'
 import { tryRoomPolygon } from '../room'
+import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
 import { validatePlan } from '../validate'
 import type { WallEnds } from '../wall'
@@ -868,16 +869,22 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
  * walls still close the outline through their faces, so an open-plan room keeps
  * its area although no wall element stands there. Returns null for a room whose
  * boundary does not close.
+ *
+ * A room set off its storey (LVL-7) stands at its `floorOffset` and still reaches the storey's
+ * ceiling, so a genkan or a stage is a space at its own level, not at the storey's.
  */
 function writeSpace(c: Context, storey: Storey, room: Room): number | null {
   const polygon = roomFootprint(storey, room)
   if (!polygon) return null
   const { w } = c
 
-  const spacePlacement = placement(w, storey.placement, [0, 0, 0])
+  const offset = roomFloorOffset(room)
+  // A room raised to the ceiling or past it (asked about by the checks) keeps the storey's height.
+  const height = storey.height - offset > 0 ? storey.height - offset : storey.height
+  const spacePlacement = placement(w, storey.placement, [0, 0, offset])
   const profile = footprintProfile(c, polygon)
   const shape = productShape(c, [
-    bodyRepresentation(c, extrusion(c, profile, storey.height))
+    bodyRepresentation(c, extrusion(c, profile, height))
   ])
 
   return w.add(
@@ -982,7 +989,11 @@ function writeSlabs(building: Context, storeys: readonly Storey[]): void {
         if (!polygon) continue
         const base = floor.level === lowest ? 'BASESLAB' : 'FLOOR'
         const under = slabUnder(floor)
-        slabs.push(writeSlab(c, storey, room, polygon, base, -under, under))
+        // LVL-7: the slab's top is the room's floor. A raised room's slab is solid down to the
+        // storey's slab; a sunken one's is the storey's slab, lower down.
+        const top = roomFloorOffset(room)
+        const bottom = Math.min(top, 0) - under
+        slabs.push(writeSlab(c, storey, room, polygon, base, bottom, top - bottom))
         if (floor.level === highest) {
           slabs.push(writeSlab(c, storey, room, polygon, 'ROOF', storey.height, SLAB_THICKNESS))
         }

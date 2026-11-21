@@ -17,6 +17,8 @@ import { roomFloorArea, tryRoomPolygon } from './room'
 import { wallExposure } from './exposure'
 import type { Issue } from './validate'
 import { validatePlan } from './validate'
+import type { PlanStep } from './steps'
+import { planSteps } from './steps'
 
 export interface PlanWall {
   readonly id: string
@@ -78,6 +80,12 @@ export interface PlanDrawing {
   readonly walls: readonly PlanWall[]
   readonly rooms: readonly PlanRoom[]
   readonly openings: readonly PlanOpening[]
+  /**
+   * Where a room at one level meets a room at another (LVL-7): a line across each door or
+   * doorless opening between them, and along a dividing line between them. Empty when every
+   * room stands on its storey's floor.
+   */
+  readonly steps: readonly PlanStep[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -201,7 +209,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
     extent.push(...polygon)
   }
 
-  return { walls, rooms, openings, bounds: computeBounds(extent), issues }
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), bounds: computeBounds(extent), issues }
 }
 
 /** Envelope with a margin, in meters, so the drawing is not flush to the edge. */
