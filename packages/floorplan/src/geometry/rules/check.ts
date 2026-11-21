@@ -9,6 +9,9 @@
 import type { FloorPlan } from '../plan'
 import { planFloors, planForFloor } from '../floors'
 import { validatePlan } from '../validate'
+import { floorElevations } from '../elevations'
+import { limit } from '../tolerances'
+import { metresText } from '../rounding'
 import { LIMITS, RULES } from './catalogue'
 import { floorGraph } from './graph'
 import type { FloorGraph } from './graph'
@@ -20,7 +23,8 @@ const RULE_OF: Record<FindingCode, string> = {
   no_exit: 'floor-has-exit',
   room_without_door: 'room-has-door',
   no_route_to_exit: 'room-reaches-exit',
-  door_to_undrawn_space: 'door-leads-somewhere'
+  door_to_undrawn_space: 'door-leads-somewhere',
+  door_to_outside_above_ground: 'door-leads-somewhere'
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -148,10 +152,15 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
   const roomName = (id: string): string => names.get(id) ?? id
 
   // The plan has no stairs, so only the ground floor can reach the outside: the floor at
-  // level 0, or the only floor there is. Any other floor is said to be unchecked, never
+  // level 0, or the only floor there is, unless it stands above the ground (LVL-1, lab VE-8:
+  // a flat whose only floor is the third). Any other floor is said to be unchecked, never
   // passed: a balcony door upstairs is not a way out.
-  const ground = floors.length === 1 ? floors : floors.filter((f) => f.level === 0)
+  const elevations = floorElevations(plan)
+  const standsAt = (id: string): number => elevations.floors.get(id)?.floorLevel ?? 0
+  const aboveGround = (id: string): boolean => standsAt(id) > limit('outsideDoorAboveGround')
+  const ground = (floors.length === 1 ? floors : floors.filter((f) => f.level === 0)).filter((f) => !aboveGround(f.id))
   const groundIds = new Set(ground.map((f) => f.id))
+  const openingIds = new Set(plan.openings.map((o) => o.id))
 
   const findings: RuleFinding[] = []
   const notChecked: NotChecked[] = []
@@ -172,6 +181,23 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
     const routes = groundIds.has(floor.id)
     const found = routeFindings(graph, floor.id, floorName, roomName, routes)
     findings.push(...found.findings)
+    // A door to the outside in mid-air (lab VE-8): said, and never a way out. Open sides of a
+    // virtual wall are left alone: they edge a terrace or a stand, not a door.
+    if (aboveGround(floor.id)) {
+      const height = metresText(standsAt(floor.id))
+      for (const { room, opening } of graph.exits) {
+        if (!openingIds.has(opening)) continue
+        findings.push({
+          code: 'door_to_outside_above_ground',
+          ruleId: RULE_OF.door_to_outside_above_ground,
+          floor: floor.id,
+          rooms: [room],
+          openings: [opening],
+          message: messages.doorOutAboveGround(roomName(room), height),
+          elevation: Number(height)
+        })
+      }
+    }
     if (found.wayOutNotDrawn) {
       notChecked.push({
         reason: 'way_out_not_drawn',

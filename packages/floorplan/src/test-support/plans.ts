@@ -1,8 +1,10 @@
-import type { FloorPlan, Opening, Room, Wall } from '@ongrid/floorplan/geometry'
+import type { FloorPlan, Opening, Room, Wall } from '../geometry/plan'
 
 /**
- * Plans for the checks, drawn the way an assistant draws them: one wall per room
- * edge, exterior walls 0.2 m, interior 0.1 m. The same plans the core's own tests use.
+ * Plans for the local rules check, drawn the way the assistant draws them: one
+ * wall per room edge, exterior walls 0.2 m, interior 0.1 m. The one copy (QAR-6):
+ * the core's tests and the rules package's import them from here, the rules
+ * package as `@ongrid/floorplan/test-support/plans`.
  */
 
 export function wall(
@@ -136,6 +138,61 @@ export function longWallStrip(): FloorPlan {
       room('right', 'Right', ['long', 'east', 'north', 'div2'])
     ],
     openings: [door('main', 'long', 5.5)]
+  })
+}
+
+/**
+ * LVL-7, lab R-4: a 4 × 3 flat entered through a genkan. The genkan (x 0 to 1.5) and the hall
+ * (1.5 to 4) are joined by a doorless opening `g` in the partition `x`, which runs from (1.5, 0)
+ * to (1.5, 3), so the genkan is on its left face. The front door `d` is in the west wall. The
+ * genkan stands `offset` off the storey's floor.
+ */
+export function genkanFlat(offset = 0.18): FloorPlan {
+  return plan({
+    walls: [
+      exterior('s', [0, 0], [4, 0]),
+      exterior('e', [4, 0], [4, 3]),
+      exterior('n', [4, 3], [0, 3]),
+      exterior('w', [0, 3], [0, 0]),
+      wall('x', [1.5, 0], [1.5, 3])
+    ],
+    rooms: [
+      { ...room('genkan', 'Genkan', ['s', 'x', 'n', 'w']), use: 'corridor', floorOffset: offset },
+      { ...room('hall', 'Hall', ['s', 'e', 'n', 'x']), use: 'corridor' }
+    ],
+    openings: [
+      door('d', 'w', 1),
+      { id: 'g', wall: 'x', type: 'opening', offset: 1, width: 0.9, sill: 0, height: 2.1 }
+    ]
+  })
+}
+
+/**
+ * LVL-7, lab S-17: a 24 × 18 ballroom, walls 0.3 m thick and 5 m high, with an 8 × 4 m stage
+ * 0.6 m high against its north wall. The stage is a room inside the ballroom, edged with
+ * dividing lines, not a wall.
+ */
+export function ballroomWithStage(offset = 0.6): FloorPlan {
+  const hall = (id: string, start: [number, number], end: [number, number]): Wall =>
+    exterior(id, start, end, { thickness: 0.3, height: 5 })
+  const edge = (id: string, start: [number, number], end: [number, number]): Wall =>
+    wall(id, start, end, { thickness: 0, height: 0, virtual: true })
+  return plan({
+    walls: [
+      hall('hall-s', [0, 0], [24, 0]),
+      hall('hall-e', [24, 0], [24, 18]),
+      hall('hall-n', [24, 18], [0, 18]),
+      hall('hall-w', [0, 18], [0, 0]),
+      edge('stg-s', [8, 13.6], [16, 13.6]),
+      edge('stg-e', [16, 13.6], [16, 17.6]),
+      edge('stg-n', [16, 17.6], [8, 17.6]),
+      edge('stg-w', [8, 17.6], [8, 13.6])
+    ],
+    rooms: [
+      { ...room('ballroom', 'Ballroom', ['hall-s', 'hall-e', 'hall-n', 'hall-w']), use: 'other' },
+      { ...room('stage', 'Stage', ['stg-s', 'stg-e', 'stg-n', 'stg-w']), use: 'other', inside: true, floorOffset: offset }
+    ],
+    openings: [door('entry', 'hall-s', 11.5, 1.8)]
   })
 }
 

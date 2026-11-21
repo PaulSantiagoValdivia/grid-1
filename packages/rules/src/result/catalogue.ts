@@ -11,7 +11,7 @@
  * Plain English, never anything that reads as "this plan complies".
  */
 
-import { figureText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
+import { figureText, metresText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
 import { quoted } from '@ongrid/floorplan/types/floorplan'
 import { wordings as figureWordings } from '../checks/messages'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
@@ -150,6 +150,17 @@ export const CODES = {
     fix: fixed('If the plan was typed in another unit, multiply every length so it reads in metres, as the line found says.')
   },
 
+  'plan/level-gap': {
+    says: fixed('The plan skips a floor level'),
+    needed: fixed('floor levels with no gap, or an elevation in metres on each floor'),
+    fix: fixed('If a floor is missing, add it. If not, state where each floor stands with an elevation in metres.')
+  },
+  'plan/same-level': {
+    says: (s) => `${s.label} is at the same level as another floor`,
+    needed: fixed('each floor at its own level, or an elevation in metres on each'),
+    fix: fixed('Give each floor its own level, or state where each stands with an elevation in metres.')
+  },
+
   // --- Walls ----------------------------------------------------------------------------------
   'wall/too-large': {
     says: (s) => `${s.label} has a number Grid does not accept`,
@@ -220,6 +231,12 @@ export const CODES = {
     says: (s) => `${s.label} stands inside a room that does not list it`,
     needed: fixed('a wall inside a room drawn as part of a room'),
     fix: fixed('If it is a room inside the room (a pod, a cupboard, a column), draw that room and mark it "inside". Otherwise remove the wall or move it.')
+  },
+
+  'wall/above-storey': {
+    says: (s) => `${s.label} is higher than the storey its floor states`,
+    needed: fixed("walls no higher than their floor's stated height"),
+    fix: fixed("Lower the wall, or raise the floor's height if the wall really is taller.")
   },
 
   // --- Openings -------------------------------------------------------------------------------
@@ -365,11 +382,27 @@ export const CODES = {
     fix: fixed(`${SIZE_QUESTION} Check its walls' coordinates and thickness.`)
   },
 
+  'room/offset-question': {
+    says: (s) => `${s.label} stands far above or below its storey's floor`,
+    needed: fixed("a room's step within what a storey holds, or a floor of its own"),
+    fix: fixed('If it is meant, leave it. If the room is a level of its own, give it its own floor with its elevation.')
+  },
+
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {
     says: (s) => `${s.label} has enclosed floor that no room claims`,
     needed: fixed('every enclosed floor in a room'),
     fix: fixed("If it is a room, draw it as one. If it is part of a room, list the walls that take it into that room's outline.")
+  },
+  'floor/empty-top': {
+    says: (s) => `${s.label} is the top floor and has nothing drawn on it`,
+    needed: fixed('a top floor with something on it'),
+    fix: fixed('Remove the floor if nothing is on it yet: it still counts as a storey and the roof stands on it.')
+  },
+  'floor/size-question': {
+    says: (s) => `${s.label} states a height that may not be meant`,
+    needed: fixed('the height of a storey in a building'),
+    fix: fixed(`${SIZE_QUESTION} Walls with no height of their own take the floor's height.`)
   },
   'floor/spaces-unknown': {
     says: (s) => `The spaces the walls enclose on ${s.label.replace(/^Floor/, 'floor')} could not be worked out`,
@@ -412,6 +445,12 @@ export const CODES = {
     found: fixed('no room and no outside wall on the far side of the door'),
     needed: fixed('a room, or the outside, on the far side'),
     fix: fixed('If that space is a shared landing or a stair, draw it as a room. If the door leads outside, mark its wall as exterior.')
+  },
+  'opening/door-out-above-ground': {
+    says: (s) => wordingText(planCheckWordings.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
+    found: (s) => `a door in an outside wall of a floor ${metresText(s.finding?.elevation ?? 0)} m above the ground`,
+    needed: fixed('a way out at ground level, or stairs the plan cannot hold yet'),
+    fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
   },
   'room/too-small': {
     says: (s) => wordingText(figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),

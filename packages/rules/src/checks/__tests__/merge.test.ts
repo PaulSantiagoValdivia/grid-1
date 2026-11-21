@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { checkPlanSanity as checkPlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { FIGURE_RULES, checkLocalRules } from '..'
-import { door, edit, flat, longWallStrip, madeVirtual, twoFloorHouse, withOpening, withoutOpening } from './fixtures'
+import { door, edit, flat, longWallStrip, madeVirtual, twoFloorHouse, withOpening, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 /**
  * The full check is the core's plan check with more in it: nothing the core reports is lost,

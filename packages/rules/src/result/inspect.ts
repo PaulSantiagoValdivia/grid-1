@@ -41,6 +41,7 @@ const FINDING_CODES: Record<FindingCode, string> = {
   room_without_door: 'room/no-door',
   no_route_to_exit: 'room/no-route-out',
   door_to_undrawn_space: 'opening/to-undrawn-space',
+  door_to_outside_above_ground: 'opening/door-out-above-ground',
   room_too_small: 'room/too-small',
   no_escape_opening: 'room/no-escape-opening',
   escape_window_too_small: 'room/escape-window-too-small',
@@ -213,9 +214,9 @@ function namesOf(plan: FloorPlan): Names {
   }
 }
 
-/** The thing a drawing problem is about: a floor's two plan-wide codes are about the floor. */
+/** The thing a drawing problem is about: the plan-wide codes that name a floor are about the floor. */
 function issueThing(issue: Issue): { thing: Thing; also: string[] } {
-  if (issue.code === 'plan/similar-floor-id' || issue.code === 'plan/duplicate-floor') return { thing: { kind: 'floor', id: issue.id }, also: [] }
+  if (issue.code === 'plan/similar-floor-id' || issue.code === 'plan/duplicate-floor' || issue.code === 'plan/same-level') return { thing: { kind: 'floor', id: issue.id }, also: [] }
   if (issue.entity === 'plan') return { thing: { kind: 'plan', id: '' }, also: issue.id === 'plan' ? [] : [issue.id] }
   return { thing: { kind: issue.entity, id: issue.id }, also: [] }
 }
@@ -241,7 +242,7 @@ function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: Readonl
   const thing: Thing =
     finding.code === 'no_exit'
       ? { kind: 'floor', id: finding.floor }
-      : finding.code === 'door_to_undrawn_space' && finding.openings[0] !== undefined
+      : (finding.code === 'door_to_undrawn_space' || finding.code === 'door_to_outside_above_ground') && finding.openings[0] !== undefined
       ? { kind: 'opening', id: finding.openings[0] }
       : { kind: 'room', id: finding.rooms[0] ?? '' }
   const room = finding.rooms[0]

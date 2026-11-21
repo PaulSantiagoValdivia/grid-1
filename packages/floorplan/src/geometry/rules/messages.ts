@@ -64,6 +64,12 @@ export const wordings = {
     words('A door from '),
     name(room),
     words(' leads to a space that is not drawn as a room')
+  ],
+  /** `height` as the check prints it, in metres. */
+  doorOutAboveGround: (room: string, height: string): WordingPart[] => [
+    words('A door from '),
+    name(room),
+    words(` leads outside ${height} m above the ground, so it is not a way out`)
   ]
 }
 
@@ -77,5 +83,6 @@ export const messages = {
   wayOutNotDrawn: (floor: string): string => wordingText(wordings.wayOutNotDrawn(floor)),
   cannotBeDrawn: (floor: string, rooms: readonly string[]): string =>
     wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor)),
-  doorToUndrawnSpace: (room: string): string => wordingText(wordings.doorToUndrawnSpace(room))
+  doorToUndrawnSpace: (room: string): string => wordingText(wordings.doorToUndrawnSpace(room)),
+  doorOutAboveGround: (room: string, height: string): string => wordingText(wordings.doorOutAboveGround(room, height))
 }

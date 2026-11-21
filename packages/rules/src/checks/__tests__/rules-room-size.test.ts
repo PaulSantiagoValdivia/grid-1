@@ -3,7 +3,7 @@ import { area, indexPlan, roomPolygon, type FloorPlan, type Room, type Wall } fr
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { FIGURES, HABITABLE_USES, RULES, checkLocalRules } from '..'
 import { messages } from '../messages'
-import { edit, flat, twoFloorHouse } from './fixtures'
+import { edit, flat, twoFloorHouse } from '@ongrid/floorplan/test-support/plans'
 
 /**
  * A free-standing rectangular room whose inner faces measure `w` × `h`: four exterior walls

@@ -49,6 +49,8 @@ export type FindingCode =
   | 'no_route_to_exit'
   /** A door leads, through a wall that is not exterior, to a space not drawn as a room. */
   | 'door_to_undrawn_space'
+  /** LVL-1: a door or opening to the outside on a floor standing above the ground; never a way out. */
+  | 'door_to_outside_above_ground'
 
 /** One way through from a room: the room on its other side, and the opening or virtual wall. */
 export interface RouteStep {
@@ -69,6 +71,11 @@ export interface RuleFinding {
    * Optional, so the report stays at schema version 1.
    */
   readonly through?: readonly RouteStep[]
+  /**
+   * Only on `door_to_outside_above_ground`: how far the floor stands above the ground, in m, as
+   * the message says it. Optional, like `through` (MSG-1: the notes word it from this).
+   */
+  readonly elevation?: number
 }
 
 export type NotCheckedReason =

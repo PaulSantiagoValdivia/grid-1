@@ -4,7 +4,7 @@ import { indexPlan } from '../plan'
 import { planFloors, planForFloor } from '../floors'
 import { tryRoomPolygon } from '../room'
 import { validatePlan } from '../validate'
-import { flat, longWallStrip, madeVirtual, twoFloorHouse } from './rules-fixtures'
+import { flat, longWallStrip, madeVirtual, twoFloorHouse } from '../../test-support/plans'
 
 const fixtures: [string, FloorPlan][] = [
   ['the flat', flat()],

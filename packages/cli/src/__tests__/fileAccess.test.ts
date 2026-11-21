@@ -11,6 +11,11 @@ import { describe, expect, it } from 'vitest'
 
 const cli = resolve(__dirname, '../..')
 const RESOLVER = 'src/fs/projectFiles.ts'
+/**
+ * Grid's one atomic writer (QAR-6), in the rules package beside the rules store. The resolver
+ * hands it only paths it has resolved inside the project.
+ */
+const WRITER = '../rules/src/store/atomicWrite.ts'
 
 /** Files that may touch the disk without the resolver, and why. Test files are left out of the scan. */
 const ALLOWED: Readonly<Record<string, string>> = {
@@ -33,7 +38,7 @@ const FILE_ACCESS: ReadonlyArray<readonly [what: string, pattern: RegExp]> = [
   ['imports a Node module that reaches files or other programs', new RegExp(`from\\s*['"]${NODE_FILE_MODULES}['"]`)],
   ['requires a Node module that reaches files or other programs', new RegExp(`require\\(\\s*['"]${NODE_FILE_MODULES}['"]\\s*\\)`)],
   ['imports a Node module that reaches files or other programs at run time', new RegExp(`import\\(\\s*['"]${NODE_FILE_MODULES}['"]\\s*\\)`)],
-  ['writes through the old atomic writer', /\batomicWrite(File|Json)?\b/],
+  ['writes through the atomic writer, which only the resolver may call', /\batomicWrite(File|Json)?\b/],
   [
     // A method of the project (`project.writeFile(...)`) is the resolver, so it is not counted.
     'calls a file function',
@@ -97,7 +102,7 @@ describe('file access in packages/cli', () => {
     ["import { execFile } from 'child_process'", 'imports a Node module'],
     ["const fs = require('fs')", 'requires a Node module'],
     ["const fs = await import('node:fs')", 'at run time'],
-    ['atomicWriteFile(out, data)', 'old atomic writer'],
+    ['atomicWriteFile(out, data)', 'atomic writer'],
     ['fs.promises.writeFile(out, data)', 'calls a file function'],
     ['fsp.readdir(dir)', 'calls a file function'],
     ['realpathSync.native(dir)', 'calls a file function'],
@@ -145,7 +150,12 @@ describe('what the command and the tool server run', () => {
     const reaching = Object.entries(result.metafile.inputs)
       .filter(([, input]) => input.imports.some((imported) => builtIn.test(imported.path)))
       .map(([input]) => relative(cli, resolve(process.cwd(), input)).split(sep).join('/'))
-    expect(reaching).toEqual([RESOLVER])
+    expect(reaching.sort()).toEqual([WRITER, RESOLVER].sort())
+    // Only the resolver imports the writer.
+    const writerImporters = Object.entries(result.metafile.inputs)
+      .filter(([, input]) => input.imports.some((imported) => imported.path.endsWith('rules/src/store/atomicWrite.ts')))
+      .map(([input]) => relative(cli, resolve(process.cwd(), input)).split(sep).join('/'))
+    expect(writerImporters).toEqual([RESOLVER])
     expect(Object.keys(result.metafile.inputs).some((input) => input.endsWith('systemLookup.ts'))).toBe(false)
   }, 30_000)
 })

@@ -4,7 +4,7 @@ import { checkPlanSanity } from '../rules'
 import type { RuleFinding } from '../rules'
 import { floorGraph } from '../rules/graph'
 import { planForFloor } from '../floors'
-import { door, edit, flat, twoFloorHouse, wall, withOpening, withoutOpening } from './rules-fixtures'
+import { door, edit, flat, twoFloorHouse, wall, withOpening, withoutOpening } from '../../test-support/plans'
 
 const summary = (plan: FloorPlan) =>
   checkPlanSanity(plan).findings.map((f) => `${f.code} ${f.floor} ${f.rooms.join('+')}`)
@@ -82,12 +82,17 @@ describe('floors other than the ground floor', () => {
   it('get a notice that their way out was not checked, and no route findings', () => {
     const report = checkPlanSanity(twoFloorHouse())
     expect(routeNotices(twoFloorHouse())).toMatchObject([{ reason: 'no_stairs', floor: 'first', rooms: [] }])
-    expect(report.findings.filter((f) => f.floor === 'first')).toEqual([])
+    // LVL-1 (lab VE-8): the balcony door upstairs leads outside 2.95 m up. It is named, and it
+    // is no way out; there are still no route findings. Before LVL-1, nothing upstairs.
+    expect(report.findings.filter((f) => f.floor === 'first').map((f) => [f.code, f.openings])).toEqual([
+      ['door_to_outside_above_ground', ['balcony']]
+    ])
   })
 
   it('still report a room with no door', () => {
     const plan = withoutOpening(twoFloorHouse(), 'd_up')
-    expect(summary(plan)).toEqual(['room_without_door first landing'])
+    // LVL-1: with the balcony door named (lab VE-8).
+    expect(summary(plan)).toEqual(['door_to_outside_above_ground first study', 'room_without_door first landing'])
   })
 
   it('never count on a balcony door, so losing one changes nothing', () => {

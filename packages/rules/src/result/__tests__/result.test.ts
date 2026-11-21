@@ -6,7 +6,7 @@ import * as geometry from '@ongrid/floorplan/geometry'
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { planNotes as planCheckNotes } from '@ongrid/floorplan/notes'
 import { CODES, GENERAL_GUIDANCE_LABEL, LINE_KINDS, checkLocalRules, inspectPlan, planNotes, type GridResult, type ResultLine } from '../..'
-import { door, edit, exterior, flat, room, twoFloorHouse, wall, window_, withoutOpening } from '../../checks/__tests__/fixtures'
+import { door, edit, exterior, flat, room, twoFloorHouse, wall, window_, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 const SRC = fileURLToPath(new URL('../../../../', import.meta.url))
 

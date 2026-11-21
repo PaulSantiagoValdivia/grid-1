@@ -13,7 +13,6 @@ entry whose fix may change it.
 | lets floors that share a level share one storey, as tall as the taller walls | `packages/floorplan/src/geometry/__tests__/elevations.test.ts` | VE-2 |
 | ignores gaps in the level numbering | `packages/floorplan/src/geometry/__tests__/elevations.test.ts` | VE-3 |
 | counts a declared floor with no walls as 2.7 m | `packages/floorplan/src/geometry/__tests__/elevations.test.ts` | VE-3 |
-| rejects a non-integer level | `packages/floorplan/src/types/__tests__/floorplan.test.ts` | VE-3 (half levels) |
 | reads %s as not stated and keeps the rest of the room (a room's `use`) | `packages/floorplan/src/types/__tests__/floorplan.test.ts` | MS-1 |
 | catches a collision between two different kinds of entity | `packages/floorplan/src/geometry/__tests__/validation.test.ts` | MS-9 |
 | agrees with the area: width × depth is the room area | `packages/floorplan/src/geometry/__tests__/dimensions.test.ts` | DR-2 (true only for rectangles) |
@@ -60,7 +59,7 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| MS-8, MS-9, MS-10 | `geometry/__tests__/validation.test.ts` |
+| MS-8, MS-9 | `geometry/__tests__/validation.test.ts` |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
 | CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
@@ -81,6 +80,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | MS-3, MS-16 | MSG-15 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-15" |
 | VE-2 | MSG-15 | `geometry/__tests__/elevations.test.ts`, "lab failures fixed by MSG-15" |
 | MS-15 | MSG-12 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-12"; the plans behind MS-2, MS-15, MS-17, W-10 and L-6 in `geometry/__tests__/wallFaults.test.ts` |
+| MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
@@ -132,6 +132,16 @@ identity is now made from the project id, the element's kind, its floor and its 
 array; no other line changed or moved. `stays unique inside one document even when the seed
 repeats` (ifc.test.ts) now expects that seed. `is pinned: re-exports only stay recognisable
 while this value never changes` is as it was: the hash itself did not change.
+
+LVL-1 fixed `MS-10 a misspelt floor is reported when the plan lists no floors` and moved it to a
+block named "lab failures fixed by LVL-1", asserting the code, the wall and the severity. Two
+pinned tests changed on purpose. `rejects a non-integer level` (floorplan.test.ts) is now
+`accepts a half level`: a level orders the floors and need not be whole (VE-3), and it left the
+pinned list. In "a floor nobody declared" (validation.test.ts) a wall that names a floor the
+list does not hold is now an error, and the wall is left out, where it was a warning and drawn.
+The three pinned stacking tests in elevations.test.ts, and the IFC's `ignores gaps in the level
+numbering`, are unchanged: a floor that states no level still stacks by order, as they pin. No
+expected figure changed. See `reviews/LVL-1.md`.
 
 ## Kinds of test the suite does not have yet
 

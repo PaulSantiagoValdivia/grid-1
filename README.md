@@ -263,6 +263,56 @@ one line`) and never repeats the text. Markup in a name is allowed: it is drawn 
 ids in `grid check`'s drawing problems are quoted, and `grid_check` returns the rooms a finding
 is about, by id and name, apart from its message.
 
+### Floor levels and heights
+
+A floor in the plan's `floors` list has a `level`, which only orders the floors (0 the ground
+floor, 1 the one above, -1 a basement, 0.5 a half level between). Where a floor stands and how
+high it is may be stated apart from that order, in metres. All three are optional:
+
+| Field | What it states |
+|---|---|
+| `elevation` | Where the top of the floor's slab stands, above the ground floor's floor level (0) |
+| `height` | The floor's clear height. A solid wall on it that states no height of its own takes it |
+| `slab` | The thickness of the slab the floor stands on (0.25 m when not stated) |
+
+A floor that states nothing stands where it always did: its height is its tallest wall, and it
+stands on the floor below it, one slab higher. The roof lies on the highest storey top, whichever
+floor that is on, so a loft stated inside a taller storey does not pull the roof down. The 3D
+view, the IFC export and the sheet all read the floors' heights from this one rule.
+
+The drawing's checks ask about levels that do not add up, as warnings: a missing level
+(`plan/level-gap`, a flat on level 3 drawn alone stands on the ground until it states its
+elevation), two floors at one level one over the other (`plan/same-level`), an empty top floor
+that still counts as a storey (`floor/empty-top`), a wall taller than the height its floor states
+(`wall/above-storey`) and a floor height far outside a storey's (`floor/size-question`). A wall
+or room on a floor id the plan does not know is an error and is left out, with the nearest id the
+plan has (`wall/unknown-floor`, `room/unknown-floor`); with no floor list, only an id spelt like
+one more of the plan uses counts as unknown. A door to the outside on a floor more than 2 m above
+the ground is named by the plan checks and is never a way out.
+
+### A step inside a floor
+
+A room's floor may stand a little above or below its storey's: a genkan a step down from the
+hall, a sunken wet area, a raised stage. The room says so with `floorOffset`, in metres from its
+storey's floor level, positive up and negative down. Unstated, the room stands on the storey's
+floor.
+
+```json
+{ "id": "genkan", "name": "Genkan", "boundary": ["s", "x", "n", "w"], "floorOffset": -0.18 }
+```
+
+A platform that covers part of a room, such as a stage, a raised stand floor or a loading dock,
+is a room inside that room (`"inside": true`), edged with dividing lines and with its own
+`floorOffset`. It is floor, not a wall: its area is counted at its own level and taken off the
+room around it.
+
+Where two rooms at different levels meet, the 2D drawing shows the step as a solid line: across
+each door or doorless opening between them, on the lower room's face of the wall, and over a
+dividing line between them. A window gets none. In 3D, in the OBJ and glTF files and in the IFC
+file, the room's floor and space stand at its own level, and a raised room is solid down to the
+storey's floor. A room set more than 1.5 m off its storey, or raised to the height its floor
+states, is asked about (`room/offset-question`): so far off, it is more likely a floor of its own.
+
 ### Floor no room claims
 
 Besides the findings, `grid check` lists problems in the drawing. Some of them come from the
@@ -410,6 +460,11 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `diffWallOverlap` | tolerance | 0.9 ratio | The share of its length a removed wall must share with an added one to be the same |
 | `diffRoomAreaShare` | tolerance | 0.1 ratio | A removed and an added room whose areas differ by less than this share may be the same |
 | `diffRoomCentre` | tolerance | 0.1 m | And whose centres are this close |
+| `wallAboveStorey` | tolerance | 0.001 m | How far a wall may rise past the height its floor states; past it, `wall/above-storey` names both heights |
+| `sameLevelOverlap` | tolerance | 0.5 ratio | Two floors at one level whose walls' boxes share more than this of the smaller one stand one over the other (`plan/same-level`) |
+| `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground floor is named and is not a way out |
+| `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
+| `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
 | `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning |
 | `wallThinnest` | limit | 0.02 m | A thinner solid wall is questioned; a line with no substance should be virtual |

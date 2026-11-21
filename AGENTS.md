@@ -73,7 +73,9 @@ Notes for agents and people changing this repository.
   rule. A refusal names the part and the limit, never the text.
 - Every file the command or the tool server reads or writes goes through
   `packages/cli/src/fs/projectFiles.ts`, which keeps it inside the project folder. Nothing else
-  in `packages/cli` imports `fs`: `src/__tests__/fileAccess.test.ts` fails if it does.
+  in `packages/cli` imports `fs`: `src/__tests__/fileAccess.test.ts` fails if it does. It
+  writes through Grid's one atomic writer, `packages/rules/src/store/atomicWrite.ts`, which the
+  rules store uses too.
 
 ## Commands
 

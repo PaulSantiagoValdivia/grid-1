@@ -66,6 +66,7 @@ describe('the picture look', () => {
     expect(at('virtual').get('stroke-dasharray')).toBe(LINE_PX.virtualDash.join(' '))
     expect(number(at('opening').get('stroke-width'))).toBe(LINE_PX.opening)
     expect(number(at('jamb').get('stroke-width'))).toBe(LINE_PX.jamb)
+    expect(number(at('step').get('stroke-width'))).toBe(LINE_PX.step)
     expect(number(at('door-leaf').get('stroke-width'))).toBe(LINE_PX.doorLeaf)
     expect(number(at('door-arc').get('stroke-width'))).toBe(LINE_PX.doorArc)
     expect(number(at('dimension-line').get('stroke-width'))).toBe(LINE_PX.dimension)

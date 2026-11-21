@@ -97,6 +97,8 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/similar-floor-id` | {thing} has an id that differs from another floor's only in capitals or spaces | floor ids that differ in more than capitals or spaces |
 | `plan/duplicate-floor` | {thing} is listed more than once | each floor listed once |
 | `plan/units-question` | The plan may not be in metres | every length in metres |
+| `plan/level-gap` | The plan skips a floor level | floor levels with no gap, or an elevation in metres on each floor |
+| `plan/same-level` | {thing} is at the same level as another floor | each floor at its own level, or an elevation in metres on each |
 | `wall/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `wall/zero-length` | {thing} has no length | a start and an end at different points |
 | `wall/no-thickness` | {thing} has no thickness | a thickness above 0, or a virtual wall for a line with no substance |
@@ -111,6 +113,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `wall/line-on-wall` | {thing} is a dividing line drawn over a wall | a wall or a dividing line, not both |
 | `wall/crosses-room` | {thing} runs across a room that does not list it | every wall across a room listed by the rooms on its sides |
 | `wall/stands-in-room` | {thing} stands inside a room that does not list it | a wall inside a room drawn as part of a room |
+| `wall/above-storey` | {thing} is higher than the storey its floor states | walls no higher than their floor's stated height |
 | `opening/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `opening/broken-wall` | {thing} is on a wall that cannot be drawn | a wall that can be drawn |
 | `opening/missing-wall` | {thing} is on a wall that is not in the plan | the id of a wall in the plan |
@@ -138,7 +141,10 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/overlap-unknown` | {thing} could not be compared with another room to see whether they overlap | room outlines Grid can compare |
 | `room/wall-listed-twice` | {thing} lists a wall more than once | each wall once in its list |
 | `room/size-question` | {thing} has a size that may not be meant | the size of a room in a building |
+| `room/offset-question` | {thing} stands far above or below its storey's floor | a room's step within what a storey holds, or a floor of its own |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
+| `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
+| `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
 | `floor/spaces-unknown` | The spaces the walls enclose on {thing} could not be worked out | walls Grid can join into spaces |
 | `floor/overlaps-unknown` | The rooms on {thing} were not all compared to see whether they overlap | fewer pairs of rooms lying over each other |
 | `floor/no-exit` | "{floor}" has no door to the outside | at least one door to the outside |
@@ -146,6 +152,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/no-route-out` | "{name}" has no route to a door to the outside | a route through doors and openings to a door to the outside |
 | `room/no-route-to-door-out` | "{name}" has no route to a door to the outside, nor to a door into a space that is not drawn | a route to a door to the outside, or to the door into the space not drawn |
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
+| `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or stairs the plan cannot hold yet |
 | `room/too-small` | "{name}" is under {minimum} m² | at least {minimum} m² |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
 | `room/escape-window-too-small` | The window of "{name}" is too small to escape through | a window someone can climb through |
@@ -219,6 +226,9 @@ A change that would add a problem that leaves a part out is refused, and nothing
   exports `checkLocalRules`, so importing the wrong one no longer compiles.
 - Notes a person reads now carry the report's wording as their title ("has no route to a
   door to the outside", no longer "has no way out").
+- Codes from LVL-1 and LVL-7 have their entries: `plan/level-gap`, `plan/same-level`,
+  `wall/above-storey`, `room/offset-question`, `floor/empty-top`, `floor/size-question` and
+  the finding `opening/door-out-above-ground`. `plan/same-level` is about the floor it names.
 - Two notices have one wording for one room or many: "On "Ground floor", rooms that could not
   be drawn were not checked: …" and "On "Ground floor", room sizes were not checked in rooms
   with no use stated: N".

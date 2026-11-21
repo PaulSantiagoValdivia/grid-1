@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./store": "./src/store/store.ts"
+    "./store": "./src/store/store.ts",
+    "./atomicWrite": "./src/store/atomicWrite.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

@@ -135,6 +135,9 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
       const said = (value: unknown): string => (value === null ? 'not stated' : `${metres(Number(value))} m`)
       parts.push(`height ${said(height.before)} → ${said(height.after)}`)
     }
+    // LVL-7: how far its floor stands off its storey's, 0 when unstated.
+    const floorOffset = prop(change, 'floorOffset')
+    if (floorOffset) parts.push(`floor offset ${metres(Number(floorOffset.before))} → ${metres(Number(floorOffset.after))} m`)
     return `${subject} ${parts.join('; ')}`
   }
 
@@ -149,6 +152,12 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
     if (name) parts.push(`renamed to ${quoted(text(name.after))}`)
     const level = prop(change, 'level')
     if (level) parts.push(`level ${text(level.before)} → ${text(level.after)}`)
+    // LVL-1: what a floor states about where it stands and how high it is.
+    const stated = (value: unknown): string => (value === null ? 'not stated' : `${text(value)} m`)
+    for (const key of ['elevation', 'height', 'slab'] as const) {
+      const found = prop(change, key)
+      if (found) parts.push(`${key} ${stated(found.before)} → ${stated(found.after)}`)
+    }
     return `${subject} ${parts.join('; ')}`
   }
 

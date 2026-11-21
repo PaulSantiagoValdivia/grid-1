@@ -1,7 +1,6 @@
 // 3D model: extruded walls, real openings, orbit camera
 import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { Grid, OrbitControls } from '@react-three/drei'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { floorElevations } from '@ongrid/floorplan/geometry'
 import type { PlaybackClock } from '../preview/playback'
@@ -13,6 +12,7 @@ import { buildingFrame, buildingLayout } from './building'
 import { openingCamera } from './camera'
 import { moveRig } from './pivot'
 import { BuildingScene, GROUND_GRID } from './BuildingScene'
+import { OrbitControls } from './OrbitControls'
 import type { StoreyPointer } from './Storey3D'
 
 type BuildClock = PlaybackClock<PlanBuild>
@@ -113,22 +113,10 @@ export function Canvas3D({
         />
 
         {/* At the ground, where it reads as ground; basements go below it. */}
-        <Grid
-          position={[cx, GROUND_GRID.y, cz]}
-          args={GROUND_GRID.args}
-          cellSize={GROUND_GRID.cellSize}
-          cellThickness={GROUND_GRID.cellThickness}
-          cellColor={colors.grid}
-          sectionSize={GROUND_GRID.sectionSize}
-          sectionThickness={GROUND_GRID.sectionThickness}
-          sectionColor={colors.gridSection}
-          fadeDistance={GROUND_GRID.fadeDistance}
-          fadeStrength={GROUND_GRID.fadeStrength}
-          infiniteGrid
-        />
+        <GroundGrid x={cx} z={cz} cellColor={colors.grid} sectionColor={colors.gridSection} />
 
         {/* Orbiting lets the build keep rising, like scrolling while code is written. */}
-        <OrbitControls target={initial.target} makeDefault />
+        <OrbitControls target={initial.target} />
         <BuildingCamera x={cx} z={cz} goalY={goalY} reducedMotion={reducedMotion} />
       </Canvas>
 
@@ -146,7 +134,49 @@ export function Canvas3D({
   )
 }
 
-/** The orbit controls `makeDefault` registers, as far as the rig needs them. */
+/**
+ * The ground grid, `GROUND_GRID.args` across and centred under the building: three's grid
+ * helper twice, a line every cell and one every section. The lines are as strong as a still
+ * draws them, about their thickness squared, with the cell lines at three quarters.
+ */
+function GroundGrid({
+  x,
+  z,
+  cellColor,
+  sectionColor
+}: {
+  x: number
+  z: number
+  cellColor: string
+  sectionColor: string
+}): JSX.Element {
+  const [size] = GROUND_GRID.args
+  const cells = Math.round(size / GROUND_GRID.cellSize)
+  const sections = Math.round(size / GROUND_GRID.sectionSize)
+  const cellOpacity = 0.75 * GROUND_GRID.cellThickness ** 2
+  const sectionOpacity = Math.min(1, GROUND_GRID.cellThickness ** 2 + GROUND_GRID.sectionThickness ** 2)
+  // A helper's colours are read once, when it is made, so a new colour makes a new helper.
+  return (
+    <group position={[x, GROUND_GRID.y, z]}>
+      <gridHelper
+        key={`cells ${cellColor}`}
+        args={[size, cells, cellColor, cellColor]}
+        material-transparent
+        material-opacity={cellOpacity}
+        material-depthWrite={false}
+      />
+      <gridHelper
+        key={`sections ${sectionColor}`}
+        args={[size, sections, sectionColor, sectionColor]}
+        material-transparent
+        material-opacity={sectionOpacity}
+        material-depthWrite={false}
+      />
+    </group>
+  )
+}
+
+/** The orbit controls, the canvas's default controls, as far as the rig needs them. */
 interface OrbitRig {
   target: { x: number; y: number; z: number; set: (x: number, y: number, z: number) => void }
   update: () => void

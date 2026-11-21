@@ -47,8 +47,8 @@ describe('the front door over the damage set', () => {
     expect(thrown).toBe(0)
     expect(failed).toEqual([])
     expect([...unknown]).toEqual([])
-    // The lab counted 506 plans the schema refuses whole (MS-20).
-    expect(refused).toBe(506)
+    // The lab counted 506 plans the schema refuses whole (MS-20); since LVL-1 two of them read.
+    expect(refused).toBe(504)
     for (const [code, set] of wordings) expect([...set], code).toHaveLength(1)
   }, 600_000)
 })

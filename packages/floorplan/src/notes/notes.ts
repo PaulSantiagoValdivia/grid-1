@@ -5,7 +5,7 @@
  * words as the report's `message`, with the names as their own segments so the list can set
  * them apart without parsing text. The detail says more, from the finding's code and ids. Pure.
  */
-import { planCheckWordings as wordings, planFloors, type RuleFinding, type RulesReport, type WordingPart } from '../geometry'
+import { metresText, planCheckWordings as wordings, planFloors, type RuleFinding, type RulesReport, type WordingPart } from '../geometry'
 import type { FloorPlan } from '../types/floorplan'
 
 /** A run of text; `name` marks a room or floor name as the plan writes it. */
@@ -101,6 +101,12 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ...base,
           title: wordings.doorToUndrawnSpace(roomName(room!)),
           detail: [words("If that space is a shared landing or a stair, draw it as a room, or mark the wall as exterior if the door leads outside.")]
+        }
+      case 'door_to_outside_above_ground':
+        return {
+          ...base,
+          title: wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation ?? 0)),
+          detail: [words('It is not counted as a way out. If it opens onto a balcony, a terrace or an outside stair, draw that as a room.')]
         }
     }
   }

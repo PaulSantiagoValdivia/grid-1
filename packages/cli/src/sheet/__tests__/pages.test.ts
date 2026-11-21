@@ -388,8 +388,11 @@ describe('small things a sheet says (VEW-7)', () => {
   })
 
   it('says a floor with no findings found nothing, even with notices, and so does the summary', () => {
-    const sheet = sheetPages(house, null, 'check', { name: 'x', date })
-    expect(checkPlan(house, {}).report.findings).toEqual([])
+    // LVL-1 (lab VE-8): the house's balcony door upstairs, with nothing drawn outside it, is now
+    // a finding, so this case takes the house without it.
+    const quiet = { ...house, plan: { ...house.plan, openings: house.plan.openings.filter((o) => o.id !== 'balcony') } }
+    const sheet = sheetPages(quiet, null, 'check', { name: 'x', date })
+    expect(checkPlan(quiet, {}).report.findings).toEqual([])
     expect(sheet.pages[0]!.notes).toContain(`Findings: none. ${NOTHING_FOUND}`)
     const floors = sheet.pages.slice(1)
     expect(floors.some((p) => p.notes.some((n) => n.startsWith('Not checked: ')))).toBe(true)

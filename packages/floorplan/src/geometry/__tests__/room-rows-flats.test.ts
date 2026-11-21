@@ -39,7 +39,10 @@ describe('R-7 the Madrid flat: a light well whose walls carry on as partitions',
   // MSG-13: the light well is drawn as a room, so rooms lie on both sides of its three walls,
   // which say they are exterior. They are kept as outside walls, as stated, and each gets one
   // line saying so (lab R-9). The fourth side is the façade.
+  // LVL-1 (lab R-12): the flat is on "Planta 4ª", level 4, drawn alone and with no elevation,
+  // so it stands on the ground until it states one, and the plan says so first.
   const lightWell: [string, string][] = [
+    ['plan/level-gap', 'plan'],
     ['wall/kind-differs', 'patio-s'],
     ['wall/kind-differs', 'patio-e'],
     ['wall/kind-differs', 'patio-n']
@@ -93,7 +96,8 @@ describe('R-7 the Berlin flat: a Berliner Zimmer whose court wall carries on thi
   const plan = fixture('berlin-flat.json')
   // MSG-13: the balcony is drawn as a room against the court wall, which says it is exterior:
   // kept as an outside wall, as stated, with one line saying so.
-  const byRoom = areas(plan, [['wall/kind-differs', 'sw']])
+  // LVL-1 (lab R-12): "3. Obergeschoss", level 3, drawn alone, with no elevation.
+  const byRoom = areas(plan, [['plan/level-gap', 'plan'], ['wall/kind-differs', 'sw']])
 
   it('measures every room', () => {
     expect([...byRoom.keys()]).toEqual(plan.rooms.map((r) => r.id))

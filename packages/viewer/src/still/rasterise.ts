@@ -23,7 +23,7 @@ export interface RasterImage {
   readonly data: Uint8ClampedArray
 }
 
-/** drei's ground grid, as the app's canvas sets it up (`GROUND_GRID`), with its colours. */
+/** The ground grid, as the app's canvas sets it up (`GROUND_GRID`), with its colours. */
 export interface GroundGrid {
   readonly y: number
   /** Where the grid is centred, in Three's x and z. Its lines are this far apart from here. */
@@ -535,7 +535,7 @@ function clipSegment(a: ClipPoint, b: ClipPoint): [ClipPoint, ClipPoint] | null 
 }
 
 /**
- * The ground grid as drei's shader draws it: a thin cell line every `cellSize` and a full
+ * The ground grid: a thin cell line every `cellSize` and a full
  * section line every `sectionSize`, each fading out `fadeDistance` from the point under the
  * camera.
  */
@@ -550,7 +550,7 @@ function drawGround(
   const under = new THREE.Vector3(eye.x, ground.y, eye.z)
   const [cx, cz] = ground.center
   const reach = ground.fadeDistance
-  // A drei grid line covers about thickness squared of a pixel; the cell lines are also
+  // A grid line covers about its thickness squared of a pixel; the cell lines are also
   // weakened to three quarters where no section line runs.
   const cellAlpha = 0.75 * ground.cellThickness ** 2
   const sectionAlpha = ground.cellThickness ** 2 + ground.sectionThickness ** 2

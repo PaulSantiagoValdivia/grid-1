@@ -36,7 +36,8 @@ record.
 1. *One front door, never throws, 0 exceptions over the 3,000 damaged plans.*
    `scoreboard/__tests__/frontDoor.test.ts` runs `inspectPlan` over the 3,000 damaged plans
    and the 442 sound plans (about 25 s). It gives 0 exceptions, 0 `plan/check-failed` lines and
-   0 codes missing from the catalogue. 506 plans are refused, the lab's figure for MS-20.
+   0 codes missing from the catalogue. 504 plans are refused: the lab's 506 for MS-20, less the
+   two that LVL-1 now reads (`reviews/LVL-1.md`).
 2. *Every line carries id, floor, stable code, found, needed, fix and one wording; a test
    fails if a code has two wordings.* `result/__tests__/result.test.ts` checks the fields and
    the code style (`<thing>/<what>`) on a corpus of fixtures. The same test file and the
@@ -126,6 +127,21 @@ No scoreboard figure moved. No `it.fails` was flipped, so `pinned-tests.md` is u
 - A test written against `checkLocalRules` from `@ongrid/floorplan/geometry` (or `../rules`)
   must call `checkPlanSanity`.
 
+## Merged with `main` at `1ed1ee7` (LVL-1, QAR-6, LVL-7)
+
+- Conflicts: `geometry/rules/messages.ts` (LVL-1's `doorOutAboveGround` is now one of the
+  shared wordings), and `rules-messages.test.ts` and `rules-report.test.ts` (main's version,
+  with the fixtures in `test-support/plans`, the rename to `checkPlanSanity`, and the
+  import-line rule).
+- New codes in the catalogue and the contract: `plan/level-gap`, `plan/same-level` (about the
+  floor it names), `wall/above-storey`, `room/offset-question`, `floor/empty-top`,
+  `floor/size-question`, and the finding `opening/door-out-above-ground`.
+- LVL-1's note for a door out above the ground had its own title, "A door from X opens outside
+  above the ground". The one-wording test caught it. It now takes the finding's wording, "A
+  door from X leads outside 9.85 m above the ground, so it is not a way out". For that, the
+  finding carries `elevation` (optional, in m). Updated `levels.test.ts`.
+- `scoreboard/__tests__/frontDoor.test.ts` expects 504 refused plans (LVL-1's figure).
+
 ## Checks run (worktree, each under `timeout`)
 
 - `npm run build`: bundled, no errors.
@@ -135,3 +151,9 @@ No scoreboard figure moved. No `it.fails` was flipped, so `pinned-tests.md` is u
 - `npx vitest run --exclude '.claude/**'`: 184 files, 4,046 tests, all passed.
 - `npm run scoreboard`: every count the same as `current.json` (197, 386, 15, 2, 5; guards
   724 and 95).
+
+After the merge with `main` at `1ed1ee7`: build, typecheck, lint, no errors. check:licenses:
+363 licences, none GPL, LGPL, AGPL, MPL or EPL. vitest: 188 files, 4,108 of 4,109 tests passed.
+The one failure was `sheet/__tests__/pdf.test.ts` "cuts a note taller than a page…", which timed
+out at 60 s in a 512 s run on a loaded machine. Run alone it passes in 29.6 s. MSG-1 does not touch
+the PDF. Scoreboard: the same as the stored figures (197, 386, 15, 2, 5; guards 727 and 95).
