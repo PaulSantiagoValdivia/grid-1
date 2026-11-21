@@ -80,10 +80,12 @@ describe('a plan that names floors', () => {
     expect(safeParseFloorPlan({ ...multi, floors: [{ id: 'ground', name: '' }] })).toBeNull()
   })
 
-  it('rejects a non-integer level', () => {
+  // LVL-1 (lab VE-3, half levels): a level orders the floors and need not be whole. Before
+  // LVL-1 this test was 'rejects a non-integer level'.
+  it('accepts a half level', () => {
     expect(
-      safeParseFloorPlan({ ...multi, floors: [{ id: 'ground', name: 'Ground', level: 0.5 }] })
-    ).toBeNull()
+      safeParseFloorPlan({ ...multi, floors: [{ id: 'ground', name: 'Ground', level: 0.5 }] })?.floors
+    ).toEqual([{ id: 'ground', name: 'Ground', level: 0.5 }])
   })
 
   it('accepts a negative level for a basement', () => {

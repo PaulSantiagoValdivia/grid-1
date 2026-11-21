@@ -46,7 +46,8 @@ describe('the report', () => {
   it('lists findings by storey, then code', () => {
     const plan = withoutOpening(withoutOpening(twoFloorHouse(), 'd_up'), 'd_hb')
     const findings = checkLocalRules(plan).findings
-    expect(findings.map((f) => f.floor)).toEqual(['ground', 'ground', 'first'])
+    // LVL-1: the second finding upstairs is the balcony door, 2.95 m up (lab VE-8).
+    expect(findings.map((f) => f.floor)).toEqual(['ground', 'ground', 'first', 'first'])
   })
 })
 

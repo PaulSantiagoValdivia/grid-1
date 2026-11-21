@@ -244,18 +244,21 @@ describe('a room reaching onto another floor', () => {
 })
 
 describe('a floor nobody declared', () => {
-  it('warns on the wall that names it, without breaking it', () => {
+  it('is an error on the wall that names it, which is left out (LVL-1)', () => {
     const plan = twoFloorPlan()
     plan.walls[0]!.floor = 'attic'
 
     const unknown = validatePlan(plan).issues.filter((i) => i.code === 'wall/unknown-floor')
 
     expect(unknown).toHaveLength(1)
-    expect(unknown[0]!.severity).toBe('warning')
-    expect(validatePlan(plan).broken.has('w1')).toBe(false)
+    // LVL-1 (lab MS-10): a floor the plan does not list, named outright, is an error with the
+    // nearest listed id, and the wall is left out. Before LVL-1: a warning, and drawn.
+    expect(unknown[0]!.severity).toBe('error')
+    expect(unknown[0]!.message).toMatch(/the nearest floor it lists is "/)
+    expect(validatePlan(plan).broken.has('w1')).toBe(true)
   })
 
-  it('warns on a room that names it', () => {
+  it('is an error on a room that names it (LVL-1)', () => {
     const plan = twoFloorPlan()
     plan.rooms[0]!.floor = 'attic'
 
@@ -486,15 +489,24 @@ describe('known failures (expected to fail until fixed)', () => {
     expect(issuesOf(plan).length).toBeGreaterThan(0)
   })
 
-  // Lab MS-10 (as corrected by the lab): with a floors list the warning already fires
-  // ('a floor nobody declared', above); without one it does not.
-  it.fails('MS-10 a misspelt floor is reported when the plan lists no floors', () => {
+})
+
+/** Known failures from the lab (entry Z-4) that LVL-1 fixed. */
+describe('lab failures fixed by LVL-1', () => {
+  type P = [number, number]
+  const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+
+  // Lab MS-10 (as corrected by the lab): with a floors list the warning already fired; without
+  // one nothing did. LVL-1 makes it an error with the id the slip looks like.
+  it('MS-10 a misspelt floor is reported when the plan lists no floors', () => {
     const { walls, room } = outline(RECT)
-    const plan = planOf({
+    const plan = parseFloorPlan({
       walls: walls.map((w, i) => ({ ...w, floor: i === 0 ? 'frist' : 'first' })),
       rooms: [{ ...room, floor: 'first' }]
     })
-    expect(issuesOf(plan).some((i) => /frist/.test(i.message))).toBe(true)
+    const found = validatePlan(plan).issues.filter((i) => /frist/.test(i.message))
+    expect(found.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['wall/unknown-floor', 'wall', 'w1', 'error']])
+    expect(found[0]!.message).toContain('spelt like floor "first"')
   })
 })
 

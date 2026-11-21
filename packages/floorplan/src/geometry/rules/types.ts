@@ -49,6 +49,8 @@ export type FindingCode =
   | 'no_route_to_exit'
   /** A door leads, through a wall that is not exterior, to a space not drawn as a room. */
   | 'door_to_undrawn_space'
+  /** LVL-1: a door or opening to the outside on a floor standing above the ground; never a way out. */
+  | 'door_to_outside_above_ground'
 
 /** One way through from a room: the room on its other side, and the opening or virtual wall. */
 export interface RouteStep {

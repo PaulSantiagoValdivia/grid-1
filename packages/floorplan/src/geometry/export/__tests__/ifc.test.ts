@@ -939,6 +939,19 @@ describe('storeys', () => {
     expect(elevations(exported(plan))).toEqual({ Sub: -4.9, Cellar: -2.65, Ground: 0, Attic: 3.25 })
   })
 
+  it('R-12 stands a third-floor flat at its stated elevation (LVL-1)', () => {
+    const third: Floor = { id: 'third', name: 'Third', level: 3, elevation: 8.85 }
+    const doc = exported(planOf([third], [wallOn('a', 'third', 2.7)]))
+    expect(elevations(doc)).toEqual({ Third: 8.85 })
+    expect(storeysOf(doc)[0]!.elevation).toBe(floorElevations(planOf([third], [wallOn('a', 'third', 2.7)])).floors.get('third')!.floorLevel)
+  })
+
+  it('stacks a stated loft and its slab as the 3D view does (LVL-1)', () => {
+    const loft: Floor = { id: 'loft', name: 'Loft', level: 1, elevation: 2.55, slab: 0.15 }
+    const plan = planOf([ground, loft], [wallOn('a', 'ground', 3.6), wallOn('b', 'loft', 1.2)])
+    expect(elevations(exported(plan))).toEqual({ Ground: 0, Loft: 2.55 })
+  })
+
   it('starts the stack at 0 when the lowest level at or above 0 is not 0', () => {
     const plan = planOf([first], [wallOn('a', 'first', 2.9)])
     expect(elevations(exported(plan))).toEqual({ First: 0 })

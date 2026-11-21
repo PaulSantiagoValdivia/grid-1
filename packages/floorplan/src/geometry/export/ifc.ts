@@ -25,7 +25,7 @@ import {
   isDrawnWall,
   isFiniteWall,
   SLAB_THICKNESS,
-  stackLevels,
+  stackFloors,
   type StoreyLevel
 } from '../elevations'
 import { tryRoomPolygon } from '../room'
@@ -444,20 +444,26 @@ function analyseFloor(plan: FloorPlan, floor: Floor): FloorModel {
 }
 
 /**
- * Storey elevations, from the tallest exported wall on each level, stacked on
- * `SLAB_THICKNESS` slabs (see `stackLevels`): the same rule the 3D view uses
- * through `floorElevations`. Floors sharing a level share an elevation.
+ * Storey elevations, by floor id, from what each floor states and the tallest exported wall on
+ * it, stacked on `SLAB_THICKNESS` slabs where a floor states none (see `stackFloors`): the same
+ * rule the 3D view uses through `floorElevations`.
  */
-function deriveLevels(models: readonly FloorModel[]): Map<number, StoreyLevel> {
-  const tallest = new Map<number, number>()
-  for (const { floor, walls } of models) {
-    let height = tallest.get(floor.level) ?? 0
-    for (const wall of walls) {
-      if (Number.isFinite(wall.height) && wall.height > height) height = wall.height
-    }
-    tallest.set(floor.level, height)
-  }
-  return stackLevels(tallest, SLAB_THICKNESS)
+function deriveLevels(models: readonly FloorModel[]): Map<string, StoreyLevel> {
+  return stackFloors(
+    models.map(({ floor, walls }) => {
+      let tallest = 0
+      for (const wall of walls) {
+        if (Number.isFinite(wall.height) && wall.height > tallest) tallest = wall.height
+      }
+      return { floor, tallest }
+    }),
+    SLAB_THICKNESS
+  )
+}
+
+/** The slab a floor stands on: its stated thickness, else `SLAB_THICKNESS`. */
+function slabUnder(floor: Floor): number {
+  return floor.slab !== undefined && Number.isFinite(floor.slab) && floor.slab >= 0 ? floor.slab : SLAB_THICKNESS
 }
 
 interface Storey {
@@ -885,7 +891,7 @@ function footprintProfile(c: Context, polygon: Footprint): number {
 type SlabKind = 'FLOOR' | 'BASESLAB' | 'ROOF'
 
 /**
- * A slab under or over a room, as an IfcSlab extruded `SLAB_THICKNESS` up from
+ * A slab under or over a room, as an IfcSlab extruded `thickness` up from
  * `bottom` (relative to its storey). It covers the room's footprint only: slabs
  * under walls wait for a building outline, the same limit the 3D view has.
  */
@@ -895,12 +901,13 @@ function writeSlab(
   room: Room,
   polygon: Footprint,
   kind: SlabKind,
-  bottom: number
+  bottom: number,
+  thickness: number
 ): number {
   const slabPlacement = placement(c.w, storey.placement, [0, 0, bottom])
   const profile = footprintProfile(c, polygon)
   const shape = productShape(c, [
-    bodyRepresentation(c, extrusion(c, profile, SLAB_THICKNESS))
+    bodyRepresentation(c, extrusion(c, profile, thickness))
   ])
   const roof = kind === 'ROOF'
 
@@ -943,9 +950,10 @@ function writeSlabs(c: Context, storeys: readonly Storey[]): void {
         const polygon = roomFootprint(storey, room)
         if (!polygon) continue
         const base = floor.level === lowest ? 'BASESLAB' : 'FLOOR'
-        slabs.push(writeSlab(c, storey, room, polygon, base, -SLAB_THICKNESS))
+        const under = slabUnder(floor)
+        slabs.push(writeSlab(c, storey, room, polygon, base, -under, under))
         if (floor.level === highest) {
-          slabs.push(writeSlab(c, storey, room, polygon, 'ROOF', storey.height))
+          slabs.push(writeSlab(c, storey, room, polygon, 'ROOF', storey.height, SLAB_THICKNESS))
         }
       } catch {
         // A room that cannot be built is left out.
@@ -1087,7 +1095,7 @@ function buildDocument(plan: FloorPlan, options: IfcOptions): string {
   const models = planFloors(plan).map((floor) => analyseFloor(plan, floor))
   const levels = deriveLevels(models)
   const storeys = models.map((model) =>
-    writeStorey(c, buildingPlacement, model, levels.get(model.floor.level)!)
+    writeStorey(c, buildingPlacement, model, levels.get(model.floor.id)!)
   )
   for (const storey of storeys) writeStoreyContents(c, storey)
   writeWallMaterialAssociations(c)

@@ -31,7 +31,14 @@
  *   rises from z = 0 (C4); stacking only translates it.
  *   `Floor.level` orders floors (0 ground, 1 above, -1 basement). It is an
  *   ordering index, NOT an elevation — it sets the order of the stack, never
- *   a height.
+ *   a height. It need not be a whole number: a half level sorts between two.
+ *
+ *   Reopened by LVL-1 (lab VE-2, VE-3): a floor MAY state where it stands and how
+ *   high it is, in metres, apart from its order. `elevation` is the top of its
+ *   floor slab above the ground floor's (0), `height` its clear height, which a
+ *   wall on it that states no height of its own takes, and `slab` the thickness
+ *   of the slab it stands on. All three are optional and never defaulted, so a
+ *   plan that states none reads and stacks exactly as before (version 1).
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
@@ -77,9 +84,17 @@ export const DEFAULT_FLOOR_ID = 'ground'
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
   name: text('name').pipe(z.string().min(1)),
-  // Ordering only: 0 = ground, 1 = the floor above it, -1 = basement.
-  // NOT an elevation — 3D derives heights from the walls (C4/C5).
-  level: finite().int().default(0),
+  // Ordering only: 0 = ground, 1 = the floor above it, -1 = basement, 0.5 a half level
+  // between them. NOT an elevation: that is `elevation` (C5).
+  level: finite().default(0),
+  // LVL-1 (C5, reopened). Optional and never defaulted: unstated, the floor stands where the
+  // stacking rule puts it (`floorElevations`), as in a plan written before LVL-1.
+  // Metres from the ground floor's floor level (0) to the top of this floor's slab.
+  elevation: finite().optional(),
+  // Metres from this floor's level to its ceiling: what a wall on it with no height takes.
+  height: finite().positive().optional(),
+  // Metres: the thickness of the slab this floor stands on.
+  slab: finite().nonnegative().optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -213,7 +228,38 @@ export const ReferenceImageSchema = z.object({
   updatedAt: finite().optional(),
 })
 
-export const FloorPlanSchema = z.object({
+/**
+ * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
+ * as read, before the wall's own default (2.7 m) fills the gap, because after that a wall that
+ * said 2.7 cannot be told from one that said nothing (lab AU3-6). A floor that states no
+ * height, or a plan with no floor list, leaves every wall as it was.
+ */
+function withFloorHeights(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const plan = raw as Record<string, unknown>
+  if (!Array.isArray(plan.floors) || !Array.isArray(plan.walls)) return raw
+  const heights = new Map<string, number>()
+  for (const floor of plan.floors as unknown[]) {
+    if (typeof floor !== 'object' || floor === null) continue
+    const { id, height } = floor as Record<string, unknown>
+    // The first entry wins, as in `planFloors`; a height the schema refuses is left to refuse.
+    if (typeof id !== 'string' || heights.has(id)) continue
+    if (typeof height === 'number' && Number.isFinite(height) && height > 0) heights.set(id, height)
+  }
+  if (heights.size === 0) return raw
+  const walls = (plan.walls as unknown[]).map((wall) => {
+    if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return wall
+    const w = wall as Record<string, unknown>
+    if (w.height !== undefined || w.virtual === true) return wall
+    const floor = typeof w.floor === 'string' ? w.floor : DEFAULT_FLOOR_ID
+    const height = heights.get(floor)
+    return height === undefined ? wall : { ...w, height }
+  })
+  return { ...plan, walls }
+}
+
+/** The plan's fields, as an object. Read a plan with `FloorPlanSchema`, which also applies `withFloorHeights`. */
+export const FloorPlanFieldsSchema = z.object({
   version: z.literal('1').default('1'),
   units: z.literal('m').default('m'),
   walls: parts(WallSchema, 'walls').default([]),
@@ -225,6 +271,8 @@ export const FloorPlanSchema = z.object({
   floors: parts(FloorSchema, 'floors').optional(),
   referenceImage: ReferenceImageSchema.optional(),
 })
+
+export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSchema)
 
 export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
