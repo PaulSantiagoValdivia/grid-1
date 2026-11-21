@@ -80,6 +80,34 @@ Each of these is a warning ("worth a look"); nothing is left out because of it.
 
 The joining uses `polygon-clipping` (MIT), named in `NOTICE`.
 
+### Rooms that overlap, and rooms inside rooms
+
+Grid also sets the rooms of each floor against each other. Two rooms that cover the same floor,
+0.01 m² of it or more, get a warning naming both rooms and the floor they share, because that
+floor is counted twice: a room that names one wrong wall and grows over its neighbour, or a room
+listed twice. Rooms that meet face to face, across a wall or along a dividing line, share no
+floor and get nothing.
+
+A wardrobe pod, a lift shaft or an en-suite drawn inside a bigger room is said with
+`"inside": true` on the inner room:
+
+```json
+{ "id": "ward", "name": "Wardrobe pod", "boundary": ["pod0", "pod1", "pod2", "pod3"], "inside": true }
+```
+
+Grid finds the room it sits in from the outlines: the smallest room on the same floor that
+holds it. The inner room's floor, with its own walls, is taken off that room, so each square
+metre is counted once, in the area of every room, the 2D drawing, the size check and the
+comparison of two plans. A door in the inner room's walls opens into the room around it. The
+outline of the room around it stays whole; only its area changes.
+
+| Code | What it says |
+|---|---|
+| `room/overlap` | Two rooms on one floor share floor: both names, each one's area, the shared area and a point inside it. On the larger room, or the later of two copies |
+| `room/inside-no-host` | A room marked `inside` that no room on its floor holds, with how much of it lies outside the room that holds most of it. It is counted on its own |
+| `room/overlap-unknown` | Two rooms that could not be compared, with the reason |
+| `floor/overlaps-unknown` | A floor whose rooms were not all compared: the plan has more than 200,000 pairs of rooms lying over each other (thousands of copies piled in one place), and Grid stopped there |
+
 ### Starting a project: `grid init`
 
 ```bash

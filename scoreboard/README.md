@@ -87,7 +87,7 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after ARE-4) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after ARE-5) | The lab's own figure |
 |---|---:|---:|---:|
 | Rooms measured wrong | 1,975 | 203 | baseline 829 + 1,145 = 1,974 |
 | Damage that passes in silence | 560 | 468 | baseline 560 |
@@ -151,6 +151,23 @@ that do not match their space reported as warnings) moved one count:
   which say so, and 20 are one corner square off the referee (lab entry V-10).
   `reviews/ARE-4.md` lists all 200.
 - Sound plans with a warning stays 70: no sound plan gets a new line.
+
+ARE-5 (rooms that overlap are reported, and a room marked `inside` is taken off the room it
+sits in) moved no count:
+
+- Rooms measured wrong stays 203. The lab's plans were written before the plan could say that a
+  room sits inside another, so none of them says it, and Grid measures them as before. Of the 200
+  wrong lab rooms, 67 are now also named in a `room/overlap` line: the 20 student bedrooms
+  round their en-suite pods (two copies), the bedroom and hall of the room-in-room plan (five
+  copies),
+  plots and gardens drawn round a house, a stair and a table drawn as rooms, and the AR-4
+  mistakes. With their pods marked `inside`, the AR-3 plans measure what the referee measured,
+  room by room (`scoreboard/__tests__/scoreboard.test.ts`).
+- Damage that passes in silence stays 468. Three damaged plans that were caught vaguely now
+  name the damaged part, the rooms that grew over each other (named 1,669 to 1,672, vaguely 240
+  to 237); `current.json` stores the new detail.
+- Sound plans with a warning stays 70: rooms that meet face to face give no overlap on any of
+  the 442 sound plans, and a test holds that.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The
