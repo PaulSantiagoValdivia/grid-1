@@ -51,7 +51,7 @@ local one is missing.
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below) |
 | `grid draw [<plan>] [--png \| --3d] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
-| `grid serve` | Starts the tool server on standard input and output, with the 13 tools below |
+| `grid serve` | Starts the tool server on standard input and output, with the 14 tools below |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ### The tool server
@@ -75,6 +75,7 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
 | `grid_preview` | Points the live preview at a floor or room of the plan |
 | `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/` |
+| `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into) or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in; walls ending on it follow |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |

@@ -6,18 +6,22 @@
  * writes the file's own JSON back with only that change in it. It is refused, and nothing is
  * written, when it would leave the drawing with a problem it did not have.
  */
-import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { checkExportRequest, ExportWriteFailed, exportIntoProject } from '../command/export'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type Mirror, type Patch } from '../edit/edits'
+import { NAME_MAX } from '../command/planText'
+import { parseSheetWords, SHEET_HEADLINE_MAX, SHEET_PARAGRAPH_MAX, SHEET_PARAGRAPHS_MAX, SheetWordsRefused } from '@ongrid/floorplan/types/sheet'
+import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { openingBetween } from './readTools'
 import {
+  asRefusal,
   FLOOR_ARG,
   floorArg,
   listSchema,
@@ -54,7 +58,7 @@ const exportTool: GridTool = {
   description:
     'Use this when the person wants the plan as a file to open in another program: dxf for AutoCAD and other 2D CAD programs (the nearest to DWG), ifc for BIM programs such as Revit, glb or obj for 3D. '
     + 'It writes the file into the exports folder beside the plan, replacing an earlier copy of the same export, and answers with the path it wrote. It never changes the plan. '
-    + 'Do not use for a picture to look at (grid_view). PDF and JPG are not made. The plan must be a file inside the project folder: any other path is refused.',
+    + 'Do not use for a picture to look at (grid_view). For a PDF to read or print, use grid_sheet; JPG is not made. The plan must be a file inside the project folder: any other path is refused.',
   args: {
     plan: { type: 'string', maxLength: PATH_MAX, required: true, description: 'The plan file, as a path inside the project folder.', examples: ['floor-plan.json', 'plan.json'] },
     format: { type: 'string', required: true, enum: EXPORT_FORMATS, description: 'The file format.', examples: ['dxf', 'ifc'] },
@@ -124,6 +128,69 @@ const previewTool: GridTool = {
     const note = (args['note'] as string | undefined)?.replace(CONTROL, '').trim().slice(0, PREVIEW_NOTE_MAX) || null
     const text = `Showing floor ${q(shown)}${room ? `, room ${q(room)}` : ''}${view ? ` in ${view}` : ''}${note ? `, with your note` : ''}.`
     return { text, data: { floor: shown, view, room: room ?? null, note } }
+  },
+}
+
+// ---------------------------------------------------------------------------------------------
+// grid_sheet
+
+export const SHEET_TOOL_NAME = 'grid_sheet'
+
+const PARAGRAPHS = { type: 'array', maxItems: SHEET_PARAGRAPHS_MAX, items: { type: 'string', maxLength: SHEET_PARAGRAPH_MAX } }
+
+const sheetTool: GridTool = {
+  name: SHEET_TOOL_NAME,
+  title: 'Make a PDF sheet',
+  hint: 'write-file',
+  description:
+    'Use this when the person wants the plan as a PDF to read, print or send: layout client for the person the house is for (a cover with the 3D model and key figures, then a page per floor with its drawing and room areas), or layout check for whoever checks the plan (every id, every room\'s use, and what grid check finds on each floor). '
+    + 'The words of a client sheet (name, headline, intro, a few paragraphs per floor) are yours to write: pass them as sheet, or Grid reads sheet.json beside the plan. Grid draws only what the plan holds: no furniture or landscape. Every page carries "General guidance, not your local rules". '
+    + 'It writes the PDF into the exports folder beside the plan and answers with the path and what is on each page. It never changes the plan. Do not use for a single picture (grid_view) or a file for another program (grid_export).',
+  args: {
+    plan: { type: 'string', maxLength: PATH_MAX, required: true, description: 'The plan file, as a path inside the project folder.', examples: ['plan.json'] },
+    layout: { type: 'string', required: true, enum: ['client', 'check'], description: 'client or check.', examples: ['client', 'check'] },
+    sheet: {
+      type: 'object',
+      description: 'Client only: the words, as sheet.json holds them. sheet.json beside the plan is read when left out.',
+      examples: [{ version: '1', name: 'Solace House', headline: 'A private retreat for one', intro: ['A two-storey home for work and rest.'], floors: { ground: ['The study sits beside the entry.'] } }],
+      schema: {
+        type: 'object',
+        properties: {
+          version: { const: '1' },
+          name: { type: 'string', maxLength: NAME_MAX },
+          headline: { type: 'string', maxLength: SHEET_HEADLINE_MAX },
+          intro: PARAGRAPHS,
+          floors: { type: 'object', additionalProperties: PARAGRAPHS },
+        },
+        required: ['version'],
+        additionalProperties: false,
+      },
+      // Checked against the plan's floors in run(), where the plan is known.
+      read: (value) => value,
+    },
+  },
+  outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: { type: 'object' } }, note: { type: ['string', 'null'] } }),
+  async run(args, context) {
+    const layoutArg = args['layout'] as string
+    const given = args['sheet'] as Record<string, unknown> | undefined
+    try {
+      const layout = checkSheetRequest({ layout: layoutArg, sheet: given === undefined ? undefined : 'sheet' })
+      const { project, file, loaded } = readPlan(context, args['plan'])
+      const words = layout === 'check'
+        ? null
+        : given !== undefined
+          ? parseSheetWords(given, planFloors(loaded.plan).map((floor) => floor.id))
+          : readSheetWords(project, file, loaded, undefined)
+      const done = await sheetIntoProject(project, file, layout, words)
+      const written = project.relative(done.written)
+      const lines = [`Wrote ${quoted(written)} in the project folder: ${done.pages.length} pages.`]
+      if (done.note) lines.push(done.note)
+      return { text: lines.join('\n'), data: { written, layout, pages: done.pages, note: done.note ?? null } }
+    } catch (error) {
+      if (error instanceof SheetWordsRefused) throw new ToolRefusal(`sheet is not a sheet: ${error.message}.`)
+      if (error instanceof UsageError) throw new ToolRefusal(error.message.replace(/--(layout|sheet)\b/g, '$1'))
+      throw asRefusal(error)
+    }
   },
 }
 
@@ -286,4 +353,4 @@ const mirrorTool: GridTool = {
   },
 }
 
-export const WRITE_TOOLS: readonly GridTool[] = [exportTool, previewTool, changeOpeningTool, moveSideTool, mirrorTool]
+export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, previewTool, changeOpeningTool, moveSideTool, mirrorTool]

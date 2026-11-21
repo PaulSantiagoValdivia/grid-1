@@ -19,6 +19,7 @@ const ORDER = [
   'grid_check',
   'grid_preview',
   'grid_export',
+  'grid_sheet',
   'grid_change_opening',
   'grid_move_room_side',
   'grid_mirror',
@@ -48,6 +49,7 @@ function allowed(property: Record<string, unknown>): boolean {
   if (property['type'] === 'boolean') return true
   if (property['type'] === 'number') return typeof property['minimum'] === 'number' && typeof property['maximum'] === 'number'
   if (property['type'] === 'string') return typeof property['pattern'] === 'string' || typeof property['maxLength'] === 'number'
+  if (property['type'] === 'object') return typeof property['properties'] === 'object'
   if (property['type'] === 'array') {
     const items = property['items'] as Record<string, unknown> | undefined
     return items !== undefined && typeof property['maxItems'] === 'number' && (Array.isArray(items['enum']) || typeof items['pattern'] === 'string' || typeof items['maxLength'] === 'number')
@@ -89,7 +91,7 @@ describe('tools/list', () => {
 
   it('says the units are metres wherever a tool takes or gives a length', async () => {
     for (const tool of await listed()) {
-      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_mirror'].includes(tool.name)) continue
+      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mirror'].includes(tool.name)) continue
       expect(tool.description, tool.name).toMatch(/metres/)
     }
   })
@@ -130,6 +132,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_check: {},
     grid_preview: { view: '2d' },
     grid_export: { plan: 'plan.json', format: 'dxf' },
+    grid_sheet: { plan: 'plan.json', layout: 'check' },
     grid_change_opening: { opening: 'door-bath', width: 0.8, out: 'changed.json' },
     grid_move_room_side: { room: 'bed2', side: 'north', by: 0.5, out: 'moved.json' },
     grid_mirror: { how: 'left-right', out: 'mirrored.json' },

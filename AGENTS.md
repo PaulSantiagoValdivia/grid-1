@@ -32,7 +32,7 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 13 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 14 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, then the preview, the
   export, and the tools that change the plan). Each is written once in `readTools.ts` or
   `writeTools.ts`; `toolkit.ts` turns its argument list into both the input schema and the

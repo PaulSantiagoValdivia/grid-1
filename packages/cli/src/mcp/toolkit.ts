@@ -60,6 +60,16 @@ export type ArgSpec =
       readonly maxItems: number
       readonly required?: boolean
     }
+  | {
+      readonly type: 'object'
+      readonly description: string
+      readonly examples: readonly Record<string, unknown>[]
+      /** The JSON Schema `tools/list` shows. */
+      readonly schema: Record<string, unknown>
+      /** Checks the value; throws ToolRefusal with one line. */
+      readonly read: (value: unknown) => unknown
+      readonly required?: boolean
+    }
 
 export type ArgSpecs = Readonly<Record<string, ArgSpec>>
 
@@ -114,6 +124,7 @@ function argSchema(spec: ArgSpec): Record<string, unknown> {
       : { type: 'string', ...(items.enum ? { enum: items.enum } : {}), ...(items.maxLength ? { maxLength: items.maxLength } : {}) }
     return { ...array, items: item }
   }
+  if (rest.type === 'object') return { ...rest.schema, description: rest.description, examples: rest.examples }
   return rest
 }
 
@@ -175,6 +186,10 @@ function checkOne(name: string, spec: ArgSpec, value: unknown): unknown {
       }
       const item: ArgSpec = { type: 'string', description: '', examples: [], ...spec.items }
       return value.map((one) => checkOne(`each item of ${name}`, item, one))
+    }
+    case 'object': {
+      if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new ToolRefusal(`${name} takes an object.`)
+      return spec.read(value)
     }
   }
 }

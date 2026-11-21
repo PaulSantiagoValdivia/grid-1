@@ -282,9 +282,13 @@ describe('each install artefact installs and makes one call', () => {
       ...INITIALIZE,
       describeCall(1, 'two-bed-flat.json'),
       { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'grid_view', arguments: { plan: 'two-bed-flat.json', kind: 'plan' } } },
+      { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'grid_sheet', arguments: { plan: 'two-bed-flat.json', layout: 'check' } } },
     ])
     expect(text(replies[1])).toMatch(/bed/i)
     // The bundle carries the canvas for the platform it was packed on, so pictures work.
     expect(replies[2]?.result).toMatchObject({ content: [{ type: 'text' }, { type: 'image', mimeType: 'image/png' }] })
+    // VEW-7: the sheet is written as a PDF, through the bundle (the one form that carries the canvas).
+    expect(text(replies[3])).toMatch(/Wrote "exports\/[^"]*-check\.pdf"/)
+    expect(readdirSync(join(project, 'exports')).some((name) => name.endsWith('-check.pdf'))).toBe(true)
   }, 120_000)
 })
