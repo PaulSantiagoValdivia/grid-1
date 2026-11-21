@@ -350,7 +350,8 @@ describe('export names from the plan file (T-4) and from inside the plan (T-1)',
     expect(run.status).toBe(2)
     expect(run.err.trimEnd().split('\n')).toHaveLength(1)
     const [answer] = await serve([{ plan: 'odd.json', format: 'dxf', floor: 'up' }])
-    expect(answer).toEqual({ text: 'floor "up" is not a floor of this plan. Its floors: "ground".', isError: true })
+    // CMD-5 (MS-19): the tool server no longer repeats the floor it was sent.
+    expect(answer).toEqual({ text: 'That floor is not in this plan. Its floors: "ground".', isError: true })
   }, 20_000)
 })
 

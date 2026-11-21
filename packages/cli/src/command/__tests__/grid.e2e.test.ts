@@ -5,6 +5,7 @@ import { join, resolve } from 'path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { twoBedFlat } from '../../draw/__tests__/twoBedFlat'
+import { GRID_TOOLS } from '../../mcp/serveTools'
 
 /**
  * The `grid` command, run the way a person runs it: the built file, as its own Node process,
@@ -354,8 +355,10 @@ describe('grid serve', () => {
     })
     const reply = JSON.parse(replies.trim()) as { id: number; result: { tools: Array<{ name: string }> } }
     expect(reply.id).toBe(1)
-    // CMD-15 added grid_export, the first tool that takes a path.
-    expect(reply.result.tools.map((tool) => tool.name)).toEqual(['show_in_preview', 'grid_export'])
+    // CMD-15 added grid_export, the first tool that takes a path. CMD-5 added the rest, and
+    // renamed show_in_preview to grid_preview; src/mcp/__tests__/tools.test.ts holds the order.
+    expect(reply.result.tools.map((tool) => tool.name)).toEqual(GRID_TOOLS.map((tool) => tool.name))
+    expect(reply.result.tools.map((tool) => tool.name)).toContain('grid_export')
   }, 20_000)
 })
 
