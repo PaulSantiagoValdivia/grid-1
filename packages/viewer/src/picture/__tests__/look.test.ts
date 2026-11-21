@@ -70,6 +70,7 @@ describe('the picture look', () => {
     expect(number(at('door-arc').get('stroke-width'))).toBe(LINE_PX.doorArc)
     expect(number(at('dimension-line').get('stroke-width'))).toBe(LINE_PX.dimension)
     expect(number(at('extension').get('stroke-width'))).toBe(LINE_PX.extension)
+    expect(number(at('label-leader').get('stroke-width'))).toBe(LINE_PX.leader)
     expect(at('dimension-line', "[data-kind='room'] ").get('stroke-dasharray')).toBe(LINE_PX.roomDimensionDash.join(' '))
     expect(number(at('door-warning-dot').get('stroke-width'))).toBe(LINE_PX.warningRing)
     expect(number(at('door-warning-text').get('stroke-width'))).toBe(LINE_PX.warningHalo)
@@ -85,7 +86,7 @@ describe('the picture look', () => {
   })
 
   it('draws every line in plan.css at a fixed screen width, which the picture turns into metres', () => {
-    for (const part of ['virtual', 'opening', 'jamb', 'door-leaf', 'door-arc', 'dimension-line', 'extension']) {
+    for (const part of ['virtual', 'opening', 'jamb', 'door-leaf', 'door-arc', 'dimension-line', 'extension', 'label-leader']) {
       expect(rule(`.canvas [data-part='${part}']`).get('vector-effect'), part).toBe('non-scaling-stroke')
     }
   })

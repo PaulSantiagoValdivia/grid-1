@@ -39,11 +39,24 @@ const awkwardNames = (): FloorPlan => {
   return plan
 }
 
+/** A closet too small for its label: the label moves out with a leader. */
+const closet = (): FloorPlan =>
+  edit((plan) => {
+    plan.walls.push(
+      { id: 'c1', start: [0.1, 3.9], end: [0.6, 3.9], thickness: 0.05, height: 2.7, kind: 'partition' },
+      { id: 'c2', start: [0.6, 3.9], end: [0.6, 3.4], thickness: 0.05, height: 2.7, kind: 'partition' },
+      { id: 'c3', start: [0.6, 3.4], end: [0.1, 3.4], thickness: 0.05, height: 2.7, kind: 'partition' },
+      { id: 'c4', start: [0.1, 3.4], end: [0.1, 3.9], thickness: 0.05, height: 2.7, kind: 'partition' }
+    )
+    plan.rooms.push({ id: 'closet', name: 'Linen closet', boundary: ['c1', 'c2', 'c3', 'c4'] })
+  })
+
 const PLANS: [string, () => FloorPlan][] = [
   ['the mixed fixture plan', mixedPlan],
   ['the house fixture plan', house],
   ['a door with its swing drawn and a sweep warning', blockedDoor],
-  ['room names with characters to escape', awkwardNames]
+  ['room names with characters to escape', awkwardNames],
+  ['a room too small for its label', closet]
 ]
 
 function appSvg(plan: FloorPlan, props: Partial<Parameters<typeof Canvas2D>[0]> = {}): SVGSVGElement {
@@ -102,6 +115,21 @@ describe('the app and the picture draw the same SVG', () => {
     const picture = planPicture(plan, { width: WIDTH, height: HEIGHT, floor: 'first' })
     expect(picture.rooms).toBe(1)
     expect(svg.innerHTML).toBe(toSvg(picture.nodes))
+  })
+
+  it('draws the leader of a label moved out of its room', () => {
+    const svg = appSvg(closet())
+    const leader = svg.querySelector("[data-part='label-leader']")
+    expect(leader?.getAttribute('data-room')).toBe('closet')
+  })
+
+  it('with room tags in capitals, numbered, and areas rounded', () => {
+    const labels = { upperCase: true, numbered: true, areaDecimals: 0 } as const
+    const svg = appSvg(house(), { labels })
+    expect(svg.innerHTML).toBe(toSvg(planPicture(house(), { width: WIDTH, height: HEIGHT, labels }).nodes))
+    const names = [...svg.querySelectorAll("[data-part='label']")].map((node) => node.textContent)
+    expect(names).toEqual(['1 LIVING', '2 KITCHEN'])
+    expect(svg.querySelector("[data-part='area']")?.textContent).toBe('11 m²')
   })
 
   it('gives the app the light paint by default', () => {

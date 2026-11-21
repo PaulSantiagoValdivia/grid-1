@@ -39,7 +39,10 @@ const MAX_SPAN = 400
  * Frames the whole plan with a margin, honouring the container's aspect ratio
  * so nothing gets stretched.
  */
-export function fitTo(bounds: Bounds, aspect: number, margin = 0.08): Viewport {
+/** How much room a framed view leaves round the plan on each side, as a share of its size. */
+export const FRAME_MARGIN = 0.08
+
+export function fitTo(bounds: Bounds, aspect: number, margin = FRAME_MARGIN): Viewport {
   const width = Math.max(bounds.width, 0.001)
   const height = Math.max(bounds.height, 0.001)
 

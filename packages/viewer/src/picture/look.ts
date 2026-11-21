@@ -82,6 +82,8 @@ export const LINE_PX = {
   doorArc: 0.75,
   dimension: 1,
   extension: 0.75,
+  /** The line from a label moved out of its room back to the room. */
+  leader: 0.75,
   roomDimensionDash: [3, 3],
   /** The warning dot's ring. Drawn inside a group already scaled to pixels. */
   warningRing: 1.5,

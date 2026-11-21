@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { buildFloorPlan, roomDimensions } from '@ongrid/floorplan/geometry'
+import { buildFloorPlan, pointInPolygon, poleOfInaccessibility, rectInsidePolygon, roomDimensions } from '@ongrid/floorplan/geometry'
 import type { Dimension, PlanRoom } from '@ongrid/floorplan/geometry'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import { dimensionTextBox, overlaps, placeDimensionLabel, roomLabelBox } from '../labelPlacement'
+import type { LabelRoom } from '../labelPlacement'
+import {
+  dimensionTextBox,
+  doorSwingBox,
+  formatArea,
+  labelName,
+  overlaps,
+  placeDimensionLabel,
+  placeRoomLabels,
+  roomLabelBox
+} from '../labelPlacement'
 
 // About 70 px per metre: the "normal zoom" the issue measured (0.33 m ≈ 20-25 px).
 const MPP = 1 / 70
@@ -89,5 +99,109 @@ describe('roomLabelBox with a review area', () => {
     expect(review.maxX - review.minX).toBeGreaterThan(plain.maxX - plain.minX)
     // Same height: only the width depends on the text.
     expect(review.maxY - review.minY).toBeCloseTo(plain.maxY - plain.minY, 9)
+  })
+})
+
+const NONE = { swings: [], walls: [], dimensions: [] }
+const ring = (...points: [number, number][]) => points.map(([x, y]) => ({ x, y }))
+const labelRoom = (id: string, polygon: { x: number; y: number }[], name = 'Kitchen'): LabelRoom => ({
+  id,
+  polygon,
+  name,
+  areaText: '12.00 m²'
+})
+
+describe('placeRoomLabels', () => {
+  it('centres the label on the middle of a plain room', () => {
+    const [label] = placeRoomLabels([labelRoom('r', ring([0, 0], [6, 0], [6, 5], [0, 5]))], NONE, MPP)
+    expect(label!.leader).toBeNull()
+    expect((label!.box.minX + label!.box.maxX) / 2).toBeCloseTo(3, 6)
+    expect((label!.box.minY + label!.box.maxY) / 2).toBeCloseTo(2.5, 6)
+  })
+
+  it('puts a U-shaped room’s label in the room, where its corners’ average is not', () => {
+    const you = ring([0, 0], [7, 0], [7, 5], [5, 5], [5, 2], [2, 2], [2, 5], [0, 5])
+    const [label] = placeRoomLabels([labelRoom('u', you)], NONE, MPP)
+    expect(label!.leader).toBeNull()
+    expect(pointInPolygon(label!.anchor, you)).toBe(true)
+    expect(rectInsidePolygon(label!.box, you)).toBe(true)
+  })
+
+  it('steps off a door swing in the middle of the room', () => {
+    const polygon = ring([0, 0], [4, 0], [4, 3], [0, 3])
+    const swing = { minX: 1.2, minY: 0.8, maxX: 2.8, maxY: 2.2 }
+    const [label] = placeRoomLabels([labelRoom('r', polygon)], { ...NONE, swings: [swing] }, MPP)
+    expect(label!.leader).toBeNull()
+    expect(overlaps(label!.box, swing)).toBe(false)
+    expect(rectInsidePolygon(label!.box, polygon)).toBe(true)
+  })
+
+  it('keeps off a wall standing in the room', () => {
+    const polygon = ring([0, 0], [6, 0], [6, 4], [0, 4])
+    const wall = ring([2.9, 0], [3.1, 0], [3.1, 3], [2.9, 3])
+    const [label] = placeRoomLabels([labelRoom('r', polygon)], { ...NONE, walls: [wall] }, MPP)
+    expect(label!.box.maxX <= 2.9 || label!.box.minX >= 3.1 || label!.box.minY >= 3).toBe(true)
+  })
+
+  it('moves a label too big for its room out, with a leader from the room’s pole', () => {
+    const closet = ring([0, 0], [0.8, 0], [0.8, 0.8], [0, 0.8])
+    const hall = ring([1, 0], [8, 0], [8, 4], [1, 4])
+    const [small, big] = placeRoomLabels([labelRoom('closet', closet, 'Linen closet'), labelRoom('hall', hall)], NONE, MPP)
+    expect(big!.leader).toBeNull()
+    expect(small!.leader).not.toBeNull()
+    const [from, to] = small!.leader!
+    expect(from).toEqual(poleOfInaccessibility(closet).point)
+    expect(pointInPolygon(small!.anchor, closet)).toBe(true)
+    // The leader ends on the edge of the moved label, which sits clear of both rooms.
+    expect(to.x >= small!.box.minX && to.x <= small!.box.maxX && to.y >= small!.box.minY && to.y <= small!.box.maxY).toBe(true)
+    expect(overlaps(small!.box, big!.box)).toBe(false)
+    expect(rectInsidePolygon(small!.box, hall)).toBe(false)
+    expect(small!.box.maxX <= 0 || small!.box.minY >= 4 || small!.box.maxY <= 0 || small!.box.minX >= 8).toBe(true)
+  })
+
+  it('keeps every label off every other, in a row of rooms too small for them', () => {
+    const rooms = Array.from({ length: 12 }, (_, i) =>
+      labelRoom(`r${i}`, ring([i, 0], [i + 0.9, 0], [i + 0.9, 0.9], [i, 0.9]), `Store room ${i}`)
+    )
+    const labels = placeRoomLabels(rooms, NONE, MPP)
+    labels.forEach((a, i) => {
+      expect(a).not.toBeNull()
+      expect(pointInPolygon(a!.anchor, rooms[i]!.polygon)).toBe(true)
+      labels.slice(i + 1).forEach((b) => expect(overlaps(a!.box, b!.box)).toBe(false))
+    })
+  })
+
+  it('gives the same places every time', () => {
+    const rooms = [labelRoom('a', ring([0, 0], [3, 0], [3, 3], [0, 3])), labelRoom('b', ring([0, 3.2], [0.5, 3.2], [0.5, 3.7], [0, 3.7]))]
+    expect(placeRoomLabels(rooms, NONE, MPP)).toEqual(placeRoomLabels(rooms, NONE, MPP))
+  })
+})
+
+describe('doorSwingBox', () => {
+  it('covers the quarter circle the leaf sweeps, and nothing for a door with no swing', () => {
+    const opening = {
+      id: 'd',
+      wallId: 'w',
+      type: 'door' as const,
+      from: { x: 1, y: 0 },
+      to: { x: 2, y: 0 },
+      normal: { x: 0, y: 1 },
+      thickness: 0.2,
+      width: 1
+    }
+    const box = doorSwingBox(opening, { hinge: 'start', swing: 'left' }, 0)!
+    expect(box).toEqual({ minX: 1, minY: 0, maxX: 2, maxY: 1 })
+    expect(doorSwingBox(opening, {}, MPP)).toBeNull()
+    expect(doorSwingBox({ ...opening, type: 'window' }, { hinge: 'start', swing: 'left' }, MPP)).toBeNull()
+  })
+})
+
+describe('room tags', () => {
+  it('can be upper case, numbered, and rounded as asked', () => {
+    expect(labelName('Kitchen', 0)).toBe('Kitchen')
+    expect(labelName('Kitchen', 2, { upperCase: true, numbered: true })).toBe('3 KITCHEN')
+    expect(formatArea(12.345)).toBe('12.35 m²')
+    expect(formatArea(12.345, 1)).toBe('12.3 m²')
+    expect(formatArea(12.5, 0)).toBe('13 m²')
   })
 })
