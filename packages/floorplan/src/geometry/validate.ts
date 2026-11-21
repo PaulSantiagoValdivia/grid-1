@@ -13,6 +13,7 @@
  * skipped and reported, and the rest of the plan still gets drawn.
  */
 
+import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
 import { floorOf, planFloors } from './floors'
@@ -760,6 +761,27 @@ export interface ValidateOptions {
 }
 
 /**
+ * WRT-2: in a plan written rooms first, each room's boundary is derived: Grid worked it out from
+ * where the rooms are, and `written` keeps its fingerprint. A boundary that no longer matches
+ * was edited by hand, and is refused with its own code; the room is left out until the rooms
+ * text is written again, or `written` is taken out to keep the plan as a hand-written one.
+ */
+function validateDerived(plan: FloorPlan, issues: Issue[], broken: Set<string>): void {
+  for (const room of boundariesEdited(plan)) {
+    if (broken.has(room.id)) continue
+    issues.push(
+      issue(
+        'room',
+        room.id,
+        'room/derived-edited',
+        `Room ${quoted(room.id)}'s boundary was changed by hand, but this plan was written rooms first and Grid works out each room's walls from where the rooms are. Change the rooms text and write it again (grid write), or take "written" out of the plan to keep it as a hand-written one`
+      )
+    )
+    broken.add(room.id)
+  }
+}
+
+/**
  * Checks the whole plan. Never throws, except for a `tolerances` change that is not one
  * (`withTolerances`).
  */
@@ -825,6 +847,7 @@ export function validatePlan(
     }
   }
 
+  validateDerived(plan, issues, broken)
   validatePlausibility(plan, index, broken, issues)
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))

@@ -1,12 +1,14 @@
 /**
- * The tools of `grid serve` that write: an export file beside the plan, the live preview, and
- * the three changes to the plan itself (an opening, one side of a room, a mirror).
+ * The tools of `grid serve` that write: an export file beside the plan, the live preview, the
+ * plan written from rooms text (WRT-2, the main way to write one), and the three changes to the
+ * plan itself (an opening, one side of a room, a mirror).
  *
  * A change to the plan reads the file, works out the change on Grid's reading of it, and
  * writes the file's own JSON back with only that change in it. It is refused, and nothing is
  * written, when it would leave the drawing with a problem it did not have.
  */
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { keptDerived } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
@@ -16,6 +18,7 @@ import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type Mirror, type Patch } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
+import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
 import type { SheetLayout } from '../sheet/pages'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { comparePlans } from '../quantities/compare'
@@ -30,6 +33,7 @@ import {
   objectSchema,
   openingArg,
   PLAN_ARG,
+  planFileOf,
   projectOf,
   readPlan,
   roomArg,
@@ -244,7 +248,8 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
     if (error instanceof EditRefused) throw new ToolRefusal(`${error.message} Nothing was written.`)
     throw error
   }
-  const after = applyPatch(loaded.plan as unknown as Record<string, unknown>, patch) as unknown as FloorPlan
+  // A plan written rooms first keeps its derived boundaries derived through Grid's own edits (WRT-2).
+  const after = keptDerived(loaded.plan.rooms, applyPatch(loaded.plan as unknown as Record<string, unknown>, patch)) as unknown as FloorPlan
   const oldErrors = errorsOf(loaded.plan)
   const newErrors = errorsOf(after)
   const known = new Set(oldErrors.map((e) => `${e.id}|${e.message}`))
@@ -261,7 +266,8 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
   }
   let written: string
   try {
-    written = project.relative(project.writeFile(out, `${JSON.stringify(applyPatch(raw, patch), null, 2)}\n`))
+    const next = keptDerived(loaded.plan.rooms, applyPatch(raw, patch))
+    written = project.relative(project.writeFile(out, `${JSON.stringify(next, null, 2)}\n`))
   } catch (error) {
     if (error instanceof PathRefused) throw new ToolRefusal(error.message)
     throw new ToolRefusal(`Can't write ${quoted(out)}: ${String((error as Error).message).replace(/\s+/g, ' ')}`)
@@ -368,4 +374,78 @@ const mirrorTool: GridTool = {
   },
 }
 
-export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, previewTool, changeOpeningTool, moveSideTool, mirrorTool]
+// ---------------------------------------------------------------------------------------------
+// grid_write_rooms
+
+/** The rooms text a tool call may pass, at most. */
+export const ROOMS_TEXT_MAX = 200_000
+
+const ROOMS_EXAMPLE = [
+  'walls outside 0.3 inside 0.1 height 2.6',
+  'room living "Living room" living 4.4 x 4.2',
+  'room kitchen "Kitchen" kitchen 4.4 x 3.0 north of living',
+  'room hall "Hall" corridor 1.3 x * east of living until kitchen',
+  'door d1 between hall and living, 0.1 from south, 0.8 wide, opens into living',
+  'door front in hall north, centred, 0.9 wide, opens in, hinged east',
+  'window w1 in living south, centred, 1.8 wide, sill 0.6, height 1.5',
+].join('\n')
+
+const writeRoomsTool: GridTool = {
+  name: 'grid_write_rooms',
+  title: 'Write the plan rooms first',
+  hint: 'change-plan',
+  description:
+    'Use this when you write a plan, or change more than one door or wall of it: the main way to write a plan. Name each room with its inside size, east-west by north-south, and where it goes (at x,y for the first, then "north of living"; * x 1.6 with until <room> stretches it); name each door and window by the two rooms it joins or the room side it is in, with its distance from a corner. '
+    + 'Grid works out the walls, their kinds, each room\'s boundary and each opening\'s place, and writes them into the plan file, which stays the source of truth: its walls stay there and stay editable. '
+    + 'To change a plan, read it back with grid_describe as=rooms, change that text and pass it here: rooms text read from an older plan, or written over a plan changed some other way, is refused with the difference, and nothing is written (replace=true writes over it). Overlapping rooms and gaps that are neither wall nor room are refused, naming both rooms. '
+    + 'A size may say centre or outside (8 x 10 outside: to the outside faces); inside is the default. What rooms cannot say (a free-standing wall, a room with a hole) is written raw, as one line of Grid\'s own JSON: raw wall {...}. '
+    + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file. Units are metres.',
+  args: {
+    plan: { ...PLAN_ARG, description: 'The plan file to write, inside the project folder, ending in .json. The project\'s own plan.json when left out.' },
+    rooms: {
+      type: 'string',
+      lines: true,
+      required: true,
+      maxLength: ROOMS_TEXT_MAX,
+      description: 'The rooms text, one statement a line. A room: room <id> "<name>" <use or -> <width> x <depth> [inside|centre|outside] <at x,y | north|south|east|west of <room> [align ...] [until <room>]>. An opening: door|window|opening <id> between <room> and <room> | in <room> <side>, <m> from <side> | centred, <m> wide [, sill <m>, height <m>, opens into <room>|in|out, hinged <direction>]. The first line sets the walls: walls outside <t> inside <t> height <h>.',
+      examples: [ROOMS_EXAMPLE],
+    },
+    replace: { type: 'boolean', description: 'true to write over a plan that was not written from this text, or was changed since. Refused with the difference when left out.', examples: [true] },
+  },
+  outputSchema: objectSchema({
+    written: STRING,
+    rooms: listSchema(objectSchema({ id: STRING, name: STRING, floor: STRING, width: { type: 'number' }, depth: { type: 'number' }, area: { type: 'number' }, basis: { type: ['string', 'null'] } })),
+    walls: { type: 'number' },
+    openings: { type: 'number' },
+    guesses: listSchema(STRING),
+    warnings: listSchema(STRING),
+    verdict: { type: ['string', 'null'] },
+    drawingProblems: objectSchema({ before: { type: 'number' }, after: { type: 'number' } }),
+  }),
+  run(args, context) {
+    const project = projectOf(context)
+    try {
+      const file = planFileOf(project, args['plan'])
+      const done = writeRoomsIntoProject(project, args['rooms'] as string, file, { replace: args['replace'] === true, brief: true })
+      const r = done.result
+      return {
+        text: done.lines.join('\n'),
+        data: {
+          written: done.written,
+          rooms: r.rooms.map((x) => ({ id: x.id, name: x.name, floor: x.floor, width: x.width, depth: x.depth, area: x.area, basis: x.basis })),
+          walls: r.walls.length,
+          openings: r.openings.length,
+          guesses: [...r.guesses],
+          warnings: r.warnings.map((w) => `${w.code}: ${w.message}`),
+          verdict: done.verdict,
+          drawingProblems: done.drawingProblems,
+        },
+      }
+    } catch (error) {
+      if (error instanceof RoomsRefused) throw new ToolRefusal(error.problems.length > 1 ? `The rooms text was not written, and the plan is as it was. ${error.problems.length} problems:\n${error.problems.map((p) => `  ${p}`).join('\n')}` : error.message.replace(/--replace/g, 'replace=true').replace(/grid describe --as rooms/g, 'grid_describe as=rooms'))
+      throw asRefusal(error)
+    }
+  },
+}
+
+export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, previewTool, writeRoomsTool, changeOpeningTool, moveSideTool, mirrorTool]

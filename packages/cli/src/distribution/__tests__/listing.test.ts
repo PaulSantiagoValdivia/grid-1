@@ -123,7 +123,10 @@ describe('the plugin folder, for Claude Code and Codex', () => {
     expect(front?.[1]).toBe('grid')
     expect(front?.[2]).toMatch(/^Use when /)
     expect(skill).toContain(GENERAL_GUIDANCE_LABEL)
-    for (const tool of ['grid_describe', 'grid_check', 'grid_view']) expect(skill).toContain(tool)
+    for (const tool of ['grid_describe', 'grid_check', 'grid_view', 'grid_write_rooms']) expect(skill).toContain(tool)
+    // WRT-1, WRT-2: rooms-first is the main way to write, and the plan file the source of truth.
+    expect(skill).toContain('Write a plan rooms first, the main way to write one')
+    expect(skill.replace(/\s+/g, ' ')).toContain('The plan file is the source of truth')
     expect(skill).not.toMatch(/\bcompl(y|ies|iant)\b|\bapproved\b/i)
   })
 })

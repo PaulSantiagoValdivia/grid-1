@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {"id": "os", "start": [0, 0], "end": [14, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "oe", "start": [14, 0], "end": [14, 14], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "on", "start": [14, 14], "end": [0, 14], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ow", "start": [0, 14], "end": [0, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "cs", "start": [5, 5], "end": [9, 5], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ce", "start": [9, 5], "end": [9, 9], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "cn", "start": [9, 9], "end": [5, 9], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "cw", "start": [5, 9], "end": [5, 5], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "y5w", "start": [0, 5], "end": [5, 5], "thickness": 0.3, "height": 2.7, "kind": "interior"},
+    {"id": "y5e", "start": [9, 5], "end": [14, 5], "thickness": 0.3, "height": 2.7, "kind": "interior"},
+    {"id": "y9w", "start": [0, 9], "end": [5, 9], "thickness": 0.3, "height": 2.7, "kind": "interior"},
+    {"id": "y9e", "start": [9, 9], "end": [14, 9], "thickness": 0.3, "height": 2.7, "kind": "interior"}
+  ],
+  "rooms": [
+    {"id": "south", "name": "South wing", "boundary": ["os", "oe", "y5e", "cs", "y5w", "ow"], "use": "living"},
+    {"id": "north", "name": "North wing", "boundary": ["y9w", "cn", "y9e", "oe", "on", "ow"], "use": "bedroom"},
+    {"id": "west", "name": "West wing", "boundary": ["y5w", "cw", "y9w", "ow"], "use": "dining"},
+    {"id": "east", "name": "East wing", "boundary": ["y5e", "oe", "y9e", "ce"], "use": "kitchen"}
+  ],
+  "openings": [
+    {"id": "front", "wall": "os", "type": "door", "offset": 6.5, "width": 1.0, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "court-door", "wall": "cs", "type": "door", "offset": 1.5, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "s-w", "wall": "y5w", "type": "door", "offset": 2, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "n-w", "wall": "y9w", "type": "door", "offset": 2, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "s-e", "wall": "y5e", "type": "door", "offset": 2, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left"}
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {"id": "ext-s", "start": [0, 0], "end": [12, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ext-e1", "start": [12, 0], "end": [12, 5], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ext-n1", "start": [12, 5], "end": [6, 5], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ext-e2", "start": [6, 5], "end": [6, 10], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ext-n2", "start": [6, 10], "end": [0, 10], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ext-w", "start": [0, 10], "end": [0, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "w-mid", "start": [0, 5], "end": [6, 5], "thickness": 0.15, "height": 2.7, "kind": "interior"},
+    {"id": "w-x6", "start": [6, 0], "end": [6, 5], "thickness": 0.15, "height": 2.7, "kind": "interior"}
+  ],
+  "rooms": [
+    {"id": "living", "name": "Living", "boundary": ["ext-s", "w-x6", "w-mid", "ext-w"], "use": "living"},
+    {"id": "kitchen", "name": "Kitchen", "boundary": ["ext-s", "ext-e1", "ext-n1", "w-x6"], "use": "kitchen"},
+    {"id": "bed", "name": "Bedroom", "boundary": ["w-mid", "ext-e2", "ext-n2", "ext-w"], "use": "bedroom"}
+  ],
+  "openings": [
+    {"id": "front", "wall": "ext-s", "type": "door", "offset": 7, "width": 1.0, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "liv-win", "wall": "ext-s", "type": "window", "offset": 2, "width": 2, "height": 1.4, "sill": 0.9},
+    {"id": "kit-win", "wall": "ext-e1", "type": "window", "offset": 1.5, "width": 2, "height": 1.2, "sill": 1.0},
+    {"id": "bed-win", "wall": "ext-n2", "type": "window", "offset": 2, "width": 1.5, "height": 1.2, "sill": 0.9},
+    {"id": "bed-door", "wall": "w-mid", "type": "door", "offset": 2, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "liv-kit", "wall": "w-x6", "type": "opening", "offset": 1.5, "width": 2, "height": 2.1}
+  ]
+}

@@ -215,6 +215,35 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Writing a plan rooms first (rooms/, WRT-2) ────────────────────────────────────────────
+  roomsWallWidest: {
+    kind: 'tolerance',
+    value: 0.6,
+    unit: 'm',
+    decides:
+      'The widest gap between two rooms written rooms first that is still one wall between them. ' +
+      'A wider gap that is not a room is refused, naming both rooms.',
+    basis: own
+  },
+  roomsTouch: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'm',
+    decides:
+      'Two rooms written rooms first that are closer than this touch, with no wall between them: ' +
+      'refused unless the rooms are said to be open to each other.',
+    basis: own
+  },
+  roomsFaceStep: {
+    kind: 'tolerance',
+    value: 0.002,
+    unit: 'm',
+    decides:
+      'Two faces of rooms written rooms first that run side by side further out of line than this ' +
+      'are named as sizes that do not add up.',
+    basis: own
+  },
+
   // ── Comparing two versions of a plan (diff/) ──────────────────────────────────────────────
   diffLength: {
     kind: 'tolerance',
@@ -509,6 +538,15 @@ export const TOLERANCES = {
     value: 1e-6,
     unit: 'm',
     decides: 'Ends of two walls closer than this are one joint, and two heights closer than this are one in the 3D build.',
+    basis: own
+  },
+  roomsWritten: {
+    kind: 'arithmetic',
+    value: 1e-4,
+    unit: 'm',
+    decides:
+      'Rooms text and the plans written from it hold lengths to a tenth of a millimetre, so two ' +
+      'lengths that agree to this are the same when a read-back is checked by writing it again.',
     basis: own
   },
   lineHalfWidth: {

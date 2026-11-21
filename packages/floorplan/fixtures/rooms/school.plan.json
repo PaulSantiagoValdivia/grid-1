@@ -1,0 +1,52 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {"id": "ext-south", "start": [0.0, 0.0], "end": [41.7, 0.0], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "w-c1-c2", "start": [7.425, 0.0], "end": [7.425, 7.725], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "w-corr-south", "start": [0.0, 7.725], "end": [29.475, 7.725], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "ext-west-1", "start": [0.0, 14.1], "end": [0.0, 0.0], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "w-c2-c3", "start": [14.775, 0.0], "end": [14.775, 7.725], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "w-hall-west", "start": [29.475, 0.0], "end": [29.475, 9.95], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "w-corr-north", "start": [0.0, 9.875], "end": [17.6, 9.875], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "ext-north-2", "start": [29.4, 9.95], "end": [17.6, 9.95], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "ext-east-1", "start": [41.7, 0.0], "end": [41.7, 10.3], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "ext-north-3", "start": [41.7, 10.3], "end": [29.475, 10.3], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "ext-west-2", "start": [29.4, 10.3], "end": [29.4, 9.95], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "w-wc-store", "start": [6.225, 9.875], "end": [6.225, 14.1], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "ext-north-1", "start": [17.6, 14.1], "end": [0.0, 14.1], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "w-store-staff", "start": [9.375, 9.875], "end": [9.375, 14.1], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "ext-east-2", "start": [17.6, 9.95], "end": [17.6, 14.1], "thickness": 0.3, "height": 3.0, "kind": "exterior"}
+  ],
+  "rooms": [
+    {"id": "c1", "name": "Reception", "boundary": ["ext-south", "w-c1-c2", "w-corr-south", "ext-west-1"]},
+    {"id": "c2", "name": "Year 1", "boundary": ["ext-south", "w-c2-c3", "w-corr-south", "w-c1-c2"]},
+    {"id": "c3", "name": "Year 2 base", "boundary": ["ext-south", "w-hall-west", "w-corr-south", "w-c2-c3"]},
+    {"id": "corr", "name": "Corridor", "use": "corridor", "boundary": ["w-corr-south", "w-hall-west", "ext-north-2", "w-corr-north", "ext-west-1"]},
+    {"id": "hall", "name": "Hall", "boundary": ["ext-south", "ext-east-1", "ext-north-3", "ext-west-2", "w-hall-west"]},
+    {"id": "wc", "name": "Pupil toilets", "use": "bathroom", "boundary": ["w-corr-north", "w-wc-store", "ext-north-1", "ext-west-1"]},
+    {"id": "store", "name": "Store", "use": "storage", "boundary": ["w-corr-north", "w-store-staff", "ext-north-1", "w-wc-store"]},
+    {"id": "staff", "name": "Staff room", "boundary": ["w-corr-north", "ext-east-2", "ext-north-1", "w-store-staff"]}
+  ],
+  "openings": [
+    {"id": "d-main", "wall": "ext-west-1", "type": "door", "offset": 4.7, "width": 1.2, "sill": 0.0, "height": 2.1, "swing": "left", "hinge": "start"},
+    {"id": "d-c1", "wall": "w-corr-south", "type": "door", "offset": 1.15, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "start"},
+    {"id": "d-c2", "wall": "w-corr-south", "type": "door", "offset": 8.5, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "start"},
+    {"id": "d-c3", "wall": "w-corr-south", "type": "door", "offset": 15.85, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "start"},
+    {"id": "d-c4", "wall": "w-corr-south", "type": "door", "offset": 23.2, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "start"},
+    {"id": "x-c1", "wall": "ext-south", "type": "door", "offset": 5.35, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "end"},
+    {"id": "x-c2", "wall": "ext-south", "type": "door", "offset": 12.7, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "end"},
+    {"id": "x-c3", "wall": "ext-south", "type": "door", "offset": 20.05, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "end"},
+    {"id": "x-c4", "wall": "ext-south", "type": "door", "offset": 27.4, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "end"},
+    {"id": "d-hall", "wall": "w-hall-west", "type": "door", "offset": 7.9, "width": 1.8, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "start"},
+    {"id": "x-hall", "wall": "ext-east-1", "type": "door", "offset": 4.25, "width": 1.8, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "start"},
+    {"id": "d-wc", "wall": "w-corr-north", "type": "door", "offset": 2.65, "width": 1.0, "sill": 0.0, "height": 2.1, "swing": "left", "hinge": "start"},
+    {"id": "d-store", "wall": "w-corr-north", "type": "door", "offset": 7.35, "width": 0.9, "sill": 0.0, "height": 2.1, "swing": "left", "hinge": "start"},
+    {"id": "d-staff", "wall": "w-corr-north", "type": "door", "offset": 13.0, "width": 0.9, "sill": 0.0, "height": 2.1, "swing": "left", "hinge": "start"},
+    {"id": "w-c1", "wall": "ext-south", "type": "window", "offset": 1.15, "width": 4.0, "sill": 0.6, "height": 1.2},
+    {"id": "w-c2", "wall": "ext-south", "type": "window", "offset": 8.5, "width": 4.0, "sill": 0.6, "height": 1.2},
+    {"id": "w-c3", "wall": "ext-south", "type": "window", "offset": 15.85, "width": 4.0, "sill": 0.6, "height": 1.2},
+    {"id": "w-c4", "wall": "ext-south", "type": "window", "offset": 23.2, "width": 4.0, "sill": 0.6, "height": 1.2},
+    {"id": "w-hall", "wall": "ext-south", "type": "window", "offset": 32.55, "width": 6.0, "sill": 1.2, "height": 1.2}
+  ]
+}

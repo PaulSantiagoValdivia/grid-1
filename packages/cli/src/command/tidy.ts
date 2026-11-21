@@ -7,6 +7,7 @@
  * a fix an earlier one made needless is skipped and said so. The plan file is changed as read:
  * every key it had is kept. Nothing here checks a building rule; the list carries the label.
  */
+import { keptDerived } from '@ongrid/floorplan/rooms'
 import { tidyPlan, wallFaults, type EditablePlan, type WallFault } from '@ongrid/floorplan/geometry'
 import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
@@ -104,7 +105,8 @@ export function tidyFile(
   // The lists the schema defaults to empty are given here only when the file leaves them out.
   const raw = { walls: [], rooms: [], openings: [], ...(JSON.parse(project.readText(planFile).text) as object) } as RawPlan
   const result = tidyPlan(raw, ids === 'all' ? undefined : ids, (plan) => parseFloorPlan(plan))
-  const tidied = result.plan
+  // A plan written rooms first keeps its derived boundaries derived through Grid's own fixes (WRT-2).
+  const tidied = keptDerived(raw.rooms, result.plan)
   const left = wallFaults(parseFloorPlan(tidied)).map(shown)
   return {
     text: result.applied.length > 0 ? `${JSON.stringify(tidied, null, 2)}\n` : null,

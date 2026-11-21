@@ -75,6 +75,18 @@ export interface WallChange {
   readonly moved: number
 }
 
+/**
+ * A wall that stands where it stood but is another height or thickness (WRT-2, lab AB-2: a
+ * read-back lowered every wall from 3.00 to 2.70 m and the verdict said nothing changed).
+ */
+export interface WallSizeChange {
+  readonly id: string
+  readonly heightBefore: number
+  readonly heightAfter: number
+  readonly thicknessBefore: number
+  readonly thicknessAfter: number
+}
+
 export interface OpeningDelta {
   readonly id: string
   readonly type: string
@@ -98,6 +110,8 @@ export interface Comparison {
   readonly wallsOut: readonly WallDelta[]
   readonly wallsNew: readonly WallDelta[]
   readonly wallsChanged: readonly WallChange[]
+  /** Walls in their place at another height or thickness: named in the verdict, whatever the likeness. */
+  readonly wallsResized: readonly WallSizeChange[]
   readonly openingsOut: readonly OpeningDelta[]
   readonly openingsNew: readonly OpeningDelta[]
   readonly openingsChanged: readonly OpeningChange[]
@@ -136,11 +150,48 @@ function close(p: Vec2, q: Vec2, tolerance = NEAR_M): boolean {
 
 const pt = (pair: readonly [number, number]): Vec2 => ({ x: pair[0], y: pair[1] })
 
-function sameWall(a: Wall, b: Wall, map: Transform): boolean {
+/** The same wall's place: its two ends, either way round, and solid or a dividing line in both. */
+function samePlace(a: Wall, b: Wall, map: Transform): boolean {
   const s = map(pt(a.start))
   const e = map(pt(a.end))
   const ends = (close(s, pt(b.start)) && close(e, pt(b.end))) || (close(s, pt(b.end)) && close(e, pt(b.start)))
-  return ends && Math.abs(a.thickness - b.thickness) < joint && a.virtual === b.virtual
+  return ends && (a.virtual === true) === (b.virtual === true)
+}
+
+/**
+ * The same wall: in its place. A wall another height or thickness in its place is the same wall
+ * resized, listed in `wallsResized` and named in the verdict, never left unsaid.
+ */
+function sameWall(a: Wall, b: Wall, map: Transform): boolean {
+  return samePlace(a, b, map)
+}
+
+/** Walls of `a` that stand in their place in `b` at another height or thickness. */
+function wallsResized(a: FloorPlan, b: FloorPlan, map: Transform): WallSizeChange[] {
+  const out: WallSizeChange[] = []
+  for (const wall of a.walls) {
+    if (wall.virtual === true) continue
+    const other = b.walls.find((x) => (x.floor ?? 'ground') === (wall.floor ?? 'ground') && samePlace(wall, x, map))
+    if (!other) continue
+    if (Math.abs(wall.height - other.height) < joint && Math.abs(wall.thickness - other.thickness) < joint) continue
+    out.push({ id: other.id, heightBefore: wall.height, heightAfter: other.height, thicknessBefore: wall.thickness, thicknessAfter: other.thickness })
+  }
+  return out
+}
+
+/** "15 walls another height (3.00 → 2.70 m)", or null when none is. */
+function resizedWords(list: readonly WallSizeChange[]): string[] {
+  const parts: string[] = []
+  const say = (what: string, pick: (w: WallSizeChange) => [number, number]): void => {
+    const changed = list.filter((w) => Math.abs(pick(w)[0] - pick(w)[1]) >= joint)
+    if (changed.length === 0) return
+    const pairs = [...new Set(changed.map((w) => `${pick(w)[0].toFixed(2)} → ${pick(w)[1].toFixed(2)} m`))]
+    const shown = pairs.length > 3 ? `${pairs.slice(0, 3).join(', ')} and more` : pairs.join(', ')
+    parts.push(`${changed.length} wall${changed.length === 1 ? '' : 's'} another ${what} (${shown})`)
+  }
+  say('height', (w) => [w.heightBefore, w.heightAfter])
+  say('thickness', (w) => [w.thicknessBefore, w.thicknessAfter])
+  return parts
 }
 
 /** Where an opening's middle is, on its wall's axis. */
@@ -331,20 +382,24 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
     }
   }
 
+  const resized = wallsResized(a.plan, b.plan, map)
+  const resizedParts = resizedWords(resized)
+  const but = resizedParts.length > 0 ? `, but ${resizedParts.join(' and ')}` : ''
   const [before, after] = labels
   let verdict: string
-  if (likeness === 'same') verdict = `${after} is the same building as ${before}: every wall, opening and room is where it was.`
-  else if (likeness === 'moved') verdict = `${after} is the same building as ${before}, moved ${Math.hypot(shift!.x, shift!.y).toFixed(2)} m on the drawing.`
-  else if (likeness !== null) verdict = `${after} is ${before} ${likeness}: every room keeps its size (${areaWord(netAfter)} net).`
+  if (likeness === 'same') verdict = resizedParts.length > 0 ? `${after} is the same building as ${before}, every wall, opening and room where it was${but}.` : `${after} is the same building as ${before}: every wall, opening and room is where it was.`
+  else if (likeness === 'moved') verdict = `${after} is the same building as ${before}, moved ${Math.hypot(shift!.x, shift!.y).toFixed(2)} m on the drawing${but}.`
+  else if (likeness !== null) verdict = `${after} is ${before} ${likeness}: every room keeps its size (${areaWord(netAfter)} net)${but}.`
   else {
     const changed = rooms.filter((r) => r.before === null || r.after === null || Math.abs(r.before - r.after) >= 0.01)
     const parts = [`net ${areaWord(netBefore)} → ${areaWord(netAfter)} (${netAfter - netBefore >= 0 ? '+' : ''}${(netAfter - netBefore).toFixed(2)})`]
     if (changed.length > 0) parts.push(`${changed.length} room${changed.length === 1 ? ' differs' : 's differ'} by name or size`)
     if (wallsOut.length + wallsNew.length > 0) parts.push(`walls: ${wallsOut.length} out (${sum(wallsOut.map((w) => w.length)).toFixed(2)} m), ${wallsNew.length} new (${sum(wallsNew.map((w) => w.length)).toFixed(2)} m)`)
     if (wallsChanged.length > 0) parts.push(`${wallsChanged.length} wall${wallsChanged.length === 1 ? '' : 's'} moved or changed length`)
+    parts.push(...resizedParts)
     if (openingsOut.length + openingsNew.length + openingsChanged.length > 0) parts.push(`openings: ${openingsOut.length} out, ${openingsNew.length} new, ${openingsChanged.length} changed`)
     verdict = `${before} → ${after}: ${parts.join('; ')}.`
   }
   verdict = verdict.charAt(0).toUpperCase() + verdict.slice(1)
-  return { likeness, shift, rooms, netBefore, netAfter, wallsOut, wallsNew, wallsChanged, openingsOut, openingsNew, openingsChanged, verdict }
+  return { likeness, shift, rooms, netBefore, netAfter, wallsOut, wallsNew, wallsChanged, wallsResized: resized, openingsOut, openingsNew, openingsChanged, verdict }
 }

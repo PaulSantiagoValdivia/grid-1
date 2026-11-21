@@ -1,0 +1,13 @@
+plan "Courtyard house (every wall 0.3 m)"
+walls outside 0.3 inside 0.3 height 2.7
+
+room south "South wing" living  13.7 x 4.7 at 0.15,0.15
+room west  "West wing"  dining  4.7 x 3.7  north of south
+room east  "East wing"  kitchen 4.7 x 3.7  north of south align east
+room north "North wing" bedroom 13.7 x 4.7 north of west
+
+door front      in south south, 6.35 from west, 1.0 wide, opens in, hinged west
+door court-door in south north, 6.45 from east, 0.9 wide, opens in, hinged west
+door s-w between south and west, 1.85 from west, 0.9 wide, opens into west, hinged west
+door n-w between west and north, 1.85 from west, 0.9 wide, opens into west, hinged west
+door s-e between south and east, 1.85 from west of east, 0.9 wide, opens into east, hinged west

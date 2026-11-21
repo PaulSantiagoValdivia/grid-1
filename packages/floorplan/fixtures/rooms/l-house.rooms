@@ -1,0 +1,13 @@
+plan "L-shaped house"
+walls outside 0.3 inside 0.15 height 2.7
+
+room living  "Living"  living  5.775 x 4.775 at 0.15,0.15
+room kitchen "Kitchen" kitchen 5.775 x 4.7   east of living
+room bed     "Bedroom" bedroom 5.7 x 4.775   north of living
+
+door front in kitchen south, 0.925 from west, 1.0 wide, opens in, hinged west
+door bed-door between living and bed, 1.85 from west, 0.9 wide, opens into bed, hinged west
+opening liv-kit between living and kitchen, 1.35 from south, 2.0 wide
+window liv-win in living south, 1.85 from west, 2.0 wide, sill 0.9, height 1.4
+window kit-win in kitchen east, 1.35 from south, 2.0 wide, sill 1.0, height 1.2
+window bed-win in bed north, 1.85 from east, 1.5 wide
