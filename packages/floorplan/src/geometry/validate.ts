@@ -14,7 +14,7 @@
  */
 
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
-import { indexPlan, openingsOf } from './plan'
+import { indexPlan, openingsOf, roomWallIds } from './plan'
 import { floorOf, planFloors } from './floors'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
@@ -456,7 +456,7 @@ function validateFloors(
   // Runs whether or not there is a registry: a room and its walls must agree.
   for (const room of plan.rooms) {
     const floor = floorOf(room)
-    const strays = room.boundary.filter((wallId) => {
+    const strays = roomWallIds(room).filter((wallId) => {
       // An ambiguous id resolves to whichever wall happened to come last, so the
       // floor read off it is a coin flip. `plan/duplicate-id` already reports
       // the real fault and has marked the id broken.
@@ -796,7 +796,7 @@ export function validatePlan(
     // Already faulted (e.g. it reaches across floors) — one fault, one issue.
     if (broken.has(room.id)) continue
 
-    if (room.boundary.some((wallId) => broken.has(wallId))) {
+    if (roomWallIds(room).some((wallId) => broken.has(wallId))) {
       issues.push(
         issue('room', room.id, 'room/broken-wall', `Room ${quoted(room.id)} rests on an invalid wall`)
       )
@@ -815,7 +815,8 @@ export function validatePlan(
         issue(
           'room',
           room.id,
-          // The outline says why it failed: not closable, out of order or inside out.
+          // The outline says why it failed: not closable, out of order, inside out, or a hole
+          // that does not lie inside it (ARE-6).
           error instanceof RoomOutlineError ? error.code : 'room/unclosed',
           error instanceof Error ? error.message : String(error)
         )

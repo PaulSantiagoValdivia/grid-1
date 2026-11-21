@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {"id": "os", "start": [0, 0], "end": [10, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "oe", "start": [10, 0], "end": [10, 10], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "on", "start": [10, 10], "end": [0, 10], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ow", "start": [0, 10], "end": [0, 0], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "cs", "start": [3, 3], "end": [7, 3], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "ce", "start": [7, 3], "end": [7, 7], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "cn", "start": [7, 7], "end": [3, 7], "thickness": 0.3, "height": 2.7, "kind": "exterior"},
+    {"id": "cw", "start": [3, 7], "end": [3, 3], "thickness": 0.3, "height": 2.7, "kind": "exterior"}
+  ],
+  "rooms": [
+    {"id": "ring", "name": "Ring gallery", "boundary": ["os", "oe", "on", "ow"], "holes": [["cw", "cn", "ce", "cs"]], "use": "corridor"}
+  ],
+  "openings": [
+    {"id": "front", "wall": "os", "type": "door", "offset": 4.5, "width": 1.0, "height": 2.1, "hinge": "start", "swing": "left"}
+  ]
+}

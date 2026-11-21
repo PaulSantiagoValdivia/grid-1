@@ -10,7 +10,8 @@ const slab: SceneSlab = {
     { x: 5, y: 4 },
     { x: 5, y: 8 },
     { x: 0, y: 8 }
-  ]
+  ],
+  holes: []
 }
 
 const vertices = (geometry: ReturnType<typeof markerGeometry>) => {

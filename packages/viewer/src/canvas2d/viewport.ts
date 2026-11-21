@@ -18,6 +18,14 @@ export function pathOf(points: readonly Vec2[]): string {
   return `M${points.map((p) => `${p.x.toFixed(4)},${(-p.y).toFixed(4)}`).join('L')}Z`
 }
 
+/**
+ * A room's outline and its holes (ARE-6) as one path. The holes wind the other way round from
+ * the outline, so they stay open under either fill rule. A room with no holes is its outline.
+ */
+export function roomPathOf(room: { readonly polygon: readonly Vec2[]; readonly holes?: readonly (readonly Vec2[])[] }): string {
+  return pathOf(room.polygon) + (room.holes ?? []).map(pathOf).join('')
+}
+
 export interface Viewport {
   /** Top-left corner, in plan screen coordinates. */
   readonly x: number

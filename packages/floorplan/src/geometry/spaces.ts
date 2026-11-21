@@ -30,7 +30,7 @@ import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import { floorOf, planFloors } from './floors'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
-import { indexPlan } from './plan'
+import { indexPlan, roomWallIds } from './plan'
 import { quoted } from '../types/planText'
 import { roomNesting, tryRoomPolygon } from './room'
 import type { Vec2 } from './vec2'
@@ -413,7 +413,7 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
     const onWalls: { wall: string; area: number; listed: boolean }[] = []
     let outside = off
     if (off >= REPORTED() && near.length > 0) {
-      const listed = new Set(r.room.boundary)
+      const listed = new Set(roomWallIds(r.room))
       for (const shape of near) {
         const area = intersectionArea(r.polygon, shape.body)
         if (area >= WALL_SHARE()) onWalls.push({ wall: shape.wall.id, area, listed: listed.has(shape.wall.id) })
@@ -424,7 +424,7 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
     const lines =
       spans.length > 1
         ? lineShapes
-            .filter((s) => !r.room.boundary.includes(s.wall.id) && overlaps(r.box, s.box))
+            .filter((s) => !roomWallIds(r.room).includes(s.wall.id) && overlaps(r.box, s.box))
             .filter((s) => {
               const end = { x: s.start.x + s.dir.x * s.length, y: s.start.y + s.dir.y * s.length }
               return lengthInside(s.start, end, r.outline) >= LINE_INSIDE()

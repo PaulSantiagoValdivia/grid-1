@@ -66,6 +66,17 @@ function optionalNumber(key: string, before: number | undefined, after: number |
   return number(key, before, after, epsilon)
 }
 
+/**
+ * A room's holes as a property (ARE-6): one entry per hole, its wall ids written as JSON, so a
+ * list of lists stays a list of text. Null on the side that states none.
+ */
+function holesProp(before: Room, after: Room): PropChange | null {
+  const text = (room: Room): string[] => (room.holes ?? []).map((hole) => JSON.stringify(hole))
+  const [a, b] = [text(before), text(after)]
+  if (a.length === b.length && a.every((hole, i) => hole === b[i])) return null
+  return { key: 'holes', before: before.holes === undefined ? null : a, after: after.holes === undefined ? null : b }
+}
+
 export function roomProps(before: Room, after: Room, epsilon: number): PropChange[] {
   const sameBoundary =
     before.boundary.length === after.boundary.length &&
@@ -74,6 +85,8 @@ export function roomProps(before: Room, after: Room, epsilon: number): PropChang
     exact('name', before.name, after.name),
     // C3 gives the order meaning, so the same walls in another order are a change.
     sameBoundary ? null : { key: 'boundary', before: [...before.boundary], after: [...after.boundary] },
+    // ARE-6. No holes stated and an empty list are the same room.
+    holesProp(before, after),
     exact('floor', floorOf(before), floorOf(after)),
     // ARE-5. Unstated and `false` are the same room.
     exact('inside', before.inside === true, after.inside === true),

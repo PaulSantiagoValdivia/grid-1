@@ -143,6 +143,16 @@ The three pinned stacking tests in elevations.test.ts, and the IFC's `ignores ga
 numbering`, are unchanged: a floor that states no level still stacks by order, as they pin. No
 expected figure changed. See `reviews/LVL-1.md`.
 
+ARE-6 fixed no expected failure: the lab's AR-5 (a room with a hole) had no `it.fails`. It
+changed no pin, golden file or snapshot: every plan without `holes` gives the same areas and
+export bytes, and the same issues but one. A room whose one wall list goes round its outline and
+then round a hole, as the lab wrote AR-5, is refused as before, and the refusal now ends with how
+to list the hole (`reviews/ARE-6.md`). Four test literals gained the new required `holes: []` field and nothing
+else: a `PlanRoom` in `dimensions.test.ts`, and a `SceneSlab` in `gltf-large.test.ts`,
+`Slab3D.test.ts` and `RoomMarker3D.test.ts`. The new pins are in `geometry/__tests__/holes.test.ts`,
+`viewer/src/picture/__tests__/holes.test.ts`, "a room with a hole (ARE-6)" in `ifc.test.ts` and
+the AR-5 case in `scoreboard/__tests__/scoreboard.test.ts`.
+
 ## Kinds of test the suite does not have yet
 
 From the lab's entry Z-7. None of these is built here.
