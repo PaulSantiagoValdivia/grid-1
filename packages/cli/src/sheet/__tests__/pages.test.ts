@@ -178,7 +178,7 @@ describe('the check layout (VEW-7)', () => {
     const rows = check.pages.flatMap((p) => p.table?.rows ?? [])
     expect(rows.find((r) => r.name === 'Hall')!.detail).toBe('bedroom')
     const client = sheetPages(withUse, null, 'client', { name: 'x', date })
-    expect(client.pages[0]!.figures.find((f) => f.label === 'bedrooms')!.value).toBe('1')
+    expect(client.pages[0]!.figures.find((f) => f.label === 'bedroom')!.value).toBe('1')
   })
 
   it('lists a drawing problem on no floor once, on the summary', () => {
@@ -354,6 +354,19 @@ describe('small things a sheet says (VEW-7)', () => {
     const flat = fixture('two-bed-flat.json')
     const figure = sheetPages(flat, null, 'client', { name: 'x', date }).pages[0]!.figures.find((f) => f.value === '1' && f.label.startsWith('floor'))
     expect(figure?.label).toBe('floor')
+  })
+
+  it('says "1 bedroom" for one, and "bedrooms" otherwise', () => {
+    const withBedrooms = (count: number): LoadedPlan => {
+      const plan = structuredClone(house.plan)
+      plan.rooms.slice(0, count).forEach((room) => { room.use = 'bedroom' })
+      const { issues, broken } = validatePlan(plan)
+      return { file: 'beds', plan, issues, broken }
+    }
+    const label = (count: number) => sheetPages(withBedrooms(count), null, 'client', { name: 'x', date }).pages[0]!.figures.find((f) => f.value === String(count) && f.label.startsWith('bedroom'))?.label
+    expect(label(1)).toBe('bedroom')
+    expect(label(2)).toBe('bedrooms')
+    expect(label(0)).toBe('bedrooms')
   })
 
   it('shows a gross area it cannot work out as not known, with the reason', () => {

@@ -170,7 +170,7 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const title = words?.name ?? name
   const figures: SheetFigure[] = [areaFigure(areas.grossInternal, 'gross internal area')]
   figures.push({ value: String(floors.length), label: floors.length === 1 ? 'floor' : 'floors' })
-  figures.push({ value: String(bedrooms), label: 'bedrooms' })
+  figures.push({ value: String(bedrooms), label: bedrooms === 1 ? 'bedroom' : 'bedrooms' })
   const height = heightFigure(loaded)
   if (height) figures.push(height)
 
