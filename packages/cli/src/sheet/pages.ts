@@ -11,7 +11,7 @@ import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { FRAME_MARGIN } from '@ongrid/viewer/src/canvas2d/viewport'
 import { planPicture } from '@ongrid/viewer/src/picture'
-import { checkPlan } from '../command/check'
+import { checkPlan, floorIssues } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
@@ -54,6 +54,8 @@ type Body = Omit<SheetPage, 'footer'>
 /** What a client sheet always says it does not show. Grid's own words. */
 export const CLIENT_LIMITS = 'Drawn from the plan alone. Furniture, stairs, structure, services and landscape are not shown.'
 export const STAIR_LIMIT = 'Grid cannot show what a stair joins, so the way between floors is not checked.'
+/** On a client floor page that leaves out a part Grid cannot draw (the check sheet lists it). */
+export const LEFT_OUT_LIMIT = 'Some parts of the plan on this floor could not be drawn, and are not shown.'
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
 function dateText(date: Date): string {
@@ -128,12 +130,13 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   }
   const pages = floors.map((floor): Body => {
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
+    const leftOut = floorIssues(loaded, floor.id).some((issue) => loaded.broken.has(issue.id))
     return {
       kind: 'floor', topLine: `${title} / ${floor.name}`, title: floor.name, subtitle: null,
       paragraphs: words?.floors?.[floor.id] ?? [], figures: [],
       table: floorAreas ? areaTable(floorAreas, false) : null,
       picture: { kind: 'plan', floor: floor.id, frame: frames.get(floor.id)!, ids: false },
-      notes: limits,
+      notes: leftOut ? [...limits, LEFT_OUT_LIMIT] : limits,
     }
   })
   return [cover, ...pages]

@@ -60,17 +60,21 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const full = checkLocalRules(plan, country === undefined ? {} : { country: country.toUpperCase() })
   if (floor === undefined) return { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full }
 
-  const on = floorsById(plan)
   const report: RulesReport = {
     ...full,
     findings: full.findings.filter((finding) => finding.floor === floor),
     // A notice about the whole plan has no floor, and holds for every floor.
     notChecked: full.notChecked.filter((notice) => notice.floor === floor || notice.floor === ''),
   }
+  return { label: GENERAL_GUIDANCE_LABEL, floor, issues: floorIssues(loaded, floor), report }
+}
+
+/** The drawing's problems on one floor. A problem with the plan itself holds for every floor. */
+export function floorIssues(loaded: LoadedPlan, floor: string): readonly Issue[] {
+  const on = floorsById(loaded.plan)
   // A `floor` issue (enclosed floor no room claims) has the floor itself as its id.
-  const issues = loaded.issues.filter((issue) =>
+  return loaded.issues.filter((issue) =>
     issue.entity === 'plan' || (issue.entity === 'floor' ? issue.id === floor : (on.get(issue.id) ?? floor) === floor))
-  return { label: GENERAL_GUIDANCE_LABEL, floor, issues, report }
 }
 
 function section(title: string, lines: readonly string[]): string[] {

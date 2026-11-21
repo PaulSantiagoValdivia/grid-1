@@ -124,6 +124,16 @@ describe('grid sheet (VEW-7)', () => {
     writeFileSync(join(dir, 'bad.json'), '{"walls": 1}')
     expectCleanRefusal(grid(['sheet', 'bad.json', '--layout', 'check']), 1)
   })
+  it.each([[[]], [['--out', 'set.pdf']]])('says which parts it leaves out, as grid draw does (%j)', (out) => {
+    const plan = JSON.parse(readFileSync(join(cli, 'fixtures', 'two-floor-house.json'), 'utf8')) as { rooms: { id: string; boundary: string[] }[] }
+    plan.rooms.find((r) => r.id === 'study')!.boundary = ['nope-a', 'nope-b', 'nope-c']
+    writeFileSync(join(dir, 'broken.json'), JSON.stringify(plan))
+    const line = 'Left out 1 part that can\'t be drawn: study. grid check says why.\n'
+    expect(grid(['draw', 'broken.json', '--floor', 'first']).err).toBe(line)
+    const run = grid(['sheet', 'broken.json', '--layout', 'client', ...out])
+    expect(run.status).toBe(0)
+    expect(run.err).toBe(line)
+  })
   it('still writes a check sheet for a plan with findings', () => {
     // Bedroom 2 loses its only door, so the check finds it shut off.
     const plan = JSON.parse(readFileSync(join(cli, 'fixtures', 'two-bed-flat.json'), 'utf8')) as { openings: { id: string }[] }

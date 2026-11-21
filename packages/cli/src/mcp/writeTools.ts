@@ -51,6 +51,11 @@ function asArguments(message: string): string {
   return message.replace(/--(format|floor|layout|sheet)\b/g, '$1')
 }
 
+/** What a written file leaves out of the plan, for the agent. */
+function leftOutLine(count: number): string {
+  return `Left out ${count} part${count === 1 ? '' : 's'} that can't be drawn: grid check says which and why.`
+}
+
 const exportTool: GridTool = {
   name: EXPORT_TOOL_NAME,
   title: 'Export the plan',
@@ -80,7 +85,7 @@ const exportTool: GridTool = {
       const lines = [`Wrote ${quoted(written)} in the project folder.`]
       if (done.note) lines.push(done.note)
       const leftOut = done.loaded.broken.size
-      if (leftOut > 0) lines.push(`Left out ${leftOut} part${leftOut === 1 ? '' : 's'} that can't be drawn: grid check says which and why.`)
+      if (leftOut > 0) lines.push(leftOutLine(leftOut))
       return { text: lines.join('\n'), data: { written, format, leftOut, note: done.note ?? null } }
     } catch (error) {
       if (error instanceof PathRefused || error instanceof PlanRefused || error instanceof ExportWriteFailed) throw new ToolRefusal(error.message)
@@ -172,7 +177,7 @@ const sheetTool: GridTool = {
       },
     },
   },
-  outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: { type: 'object' } }, note: { type: ['string', 'null'] } }),
+  outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: { type: 'object' } }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
   async run(args, context) {
     const layoutArg = args['layout'] as string
     const given = args['sheet'] as Record<string, unknown> | undefined
@@ -188,7 +193,9 @@ const sheetTool: GridTool = {
       const written = project.relative(done.written)
       const lines = [`Wrote ${quoted(written)} in the project folder: ${done.pages.length} pages.`]
       if (done.note) lines.push(done.note)
-      return { text: lines.join('\n'), data: { written, layout, pages: done.pages, note: done.note ?? null } }
+      const leftOut = done.loaded.broken.size
+      if (leftOut > 0) lines.push(leftOutLine(leftOut))
+      return { text: lines.join('\n'), data: { written, layout, pages: done.pages, leftOut, note: done.note ?? null } }
     } catch (error) {
       if (error instanceof SheetWordsRefused) throw new ToolRefusal(`The sheet words: ${error.message}.`)
       if (error instanceof ExportWriteFailed) throw new ToolRefusal(error.message)

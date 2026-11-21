@@ -9,7 +9,7 @@ import type { LoadedPlan } from '../../command/plan'
 import { planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
 import { planPicture } from '@ongrid/viewer/src/picture'
-import { floorFrames, PLAN_BOX, sheetPages } from '../pages'
+import { floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, sheetPages } from '../pages'
 
 function fixture(name: string): LoadedPlan {
   const plan = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures', name), 'utf8')))
@@ -190,5 +190,37 @@ describe('the check layout (VEW-7)', () => {
     const summary = sheet.pages[0]!
     expect(summary.figures.map((f) => f.label)).toContain('findings')
     expect(JSON.stringify(sheet)).not.toMatch(/\b(complies|compliant|approved|passes)\b/i)
+  })
+})
+
+/** The house with the study's walls gone from its boundary, so the study cannot be drawn. */
+function brokenStudy(): LoadedPlan {
+  const plan = structuredClone(house.plan)
+  plan.rooms.find((r) => r.id === 'study')!.boundary = ['nope-a', 'nope-b', 'nope-c']
+  const { issues, broken } = validatePlan(plan)
+  return { file: 'broken', plan, issues, broken }
+}
+
+describe('a part that cannot be drawn (VEW-7)', () => {
+  const broken = brokenStudy()
+  const floorPage = (sheet: ReturnType<typeof sheetPages>, floor: string) =>
+    sheet.pages.find((p) => p.picture?.kind === 'plan' && p.picture.floor === floor)!
+
+  it('is left out of the plan as read', () => {
+    expect([...broken.broken]).toEqual(['study'])
+  })
+
+  it('is said on its floor of a client sheet, and only there', () => {
+    const sheet = sheetPages(broken, null, 'client', { name: 'x', date })
+    expect(floorPage(sheet, 'first').notes).toContain(LEFT_OUT_LIMIT)
+    expect(floorPage(sheet, 'ground').notes).not.toContain(LEFT_OUT_LIMIT)
+    const whole = sheetPages(house, null, 'client', { name: 'x', date })
+    expect(whole.pages.every((p) => !p.notes.includes(LEFT_OUT_LIMIT))).toBe(true)
+  })
+
+  it('is listed on its floor of a check sheet', () => {
+    const sheet = sheetPages(broken, null, 'check', { name: 'x', date })
+    expect(floorPage(sheet, 'first').notes.some((n) => n.startsWith('Left out, room "study": '))).toBe(true)
+    expect(floorPage(sheet, 'ground').notes.some((n) => n.startsWith('Left out, '))).toBe(false)
   })
 })

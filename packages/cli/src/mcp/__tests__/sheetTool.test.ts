@@ -124,6 +124,17 @@ describe('grid_sheet (VEW-7)', () => {
     expect(readFileSync(join(ctx.dir, reply.data['written'] as string)).subarray(0, 5).toString()).toBe('%PDF-')
   }, 60_000)
 
+  it('says how many parts it left out, as grid_export does', async () => {
+    const ctx = context()
+    expect((await call({ plan: 'plan.json', layout: 'client' }, ctx)).data['leftOut']).toBe(0)
+    const plan = JSON.parse(readFileSync(sample, 'utf8')) as { rooms: { boundary: string[] }[] }
+    plan.rooms[0]!.boundary = ['nope-a', 'nope-b', 'nope-c']
+    writeFileSync(join(ctx.dir, 'broken.json'), JSON.stringify(plan))
+    const reply = await call({ plan: 'broken.json', layout: 'client' }, ctx)
+    expect(reply.data['leftOut']).toBe(1)
+    expect(reply.text).toContain('Left out 1 part that can\'t be drawn: grid check says which and why.')
+  }, 60_000)
+
   it('takes the words as an object', async () => {
     const reply = await call({ plan: 'plan.json', layout: 'client', sheet: { version: '1', name: 'Test House' } })
     expect((reply.data['pages'] as { title: string }[])[0]!.title).toBe('Test House')
