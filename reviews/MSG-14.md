@@ -78,6 +78,16 @@ No existing test changed. New tests: `geometry/__tests__/routes.test.ts`.
 - `grid check` and `grid describe` print the route findings as they come; the new message needs
   nothing there.
 
+## Done since: the door line in edit answers (lane B)
+
+`grid_change_opening`, `grid_move_room_side` and `grid_mirror` now call
+`doorsThatChangedRooms(before, after)` and print each message as its own line after the area
+verdict, and return them as `doors` in the data. No `grid` command edits a plan yet except
+`grid tidy`, whose fixes are about walls. Test: `packages/cli/src/mcp/__tests__/editDoors.test.ts`
+(bringing the sample flat's bathroom in 2 m on the east: "bath-door joined bath and lounge; it now
+joins kitchen and lounge."). The message's ids are as the library writes them, unquoted (MSG-9's
+open point for lane A).
+
 ## Still open
 
 - A door on a dividing line, or a dividing line that is in no room's list, is still MS-8's.

@@ -7,6 +7,7 @@
  * written, when it would leave the drawing with a problem it did not have.
  */
 import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { checkExportRequest, ExportWriteFailed, exportIntoProject } from '../command/export'
 import { UsageError } from '../command/options'
@@ -141,6 +142,8 @@ const EDIT_OUTPUT = objectSchema({
   changed: listSchema(STRING),
   verdict: STRING,
   drawingProblems: objectSchema({ before: { type: 'number' }, after: { type: 'number' } }),
+  // MSG-14: each door or doorless opening that joins other rooms after the change, in words.
+  doors: listSchema(STRING),
 })
 
 function errorsOf(plan: FloorPlan): Array<{ id: string; message: string }> {
@@ -183,14 +186,16 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
     throw new ToolRefusal(`Can't write ${quoted(out)}: ${String((error as Error).message).replace(/\s+/g, ' ')}`)
   }
   const verdict = comparePlans(before, surveyPlan(after), ['the plan before', 'the plan now']).verdict
+  const doors = doorsThatChangedRooms(loaded.plan, after).map((change) => `${change.message}.`)
   const drawingProblems = { before: validatePlan(loaded.plan).issues.length, after: validatePlan(after).issues.length }
   const text = [
     ...patch.said,
     verdict,
+    ...doors,
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid_check for the notes.`,
     `Wrote ${quoted(written)}.`,
   ].join('\n')
-  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems } }
+  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, doors } }
 }
 
 const changeOpeningTool: GridTool = {
