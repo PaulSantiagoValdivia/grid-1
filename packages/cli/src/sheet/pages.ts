@@ -1,0 +1,147 @@
+/**
+ * VEW-7: what is on each page of a sheet. Pure: no file, no canvas. `pdf.ts` lays it out.
+ *
+ * Every figure comes from code that already exists, never from here: areas from `planAreas`,
+ * heights from `floorElevations`, stairs from `planFacts`, findings from `checkPlan`. The
+ * pictures are named, not drawn: a floor and its frame, or the model.
+ */
+import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geometry'
+import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
+import type { SheetWords } from '@ongrid/floorplan/types/sheet'
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { planPicture } from '@ongrid/viewer/src/picture'
+import type { LoadedPlan } from '../command/plan'
+import { planFacts } from '../describe/facts'
+import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
+import { surveyPlan } from '../quantities/survey'
+
+export type SheetLayout = 'client' | 'check'
+export const SHEET_LAYOUTS: readonly SheetLayout[] = ['client', 'check']
+/** The drawing box on a floor page, in PDF points: what the frames are fitted to. */
+export const PLAN_BOX = { width: 700, height: 640 } as const
+
+export interface SheetFigure { readonly value: string; readonly label: string }
+export interface SheetRow { readonly name: string; readonly detail: string | null; readonly area: string }
+export interface SheetTable { readonly heading: string; readonly rows: readonly SheetRow[]; readonly total: SheetRow; readonly note: string }
+export type SheetPicture =
+  | { readonly kind: 'plan'; readonly floor: string; readonly frame: Bounds; readonly ids: boolean }
+  | { readonly kind: 'model' }
+export interface SheetPage {
+  readonly kind: 'cover' | 'floor' | 'summary'
+  readonly topLine: string
+  readonly title: string | null
+  readonly subtitle: string | null
+  readonly paragraphs: readonly string[]
+  readonly figures: readonly SheetFigure[]
+  readonly table: SheetTable | null
+  readonly picture: SheetPicture | null
+  readonly notes: readonly string[]
+  readonly footer: { readonly label: string; readonly page: number; readonly pages: number; readonly date: string }
+}
+export interface Sheet { readonly layout: SheetLayout; readonly name: string; readonly pages: readonly SheetPage[] }
+export interface SheetOptions { readonly name: string; readonly date: Date }
+
+type Body = Omit<SheetPage, 'footer'>
+
+/** What a client sheet always says it does not show. Grid's own words. */
+export const CLIENT_LIMITS = 'Drawn from the plan alone. Furniture, stairs, structure, services and landscape are not shown.'
+export const STAIR_LIMIT = 'Grid cannot show what a stair joins, so the way between floors is not checked.'
+
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+function dateText(date: Date): string {
+  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+}
+
+/**
+ * Each floor's frame, all the same size: the largest framed view of any floor, centred on
+ * each floor's own. Drawn into boxes of one size, every floor page has the same scale.
+ */
+export function floorFrames(loaded: LoadedPlan): ReadonlyMap<string, Bounds> {
+  const views = planFloors(loaded.plan).map((floor) => ({
+    floor: floor.id,
+    view: planPicture(loaded.plan, { floor: floor.id, width: PLAN_BOX.width, height: PLAN_BOX.height }).view,
+  }))
+  const width = Math.max(...views.map((v) => v.view.width))
+  const height = Math.max(...views.map((v) => v.view.height))
+  return new Map(views.map(({ floor, view }) => {
+    const cx = view.x + view.width / 2
+    const cy = view.y + view.height / 2
+    const frame: Bounds = { min: { x: cx - width / 2, y: cy - height / 2 }, max: { x: cx + width / 2, y: cy + height / 2 }, width, height }
+    return [floor, frame]
+  }))
+}
+
+function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {
+  const shown = sumText(floor.rooms.map((r) => r.net), floor.net, 1)
+  return {
+    heading: 'Rooms / m²',
+    rows: floor.rooms.map((room, i) => ({ name: room.name, detail: withUse ? room.use : null, area: shown.parts[i]! })),
+    total: { name: 'Net area', detail: null, area: shown.total },
+    note: AREA_RULES.net,
+  }
+}
+
+/** Floor to floor, from the levels the 3D view stacks; one floor gives its clear height. */
+function heightFigure(loaded: LoadedPlan): SheetFigure | null {
+  const storeys = [...floorElevations(loaded.plan).floors.values()]
+  const levels = [...new Set(storeys.map((s) => s.floorLevel))].sort((a, b) => a - b)
+  if (levels.length < 2) {
+    const only = storeys[0]
+    return only ? { value: `${metresText(only.clearHeight)} m`, label: 'clear height' } : null
+  }
+  const steps = levels.slice(1).map((level, i) => level - levels[i]!)
+  const low = Math.min(...steps)
+  const high = Math.max(...steps)
+  const value = metresText(low) === metresText(high) ? `${metresText(low)} m` : `${metresText(low)}–${metresText(high)} m`
+  return { value, label: 'floor to floor' }
+}
+
+function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string): Body[] {
+  const areas = planAreas(surveyPlan(loaded.plan))
+  const floors = planFloors(loaded.plan)
+  const frames = floorFrames(loaded)
+  const facts = planFacts(loaded.plan)
+  const bedrooms = loaded.plan.rooms.filter((room) => room.use === 'bedroom').length
+  const title = words?.name ?? name
+  const figures: SheetFigure[] = []
+  if (areas.grossInternal !== null) figures.push({ value: `${areaText(areas.grossInternal, 1)} m²`, label: 'gross internal area' })
+  figures.push({ value: String(floors.length), label: 'floors' })
+  figures.push({ value: String(bedrooms), label: 'bedrooms' })
+  const height = heightFigure(loaded)
+  if (height) figures.push(height)
+
+  const limits = facts.stairRooms > 0 ? [CLIENT_LIMITS, STAIR_LIMIT] : [CLIENT_LIMITS]
+  const cover: Body = {
+    kind: 'cover', topLine: title, title, subtitle: words?.headline ?? null,
+    paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' }, notes: [],
+  }
+  const pages = floors.map((floor): Body => {
+    const floorAreas = areas.floors.find((f) => f.floor === floor.id)
+    return {
+      kind: 'floor', topLine: `${title} / ${floor.name}`, title: floor.name, subtitle: null,
+      paragraphs: words?.floors?.[floor.id] ?? [], figures: [],
+      table: floorAreas ? areaTable(floorAreas, false) : null,
+      picture: { kind: 'plan', floor: floor.id, frame: frames.get(floor.id)!, ids: false },
+      notes: limits,
+    }
+  })
+  return [cover, ...pages]
+}
+
+export function sheetPages(loaded: LoadedPlan, words: SheetWords | null, layout: SheetLayout, options: SheetOptions): Sheet {
+  // A check sheet takes nothing from sheet.json, not even its name.
+  const name = layout === 'client' ? words?.name ?? options.name : options.name
+  const bodies = layout === 'client' ? clientBodies(loaded, words, options.name) : checkBodies(loaded, options.name)
+  const date = dateText(options.date)
+  const pages = bodies.map((body, i): SheetPage => ({
+    ...body,
+    footer: { label: GENERAL_GUIDANCE_LABEL, page: i + 1, pages: bodies.length, date },
+  }))
+  return { layout, name, pages }
+}
+
+/** Task 4 replaces this. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function checkBodies(_loaded: LoadedPlan, _name: string): Body[] {
+  return []
+}

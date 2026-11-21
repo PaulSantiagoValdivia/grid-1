@@ -1,0 +1,430 @@
+{
+  "version": "1",
+  "units": "m",
+  "rooms": [
+    {
+      "id": "hall",
+      "name": "Hall",
+      "boundary": [
+        "s1",
+        "hk",
+        "hb",
+        "w1"
+      ]
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "boundary": [
+        "s2",
+        "e1",
+        "kb2",
+        "kb1",
+        "hk"
+      ]
+    },
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "boundary": [
+        "hb",
+        "kb1",
+        "bb",
+        "n2",
+        "w2"
+      ]
+    },
+    {
+      "id": "bathroom",
+      "name": "Bathroom",
+      "boundary": [
+        "kb2",
+        "e2",
+        "n1",
+        "bb"
+      ]
+    },
+    {
+      "id": "landing",
+      "name": "Landing",
+      "boundary": [
+        "u_s",
+        "u_mid",
+        "u_n2",
+        "u_w"
+      ],
+      "floor": "first"
+    },
+    {
+      "id": "study",
+      "name": "Study",
+      "boundary": [
+        "u_s",
+        "u_e",
+        "u_n1",
+        "u_mid"
+      ],
+      "floor": "first"
+    }
+  ],
+  "openings": [
+    {
+      "id": "front",
+      "wall": "s1",
+      "type": "door",
+      "offset": 1.5,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "d_hk",
+      "wall": "hk",
+      "type": "door",
+      "offset": 1.5,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "d_hb",
+      "wall": "hb",
+      "type": "door",
+      "offset": 1.5,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "d_bb",
+      "wall": "bb",
+      "type": "door",
+      "offset": 1,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "win_k",
+      "wall": "s2",
+      "type": "window",
+      "offset": 2,
+      "width": 1.2,
+      "sill": 0.9,
+      "height": 1.2
+    },
+    {
+      "id": "win_b",
+      "wall": "n1",
+      "type": "window",
+      "offset": 2,
+      "width": 1.2,
+      "sill": 0.9,
+      "height": 1.2
+    },
+    {
+      "id": "d_up",
+      "wall": "u_mid",
+      "type": "door",
+      "offset": 3,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1
+    },
+    {
+      "id": "balcony",
+      "wall": "u_n1",
+      "type": "door",
+      "offset": 2,
+      "width": 0.9,
+      "sill": 0,
+      "height": 2.1
+    }
+  ],
+  "walls": [
+    {
+      "id": "s1",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        4,
+        0
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "s2",
+      "start": [
+        4,
+        0
+      ],
+      "end": [
+        10,
+        0
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "e1",
+      "start": [
+        10,
+        0
+      ],
+      "end": [
+        10,
+        4
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "e2",
+      "start": [
+        10,
+        4
+      ],
+      "end": [
+        10,
+        8
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "n1",
+      "start": [
+        10,
+        8
+      ],
+      "end": [
+        5,
+        8
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "n2",
+      "start": [
+        5,
+        8
+      ],
+      "end": [
+        0,
+        8
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "w2",
+      "start": [
+        0,
+        8
+      ],
+      "end": [
+        0,
+        4
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "w1",
+      "start": [
+        0,
+        4
+      ],
+      "end": [
+        0,
+        0
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior"
+    },
+    {
+      "id": "hk",
+      "start": [
+        4,
+        0
+      ],
+      "end": [
+        4,
+        4
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "hb",
+      "start": [
+        0,
+        4
+      ],
+      "end": [
+        4,
+        4
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "kb1",
+      "start": [
+        4,
+        4
+      ],
+      "end": [
+        5,
+        4
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "kb2",
+      "start": [
+        5,
+        4
+      ],
+      "end": [
+        10,
+        4
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "bb",
+      "start": [
+        5,
+        4
+      ],
+      "end": [
+        5,
+        8
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior"
+    },
+    {
+      "id": "u_s",
+      "start": [
+        0,
+        0
+      ],
+      "end": [
+        10,
+        0
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "u_e",
+      "start": [
+        10,
+        0
+      ],
+      "end": [
+        10,
+        8
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "u_n1",
+      "start": [
+        10,
+        8
+      ],
+      "end": [
+        5,
+        8
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "u_n2",
+      "start": [
+        5,
+        8
+      ],
+      "end": [
+        0,
+        8
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "u_w",
+      "start": [
+        0,
+        8
+      ],
+      "end": [
+        0,
+        0
+      ],
+      "thickness": 0.2,
+      "height": 2.7,
+      "kind": "exterior",
+      "floor": "first"
+    },
+    {
+      "id": "u_mid",
+      "start": [
+        5,
+        0
+      ],
+      "end": [
+        5,
+        8
+      ],
+      "thickness": 0.1,
+      "height": 2.7,
+      "kind": "interior",
+      "floor": "first"
+    }
+  ],
+  "floors": [
+    {
+      "id": "ground",
+      "name": "Ground floor",
+      "level": 0
+    },
+    {
+      "id": "first",
+      "name": "First floor",
+      "level": 1
+    }
+  ]
+}
