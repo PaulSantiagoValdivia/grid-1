@@ -160,6 +160,35 @@ outline of the room around it stays whole; only its area changes.
 | `room/overlap-unknown` | Two rooms that could not be compared, with the reason |
 | `floor/overlaps-unknown` | A floor whose rooms were not all compared: the plan has more than 200,000 pairs of rooms lying over each other (thousands of copies piled in one place), and Grid stopped there |
 
+### Wall faults, each with its fix
+
+A room's outline is made by crossing the lines of its walls, so where a wall ends does not
+change it: a wall 1.5 m short of its corner leaves the room closed and measured as before. Grid
+also sets each wall against its corners and against the other walls, and names what an agent's
+slip leaves behind at the wall, with the change that would fix it. Each is a warning.
+
+| Code | What it says |
+|---|---|
+| `wall/short` | At a corner of a room, one of its two walls stops short of where their lines cross: the gap, both points and the move that closes it |
+| `wall/gap` | The pieces of one straight side of a room leave a gap between their ends, in whatever order they are listed |
+| `wall/overrun` | A wall runs on past the last corner any room makes on it, and its end meets no other wall. A wall longer than one room, or a T-junction, is normal and gets nothing |
+| `wall/duplicate` | Two walls, or two dividing lines, on one line lie on top of each other: the drawing and every export show that stretch twice |
+| `wall/line-on-wall` | A dividing line lies on top of a solid wall, so that stretch is both open and solid |
+| `room/wall-listed-twice` | A room names one wall twice in its wall list |
+| `wall/crosses-room` | A wall runs across a room that does not list it, from one side to another, and the room can be split in two along it |
+| `wall/stands-in-room` | Walls stand inside a room that does not list them and stop there: a stub, or a pod, a column or furniture drawn as walls. One line per room, with no fix: what they are is for the person to say |
+
+Two walls reach each other when the end of one lies within half the thicker plus `gap` of the
+other's line, so walls drawn to centre lines, to faces and 1 mm apart all meet. A fix is offered
+only when it has been tried and every room it touches still has an outline; otherwise the line
+says what to do instead. In the library, `wallFaults(plan)` gives each fault with an id
+(`short:n:start`, `duplicate:copy`), the walls and rooms it is about, the distance, the message
+and the fix as plain edits (`move-end`, `remove-wall`, `set-boundary`, `add-room`,
+`move-opening`, `remove-opening`). `tidyPlan(plan, ids)` makes the fixes chosen, or every one
+on offer when no ids are given, and looks for the faults again before each, so the faults it
+fixed are gone afterwards. `applyWallEdits` makes a list of edits on a plan file as read and
+keeps every other key in it.
+
 ### Tolerances and limits
 
 Every check reads one table of tolerances and limits: `TOLERANCES` in
@@ -189,7 +218,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | Entry | Kind | Value | What it decides |
 |---|---|---|---|
 | `openingOverrun` | tolerance | 0.001 m | How far an opening may run past either end of its wall, below the floor, above its wall or into the next opening, and still fit. A refusal states the overrun and the offset that fits |
-| `gap` | tolerance | 0.02 m | A wall reaches the wall it meets when its end is within half the thicker wall plus this. The spaces check lengthens every wall by this much at both ends |
+| `gap` | tolerance | 0.02 m | A wall reaches the wall it meets when its end is within half the thicker wall plus this. The spaces check lengthens every wall by this much at both ends; the wall faults name a gap or an overrun past it, and two walls on top of each other when their bodies overlap by more than this |
 | `wallContact` | tolerance | 0.01 m | Slack past the walls' bodies when a room outline is traced: walls that touch, carry on in a row or reach a corner |
 | `strayCorner` | tolerance | 1 m | A room corner further than this from both its walls is not a corner, and the wall list is out of order |
 | `nearlyParallel` | tolerance | 0.2588 sine | Neighbouring walls closer to parallel than 15 degrees may be one straight side |
@@ -202,7 +231,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `touch` | tolerance | 0.002 m | How close a wall must come to a piece of floor to be one of its walls |
 | `touchLength` | tolerance | 0.02 m | How long that contact must be |
 | `slit` | tolerance | 0.003 m | Half the width of a slit that does not join two spaces |
-| `lineInside` | tolerance | 0.05 m | The shortest stretch of a dividing line inside a room that a message names |
+| `lineInside` | tolerance | 0.05 m | The shortest stretch of a dividing line, or of a wall, inside a room that a message names |
 | `diffLength` | tolerance | 0.001 m | Lengths closer than this are unchanged between two versions of a plan |
 | `diffMovement` | tolerance | 0.01 m | A change held to a scope that moved less than this is rounding, not an edit |
 | `diffSameLine` | tolerance | 0.01 m | A removed and an added wall this close to one line may be the same wall |

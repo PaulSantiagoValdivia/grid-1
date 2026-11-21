@@ -3,8 +3,8 @@
 `npm run scoreboard` runs the Grid lab's plans through Grid and prints five counts. Each is
 compared with the figures stored in `current.json`. When any count is worse than the stored
 figure, the run exits with code 1 and CI fails. It runs in CI on Ubuntu and Windows. A full run
-takes about 25 seconds (7 before ARE-4, which works out the spaces the walls enclose each time
-the drawing's checks run).
+takes about 35 seconds (7 before ARE-4, which works out the spaces the walls enclose each time
+the drawing's checks run, and 25 before MSG-12, which sets every wall against the others).
 
 ```bash
 npm run scoreboard                          # run, print, compare with current.json
@@ -87,10 +87,10 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after MSG-15) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after MSG-12) | The lab's own figure |
 |---|---:|---:|---:|
 | Rooms measured wrong | 1,975 | 197 | baseline 829 + 1,145 = 1,974 |
-| Damage that passes in silence | 560 | 447 | baseline 560 |
+| Damage that passes in silence | 560 | 388 | baseline 560 |
 | Turns answered | 15 | 15 | 15 |
 | Design mistakes named | 2 | 2 | 2 |
 | Checks the plan can feed | 5 | 5 | 5 |
@@ -186,6 +186,20 @@ the damage.
   `largest` leaves these figures as they are, so they come from the new questions about sizes
   (and from the smaller changes listed in `reviews/MSG-15.md`).
 - Sound plans with a warning stays 70: none of the 442 sound plans gets a question.
+
+MSG-12 (wall faults named at the wall, each with its fix) moved one count:
+
+- Damage that passes in silence, 447 to 388, and plans caught vaguely, 209 to 109: 1,721 to
+  1,907 damaged plans name the damaged part. Of the 333 plans with one wall end slipped, 279 now
+  name the wall (132 before): 52 that were silent and 95 that were caught vaguely. Of the other
+  54, the slip is within the stated tolerance (an end moved 1 mm, or 10 cm along a wall whose
+  half thickness plus `gap` is more than that) or it leaves a drawing that is consistent (an end
+  that slides along the wall it meets, which turns the wall but leaves every end on a wall). A
+  wall listed twice in a room's list is named in 30 plans with a damaged wall list: 27 where the
+  damage changed no figure, which is why "no effect at all" falls from 117 to 90, and 3 that
+  were silent. A number set wrong names its wall in 6 more plans (4 silent, 2 vague) and an id
+  reference changed in 3 (vague).
+- Sound plans with a warning stays 70: none of the 442 sound plans gets a wall fault.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The

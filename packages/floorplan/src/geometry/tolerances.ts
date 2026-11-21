@@ -79,7 +79,9 @@ export const TOLERANCES = {
       'A wall reaches the wall it meets when its end lies within half the thicker of the two ' +
       'walls plus this much of the other wall\'s line: walls are drawn to faces as well as to ' +
       'centre lines. Wall bodies already reach half their thickness, so the check of the spaces ' +
-      'walls enclose lengthens every wall by this much at both ends.',
+      'walls enclose lengthens every wall by this much at both ends. The wall faults name a wall ' +
+      'short of its corner or past it by more than that, and two walls whose bodies overlap by ' +
+      'more than this across their width.',
     basis: own
   },
   wallContact: {
@@ -198,7 +200,7 @@ export const TOLERANCES = {
     kind: 'tolerance',
     value: 0.05,
     unit: 'm',
-    decides: 'The shortest stretch of a dividing line inside a room that a message names.',
+    decides: 'The shortest stretch of a dividing line, or of a wall, inside a room that a message names.',
     basis: own
   },
 

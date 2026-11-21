@@ -496,10 +496,24 @@ describe('known failures (expected to fail until fixed)', () => {
     })
     expect(issuesOf(plan).some((i) => /frist/.test(i.message))).toBe(true)
   })
+})
 
-  it.fails('MS-15 a copy of a wall under a new id is reported', () => {
+/**
+ * Known failures from the lab (entry Z-4) that MSG-12 fixed. MS-15 ran as an expected failure
+ * above until walls were compared with walls (`wallFaults.ts`).
+ */
+describe('lab failures fixed by MSG-12', () => {
+  type P = [number, number]
+  const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+  const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
+
+  it('MS-15 a copy of a wall under a new id is reported', () => {
     const { walls, room } = outline(RECT)
-    expect(issuesOf(planOf({ walls: [...walls, { ...walls[0]!, id: 'copy' }], rooms: [room] })).length).toBeGreaterThan(0)
+    const issues = validatePlan(planOf({ walls: [...walls, { ...walls[0]!, id: 'copy' }], rooms: [room] })).issues
+    expect(issues.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['wall/duplicate', 'wall', 'copy', 'warning']])
+    expect(issues[0]!.message).toBe(
+      'Wall copy lies on top of wall w1 for 5.00 m: the drawing and every export show that stretch twice. Fix: remove wall copy.'
+    )
   })
 })
 
@@ -740,17 +754,27 @@ describe('lab failures fixed by ARE-4', () => {
     const { walls, room } = outline(RECT)
     walls[1] = { ...walls[1]!, start: [5, 1.5] }
     const issues = issuesOf(planOf({ walls, rooms: [room] }))
-    expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['room/not-enclosed', 'r1', 'warning']])
+    // MSG-12 adds the line on the wall itself, with the gap and the fix.
+    expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([
+      ['room/not-enclosed', 'r1', 'warning'],
+      ['wall/short', 'w2', 'warning']
+    ])
     expect(issues[0]!.message).toMatch(/not enclosed by its walls/)
+    expect(issues[1]!.message).toMatch(/^Wall w2 stops 1\.50 m short of its corner with wall w1 in room r1/)
   })
 
   it('MS-17 a wall that cuts a room in two without being listed is reported', () => {
     const { walls, room } = outline(RECT)
     const cut = { id: 'cut', start: [2.5, 0], end: [2.5, 4], thickness: 0.1, height: 2.7, kind: 'partition' }
     const issues = issuesOf(planOf({ walls: [...walls, cut], rooms: [room] }))
-    expect(issues.map((i) => [i.code, i.id])).toEqual([['room/space-mismatch', 'r1']])
+    // MSG-12 adds the line on the wall itself, with the split that would fix it.
+    expect(issues.map((i) => [i.code, i.id])).toEqual([
+      ['room/space-mismatch', 'r1'],
+      ['wall/crosses-room', 'cut']
+    ])
     expect(issues[0]!.message).toMatch(/lies on wall cut, which its wall list leaves out/)
     expect(issues[0]!.message).toMatch(/covers parts of 2 enclosed spaces/)
+    expect(issues[1]!.message).toMatch(/^Wall cut runs 3\.80 m across room r1, which does not list it/)
   })
 })
 

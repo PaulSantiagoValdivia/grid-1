@@ -60,7 +60,7 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| MS-8, MS-9, MS-10, MS-15 | `geometry/__tests__/validation.test.ts` |
+| MS-8, MS-9, MS-10 | `geometry/__tests__/validation.test.ts` |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
 | CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
@@ -80,6 +80,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | AR-4 | ARE-5 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-5" |
 | MS-3, MS-16 | MSG-15 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-15" |
 | VE-2 | MSG-15 | `geometry/__tests__/elevations.test.ts`, "lab failures fixed by MSG-15" |
+| MS-15 | MSG-12 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-12"; the plans behind MS-2, MS-15, MS-17, W-10 and L-6 in `geometry/__tests__/wallFaults.test.ts` |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
@@ -104,6 +105,14 @@ table, both recorded in `reviews/MSG-15.md`: the strip of unclaimed floor in `tw
 side in one space` follows the `gap` (every wall is lengthened by 2 cm, not 1 mm), and `says so
 when the walls lie too far out to join` asks the spaces check directly, because validation now
 refuses walls past `largest` before the spaces are worked out.
+
+MSG-12 fixed `MS-15 a copy of a wall under a new id is reported` and moved it to a block named
+"lab failures fixed by MSG-12", asserting the code (`wall/duplicate`), the wall it is on and the
+whole message. Two tests in "lab failures fixed by ARE-4" pin the exact list of issues and gained
+a line on purpose: `MS-2 a 1.5 m gap in a room outline is reported` now also expects
+`wall/short` on the wall that stops short, and `MS-17 a wall that cuts a room in two without
+being listed is reported` now also expects `wall/crosses-room` on the partition. The room-level
+lines they asserted are unchanged. No expected figure changed.
 
 ## Kinds of test the suite does not have yet
 

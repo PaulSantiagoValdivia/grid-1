@@ -26,6 +26,7 @@ import { MAX_CUTS, roomOverlaps } from './overlaps'
 import type { ToleranceChanges } from './tolerances'
 import { tolerance, withTolerances } from './tolerances'
 import { validatePlausibility } from './plausible'
+import { wallFaults } from './wallFaults'
 
 /** `floor` issues are about a floor as a whole; their id is the floor's id. */
 export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor'
@@ -719,11 +720,32 @@ function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: Readonl
   }
 }
 
+/**
+ * Wall faults (`wallFaults.ts`, MSG-12): walls that stop short of their corner or run on past it,
+ * walls on top of walls, a wall listed twice, a wall across a room that does not list it. One
+ * warning each, on the wall (on the room for a wall it lists twice), ending with its fix.
+ */
+function validateWallFaults(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  for (const fault of wallFaults(plan, { index, broken })) {
+    const onRoom = fault.kind === 'listed-twice'
+    issues.push(
+      issue(
+        onRoom ? 'room' : 'wall',
+        onRoom ? fault.rooms[0]! : fault.walls[0]!,
+        onRoom ? 'room/wall-listed-twice' : `wall/${fault.kind}`,
+        fault.message,
+        'warning'
+      )
+    )
+  }
+}
+
 export interface ValidateOptions {
   /**
    * Whether to work out the spaces the walls enclose and report floor no room claims and rooms
    * that do not match their space (`validateSpaces`), rooms that overlap (`validateRoomOverlaps`)
-   * and rooms marked `inside` that no room holds (`validateNesting`). On by default. Those lines
+   * rooms marked `inside` that no room holds (`validateNesting`), and the wall faults
+   * (`validateWallFaults`). On by default. Those lines
    * are warnings and never change `broken`, so a caller that only needs `broken` can leave them
    * out: joining every wall of a floor costs more than every other check together.
    */
@@ -806,6 +828,7 @@ export function validatePlan(
     validateSpaces(plan, index, broken, issues)
     validateNesting(plan, index, broken, issues)
     validateRoomOverlaps(plan, index, broken, issues)
+    validateWallFaults(plan, index, broken, issues)
   }
 
   return { issues, broken }

@@ -1,0 +1,993 @@
+/**
+ * Wall faults, each with the change that would fix it (MSG-12).
+ *
+ * A room's outline is made by crossing the endless lines of its walls, so where a wall ends
+ * never changes it: a wall 1.5 m short of its corner, or one that runs a metre past it, leaves
+ * the room closed and its area as before (lab entries MS-2, L-6). Nothing else compared one wall
+ * with another either: a copy of a wall under a new id, or a dividing line on top of a solid
+ * wall, passed in silence while the drawing and every export showed that stretch twice (MS-15,
+ * W-10, AE-5); and a wall standing in a room that does not list it changed nothing (MS-17).
+ *
+ * This module looks for those slips, floor by floor, and names each one at the wall:
+ *
+ * - `short`: at a corner of a room, one of the two walls stops short of where their lines cross.
+ * - `gap`: two walls a room lists one after the other, in a row, leave a gap between their ends.
+ * - `overrun`: a wall runs on past the last corner a room makes on it, and its end meets no
+ *   other wall. A wall longer than one room is normal (it may border several, and T-junctions
+ *   are everywhere), so only a free end beyond every outline that uses the wall counts.
+ * - `duplicate`: two walls, or two dividing lines, on one line lie on top of each other.
+ * - `line-on-wall`: a dividing line lies on top of a solid wall.
+ * - `listed-twice`: a room names one wall twice in its wall list.
+ * - `crosses-room`: a wall runs across a room that does not list it, from one side to another.
+ * - `stands-in-room`: walls stand inside a room that does not list them, and stop there: a stub,
+ *   or a pod, a column or furniture drawn as walls. One per room, and no fix: what they are is
+ *   for the person to say.
+ *
+ * Every distance is read against the tolerance table: a wall reaches another when its end lies
+ * within half the thicker of the two plus `gap` of the other's line, as `gap` says.
+ *
+ * Each fault carries its fix as a list of plain edits (`WallEdit`), so that a caller can apply
+ * them to the plan file as it stands, and `tidyPlan` applies the ones chosen. A fix is offered
+ * only when it was tried on the plan and every room it touches still has an outline: where none
+ * is safe the fault says what to do instead, and its `fix` is null.
+ */
+
+import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
+import { indexPlan, openingsOf } from './plan'
+import { floorOf } from './floors'
+import type { RoomOutline } from './room'
+import { roomNesting, roomOutline } from './room'
+import { sitsWithin } from './nesting'
+import { tolerance } from './tolerances'
+import type { Vec2 } from './vec2'
+import { area, cross, dot, sub } from './vec2'
+import { wallAxis } from './wall'
+
+export type WallFaultKind =
+  | 'short'
+  | 'gap'
+  | 'overrun'
+  | 'duplicate'
+  | 'line-on-wall'
+  | 'listed-twice'
+  | 'crosses-room'
+  | 'stands-in-room'
+
+/** One change to the plan file. Coordinates are in metres, as the file holds them. */
+export type WallEdit =
+  /** Move one end of a wall. Openings keep their place: a fix that moves `start` resets their offsets. */
+  | { readonly op: 'move-end'; readonly wall: string; readonly end: 'start' | 'end'; readonly to: [number, number] }
+  | { readonly op: 'remove-wall'; readonly wall: string }
+  | { readonly op: 'set-boundary'; readonly room: string; readonly boundary: readonly string[] }
+  | { readonly op: 'add-room'; readonly room: Room }
+  /** Put an opening on a wall at an offset; `hinge` and `swing` are set when the wall runs the other way. */
+  | {
+      readonly op: 'move-opening'
+      readonly opening: string
+      readonly wall: string
+      readonly offset: number
+      readonly hinge?: 'start' | 'end'
+      readonly swing?: 'left' | 'right'
+    }
+  | { readonly op: 'remove-opening'; readonly opening: string }
+
+export interface WallFix {
+  /** The fix in words, as the message ends. */
+  readonly says: string
+  readonly edits: readonly WallEdit[]
+}
+
+export interface WallFault {
+  /** Stable while the walls it is about keep their ids: `short:n:end`, `duplicate:copy`. */
+  readonly id: string
+  readonly kind: WallFaultKind
+  readonly floor: string
+  /** The walls it is about, the one the fix changes first. */
+  readonly walls: readonly string[]
+  /** The rooms it was found in. */
+  readonly rooms: readonly string[]
+  /** How far, in metres: the gap, the overrun, the length two walls share or a wall stands in a room. */
+  readonly distance: number
+  /** What is wrong, then the fix or what to do instead. */
+  readonly message: string
+  readonly fix: WallFix | null
+}
+
+export interface WallFaultOptions {
+  readonly index?: PlanIndex
+  /** Ids validation could not draw (`validatePlan`); they are left out. */
+  readonly broken?: ReadonlySet<string>
+}
+
+// ── Small geometry ──────────────────────────────────────────────────────────────────────────
+
+interface Seg {
+  readonly wall: Wall
+  readonly a: Vec2
+  readonly b: Vec2
+  readonly dir: Vec2
+  readonly normal: Vec2
+  readonly length: number
+  /** 0 for a dividing line. */
+  readonly t: number
+  readonly box: { x0: number; y0: number; x1: number; y1: number }
+}
+
+const thickness = (wall: Wall): number => (wall.virtual === true ? 0 : wall.thickness)
+
+function segOf(wall: Wall): Seg | null {
+  let axis
+  try {
+    axis = wallAxis(wall)
+  } catch {
+    return null
+  }
+  const t = thickness(wall)
+  const pad = t / 2 + tolerance('gap')
+  return {
+    wall,
+    a: axis.start,
+    b: axis.end,
+    dir: axis.dir,
+    normal: axis.normal,
+    length: axis.length,
+    t,
+    box: {
+      x0: Math.min(axis.start.x, axis.end.x) - pad,
+      y0: Math.min(axis.start.y, axis.end.y) - pad,
+      x1: Math.max(axis.start.x, axis.end.x) + pad,
+      y1: Math.max(axis.start.y, axis.end.y) + pad
+    }
+  }
+}
+
+const along = (s: Seg, p: Vec2): number => dot(sub(p, s.a), s.dir)
+const across = (s: Seg, p: Vec2): number => dot(sub(p, s.a), s.normal)
+const at = (s: Seg, d: number): Vec2 => ({ x: s.a.x + s.dir.x * d, y: s.a.y + s.dir.y * d })
+
+function toSegment(p: Vec2, s: Seg): number {
+  const d = Math.max(0, Math.min(s.length, along(s, p)))
+  const q = at(s, d)
+  return Math.hypot(p.x - q.x, p.y - q.y)
+}
+
+/** Pairs of segments whose boxes overlap: a sweep along x, so a large floor is not n². */
+function nearPairs(segs: readonly Seg[]): [Seg, Seg][] {
+  const sorted = [...segs].sort((p, q) => p.box.x0 - q.box.x0)
+  const pairs: [Seg, Seg][] = []
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i]!
+    for (let j = i + 1; j < sorted.length && sorted[j]!.box.x0 <= p.box.x1; j++) {
+      const q = sorted[j]!
+      if (q.box.y0 <= p.box.y1 && p.box.y0 <= q.box.y1) pairs.push([p, q])
+    }
+  }
+  return pairs
+}
+
+/** To the micrometre, so a fix writes 4, not 3.9999999999999996. */
+const tidy = (v: number): number => {
+  const r = Math.round(v * 1e6) / 1e6
+  return Object.is(r, -0) ? 0 : r
+}
+const pair = (p: Vec2): [number, number] => [tidy(p.x), tidy(p.y)]
+
+/** A length to the millimetre, with at least two decimals: 1.50, 0.025. */
+export function wallMetres(value: number): string {
+  const fixed = (Math.round(Number((value * 1000).toPrecision(12))) / 1000).toFixed(3)
+  return fixed.endsWith('0') ? fixed.slice(0, -1) : fixed
+}
+const m = (value: number): string => `${wallMetres(value)} m`
+const point = (p: Vec2): string => `(${wallMetres(p.x)}, ${wallMetres(p.y)})`
+
+/** `a, b and c`. */
+const list = (ids: readonly string[]): string =>
+  ids.length <= 1 ? ids.join('') : `${ids.slice(0, -1).join(', ')} and ${ids.at(-1)}`
+
+function pointInPolygon(p: Vec2, polygon: readonly Vec2[]): boolean {
+  let odd = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const a = polygon[i]!
+    const b = polygon[j]!
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) odd = !odd
+  }
+  return odd
+}
+
+/** The stretches of a segment inside a polygon, as distances along it. */
+function insideStretches(s: Seg, polygon: readonly Vec2[]): [number, number][] {
+  const cuts = [0, s.length]
+  for (let i = 0; i < polygon.length; i++) {
+    const p = polygon[i]!
+    const q = polygon[(i + 1) % polygon.length]!
+    const e = sub(q, p)
+    const denom = cross(s.dir, e)
+    if (Math.abs(denom) < tolerance('parallel')) continue
+    const w = sub(p, s.a)
+    const d = cross(w, e) / denom
+    const u = cross(w, s.dir) / denom
+    if (u >= 0 && u <= 1 && d > 0 && d < s.length) cuts.push(d)
+  }
+  cuts.sort((x, y) => x - y)
+  const out: [number, number][] = []
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const [d0, d1] = [cuts[i]!, cuts[i + 1]!]
+    if (d1 - d0 < tolerance('noLength')) continue
+    if (!pointInPolygon(at(s, (d0 + d1) / 2), polygon)) continue
+    const last = out.at(-1)
+    if (last && Math.abs(last[1] - d0) < tolerance('noLength')) last[1] = d1
+    else out.push([d0, d1])
+  }
+  return out
+}
+
+// ── Edits ───────────────────────────────────────────────────────────────────────────────────
+
+/** The parts of a plan the edits touch. Any other key, on the plan or on its parts, is kept. */
+export interface EditablePlan {
+  readonly walls: readonly { readonly id: string; readonly start: readonly number[]; readonly end: readonly number[] }[]
+  readonly rooms: readonly { readonly id: string; readonly boundary: readonly string[] }[]
+  readonly openings: readonly { readonly id: string; readonly wall: string; readonly offset: number }[]
+}
+
+/**
+ * The plan with the edits made, in order. Nothing else changes: every other key of the plan, of
+ * its walls, rooms and openings is kept as it was, so this also works on a plan file as read.
+ */
+export function applyWallEdits<P extends EditablePlan>(plan: P, edits: readonly WallEdit[]): P {
+  let walls = [...plan.walls] as Record<string, unknown>[]
+  let rooms = [...plan.rooms] as Record<string, unknown>[]
+  let openings = [...plan.openings] as Record<string, unknown>[]
+  for (const edit of edits) {
+    switch (edit.op) {
+      case 'move-end':
+        walls = walls.map((w) => (w.id === edit.wall ? { ...w, [edit.end]: [...edit.to] } : w))
+        break
+      case 'remove-wall':
+        walls = walls.filter((w) => w.id !== edit.wall)
+        break
+      case 'set-boundary':
+        rooms = rooms.map((r) => (r.id === edit.room ? { ...r, boundary: [...edit.boundary] } : r))
+        break
+      case 'add-room':
+        rooms = [...rooms, { ...edit.room, boundary: [...edit.room.boundary] }]
+        break
+      case 'move-opening':
+        openings = openings.map((o) => {
+          if (o.id !== edit.opening) return o
+          const moved: Record<string, unknown> = { ...o, wall: edit.wall, offset: edit.offset }
+          if (edit.hinge !== undefined) moved.hinge = edit.hinge
+          if (edit.swing !== undefined) moved.swing = edit.swing
+          return moved
+        })
+        break
+      case 'remove-opening':
+        openings = openings.filter((o) => o.id !== edit.opening)
+        break
+    }
+  }
+  return { ...plan, walls, rooms, openings }
+}
+
+// ── The search ──────────────────────────────────────────────────────────────────────────────
+
+interface Traced {
+  readonly room: Room
+  readonly outline: RoomOutline
+}
+
+interface Context {
+  readonly plan: FloorPlan
+  readonly index: PlanIndex
+  readonly floor: string
+  readonly segs: ReadonlyMap<string, Seg>
+  /** Rooms on the floor whose outline was traced, with or without a fault. */
+  readonly traced: readonly Traced[]
+}
+
+/**
+ * Moves one end of a wall to a point on its own line, and keeps its openings where they stand.
+ * Null when an opening would no longer fit on the wall.
+ */
+function moveEnd(ctx: Context, s: Seg, end: 'start' | 'end', to: Vec2): WallEdit[] | null {
+  const d = along(s, to)
+  const length = end === 'end' ? d : s.length - d
+  if (length < tolerance('gap')) return null
+  const shift = end === 'start' ? -d : 0
+  const edits: WallEdit[] = [{ op: 'move-end', wall: s.wall.id, end, to: pair(to) }]
+  const overrun = tolerance('openingOverrun')
+  for (const o of openingsOf(ctx.index, s.wall.id)) {
+    const offset = o.offset + shift
+    if (offset < -overrun || offset + o.width > length + overrun) return null
+    if (shift !== 0) edits.push({ op: 'move-opening', opening: o.id, wall: s.wall.id, offset: tidy(Math.max(0, offset)) })
+  }
+  return edits
+}
+
+/**
+ * Whether every room the edits touch still has an outline with no fault, as it had before. A
+ * room that had none before is not held to it.
+ */
+function fixHolds(ctx: Context, edits: readonly WallEdit[]): boolean {
+  const after = applyWallEdits(ctx.plan, edits)
+  const index = indexPlan(after)
+  const walls = new Set<string>()
+  const rooms = new Set<string>()
+  for (const e of edits) {
+    if (e.op === 'move-end' || e.op === 'remove-wall') walls.add(e.wall)
+    if (e.op === 'set-boundary') rooms.add(e.room)
+    if (e.op === 'add-room') rooms.add(e.room.id)
+  }
+  for (const { room } of ctx.traced) if (room.boundary.some((id) => walls.has(id))) rooms.add(room.id)
+  const before = new Map(ctx.traced.map((t) => [t.room.id, t.outline.fault === null]))
+  for (const room of after.rooms) {
+    if (!rooms.has(room.id)) continue
+    if (before.get(room.id) === false) continue
+    try {
+      const outline = roomOutline(room, index)
+      if (outline.fault !== null || area(outline.polygon) < tolerance('areaEqual')) return false
+    } catch {
+      return false
+    }
+  }
+  return true
+}
+
+function fixOf(ctx: Context, says: string, edits: readonly WallEdit[] | null): WallFix | null {
+  if (edits === null || !fixHolds(ctx, edits)) return null
+  return { says, edits }
+}
+
+const NO_FIX = 'Grid offers no change for this: every one it tried leaves a room without an outline.'
+
+/** The message: what is wrong, then the fix or what to do instead. */
+const say = (what: string, fix: WallFix | null, otherwise: string = NO_FIX): string =>
+  `${what} ${fix !== null ? `Fix: ${fix.says}` : otherwise}`
+
+/** The end of a segment nearest a point. */
+const nearestEnd = (s: Seg, p: Vec2): 'start' | 'end' =>
+  Math.hypot(p.x - s.a.x, p.y - s.a.y) <= Math.hypot(p.x - s.b.x, p.y - s.b.y) ? 'start' : 'end'
+const endPoint = (s: Seg, end: 'start' | 'end'): Vec2 => (end === 'start' ? s.a : s.b)
+
+/** How far a wall end may lie from the other wall's line and still reach it (`gap`). */
+const reach = (a: Seg, b: Seg): number => Math.max(a.t, b.t) / 2 + tolerance('gap')
+
+/**
+ * Corners and rows of each room's own wall list: `short` and `gap`. A corner whose lines cross
+ * far from both walls is a wall list out of order, which the outline already refuses, and is
+ * left to that refusal.
+ */
+function cornerFaults(ctx: Context, out: Map<string, WallFault>): void {
+  for (const { room, outline } of ctx.traced) {
+    if (outline.fault?.code === 'room/out-of-order') continue
+    const corners = new Set(outline.corners.map((c) => `${c.wallA}|${c.wallB}`))
+    const runs = straightSides(room.boundary, corners)
+    for (const c of outline.corners) {
+      const a = ctx.segs.get(c.wallA)
+      const b = ctx.segs.get(c.wallB)
+      if (!a || !b || a === b) continue
+      const stray = Math.max(tolerance('strayCorner'), Math.max(a.t, b.t) + tolerance('wallContact'))
+      if (Math.min(c.offA, c.offB) > stray) continue
+      const sine = Math.abs(cross(a.dir, b.dir))
+      // A straight side drawn in pieces reaches the corner with the piece nearest it, whatever the
+      // order its pieces are listed in.
+      const nearest = (id: string, fallback: Seg): [Seg, number] =>
+        (runs.get(id) ?? [id]).reduce<[Seg, number]>(
+          (best, piece) => {
+            const seg = ctx.segs.get(piece)
+            if (!seg) return best
+            const off = toSegment(c.at, seg)
+            return off < best[1] ? [seg, off] : best
+          },
+          [fallback, toSegment(c.at, fallback)]
+        )
+      const [na, offA] = nearest(c.wallA, a)
+      const [nb, offB] = nearest(c.wallB, b)
+      for (const [s, other, off] of [[na, nb, offA], [nb, na, offB]] as const) {
+        if (off * sine <= reach(s, other)) continue
+        const end = nearestEnd(s, c.at)
+        const id = `short:${s.wall.id}:${end}`
+        const known = out.get(id)
+        if (known) {
+          if (!known.rooms.includes(room.id)) out.set(id, { ...known, rooms: [...known.rooms, room.id] })
+          continue
+        }
+        const edits = moveEnd(ctx, s, end, c.at)
+        const fix = fixOf(ctx, `move the ${end} of wall ${s.wall.id} to ${point(c.at)}.`, edits)
+        out.set(id, {
+          id,
+          kind: 'short',
+          floor: ctx.floor,
+          walls: [s.wall.id, other.wall.id],
+          rooms: [room.id],
+          distance: off,
+          message: say(
+            `Wall ${s.wall.id} stops ${m(off)} short of its corner with wall ${other.wall.id} in room ` +
+              `${room.id}: its ${end} is at ${point(endPoint(s, end))} and the corner at ${point(c.at)}. ` +
+              `The room is measured as if the two walls met.`,
+            fix
+          ),
+          fix
+        })
+      }
+    }
+    // The pieces of one straight side must cover it with no gap, in whatever order they are listed.
+    for (const side of new Set(runs.values())) {
+      const pieces = [...new Set(side)].flatMap((id) => {
+        const seg = ctx.segs.get(id)
+        return seg ? [seg] : []
+      })
+      if (pieces.length < 2) continue
+      const ref = pieces[0]!
+      const spans = pieces
+        .map((seg) => {
+          const [p, q] = [along(ref, seg.a), along(ref, seg.b)]
+          return { seg, from: Math.min(p, q), to: Math.max(p, q) }
+        })
+        .sort((x, y) => x.from - y.from)
+      let reached = spans[0]!
+      for (const next of spans.slice(1)) {
+        const apart = next.from - reached.to
+        if (apart > tolerance('gap')) {
+          const a = reached.seg
+          const ia = a.wall.id
+          const ib = next.seg.wall.id
+          // The end of the piece before the gap that faces it, moved onto its own line opposite the next piece's end.
+          const facing = at(ref, reached.to)
+          const end = nearestEnd(a, facing)
+          const target = at(a, along(a, at(ref, next.from)))
+          const id = `gap:${ia}:${ib}`
+          if (!out.has(id)) {
+            const fix = fixOf(ctx, `move the ${end} of wall ${ia} to ${point(target)}.`, moveEnd(ctx, a, end, target))
+            out.set(id, {
+              id,
+              kind: 'gap',
+              floor: ctx.floor,
+              walls: [ia, ib],
+              rooms: [room.id],
+              distance: apart,
+              message: say(
+                `Walls ${ia} and ${ib} are one straight side of room ${room.id}, but leave ${m(apart)} ` +
+                  `between their ends, at ${point(endPoint(a, end))} and ${point(target)}. The room is ` +
+                  `measured as if the side were whole.`,
+                fix
+              ),
+              fix
+            })
+          }
+        }
+        if (next.to > reached.to) reached = next
+      }
+    }
+  }
+}
+
+/** For each wall of a room's list, the walls of the straight side it is part of (neighbours that make no corner). */
+function straightSides(ids: readonly string[], corners: ReadonlySet<string>): Map<string, string[]> {
+  const sides = new Map<string, string[]>()
+  const n = ids.length
+  // Start just after a corner, so that a side wrapping round the end of the list is one side.
+  const start = ids.findIndex((id, i) => corners.has(`${id}|${ids[(i + 1) % n]!}`))
+  if (start < 0) return sides
+  let side: string[] = []
+  for (let k = 1; k <= n; k++) {
+    const id = ids[(start + k) % n]!
+    side.push(id)
+    if (corners.has(`${id}|${ids[(start + k + 1) % n]!}`)) {
+      for (const piece of side) sides.set(piece, side)
+      side = []
+    }
+  }
+  return sides
+}
+
+/** Whether a wall end lies on another wall's body, to within `gap`. */
+function touchesAnother(s: Seg, p: Vec2, near: readonly Seg[]): boolean {
+  return near.some((o) => o !== s && toSegment(p, o) <= o.t / 2 + tolerance('gap'))
+}
+
+/** Free ends of listed walls beyond the last corner any room makes on them: `overrun`. */
+function overrunFaults(ctx: Context, out: Map<string, WallFault>): void {
+  // The corners each wall has in rooms whose outline is sound, with the wall it meets there.
+  const cornersOn = new Map<string, { d: number; at: Vec2; other: Seg; room: string }[]>()
+  for (const { room, outline } of ctx.traced) {
+    if (outline.fault !== null) continue
+    for (const c of outline.corners) {
+      for (const [id, otherId] of [[c.wallA, c.wallB], [c.wallB, c.wallA]] as const) {
+        const s = ctx.segs.get(id)
+        const other = ctx.segs.get(otherId)
+        if (!s || !other) continue
+        const entry = { d: along(s, c.at), at: c.at, other, room: room.id }
+        const known = cornersOn.get(id)
+        if (known) known.push(entry)
+        else cornersOn.set(id, [entry])
+      }
+    }
+    // Two walls in a row reach as far as their facing ends: a joint, not a corner.
+    const corners = new Set(outline.corners.map((c) => `${c.wallA}|${c.wallB}`))
+    const ids = room.boundary
+    for (let i = 0; i < ids.length; i++) {
+      const [ia, ib] = [ids[i]!, ids[(i + 1) % ids.length]!]
+      if (ia === ib || corners.has(`${ia}|${ib}`)) continue
+      const a = ctx.segs.get(ia)
+      const b = ctx.segs.get(ib)
+      if (!a || !b) continue
+      for (const [s, other] of [[a, b], [b, a]] as const) {
+        const end = toSegment(s.a, other) <= toSegment(s.b, other) ? s.a : s.b
+        const entry = { d: along(s, end), at: end, other, room: room.id }
+        const known = cornersOn.get(s.wall.id)
+        if (known) known.push(entry)
+        else cornersOn.set(s.wall.id, [entry])
+      }
+    }
+  }
+  const segs = [...ctx.segs.values()]
+  const nearby = new Map<Seg, Seg[]>()
+  for (const [p, q] of nearPairs(segs)) {
+    for (const [x, y] of [[p, q], [q, p]] as const) {
+      const known = nearby.get(x)
+      if (known) known.push(y)
+      else nearby.set(x, [y])
+    }
+  }
+  for (const s of segs) {
+    const corners = cornersOn.get(s.wall.id)
+    if (!corners || corners.length === 0) continue
+    for (const end of ['start', 'end'] as const) {
+      const d = end === 'end' ? s.length : 0
+      const last = corners.reduce((best, c) => ((end === 'end' ? c.d > best.d : c.d < best.d) ? c : best))
+      const past = end === 'end' ? d - last.d : last.d - d
+      if (past <= reach(s, last.other)) continue
+      const p = endPoint(s, end)
+      if (touchesAnother(s, p, nearby.get(s) ?? [])) continue
+      const id = `overrun:${s.wall.id}:${end}`
+      const edits = moveEnd(ctx, s, end, last.at)
+      const fix = fixOf(ctx, `move the ${end} of wall ${s.wall.id} back to ${point(last.at)}.`, edits)
+      // When the other wall ends at the corner, the slip may be its: it may be meant to reach this end.
+      const otherEnd = nearestEnd(last.other, last.at)
+      const otherAt = endPoint(last.other, otherEnd)
+      const theirs =
+        Math.hypot(otherAt.x - last.at.x, otherAt.y - last.at.y) <= tolerance('gap')
+          ? ` If instead wall ${last.other.wall.id} is meant to reach ${point(p)}, move its ${otherEnd} there.`
+          : ''
+      const otherwise =
+        edits === null && openingsOf(ctx.index, s.wall.id).length > 0
+          ? `An opening on it stands past the corner, so Grid offers no change. If the wall is meant to carry on there, ignore this.`
+          : NO_FIX
+      out.set(id, {
+        id,
+        kind: 'overrun',
+        floor: ctx.floor,
+        walls: [s.wall.id, last.other.wall.id],
+        rooms: [last.room],
+        distance: past,
+        message: say(
+          `Wall ${s.wall.id} runs ${m(past)} past its corner with wall ${last.other.wall.id} in room ` +
+            `${last.room}, at ${point(last.at)}, to ${point(p)}, where it meets no other wall.`,
+          fix === null ? null : { ...fix, says: fix.says + theirs },
+          otherwise
+        ),
+        fix
+      })
+    }
+  }
+}
+
+/** The rooms that list a wall, on this floor. */
+const listing = (ctx: Context, wallId: string): Room[] =>
+  (ctx.index.roomsByWall.get(wallId) ?? []).filter((r) => floorOf(r) === ctx.floor)
+
+/** Wall lists with `gone` replaced by `kept`, and a `kept` that would then follow itself dropped. */
+function relist(ctx: Context, gone: string, kept: string): WallEdit[] {
+  return listing(ctx, gone).map((room) => {
+    const swapped = room.boundary.map((id) => (id === gone ? kept : id))
+    const boundary = swapped.filter((id, i) => id !== swapped[(i + swapped.length - 1) % swapped.length] || swapped.length === 1)
+    return { op: 'set-boundary', room: room.id, boundary }
+  })
+}
+
+/** The openings of a removed wall, moved onto the wall kept in its place; a door already there is not doubled. */
+function moveOpenings(ctx: Context, from: Seg, to: Seg): WallEdit[] {
+  const edits: WallEdit[] = []
+  const reversed = dot(from.dir, to.dir) < 0
+  const there = openingsOf(ctx.index, to.wall.id)
+  for (const o of openingsOf(ctx.index, from.wall.id)) {
+    const p = along(to, at(from, o.offset))
+    const q = along(to, at(from, o.offset + o.width))
+    const offset = Math.min(p, q)
+    const doubled = there.some(
+      (k) => k.type === o.type && Math.abs(k.offset - offset) < tolerance('diffOpeningOffset') && Math.abs(k.width - o.width) < tolerance('diffOpeningOffset')
+    )
+    if (doubled) {
+      edits.push({ op: 'remove-opening', opening: o.id })
+      continue
+    }
+    const flipped: { hinge?: 'start' | 'end'; swing?: 'left' | 'right' } = {}
+    if (reversed && o.hinge !== undefined) flipped.hinge = o.hinge === 'start' ? 'end' : 'start'
+    if (reversed && o.swing !== undefined) flipped.swing = o.swing === 'left' ? 'right' : 'left'
+    edits.push({ op: 'move-opening', opening: o.id, wall: to.wall.id, offset: tidy(Math.max(0, offset)), ...flipped })
+  }
+  return edits
+}
+
+/**
+ * The stretch of `b` that lies on `a`: bodies overlapping by more than `gap` across their
+ * width, within `a`'s length, as fractions of `b`. Null when they share no such stretch.
+ */
+function sharedStretch(a: Seg, b: Seg): [number, number] | null {
+  const limit = Math.max((a.t + b.t) / 2 - tolerance('gap'), tolerance('wallContact'))
+  const [s0, s1] = [along(a, b.a), along(a, b.b)]
+  const [d0, d1] = [across(a, b.a), across(a, b.b)]
+  let lo = 0
+  let hi = 1
+  // Each bound is linear in u: v0 + u (v1 - v0) within [min, max].
+  const keep = (v0: number, v1: number, min: number, max: number): void => {
+    const dv = v1 - v0
+    if (Math.abs(dv) < tolerance('noLength')) {
+      if (v0 < min || v0 > max) hi = -1
+      return
+    }
+    const [u0, u1] = [(min - v0) / dv, (max - v0) / dv]
+    lo = Math.max(lo, Math.min(u0, u1))
+    hi = Math.min(hi, Math.max(u0, u1))
+  }
+  keep(s0, s1, 0, a.length)
+  keep(d0, d1, -limit, limit)
+  return hi > lo ? [lo, hi] : null
+}
+
+/** Walls on top of walls: `duplicate` and `line-on-wall`. */
+function overlapFaults(ctx: Context, out: Map<string, WallFault>): void {
+  const order = new Map(ctx.plan.walls.map((w, i) => [w.id, i]))
+  // Two walls of a room narrower than they are thick overlap; that room's refusal says so.
+  const squeezed = ctx.traced.filter((t) => t.outline.fault?.code === 'room/inside-out').map((t) => new Set(t.room.boundary))
+  for (const [p, q] of nearPairs([...ctx.segs.values()])) {
+    if (Math.abs(cross(p.dir, q.dir)) >= tolerance('nearlyParallel')) continue
+    if (squeezed.some((walls) => walls.has(p.wall.id) && walls.has(q.wall.id))) continue
+    // The one the fix changes: the line when one is a line, else the copy (the later one), or
+    // the one lying wholly on the other.
+    let [kept, gone] = (order.get(p.wall.id) ?? 0) <= (order.get(q.wall.id) ?? 0) ? [p, q] : [q, p]
+    const line = (s: Seg): boolean => s.wall.virtual === true
+    if (line(kept) !== line(gone) && line(kept)) [kept, gone] = [gone, kept]
+    let shared = sharedStretch(kept, gone)
+    if (shared === null) continue
+    let length = (shared[1] - shared[0]) * gone.length
+    if (length <= Math.max(kept.t, gone.t, tolerance('lineInside')) + tolerance('gap')) continue
+    const whole = (stretch: [number, number], s: Seg): boolean => (stretch[1] - stretch[0]) * s.length >= s.length - tolerance('gap')
+    if (line(kept) === line(gone) && !whole(shared, gone)) {
+      const back = sharedStretch(gone, kept)
+      if (back !== null && whole(back, kept)) {
+        ;[kept, gone] = [gone, kept]
+        shared = back
+        length = (back[1] - back[0]) * gone.length
+      }
+    }
+    const kind: WallFaultKind = line(gone) && !line(kept) ? 'line-on-wall' : 'duplicate'
+    const id = `${kind}:${gone.wall.id}`
+    if (out.has(id)) continue
+    const goneName = line(gone) ? `line ${gone.wall.id}` : `wall ${gone.wall.id}`
+    const keptName = line(kept) ? `line ${kept.wall.id}` : `wall ${kept.wall.id}`
+    let edits: WallEdit[] | null
+    let says: string
+    if (whole(shared, gone)) {
+      const rooms = listing(ctx, gone.wall.id).map((r) => r.id)
+      const hasOpenings = openingsOf(ctx.index, gone.wall.id).length > 0
+      edits = kind === 'line-on-wall' && hasOpenings ? null : [...relist(ctx, gone.wall.id, kept.wall.id), ...moveOpenings(ctx, gone, kept), { op: 'remove-wall', wall: gone.wall.id }]
+      says =
+        `remove ${goneName}` +
+        (rooms.length > 0 ? `, and list ${keptName} in its place in room${rooms.length > 1 ? 's' : ''} ${list(rooms)}` : '') +
+        (!hasOpenings ? '.' : ', moving its openings onto it.')
+    } else if (shared[0] <= tolerance('noLength') || shared[1] >= 1 - tolerance('noLength')) {
+      // The shared stretch is at one end of the wall: take that end back to where the other ends.
+      const end: 'start' | 'end' = shared[0] <= tolerance('noLength') ? 'start' : 'end'
+      const u = end === 'start' ? shared[1] : shared[0]
+      const target = { x: gone.a.x + (gone.b.x - gone.a.x) * u, y: gone.a.y + (gone.b.y - gone.a.y) * u }
+      edits = moveEnd(ctx, gone, end, target)
+      says = `move the ${end} of ${goneName} to ${point(target)}, where ${keptName} ends.`
+    } else {
+      edits = null
+      says = ''
+    }
+    const fix = fixOf(ctx, says, edits)
+    const what =
+      kind === 'line-on-wall'
+        ? `Dividing line ${gone.wall.id} lies on top of wall ${kept.wall.id} for ${m(length)}, so that stretch is both open and solid.`
+        : `${goneName[0]!.toUpperCase()}${goneName.slice(1)} lies on top of ${keptName} for ${m(length)}: the drawing and every export show that stretch twice.`
+    const otherwise =
+      edits === null && kind === 'line-on-wall' && whole(shared, gone)
+        ? `It carries an opening, so Grid offers no change: say whether the opening belongs in wall ${kept.wall.id}, then remove the line.`
+        : edits === null
+          ? `It runs past ${keptName} at both ends, so Grid offers no change: remove the stretch they share by hand.`
+          : NO_FIX
+    out.set(id, {
+      id,
+      kind,
+      floor: ctx.floor,
+      walls: [gone.wall.id, kept.wall.id],
+      rooms: listing(ctx, gone.wall.id).map((r) => r.id),
+      distance: length,
+      message: say(what, fix, otherwise),
+      fix
+    })
+  }
+}
+
+/** A room that names one wall twice: `listed-twice`. */
+function listedTwiceFaults(ctx: Context, out: Map<string, WallFault>): void {
+  for (const room of ctx.plan.rooms) {
+    if (floorOf(room) !== ctx.floor) continue
+    const places = new Map<string, number[]>()
+    room.boundary.forEach((id, i) => places.set(id, [...(places.get(id) ?? []), i + 1]))
+    for (const [wallId, at] of places) {
+      if (at.length < 2) continue
+      const id = `listed-twice:${room.id}:${wallId}`
+      let seen = false
+      const boundary = room.boundary.filter((w) => {
+        if (w !== wallId) return true
+        if (seen) return false
+        seen = true
+        return true
+      })
+      const fix = fixOf(ctx, `list it once, at place ${at[0]}.`, [{ op: 'set-boundary', room: room.id, boundary }])
+      out.set(id, {
+        id,
+        kind: 'listed-twice',
+        floor: ctx.floor,
+        walls: [wallId],
+        rooms: [room.id],
+        distance: 0,
+        message: say(
+          `Room ${room.id} lists wall ${wallId} ${at.length === 2 ? 'twice' : `${at.length} times`}, at places ` +
+            `${list(at.map(String))} of its wall list.`,
+          fix,
+          'Listed once, the room has no outline: check its wall list.'
+        ),
+        fix
+      })
+    }
+  }
+}
+
+/** A fresh room id: `bed-2`, or the next number free. */
+function freshId(plan: FloorPlan, base: string): string {
+  const taken = new Set([...plan.walls, ...plan.rooms, ...plan.openings].map((e) => e.id))
+  for (let n = 2; ; n++) if (!taken.has(`${base}-${n}`)) return `${base}-${n}`
+}
+
+/**
+ * The room split in two along a wall that crosses it: each part is the run of its wall list
+ * from one wall the crossing wall meets to the other, closed by the crossing wall. Null when no
+ * such split gives two outlines.
+ */
+function splitAlong(ctx: Context, room: Room, s: Seg, stretch: [number, number]): { edits: WallEdit[]; areas: [number, number]; ids: [string, string] } | null {
+  const ids = room.boundary
+  const meets = (p: Vec2): number[] =>
+    ids
+      .map((id, i) => ({ i, seg: ctx.segs.get(id) }))
+      .filter((e) => e.seg !== undefined && toSegment(p, e.seg) <= (e.seg.t + s.t) / 2 + tolerance('gap'))
+      .sort((x, y) => toSegment(p, x.seg!) - toSegment(p, y.seg!))
+      .map((e) => e.i)
+  const from = meets(at(s, stretch[0]))
+  const to = meets(at(s, stretch[1]))
+  const run = (i: number, j: number): string[] => {
+    const out: string[] = []
+    for (let k = i; ; k = (k + 1) % ids.length) {
+      out.push(ids[k]!)
+      if (k === j) return out
+    }
+  }
+  const other = freshId(ctx.plan, room.id)
+  for (const i of from) {
+    for (const j of to) {
+      if (i === j) continue
+      const one = [...run(i, j), s.wall.id]
+      const two = [...run(j, i), s.wall.id]
+      if (one.length < 3 || two.length < 3) continue
+      const plan = applyWallEdits(ctx.plan, [{ op: 'set-boundary', room: room.id, boundary: one }])
+      const index = indexPlan(plan)
+      try {
+        const a = roomOutline({ ...room, boundary: one }, index)
+        const b = roomOutline({ ...room, boundary: two }, index)
+        if (a.fault !== null || b.fault !== null) continue
+        const [areaA, areaB] = [area(a.polygon), area(b.polygon)]
+        if (areaA < tolerance('areaReported') || areaB < tolerance('areaReported')) continue
+        // Each part's list starts where the room's own list starts, as far as it can.
+        const first = (part: string[]): string[] => {
+          const k = part.reduce((best, id, n) => (ids.indexOf(id) >= 0 && (best < 0 || ids.indexOf(id) < ids.indexOf(part[best]!)) ? n : best), -1)
+          return k <= 0 ? part : [...part.slice(k), ...part.slice(0, k)]
+        }
+        const [big, small] = (areaA >= areaB ? [one, two] : [two, one]).map(first) as [string[], string[]]
+        // The new part says nothing about its use, nor that it sits inside another room: that is for the person to say.
+        const part: Room = { id: other, name: `${room.name} (part)`, boundary: small }
+        if (room.floor !== undefined) part.floor = room.floor
+        return {
+          edits: [
+            { op: 'set-boundary', room: room.id, boundary: big },
+            { op: 'add-room', room: part }
+          ],
+          areas: [Math.max(areaA, areaB), Math.min(areaA, areaB)],
+          ids: [room.id, other]
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+  return null
+}
+
+/** Walls in a room that does not list them: `crosses-room` and `stands-in-room`. */
+function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
+  const nesting = roomNesting(ctx.index)
+  for (const { room, outline } of ctx.traced) {
+    if (outline.fault !== null) continue
+    const listed = new Set(room.boundary)
+    const polygon = outline.polygon
+    const box = polygon.reduce(
+      (b, p) => ({ x0: Math.min(b.x0, p.x), y0: Math.min(b.y0, p.y), x1: Math.max(b.x1, p.x), y1: Math.max(b.y1, p.y) }),
+      { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }
+    )
+    const standing: { s: Seg; inside: number }[] = []
+    for (const s of ctx.segs.values()) {
+      if (listed.has(s.wall.id)) continue
+      if (s.box.x0 > box.x1 || s.box.x1 < box.x0 || s.box.y0 > box.y1 || s.box.y1 < box.y0) continue
+      // The walls of a room that sits inside this one stand in it by right (ARE-5).
+      if (listing(ctx, s.wall.id).some((r) => r.id !== room.id && sitsWithin(nesting, r.id, room.id))) continue
+      const stretches = insideStretches(s, polygon)
+      const inside = stretches.reduce((sum, [d0, d1]) => sum + d1 - d0, 0)
+      if (inside <= tolerance('lineInside')) continue
+      // A wall that runs from one side of the room to another divides it. One that stops inside
+      // it (a stub, a column, a pod, a piece of furniture drawn as a wall) stands in it.
+      const onEdge = (d: number): boolean => toBoundary(at(s, d), polygon) <= tolerance('gap')
+      const divides = stretches.length === 1 && onEdge(stretches[0]![0]) && onEdge(stretches[0]![1])
+      // It divides the room only where the room can be split in two along it.
+      const split = divides ? splitAlong(ctx, room, s, stretches[0]!) : null
+      if (split === null) {
+        standing.push({ s, inside })
+        continue
+      }
+      const id = `crosses-room:${s.wall.id}:${room.id}`
+      const name = s.wall.virtual === true ? `Dividing line ${s.wall.id}` : `Wall ${s.wall.id}`
+      const fix = fixOf(
+        ctx,
+        `split room ${room.id} along it, into ${split.ids[0]} (${split.areas[0].toFixed(2)} m²) and ` +
+          `${split.ids[1]} (${split.areas[1].toFixed(2)} m²), each listing it. If it should not be there, remove it instead.`,
+        split.edits
+      )
+      out.set(id, {
+        id,
+        kind: 'crosses-room',
+        floor: ctx.floor,
+        walls: [s.wall.id],
+        rooms: [room.id],
+        distance: inside,
+        message: say(
+          `${name} runs ${m(inside)} across room ${room.id}, which does not list it, so the room is ` +
+            `measured and checked as one space.`,
+          fix,
+          `Grid offers no change: split the room along it, or remove it if it should not be there.`
+        ),
+        fix
+      })
+    }
+    if (standing.length > 0) {
+      const walls = standing.map((w) => w.s.wall.id)
+      const shown = walls.length > 6 ? [...walls.slice(0, 6), `${walls.length - 6} more`] : walls
+      const one = walls.length === 1
+      out.set(`stands-in-room:${room.id}`, {
+        id: `stands-in-room:${room.id}`,
+        kind: 'stands-in-room',
+        floor: ctx.floor,
+        walls,
+        rooms: [room.id],
+        distance: Math.max(...standing.map((w) => w.inside)),
+        message:
+          `${one ? 'Wall' : 'Walls'} ${list(shown)} ${one ? 'stands' : 'stand'} inside room ${room.id}, which does not list ` +
+          `${one ? 'it' : 'them'}, so the room is measured as if ${one ? 'it were' : 'they were'} not there. If ${one ? 'it is' : 'they are'} ` +
+          `a room inside it (a pod, a cupboard, a column), draw that room and mark it ${JSON.stringify('inside')}; if ` +
+          `furniture, leave ${one ? 'it' : 'them'} out of the walls; if the room goes round ${one ? 'it' : 'them'}, add ${one ? 'it' : 'them'} to its wall list.`,
+        fix: null
+      })
+    }
+  }
+}
+
+/** How far a point lies from the edge of a polygon. */
+function toBoundary(p: Vec2, polygon: readonly Vec2[]): number {
+  let best = Infinity
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i]!
+    const b = polygon[(i + 1) % polygon.length]!
+    const ab = sub(b, a)
+    const len2 = dot(ab, ab)
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, dot(sub(p, a), ab) / len2))
+    best = Math.min(best, Math.hypot(p.x - (a.x + ab.x * t), p.y - (a.y + ab.y * t)))
+  }
+  return best
+}
+
+/**
+ * Every wall fault of the plan, floor by floor, in a stable order. Never throws. Walls and rooms
+ * in `broken` are left out, as are rooms whose outline could not be traced at all.
+ */
+export function wallFaults(plan: FloorPlan, options: WallFaultOptions = {}): WallFault[] {
+  const index = options.index ?? indexPlan(plan)
+  const broken = options.broken ?? new Set<string>()
+  const floors = [...new Set([...plan.walls.map(floorOf), ...plan.rooms.map(floorOf)])]
+  const found: WallFault[] = []
+  for (const floor of floors) {
+    const segs = new Map<string, Seg>()
+    const counts = new Map<string, number>()
+    for (const w of plan.walls) counts.set(w.id, (counts.get(w.id) ?? 0) + 1)
+    for (const w of plan.walls) {
+      if (floorOf(w) !== floor || broken.has(w.id) || counts.get(w.id) !== 1) continue
+      const s = segOf(w)
+      if (s) segs.set(w.id, s)
+    }
+    const traced: Traced[] = []
+    for (const room of plan.rooms) {
+      if (floorOf(room) !== floor || room.boundary.some((id) => !segs.has(id))) continue
+      try {
+        const outline = roomOutline(room, index)
+        // A room refused for something other than its outline (an id used twice, an empty one).
+        if (broken.has(room.id) && outline.fault === null) continue
+        traced.push({ room, outline })
+      } catch {
+        continue
+      }
+    }
+    const ctx: Context = { plan, index, floor, segs, traced }
+    const out = new Map<string, WallFault>()
+    try {
+      listedTwiceFaults(ctx, out)
+      cornerFaults(ctx, out)
+      overrunFaults(ctx, out)
+      overlapFaults(ctx, out)
+      crossingFaults(ctx, out)
+    } catch {
+      // A plan odd enough to throw here is reported by the checks that refuse it.
+    }
+    found.push(...out.values())
+  }
+  return found
+}
+
+export interface TidyResult<P> {
+  readonly plan: P
+  /** The faults whose fixes were made, in the order made. */
+  readonly applied: readonly WallFault[]
+  /** The faults asked for and not fixed, with why. */
+  readonly skipped: readonly { readonly id: string; readonly why: string }[]
+}
+
+/**
+ * Makes the fixes of the faults named, or of every fault that has one when `ids` is left out.
+ * The faults are looked for again before each fix, so a fix that an earlier one made needless
+ * is skipped, and one fix never works on walls another has moved. The plan is a parsed plan, or
+ * a plan file as read with `parse` to read it (every other key of the file is kept).
+ */
+export function tidyPlan<P extends EditablePlan>(
+  plan: P,
+  ids?: readonly string[],
+  parse: (plan: P) => FloorPlan = (p) => p as unknown as FloorPlan
+): TidyResult<P> {
+  const find = (p: FloorPlan): readonly WallFault[] => wallFaults(p)
+  let current = plan
+  const wanted = ids ?? find(parse(plan)).filter((f) => f.fix !== null).map((f) => f.id)
+  const applied: WallFault[] = []
+  const skipped: { id: string; why: string }[] = []
+  for (const id of wanted) {
+    const fault = find(parse(current)).find((f) => f.id === id)
+    if (fault === undefined) {
+      skipped.push({ id, why: applied.length > 0 ? 'no longer found: an earlier fix took care of it' : 'not found in this plan' })
+      continue
+    }
+    if (fault.fix === null) {
+      skipped.push({ id, why: 'Grid offers no change for it' })
+      continue
+    }
+    current = applyWallEdits(current, fault.fix.edits)
+    applied.push(fault)
+  }
+  return { plan: current, applied, skipped }
+}
