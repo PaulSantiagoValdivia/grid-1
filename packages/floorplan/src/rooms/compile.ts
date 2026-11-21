@@ -23,7 +23,7 @@
  *                inside <room> corner <ne|nw|se|sw> [wall <t> [kind]]  cuts that corner out of the room
  *       then:    walls <t> [kind]  height <h>  first-wall <wall id>
  *       a size may be '*': the room stretches as far as the room named after 'until'
- *   wall between <room> and <room> [<t>] [kind|virtual] [height <h>] [id <id>] [reversed]
+ *   wall between <room> and <room> [<side>] [<t>] [kind|virtual] [height <h>] [id <id>] [reversed]
  *   wall <room> <side> [<t>] [kind] [height <h>] [id <id>] [reversed]  an outside wall
  *   door|window|opening <id> between <room> and <room>, <place>, <w> wide [...]
  *   door|window|opening <id> in <room> <side>, <place>, <w> wide [...]
@@ -186,6 +186,8 @@ interface FloorDraft {
   rooms: Map<string, RoomDraft>
   inst: Map<string, string[]>
   between: Map<string, WallSay>
+  /** What the text says about one of several walls two rooms share: keyed by the pair, a room and its side. */
+  betweenSide: Map<string, WallSay>
   open: Set<string>
   extover: Array<{ room: string; side: string; say: WallSay }>
   openings: OpeningLine[]
@@ -237,6 +239,8 @@ export interface DerivedWallFacts {
   readonly rooms: readonly string[]
   /** The statements that would say something about it: `wall between a and b` or `wall a south`. */
   readonly handles: readonly string[]
+  /** Its stretches along its centre line, each with the statement that says something about it. */
+  readonly stretches: readonly { readonly handle: string; readonly start: readonly [number, number]; readonly end: readonly [number, number] }[]
 }
 
 export interface RoomsResult {
@@ -321,6 +325,8 @@ class Compiler {
   sizes: { basis: SizeBasis; stated: boolean } = { basis: 'inside', stated: false }
   readonly floors: FloorDraft[] = []
   private explicitFloors = false
+  /** One wall per stretch between two rooms, never one long wall past several. */
+  split = false
   private units = new Map<string, Unit>()
   private cur: FloorDraft | null = null
   readonly problems: RoomsProblem[] = []
@@ -861,8 +867,11 @@ class Compiler {
   private stWall(t: string[], at: number): void {
     const fl = this.floor()
     if (t.length >= 4 && t[1] === 'between' && t[3] === 'and') {
-      const say = this.wallSay(t.slice(5), at, true)
-      fl.between.set(pairKey(t[2]!, t[4]!), say)
+      // 'wall between a and b east': the wall on a's east side, where a and b share more than one.
+      const side = t[5] !== undefined && Object.hasOwn(COMPASS, t[5]) ? t[5] : null
+      const say = this.wallSay(t.slice(side === null ? 5 : 6), at, true)
+      if (side !== null) fl.betweenSide.set(`${pairKey(t[2]!, t[4]!)}\u0000${t[2]}\u0000${side}`, say)
+      else fl.between.set(pairKey(t[2]!, t[4]!), say)
       if (say.kind === 'virtual') fl.open.add(pairKey(t[2]!, t[4]!))
     } else if (t.length >= 3 && Object.hasOwn(COMPASS, t[2]!)) {
       fl.extover.push({ room: t[1]!, side: t[2]!, say: this.wallSay(t.slice(3), at, false) })
@@ -1039,6 +1048,7 @@ class Compiler {
     for (const r of src.rooms.values()) this.addRoom({ ...r, poly: [...r.poly] }, null)
     for (const [k, v] of src.inst) fl.inst.set(k, [...v])
     for (const [k, v] of src.between) fl.between.set(k, { ...v })
+    for (const [k, v] of src.betweenSide) fl.betweenSide.set(k, { ...v })
     for (const k of src.open) fl.open.add(k)
     fl.extover.push(...src.extover.map((e) => ({ ...e, say: { ...e.say } })))
     const rest = t.slice(2).join(' ')
@@ -1062,6 +1072,12 @@ class Compiler {
     fl.rooms = new Map([...fl.rooms].map(([k, v]) => [k === old ? fresh : k, v]))
     const swap = (key: string): string => key.split('\u0000').map((x) => (x === old ? fresh : x)).reduce((a, b) => pairKey(a, b))
     fl.between = new Map([...fl.between].map(([k, v]) => [swap(k), v]))
+    fl.betweenSide = new Map(
+      [...fl.betweenSide].map(([k, v]) => {
+        const [a, b, room, side] = k.split('\u0000') as [string, string, string, string]
+        return [`${swap(pairKey(a, b))}\u0000${room === old ? fresh : room}\u0000${side}`, v]
+      })
+    )
     fl.open = new Set([...fl.open].map(swap))
     fl.extover = fl.extover.map((e) => ({ ...e, room: e.room === old ? fresh : e.room }))
     fl.openings = fl.openings.map((o) => ({ ...o, words: o.words.map((w, i) => (w === old && i > 1 ? fresh : w)) }))
@@ -1158,7 +1174,10 @@ class Compiler {
         if (order.get(A.id)! > order.get(B.id)!) continue
         const key = pairKey(A.id, B.id)
         let d = c.d
-        const spec = fl.between.get(key)
+        const spec =
+          fl.betweenSide.get(`${key}\u0000${A.id}\u0000${compassOf(e.n)}`) ??
+          fl.betweenSide.get(`${key}\u0000${B.id}\u0000${compassOf(c.f.n)}`) ??
+          fl.between.get(key)
         let kind: WallKind =
           (spec && spec.kind !== null && spec.kind !== 'virtual' ? spec.kind : null) ??
           this.tkinds.get(Math.round(d * 1000)) ??
@@ -1201,10 +1220,10 @@ class Compiler {
         raws.push({
           a,
           b,
-          t: d,
+          t: virtual ? (spec?.t ?? 0) : d,
           kind,
           virtual,
-          height: virtual ? 0 : (spec?.height ?? height),
+          height: virtual ? (spec?.height ?? 0) : (spec?.height ?? height),
           wantId: spec?.id ?? null,
           reversed: spec?.reversed ?? false,
           rooms: [A, B],
@@ -1249,6 +1268,13 @@ class Compiler {
           handles: [`wall ${A.id} ${compassOf(e.n)}`],
         })
       }
+    }
+    // Two rooms that share walls on more than one line: each handle names the first room's side.
+    const perPair = new Map<string, number>()
+    for (const r of raws) if (r.rooms.length === 2) perPair.set(pairKey(r.rooms[0]!.id, r.rooms[1]!.id), (perPair.get(pairKey(r.rooms[0]!.id, r.rooms[1]!.id)) ?? 0) + 1)
+    for (const r of raws) {
+      if (r.rooms.length !== 2 || (perPair.get(pairKey(r.rooms[0]!.id, r.rooms[1]!.id)) ?? 0) < 2) continue
+      r.handles = [`wall between ${r.rooms[0]!.id} and ${r.rooms[1]!.id} ${compassOf(edges[r.sides[0]![0]]!.n)}`]
     }
     this.checkSteps(edges)
     this.sideThicknesses(fl, edges, raws)
@@ -1357,11 +1383,19 @@ class Compiler {
       }
       rs.sort((a, b) => a.lo! - b.lo!)
       let cur: DerivedWall | null = null
+      let curId: string | null = null
       for (const r of rs) {
-        if (cur !== null && r.lo! - cur.hi <= maxT + eps()) {
+        // A wall the text names stays apart from a neighbour named otherwise: that is how a
+        // plan drawn with its walls cut at the room corners is written again as it was.
+        const sameName = curId === null || r.wantId === null || r.wantId === curId
+        // Stretches given one id are one wall, however far apart along the line they lie.
+        const named = cur !== null && r.wantId !== null && r.wantId === curId
+        if (cur !== null && ((r.lo! - cur.hi <= maxT + eps() && sameName && !this.split) || named)) {
           cur.hi = Math.max(cur.hi, r.hi!)
           cur.raws.push(r)
+          curId = curId ?? r.wantId
         } else {
+          curId = r.wantId
           cur = { lo: r.lo!, hi: r.hi!, raws: [r], d, t: r.t, kind: r.kind, virtual: r.virtual, height: r.height, base: rs[0]!.a } as DerivedWall
           walls.push(cur)
         }
@@ -1799,6 +1833,7 @@ class Compiler {
             length: norm(sub(w.end, w.start)),
             rooms: [...L, ...R],
             handles: [...new Set(w.raws.flatMap((r) => r.handles))],
+            stretches: w.raws.flatMap((r) => r.handles.map((handle) => ({ handle, start: [r.a[0], r.a[1]] as const, end: [r.b[0], r.b[1]] as const }))),
           })
         }
         const seen = new Set<string>()
@@ -1888,6 +1923,7 @@ function newFloor(id: string, name: string, level: number): FloorDraft {
     rooms: new Map(),
     inst: new Map(),
     between: new Map(),
+    betweenSide: new Map(),
     open: new Set(),
     extover: [],
     openings: [],

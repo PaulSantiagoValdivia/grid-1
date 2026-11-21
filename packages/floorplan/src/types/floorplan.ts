@@ -286,6 +286,18 @@ export const FloorPlanFieldsSchema = z.object({
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
   floors: parts(FloorSchema, 'floors').optional(),
   referenceImage: ReferenceImageSchema.optional(),
+  // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
+  // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
+  // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
+  // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  written: z
+    .object({
+      from: z.literal('rooms'),
+      revision: z.string().regex(/^[0-9a-f]{16}$/),
+      boundaries: z.record(text('id'), z.string().regex(/^[0-9a-f]{8}$/)),
+    })
+    .optional()
+    .catch(undefined),
 })
 
 export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSchema)
