@@ -9,7 +9,7 @@
  */
 import { floorOf, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
-import { checkPlan } from '../command/check'
+import { checkPlan, countsText, KIND_WORDS, thingText } from '../command/check'
 import { describePlan } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
@@ -730,6 +730,21 @@ const checkTool: GridTool = {
   },
   outputSchema: objectSchema({
     label: STRING,
+    // MSG-1: the one list and the one count, as docs/result-contract.md sets them out.
+    count: { type: 'number' },
+    lines: listSchema(objectSchema({
+      code: STRING,
+      kind: STRING,
+      thing: objectSchema({ kind: STRING, id: STRING }),
+      floor: { type: ['string', 'null'] },
+      also: listSchema(STRING),
+      message: STRING,
+      found: STRING,
+      needed: STRING,
+      fix: STRING,
+      // On a finding that applied a figure: each figure with its source and status.
+      figures: { type: 'array' },
+    }, ['code', 'kind', 'thing', 'floor', 'also', 'message', 'found', 'needed', 'fix'])),
     // The rooms a finding is about, by id and name, apart from the message: text from the plan file.
     findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
     notChecked: listSchema(objectSchema({ floor: STRING, message: STRING })),
@@ -752,14 +767,16 @@ const checkTool: GridTool = {
     }))
     const notChecked = result.report.notChecked.map((n) => ({ floor: n.floor, message: n.message }))
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
+    const record = result.result
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]
-    lines.push(`Drawing: ${drawing.length === 0 ? 'no problems found' : `${drawing.length} problem${drawing.length === 1 ? '' : 's'}`}. Checks run: ${result.report.rules.length}. Findings: ${findings.length}. Not checked: ${notChecked.length}.`)
-    for (const d of drawing.slice(0, 8)) lines.push(`  ${d.severity === 'error' ? 'left out' : 'worth a look'}, ${d.entity} ${q(d.id)}: ${d.message}`)
-    for (const f of findings.slice(0, 12)) lines.push(`  ${f.message}`)
-    if (findings.length > 12) lines.push(`  … ${findings.length - 12} more in the data.`)
-    for (const n of notChecked.slice(0, 4)) lines.push(`  Not checked: ${n.message}`)
-    if (findings.length === 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
-    return { text: lines.join('\n'), data: { label: GENERAL_GUIDANCE_LABEL, findings, notChecked, drawing } }
+    lines.push(`To look at: ${record.count === 0 ? 'nothing' : `${record.count} (${countsText(record)})`}. Checks run: ${result.report.rules.length}.`)
+    for (const line of record.lines.slice(0, 12)) lines.push(`  ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Fix: ${line.fix} [${line.code}]`)
+    if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
+    if (record.counts.finding === 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
+    return {
+      text: lines.join('\n'),
+      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing },
+    }
   },
 }
 

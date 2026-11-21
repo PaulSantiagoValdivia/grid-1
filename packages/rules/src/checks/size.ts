@@ -23,8 +23,8 @@ export function sizeCheck(
   storey: FloorPlan,
   leftOut: ReadonlySet<string>,
   floor: string,
-  /** The floor's name, or null in a plan with only one floor. */
-  floorLabel: string | null,
+  /** The floor's name, as its notice names it. */
+  floorLabel: string,
   roomName: (id: string) => string,
   /** The minimum net area of a habitable room. */
   minimum: AppliedFigure
@@ -71,7 +71,8 @@ export function sizeCheck(
             floor,
             rooms: [...new Set(unstated)].sort(byText),
             openings: [],
-            message: messages.noUse(floorLabel, unstated.length)
+            // The rooms it names, counted once each, as the record counts them.
+            message: messages.noUse(floorLabel, new Set(unstated).size)
           }
         ]
   return { findings, notChecked }

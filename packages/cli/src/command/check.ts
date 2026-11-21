@@ -1,12 +1,13 @@
 /**
- * `grid check <plan>`: the full check of `@ongrid/rules`, with the drawing's own problems,
+ * `grid check <plan>`: the result record of `@ongrid/rules` (`inspectPlan`, MSG-1): the drawing's
+ * problems, the door sweeps, the findings and what was not checked, in one list with one count,
  * as text for a person or as JSON for a program.
  *
  * Every report starts with the label "General guidance, not your local rules". No line says a
  * plan complies, passes or is approved: no findings only means these checks found nothing.
  */
 import { floorOf, type FloorPlan, type Issue } from '@ongrid/floorplan/geometry'
-import { checkLocalRules, GENERAL_GUIDANCE_LABEL, type RulesReport } from '@ongrid/rules'
+import { checkLocalRules, GENERAL_GUIDANCE_LABEL, inspectPlan, type GridResult, type LineKind, type ResultLine, type RulesReport } from '@ongrid/rules'
 import { floorOption } from './plan'
 import type { LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
@@ -34,6 +35,8 @@ export interface CheckResult {
   /** Problems with the drawing itself: what can't be drawn, and what is worth a look. */
   readonly issues: readonly Issue[]
   readonly report: RulesReport
+  /** Everything above, and the door sweeps, as one list with one count (MSG-1). On one floor, its lines and the plan's. */
+  readonly result: GridResult
 }
 
 const COUNTRY = /^[A-Za-z]{2}$/
@@ -60,8 +63,9 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
     throw new UsageError(`--country takes a two-letter country code, such as US or ES: got ${JSON.stringify(country)}.`)
   }
   const floor = floorOption(plan, request.floor)
-  const full = checkLocalRules(plan, country === undefined ? {} : { country: country.toUpperCase() })
-  const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full }
+  const options = country === undefined ? {} : { country: country.toUpperCase() }
+  const full = checkLocalRules(plan, options)
+  const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result: inspectPlan(plan, options) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }
 
@@ -74,7 +78,36 @@ export function checkOnFloor(loaded: LoadedPlan, whole: CheckResult, floor: stri
     // A notice about the whole plan has no floor, and holds for every floor.
     notChecked: full.notChecked.filter((notice) => notice.floor === floor || notice.floor === ''),
   }
-  return { label: GENERAL_GUIDANCE_LABEL, floor, issues: floorIssues(loaded, floor), report }
+  return { label: GENERAL_GUIDANCE_LABEL, floor, issues: floorIssues(loaded, floor), report, result: resultOnFloor(whole.result, floor) }
+}
+
+/** The record's lines on one floor, and those about the whole plan, counted again. */
+export function resultOnFloor(result: GridResult, floor: string): GridResult {
+  const lines = result.lines.filter((line) => line.floor === null || line.floor === floor)
+  const counts = Object.fromEntries(Object.keys(result.counts).map((kind) => [kind, lines.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
+  return { ...result, lines, count: lines.length, counts }
+}
+
+/** What each kind of line is called in a list. */
+export const KIND_WORDS: Record<LineKind, string> = {
+  refused: 'refused',
+  'left-out': 'left out',
+  'worth-a-look': 'worth a look',
+  finding: 'finding',
+  'not-checked': 'not checked',
+}
+
+/** How many lines of each kind, as "2 worth a look, 1 finding". */
+export function countsText(result: GridResult): string {
+  return (Object.keys(KIND_WORDS) as LineKind[])
+    .filter((kind) => result.counts[kind] > 0)
+    .map((kind) => `${result.counts[kind]} ${KIND_WORDS[kind]}${kind === 'finding' && result.counts[kind] !== 1 ? 's' : ''}`)
+    .join(', ')
+}
+
+/** The thing a line is about, as `opening "d1"` or `the plan`. */
+export function thingText(line: ResultLine): string {
+  return line.thing.kind === 'plan' ? 'the plan' : `${line.thing.kind} ${JSON.stringify(line.thing.id)}`
 }
 
 /** The drawing's problems on one floor. A problem with the plan itself holds for every floor. */
@@ -92,28 +125,29 @@ function section(title: string, lines: readonly string[]): string[] {
 /** The report as plain text. It always starts with the label. */
 export function checkText(result: CheckResult, floorCount: number): string {
   const { report } = result
-  const onFloor = (floor: string): string => (floorCount > 1 && floor ? `${floor}: ` : '')
   const lines: string[] = [result.label]
   if (report.lookupNotice) lines.push(report.lookupNotice)
   if (result.floor !== undefined) lines.push(`Floor ${result.floor} only.`)
 
   lines.push(...section('Checks run', report.rules.map((rule) => `${rule.title} (${rule.source.label})`)))
 
-  if (report.findings.length === 0) {
-    lines.push('', `Findings: none. ${NOTHING_FOUND}`)
+  // One list, one count (MSG-1): the drawing's problems, the door sweeps, the findings and what
+  // was not checked, each with its code, what was found and needed, and the fix.
+  const record = result.result
+  if (record.count === 0) {
+    lines.push('', `To look at: nothing. ${NOTHING_FOUND}`)
   } else {
-    lines.push(...section('Findings', report.findings.map((finding) => `${onFloor(finding.floor)}${finding.message}`)))
-  }
-
-  if (report.notChecked.length > 0) {
-    lines.push(...section('Not checked', report.notChecked.map((notice) => `${onFloor(notice.floor)}${notice.message}`)))
-  }
-
-  if (result.issues.length > 0) {
-    lines.push(...section(
-      'Problems in the drawing',
-      result.issues.map((issue) => `${issue.severity === 'error' ? 'left out' : 'worth a look'}, ${issue.entity} ${JSON.stringify(issue.id)}: ${issue.message}`),
-    ))
+    lines.push('', `To look at (${record.count}): ${countsText(record)}.`)
+    for (const line of record.lines) {
+      const where = floorCount > 1 && line.floor !== null && line.thing.kind !== 'floor' ? ` on ${JSON.stringify(line.floor)}` : ''
+      lines.push(
+        `  - ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`,
+        `      found: ${line.found}`,
+        `      needed: ${line.needed}`,
+        `      fix: ${line.fix}`,
+      )
+    }
+    if (record.counts.finding === 0) lines.push('', `No findings. ${NOTHING_FOUND}`)
   }
 
   if (report.figures.length > 0) {

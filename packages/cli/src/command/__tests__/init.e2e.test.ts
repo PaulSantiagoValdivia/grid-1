@@ -221,7 +221,7 @@ describe('inside a project grid init made', () => {
     const run = grid(['check'], demo)
     expect(run.status).toBe(0)
     expect(run.out.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
-    expect(run.out).toContain('Findings: none.')
+    expect(run.out).toContain('To look at: nothing.')
     expect(run.out).not.toContain('Not checked')
     expect(run.out).not.toContain('Problems in the drawing')
     expect(run.out).toBe(grid(['check', 'plan.json'], demo).out)
@@ -283,7 +283,7 @@ describe('inside a project grid init made', () => {
     writeFileSync(join(demo, 'other.json'), JSON.stringify(other))
     const run = grid(['check', 'other.json'], demo)
     expect(run.status).toBe(0)
-    expect(run.out).toContain('Not checked')
+    expect(run.out).toContain('not checked, floor')
   })
 
   it('says so when plan.json was removed', () => {

@@ -17,7 +17,7 @@ import { MAX_HOST_CUTS } from '../nesting'
 import { floorSpaces, spacesKnown } from '../spaces'
 import { validatePlan } from '../validate'
 import { buildFloorPlan } from '../floorplan'
-import { checkLocalRules } from '../rules/check'
+import { checkPlanSanity } from '../rules/check'
 import { floorGraph, openingSides, roomOutlines } from '../rules/graph'
 import { diffPlans } from '../diff'
 import { outline, type Point } from '../../test-support/outline'
@@ -140,9 +140,9 @@ describe("the lab's room-in-room plan (B-13), with the pod and the lift shaft ma
   })
 
   it('no longer says a door leads to a space that is not drawn, nor that the lift has no way out', () => {
-    expect(checkLocalRules(plan).findings).toEqual([])
+    expect(checkPlanSanity(plan).findings).toEqual([])
     // As the lab saw it, unmarked: both inner rooms' doors lead "nowhere".
-    const before = checkLocalRules(unmarked(plan)).findings.map((f) => [f.code, f.rooms.join()])
+    const before = checkPlanSanity(unmarked(plan)).findings.map((f) => [f.code, f.rooms.join()])
     expect(before).toContainEqual(['door_to_undrawn_space', 'ward'])
     expect(before).toContainEqual(['door_to_undrawn_space', 'lift'])
   })

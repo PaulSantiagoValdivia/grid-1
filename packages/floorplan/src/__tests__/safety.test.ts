@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest'
 import { diffPlans, validatePlan } from '../geometry'
 import { exportPlan, type ExportFormat } from '../export/planExport'
 import { parseFloorPlan, type FloorPlan } from '../types/floorplan'
-import { checkLocalRules } from '../geometry/rules/check'
+import { checkPlanSanity } from '../geometry/rules/check'
 
 const NOW = new Date('2026-11-17T00:00:00Z')
 
@@ -97,7 +97,7 @@ describe('input that is very large or oddly named', () => {
     const plan = parseFloorPlan(raw)
     expect(plan.walls.map((w) => w.id)).toEqual(ids)
     expect(validatePlan(plan).issues).toEqual([])
-    expect(() => checkLocalRules(plan)).not.toThrow()
+    expect(() => checkPlanSanity(plan)).not.toThrow()
     const changes = diffPlans(parseFloorPlan(box('R')), plan).changes.map((c) => c.entity.id)
     for (const id of [...ids, 'valueOf']) expect(changes).toContain(id)
     const objects = text(plan, 'obj').split('\n').filter((line) => line.startsWith('o '))

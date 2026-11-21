@@ -1,5 +1,7 @@
 export * from './types'
 export { LIMITS, PLAN_SANITY, RULES } from './catalogue'
-export { checkLocalRules } from './check'
+export { checkPlanSanity } from './check'
 export { doorsThatChangedRooms } from './doors'
 export type { DoorRoomsChange, DoorFace } from './doors'
+export { wordings as planCheckWordings, wordingText } from './messages'
+export type { WordingPart } from './messages'

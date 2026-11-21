@@ -79,12 +79,10 @@ describe('the room-size messages', () => {
     expect(messages.roomTooSmall('Bedroom 2', 9)).toBe('"Bedroom 2" is under 9 m²')
   })
 
-  it('count the rooms without a use, naming the floor only when asked', () => {
-    expect(messages.noUse(null, 3)).toBe("Room sizes weren't checked for 3 rooms that don't say what they're for")
-    expect(messages.noUse(null, 1)).toBe("Room sizes weren't checked for 1 room that doesn't say what it's for")
-    expect(messages.noUse('First floor', 2)).toBe(
-      'On "First floor", room sizes weren\'t checked for 2 rooms that don\'t say what they\'re for'
-    )
+  it('count the rooms without a use, in one wording for one room or many (MSG-1)', () => {
+    expect(messages.noUse('Ground floor', 3)).toBe('On "Ground floor", room sizes were not checked in rooms with no use stated: 3')
+    expect(messages.noUse('Ground floor', 1)).toBe('On "Ground floor", room sizes were not checked in rooms with no use stated: 1')
+    expect(messages.noUse('First floor', 2)).toBe('On "First floor", room sizes were not checked in rooms with no use stated: 2')
   })
 })
 
@@ -226,7 +224,7 @@ describe('rooms without a use', () => {
         floor: 'ground',
         rooms: ['b', 'c', 'd'],
         openings: [],
-        message: "Room sizes weren't checked for 3 rooms that don't say what they're for"
+        message: 'On "Ground floor", room sizes were not checked in rooms with no use stated: 3'
       }
     ])
     expect(sizeFindings(p)).toEqual([])
@@ -242,7 +240,7 @@ describe('rooms without a use', () => {
       copy.rooms.find((r) => (r.floor ?? 'ground') === 'first')!.use = undefined
     })
     expect(noUse(p)).toMatchObject([
-      { floor: 'first', message: `On "First floor", room sizes weren't checked for 1 room that doesn't say what it's for` }
+      { floor: 'first', message: 'On "First floor", room sizes were not checked in rooms with no use stated: 1' }
     ])
   })
 

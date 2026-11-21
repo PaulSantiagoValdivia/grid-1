@@ -139,7 +139,13 @@ export function drawable(storey: FloorPlan): {
   }
 }
 
-export function checkLocalRules(plan: FloorPlan): RulesReport {
+/**
+ * The plan checks alone: a way out, a door on every room, a route to the way out, and doors
+ * that lead somewhere. Not the full check: `checkLocalRules` in `@ongrid/rules` runs these and
+ * the figure checks, and `inspectPlan` there gives everything in one record (MSG-1). The two
+ * no longer share a name, so importing the wrong one does not compile.
+ */
+export function checkPlanSanity(plan: FloorPlan): RulesReport {
   const floors = planFloors(plan)
   const level = new Map(floors.map((f) => [f.id, f.level] as const))
   const names = new Map(plan.rooms.map((r) => [r.id, r.name || r.id] as const))
@@ -187,7 +193,8 @@ export function checkLocalRules(plan: FloorPlan): RulesReport {
           floor: floor.id,
           rooms: [room],
           openings: [opening],
-          message: messages.doorOutAboveGround(roomName(room), height)
+          message: messages.doorOutAboveGround(roomName(room), height),
+          elevation: Number(height)
         })
       }
     }

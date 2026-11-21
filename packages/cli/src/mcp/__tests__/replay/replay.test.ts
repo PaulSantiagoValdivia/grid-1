@@ -102,7 +102,8 @@ const TURNS: Turn[] = [
     who: 'architect', n: 1, asked: '12 × 8 m, three bedrooms, three layouts.', mark: 'S', why: 'the agent writes the three plans by hand; grid_check and grid_describe only read them back',
     run: async (b) => {
       for (const plan of ['a.json', 'b.json', 'c.json']) {
-        expect((await ok(b, 'grid_check', { plan })).text).toContain('Drawing: no problems found')
+        // MSG-1: one list; a plan drawn right has no line left out and none worth a look.
+        expect((await ok(b, 'grid_check', { plan })).text).not.toMatch(/left out|worth a look|refused/)
         expect((await ok(b, 'grid_describe', { plan, length: 'line' })).text).toMatch(/3 bedrooms/)
       }
     },
