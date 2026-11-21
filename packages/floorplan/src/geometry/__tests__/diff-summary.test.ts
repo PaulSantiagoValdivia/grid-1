@@ -55,7 +55,7 @@ describe('what a wall change says', () => {
   it('names the floor a wall moved to', () => {
     const plan = twoFloorPlan()
     expect(summaryOf(diffPlans(plan, withWall(plan, 'g_s', { floor: 'first' })), 'g_s')).toBe(
-      'Wall moved to First floor'
+      'Wall moved to "First floor"'
     )
   })
 
@@ -133,8 +133,8 @@ describe('what a room or floor change says', () => {
     const next = edit(plan, (copy) => {
       copy.rooms.push(room('r_new', 'Bedroom 4', ['w_s', 'w_mid', 'w_n', 'w_w']))
     })
-    expect(summaryOf(diffPlans(plan, next), 'r_new')).toBe('Room added: Bedroom 4')
-    expect(summaryOf(diffPlans(next, plan), 'r_new')).toBe('Room removed: Bedroom 4')
+    expect(summaryOf(diffPlans(plan, next), 'r_new')).toBe('Room added: "Bedroom 4"')
+    expect(summaryOf(diffPlans(next, plan), 'r_new')).toBe('Room removed: "Bedroom 4"')
   })
 
   it('says a room was renamed, by its old name', () => {
@@ -142,13 +142,13 @@ describe('what a room or floor change says', () => {
     const named = withRoom(plan, 'r_left', { name: 'Kitchen' })
     expect(
       summaryOf(diffPlans(named, withRoom(plan, 'r_left', { name: 'Kitchen and dining' })), 'r_left')
-    ).toBe('Kitchen renamed to Kitchen and dining')
+    ).toBe('"Kitchen" renamed to "Kitchen and dining"')
   })
 
   it('says a room’s walls changed', () => {
     const plan = twoRoomBox()
     const next = withRoom(plan, 'r_left', { boundary: ['w_s', 'w_mid', 'w_n', 'w_w', 'w_s'] })
-    expect(summaryOf(diffPlans(plan, next), 'r_left')).toBe('Left room walls changed')
+    expect(summaryOf(diffPlans(plan, next), 'r_left')).toBe('"Left room" walls changed')
   })
 
   it('names a floor that was renamed, added or removed', () => {
@@ -156,15 +156,15 @@ describe('what a room or floor change says', () => {
     const renamed = edit(plan, (copy) => {
       copy.floors = copy.floors!.map((f) => (f.id === 'first' ? { ...f, name: 'Upper floor' } : f))
     })
-    expect(summaryOf(diffPlans(plan, renamed), 'first')).toBe('First floor renamed to Upper floor')
+    expect(summaryOf(diffPlans(plan, renamed), 'first')).toBe('"First floor" renamed to "Upper floor"')
     const without = edit(plan, (copy) => {
       copy.walls = copy.walls.filter((w) => w.floor !== 'first')
       copy.rooms = copy.rooms.filter((r) => r.floor !== 'first')
       copy.openings = copy.openings.filter((o) => o.id !== 'f_win')
       copy.floors = copy.floors!.filter((f) => f.id !== 'first')
     })
-    expect(summaryOf(diffPlans(plan, without), 'first')).toBe('Floor removed: First floor')
-    expect(summaryOf(diffPlans(without, plan), 'first')).toBe('Floor added: First floor')
+    expect(summaryOf(diffPlans(plan, without), 'first')).toBe('Floor removed: "First floor"')
+    expect(summaryOf(diffPlans(without, plan), 'first')).toBe('Floor added: "First floor"')
   })
 })
 

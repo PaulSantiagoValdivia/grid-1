@@ -153,20 +153,20 @@ describe("the lab's rooms inside rooms and rooms that overlap", () => {
     const found = overlaps(read('AU1/scenarios/AR-4/f14-rooms-overlap.json'))
     expect(found.map(([id]) => id)).toEqual(['den', 'den', 'den'])
     const said = found.map(([, message]) => message).join('\n')
-    expect(said).toMatch(/Rooms hall \(5\.33 m²\) and den \(21\.12 m²\) overlap: 2\.08 m² of floor/)
-    expect(said).toMatch(/Room bed1 \(13\.64 m²\) lies wholly inside room den \(21\.12 m²\)/)
-    expect(said).toMatch(/Room bath \(4\.80 m²\) lies wholly inside room den \(21\.12 m²\)/)
+    expect(said).toMatch(/Rooms "hall" \(5\.33 m²\) and "den" \(21\.12 m²\) overlap: 2\.08 m² of floor/)
+    expect(said).toMatch(/Room "bed1" \(13\.64 m²\) lies wholly inside room "den" \(21\.12 m²\)/)
+    expect(said).toMatch(/Room "bath" \(4\.80 m²\) lies wholly inside room "den" \(21\.12 m²\)/)
   })
 
   it('AR-4: the villa with one wrong wall (+21.45 m²) names the master bedroom and the en-suite', () => {
     const found = overlaps(read('AU1/scenarios/AR-4/villa-wrong-wall.json'))
     expect(found.map(([id]) => id)).toEqual(['master'])
-    expect(found[0]![1]).toMatch(/^Room ensuite \(20\.74 m²\) lies wholly inside room master \(55\.59 m²\)/)
+    expect(found[0]![1]).toMatch(/^Room "ensuite" \(20\.74 m²\) lies wholly inside room "master" \(55\.59 m²\)/)
   })
 
   it('AR-4: the villa with a room listed twice (+34.14 m²) names both copies and the 34.14 m²', () => {
     const found = overlaps(read('AU1/scenarios/AR-4/villa-duplicate-room.json'))
-    expect(found).toEqual([['master-dup', expect.stringMatching(/^Rooms master and master-dup cover the same 34\.14 m² of floor and list the same walls/)]])
+    expect(found).toEqual([['master-dup', expect.stringMatching(/^Rooms "master" and "master-dup" cover the same 34\.14 m² of floor and list the same walls/)]])
   })
 
   it('AR-4: the hotel room that kept its neighbour\'s wall names its own bathroom and the room next door', () => {
@@ -174,8 +174,8 @@ describe("the lab's rooms inside rooms and rooms that overlap", () => {
     const found = overlaps(read('AU1/scenarios/AR-4/hotel-mistakes.json'))
     expect(found.map(([id]) => id)).toEqual(['room-309', 'room-309'])
     const said = found.map(([, message]) => message).join('\n')
-    expect(said).toMatch(/Rooms room-308 \(20\.37 m²\) and room-309 \(28\.67 m²\) overlap: 3\.32 m² of floor/)
-    expect(said).toMatch(/Room bath-309 \(4\.22 m²\) lies wholly inside room room-309 \(28\.67 m²\)/)
+    expect(said).toMatch(/Rooms "room-308" \(20\.37 m²\) and "room-309" \(28\.67 m²\) overlap: 3\.32 m² of floor/)
+    expect(said).toMatch(/Room "bath-309" \(4\.22 m²\) lies wholly inside room "room-309" \(28\.67 m²\)/)
   })
 })
 

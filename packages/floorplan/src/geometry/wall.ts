@@ -9,6 +9,7 @@
 import type { Opening, Wall } from './plan'
 import type { Line, Vec2 } from './vec2'
 import { tolerance } from './tolerances'
+import { quoted } from '../types/planText'
 import { add, fromTuple, length, normalize, perp, scale, sub } from './vec2'
 
 export interface WallAxis {
@@ -27,7 +28,7 @@ export function wallAxis(wall: Wall): WallAxis {
   const delta = sub(end, start)
   const len = length(delta)
   if (len === 0) {
-    throw new Error(`Wall ${wall.id} has zero length: start and end are the same point`)
+    throw new Error(`Wall ${quoted(wall.id)} has zero length: start and end are the same point`)
   }
   const dir = normalize(delta)
   return { start, end, dir, normal: perp(dir), length: len }

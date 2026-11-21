@@ -116,10 +116,10 @@ describe("the lab's room-in-room plan (B-13), with the pod and the lift shaft ma
     const issues = validatePlan(unmarked(plan)).issues.filter((i) => i.code === 'room/overlap')
     expect(issues.map((i) => i.id)).toEqual(['bed', 'hall'])
     expect(issues[0]!.message).toBe(
-      'Room ward (3.61 m²) lies wholly inside room bed (26.79 m²), so 3.61 m² of floor around ' +
-        '(3.00, 2.50) is counted twice, once in each. If ward sits inside bed, as a wardrobe pod or ' +
-        'an en-suite does, mark ward with "inside": true and its floor is taken off bed. If not, ' +
-        'check the wall list of bed: it most likely names a wall it should not.'
+      'Room "ward" (3.61 m²) lies wholly inside room "bed" (26.79 m²), so 3.61 m² of floor around ' +
+        '(3.00, 2.50) is counted twice, once in each. If "ward" sits inside "bed", as a wardrobe pod or ' +
+        'an en-suite does, mark "ward" with "inside": true and its floor is taken off "bed". If not, ' +
+        'check the wall list of "bed": it most likely names a wall it should not.'
     )
   })
 
@@ -196,8 +196,8 @@ describe('rooms inside rooms inside rooms', () => {
     // The cupboard is still taken off the en-suite, but the bedroom now counts the floor of both.
     const overlaps = issues.filter((i) => i.code === 'room/overlap')
     expect(overlaps.map((i) => i.id)).toEqual(['r1', 'r1'])
-    expect(overlaps[0]!.message).toMatch(/^Room ens \(14\.00 m²\) lies wholly inside room r1 \(76\.44 m²\)/)
-    expect(overlaps[1]!.message).toMatch(/^Room cup \(0\.81 m²\) lies wholly inside room r1 \(76\.44 m²\)/)
+    expect(overlaps[0]!.message).toMatch(/^Room "ens" \(14\.00 m²\) lies wholly inside room "r1" \(76\.44 m²\)/)
+    expect(overlaps[1]!.message).toMatch(/^Room "cup" \(0\.81 m²\) lies wholly inside room "r1" \(76\.44 m²\)/)
   })
 })
 
@@ -212,7 +212,7 @@ describe('two pods in one room that overlap each other', () => {
     expect(areas(plan).r1).toBeCloseTo(9.8 * 7.8 - (2 * 2.1 * 2.1 - 1.1 * 1.1), 9)
     const overlaps = validatePlan(plan).issues.filter((i) => i.code === 'room/overlap')
     expect(overlaps.map((i) => i.id)).toEqual(['b'])
-    expect(overlaps[0]!.message).toMatch(/^Rooms a \(3\.61 m²\) and b \(3\.61 m²\) overlap: 0\.81 m² of floor around/)
+    expect(overlaps[0]!.message).toMatch(/^Rooms "a" \(3\.61 m²\) and "b" \(3\.61 m²\) overlap: 0\.81 m² of floor around/)
   })
 })
 
@@ -223,8 +223,8 @@ describe('a room marked inside that no room holds', () => {
     const issues = validatePlan(plan).issues
     expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['room/inside-no-host', 'r1', 'warning']])
     expect(issues[0]!.message).toBe(
-      'Room r1 is marked as inside another room, but no room on floor ground holds it: no room on ' +
-        'floor ground covers any of it. Its floor is counted on its own and taken off no room. Draw ' +
+      'Room "r1" is marked as inside another room, but no room on floor "ground" holds it: no room on ' +
+        'floor "ground" covers any of it. Its floor is counted on its own and taken off no room. Draw ' +
         'it within the room it sits in, or leave out "inside".'
     )
     expect(areas(plan).r1).toBeCloseTo(4.8 * 3.8, 9)
@@ -238,7 +238,7 @@ describe('a room marked inside that no room holds', () => {
     const plan = planOf([...walls, ...podWalls], [room, { id: 'pod', name: 'Pod', boundary: podWalls.map((w) => w.id), inside: true }])
     const issue = validatePlan(plan).issues.find((i) => i.code === 'room/inside-no-host')
     // The pod: 1.9 × 1.9 m, of which 0.85 × 1.9 m is inside the bedroom.
-    expect(issue?.message).toMatch(/: 2\.00 m² of it lies outside room r1, the room that holds most of it\./)
+    expect(issue?.message).toMatch(/: 2\.00 m² of it lies outside room "r1", the room that holds most of it\./)
     expect(areas(plan).r1).toBeCloseTo(4.8 * 3.8, 9)
     expect(validatePlan(plan).issues.some((i) => i.code === 'room/overlap' && /1\.62 m² of floor/.test(i.message))).toBe(true)
   })

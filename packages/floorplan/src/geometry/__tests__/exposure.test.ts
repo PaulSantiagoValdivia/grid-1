@@ -200,7 +200,7 @@ describe('R-9 a courtyard drawn as a room', () => {
     const lines = validatePlan(plan).issues.filter((i) => i.code === 'wall/kind-differs')
     expect(lines.map((i) => i.id)).toEqual(['cs', 'ce', 'cn', 'cw'])
     expect(lines[0]!.message).toBe(
-      'Wall cs is stated exterior, but rooms lie on both its sides along 3.00 m (south and court). It is ' +
+      'Wall "cs" is stated exterior, but rooms lie on both its sides along 3.00 m ("south" and "court"). It is ' +
         'kept as an outside wall, as stated; if it is an inside wall, leave out its kind.'
     )
   })
@@ -222,7 +222,7 @@ describe('what the worked-out kind leaves alone', () => {
       [
         'wall/kind-differs',
         'e',
-        'Wall e is stated a partition, but faces outside along 2.80 m: room r lies on one side and no room on the other. It is treated as an outside wall.'
+        'Wall "e" is stated a partition, but faces outside along 2.80 m: room "r" lies on one side and no room on the other. It is treated as an outside wall.'
       ]
     ])
   })

@@ -82,9 +82,9 @@ describe('AR-15 a room left out of the file is reported, with its area and where
     const issues = spaceIssues(missing)
     expect(issues.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['floor/unclaimed', 'floor', 'ground', 'warning']])
     expect(issues[0]!.message).toBe(
-      `Floor ground has 13.59 m² of enclosed floor that no room claims, around ` +
-        `(${piece.at.x.toFixed(2)}, ${piece.at.y.toFixed(2)}), between walls ${piece.walls.slice(0, -1).join(', ')} ` +
-        `and ${piece.walls.at(-1)}. It is in no room's area. If it is a room, draw it as one.`
+      `Floor "ground" has 13.59 m² of enclosed floor that no room claims, around ` +
+        `(${piece.at.x.toFixed(2)}, ${piece.at.y.toFixed(2)}), between walls ${piece.walls.slice(0, -1).map((w) => JSON.stringify(w)).join(', ')} ` +
+        `and ${JSON.stringify(piece.walls.at(-1))}. It is in no room's area. If it is a room, draw it as one.`
     )
   })
 
@@ -103,7 +103,7 @@ describe('AR-15 a room left out of the file is reported, with its area and where
     expect(inside(result.unclaimed[0]!.at, utility)).toBe(true)
     expect([...result.unclaimed[0]!.walls].sort()).toEqual(['bed1-n', 'corr-w', 'ext-w', 'util-n'])
     expectBalanced(result)
-    expect(spaceIssues(missing).map((i) => i.message)).toEqual([expect.stringMatching(/^Floor ground has 5\.54 m² of enclosed floor/)])
+    expect(spaceIssues(missing).map((i) => i.message)).toEqual([expect.stringMatching(/^Floor "ground" has 5\.54 m² of enclosed floor/)])
   })
 
   it('a courtyard no room claims is unclaimed floor too', () => {
@@ -197,8 +197,8 @@ describe('rooms that do not match the space their walls enclose', () => {
     const issues = spaceIssues(plan([...walls, line], [r]))
     expect(issues.map((i) => [i.code, i.id])).toEqual([['room/space-mismatch', 'r1']])
     expect(issues[0]!.message).toBe(
-      'Room r1 does not match the space its walls enclose. Its outline measures 16.24 m²: it covers ' +
-        'parts of 2 enclosed spaces (8.12 and 8.12 m²), split by dividing line line, which its wall ' +
+      'Room "r1" does not match the space its walls enclose. Its outline measures 16.24 m²: it covers ' +
+        'parts of 2 enclosed spaces (8.12 and 8.12 m²), split by dividing line "line", which its wall ' +
         'list leaves out. Its area counts all of it. Check its wall list.'
     )
   })
@@ -239,7 +239,7 @@ describe('rooms that do not match the space their walls enclose', () => {
     // The inside of the pod lies inside the room's outline, so it is not unclaimed.
     expect(result.unclaimed).toEqual([])
     expect(spaceIssues(plan([...walls, ...pod], [r]))[0]!.message).toMatch(
-      /^Room r1 does not match the space its walls enclose\. Its outline measures 16\.24 m²: 0\.\d\d m² of it lies on walls p1, p2, p3 and p4, which its wall list leaves out; it covers parts of 2 enclosed spaces/
+      /^Room "r1" does not match the space its walls enclose\. Its outline measures 16\.24 m²: 0\.\d\d m² of it lies on walls "p1", "p2", "p3" and "p4", which its wall list leaves out; it covers parts of 2 enclosed spaces/
     )
   })
 
@@ -278,8 +278,8 @@ describe('rooms that do not match the space their walls enclose', () => {
     const issues = spaceIssues(p)
     expect(issues.map((i) => [i.code, i.id])).toEqual([['floor/unclaimed', 'ground'], ['room/space-mismatch', 'a'], ['room/space-mismatch', 'b']])
     expect(issues[1]!.message).toBe(
-      'Room a does not match the space its walls enclose. Its outline measures 7.98 m²: it lies in ' +
-        'one enclosed space with room b, and no wall or dividing line divides that space between ' +
+      'Room "a" does not match the space its walls enclose. Its outline measures 7.98 m²: it lies in ' +
+        'one enclosed space with room "b", and no wall or dividing line divides that space between ' +
         'them. Its area counts all of it. Check its wall list.'
     )
   })
@@ -340,7 +340,7 @@ describe('what is not reported twice, and what cannot be worked out', () => {
     expect(result.broken.has('broken')).toBe(true)
     const unclaimed = result.issues.filter((i) => i.code === 'floor/unclaimed')
     expect(unclaimed).toHaveLength(1)
-    expect(unclaimed[0]!.message).toMatch(/^Floor ground has 14\.44 m² of enclosed floor that no room claims, around \(6\.00, 2\.00\), between walls s, e, n and mid\./)
+    expect(unclaimed[0]!.message).toMatch(/^Floor "ground" has 14\.44 m² of enclosed floor that no room claims, around \(6\.00, 2\.00\), between walls "s", "e", "n" and "mid"\./)
   })
 
   it('is left out with { spaces: false }, and `broken` is the same either way', () => {
@@ -359,7 +359,7 @@ describe('what is not reported twice, and what cannot be worked out', () => {
     const far = walls.map((w) => ({ ...w, start: [w.start[0] + 2e7, w.start[1]] as Point, end: [w.end[0] + 2e7, w.end[1]] as Point }))
     const result = floorSpaces(plan(far, [r]), 'ground')
     expect(spacesKnown(result)).toBe(false)
-    expect(spacesKnown(result) ? '' : result.reason).toBe('wall w1 lies more than 10000 km from the origin')
+    expect(spacesKnown(result) ? '' : result.reason).toBe('wall "w1" lies more than 10000 km from the origin')
     expect(spaceIssues(plan(far, [r]))).toEqual([])
     expect(validatePlan(plan(far, [r])).issues.map((i) => i.code)).toEqual([
       'wall/too-large',

@@ -31,6 +31,7 @@ import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import { floorOf, planFloors } from './floors'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan } from './plan'
+import { quoted } from '../types/planText'
 import { roomNesting, tryRoomPolygon } from './room'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
@@ -267,10 +268,10 @@ function lengthInside(a: Vec2, b: Vec2, polygon: readonly Vec2[]): number {
 function farReason(walls: readonly Wall[]): string | null {
   for (const wall of walls) {
     if ([...wall.start, ...wall.end].some((v) => !Number.isFinite(v) || Math.abs(v) > FAR())) {
-      return `wall ${wall.id} lies more than ${FAR() / 1000} km from the origin`
+      return `wall ${quoted(wall.id)} lies more than ${FAR() / 1000} km from the origin`
     }
     if (!wall.virtual && (!Number.isFinite(wall.thickness) || wall.thickness > FAR())) {
-      return `wall ${wall.id} is more than ${FAR() / 1000} km thick`
+      return `wall ${quoted(wall.id)} is more than ${FAR() / 1000} km thick`
     }
   }
   return null
@@ -473,7 +474,7 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
     const outline = tryRoomPolygon(room, index)
     if (!outline || outline.length < 3) continue
     if (outline.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > FAR() || Math.abs(p.y) > FAR())) {
-      return { floor, reason: `room ${room.id} lies more than ${FAR() / 1000} km from the origin` }
+      return { floor, reason: `room ${quoted(room.id)} lies more than ${FAR() / 1000} km from the origin` }
     }
     const host = nesting.hosts.get(room.id)
     rooms.push(host ? { room, outline, region: host.region, area: host.area } : { room, outline, area: Math.abs(signedArea(outline)) })

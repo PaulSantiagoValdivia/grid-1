@@ -26,6 +26,7 @@ import { MAX_CUTS, roomOverlaps } from './overlaps'
 import type { ToleranceChanges } from './tolerances'
 import { tolerance, withTolerances } from './tolerances'
 import { fixedText, metresText } from './rounding'
+import { quoted, quotedList } from '../types/planText'
 import { validatePlausibility } from './plausible'
 import { wallFaults } from './wallFaults'
 import { kindDisagreements } from './exposure'
@@ -136,7 +137,7 @@ function validateWallNumbers(wall: Wall, issues: Issue[]): boolean {
   ]
   const bad = named.find(([, value]) => !held(value))
   if (bad === undefined) return true
-  issues.push(issue('wall', wall.id, 'wall/too-large', `Wall ${wall.id}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`))
+  issues.push(issue('wall', wall.id, 'wall/too-large', `Wall ${quoted(wall.id)}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`))
   return false
 }
 
@@ -150,7 +151,7 @@ function validateOpeningNumbers(opening: Opening, issues: Issue[]): boolean {
   const bad = named.find(([, value]) => !held(value))
   if (bad === undefined) return true
   issues.push(
-    issue('opening', opening.id, 'opening/too-large', `Opening ${opening.id}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`)
+    issue('opening', opening.id, 'opening/too-large', `Opening ${quoted(opening.id)}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`)
   )
   return false
 }
@@ -162,7 +163,7 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
   const [ex, ey] = wall.end
 
   if (sx === ex && sy === ey) {
-    issues.push(issue('wall', wall.id, 'wall/zero-length', `Wall ${wall.id} has start === end`))
+    issues.push(issue('wall', wall.id, 'wall/zero-length', `Wall ${quoted(wall.id)} has start === end`))
     return false
   }
 
@@ -175,7 +176,7 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
         'wall',
         wall.id,
         'wall/no-thickness',
-        `Wall ${wall.id} has thickness ${wall.thickness}; only a virtual wall may be zero`
+        `Wall ${quoted(wall.id)} has thickness ${wall.thickness}; only a virtual wall may be zero`
       )
     )
     ok = false
@@ -186,7 +187,7 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
         'wall',
         wall.id,
         'wall/no-height',
-        `Wall ${wall.id} has height ${wall.height}; only a virtual wall may be zero`
+        `Wall ${quoted(wall.id)} has height ${wall.height}; only a virtual wall may be zero`
       )
     )
     ok = false
@@ -208,7 +209,7 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/broken-wall',
-        `Opening ${opening.id} hangs off wall ${opening.wall}, which is invalid`
+        `Opening ${quoted(opening.id)} hangs off wall ${quoted(opening.wall)}, which is invalid`
       )
     )
     return false
@@ -221,7 +222,7 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/missing-wall',
-        `Opening ${opening.id} points at wall ${opening.wall}, which does not exist`
+        `Opening ${quoted(opening.id)} points at wall ${quoted(opening.wall)}, which does not exist`
       )
     )
     return false
@@ -237,7 +238,7 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/degenerate',
-        `Opening ${opening.id} measures ${opening.width} × ${opening.height} m`
+        `Opening ${quoted(opening.id)} measures ${opening.width} × ${opening.height} m`
       )
     )
     return false
@@ -263,8 +264,8 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/out-of-wall',
-        `Opening ${opening.id} runs from ${exactMetres(span.from)} to ${exactMetres(span.to)} m ` +
-          `on wall ${wall.id}, which is ${exactMetres(wallLength)} m long: it runs ${past}, more ` +
+        `Opening ${quoted(opening.id)} runs from ${exactMetres(span.from)} to ${exactMetres(span.to)} m ` +
+          `on wall ${quoted(wall.id)}, which is ${exactMetres(wallLength)} m long: it runs ${past}, more ` +
           `than the ${millimetres(overrun)} Grid allows. ${fix}`
       )
     )
@@ -280,7 +281,7 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/too-tall',
-        `Opening ${opening.id} reaches ${exactMetres(head)} m on a wall ` +
+        `Opening ${quoted(opening.id)} reaches ${exactMetres(head)} m on a wall ` +
           `${exactMetres(wall.height)} m high`
       )
     )
@@ -293,7 +294,7 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/negative-sill',
-        `Opening ${opening.id} has its sill below the floor (${opening.sill} m)`
+        `Opening ${quoted(opening.id)} has its sill below the floor (${opening.sill} m)`
       )
     )
     ok = false
@@ -322,7 +323,7 @@ function validateOverlaps(index: PlanIndex, broken: Set<string>, issues: Issue[]
             'opening',
             current.opening.id,
             'opening/overlap',
-            `Openings ${kept!.opening.id} and ${current.opening.id} overlap on wall ${wall.id}`
+            `Openings ${quoted(kept!.opening.id)} and ${quoted(current.opening.id)} overlap on wall ${quoted(wall.id)}`
           )
         )
         broken.add(current.opening.id)
@@ -367,7 +368,7 @@ function validateDuplicateIds(
         'plan',
         id,
         'plan/duplicate-id',
-        `Id ${id} names more than one wall, room or opening. Every lookup resolves to ` +
+        `Id ${quoted(id)} names more than one wall, room or opening. Every lookup resolves to ` +
           `only one of them, so all of them are skipped`
       )
     )
@@ -434,7 +435,7 @@ function validateFloors(
           'plan',
           floor.id,
           'plan/duplicate-floor',
-          `Floor ${floor.id} is listed more than once; the first entry is the one used`,
+          `Floor ${quoted(floor.id)} is listed more than once; the first entry is the one used`,
           'warning'
         )
       )
@@ -453,7 +454,7 @@ function validateFloors(
           'wall',
           wall.id,
           'wall/unknown-floor',
-          `Wall ${wall.id} sits on floor ${floor}, which the plan does not list`,
+          `Wall ${quoted(wall.id)} sits on floor ${quoted(floor)}, which the plan does not list`,
           'warning'
         )
       )
@@ -467,7 +468,7 @@ function validateFloors(
           'room',
           room.id,
           'room/unknown-floor',
-          `Room ${room.id} sits on floor ${floor}, which the plan does not list`,
+          `Room ${quoted(room.id)} sits on floor ${quoted(floor)}, which the plan does not list`,
           'warning'
         )
       )
@@ -492,7 +493,7 @@ function validateFloors(
         'room',
         room.id,
         'room/cross-floor',
-        `Room ${room.id} is on floor ${floor} but rests on ${strays.join(', ')}, on another floor`
+        `Room ${quoted(room.id)} is on floor ${quoted(floor)} but rests on ${quotedList(strays)}, on another floor`
       )
     )
     broken.add(room.id)
@@ -520,9 +521,9 @@ function names(ids: readonly string[], most = 6): string {
 }
 
 function unclaimedMessage(floor: string, piece: FloorPiece): string {
-  const walls = piece.walls.length > 0 ? `, between walls ${names(piece.walls)}` : ''
+  const walls = piece.walls.length > 0 ? `, between walls ${names(piece.walls.map(quoted))}` : ''
   return (
-    `Floor ${floor} has ${m2(piece.area)} of enclosed floor that no room claims, around ` +
+    `Floor ${quoted(floor)} has ${m2(piece.area)} of enclosed floor that no room claims, around ` +
     `${at(piece.at)}${walls}. It is in no room's area. If it is a room, draw it as one.`
   )
 }
@@ -547,7 +548,7 @@ function refusedRoomFor(floor: string, piece: FloorPiece, plan: FloorPlan, broke
 function mismatchMessage(m: RoomMismatch): string {
   if (m.enclosed < tolerance('areaReported')) {
     return (
-      `Room ${m.room} is not enclosed by its walls: none of its ${m2(m.area)} is floor that ` +
+      `Room ${quoted(m.room)} is not enclosed by its walls: none of its ${m2(m.area)} is floor that ` +
       `walls close off. Its outline is closed only by carrying the walls' lines on until they ` +
       `meet. Check that its walls reach each other.`
     )
@@ -557,26 +558,26 @@ function mismatchMessage(m: RoomMismatch): string {
   const listed = m.onWalls.filter((w) => w.listed)
   const sum = (list: readonly { area: number }[]): number => list.reduce((s, w) => s + w.area, 0)
   if (unlisted.length > 0) {
-    parts.push(`${m2(sum(unlisted))} of it lies on ${unlisted.length === 1 ? 'wall' : 'walls'} ${names(unlisted.map((w) => w.wall))}, which its wall list leaves out`)
+    parts.push(`${m2(sum(unlisted))} of it lies on ${unlisted.length === 1 ? 'wall' : 'walls'} ${names(unlisted.map((w) => quoted(w.wall)))}, which its wall list leaves out`)
   }
   if (listed.length > 0) {
-    parts.push(`${m2(sum(listed))} lies on its own ${listed.length === 1 ? 'wall' : 'walls'} ${names(listed.map((w) => w.wall))}`)
+    parts.push(`${m2(sum(listed))} lies on its own ${listed.length === 1 ? 'wall' : 'walls'} ${names(listed.map((w) => quoted(w.wall)))}`)
   }
   if (m.outside >= tolerance('areaReported')) parts.push(`${m2(m.outside)} lies outside the walls`)
   if (m.spaces.length > 1) {
     const lines = m.lines.length > 0
-      ? `, split by ${m.lines.length === 1 ? 'dividing line' : 'dividing lines'} ${names(m.lines)}, which its wall list leaves out`
+      ? `, split by ${m.lines.length === 1 ? 'dividing line' : 'dividing lines'} ${names(m.lines.map(quoted))}, which its wall list leaves out`
       : ''
     parts.push(`it covers parts of ${m.spaces.length} enclosed spaces (${names(m.spaces.map(two), 4)} m²)${lines}`)
   }
   if (m.sharedWith.length > 0) {
     parts.push(
       `it lies in one enclosed space with ${m.sharedWith.length === 1 ? 'room' : 'rooms'} ` +
-        `${names(m.sharedWith)}, and no wall or dividing line divides that space between them`
+        `${names(m.sharedWith.map(quoted))}, and no wall or dividing line divides that space between them`
     )
   }
   return (
-    `Room ${m.room} does not match the space its walls enclose. Its outline measures ` +
+    `Room ${quoted(m.room)} does not match the space its walls enclose. Its outline measures ` +
     `${m2(m.area)}: ${parts.join('; ')}. Its area counts all of it. Check its wall list.`
   )
 }
@@ -599,7 +600,7 @@ function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<s
           'floor',
           result.floor,
           'floor/spaces-unknown',
-          `The spaces the walls enclose on floor ${result.floor} could not be worked out: ` +
+          `The spaces the walls enclose on floor ${quoted(result.floor)} could not be worked out: ` +
             `${result.reason}. Floor that no room claims is not looked for there.`,
           'warning'
         )
@@ -621,8 +622,6 @@ function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<
   }
 }
 
-const quoted = (id: string): string => JSON.stringify(id)
-
 /**
  * Rooms marked `inside` that no room on their floor holds (`nesting.ts`). Their floor is
  * counted on its own and taken off nothing, which is what the plan said not to do.
@@ -637,14 +636,14 @@ function validateNesting(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<
       inner.reason !== undefined
         ? `the room it sits in could not be worked out: ${inner.reason}`
         : inner.nearest !== null
-          ? `${m2(inner.nearest.outside)} of it lies outside room ${inner.nearest.room}, the room that holds most of it`
-          : `no room on floor ${floor} covers any of it`
+          ? `${m2(inner.nearest.outside)} of it lies outside room ${quoted(inner.nearest.room)}, the room that holds most of it`
+          : `no room on floor ${quoted(floor)} covers any of it`
     issues.push(
       issue(
         'room',
         inner.room,
         'room/inside-no-host',
-        `Room ${inner.room} is marked as inside another room, but no room on floor ${floor} holds ` +
+        `Room ${quoted(inner.room)} is marked as inside another room, but no room on floor ${quoted(floor)} holds ` +
           `it: ${why}. Its floor is counted on its own and taken off no room. Draw it within the ` +
           `room it sits in, or leave out ${quoted('inside')}.`,
         'warning'
@@ -659,7 +658,7 @@ function overlapMessage(o: RoomOverlap): string {
   if (o.kind === 'same') {
     const walls = o.sameWalls ? ' and list the same walls' : ''
     return (
-      `Rooms ${a} and ${b} cover the same ${m2(o.shared)} of floor${walls}, so that floor is counted ` +
+      `Rooms ${quoted(a)} and ${quoted(b)} cover the same ${m2(o.shared)} of floor${walls}, so that floor is counted ` +
       `twice, once in each. If one is a copy of the other, remove it; if not, check their wall lists.`
     )
   }
@@ -667,15 +666,15 @@ function overlapMessage(o: RoomOverlap): string {
     const [inner, outer] = areaA <= areaB ? [a, b] : [b, a]
     const [innerArea, outerArea] = areaA <= areaB ? [areaA, areaB] : [areaB, areaA]
     return (
-      `Room ${inner} (${m2(innerArea)}) lies wholly inside room ${outer} (${m2(outerArea)}), so ` +
-      `${m2(o.shared)} of floor around ${at(o.at)} is counted twice, once in each. If ${inner} ` +
-      `sits inside ${outer}, as a wardrobe pod or an en-suite does, mark ${inner} with ` +
-      `${quoted('inside')}: true and its floor is taken off ${outer}. If not, check the wall list ` +
-      `of ${outer}: it most likely names a wall it should not.`
+      `Room ${quoted(inner)} (${m2(innerArea)}) lies wholly inside room ${quoted(outer)} (${m2(outerArea)}), so ` +
+      `${m2(o.shared)} of floor around ${at(o.at)} is counted twice, once in each. If ${quoted(inner)} ` +
+      `sits inside ${quoted(outer)}, as a wardrobe pod or an en-suite does, mark ${quoted(inner)} with ` +
+      `${quoted('inside')}: true and its floor is taken off ${quoted(outer)}. If not, check the wall list ` +
+      `of ${quoted(outer)}: it most likely names a wall it should not.`
     )
   }
   return (
-    `Rooms ${a} (${m2(areaA)}) and ${b} (${m2(areaB)}) overlap: ${m2(o.shared)} of floor around ` +
+    `Rooms ${quoted(a)} (${m2(areaA)}) and ${quoted(b)} (${m2(areaB)}) overlap: ${m2(o.shared)} of floor around ` +
     `${at(o.at)} lies in both, so it is counted twice. Check their wall lists: one of them most ` +
     `likely names a wall of the other.`
   )
@@ -701,7 +700,7 @@ function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: Readonl
         'floor',
         floor,
         'floor/overlaps-unknown',
-        `The rooms on floor ${floor} were not all compared to see whether they overlap: the plan has ` +
+        `The rooms on floor ${quoted(floor)} were not all compared to see whether they overlap: the plan has ` +
           `more than ${MAX_CUTS.toLocaleString('en')} pairs of rooms lying over each other, and Grid ` +
           `stopped there. The overlaps it found are listed.`,
         'warning'
@@ -715,7 +714,7 @@ function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: Readonl
         'room',
         b,
         'room/overlap-unknown',
-        `Rooms ${a} and ${b} could not be compared to see whether they overlap: ${u.reason}.`,
+        `Rooms ${quoted(a)} and ${quoted(b)} could not be compared to see whether they overlap: ${u.reason}.`,
         'warning'
       )
     )
@@ -755,10 +754,10 @@ function validateKinds(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<st
     const facing = [...new Set(sides.stretches.filter((s) => s.worked === 'exterior').flatMap((s) => [...s.left, ...s.right]))]
     const message =
       sides.differs.stands === 'kept'
-        ? `Wall ${sides.wall} is stated exterior, but rooms lie on both its sides along ${length} ` +
-          `(${names(inside)}). It is kept as an outside wall, as stated; if it is an inside wall, leave out its kind.`
-        : `Wall ${sides.wall} is stated a partition, but faces outside along ${length}: room ` +
-          `${names(facing)} lies on one side and no room on the other. It is treated as an outside wall.`
+        ? `Wall ${quoted(sides.wall)} is stated exterior, but rooms lie on both its sides along ${length} ` +
+          `(${names(inside.map(quoted))}). It is kept as an outside wall, as stated; if it is an inside wall, leave out its kind.`
+        : `Wall ${quoted(sides.wall)} is stated a partition, but faces outside along ${length}: room ` +
+          `${names(facing.map(quoted))} lies on one side and no room on the other. It is treated as an outside wall.`
     issues.push(issue('wall', sides.wall, 'wall/kind-differs', message, 'warning'))
   }
 }
@@ -820,7 +819,7 @@ export function validatePlan(
 
     if (room.boundary.some((wallId) => broken.has(wallId))) {
       issues.push(
-        issue('room', room.id, 'room/broken-wall', `Room ${room.id} rests on an invalid wall`)
+        issue('room', room.id, 'room/broken-wall', `Room ${quoted(room.id)} rests on an invalid wall`)
       )
       broken.add(room.id)
       continue
@@ -829,7 +828,7 @@ export function validatePlan(
     try {
       const polygon = roomPolygon(room, index)
       if (area(polygon) < tolerance('areaEqual')) {
-        issues.push(issue('room', room.id, 'room/empty', `Room ${room.id} encloses zero area`))
+        issues.push(issue('room', room.id, 'room/empty', `Room ${quoted(room.id)} encloses zero area`))
         broken.add(room.id)
       }
     } catch (error) {

@@ -137,7 +137,7 @@ describe('boundaries that are still wrong', () => {
       ],
       ['a', 'b', 'c', 'd', 'e']
     )
-    expect(() => polygonOf(stepped)).toThrow(/walls a and b are parallel/)
+    expect(() => polygonOf(stepped)).toThrow(/walls "a" and "b" are parallel/)
     expect(tryRoomPolygon(stepped.rooms[0]!, indexPlan(stepped))).toBeNull()
   })
 
@@ -153,7 +153,7 @@ describe('boundaries that are still wrong', () => {
       ],
       ['a', 'b', 'c', 'd', 'e']
     )
-    expect(() => polygonOf(broken)).toThrow(/walls d and e are parallel/)
+    expect(() => polygonOf(broken)).toThrow(/walls "d" and "e" are parallel/)
   })
 
   it('rejects walls that all lie on one line', () => {

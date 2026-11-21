@@ -122,8 +122,8 @@ describe('rooms that overlap', () => {
     plan.rooms[0] = room('a', ['s1', 'e', 'n1', 'w'])
     const issues = overlapIssues(plan)
     expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['room/overlap', 'a', 'warning']])
-    expect(issues[0]!.message).toMatch(/^Room b \(18\.24 m²\) lies wholly inside room a \(37\.24 m²\), so 18\.24 m² of floor around/)
-    expect(issues[0]!.message).toMatch(/If not, check the wall list of a: it most likely names a wall it should not\.$/)
+    expect(issues[0]!.message).toMatch(/^Room "b" \(18\.24 m²\) lies wholly inside room "a" \(37\.24 m²\), so 18\.24 m² of floor around/)
+    expect(issues[0]!.message).toMatch(/If not, check the wall list of "a": it most likely names a wall it should not\.$/)
   })
 
   it('a room drawn across two others: one line for each, naming both rooms and the floor they share', () => {
@@ -138,7 +138,7 @@ describe('rooms that overlap', () => {
     for (const o of found) expect(o.shared).toBeCloseTo(1.85 * 1.9, 9)
     const issues = overlapIssues(plan)
     expect(issues.map((i) => i.id)).toEqual(['a', 'b'])
-    expect(issues[0]!.message).toMatch(/^Rooms a \(18\.24 m²\) and c \(7\.41 m²\) overlap: 3\.52 m² of floor around \(\d+\.\d\d, \d+\.\d\d\) lies in both, so it is counted twice\./)
+    expect(issues[0]!.message).toMatch(/^Rooms "a" \(18\.24 m²\) and "c" \(7\.41 m²\) overlap: 3\.52 m² of floor around \(\d+\.\d\d, \d+\.\d\d\) lies in both, so it is counted twice\./)
     // The point lies in the floor both cover.
     expect(found[0]!.at.x).toBeGreaterThan(3.05)
     expect(found[0]!.at.x).toBeLessThan(4.9)
@@ -173,7 +173,7 @@ describe("the lab's villa with one wrong wall, and with a room listed twice (A-1
     }
     const issues = overlapIssues(plan)
     expect(issues.map((i) => [i.code, i.id])).toEqual([['room/overlap', 'master']])
-    expect(issues[0]!.message).toMatch(/^Room ensuite \(20\.74 m²\) lies wholly inside room master \(55\.59 m²\), so 20\.74 m² of floor/)
+    expect(issues[0]!.message).toMatch(/^Room "ensuite" \(20\.74 m²\) lies wholly inside room "master" \(55\.59 m²\), so 20\.74 m² of floor/)
   })
 
   it('a room listed twice: 34.14 m², once, on the copy', () => {
@@ -181,7 +181,7 @@ describe("the lab's villa with one wrong wall, and with a room listed twice (A-1
     const plan: FloorPlan = { ...villa, rooms: [...villa.rooms, { ...master, id: 'master-dup', name: 'Master bedroom copy' }] }
     const issues = overlapIssues(plan)
     expect(issues.map((i) => [i.code, i.id])).toEqual([['room/overlap', 'master-dup']])
-    expect(issues[0]!.message).toMatch(/^Rooms master and master-dup cover the same 34\.14 m² of floor and list the same walls/)
+    expect(issues[0]!.message).toMatch(/^Rooms "master" and "master-dup" cover the same 34\.14 m² of floor and list the same walls/)
   })
 })
 

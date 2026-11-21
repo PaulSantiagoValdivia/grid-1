@@ -87,9 +87,9 @@ describe('the escape-opening rule', () => {
   })
 
   it('reads its messages from fixed templates', () => {
-    expect(messages.noEscapeOpening('Bedroom 2')).toBe('Bedroom 2 has no window or door to escape through')
-    expect(messages.escapeWindowTooSmall('Bedroom 2')).toBe("Bedroom 2's window is too small to escape through")
-    expect(messages.escapeWindowTooHigh('Bedroom 2')).toBe("Bedroom 2's window is too high to escape through")
+    expect(messages.noEscapeOpening('Bedroom 2')).toBe('"Bedroom 2" has no window or door to escape through')
+    expect(messages.escapeWindowTooSmall('Bedroom 2')).toBe('The window of "Bedroom 2" is too small to escape through')
+    expect(messages.escapeWindowTooHigh('Bedroom 2')).toBe('The window of "Bedroom 2" is too high to escape through')
   })
 })
 
@@ -123,7 +123,7 @@ describe('which bedrooms are reported', () => {
     const [finding, ...rest] = escapes(bedroom([win('o1', 1.0, 1.2, 0.9)], { interiorBottom: true }))
     expect(rest).toEqual([])
     expect(finding).toMatchObject({ code: 'no_escape_opening', ruleId: 'escape-opening', floor: 'f', rooms: ['b'], openings: [] })
-    expect(finding!.message).toBe('Bedroom 2 has no window or door to escape through')
+    expect(finding!.message).toBe('"Bedroom 2" has no window or door to escape through')
   })
 
   it('no window at all, in a basement', () => {

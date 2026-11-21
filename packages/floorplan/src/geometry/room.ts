@@ -36,6 +36,7 @@ import type { Line, Vec2 } from './vec2'
 import { area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
 import { tolerance, tolerancesAsStated } from './tolerances'
 import { fixedText, metresText } from './rounding'
+import { quoted } from '../types/planText'
 import type { WallAxis } from './wall'
 import { wallAxis, wallFaces } from './wall'
 import type { RoomNesting } from './nesting'
@@ -208,7 +209,7 @@ function resolveWalls(room: Room, index: PlanIndex): Wall[] {
     if (!wall) {
       throw new RoomOutlineError(
         'room/unclosed',
-        `Room ${room.id} references wall ${wallId}, which does not exist`
+        `Room ${quoted(room.id)} references wall ${quoted(wallId)}, which does not exist`
       )
     }
     return wall
@@ -292,7 +293,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
   if (walls.length < 3) {
     throw new RoomOutlineError(
       'room/unclosed',
-      `Room ${room.id} has ${walls.length} walls; at least 3 are needed to close`
+      `Room ${quoted(room.id)} has ${walls.length} walls; at least 3 are needed to close`
     )
   }
 
@@ -317,7 +318,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
   if (runs.length < 3) {
     throw new RoomOutlineError(
       'room/unclosed',
-      `Room ${room.id} has ${runs.length} distinct sides; at least 3 are needed to close`
+      `Room ${quoted(room.id)} has ${runs.length} distinct sides; at least 3 are needed to close`
     )
   }
 
@@ -332,7 +333,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
     if (!at) {
       throw new RoomOutlineError(
         'room/unclosed',
-        `In room ${room.id}, walls ${a.wall.id} and ${b.wall.id} are parallel and form no ` +
+        `In room ${quoted(room.id)}, walls ${quoted(a.wall.id)} and ${quoted(b.wall.id)} are parallel and form no ` +
           `corner. The boundary may be out of order.`
       )
     }
@@ -396,7 +397,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
     if (step === 'none') {
       throw new RoomOutlineError(
         'room/unclosed',
-        `In room ${room.id}, walls ${last.piece.wall.id} and ${next.piece.wall.id} are parallel ` +
+        `In room ${quoted(room.id)}, walls ${quoted(last.piece.wall.id)} and ${quoted(next.piece.wall.id)} are parallel ` +
           `and form no corner. The boundary may be out of order.`
       )
     }
@@ -435,7 +436,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
     return done(
       new RoomOutlineError(
         'room/out-of-order',
-        `In room ${room.id}, walls ${stray.wallA} and ${stray.wallB} are listed one after the ` +
+        `In room ${quoted(room.id)}, walls ${quoted(stray.wallA)} and ${quoted(stray.wallB)} are listed one after the ` +
           `other but do not meet: their lines cross ${metres(Math.min(stray.offA, stray.offB))} ` +
           `away from both. The boundary is out of order, or a wall between them is missing. ` +
           `List the walls in the order they are met going round the room.`
@@ -449,8 +450,8 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
     return done(
       new RoomOutlineError(
         'room/out-of-order',
-        `In room ${room.id}, the outline crosses itself: the side along wall ${first} cuts ` +
-          `through the side along wall ${second}. The boundary is out of order. List the walls ` +
+        `In room ${quoted(room.id)}, the outline crosses itself: the side along wall ${quoted(first)} cuts ` +
+          `through the side along wall ${quoted(second)}. The boundary is out of order. List the walls ` +
           `in the order they are met going round the room.`
       )
     )
@@ -473,7 +474,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
     done(
       new RoomOutlineError(
         'room/inside-out',
-        `Room ${room.id} has no floor: walls ${a.id} and ${b.id} are thicker than the gap ` +
+        `Room ${quoted(room.id)} has no floor: walls ${quoted(a.id)} and ${quoted(b.id)} are thicker than the gap ` +
           `between them, so their inner faces cross. Move the walls apart or make them thinner.`
       )
     )
@@ -512,7 +513,7 @@ export function roomOutline(room: Room, index: PlanIndex): RoomOutline {
       return done(
         new RoomOutlineError(
           'room/inside-out',
-          `Part of room ${room.id} has no floor: somewhere its walls are thicker than the gap ` +
+          `Part of room ${quoted(room.id)} has no floor: somewhere its walls are thicker than the gap ` +
             `between them, so their inner faces cross. Move the walls apart or make them thinner.`
         )
       )

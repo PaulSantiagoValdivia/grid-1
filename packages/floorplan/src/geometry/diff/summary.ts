@@ -10,6 +10,7 @@
 import type { FloorPlan } from '../plan'
 import { planFloors } from '../floors'
 import { fixedText, metresText } from '../rounding'
+import { quoted } from '../../types/planText'
 import type { PlanChange, PropChange, WallMotion } from './types'
 
 function metres(value: number): string {
@@ -87,7 +88,7 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
     const virtual = prop(change, 'virtual')
     if (virtual) parts.push(virtual.after === true ? 'made virtual' : 'made solid')
     const floor = prop(change, 'floor')
-    if (floor) parts.push(`moved to ${floorName(text(floor.after))}`)
+    if (floor) parts.push(`moved to ${quoted(floorName(text(floor.after)))}`)
     return `Wall ${parts.join('; ')}`
   }
 
@@ -118,28 +119,28 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
 
   const roomSummary = (change: PlanChange): string => {
     const id = change.entity.id
-    if (change.kind === 'added') return `Room added: ${headRooms.get(id) ?? id}`
-    if (change.kind === 'removed') return `Room removed: ${baseRooms.get(id) ?? id}`
-    if (change.derived) return `${headRooms.get(id) ?? id} changed with its walls`
+    if (change.kind === 'added') return `Room added: ${quoted(headRooms.get(id) ?? id)}`
+    if (change.kind === 'removed') return `Room removed: ${quoted(baseRooms.get(id) ?? id)}`
+    if (change.derived) return `${quoted(headRooms.get(id) ?? id)} changed with its walls`
     const name = prop(change, 'name')
-    const subject = name ? text(name.before) : (headRooms.get(id) ?? id)
+    const subject = quoted(name ? text(name.before) : (headRooms.get(id) ?? id))
     const parts: string[] = []
-    if (name) parts.push(`renamed to ${text(name.after)}`)
+    if (name) parts.push(`renamed to ${quoted(text(name.after))}`)
     if (prop(change, 'boundary')) parts.push('walls changed')
     const floor = prop(change, 'floor')
-    if (floor) parts.push(`moved to ${floorName(text(floor.after))}`)
+    if (floor) parts.push(`moved to ${quoted(floorName(text(floor.after)))}`)
     return `${subject} ${parts.join('; ')}`
   }
 
   const floorSummary = (change: PlanChange): string => {
     const id = change.entity.id
-    if (change.kind === 'added') return `Floor added: ${headFloors.get(id) ?? id}`
-    if (change.kind === 'removed') return `Floor removed: ${baseFloors.get(id) ?? id}`
+    if (change.kind === 'added') return `Floor added: ${quoted(headFloors.get(id) ?? id)}`
+    if (change.kind === 'removed') return `Floor removed: ${quoted(baseFloors.get(id) ?? id)}`
 
     const name = prop(change, 'name')
-    const subject = name ? text(name.before) : (headFloors.get(id) ?? id)
+    const subject = quoted(name ? text(name.before) : (headFloors.get(id) ?? id))
     const parts: string[] = []
-    if (name) parts.push(`renamed to ${text(name.after)}`)
+    if (name) parts.push(`renamed to ${quoted(text(name.after))}`)
     const level = prop(change, 'level')
     if (level) parts.push(`level ${text(level.before)} → ${text(level.after)}`)
     return `${subject} ${parts.join('; ')}`

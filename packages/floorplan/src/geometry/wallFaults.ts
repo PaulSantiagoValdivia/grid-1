@@ -40,6 +40,7 @@ import { roomNesting, roomOutline } from './room'
 import { sitsWithin } from './nesting'
 import { tolerance } from './tolerances'
 import { areaText, metresText } from './rounding'
+import { quoted } from '../types/planText'
 import type { Vec2 } from './vec2'
 import { area, cross, dot, sub } from './vec2'
 import { wallAxis } from './wall'
@@ -394,7 +395,7 @@ function cornerFaults(ctx: Context, out: Map<string, WallFault>): void {
           continue
         }
         const edits = moveEnd(ctx, s, end, c.at)
-        const fix = fixOf(ctx, `move the ${end} of wall ${s.wall.id} to ${point(c.at)}.`, edits)
+        const fix = fixOf(ctx, `move the ${end} of wall ${quoted(s.wall.id)} to ${point(c.at)}.`, edits)
         out.set(id, {
           id,
           kind: 'short',
@@ -403,8 +404,8 @@ function cornerFaults(ctx: Context, out: Map<string, WallFault>): void {
           rooms: [room.id],
           distance: off,
           message: say(
-            `Wall ${s.wall.id} stops ${m(off)} short of its corner with wall ${other.wall.id} in room ` +
-              `${room.id}: its ${end} is at ${point(endPoint(s, end))} and the corner at ${point(c.at)}. ` +
+            `Wall ${quoted(s.wall.id)} stops ${m(off)} short of its corner with wall ${quoted(other.wall.id)} in room ` +
+              `${quoted(room.id)}: its ${end} is at ${point(endPoint(s, end))} and the corner at ${point(c.at)}. ` +
               `The room is measured as if the two walls met.`,
             fix
           ),
@@ -439,7 +440,7 @@ function cornerFaults(ctx: Context, out: Map<string, WallFault>): void {
           const target = at(a, along(a, at(ref, next.from)))
           const id = `gap:${ia}:${ib}`
           if (!out.has(id)) {
-            const fix = fixOf(ctx, `move the ${end} of wall ${ia} to ${point(target)}.`, moveEnd(ctx, a, end, target))
+            const fix = fixOf(ctx, `move the ${end} of wall ${quoted(ia)} to ${point(target)}.`, moveEnd(ctx, a, end, target))
             out.set(id, {
               id,
               kind: 'gap',
@@ -448,7 +449,7 @@ function cornerFaults(ctx: Context, out: Map<string, WallFault>): void {
               rooms: [room.id],
               distance: apart,
               message: say(
-                `Walls ${ia} and ${ib} are one straight side of room ${room.id}, but leave ${m(apart)} ` +
+                `Walls ${quoted(ia)} and ${quoted(ib)} are one straight side of room ${quoted(room.id)}, but leave ${m(apart)} ` +
                   `between their ends, at ${point(endPoint(a, end))} and ${point(target)}. The room is ` +
                   `measured as if the side were whole.`,
                 fix
@@ -543,13 +544,13 @@ function overrunFaults(ctx: Context, out: Map<string, WallFault>): void {
       if (touchesAnother(s, p, nearby.get(s) ?? [])) continue
       const id = `overrun:${s.wall.id}:${end}`
       const edits = moveEnd(ctx, s, end, last.at)
-      const fix = fixOf(ctx, `move the ${end} of wall ${s.wall.id} back to ${point(last.at)}.`, edits)
+      const fix = fixOf(ctx, `move the ${end} of wall ${quoted(s.wall.id)} back to ${point(last.at)}.`, edits)
       // When the other wall ends at the corner, the slip may be its: it may be meant to reach this end.
       const otherEnd = nearestEnd(last.other, last.at)
       const otherAt = endPoint(last.other, otherEnd)
       const theirs =
         Math.hypot(otherAt.x - last.at.x, otherAt.y - last.at.y) <= tolerance('gap')
-          ? ` If instead wall ${last.other.wall.id} is meant to reach ${point(p)}, move its ${otherEnd} there.`
+          ? ` If instead wall ${quoted(last.other.wall.id)} is meant to reach ${point(p)}, move its ${otherEnd} there.`
           : ''
       const otherwise =
         edits === null && openingsOf(ctx.index, s.wall.id).length > 0
@@ -563,8 +564,8 @@ function overrunFaults(ctx: Context, out: Map<string, WallFault>): void {
         rooms: [last.room],
         distance: past,
         message: say(
-          `Wall ${s.wall.id} runs ${m(past)} past its corner with wall ${last.other.wall.id} in room ` +
-            `${last.room}, at ${point(last.at)}, to ${point(p)}, where it meets no other wall.`,
+          `Wall ${quoted(s.wall.id)} runs ${m(past)} past its corner with wall ${quoted(last.other.wall.id)} in room ` +
+            `${quoted(last.room)}, at ${point(last.at)}, to ${point(p)}, where it meets no other wall.`,
           fix === null ? null : { ...fix, says: fix.says + theirs },
           otherwise
         ),
@@ -666,8 +667,8 @@ function overlapFaults(ctx: Context, out: Map<string, WallFault>): void {
     const kind: WallFaultKind = line(gone) && !line(kept) ? 'line-on-wall' : 'duplicate'
     const id = `${kind}:${gone.wall.id}`
     if (out.has(id)) continue
-    const goneName = line(gone) ? `line ${gone.wall.id}` : `wall ${gone.wall.id}`
-    const keptName = line(kept) ? `line ${kept.wall.id}` : `wall ${kept.wall.id}`
+    const goneName = line(gone) ? `line ${quoted(gone.wall.id)}` : `wall ${quoted(gone.wall.id)}`
+    const keptName = line(kept) ? `line ${quoted(kept.wall.id)}` : `wall ${quoted(kept.wall.id)}`
     let edits: WallEdit[] | null
     let says: string
     if (whole(shared, gone)) {
@@ -676,7 +677,7 @@ function overlapFaults(ctx: Context, out: Map<string, WallFault>): void {
       edits = kind === 'line-on-wall' && hasOpenings ? null : [...relist(ctx, gone.wall.id, kept.wall.id), ...moveOpenings(ctx, gone, kept), { op: 'remove-wall', wall: gone.wall.id }]
       says =
         `remove ${goneName}` +
-        (rooms.length > 0 ? `, and list ${keptName} in its place in room${rooms.length > 1 ? 's' : ''} ${list(rooms)}` : '') +
+        (rooms.length > 0 ? `, and list ${keptName} in its place in room${rooms.length > 1 ? 's' : ''} ${list(rooms.map(quoted))}` : '') +
         (!hasOpenings ? '.' : ', moving its openings onto it.')
     } else if (shared[0] <= tolerance('noLength') || shared[1] >= 1 - tolerance('noLength')) {
       // The shared stretch is at one end of the wall: take that end back to where the other ends.
@@ -692,11 +693,11 @@ function overlapFaults(ctx: Context, out: Map<string, WallFault>): void {
     const fix = fixOf(ctx, says, edits)
     const what =
       kind === 'line-on-wall'
-        ? `Dividing line ${gone.wall.id} lies on top of wall ${kept.wall.id} for ${m(length)}, so that stretch is both open and solid.`
+        ? `Dividing line ${quoted(gone.wall.id)} lies on top of wall ${quoted(kept.wall.id)} for ${m(length)}, so that stretch is both open and solid.`
         : `${goneName[0]!.toUpperCase()}${goneName.slice(1)} lies on top of ${keptName} for ${m(length)}: the drawing and every export show that stretch twice.`
     const otherwise =
       edits === null && kind === 'line-on-wall' && whole(shared, gone)
-        ? `It carries an opening, so Grid offers no change: say whether the opening belongs in wall ${kept.wall.id}, then remove the line.`
+        ? `It carries an opening, so Grid offers no change: say whether the opening belongs in wall ${quoted(kept.wall.id)}, then remove the line.`
         : edits === null
           ? `It runs past ${keptName} at both ends, so Grid offers no change: remove the stretch they share by hand.`
           : NO_FIX
@@ -738,7 +739,7 @@ function listedTwiceFaults(ctx: Context, out: Map<string, WallFault>): void {
         rooms: [room.id],
         distance: 0,
         message: say(
-          `Room ${room.id} lists wall ${wallId} ${at.length === 2 ? 'twice' : `${at.length} times`}, at places ` +
+          `Room ${quoted(room.id)} lists wall ${quoted(wallId)} ${at.length === 2 ? 'twice' : `${at.length} times`}, at places ` +
             `${list(at.map(String))} of its wall list.`,
           fix,
           'Listed once, the room has no outline: check its wall list.'
@@ -848,11 +849,11 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
         continue
       }
       const id = `crosses-room:${s.wall.id}:${room.id}`
-      const name = s.wall.virtual === true ? `Dividing line ${s.wall.id}` : `Wall ${s.wall.id}`
+      const name = s.wall.virtual === true ? `Dividing line ${quoted(s.wall.id)}` : `Wall ${quoted(s.wall.id)}`
       const fix = fixOf(
         ctx,
-        `split room ${room.id} along it, into ${split.ids[0]} (${areaText(split.areas[0])} m²) and ` +
-          `${split.ids[1]} (${areaText(split.areas[1])} m²), each listing it. If it should not be there, remove it instead.`,
+        `split room ${quoted(room.id)} along it, into ${quoted(split.ids[0])} (${areaText(split.areas[0])} m²) and ` +
+          `${quoted(split.ids[1])} (${areaText(split.areas[1])} m²), each listing it. If it should not be there, remove it instead.`,
         split.edits
       )
       out.set(id, {
@@ -863,7 +864,7 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
         rooms: [room.id],
         distance: inside,
         message: say(
-          `${name} runs ${m(inside)} across room ${room.id}, which does not list it, so the room is ` +
+          `${name} runs ${m(inside)} across room ${quoted(room.id)}, which does not list it, so the room is ` +
             `measured and checked as one space.`,
           fix,
           `Grid offers no change: split the room along it, or remove it if it should not be there.`
@@ -883,7 +884,7 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
         rooms: [room.id],
         distance: Math.max(...standing.map((w) => w.inside)),
         message:
-          `${one ? 'Wall' : 'Walls'} ${list(shown)} ${one ? 'stands' : 'stand'} inside room ${room.id}, which does not list ` +
+          `${one ? 'Wall' : 'Walls'} ${list(shown.map(quoted))} ${one ? 'stands' : 'stand'} inside room ${quoted(room.id)}, which does not list ` +
           `${one ? 'it' : 'them'}, so the room is measured as if ${one ? 'it were' : 'they were'} not there. If ${one ? 'it is' : 'they are'} ` +
           `a room inside it (a pod, a cupboard, a column), draw that room and mark it ${JSON.stringify('inside')}; if ` +
           `furniture, leave ${one ? 'it' : 'them'} out of the walls; if the room goes round ${one ? 'it' : 'them'}, add ${one ? 'it' : 'them'} to its wall list.`,

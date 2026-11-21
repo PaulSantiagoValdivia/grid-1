@@ -197,7 +197,7 @@ describe('walls in a row with different thickness', () => {
       [wall('a', [0, 0], [5, 0]), wall('b', [5, 0.5], [8, 0.5]), wall('e', [8, 0.5], [8, 4]), ...sides.slice(1)],
       [['r', ['a', 'b', 'e', 'n', 'w']]]
     )
-    expect(() => roomPolygon(apart.rooms[0]!, indexPlan(apart))).toThrow(/walls a and b are parallel/)
+    expect(() => roomPolygon(apart.rooms[0]!, indexPlan(apart))).toThrow(/walls "a" and "b" are parallel/)
   })
 })
 
@@ -261,6 +261,6 @@ describe('a wall list out of order', () => {
     const square: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
     const result = validatePlan(loop(square, 0.2, [0, 2, 1, 3]))
     expect(result.issues.map((issue) => issue.code)).toEqual(['room/unclosed'])
-    expect(result.issues[0]!.message).toMatch(/walls w1 and w3 are parallel/)
+    expect(result.issues[0]!.message).toMatch(/walls "w1" and "w3" are parallel/)
   })
 })

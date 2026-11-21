@@ -66,9 +66,9 @@ describe('a wall short of its corner (MS-2)', () => {
     expect(faults.map((f) => [f.id, f.kind, f.walls, f.rooms])).toEqual([['short:n:start', 'short', ['n', 'e'], ['r']]])
     expect(faults[0]!.distance).toBeCloseTo(1.5, 9)
     expect(faults[0]!.message).toBe(
-      'Wall n stops 1.50 m short of its corner with wall e in room r: its start is at (2.50, 3.00) and ' +
+      'Wall "n" stops 1.50 m short of its corner with wall "e" in room "r": its start is at (2.50, 3.00) and ' +
         'the corner at (4.00, 3.00). The room is measured as if the two walls met. Fix: move the start ' +
-        'of wall n to (4.00, 3.00).'
+        'of wall "n" to (4.00, 3.00).'
     )
     expect(faults[0]!.fix!.edits).toEqual([{ op: 'move-end', wall: 'n', end: 'start', to: [4, 3] }])
   })
@@ -132,7 +132,7 @@ describe('a wall short of its corner (MS-2)', () => {
     })
     const faults = faultsOf(plan)
     expect(faults.map((f) => f.id)).toEqual(['gap:s1:s2'])
-    expect(faults[0]!.message).toMatch(/^Walls s1 and s2 are one straight side of room r, but leave 0\.50 m between their ends/)
+    expect(faults[0]!.message).toMatch(/^Walls "s1" and "s2" are one straight side of room "r", but leave 0\.50 m between their ends/)
     expect(faults[0]!.fix!.edits).toEqual([{ op: 'move-end', wall: 's1', end: 'end', to: [2.5, 0] }])
     expect(faultsOf(tidyPlan(plan).plan)).toEqual([])
   })
@@ -162,9 +162,9 @@ describe('a wall past its corner', () => {
     const faults = faultsOf(planOf({ walls, rooms: [r] }))
     expect(faults.map((f) => f.id)).toEqual(['overrun:w2:end'])
     expect(faults[0]!.message).toBe(
-      'Wall w2 runs 1.00 m past its corner with wall w3 in room r1, at (5.00, 4.00), to (5.00, 5.00), ' +
-        'where it meets no other wall. Fix: move the end of wall w2 back to (5.00, 4.00). If instead wall ' +
-        'w3 is meant to reach (5.00, 5.00), move its start there.'
+      'Wall "w2" runs 1.00 m past its corner with wall "w3" in room "r1", at (5.00, 4.00), to (5.00, 5.00), ' +
+        'where it meets no other wall. Fix: move the end of wall "w2" back to (5.00, 4.00). If instead wall ' +
+        '"w3" is meant to reach (5.00, 5.00), move its start there.'
     )
   })
 
@@ -182,8 +182,8 @@ describe('a wall past its corner', () => {
     })
     const faults = faultsOf(plan)
     expect(faults.map((f) => [f.id, f.walls])).toEqual([['overrun:east:start', ['east', 'south']]])
-    expect(faults[0]!.message).toMatch(/Wall east runs 0\.30 m past its corner with wall south/)
-    expect(faults[0]!.message).toMatch(/If instead wall south is meant to reach \(4\.00, 0\.00\), move its end there\./)
+    expect(faults[0]!.message).toMatch(/Wall "east" runs 0\.30 m past its corner with wall "south"/)
+    expect(faults[0]!.message).toMatch(/If instead wall "south" is meant to reach \(4\.00, 0\.00\), move its end there\./)
   })
 
   it('leaves T-junctions and a long wall that borders several rooms', () => {
@@ -214,8 +214,8 @@ describe('walls on top of walls (MS-15, W-10, AE-5)', () => {
     const faults = faultsOf(plan)
     expect(faults.map((f) => [f.id, f.walls])).toEqual([['duplicate:copy', ['copy', 'w1']]])
     expect(faults[0]!.message).toBe(
-      'Wall copy lies on top of wall w1 for 5.00 m: the drawing and every export show that stretch twice. ' +
-        'Fix: remove wall copy, moving its openings onto it.'
+      'Wall "copy" lies on top of wall "w1" for 5.00 m: the drawing and every export show that stretch twice. ' +
+        'Fix: remove wall "copy", moving its openings onto it.'
     )
     const tidied = tidyPlan(plan).plan
     expect(tidied.walls.map((w) => w.id)).toEqual(['w1', 'w2', 'w3', 'w4'])
@@ -252,7 +252,7 @@ describe('walls on top of walls (MS-15, W-10, AE-5)', () => {
     const plan = planOf({ walls: [...walls, { ...walls[1]!, id: 'w2-copy' }], rooms: [{ ...r, boundary: ['w1', 'w2-copy', 'w3', 'w4'] }] })
     const [fault] = faultsOf(plan)
     expect(fault!.id).toBe('duplicate:w2-copy')
-    expect(fault!.message).toMatch(/Fix: remove wall w2-copy, and list wall w2 in its place in room r1\.$/)
+    expect(fault!.message).toMatch(/Fix: remove wall "w2-copy", and list wall "w2" in its place in room "r1"\.$/)
     const tidied = tidyPlan(plan).plan
     expect(tidied.rooms[0]!.boundary).toEqual(['w1', 'w2', 'w3', 'w4'])
     expect(validatePlan(tidied).issues).toEqual([])
@@ -264,7 +264,7 @@ describe('walls on top of walls (MS-15, W-10, AE-5)', () => {
     const extra = wall('more', [3, 0], [8, 0])
     const faults = faultsOf(planOf({ walls: [...walls, extra], rooms: [r] }))
     const dup = faults.find((f) => f.kind === 'duplicate')!
-    expect(dup.message).toMatch(/^Wall more lies on top of wall w1 for 2\.00 m/)
+    expect(dup.message).toMatch(/^Wall "more" lies on top of wall "w1" for 2\.00 m/)
     expect(dup.fix!.edits).toEqual([{ op: 'move-end', wall: 'more', end: 'start', to: [5, 0] }])
   })
 
@@ -284,8 +284,8 @@ describe('walls on top of walls (MS-15, W-10, AE-5)', () => {
     const faults = faultsOf(plan)
     expect(faults.map((f) => f.id)).toEqual(['line-on-wall:bay-e'])
     expect(faults[0]!.message).toBe(
-      'Dividing line bay-e lies on top of wall e for 5.00 m, so that stretch is both open and solid. ' +
-        'Fix: remove line bay-e, and list wall e in its place in room east-bay.'
+      'Dividing line "bay-e" lies on top of wall "e" for 5.00 m, so that stretch is both open and solid. ' +
+        'Fix: remove line "bay-e", and list wall "e" in its place in room "east-bay".'
     )
     const tidied = tidyPlan(plan).plan
     expect(tidied.rooms[1]!.boundary).toEqual(['s', 'e', 'n', 'mid'])
@@ -314,7 +314,7 @@ describe('a wall a room lists twice', () => {
     const plan = planOf({ walls, rooms: [{ ...r, boundary: ['w1', 'w2', 'w2', 'w3', 'w4'] }] })
     const faults = faultsOf(plan)
     expect(faults.map((f) => [f.id, f.message])).toEqual([
-      ['listed-twice:r1:w2', 'Room r1 lists wall w2 twice, at places 2 and 3 of its wall list. Fix: list it once, at place 2.']
+      ['listed-twice:r1:w2', 'Room "r1" lists wall "w2" twice, at places 2 and 3 of its wall list. Fix: list it once, at place 2.']
     ])
     expect(wallLines(plan).map((i) => [i.code, i.entity, i.id])).toEqual([['room/wall-listed-twice', 'room', 'r1']])
     expect(tidyPlan(plan).plan.rooms[0]!.boundary).toEqual(['w1', 'w2', 'w3', 'w4'])
@@ -344,8 +344,8 @@ describe('a wall across a room that does not list it (MS-17)', () => {
     const faults = faultsOf(plan)
     expect(faults.map((f) => [f.id, f.walls, f.rooms])).toEqual([['crosses-room:stray:bed', ['stray'], ['bed']]])
     expect(faults[0]!.message).toBe(
-      'Wall stray runs 3.00 m across room bed, which does not list it, so the room is measured and checked ' +
-        'as one space. Fix: split room bed along it, into bed (4.35 m²) and bed-2 (4.35 m²), each listing it. ' +
+      'Wall "stray" runs 3.00 m across room "bed", which does not list it, so the room is measured and checked ' +
+        'as one space. Fix: split room "bed" along it, into "bed" (4.35 m²) and "bed-2" (4.35 m²), each listing it. ' +
         'If it should not be there, remove it instead.'
     )
   })
@@ -374,7 +374,7 @@ describe('a wall across a room that does not list it (MS-17)', () => {
     })
     const faults = faultsOf(plan)
     expect(faults.map((f) => [f.id, f.walls, f.fix])).toEqual([['stands-in-room:r1', ['col', 'stub'], null]])
-    expect(faults[0]!.message).toMatch(/^Walls col and stub stand inside room r1, which does not list them/)
+    expect(faults[0]!.message).toMatch(/^Walls "col" and "stub" stand inside room "r1", which does not list them/)
   })
 
   it('leaves the walls of a room marked inside the room it sits in (ARE-5)', () => {

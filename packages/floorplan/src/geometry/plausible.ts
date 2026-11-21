@@ -17,6 +17,7 @@ import { tryRoomPolygon } from './room'
 import type { BuildingKind, ToleranceName } from './tolerances'
 import { limit } from './tolerances'
 import { fixedText } from './rounding'
+import { quoted } from '../types/planText'
 import type { Issue } from './validate'
 
 /** The room uses that make a plan a home. */
@@ -107,31 +108,31 @@ function wallQuestions(wall: Wall, others: readonly Wall[], building: BuildingKi
   // Against the other walls first: that names what the wall most likely should be.
   if (typicalHeight !== null && wall.height >= typicalHeight * limit('wallHigherThanTypical')) {
     asked.push(
-      `Wall ${wall.id} is ${size(wall.height)} m high, the others on its floor typically ` +
+      `Wall ${quoted(wall.id)} is ${size(wall.height)} m high, the others on its floor typically ` +
         `${size(typicalHeight)} m: is that meant? Grid stands a storey on its tallest wall, so this ` +
         `one makes the storey ${size(wall.height)} m high.`
     )
   } else if (wall.height > highest) {
     asked.push(
-      `Wall ${wall.id} is ${size(wall.height)} m high: is that meant? Grid asks about walls higher ` +
+      `Wall ${quoted(wall.id)} is ${size(wall.height)} m high: is that meant? Grid asks about walls higher ` +
         `than ${size(highest)} m${inHome(building)}, and stands a storey on its tallest wall.`
     )
   } else if (wall.height < limit('wallLowest', building)) {
     asked.push(
-      `Wall ${wall.id} is ${size(wall.height)} m high: is that meant? Grid asks about solid walls ` +
+      `Wall ${quoted(wall.id)} is ${size(wall.height)} m high: is that meant? Grid asks about solid walls ` +
         `lower than ${size(limit('wallLowest', building))} m.`
     )
   }
   const thickest = limit('wallThickest', building)
   if (wall.thickness < limit('wallThinnest', building)) {
     asked.push(
-      `Wall ${wall.id} is ${size(wall.thickness)} m thick: is that meant? Grid asks about solid ` +
+      `Wall ${quoted(wall.id)} is ${size(wall.thickness)} m thick: is that meant? Grid asks about solid ` +
         `walls thinner than ${size(limit('wallThinnest', building))} m. If it is a line on the ` +
         `floor with no substance, mark it virtual.`
     )
   } else if (wall.thickness > thickest) {
     asked.push(
-      `Wall ${wall.id} is ${size(wall.thickness)} m thick: is that meant? Grid asks about walls ` +
+      `Wall ${quoted(wall.id)} is ${size(wall.thickness)} m thick: is that meant? Grid asks about walls ` +
         `thicker than ${size(thickest)} m${inHome(building)}.`
     )
   }
@@ -142,7 +143,7 @@ const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as c
 
 function openingQuestions(opening: Opening, building: BuildingKind): string[] {
   const asked: string[] = []
-  const noun = `${OPENING_NOUN[opening.type]} ${opening.id}`
+  const noun = `${OPENING_NOUN[opening.type]} ${quoted(opening.id)}`
   const narrowest = limit('openingNarrowest', building)
   if (opening.width < narrowest) {
     const still = opening.type === 'door' ? ' It still counts as a way through.' : ''
@@ -217,7 +218,7 @@ export function validatePlausibility(
       'room',
       room.id,
       'room/size-question',
-      `Room ${room.id} measures ${squareMetres(measured)}: is that meant? Grid asks about rooms ` +
+      `Room ${quoted(room.id)} measures ${squareMetres(measured)}: is that meant? Grid asks about rooms ` +
         `larger than ${squareMetres(largest)}${inHome(building)}. Check its walls' coordinates and ` +
         `thickness.`
     )

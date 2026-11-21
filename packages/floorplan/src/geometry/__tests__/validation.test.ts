@@ -512,7 +512,7 @@ describe('lab failures fixed by MSG-12', () => {
     const issues = validatePlan(planOf({ walls: [...walls, { ...walls[0]!, id: 'copy' }], rooms: [room] })).issues
     expect(issues.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['wall/duplicate', 'wall', 'copy', 'warning']])
     expect(issues[0]!.message).toBe(
-      'Wall copy lies on top of wall w1 for 5.00 m: the drawing and every export show that stretch twice. Fix: remove wall copy.'
+      'Wall "copy" lies on top of wall "w1" for 5.00 m: the drawing and every export show that stretch twice. Fix: remove wall "copy".'
     )
   })
 })
@@ -535,7 +535,7 @@ describe('lab failures fixed by MSG-15', () => {
     const issues = issuesOf(planOf({ walls, rooms: [room] }))
     expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['wall/size-question', 'w1', 'warning']])
     expect(issues[0]!.message).toBe(
-      'Wall w1 is 27.00 m high, the others on its floor typically 2.70 m: is that meant? Grid stands ' +
+      'Wall "w1" is 27.00 m high, the others on its floor typically 2.70 m: is that meant? Grid stands ' +
         'a storey on its tallest wall, so this one makes the storey 27.00 m high. The limit is ' +
         "Grid's own, for catching a slipped digit or unit, and no rule."
     )
@@ -583,7 +583,7 @@ describe('lab failures fixed by MSG-15', () => {
     const issues = issuesOf(plan)
     expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['opening/out-of-wall', 'd', 'error']])
     expect(issues[0]!.message).toBe(
-      'Opening d runs from 4.01 to 4.91 m on wall w, which is 4.8996 m long: it runs 10 mm past ' +
+      'Opening "d" runs from 4.01 to 4.91 m on wall "w", which is 4.8996 m long: it runs 10 mm past ' +
         'the end of the wall, more than the 1 mm Grid allows. An offset from 0.00 to 3.9996 m fits.'
     )
   })
@@ -647,7 +647,7 @@ describe('lab failures fixed by MSG-15', () => {
     const issues = issuesOf(planOf({ walls: high, rooms: [{ ...room, use: 'bedroom' }] }))
     expect(issues.map((i) => i.code)).toEqual(['wall/size-question', 'wall/size-question', 'wall/size-question', 'wall/size-question'])
     expect(issues[0]!.message).toMatch(
-      /^Wall w1 is 12\.00 m high: is that meant\? Grid asks about walls higher than 10\.00 m in a home \(a room in this plan is a bedroom or a living room\)/
+      /^Wall "w1" is 12\.00 m high: is that meant\? Grid asks about walls higher than 10\.00 m in a home \(a room in this plan is a bedroom or a living room\)/
     )
   })
 
@@ -656,7 +656,7 @@ describe('lab failures fixed by MSG-15', () => {
     const plan = planOf({ walls, rooms: [room], openings: [{ id: 'd', wall: 'w1', type: 'door', offset: 1, width: 1e-9, height: 2.1 }] })
     const issues = issuesOf(plan)
     expect(issues.map((i) => [i.code, i.id])).toEqual([['opening/size-question', 'd']])
-    expect(issues[0]!.message).toMatch(/^Door d is 1e-9 m wide: is that meant\? Grid asks about openings narrower than 0\.20 m\. It still counts as a way through\./)
+    expect(issues[0]!.message).toMatch(/^Door "d" is 1e-9 m wide: is that meant\? Grid asks about openings narrower than 0\.20 m\. It still counts as a way through\./)
   })
 
   // Lab T-7: JSON reads 1e400 as infinity, and the schema used to accept it.
@@ -678,7 +678,7 @@ describe('lab failures fixed by MSG-15', () => {
       ['room/broken-wall', 'r1', 'error']
     ])
     expect(result.issues[0]!.message).toBe(
-      'Wall w1: its thickness is 1000000000 m, past the 10,000 km Grid accepts. A number this large ' +
+      'Wall "w1": its thickness is 1000000000 m, past the 10,000 km Grid accepts. A number this large ' +
         'is no building: most likely a digit or a unit slipped. Give every size in metres.'
     )
     expect(result.broken.has('w1')).toBe(true)
@@ -692,7 +692,7 @@ describe('lab failures fixed by MSG-15', () => {
     const built: FloorPlan = { version: '1', units: 'm', walls: [{ ...walls[0]!, end: [Infinity, 0] }, ...walls.slice(1)], rooms: [room], openings: [] }
     const issues = issuesOf(built)
     expect(issues[0]!.code).toBe('wall/too-large')
-    expect(issues[0]!.message).toMatch(/^Wall w1: a coordinate of its end is not a finite number\./)
+    expect(issues[0]!.message).toMatch(/^Wall "w1": a coordinate of its end is not a finite number\./)
   })
 
   // Lab AE-6: a 0.0015 m partition from a scan passed with no issue.
@@ -702,7 +702,7 @@ describe('lab failures fixed by MSG-15', () => {
     const issues = issuesOf(planOf({ walls: [...walls, thin], rooms: [room] })).filter((i) => i.code === 'wall/size-question')
     expect(issues.map((i) => i.id)).toEqual(['p'])
     expect(issues[0]!.message).toBe(
-      'Wall p is 0.0015 m thick: is that meant? Grid asks about solid walls thinner than 0.02 m. If ' +
+      'Wall "p" is 0.0015 m thick: is that meant? Grid asks about solid walls thinner than 0.02 m. If ' +
         'it is a line on the floor with no substance, mark it virtual. The limit is Grid\'s own, for ' +
         'catching a slipped digit or unit, and no rule.'
     )
@@ -733,7 +733,7 @@ describe('lab failures fixed by ARE-5', () => {
     const issues = issuesOf(planOf({ walls, rooms: [room, { ...room, id: 'r2', name: 'Again' }] }))
     expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['room/overlap', 'r2', 'warning']])
     expect(issues[0]!.message).toBe(
-      'Rooms r1 and r2 cover the same 18.24 m² of floor and list the same walls, so that floor is ' +
+      'Rooms "r1" and "r2" cover the same 18.24 m² of floor and list the same walls, so that floor is ' +
         'counted twice, once in each. If one is a copy of the other, remove it; if not, check their ' +
         'wall lists.'
     )
@@ -760,7 +760,7 @@ describe('lab failures fixed by ARE-4', () => {
       ['wall/short', 'w2', 'warning']
     ])
     expect(issues[0]!.message).toMatch(/not enclosed by its walls/)
-    expect(issues[1]!.message).toMatch(/^Wall w2 stops 1\.50 m short of its corner with wall w1 in room r1/)
+    expect(issues[1]!.message).toMatch(/^Wall "w2" stops 1\.50 m short of its corner with wall "w1" in room "r1"/)
   })
 
   it('MS-17 a wall that cuts a room in two without being listed is reported', () => {
@@ -772,9 +772,9 @@ describe('lab failures fixed by ARE-4', () => {
       ['room/space-mismatch', 'r1'],
       ['wall/crosses-room', 'cut']
     ])
-    expect(issues[0]!.message).toMatch(/lies on wall cut, which its wall list leaves out/)
+    expect(issues[0]!.message).toMatch(/lies on wall "cut", which its wall list leaves out/)
     expect(issues[0]!.message).toMatch(/covers parts of 2 enclosed spaces/)
-    expect(issues[1]!.message).toMatch(/^Wall cut runs 3\.80 m across room r1, which does not list it/)
+    expect(issues[1]!.message).toMatch(/^Wall "cut" runs 3\.80 m across room "r1", which does not list it/)
   })
 })
 

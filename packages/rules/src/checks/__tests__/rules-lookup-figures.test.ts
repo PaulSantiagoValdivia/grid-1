@@ -102,7 +102,7 @@ describe('a report with a looked-up figure', () => {
   it('applies it: the room is measured against the looked-up minimum, and the finding carries it', () => {
     expect(sizeFindings(withBedroom())).toEqual([])
     const [finding] = sizeFindings(withBedroom(), { figures })
-    expect(finding).toMatchObject({ rooms: ['bedroom'], minimum: 30, message: 'Bedroom is under 30 m²' })
+    expect(finding).toMatchObject({ rooms: ['bedroom'], minimum: 30, message: '"Bedroom" is under 30 m²' })
     expect(finding!.figures).toEqual([
       { key: 'habitableRoomMinArea', value: 30, unit: 'm²', origin: 'lookup', status: 'ai-found', source }
     ])

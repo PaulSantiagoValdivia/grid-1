@@ -145,7 +145,7 @@ describe('a flat drawn on its own', () => {
         floor: 'ground',
         rooms: [],
         openings: ['front'],
-        message: 'The way out of Ground floor was not checked: its only door out leads to a space that is not drawn'
+        message: 'The way out of "Ground floor" was not checked: its only door out leads to a space that is not drawn'
       }
     ])
   })

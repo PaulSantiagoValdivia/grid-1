@@ -35,6 +35,10 @@
  */
 import { z } from 'zod'
 
+// MSG-9: the limits and the character rule for the plan's text, and how Grid quotes it. The
+// schema does not apply the limits yet; see reviews/MSG-9.md.
+export * from './planText'
+
 /**
  * Every number in a plan is finite (MSG-15, lab T-7). JSON reads a number too large to hold,
  * such as 1e400, as infinity; `z.number()` alone would accept it, and every area and export

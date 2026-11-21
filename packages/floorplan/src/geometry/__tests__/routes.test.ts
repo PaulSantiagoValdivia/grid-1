@@ -37,9 +37,9 @@ describe('CH-7 rooms that reach no way in, when the way out is not checked', () 
   it('names both stores, though the front door leads to a landing not drawn', () => {
     const report = checkLocalRules(flat(true))
     expect(report.findings.map((f) => [f.code, f.rooms, f.message])).toEqual([
-      ['door_to_undrawn_space', ['hall'], 'A door from Hall leads to a space that is not drawn as a room'],
-      ['no_route_to_exit', ['store1'], 'Store 1 has no route to a door to the outside, nor to a door into a space that is not drawn'],
-      ['no_route_to_exit', ['store2'], 'Store 2 has no route to a door to the outside, nor to a door into a space that is not drawn']
+      ['door_to_undrawn_space', ['hall'], 'A door from "Hall" leads to a space that is not drawn as a room'],
+      ['no_route_to_exit', ['store1'], '"Store 1" has no route to a door to the outside, nor to a door into a space that is not drawn'],
+      ['no_route_to_exit', ['store2'], '"Store 2" has no route to a door to the outside, nor to a door into a space that is not drawn']
     ])
     expect(report.notChecked.map((n) => n.reason)).toEqual(['way_out_not_drawn'])
     expect(report.findings[1]!.through).toEqual([{ room: 'store2', via: 'bc' }])
