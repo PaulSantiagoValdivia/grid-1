@@ -13,7 +13,7 @@ import type { SKRSContext2D } from '@napi-rs/canvas'
 import { loadCanvas } from '../draw/canvas'
 import { drawPlan } from '../draw/drawPlan'
 import { drawStill } from '../draw/drawStill'
-import { SANS, SERIF, registerSheetFonts } from './fonts'
+import { SANS, SERIF, registerSheetFonts, sheetFont } from './fonts'
 import { PLAN_BOX, planPictureOptions, type Sheet, type SheetPage, type SheetRow, type SheetTable } from './pages'
 
 export const A3 = { width: 1191, height: 842 } as const
@@ -35,7 +35,7 @@ type Ctx = SKRSContext2D
 type Canvas = typeof import('@napi-rs/canvas')
 
 function font(ctx: Ctx, family: string, size: number, weight: 400 | 600 = 400): void {
-  ctx.font = `${weight} ${size}px "${family}"`
+  ctx.font = sheetFont(family, size, weight)
   // No ligatures: a ligature glyph has no text behind it in the PDF, so "Lift" would copy as
   // "Li". The canvas has no ligature switch of its own; this rendering hint turns them off.
   ctx.textRendering = 'optimizeSpeed'

@@ -3,7 +3,7 @@ import { pathToFileURL } from 'url'
 import { describe, expect, it, vi } from 'vitest'
 import { GlobalFonts } from '@napi-rs/canvas'
 import * as canvas from '@napi-rs/canvas'
-import { fontsFolder, SANS, SERIF, registerSheetFonts } from '../fonts'
+import { CJK_FONTS, fontsFolder, sheetFont, SANS, SERIF, registerSheetFonts } from '../fonts'
 
 describe('the sheet fonts (VEW-7)', () => {
   it('registers a serif and a sans under Grid\'s own names', () => {
@@ -38,5 +38,24 @@ describe('the sheet fonts (VEW-7)', () => {
     expect(fontsFolder(at('/x/node_modules/ongrid/chunks/sheet-AB12.mjs'))).toBe(folder('/x/node_modules/ongrid/fonts'))
     expect(fontsFolder(at('/x/server/grid.mjs'))).toBe(folder('/x/server/fonts'))
     expect(fontsFolder(at('/x/packages/cli/src/sheet/fonts.ts'))).toBe(folder('/x/packages/cli/fonts'))
+  })
+
+  it('sets each sheet font with the system\'s fonts after it, for what the bundled ones lack', () => {
+    for (const family of [SANS, SERIF]) {
+      const font = sheetFont(family, 12, 600)
+      expect(font.startsWith(`600 12px "${family}", `)).toBe(true)
+      expect(font.endsWith(', sans-serif')).toBe(true)
+    }
+  })
+  const cjk = CJK_FONTS.some((family) => GlobalFonts.has(family))
+  it.skipIf(!cjk)('draws a CJK name in a system font, not as the box (skipped when the machine has no CJK system font)', () => {
+    registerSheetFonts(canvas)
+    const ctx = canvas.createCanvas(10, 10).getContext('2d')
+    ctx.font = sheetFont(SANS, 40)
+    const box = ctx.measureText('\uE000').width
+    const name = ctx.measureText('家').width
+    expect(name).not.toBeCloseTo(box, 1)
+    // An ideograph is one em wide in every CJK face.
+    expect(name).toBeCloseTo(40, 0)
   })
 })
