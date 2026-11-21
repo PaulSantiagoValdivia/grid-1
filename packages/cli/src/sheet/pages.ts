@@ -75,6 +75,8 @@ export type SheetPicture =
   | { readonly kind: 'model' }
 export interface SheetPage {
   readonly kind: 'cover' | 'floor' | 'summary'
+  /** The floor a floor page, or its continuation, is about; null on the cover and the summary. */
+  readonly floor: string | null
   readonly topLine: string
   readonly title: string | null
   readonly subtitle: string | null
@@ -174,15 +176,18 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
 
   const limits = facts.stairRooms > 0 ? [CLIENT_LIMITS, STAIR_LIMIT] : [CLIENT_LIMITS]
   const cover: Body = {
-    kind: 'cover', topLine: title, title, subtitle: words?.headline ?? null,
+    kind: 'cover', floor: null, topLine: title, title, subtitle: words?.headline ?? null,
     paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' },
     notes: areas.grossInternal === null ? [GROSS_NOT_KNOWN] : [],
   }
-  const pages = floors.map((floor): Body => {
+  // Never an id here: floors that share a name are told apart by their place in the plan.
+  const named = (name: string) => floors.filter((f) => f.name === name).length
+  const pages = floors.map((floor, i): Body => {
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
     const leftOut = floorIssues(loaded, floor.id).some((issue) => loaded.broken.has(issue.id))
+    const floorTitle = named(floor.name) > 1 ? `${floor.name}, floor ${i + 1}` : floor.name
     return {
-      kind: 'floor', topLine: `${title} / ${floor.name}`, title: floor.name, subtitle: null,
+      kind: 'floor', floor: floor.id, topLine: `${title} / ${floorTitle}`, title: floorTitle, subtitle: null,
       paragraphs: words?.floors?.[floor.id] ?? [], figures: [],
       table: floorAreas ? areaTable(floorAreas, false) : null,
       picture: floorPicture(loaded, frames, floor.id, false),
@@ -221,7 +226,7 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     areaFigure(areas.grossExternal, 'gross external area'),
   ]
   const summary: Body = {
-    kind: 'summary', topLine: `${name} / Check set`, title: 'Check set', subtitle: null,
+    kind: 'summary', floor: null, topLine: `${name} / Check set`, title: 'Check set', subtitle: null,
     paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person').trim()],
     figures, table: null, picture: null,
     notes: [
@@ -243,8 +248,10 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
       ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine),
       ...result.report.notChecked.filter((n) => n.floor !== '').map(noticeLine),
     ]
+    // The floor's id, as each room's label carries the room's.
+    const floorTitle = `${floor.name} [${floor.id}]`
     return {
-      kind: 'floor', topLine: `${name} / ${floor.name}`, title: floor.name, subtitle: null,
+      kind: 'floor', floor: floor.id, topLine: `${name} / ${floorTitle}`, title: floorTitle, subtitle: null,
       paragraphs: [], figures: [],
       table: floorAreas ? areaTable(floorAreas, true) : null,
       picture: floorPicture(loaded, frames, floor.id, true),

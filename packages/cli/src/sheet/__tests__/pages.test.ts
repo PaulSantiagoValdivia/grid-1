@@ -455,3 +455,38 @@ describe('room labels on a floor page (VEW-7)', () => {
     }
   })
 })
+
+describe('floors with the same name (VEW-7)', () => {
+  /** The house with its two floors both called "Ground", and a third named apart. */
+  function sameNames(third: boolean): LoadedPlan {
+    const plan = structuredClone(house.plan)
+    for (const floor of plan.floors!) floor.name = 'Ground'
+    if (third) plan.floors!.push({ id: 'roof', name: 'Roof', level: 5 })
+    const { issues, broken } = validatePlan(plan)
+    return { file: 'same', plan, issues, broken }
+  }
+  const titles = (sheet: ReturnType<typeof sheetPages>) => sheet.pages.filter((p) => p.kind === 'floor').map((p) => p.title)
+
+  it('gives each floor\'s id in its title on the check layout, as room labels carry theirs', () => {
+    const sheet = sheetPages(sameNames(false), null, 'check', { name: 'x', date })
+    expect(titles(sheet)).toEqual(['Ground [ground]', 'Ground [first]'])
+    expect(sheet.pages[1]!.topLine).toBe('x / Ground [ground]')
+    expect(titles(sheetPages(house, null, 'check', { name: 'x', date }))).toEqual(house.plan.floors!.map((f) => `${f.name} [${f.id}]`))
+  })
+
+  it('numbers the floors that share a name on the client layout, and never gives an id', () => {
+    const sheet = sheetPages(sameNames(true), null, 'client', { name: 'x', date })
+    expect(titles(sheet)).toEqual(['Ground, floor 1', 'Ground, floor 2', 'Roof'])
+    expect(sheet.pages[1]!.topLine).toBe('x / Ground, floor 1')
+    for (const page of sheet.pages) expect(`${page.title} ${page.topLine}`).not.toContain('[')
+  })
+
+  it('leaves the client titles of floors with their own names as they are', () => {
+    expect(titles(sheetPages(house, null, 'client', { name: 'x', date }))).toEqual(house.plan.floors!.map((f) => f.name))
+  })
+
+  it.each(['client', 'check'] as const)('says which floor a floor page is, continued or not (%s)', (layout) => {
+    const sheet = sheetPages(sameNames(false), null, layout, { name: 'x', date })
+    expect(sheet.pages.map((p) => p.floor)).toEqual([null, 'ground', 'first'])
+  })
+})

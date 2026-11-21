@@ -68,7 +68,8 @@ export function readSheetWords(project: Project, planFile: string, loaded: Loade
 export interface MadeSheet {
   readonly loaded: LoadedPlan
   readonly pdf: Uint8Array
-  readonly pages: readonly { readonly kind: string; readonly title: string | null }[]
+  /** What is on each page; a floor page, or its continuation, also says which floor. */
+  readonly pages: readonly { readonly kind: string; readonly title: string | null; readonly floor?: string }[]
   /** The name of the file in `exports/`, and why Grid changed it, when it did. */
   readonly fileName: string
   readonly note?: string
@@ -81,7 +82,7 @@ export async function makeSheet(project: Project, planFile: string, layout: Shee
   const sheet = sheetPages(loaded, words, layout, { name: base, date: new Date() })
   // The laid-out sheet is the one written: text that did not fit flows onto continuation pages.
   const { pdf, sheet: laidOut } = await sheetPdf(loaded.plan, sheet)
-  const pages = laidOut.pages.map((page) => ({ kind: page.kind, title: page.title }))
+  const pages = laidOut.pages.map((page) => (page.floor === null ? { kind: page.kind, title: page.title } : { kind: page.kind, title: page.title, floor: page.floor }))
   const fileName = `${base}-${layout}.pdf`
   return note === undefined
     ? { loaded, pdf, pages, fileName }

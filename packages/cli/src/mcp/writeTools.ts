@@ -25,6 +25,7 @@ import {
   FLOOR_ARG,
   floorArg,
   listSchema,
+  NULLABLE_STRING,
   objectSchema,
   openingArg,
   PLAN_ARG,
@@ -177,7 +178,7 @@ const sheetTool: GridTool = {
       },
     },
   },
-  outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: { type: 'object' } }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
+  outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: objectSchema({ kind: STRING, title: NULLABLE_STRING, floor: STRING }, ['kind', 'title']) }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
   async run(args, context) {
     const layoutArg = args['layout'] as string
     const given = args['sheet'] as Record<string, unknown> | undefined

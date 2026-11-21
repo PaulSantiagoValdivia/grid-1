@@ -135,6 +135,16 @@ describe('grid_sheet (VEW-7)', () => {
     expect(reply.text).toContain('Left out 1 part that can\'t be drawn: grid check says which and why.')
   }, 60_000)
 
+  it('gives the floor id of each floor page', async () => {
+    const reply = await call({ plan: 'plan.json', layout: 'client' })
+    const pages = reply.data['pages'] as { kind: string; floor?: string }[]
+    expect(pages[0]).not.toHaveProperty('floor')
+    expect(pages.filter((p) => p.kind === 'floor').map((p) => p.floor)).toEqual(['ground'])
+    const schema = tool.outputSchema as { properties: { pages: { items: { properties: Record<string, unknown>; required: string[] } } } }
+    expect(Object.keys(schema.properties.pages.items.properties).sort()).toEqual(['floor', 'kind', 'title'])
+    expect(schema.properties.pages.items.required.sort()).toEqual(['kind', 'title'])
+  }, 60_000)
+
   it('takes the words as an object', async () => {
     const reply = await call({ plan: 'plan.json', layout: 'client', sheet: { version: '1', name: 'Test House' } })
     expect((reply.data['pages'] as { title: string }[])[0]!.title).toBe('Test House')

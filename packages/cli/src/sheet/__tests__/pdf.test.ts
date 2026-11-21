@@ -53,6 +53,7 @@ describe('the sheet as a PDF (VEW-7)', () => {
     const more = result.sheet.pages.filter((p) => p.title?.endsWith('(continued)'))
     expect(more.length).toBeGreaterThan(0)
     for (const page of more) { expect(page.picture).toBeNull(); expect(page.figures).toEqual([]) }
+    expect(more.every((page) => page.floor === sheet.pages[1]!.floor && page.floor !== null)).toBe(true)
   }, 60_000)
 
   it('numbers the footers 1 to n of n', async () => {
