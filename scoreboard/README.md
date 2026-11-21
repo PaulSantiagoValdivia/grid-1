@@ -87,14 +87,14 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after ARE-5) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after MSG-15) | The lab's own figure |
 |---|---:|---:|---:|
-| Rooms measured wrong | 1,975 | 203 | baseline 829 + 1,145 = 1,974 |
-| Damage that passes in silence | 560 | 468 | baseline 560 |
+| Rooms measured wrong | 1,975 | 197 | baseline 829 + 1,145 = 1,974 |
+| Damage that passes in silence | 560 | 447 | baseline 560 |
 | Turns answered | 15 | 15 | 15 |
 | Design mistakes named | 2 | 2 | 2 |
 | Checks the plan can feed | 5 | 5 | 5 |
-| Guard: rooms Grid does not measure | 1,284 | 712 | – |
+| Guard: rooms Grid does not measure | 1,284 | 724 | – |
 | Guard: sound plans with a warning | 70 | 70 | 70 |
 
 The baseline is commit `76caeb8`, the roadmap's reference point from before the week's work.
@@ -168,6 +168,24 @@ sits in) moved no count:
   to 237); `current.json` stores the new detail.
 - Sound plans with a warning stays 70: rooms that meet face to face give no overlap on any of
   the 442 sound plans, and a test holds that.
+
+MSG-15 (one table of tolerances and limits, numbers past `largest` refused, sizes far outside a
+building's asked about) moved three counts. Running the scoreboard with each changed figure put
+back (`withTolerances`) shows which change moved what: the 1 mm opening overrun and the 2 cm gap
+move no count, the refusal past `largest` moves the first and the guard, and the questions move
+the damage.
+
+- Rooms measured wrong, 203 to 197, and rooms Grid does not measure, 712 to 724. Twelve lab rooms
+  in eight probe plans rest on a wall past 10,000 km: a wall 1e9 m high (three plans), one
+  coordinate of 1e21, a whole plan moved to 1e8 m, and the plan at 1e7 m (two copies). Their
+  walls are refused now, with `wall/too-large`, and the rooms on them are not measured. Six of
+  the twelve had been measured wrong. The guard rises for that reason, a new refusal with a
+  clear message, and the new figure is stored.
+- Damage that passes in silence, 468 to 447, and plans caught vaguely, 237 to 209: 49 more
+  damaged plans name the damaged part (1,672 to 1,721). Putting back the overrun, the gap or
+  `largest` leaves these figures as they are, so they come from the new questions about sizes
+  (and from the smaller changes listed in `reviews/MSG-15.md`).
+- Sound plans with a warning stays 70: none of the 442 sound plans gets a question.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The

@@ -12,7 +12,11 @@ Notes for agents and people changing this repository.
 ## Layout
 
 - `packages/floorplan`: the plan schema, geometry, validation and exporters. It stays pure: no
-  React, no Three.js, no DOM and no network.
+  React, no Three.js, no DOM and no network. Every tolerance and limit a check uses lives in one
+  table, `src/geometry/tolerances.ts` (MSG-15), and is read through `tolerance()` or `limit()`;
+  `src/geometry/__tests__/tolerances.test.ts` fails on a tolerance literal anywhere else in the
+  geometry, validation or schema, and when the README's table no longer matches it. Its figures
+  are Grid's own drawing checks and cite no document.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule.
