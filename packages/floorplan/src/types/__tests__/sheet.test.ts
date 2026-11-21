@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { parseSheetWords, sheetWordsProblem, SHEET_PARAGRAPH_MAX, SheetWordsRefused } from '../sheet'
+import { z } from 'zod'
+import { jsonSchemaOf, parseSheetWords, sheetWordsProblem, SHEET_PARAGRAPH_MAX, SheetWordsRefused } from '../sheet'
 
 const floors = ['ground', 'first']
 const ok = { version: '1', name: 'Solace House', headline: 'A retreat', intro: ['One.'], floors: { ground: ['Two.'] } }
@@ -58,5 +59,10 @@ describe('sheet.json (VEW-7)', () => {
   })
   it('throws SheetWordsRefused from parseSheetWords', () => {
     expect(() => parseSheetWords({ version: '1', logo: 1 }, floors)).toThrow(SheetWordsRefused)
+  })
+  it('the JSON Schema walker throws on a zod type it does not handle, instead of skipping it', () => {
+    expect(() => jsonSchemaOf(z.number())).toThrow(/ZodNumber is not handled/)
+    expect(() => jsonSchemaOf(z.object({ a: z.boolean() }).strict())).toThrow(/ZodBoolean/)
+    expect(() => jsonSchemaOf(z.object({ a: z.string() }))).toThrow(/strict/)
   })
 })

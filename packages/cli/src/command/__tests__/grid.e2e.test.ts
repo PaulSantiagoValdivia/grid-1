@@ -403,6 +403,6 @@ describe('the launcher npm links as grid and ongrid', () => {
 describe('the built file', () => {
   it('starts with a shebang and is one file', () => {
     expect(readFileSync(bundle, 'utf8').startsWith('#!/usr/bin/env node\n')).toBe(true)
-    expect(statSync(bundle).size).toBeLessThan(500_000)
+    expect(statSync(bundle).size).toBeLessThan(400_000)
   })
 })

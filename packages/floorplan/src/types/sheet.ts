@@ -5,7 +5,7 @@
  * direction character or lone surrogate. One paragraph is one string. A refusal names the
  * field and the limit, never the text.
  */
-import { z } from 'zod/v4'
+import { z } from 'zod'
 import { NAME_MAX, quoted, UNSAFE_TEXT } from './planText'
 
 export const SHEET_HEADLINE_MAX = 200
@@ -104,9 +104,55 @@ export function parseSheetWords(raw: unknown, floorIds: readonly string[]): Shee
   return SheetWordsSchema.parse(raw) as SheetWords
 }
 
+type Json = Record<string, unknown>
+
+/**
+ * JSON Schema for the zod types the sheet schema uses: a strict object, a string with limits, a
+ * literal, an array with a limit, a record, and optional fields. Any other zod type throws, so a
+ * new kind of field fails a test instead of being left out of the schema a tool shows.
+ */
+export function jsonSchemaOf(schema: z.ZodTypeAny): Json {
+  const def = schema._def as { typeName: string } & Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any
+  switch (def.typeName) {
+    case 'ZodObject': {
+      if (def.unknownKeys !== 'strict') throw new Error('jsonSchemaOf: only a strict object is handled')
+      const shape = (schema as z.AnyZodObject).shape as Record<string, z.ZodTypeAny>
+      const required = Object.entries(shape).filter(([, field]) => field._def.typeName !== 'ZodOptional').map(([key]) => key)
+      return {
+        type: 'object',
+        properties: Object.fromEntries(Object.entries(shape).map(([key, field]) => [key, jsonSchemaOf(field)])),
+        ...(required.length > 0 ? { required } : {}),
+        additionalProperties: false,
+      }
+    }
+    case 'ZodOptional':
+      return jsonSchemaOf(def.innerType)
+    case 'ZodString': {
+      const out: Json = { type: 'string' }
+      for (const check of def.checks as { kind: string; value: number }[]) {
+        if (check.kind === 'min') out['minLength'] = check.value
+        else if (check.kind === 'max') out['maxLength'] = check.value
+        else throw new Error(`jsonSchemaOf: a string check "${check.kind}" is not handled`)
+      }
+      return out
+    }
+    case 'ZodLiteral':
+      return { type: typeof def.value, const: def.value }
+    case 'ZodArray':
+      return {
+        type: 'array',
+        items: jsonSchemaOf(def.type),
+        ...(def.maxLength ? { maxItems: def.maxLength.value } : {}),
+        ...(def.minLength ? { minItems: def.minLength.value } : {}),
+      }
+    case 'ZodRecord':
+      return { type: 'object', additionalProperties: jsonSchemaOf(def.valueType) }
+    default:
+      throw new Error(`jsonSchemaOf: the zod type ${def.typeName} is not handled`)
+  }
+}
+
 /** The schema of a sheet file as JSON Schema, for a tool that takes the words as an argument. */
-export function sheetWordsJsonSchema(): Record<string, unknown> {
-  const schema = z.toJSONSchema(SheetWordsSchema) as Record<string, unknown>
-  delete schema['$schema']
-  return schema
+export function sheetWordsJsonSchema(): Json {
+  return jsonSchemaOf(SheetWordsSchema)
 }
