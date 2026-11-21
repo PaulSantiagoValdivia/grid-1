@@ -38,8 +38,8 @@ Both layouts:
   count and the date.
 - The footer holds "General guidance, not your local rules" on every page. `sheet.json` cannot
   remove or change it. No page says a plan complies or is approved.
-- One drawing scale for every floor page of a sheet. A floor that does not fit its box at that
-  scale is refused, naming the floor; one floor is never drawn smaller than the others.
+- One drawing scale for every floor page of a sheet: the largest at which every floor fits its
+  box. One floor is never drawn smaller than the others, and no floor is ever cut off.
 
 ### Client layout
 
@@ -123,9 +123,12 @@ grid sheet [plan] --layout client|check [--sheet <file>] [--out <file>.pdf]
 
 ## The tool
 
-- `grid_sheet`, written once in the tool server, takes the command's arguments.
-- It can also take the words directly as a `sheet` object, so an agent can try wording without
-  writing a file. `sheet` and a sheet file together are refused.
+- `grid_sheet`, written once in the tool server, takes `plan` and `layout`, and writes into
+  `exports/` as `grid_export` does (no `out`).
+- It takes the words directly as a `sheet` object, so an agent can try wording without writing a
+  file; without one, it reads `sheet.json` beside the plan. `sheet` with the check layout is
+  refused. The tool server's argument kit
+  gains an `object` kind for it: its JSON Schema and its check both come from the sheet schema.
 - It returns the file's path, the page count and, for each page, what is on it. It never
   returns the PDF's bytes.
 - It goes after `grid_export` in the fixed order: it writes a file and does not change the plan.
@@ -180,7 +183,7 @@ system's fonts.
   - the label is on every page
   - every finding is on its floor's page
   - nothing from `sheet.json` is in the check layout
-  - a floor that does not fit is refused by name
+  - every floor page is drawn at the same scale
 - Coverage: the table's keys equal the schema's keys.
 - End to end, on the built `grid.mjs`:
   - a PDF is written with the expected page count
