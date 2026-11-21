@@ -32,7 +32,22 @@ function grid(args: readonly string[]): { status: number | null; out: string; er
   return { status: run.status, out: run.stdout.toString('utf8'), err: run.stderr.toString('utf8') }
 }
 
+/** The pages of a PDF: its page objects, as Skia writes them, one `/Type /Page` each. */
+function pageCount(file: string): number {
+  return readFileSync(file).toString('latin1').match(/\/Type\s*\/Page(?![A-Za-z])/g)?.length ?? 0
+}
+
 describe('grid sheet (VEW-7)', () => {
+  it.each(['client', 'check'])('writes the expected pages, the same twice (%s)', (layout) => {
+    // A cover or a summary, then one page per floor: the house has two floors and short words.
+    const file = join(dir, 'exports', `two-floor-house-${layout}.pdf`)
+    const counts = [1, 2].map(() => {
+      expect(grid(['sheet', 'two-floor-house.json', '--layout', layout]).status).toBe(0)
+      return pageCount(file)
+    })
+    expect(counts).toEqual([3, 3])
+  })
+
   it('writes a client sheet into exports/ beside the plan', () => {
     const run = grid(['sheet', 'two-floor-house.json', '--layout', 'client'])
     expect(run.err).toBe('')

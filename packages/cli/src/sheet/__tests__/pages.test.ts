@@ -1,7 +1,9 @@
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
+import { gunzipSync } from 'zlib'
 import { describe, expect, it } from 'vitest'
-import { validatePlan } from '@ongrid/floorplan/geometry'
+import { floorOf, planFloors, validatePlan } from '@ongrid/floorplan/geometry'
+import { areaText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkPlan } from '../../command/check'
@@ -9,7 +11,7 @@ import type { LoadedPlan } from '../../command/plan'
 import { planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
 import { planPicture } from '@ongrid/viewer/src/picture'
-import { floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, sheetPages } from '../pages'
+import { floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, sheetPages, type SheetPicture } from '../pages'
 
 function fixture(name: string): LoadedPlan {
   const plan = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures', name), 'utf8')))
@@ -52,6 +54,24 @@ describe('the client layout (VEW-7)', () => {
     for (const floor of areas.floors) {
       const page = sheet.pages.find((p) => p.picture?.kind === 'plan' && p.picture.floor === floor.floor)!
       expect(page.table!.rows.map((r) => r.name)).toEqual(floor.rooms.map((r) => r.name))
+    }
+  })
+
+  it.each(['client', 'check'] as const)('shows every area as planAreas gives it, through sumText and areaText (%s)', (layout) => {
+    const areas = planAreas(surveyPlan(house.plan))
+    const made = sheetPages(house, words, layout, { name: 'two-floor-house', date })
+    for (const floor of areas.floors) {
+      const page = made.pages.find((p) => p.picture?.kind === 'plan' && p.picture.floor === floor.floor)!
+      const shown = sumText(floor.rooms.map((r) => r.net), floor.net, 1)
+      expect(page.table!.rows.map((r) => [r.name, r.area])).toEqual(floor.rooms.map((r, i) => [r.name, shown.parts[i]]))
+      expect(page.table!.total).toMatchObject({ name: 'Net area', area: shown.total })
+    }
+    const figure = (label: string) => made.pages[0]!.figures.find((f) => f.label === label)?.value
+    expect(areas.grossInternal).not.toBeNull()
+    expect(figure('gross internal area')).toBe(`${areaText(areas.grossInternal!, 1)} m²`)
+    if (layout === 'check') {
+      expect(figure('net area')).toBe(`${areaText(areas.net, 1)} m²`)
+      expect(figure('gross external area')).toBe(`${areaText(areas.grossExternal!, 1)} m²`)
     }
   })
 
@@ -179,10 +199,19 @@ describe('the check layout (VEW-7)', () => {
   })
 
   it('lists every finding on its own floor', () => {
-    for (const page of sheet.pages.slice(1)) {
-      const floorId = page.picture?.kind === 'plan' ? page.picture.floor : ''
-      const result = checkPlan(house, { floor: floorId })
-      for (const finding of result.report.findings) expect(page.notes).toContain(finding.message)
+    // Bedroom 2 loses its only door, so the check finds it shut off (as grid.e2e.test.ts does).
+    const flat = fixture('two-bed-flat.json')
+    const plan = { ...flat.plan, openings: flat.plan.openings.filter((o) => o.id !== 'bed2-door') }
+    const { issues, broken } = validatePlan(plan)
+    const shut: LoadedPlan = { file: 'shut', plan, issues, broken }
+    const findings = checkPlan(shut, {}).report.findings
+    expect(findings.length).toBeGreaterThan(0)
+    const made = sheetPages(shut, null, 'check', { name: 'shut', date })
+    expect(made.pages[0]!.figures.find((f) => f.label === 'findings')!.value).toBe(String(findings.length))
+    for (const finding of findings) {
+      const page = made.pages.find((p) => p.picture?.kind === 'plan' && p.picture.floor === finding.floor)!
+      expect(page.notes).toContain(finding.message)
+      for (const other of made.pages.filter((p) => p !== page)) expect(other.notes).not.toContain(finding.message)
     }
   })
 
@@ -222,5 +251,79 @@ describe('a part that cannot be drawn (VEW-7)', () => {
     const sheet = sheetPages(broken, null, 'check', { name: 'x', date })
     expect(floorPage(sheet, 'first').notes.some((n) => n.startsWith('Left out, room "study": '))).toBe(true)
     expect(floorPage(sheet, 'ground').notes.some((n) => n.startsWith('Left out, '))).toBe(false)
+  })
+})
+
+/** A few of the lab's plans, read from the scoreboard's data: a basement, three and four floors, a part left out, ids that clash. */
+const LAB_SAMPLE = [
+  'A/scenarios/basement-flat.json',
+  'A/scenarios/townhouse.json',
+  'AU2/scenarios/H-h06-lift-four-floors/plan.json',
+  'AU1/scenarios/AR-12/room-narrower-than-its-walls.json',
+  'A/scenarios/probes/townhouse-v1-id-clash.json',
+]
+
+function labPlans(): Map<string, LoadedPlan> {
+  const repo = resolve(__dirname, '../../../../..')
+  const lines = gunzipSync(readFileSync(resolve(repo, 'scoreboard/data/lab-plans.ndjson.gz'))).toString('utf8').split('\n')
+  const found = new Map<string, LoadedPlan>()
+  for (const line of lines) {
+    if (!line) continue
+    const row = JSON.parse(line) as { name: string; text: string }
+    if (!LAB_SAMPLE.includes(row.name)) continue
+    const plan = FloorPlanSchema.parse(JSON.parse(row.text))
+    const { issues, broken } = validatePlan(plan)
+    found.set(row.name, { file: row.name, plan, issues, broken })
+  }
+  return found
+}
+
+describe('the page list on the lab\'s plans (VEW-7)', () => {
+  const plans = labPlans()
+
+  it('finds every plan of the sample', () => {
+    expect([...plans.keys()].sort()).toEqual([...LAB_SAMPLE].sort())
+  })
+
+  describe.each(LAB_SAMPLE)('%s', (name) => {
+    const loaded = plans.get(name)!
+    const floors = planFloors(loaded.plan)
+    const labWords = { version: '1' as const, name: 'Lab Words House', headline: 'Lab headline words', intro: ['Lab intro words.'], floors: Object.fromEntries(floors.map((f) => [f.id, [`Lab words for ${f.id}.`]])) }
+    const sheets = {
+      client: sheetPages(loaded, labWords, 'client', { name: 'lab', date }),
+      check: sheetPages(loaded, labWords, 'check', { name: 'lab', date }),
+    }
+    const floorPages = (sheet: ReturnType<typeof sheetPages>) => sheet.pages.filter((p) => p.picture?.kind === 'plan')
+
+    it.each(['client', 'check'] as const)('has a page for every floor, every room in its floor\'s table (%s)', (layout) => {
+      const pages = floorPages(sheets[layout])
+      expect(pages.map((p) => (p.picture as { floor: string }).floor)).toEqual(floors.map((f) => f.id))
+      for (const floor of floors) {
+        const page = pages.find((p) => (p.picture as { floor: string }).floor === floor.id)!
+        const rows = page.table?.rows.map((r) => r.name) ?? []
+        const rooms = loaded.plan.rooms.filter((r) => floorOf(r) === floor.id && !loaded.broken.has(r.id)).map((r) => r.name)
+        for (const room of rooms) expect(rows).toContain(room)
+      }
+    })
+
+    it.each(['client', 'check'] as const)('puts the label on every page (%s)', (layout) => {
+      for (const page of sheets[layout].pages) expect(page.footer.label).toBe(GENERAL_GUIDANCE_LABEL)
+    })
+
+    it('takes nothing from sheet.json on the check layout', () => {
+      expect(JSON.stringify(sheets.check)).not.toMatch(/Lab (Words House|headline words|intro words|words for)/)
+    })
+
+    it.each(['client', 'check'] as const)('draws every floor at one scale (%s)', (layout) => {
+      const box = { width: PLAN_BOX.width, height: PLAN_BOX.height }
+      const views = floorPages(sheets[layout]).map((p) => {
+        const picture = p.picture as Extract<SheetPicture, { kind: 'plan' }>
+        return planPicture(loaded.plan, { floor: picture.floor, ...box, frame: picture.frame }).view
+      })
+      for (const view of views) {
+        expect(view.width).toBeCloseTo(views[0]!.width, 9)
+        expect(view.height).toBeCloseTo(views[0]!.height, 9)
+      }
+    })
   })
 })
