@@ -10,7 +10,7 @@
 import { floorOf, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkPlan } from '../command/check'
-import { describePlan } from '../command/describe'
+import { describePlan, describeRooms } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
@@ -696,19 +696,28 @@ const describeTool: GridTool = {
   description:
     'Use this when the person asks what is in the plan, what the rooms are and how they connect, which side a door or window is on, or when you need to read the plan before changing it. '
     + 'It gives the plan in rooms: each room with its inside size and area, the rooms next to it, and each door and window with the side it is on, its distance from the corners and the two rooms it joins. '
-    + 'length=line is one line, rooms (the default) each room, walls also every wall. for=person never shows an id; for=agent is terse and gives the ids to edit with. Do not use for an area table (grid_areas) or a picture (grid_view). Units are metres.',
+    + 'length=line is one line, rooms (the default) each room, walls also every wall. for=person never shows an id; for=agent is terse and gives the ids to edit with. '
+    + 'as=rooms reads the plan back as rooms text instead, the way plans are written: change it and pass it to grid_write_rooms, which writes it back losing nothing. Do not use for an area table (grid_areas) or a picture (grid_view). Units are metres.',
   args: {
     plan: PLAN_ARG,
     length: { type: 'string', enum: DESCRIBE_LENGTHS, description: 'line, rooms or walls. rooms when left out.', examples: ['rooms', 'line'] },
     for: { type: 'string', enum: DESCRIBE_AUDIENCES, description: 'person (names only, no ids) or agent (terse, with ids). agent when left out.', examples: ['agent', 'person'] },
+    as: { type: 'string', enum: ['rooms'], description: 'rooms: the plan as rooms text, to change and write again with grid_write_rooms. Takes no length or for.', examples: ['rooms'] },
   },
-  outputSchema: objectSchema({ length: STRING, for: STRING, text: STRING }),
+  outputSchema: objectSchema({ length: { type: ['string', 'null'] }, for: { type: ['string', 'null'] }, as: { type: ['string', 'null'] }, text: STRING }),
   run(args, context) {
+    if (args['as'] !== undefined && (args['length'] !== undefined || args['for'] !== undefined)) {
+      throw new ToolRefusal('as=rooms reads the plan back as rooms text, which has no length or for: leave them out.')
+    }
     const { loaded } = readPlan(context, args['plan'])
+    if (args['as'] === 'rooms') {
+      const text = describeRooms(loaded)
+      return { text, data: { length: null, for: null, as: 'rooms', text } }
+    }
     const length = (args['length'] as (typeof DESCRIBE_LENGTHS)[number] | undefined) ?? 'rooms'
     const audience = (args['for'] as (typeof DESCRIBE_AUDIENCES)[number] | undefined) ?? 'agent'
     const text = describePlan(loaded, length, audience)
-    return { text, data: { length, for: audience, text } }
+    return { text, data: { length, for: audience, as: null, text } }
   },
 }
 

@@ -1,0 +1,168 @@
+/**
+ * `grid write <plan.rooms>` (WRT-2): writes a plan from rooms text. The agent names the rooms
+ * with their sizes and neighbours, and the doors and windows by the rooms they join; Grid works
+ * out the walls, their kinds, each room's boundary and each opening's place, and writes them
+ * into the plan file.
+ *
+ * The plan file is the source of truth, and its walls stay in it and stay editable; rooms text
+ * is a way of writing it, and `grid describe --as rooms` reads any plan back as rooms text. So
+ * writing never loses a change made to the plan some other way: rooms text read from an
+ * earlier version of the plan (its `based on` line), or written over a plan that was changed
+ * since Grid last wrote it from rooms text, is refused with the difference, and nothing is
+ * written. `--replace` writes over it anyway.
+ *
+ * The tool server's `grid_write_rooms` does the same through `writeRoomsIntoProject`.
+ */
+import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
+import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import type { Project } from '../fs/projectFiles'
+import { TextNotDecoded } from '../fs/textEncoding'
+import { comparePlans } from '../quantities/compare'
+import { surveyPlan } from '../quantities/survey'
+import starterPlan from './starter-plan.json'
+import { loadPlan, PlanRefused } from './plan'
+import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
+import { PROJECT_OPTION, type OptionSpecs } from './options'
+
+export const WRITE_OPTIONS: OptionSpecs = {
+  '--plan': {
+    takesValue: true,
+    help: 'The plan file to write, ending in .json. In a project folder, its plan.json when left out.',
+  },
+  '--replace': {
+    takesValue: false,
+    help: 'Write over a plan that was not written from this rooms text, or was changed since. Grid refuses that otherwise, with the difference.',
+  },
+  '--json': { takesValue: false, help: 'Print the answer as JSON.' },
+  ...PROJECT_OPTION,
+}
+
+/** Why rooms text was not written: its problems, or a plan that would lose a change. The message is one line. */
+export class RoomsRefused extends Error {
+  override readonly name = 'RoomsRefused'
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly problems: readonly string[] = []
+  ) {
+    super(message)
+  }
+}
+
+export interface WriteDone {
+  readonly written: string
+  readonly result: RoomsResult
+  readonly plan: FloorPlan
+  /** The comparison with the plan before, or null when there was none. */
+  readonly verdict: string | null
+  readonly drawingProblems: { readonly before: number; readonly after: number }
+  readonly lines: readonly string[]
+}
+
+function oneLine(text: string): string {
+  return text.replace(/\s+/g, ' ').trim()
+}
+
+const STARTER_REVISION = planRevision(FloorPlanSchema.parse(starterPlan))
+
+/** A plan that holds nothing yet, or is still the starter plan `grid init` wrote. */
+function nothingToLose(plan: FloorPlan): boolean {
+  if (plan.walls.length + plan.rooms.length + plan.openings.length === 0) return true
+  return planRevision(plan) === STARTER_REVISION
+}
+
+/** Reads rooms text from a file in the project. */
+export function readRoomsFile(project: Project, file: string): string {
+  try {
+    return project.readText(file, PLAN_FILE_MAX_BYTES).text
+  } catch (error) {
+    if (error instanceof TextNotDecoded) throw new PlanRefused(oneLine(error.message))
+    if (!(error as NodeJS.ErrnoException).code) throw error
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') throw new PlanRefused(`There is no file ${file}.`)
+    if (code === 'EISDIR') throw new PlanRefused(`${file} is a folder, not rooms text.`)
+    if (code === 'EFBIG') throw new PlanRefused(`${file} is larger than ${PLAN_FILE_MAX_BYTES / 1024 / 1024} MB, the most Grid reads.`)
+    throw new PlanRefused(`${file} can't be read: ${oneLine((error as Error).message)}`)
+  }
+}
+
+/** What writing would change, in a sentence, for a refusal. */
+function differenceLine(before: FloorPlan, after: FloorPlan): string {
+  return comparePlans(surveyPlan(before), surveyPlan(after), ['the plan now', 'the plan this text writes']).verdict
+}
+
+/**
+ * Writes rooms text into the plan file `planFile`. Refuses with `RoomsRefused` (the text's
+ * problems, or a plan that would lose a change), `PlanRefused` (a plan file that is there but
+ * is not a plan) or the project's `PathRefused`; nothing is written then.
+ */
+/** Rooms past which the tool's answer lists only what is not plain: sizes to the walls, guesses, warnings. */
+export const ROOMS_LISTED_MAX = 12
+
+export function writeRoomsIntoProject(project: Project, text: string, planFile: string, options: { readonly replace?: boolean; readonly brief?: boolean } = {}): WriteDone {
+  if (!planFile.toLowerCase().endsWith('.json')) throw new RoomsRefused('rooms/plan-file', `The plan to write must be a .json file: got ${JSON.stringify(planFile)}.`)
+  const result = compileRoomsText(text)
+  if (result.plan === null) {
+    const lines = problemLines(result)
+    const more = lines.length > 1 ? ` (${lines.length - 1} more: ${lines.slice(1).join(' | ')})` : ''
+    throw new RoomsRefused(result.problems[0]?.code ?? 'rooms/syntax', `The rooms text was not written, and the plan is as it was: ${lines[0] ?? 'it could not be read'}${more}`, lines)
+  }
+  // The text's names and ids are held to the plan file's own limits (MSG-9).
+  const problem = planTextProblem(result.plan as unknown as Record<string, unknown>)
+  if (problem !== null) throw new RoomsRefused('rooms/text-limit', `The rooms text was not written: ${problem}.`)
+  const parsed = FloorPlanSchema.safeParse(result.plan)
+  if (!parsed.success) {
+    const first = parsed.error.issues[0]
+    throw new RoomsRefused('rooms/schema', `The rooms text was not written: the plan it makes does not fit the plan's format at ${first?.path.join('.') ?? 'its top'} (${first?.message ?? 'invalid'}).`)
+  }
+  const plan = parsed.data
+
+  // The plan now, if there is one, and whether writing over it would lose a change.
+  let before: FloorPlan | null = null
+  let raw: Record<string, unknown> = { version: '1', units: 'm' }
+  // The plan as a person sees its name: relative to the folder Grid runs in.
+  const shownFile = project.shown(project.resolve(planFile))
+  if (project.exists(planFile)) {
+    const loaded = loadPlan(project, planFile)
+    before = loaded.plan
+    raw = JSON.parse(project.readText(planFile, PLAN_FILE_MAX_BYTES).text) as Record<string, unknown>
+    const now = planRevision(before)
+    if (options.replace !== true) {
+      if (result.basedOn !== null && result.basedOn !== now) {
+        throw new RoomsRefused(
+          'rooms/stale',
+          `This rooms text was read from another version of ${shownFile} (based on ${result.basedOn}; the plan is now ${now}), so writing it would undo what changed since. ${differenceLine(before, plan)} Read the plan back again (grid describe --as rooms), make the change there and write that; or pass --replace to write over it.`
+        )
+      }
+      const unchanged = before.written !== undefined && before.written.revision === now
+      if (result.basedOn === null && !unchanged && !nothingToLose(before)) {
+        const why = before.written === undefined ? 'was not written from rooms text' : 'was changed since Grid last wrote it from rooms text'
+        throw new RoomsRefused(
+          'rooms/plan-changed',
+          `${shownFile} ${why}, and writing this text over it would lose that. ${differenceLine(before, plan)} Read the plan back as rooms text (grid describe --as rooms), which keeps it, and change that; or pass --replace to write over it.`
+        )
+      }
+    }
+  }
+
+  // Everything the rooms text does not hold stays as the file has it: its id, its picture.
+  const next: Record<string, unknown> = { ...raw, version: '1', units: 'm' }
+  delete next['floors']
+  if (plan.floors !== undefined) next['floors'] = plan.floors
+  next['walls'] = plan.walls
+  next['rooms'] = plan.rooms
+  next['openings'] = plan.openings
+  next['written'] = stampFor(plan)
+  const written = project.relative(project.writeFile(planFile, `${JSON.stringify(next, null, 2)}\n`))
+
+  const verdict = before === null || nothingToLose(before) ? null : comparePlans(surveyPlan(before), surveyPlan(plan), ['the plan before', 'the plan now']).verdict
+  const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(plan).issues.length }
+  const lines = [
+    `Wrote ${written} from rooms text: the walls, their kinds, the room boundaries and the openings' places are worked out by Grid.`,
+    ...roomsAnswer(result, options.brief !== true || result.rooms.length <= ROOMS_LISTED_MAX),
+    ...(verdict === null ? [] : [verdict]),
+    `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
+  ]
+  return { written, result, plan, verdict, drawingProblems, lines }
+}

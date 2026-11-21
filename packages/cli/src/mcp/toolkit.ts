@@ -35,6 +35,8 @@ export type ArgSpec =
       readonly maxLength?: number
       /** An id of the plan: letters, digits, dash, underscore and dot, at most `ID_MAX`. */
       readonly id?: boolean
+      /** Text of several lines, such as rooms text: line breaks and tabs are allowed, other control characters are not. */
+      readonly lines?: boolean
       readonly required?: boolean
     }
   | {
@@ -117,7 +119,7 @@ function argSchema(spec: ArgSpec): Record<string, unknown> {
   const rest = { ...spec }
   delete rest.required
   if (rest.type === 'string') {
-    const { id, ...string } = rest
+    const { id, lines: _lines, ...string } = rest
     return id ? { ...string, pattern: ID_PATTERN, maxLength: ID_MAX } : string
   }
   if (rest.type === 'array') {
@@ -169,7 +171,8 @@ function checkOne(name: string, spec: ArgSpec, value: unknown, earlier: Readonly
       }
       const max = spec.maxLength
       if (max !== undefined && value.length > max) throw new ToolRefusal(`${name} is longer than ${max} characters.`)
-      if (CONTROL.test(value)) throw new ToolRefusal(`${name} holds a control or direction character.`)
+      const checked = spec.lines === true ? value.replace(/\r\n|\r|\n|\t/g, ' ') : value
+      if (CONTROL.test(checked)) throw new ToolRefusal(`${name} holds a control or direction character${spec.lines === true ? ' other than a line break or a tab' : ''}.`)
       if (spec.enum && !spec.enum.includes(value)) throw new ToolRefusal(`${name} takes one of ${spec.enum.join(', ')}.`)
       return value
     }

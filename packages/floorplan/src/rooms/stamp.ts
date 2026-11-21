@@ -50,7 +50,7 @@ export function planRevision(plan: Pick<FloorPlan, 'walls' | 'rooms' | 'openings
 }
 
 /** A room's boundary fingerprint: its wall ids in order. */
-export function boundaryPrint(room: Pick<Room, 'boundary'>): string {
+export function boundaryPrint(room: { readonly boundary: readonly string[] }): string {
   return fnv(room.boundary.join('\u0000'))
 }
 
@@ -78,11 +78,19 @@ export function boundariesEdited(plan: Pick<FloorPlan, 'rooms'> & { readonly wri
 }
 
 /**
- * The stamp after Grid itself changed some rooms' boundaries (its own edits keep the derived
- * parts derived): those rooms' prints are taken again, every other print and the revision stay.
+ * A plan file's JSON after one of Grid's own edits (a tool's change, a tidy fix): the rooms whose
+ * boundary the edit changed, or that it added, are printed again, so Grid's edits never read as
+ * hand edits. A plan not written rooms first is given back as it was.
  */
-export function restamped(written: WrittenStamp, rooms: readonly Pick<Room, 'id' | 'boundary'>[], changed: ReadonlySet<string>): WrittenStamp {
+export function keptDerived<T extends Record<string, unknown>>(before: readonly { readonly id: string; readonly boundary: readonly string[] }[], after: T): T {
+  const written = after['written'] as Partial<WrittenStamp> | undefined
+  if (typeof written !== 'object' || written === null || written.from !== 'rooms' || typeof written.boundaries !== 'object' || written.boundaries === null) return after
+  const rooms = Array.isArray(after['rooms']) ? (after['rooms'] as Array<Pick<Room, 'id' | 'boundary'>>) : []
+  const was = new Map(before.map((r) => [r.id, r.boundary.join('\u0000')]))
   const boundaries: Record<string, string> = { ...written.boundaries }
-  for (const room of rooms) if (changed.has(room.id) && boundaries[room.id] !== undefined) boundaries[room.id] = boundaryPrint(room)
-  return { ...written, boundaries }
+  for (const room of rooms) {
+    if (typeof room?.id !== 'string' || !Array.isArray(room.boundary)) continue
+    if (was.get(room.id) !== room.boundary.join('\u0000')) boundaries[room.id] = boundaryPrint(room)
+  }
+  return { ...after, written: { ...written, boundaries } }
 }

@@ -24,4 +24,5 @@ export const SHEET_COVERAGE = {
   rooms: { shown: 'drawn and tabled' },
   floors: { shown: 'a page each' },
   referenceImage: { shown: 'not shown', why: 'A tracing aid, not part of the building.' },
+  written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
