@@ -134,6 +134,9 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/unclosed` | {thing} cannot be closed from the walls it lists | at least three walls in the plan, each meeting the next, round the room |
 | `room/out-of-order` | {thing} lists its walls out of order | its walls in order round the room, each meeting the next |
 | `room/inside-out` | {thing} has walls thicker than the gap between them | inner wall faces that do not cross |
+| `room/hole-outside` | {thing} has a hole that does not lie inside it | a hole inside the room, with floor all round it |
+| `room/holes-overlap` | {thing} has two holes that overlap or touch | floor between any two holes |
+| `room/derived-edited` | {thing}'s boundary was changed by hand in a plan written rooms first | walls worked out from the rooms text |
 | `room/not-enclosed` | {thing} is not enclosed by its walls | walls that reach each other round the room |
 | `room/space-mismatch` | {thing} does not match the space its walls enclose | a room that covers the space its walls close off, and no more |
 | `room/inside-no-host` | {thing} is marked as inside another room, but no room holds it | a room on its floor that holds it |
