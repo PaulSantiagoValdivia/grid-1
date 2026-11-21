@@ -105,11 +105,12 @@ describe('grid sheet (VEW-7)', () => {
     expectCleanRefusal(grid(['sheet', 'bad.json', '--layout', 'check']), 1)
   })
   it('still writes a check sheet for a plan with findings', () => {
-    writeFileSync(join(dir, 'front-door-into-bedroom.json'), readFileSync(join(cli, 'fixtures', 'front-door-into-bedroom.json')))
-    const check = grid(['check', 'front-door-into-bedroom.json'])
-    expect(check.out).toMatch(/\S/)
-    const run = grid(['sheet', 'front-door-into-bedroom.json', '--layout', 'check'])
+    // Bedroom 2 loses its only door, so the check finds it shut off.
+    const plan = JSON.parse(readFileSync(join(cli, 'fixtures', 'two-bed-flat.json'), 'utf8')) as { openings: { id: string }[] }
+    writeFileSync(join(dir, 'shut.json'), JSON.stringify({ ...plan, openings: plan.openings.filter((o) => o.id !== 'bed2-door') }))
+    expect(grid(['check', 'shut.json']).out).toContain('Findings (1):')
+    const run = grid(['sheet', 'shut.json', '--layout', 'check'])
     expect(run.status).toBe(0)
-    expect(existsSync(join(dir, 'exports', 'front-door-into-bedroom-check.pdf'))).toBe(true)
+    expect(existsSync(join(dir, 'exports', 'shut-check.pdf'))).toBe(true)
   })
 })
