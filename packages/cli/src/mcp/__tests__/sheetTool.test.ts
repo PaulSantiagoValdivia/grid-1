@@ -1,4 +1,4 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -6,7 +6,9 @@ import { NAME_MAX } from '../../command/planText'
 import { SHEET_HEADLINE_MAX, SHEET_PARAGRAPH_MAX, SHEET_PARAGRAPHS_MAX } from '@ongrid/floorplan/types/sheet'
 import { openProject } from '../../fs/projectFiles'
 import { bench } from './replay/harness'
-import { GRID_TOOLS } from '../serveTools'
+import { FontsMissing } from '../../sheet/fonts'
+import { GRID_TOOLS, serverTool } from '../serveTools'
+import type { GridTool } from '../toolkit'
 
 /** VEW-7: grid_sheet writes the plan as a PDF sheet into exports/. */
 
@@ -77,6 +79,36 @@ describe('the sheet argument, through the server (VEW-7)', () => {
   it('refuses a limit breach naming the field and the limit', async () => {
     const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'client', sheet: { version: '1', headline: 'x'.repeat(SHEET_HEADLINE_MAX + 1) } })
     expect(reply).toMatchObject({ isError: true, text: `The sheet words: headline is longer than ${SHEET_HEADLINE_MAX} characters.` })
+  })
+})
+
+describe('grid_sheet when the sheet cannot be written (VEW-7)', () => {
+  const plan = JSON.parse(readFileSync(sample, 'utf8'))
+
+  it('refuses in one line when exports is a file', async () => {
+    const b = bench({ 'plan.json': plan })
+    writeFileSync(join(b.folder, 'exports'), 'not a folder')
+    const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'check' })
+    b.close()
+    expect(reply.isError).toBe(true)
+    expect(reply.text).toMatch(/^Can't write the export beside plan\.json: /)
+    expect(reply.text).not.toContain('\n')
+  }, 60_000)
+
+  it('refuses in one line when the sheet\'s name in exports is a folder', async () => {
+    const b = bench({ 'plan.json': plan })
+    mkdirSync(join(b.folder, 'exports', 'plan-check.pdf'), { recursive: true })
+    const reply = await b.call('grid_sheet', { plan: 'plan.json', layout: 'check' })
+    b.close()
+    expect(reply.isError).toBe(true)
+    expect(reply.text).toMatch(/^Can't write the export beside plan\.json: /)
+    expect(reply.text).not.toContain('\n')
+  }, 60_000)
+
+  it('answers missing fonts with one line, as missing canvas, not a protocol error', async () => {
+    const broken: GridTool = { ...tool, run: () => { throw new FontsMissing('The sheet fonts are missing from this install of Grid: reinstall it.') } }
+    const reply = await serverTool(broken, context().context).call({ plan: 'plan.json', layout: 'check' })
+    expect(reply).toEqual({ text: 'The sheet fonts are missing from this install of Grid: reinstall it.', isError: true })
   })
 })
 

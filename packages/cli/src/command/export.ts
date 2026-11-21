@@ -164,13 +164,20 @@ function oneLine(text: string): string {
 export function exportIntoProject(project: Project, planFile: string, format: ExportFormat, request: Omit<ExportRequest, 'out'>): ExportDone {
   const loaded = loadPlan(project, planFile)
   const made = exportFile(loaded, planFile, format, request)
-  let written: string
+  const written = writeBesidePlan(project, planFile, made.name.fileName, made.data)
+  return made.name.note === undefined ? { loaded, written } : { loaded, written, note: made.name.note }
+}
+
+/**
+ * Writes `fileName` into `exports/` beside the plan as it was named: the folder that holds the
+ * name given. Returns the real path written. A failure is one line (`ExportWriteFailed`); a
+ * path outside the project stays a `PathRefused`. `grid export` and `grid sheet` both use it.
+ */
+export function writeBesidePlan(project: Project, planFile: string, fileName: string, data: string | Uint8Array): string {
   try {
-    // Beside the plan as it was named, as before: the folder that holds the name given.
-    written = writeProjectExport(project, path.dirname(planFile), made.name.fileName, made.data)
+    return writeProjectExport(project, path.dirname(planFile), fileName, data)
   } catch (error) {
     if (error instanceof PathRefused) throw error
     throw new ExportWriteFailed(`Can't write the export beside ${planFile}: ${oneLine((error as Error).message)}`)
   }
-  return made.name.note === undefined ? { loaded, written } : { loaded, written, note: made.name.note }
 }

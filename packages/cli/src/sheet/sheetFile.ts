@@ -6,10 +6,9 @@
 import path from 'path'
 import { planFloors } from '@ongrid/floorplan/geometry'
 import { parseSheetWords, SheetWordsRefused, type SheetWords } from '@ongrid/floorplan/types/sheet'
-import { exportBaseOf } from '../command/export'
+import { exportBaseOf, writeBesidePlan } from '../command/export'
 import { loadPlan, PlanRefused, type LoadedPlan } from '../command/plan'
 import { UsageError } from '../command/options'
-import { writeProjectExport } from '../export/projectExports'
 import { quoted, type Project } from '../fs/projectFiles'
 import { sheetPages, SHEET_LAYOUTS, type SheetLayout } from './pages'
 import { sheetPdf } from './pdf'
@@ -65,21 +64,44 @@ export function readSheetWords(project: Project, planFile: string, loaded: Loade
   }
 }
 
-export interface SheetDone {
-  readonly written: string
+/** A sheet made and not yet written: the plan as read, the PDF and its laid-out pages. */
+export interface MadeSheet {
+  readonly loaded: LoadedPlan
+  readonly pdf: Uint8Array
   readonly pages: readonly { readonly kind: string; readonly title: string | null }[]
+  /** The name of the file in `exports/`, and why Grid changed it, when it did. */
+  readonly fileName: string
   readonly note?: string
 }
 
-export async function sheetIntoProject(project: Project, planFile: string, layout: SheetLayout, words: SheetWords | null, out?: string): Promise<SheetDone> {
+/** Reads the plan and makes the sheet. `grid sheet --out` writes it where it is told. */
+export async function makeSheet(project: Project, planFile: string, layout: SheetLayout, words: SheetWords | null): Promise<MadeSheet> {
   const loaded = loadPlan(project, planFile)
   const { base, note } = exportBaseOf(planFile)
   const sheet = sheetPages(loaded, words, layout, { name: base, date: new Date() })
   // The laid-out sheet is the one written: text that did not fit flows onto continuation pages.
   const { pdf, sheet: laidOut } = await sheetPdf(loaded.plan, sheet)
-  const written = out === undefined
-    ? writeProjectExport(project, path.dirname(planFile), `${base}-${layout}.pdf`, pdf)
-    : project.writeFile(out, pdf)
   const pages = laidOut.pages.map((page) => ({ kind: page.kind, title: page.title }))
-  return note === undefined ? { written, pages } : { written, pages, note: `Named the sheet ${base}-${layout}.pdf: ${note}.` }
+  const fileName = `${base}-${layout}.pdf`
+  return note === undefined
+    ? { loaded, pdf, pages, fileName }
+    : { loaded, pdf, pages, fileName, note: `Named the sheet ${fileName}: ${note}.` }
+}
+
+export interface SheetDone {
+  readonly loaded: LoadedPlan
+  /** The real path written. */
+  readonly written: string
+  readonly pages: MadeSheet['pages']
+  readonly note?: string
+}
+
+/**
+ * Makes the sheet and writes it into `exports/` beside the plan, replacing an earlier copy, as
+ * `grid export` writes its files. The command and the tool server both call this.
+ */
+export async function sheetIntoProject(project: Project, planFile: string, layout: SheetLayout, words: SheetWords | null): Promise<SheetDone> {
+  const { loaded, pdf, pages, fileName, note } = await makeSheet(project, planFile, layout, words)
+  const written = writeBesidePlan(project, planFile, fileName, pdf)
+  return note === undefined ? { loaded, written, pages } : { loaded, written, pages, note }
 }

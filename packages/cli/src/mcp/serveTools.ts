@@ -9,6 +9,7 @@
  */
 import { CanvasMissing } from '../draw/canvas'
 import type { PathRefused, Project } from '../fs/projectFiles'
+import { FontsMissing } from '../sheet/fonts'
 import type { ServerTool, ToolAnswer } from './protocol'
 import { READ_TOOLS } from './readTools'
 import { readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
@@ -29,7 +30,7 @@ async function answer(tool: GridTool, raw: unknown, context: ToolContext): Promi
     const result = await tool.run(readArgs(tool, raw), context)
     return { text: result.text, data: result.data, ...(result.image ? { image: result.image } : {}) }
   } catch (error) {
-    if (error instanceof ToolRefusal || error instanceof CanvasMissing) return { text: error.message, isError: true }
+    if (error instanceof ToolRefusal || error instanceof CanvasMissing || error instanceof FontsMissing) return { text: error.message, isError: true }
     throw error
   }
 }

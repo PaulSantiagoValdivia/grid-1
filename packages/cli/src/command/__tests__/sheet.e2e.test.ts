@@ -85,6 +85,26 @@ describe('grid sheet (VEW-7)', () => {
     writeFileSync(join(dir, 'sheet.json'), ' '.repeat(65 * 1024))
     expectCleanRefusal(grid(['sheet', 'two-floor-house.json', '--layout', 'client']), 1)
   })
+  it('refuses an --out whose folder does not exist, in one line, as grid export does', () => {
+    const run = grid(['sheet', 'two-floor-house.json', '--layout', 'check', '--out', 'nope/x.pdf'])
+    expectCleanRefusal(run, 1)
+    expect(run.err).toBe('grid: Can\'t write nope/x.pdf: its folder does not exist.\n')
+  })
+  it('refuses an --out that is a folder, in one line', () => {
+    mkdirSync(join(dir, 'dirout.pdf'))
+    const run = grid(['sheet', 'two-floor-house.json', '--layout', 'check', '--out', 'dirout.pdf'])
+    expectCleanRefusal(run, 1)
+    expect(run.err).toBe('grid: Can\'t write dirout.pdf: it is a folder.\n')
+  })
+  it('refuses to write into exports/ when the sheet\'s name there is a folder, in one line', () => {
+    mkdirSync(join(dir, 'exports', 'two-floor-house-client.pdf'), { recursive: true })
+    const run = grid(['sheet', 'two-floor-house.json', '--layout', 'client'])
+    // The same line grid export gives when its file in exports/ is a folder.
+    expect(run.status).toBe(1)
+    expect(run.err.trimEnd().split('\n')).toHaveLength(1)
+    expect(run.err).toMatch(/^grid: Can't write the export beside two-floor-house\.json: /)
+    expect(run.err).not.toMatch(/something went wrong|\n\s+at /)
+  })
   it('uses a named --sheet file instead of sheet.json beside the plan', () => {
     writeFileSync(join(dir, 'sheet.json'), '{ not json')
     writeFileSync(join(dir, 'words.json'), JSON.stringify({ version: '1', name: 'Words House', intro: ['A short welcome.'] }))

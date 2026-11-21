@@ -191,6 +191,7 @@ const sheetTool: GridTool = {
       return { text: lines.join('\n'), data: { written, layout, pages: done.pages, note: done.note ?? null } }
     } catch (error) {
       if (error instanceof SheetWordsRefused) throw new ToolRefusal(`The sheet words: ${error.message}.`)
+      if (error instanceof ExportWriteFailed) throw new ToolRefusal(error.message)
       throw asRefusal(error)
     }
   },

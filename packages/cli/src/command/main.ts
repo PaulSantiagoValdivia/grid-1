@@ -24,7 +24,7 @@ import { CanvasMissing } from '../draw/canvas'
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { FontsMissing } from '../sheet/fonts'
-import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
+import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
@@ -261,9 +261,16 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const layout = checkSheetRequest(request)
     const project = openProject(projectOption, io.cwd)
     const words = layout === 'client' ? readSheetWords(project, planFile, loadPlan(project, planFile), request.sheet) : null
-    const done = await sheetIntoProject(project, planFile, layout, words, request.out)
-    if (done.note) io.stderr(`${done.note}\n`)
-    io.stdout(`Wrote ${project.shown(done.written)}\n`)
+    if (request.out === undefined) {
+      const done = await sheetIntoProject(project, planFile, layout, words)
+      warnLeftOut(io, done.loaded)
+      if (done.note) io.stderr(`${done.note}\n`)
+      io.stdout(`Wrote ${project.shown(done.written)}\n`)
+      return EXIT_OK
+    }
+    const made = await makeSheet(project, planFile, layout, words)
+    warnLeftOut(io, made.loaded)
+    io.stdout(`Wrote ${project.shown(write(project, request.out, made.pdf))}\n`)
     return EXIT_OK
   }
 
