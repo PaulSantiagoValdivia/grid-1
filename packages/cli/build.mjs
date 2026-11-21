@@ -13,7 +13,7 @@
  * Usage: node build.mjs [--metafile]
  */
 import { build } from 'esbuild'
-import { chmodSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, cpSync, rmSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 const here = (/** @type {string} */ path) => fileURLToPath(new URL(path, import.meta.url))
@@ -45,5 +45,8 @@ const result = await build({
 
 // Runnable as ./dist/grid.mjs too. npm sets this itself when it links the bin.
 chmodSync(here('./dist/grid.mjs'), 0o755)
+
+// The sheet's fonts (VEW-7), read by the canvas beside grid.mjs.
+cpSync(here('./fonts'), here('./dist/fonts'), { recursive: true })
 
 if (result.metafile) writeFileSync(here('./dist/meta.json'), JSON.stringify(result.metafile))

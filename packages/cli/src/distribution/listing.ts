@@ -61,7 +61,7 @@ export function packageManifest(version: string): Record<string, unknown> {
     license: LICENSE,
     type: 'module',
     bin: { grid: 'grid.mjs', ongrid: 'grid.mjs' },
-    files: ['grid.mjs', 'chunks/', 'README.md', 'LICENSE', 'NOTICE'],
+    files: ['grid.mjs', 'chunks/', 'fonts/', 'README.md', 'LICENSE', 'NOTICE'],
     engines: { node: '>=22' },
     mcpName: MCP_NAME,
     repository: { type: 'git', url: `git+${REPOSITORY}.git`, directory: 'packages/cli' },

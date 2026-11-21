@@ -1,2 +1,4 @@
 # The scoreboard data is compressed: never convert line endings in it.
 scoreboard/data/*.gz binary
+# The bundled fonts and their licences are shipped byte for byte: never convert them.
+packages/cli/fonts/** binary

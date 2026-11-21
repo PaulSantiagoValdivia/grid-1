@@ -79,6 +79,7 @@ try {
   mkdirSync(stage)
   cpSync(built, join(stage, 'grid.mjs'))
   cpSync(join(cli, 'dist', 'chunks'), join(stage, 'chunks'), { recursive: true })
+  cpSync(join(cli, 'dist', 'fonts'), join(stage, 'fonts'), { recursive: true })
   cpSync(join(repo, 'LICENSE'), join(stage, 'LICENSE'))
   cpSync(join(repo, 'NOTICE'), join(stage, 'NOTICE'))
   writeAll(stage, {
@@ -115,6 +116,7 @@ try {
   }
   entries.push({ path: 'server/grid.mjs', data: readFileSync(built), executable: true })
   addTree(join(cli, 'dist', 'chunks'), 'server/chunks')
+  addTree(join(cli, 'dist', 'fonts'), 'server/fonts')
   entries.push({ path: 'LICENSE', data: readFileSync(join(repo, 'LICENSE')) }, { path: 'NOTICE', data: readFileSync(join(repo, 'NOTICE')) })
   const require = createRequire(join(cli, 'package.json'))
   let canvas = null
