@@ -18,7 +18,7 @@ is published yet and there is no release to install.
 | `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
 | `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, `planToSvg` (a picture of a plan as an SVG file) and `planStill` (a still of the 3D model as pixels), with no browser |
-| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `describe`, `draw`, `export`, `tidy` and `serve` (the tool server an agent uses). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
+| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `describe`, `draw`, `export`, `tidy`, `serve` (the tool server an agent uses) and `mcp` (the same server). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
 
 ## Development
 
@@ -52,6 +52,7 @@ local one is missing.
 | `grid draw [<plan>] [--png \| --3d] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid serve` | Starts the tool server on standard input and output, with the 13 tools below |
+| `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ### The tool server
 
@@ -88,6 +89,45 @@ from where it stands: `bath-door joined bath and lounge; it now joins kitchen an
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
+
+### Installing Grid in an agent
+
+Not yet: the package is not published, and publishing waits on the owner's approval (CMD-8).
+Once it is, one line starts Grid's tool server for any agent that runs tools on the person's
+computer, and the lines below are the ones to type. They all come from one file,
+`packages/cli/src/distribution/listing.ts`, and a test fails when this list no longer matches it.
+
+Every way below starts Grid's tool server with `npx -y ongrid mcp`.
+
+- Claude Code: `claude mcp add grid -- npx -y ongrid mcp`
+- Codex: `codex mcp add grid -- npx -y ongrid mcp`
+- VS Code: `code --add-mcp '{"name":"grid","type":"stdio","command":"npx","args":["-y","ongrid","mcp"]}'`
+- Copilot CLI: `copilot mcp add grid -- npx -y ongrid mcp`
+- Cursor: [Add to Cursor](cursor://anysphere.cursor-deeplink/mcp/install?name=grid&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIm9uZ3JpZCIsIm1jcCJdfQ==)
+- Claude Code, as a plugin with a skill: `/plugin marketplace add ongrid-arch/grid`, then `/plugin install grid@grid`
+- Codex, as a plugin with a skill: `codex plugin marketplace add ongrid-arch/grid`
+- Claude's desktop app: open the `.mcpb` file for your computer and pick the project folder.
+
+The tool server answers clients of both eras of the protocol: an older client that opens with
+`initialize` (2024-11-05, 2025-03-26 and 2025-06-18), and a 2026-07-28 client that sends no
+handshake, names its version in each request's `_meta` and starts with `server/discover`. A
+version it does not speak is refused with the ones it does. It keeps no state between calls:
+the plan file is the only state.
+
+Until publishing, pack everything from a copy of the repository, and install from the tarball:
+
+```bash
+npm run build
+npm run pack:local --workspace ongrid
+npx -y --package=./packages/cli/dist/release/ongrid-0.0.0.tgz ongrid mcp
+```
+
+`pack:local` publishes nothing. It writes into `packages/cli/dist/release/` the npm package as
+a tarball (the bundled command and nothing else; the canvas that draws PNGs is an optional
+package), the registry's `server.json`, the plugin for Claude Code and Codex with a marketplace
+folder that lists it, `install.md` with the lines above, and a `.mcpb` bundle for Claude's
+desktop app that carries the canvas for the computer it was packed on. The plugin lines above
+name the repository, so they work once its marketplace files are committed at the top (CMD-8).
 
 ### Walls that do not meet: `grid tidy`
 

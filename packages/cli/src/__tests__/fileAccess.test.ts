@@ -20,6 +20,7 @@ const ALLOWED: Readonly<Record<string, string>> = {
     + 'an agent or a command line; no command or tool imports it (checked below)',
   'bin/grid.mjs': 'the launcher checks that its own built file, next to it, exists',
   'build.mjs': 'the build script, run by developers and CI, writes dist/',
+  'pack.mjs': 'packs the built command and its install files into dist/release/ (CMD-9), run by developers and CI',
 }
 
 const NODE_FILE_MODULES = '(?:node:)?(?:fs|fs/promises|child_process|worker_threads|module)'
@@ -69,7 +70,7 @@ function findFileAccess(file: string, text: string): string[] {
     FILE_ACCESS.filter(([, pattern]) => pattern.test(line)).map(([what]) => `${file}:${i + 1}: ${what}: ${line.trim()}`))
 }
 
-const sources = [...filesUnder(join(cli, 'src')), ...filesUnder(join(cli, 'bin')), join(cli, 'build.mjs')]
+const sources = [...filesUnder(join(cli, 'src')), ...filesUnder(join(cli, 'bin')), join(cli, 'build.mjs'), join(cli, 'pack.mjs')]
   .map((path) => relative(cli, path).split(sep).join('/'))
 
 describe('file access in packages/cli', () => {

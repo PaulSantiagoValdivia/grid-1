@@ -1,6 +1,7 @@
 /**
  * The `grid` command, which `ongrid` runs too: `init`, `check`, `describe`, `draw`, `export`,
- * `tidy` and `serve`.
+ * `tidy`, `serve` and `mcp`, the same server under the name an agent's host types
+ * (`npx -y ongrid mcp`, CMD-9).
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -19,6 +20,7 @@
 import { planFloors } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { version } from '../../package.json'
+import { CanvasMissing } from '../draw/canvas'
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { startToolServer } from '../mcp/serve'
@@ -83,6 +85,11 @@ const COMMANDS = {
   serve: {
     usage: 'grid serve [--project <folder>]',
     summary: "Starts Grid's tool server on standard input and output, for an agent's host to talk to.",
+    options: PROJECT_OPTION,
+  },
+  mcp: {
+    usage: 'grid mcp [--project <folder>]',
+    summary: 'The same as serve, under the name agents start it by: npx -y ongrid mcp.',
     options: PROJECT_OPTION,
   },
 } as const satisfies Record<string, { usage: string; summary: string; options: OptionSpecs }>
@@ -150,8 +157,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
 
   const projectOption = textOf(parsed, '--project')
 
-  if (name === 'serve') {
-    if (parsed.positionals.length > 0) throw new UsageError(`serve takes no arguments: got ${parsed.positionals.join(', ')}.`)
+  if (name === 'serve' || name === 'mcp') {
+    if (parsed.positionals.length > 0) throw new UsageError(`${name} takes no arguments: got ${parsed.positionals.join(', ')}.`)
     let project: Project | PathRefused
     try {
       project = openProject(projectOption, io.cwd, 'project')
@@ -289,7 +296,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused) {
+    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof CanvasMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

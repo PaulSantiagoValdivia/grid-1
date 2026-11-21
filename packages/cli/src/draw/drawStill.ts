@@ -9,6 +9,7 @@
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { DEFAULT_STILL_HEIGHT, DEFAULT_STILL_WIDTH, planStill, type StillOptions } from '@ongrid/viewer/src/still'
+import { loadCanvas } from './canvas'
 
 export interface StillDrawOptions extends Omit<StillOptions, 'width' | 'height'> {
   /** In pixels, before `scale`: 1200 by 800 by default. */
@@ -42,7 +43,7 @@ export async function drawStill(plan: FloorPlan, options: StillDrawOptions = {})
   const image = planStill(plan, { ...still, width: w, height: h })
 
   // Loaded only for a picture: it is a native module.
-  const { createCanvas, ImageData } = await import('@napi-rs/canvas')
+  const { createCanvas, ImageData } = await loadCanvas()
   const canvas = createCanvas(image.width, image.height)
   canvas.getContext('2d').putImageData(new ImageData(image.data, image.width, image.height), 0, 0)
   return canvas.encode('png')
