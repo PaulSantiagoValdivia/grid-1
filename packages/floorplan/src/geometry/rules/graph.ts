@@ -14,6 +14,7 @@ import { floorOf } from '../floors'
 import { roomNesting, tryRoomPolygon } from '../room'
 import type { FloorSpaces } from '../spaces'
 import { floorSpaces, spacesKnown } from '../spaces'
+import { planWallSides } from '../exposure'
 import type { Vec2 } from '../vec2'
 import { add, area, scale } from '../vec2'
 import { wallAxis } from '../wall'
@@ -123,7 +124,7 @@ export function openingSides(
  * floor are worked out only when first asked, and when they cannot be, the side is not taken to
  * be outside, as before.
  */
-export type OutsideTest = (wall: Wall, along: number, side: 'left' | 'right') => boolean
+export type OutsideTest = (wall: Wall, along: number, side: 'left' | 'right', asStated?: boolean) => boolean
 
 export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
   const spaces = new Map<string, FloorSpaces | null>()
@@ -134,8 +135,9 @@ export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
     }
     return spaces.get(floor) ?? null
   }
-  return (wall, along, side) => {
-    if (wall.kind === 'exterior') return true
+  // `asStated: false` asks only what lies there, for a door with no room on either side.
+  return (wall, along, side, asStated = true) => {
+    if (asStated && wall.kind === 'exterior') return true
     const found = spacesOf(floorOf(wall))
     if (found === null) return false
     const axis = wallAxis(wall)
@@ -216,20 +218,27 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     if (wall === undefined) continue
     passage(wall, opening.id, opening.offset + opening.width / 2, openingSides(opening, index, outlines))
   }
-  // A virtual wall is an open side: it joins the rooms it separates, tested at its middle.
+  // A virtual wall is an open side all along its length (MSG-14): each stretch of it joins the
+  // rooms on its two sides there. The stretches are cut wherever the rooms beside it change, so
+  // two lines that cross at their middles join all four rooms round the crossing (lab S-4); a
+  // line tested only at its middle tested the crossing.
+  const sides = planWallSides(index)
   for (const wall of plan.walls) {
     if (wall.virtual !== true) continue
-    const middle = wallAxis(wall).length / 2
-    passage(wall, wall.id, middle, sidesAt(wall, middle, index, outlines))
+    const stretches = (sides.get(wall.id)?.stretches ?? []).filter((st) => st.to - st.from > tolerance('lineInside'))
+    const points = stretches.length > 0 ? stretches.map((st) => (st.from + st.to) / 2) : [wallAxis(wall).length / 2]
+    for (const along of points) passage(wall, wall.id, along, sidesAt(wall, along, index, outlines))
   }
 
   const bySide = (a: OneSided, b: OneSided): number => byText(a.room, b.room) || byText(a.opening, b.opening)
+  // A line with several stretches can join the same two rooms, or lead out of one room, more than once.
+  const once = <T>(list: T[], key: (t: T) => string): T[] => [...new Map(list.map((t) => [key(t), t] as const)).values()]
   return {
     rooms: [...outlines.keys()].sort(byText),
-    links: links.sort(
+    links: once(links, (l) => `${l.rooms.join('|')}|${l.via}`).sort(
       (a, b) => byText(a.rooms[0], b.rooms[0]) || byText(a.rooms[1], b.rooms[1]) || byText(a.via, b.via)
     ),
-    exits: exits.sort(bySide),
-    undrawn: undrawn.sort(bySide)
+    exits: once(exits, (e) => `${e.room}|${e.opening}`).sort(bySide),
+    undrawn: once(undrawn, (u) => `${u.room}|${u.opening}`).sort(bySide)
   }
 }

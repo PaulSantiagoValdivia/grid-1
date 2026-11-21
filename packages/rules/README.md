@@ -9,6 +9,16 @@ figures themselves, each with where it was read and how far it has been checked.
 document: a way out of the ground floor, a door on every room, a route from every room to
 a way out, and doors that lead somewhere.
 
+Which rooms a door or a dividing line joins is read from where it stands, never from the wall
+it names: a dividing line joins the rooms beside it all along its length, stretch by stretch,
+so lines that cross join every room round the crossing. A door leads outside when no room and
+no enclosed floor lies past it, or its wall is stated exterior; a door into floor the walls
+enclose and no room claims "leads to a space that is not drawn", on every floor. When the only
+way out of a floor is such a door, the rooms that reach neither it nor an exit are still named.
+`doorsThatChangedRooms(before, after)` (in `@ongrid/floorplan/geometry`) names each door that
+joins other rooms after an edit: "door-living joined hall and living; it now joins hall and
+kitchen".
+
 This package adds two checks that apply figures:
 
 | Check | What it looks at | Basis |

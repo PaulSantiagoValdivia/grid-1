@@ -44,8 +44,9 @@ function routeFindings(
 
   const doorlessOnly = !routes
   // A door with nothing drawn behind it: probably a corridor or a stair nobody drew. It
-  // is said, never guessed at, and never an exit.
-  for (const { room, opening } of doorlessOnly ? [] : graph.undrawn) {
+  // is said, never guessed at, and never an exit. On every floor (MSG-14): a door into
+  // floor nobody drew is as worth a look upstairs as on the ground.
+  for (const { room, opening } of graph.undrawn) {
     findings.push(
       finding('door_to_undrawn_space', [room], messages.doorToUndrawnSpace(roomName(room)), [opening])
     )
@@ -66,22 +67,24 @@ function routeFindings(
   }
 
   if (doorlessOnly || graph.rooms.length === 0) return { findings, wayOutNotDrawn: false }
-  if (graph.exits.length === 0) {
-    // A flat drawn on its own leaves through its entrance, into a landing nobody drew. That
-    // door is already reported; whether it is a way out cannot be told, so nothing more is said.
-    if (graph.undrawn.length > 0) return { findings, wayOutNotDrawn: true }
+  // A flat drawn on its own leaves through its entrance, into a landing nobody drew. That door
+  // is already reported, and whether it is a way out cannot be told. The rooms that reach no
+  // such door, nor any exit, are still said (MSG-14, lab CH-7): they are cut off either way.
+  const wayOutNotDrawn = graph.exits.length === 0 && graph.undrawn.length > 0
+  if (graph.exits.length === 0 && !wayOutNotDrawn) {
     // No exit on the floor: one finding for the floor, not one per room.
     findings.push(finding('no_exit', [], messages.noExit(floorName)))
     return { findings, wayOutNotDrawn: false }
   }
 
-  // Breadth-first from every exit at once.
+  // Breadth-first from every exit at once, or, when the way out is not drawn, from every door
+  // into a space not drawn.
   const neighbours = new Map<string, string[]>()
   for (const { rooms: [a, b] } of graph.links) {
     neighbours.set(a, [...(neighbours.get(a) ?? []), b])
     neighbours.set(b, [...(neighbours.get(b) ?? []), a])
   }
-  const reached = new Set(graph.exits.map((e) => e.room))
+  const reached = new Set((wayOutNotDrawn ? graph.undrawn : graph.exits).map((e) => e.room))
   const queue = [...reached]
   while (queue.length > 0) {
     for (const next of neighbours.get(queue.shift()!) ?? []) {
@@ -99,10 +102,11 @@ function routeFindings(
       .filter((link) => link.rooms.includes(room))
       .map((link) => ({ room: link.rooms[0] === room ? link.rooms[1] : link.rooms[0], via: link.via }))
       .sort((a, b) => byText(a.room, b.room) || byText(a.via, b.via))
-    findings.push({ ...finding('no_route_to_exit', [room], messages.noRoute(roomName(room))), through })
+    const message = wayOutNotDrawn ? messages.noRouteToAnyDoorOut(roomName(room)) : messages.noRoute(roomName(room))
+    findings.push({ ...finding('no_route_to_exit', [room], message), through })
   }
 
-  return { findings, wayOutNotDrawn: false }
+  return { findings, wayOutNotDrawn }
 }
 
 /**

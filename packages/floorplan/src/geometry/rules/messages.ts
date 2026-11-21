@@ -8,6 +8,8 @@ export const messages = {
   noExit: (floor: string): string => `${floor} has no door to the outside`,
   roomWithoutDoor: (room: string): string => `${room} has no door or opening to another space`,
   noRoute: (room: string): string => `${room} has no route to a door to the outside`,
+  noRouteToAnyDoorOut: (room: string): string =>
+    `${room} has no route to a door to the outside, nor to a door into a space that is not drawn`,
   noStairs: (floor: string): string =>
     `The way out of ${floor} was not checked: the plan has no stairs`,
   wayOutNotDrawn: (floor: string): string =>

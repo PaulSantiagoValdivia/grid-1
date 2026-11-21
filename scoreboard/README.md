@@ -88,7 +88,7 @@ lab marked "yes" counts, and no other.
 
 ## The figures
 
-| Count | Baseline (76caeb8) | Current (after MSG-13) | The lab's own figure |
+| Count | Baseline (76caeb8) | Current (after MSG-14) | The lab's own figure |
 |---|---:|---:|---:|
 | Rooms measured wrong | 1,975 | 197 | baseline 829 + 1,145 = 1,974 |
 | Damage that passes in silence | 560 | 388 | baseline 560 |
@@ -209,6 +209,10 @@ wall's kind, and on them the worked-out kind agrees with the stated one: no soun
 410 plans whose outcome differs from the lab's). Its effect is on plans that
 leave the kind out, which the lab's own plans show (`reviews/MSG-13.md`). A full run takes about
 45 seconds.
+
+MSG-14 (rooms joined along the whole of a dividing line, cut-off rooms named when the way out is
+not checked, the "space not drawn" note on every floor) moved no count: the damage set's plans
+draw no dividing line that crosses another, and the damage outcomes are as they were.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The
