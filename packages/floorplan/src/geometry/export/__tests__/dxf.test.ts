@@ -397,8 +397,9 @@ describe('door swings (door-swing-export)', () => {
     expect(swing.map((e) => e.type)).toEqual(['LINE', 'ARC'])
     const [leaf, arc] = swing as [(typeof swing)[number], (typeof swing)[number]]
 
-    expect([num(leaf, 10), num(leaf, 20), num(leaf, 11), num(leaf, 21)]).toEqual([1, 0, 1, 0.9])
-    expect([num(arc, 10), num(arc, 20), num(arc, 40), num(arc, 50), num(arc, 51)]).toEqual([1, 0, 0.9, 0, 90])
+    // Hung from the left face of the 0.2 m wall, y = 0.1, not from its axis (SHT-2).
+    expect([num(leaf, 10), num(leaf, 20), num(leaf, 11), num(leaf, 21)]).toEqual([1, 0.1, 1, 1])
+    expect([num(arc, 10), num(arc, 20), num(arc, 40), num(arc, 50), num(arc, 51)]).toEqual([1, 0.1, 0.9, 0, 90])
   })
 
   it('still marks the opening line across the gap', () => {
@@ -457,9 +458,10 @@ describe('door swings (door-swing-export)', () => {
     // The leaf starts at the hinge jamb, which is the arc's centre.
     expect(num(leaf, 10)).toBeCloseTo(num(arc, 10), 6)
     expect(num(leaf, 20)).toBeCloseTo(num(arc, 20), 6)
+    // The hinge jamb, on the face the door opens to: half the 0.2 m wall off the axis (SHT-2).
     const hingeAt = hinge === 'start' ? 1.0 : 1.9
-    expect(num(arc, 10)).toBeCloseTo(hingeAt * Math.cos(theta), 6)
-    expect(num(arc, 20)).toBeCloseTo(hingeAt * Math.sin(theta), 6)
+    expect(num(arc, 10)).toBeCloseTo(hingeAt * Math.cos(theta) + normal.x * 0.1 * facing, 6)
+    expect(num(arc, 20)).toBeCloseTo(hingeAt * Math.sin(theta) + normal.y * 0.1 * facing, 6)
   })
 })
 

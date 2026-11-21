@@ -31,7 +31,9 @@ import {
 import { tryRoomPolygon } from '../room'
 import { wallExposure } from '../exposure'
 import { validatePlan } from '../validate'
+import type { WallEnds } from '../wall'
 import { wallAxis } from '../wall'
+import { wallJoints } from '../joints'
 
 export interface IfcOptions {
   /**
@@ -556,12 +558,14 @@ interface WallElement {
  * axis, an `Axis` polyline from 0 to the length, and a `Body` that is the
  * rectangle (length x thickness) extruded `height`. The rectangle is centred on
  * the axis, which is C1: thickness grows symmetrically from the reference line.
- * Wall corners are not joined, as in the 2D and 3D views.
+ * Where the wall meets others its corners are joined as in the 2D and 3D views
+ * (SHT-2): the body is then the outline with each face running to the joint, an
+ * IfcArbitraryClosedProfileDef whose two long sides stay parallel to the axis.
  *
  * Everything that can throw (`wallAxis` on a zero-length wall) is computed
  * before the first entity is written, so a failure leaves no dangling entity.
  */
-function writeWall(c: Context, storey: Storey, wall: Wall): WallElement {
+function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | undefined): WallElement {
   const axis = wallAxis(wall)
   const { w } = c
 
@@ -583,7 +587,17 @@ function writeWall(c: Context, storey: Storey, wall: Wall): WallElement {
     refs([line])
   )
 
-  const profile = rectangleProfile(c, axis.length, wall.thickness, axis.length / 2)
+  const half = wall.thickness / 2
+  // Local Y is the wall's normal, its left face.
+  const profile =
+    ends === undefined
+      ? rectangleProfile(c, axis.length, wall.thickness, axis.length / 2)
+      : footprintProfile(c, [
+          { x: -ends.start.right, y: -half },
+          { x: axis.length + ends.end.right, y: -half },
+          { x: axis.length + ends.end.left, y: half },
+          { x: -ends.start.left, y: half }
+        ])
   const body = bodyRepresentation(c, extrusion(c, profile, wall.height))
   const shape = productShape(c, [axisRepresentation, body])
 
@@ -962,11 +976,12 @@ function writeSlabs(c: Context, storeys: readonly Storey[]): void {
 function writeStoreyContents(c: Context, storey: Storey): void {
   const { index, broken } = storey.model
   const contained: number[] = []
+  const joints = wallJoints(storey.model.walls)
 
   for (const wall of storey.model.walls) {
     let element: WallElement
     try {
-      element = writeWall(c, storey, wall)
+      element = writeWall(c, storey, wall, joints.get(wall.id))
     } catch {
       // A wall that cannot be built is left out; the rest still exports.
       continue

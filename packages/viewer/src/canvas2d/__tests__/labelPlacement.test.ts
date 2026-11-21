@@ -190,7 +190,11 @@ describe('doorSwingBox', () => {
       width: 1
     }
     const box = doorSwingBox(opening, { hinge: 'start', swing: 'left' }, 0)!
-    expect(box).toEqual({ minX: 1, minY: 0, maxX: 2, maxY: 1 })
+    // From the wall's left face, y = 0.1, where the leaf hangs since SHT-2.
+    expect(box.minX).toBeCloseTo(1, 12)
+    expect(box.minY).toBeCloseTo(0.1, 12)
+    expect(box.maxX).toBeCloseTo(2, 12)
+    expect(box.maxY).toBeCloseTo(1.1, 12)
     expect(doorSwingBox(opening, {}, MPP)).toBeNull()
     expect(doorSwingBox({ ...opening, type: 'window' }, { hinge: 'start', swing: 'left' }, MPP)).toBeNull()
   })

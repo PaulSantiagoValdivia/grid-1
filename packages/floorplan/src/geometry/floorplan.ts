@@ -11,6 +11,7 @@ import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
 import { add, centroid, fromTuple, scale } from './vec2'
 import { openingSpan, pointAlong, wallAxis, wallCenterline, wallPlanSlices } from './wall'
+import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { roomFloorArea, tryRoomPolygon } from './room'
 import { wallExposure } from './exposure'
@@ -26,7 +27,10 @@ export interface PlanWall {
    * line weight.
    */
   readonly exposure: WallExposure
-  /** Solid runs, with the openings already taken out. Empty for virtual walls. */
+  /**
+   * Solid runs, with the openings already taken out and the corners joined to the walls it
+   * meets (SHT-2). Empty for virtual walls.
+   */
   readonly slices: readonly Vec2[][]
   /** The axis, for drawing virtual walls as a line. */
   readonly centerline: readonly [Vec2, Vec2]
@@ -140,13 +144,15 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const walls: PlanWall[] = []
   const openings: PlanOpening[] = []
   const extent: Vec2[] = []
+  // The corners, joined once for the walls this drawing holds (SHT-2).
+  const joints = wallJoints(plan.walls.filter((wall) => !broken.has(wall.id)))
 
   for (const wall of plan.walls) {
     if (broken.has(wall.id)) continue
 
     const axis = wallAxis(wall)
     const usable = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
-    const slices = wall.virtual ? [] : wallPlanSlices(wall, usable)
+    const slices = wall.virtual ? [] : wallPlanSlices(wall, usable, joints.get(wall.id))
 
     walls.push({
       id: wall.id,

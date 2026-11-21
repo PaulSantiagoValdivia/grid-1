@@ -127,8 +127,9 @@ describe('the bounds of the ghosts', () => {
     // w1 is the 4 m wall along the bottom of the first room; the second room is at x >= 10.
     const ghosts = ghostsOf(drawing(), { w1: 'removed' })
     expect(ghosts.bounds.max.x).toBeLessThan(5)
-    // 4 m along the axis; the thickness (0.2 m) grows across it, not past its ends (C1).
-    expect(ghosts.bounds.width).toBeCloseTo(4, 6)
+    // 4 m along the axis, and since SHT-2 its outer face runs on to both mitred corners,
+    // half the 0.2 m crossing walls past each end: 4.2 m. The thickness grows across it (C1).
+    expect(ghosts.bounds.width).toBeCloseTo(4.2, 6)
     expect(ghosts.bounds.height).toBeCloseTo(0.2, 6)
   })
 

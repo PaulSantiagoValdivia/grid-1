@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import type { Scene3D, SceneWall } from '@ongrid/floorplan/geometry'
+import { alongFace } from '@ongrid/floorplan/geometry'
 import { toThree } from './convert'
 
 /**
@@ -59,7 +60,8 @@ export function useWallGeometries(scene: Scene3D): Map<string, THREE.BufferGeome
  *
  * Build the Shape of the outline, add the openings as Paths, extrude by the
  * thickness. No boolean operations — the holes are part of the shape and Three
- * triangulates them on extrusion.
+ * triangulates them on extrusion. Then each face's ends move to the joint the
+ * core decided, so the corners close as in the plan.
  */
 export function buildWallGeometry(wall: SceneWall): THREE.BufferGeometry {
   const { elevation, basis } = wall
@@ -77,6 +79,15 @@ export function buildWallGeometry(wall: SceneWall): THREE.BufferGeometry {
 
   // The extrusion runs from z=0 to z=thickness; the wall axis sits halfway.
   geometry.translate(0, 0, -elevation.thickness / 2)
+
+  // Each face's ends go where the core joins the corners (SHT-2). Local z is `across`, the
+  // wall's right face; the left face is at −z.
+  const position = geometry.getAttribute('position')
+  for (let i = 0; i < position.count; i++) {
+    position.setX(i, alongFace(elevation, position.getX(i), position.getZ(i) > 0 ? 'right' : 'left'))
+  }
+  position.needsUpdate = true
+  geometry.computeVertexNormals()
 
   // The basis is right-handed, so the normals survive intact. The transform is
   // baked into the vertices: the scene is static, so the mesh needs no

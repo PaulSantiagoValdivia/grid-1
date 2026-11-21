@@ -13,7 +13,9 @@ import { validateDoorSweeps } from '../sweep'
  *
  * The base fixture is one 4 m wall along +X with a 90 cm door from x = 1 to
  * x = 1.9. With `hinge: 'start'` and `swing: 'left'` its sweep is the quarter
- * disc centred on (1, 0), radius 0.9, over +X and +Y.
+ * disc centred on (1, 0.1), radius 0.9, over +X and +Y: since SHT-2 the leaf
+ * hangs from the wall's face at y = 0.1, not from its axis, so it reaches
+ * y = 1.0.
  */
 
 type Tuple = [number, number]
@@ -112,8 +114,8 @@ const blocked = (p: FloorPlan, values: DoorSwingValues = OPEN_LEFT) =>
 describe('a door against a wall', () => {
   it('reports a wall 2 cm into the sweep, in plain language, naming the wall', () => {
     const p = base()
-    // The open leaf reaches y = 0.9; this face stands at y = 0.88.
-    p.walls.push(ceilingAt('w1', 0.88))
+    // The open leaf reaches y = 1.0; this face stands at y = 0.98.
+    p.walls.push(ceilingAt('w1', 0.98))
     expect(blocked(p)).toEqual([
       {
         code: 'opening/door-blocked',
@@ -128,13 +130,13 @@ describe('a door against a wall', () => {
 
   it('clears once the wall stands 2 cm clear of the sweep', () => {
     const p = base()
-    p.walls.push(ceilingAt('w1', 0.92))
+    p.walls.push(ceilingAt('w1', 1.02))
     expect(blocked(p)).toEqual([])
   })
 
   it('lets a wall reach in by less than 1 cm', () => {
     const p = base()
-    p.walls.push(ceilingAt('w1', 0.895))
+    p.walls.push(ceilingAt('w1', 0.995))
     expect(blocked(p)).toEqual([])
   })
 
@@ -147,7 +149,7 @@ describe('a door against a wall', () => {
 
   it('reports one warning naming every wall the sweep hits', () => {
     const p = base()
-    p.walls.push(ceilingAt('w1', 0.88), wall('w2', [1.8, 0.1], [1.8, 3]))
+    p.walls.push(ceilingAt('w1', 0.98), wall('w2', [1.8, 0.1], [1.8, 3]))
     expect(blocked(p).map((i) => [i.code, i.hits])).toEqual([
       ['opening/door-blocked', ['w1', 'w2']]
     ])
@@ -155,7 +157,7 @@ describe('a door against a wall', () => {
 
   it('checks the side the door opens to, not the other one', () => {
     const p = base()
-    p.walls.push(ceilingAt('w1', 0.88))
+    p.walls.push(ceilingAt('w1', 0.98))
     expect(blocked(p, { hinge: 'start', swing: 'right' })).toEqual([])
     expect(blocked(p, { hinge: 'end', swing: 'left' }).map((i) => i.hits)).toEqual([['w1']])
   })
@@ -200,18 +202,19 @@ describe('what counts as a wall', () => {
     expect(blocked(pastLeaf(1.005))).toEqual([])
     expect(blocked(pastLeaf(1.02)).map((i) => i.hits)).toEqual([['w1']])
 
-    // Past the closed leaf: a stub whose top face rises above the door's axis.
+    // Past the closed leaf: a stub whose top face rises above the door wall's face at y = 0.1,
+    // where the closed leaf lies since SHT-2.
     const pastClosed = (face: number): FloorPlan => {
       const p = base()
       p.walls.push(wall('w1', [1.2, face - 0.1], [1.7, face - 0.1]))
       return p
     }
-    expect(blocked(pastClosed(0.005))).toEqual([])
-    expect(blocked(pastClosed(0.02)).map((i) => i.hits)).toEqual([['w1']])
+    expect(blocked(pastClosed(0.105))).toEqual([])
+    expect(blocked(pastClosed(0.12)).map((i) => i.hits)).toEqual([['w1']])
   })
 
   it('lets the leaf swing into another wall\'s doorway, but not into a window\'s sill', () => {
-    // w1's face at y = 0.75 crosses the sweep between x = 1 and about x = 1.5.
+    // w1's face at y = 0.75 crosses the sweep between x = 1 and about x = 1.6.
     const withGap = (type: Opening['type']): FloorPlan => {
       const p = base()
       p.walls.push(ceilingAt('w1', 0.75))
