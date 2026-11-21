@@ -30,7 +30,23 @@ describe('sheet.json (VEW-7)', () => {
     expect(problem).not.toMatch(/secret/)
   })
   it('refuses a fourth paragraph', () => {
-    expect(sheetWordsProblem({ version: '1', intro: ['a', 'b', 'c', 'd'] }, floors)).toMatch(/intro.*3/)
+    expect(sheetWordsProblem({ version: '1', intro: ['a', 'b', 'c', 'd'] }, floors)).toMatch(/intro has more than 3 paragraphs/)
+  })
+  it('refuses a fourth paragraph of a floor, quoting the floor id and naming the limit', () => {
+    const problem = sheetWordsProblem({ version: '1', floors: { ground: ['a', 'b', 'c', 'd'] } }, floors)!
+    expect(problem).toContain('floors["ground"]')
+    expect(problem).toMatch(/has more than 3 paragraphs/)
+  })
+  it('refuses a headline longer than 200 characters, naming the limit and not the text', () => {
+    const problem = sheetWordsProblem({ version: '1', headline: 'secret'.repeat(34) }, floors)!
+    expect(problem).toMatch(/headline/)
+    expect(problem).toMatch(/200 characters/)
+    expect(problem).not.toMatch(/secret/)
+  })
+  it('refuses a lone surrogate', () => {
+    const problem = sheetWordsProblem({ version: '1', headline: '\uD800' }, floors)!
+    expect(problem).toMatch(/headline/)
+    expect(problem).toMatch(/half of a character pair/)
   })
   it('refuses line breaks, control and direction characters', () => {
     for (const bad of ['a\nb', 'a\u0007b', 'a‮b']) {

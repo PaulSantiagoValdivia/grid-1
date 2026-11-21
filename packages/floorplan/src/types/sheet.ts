@@ -28,7 +28,9 @@ function textProblem(where: string, value: unknown, max: number): string | null 
   if (typeof value !== 'string') return `${where} must be text`
   if (value.length === 0) return `${where} is empty`
   if (value.length > max) return `${where} is longer than ${max} characters`
-  if (UNSAFE_TEXT.test(value)) return `${where} holds a line break, a control character or a direction character`
+  if (UNSAFE_TEXT.test(value)) {
+    return `${where} holds a character Grid does not take: a line break, a control or direction character, or half of a character pair`
+  }
   return null
 }
 
@@ -73,7 +75,7 @@ export function sheetWordsProblem(raw: unknown, floorIds: readonly string[]): st
       if (!floorIds.includes(id)) {
         return PLAIN_KEY.test(id) ? `floors names ${quoted(id)}, which is not a floor of the plan` : 'floors names a floor the plan does not have'
       }
-      const problem = paragraphsProblem(`floors.${id}`, paragraphs)
+      const problem = paragraphsProblem(`floors[${quoted(id)}]`, paragraphs)
       if (problem) return problem
     }
   }
