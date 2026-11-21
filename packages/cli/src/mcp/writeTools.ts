@@ -170,7 +170,7 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
   }
   let raw: Record<string, unknown>
   try {
-    raw = JSON.parse(project.readText(file).text.replace(/^\ufeff/, '')) as Record<string, unknown>
+    raw = JSON.parse(project.readText(file).text) as Record<string, unknown>
   } catch (error) {
     if (error instanceof PathRefused) throw new ToolRefusal(error.message)
     throw new ToolRefusal(`${file} could not be read again to write the change; nothing was written.`)

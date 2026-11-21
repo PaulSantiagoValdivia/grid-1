@@ -44,6 +44,10 @@ Notes for agents and people changing this repository.
   `npm run scoreboard`. It prints five counts and fails when one is worse than
   `scoreboard/current.json`. Its `README.md` defines the counts. A change that moves a count
   stores the new figures in the same commit.
+- A plan file is read one way (MSG-9): `src/fs/textEncoding.ts` turns its bytes into text
+  (byte-order mark, UTF-16, strict UTF-8) and `src/command/planText.ts` limits and cleans its
+  names, ids and lists before the schema. The tool server's arguments use the same character
+  rule. A refusal names the part and the limit, never the text.
 - Every file the command or the tool server reads or writes goes through
   `packages/cli/src/fs/projectFiles.ts`, which keeps it inside the project folder. Nothing else
   in `packages/cli` imports `fs`: `src/__tests__/fileAccess.test.ts` fails if it does.

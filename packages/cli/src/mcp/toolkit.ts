@@ -12,9 +12,10 @@ import { PATH_MAX, PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { PROJECT_FILE, projectPlanFile } from '../command/init'
 import { UsageError } from '../command/options'
 import { loadPlan, PlanRefused, type LoadedPlan } from '../command/plan'
+import { ID_MAX as PLAN_ID_MAX, UNSAFE_TEXT } from '../command/planText'
 
-/** The longest id an argument may hold: a floor, room, opening or wall id. */
-export const ID_MAX = 64
+/** The longest id an argument may hold: a floor, room, opening or wall id, as long as a plan file may hold. */
+export const ID_MAX = PLAN_ID_MAX
 /** What an id may hold: letters, digits, dash, underscore and dot (T-3). */
 export const ID_PATTERN = '^[A-Za-z0-9._-]{1,64}$'
 const ID = new RegExp(ID_PATTERN)
@@ -134,7 +135,8 @@ export function toolDefinition(tool: GridTool): Record<string, unknown> & { name
   }
 }
 
-const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/
+/** The characters a plan file may not hold in a name either (MSG-9): one rule for both. */
+const CONTROL = UNSAFE_TEXT
 
 function listOf(names: readonly string[]): string {
   if (names.length <= 1) return names.join('')

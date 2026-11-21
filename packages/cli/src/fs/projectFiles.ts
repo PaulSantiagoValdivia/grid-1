@@ -25,6 +25,7 @@ import fs from 'fs'
 import { randomBytes } from 'crypto'
 import { homedir } from 'os'
 import path from 'path'
+import { decodeText, TextNotDecoded } from './textEncoding'
 
 /** Why a path was refused. The message is one line and names the path and the project folder. */
 export class PathRefused extends Error {
@@ -33,6 +34,8 @@ export class PathRefused extends Error {
 
 /** Longest path text Grid looks at. Real paths are far shorter. */
 export const PATH_MAX = 4096
+/** The largest text file Grid reads, in bytes, unless the caller says less (MSG-9). */
+export const TEXT_FILE_MAX_BYTES = 64 * 1024 * 1024
 /** As many links as one path may go through, as the systems themselves allow. */
 const LINKS_MAX = 40
 /** Most file systems refuse a longer name: say so plainly instead of with a system error. */
@@ -274,14 +277,27 @@ export class Project {
     return this.locate(given).real
   }
 
-  /** The text of a file in the project. Errors carry `ENOENT` or `EISDIR` as `code`. */
-  readText(given: string): { readonly text: string; readonly real: string } {
+  /**
+   * The text of a file in the project, read by the one reader (`textEncoding.ts`): a byte-order
+   * mark is dropped, UTF-16 is recognised, and anything else must be strict UTF-8, or
+   * `TextNotDecoded` says where it is not. Errors carry `ENOENT`, `EISDIR` or, for a file larger
+   * than `maxBytes`, `EFBIG` as `code`; the size is checked before anything is read.
+   */
+  readText(given: string, maxBytes: number = TEXT_FILE_MAX_BYTES): { readonly text: string; readonly real: string } {
     const { real, missing } = this.locate(given)
     if (missing > 0) throw errno('ENOENT', `no such file ${quoted(given)}`)
     const stat = fs.statSync(real)
     if (stat.isDirectory()) throw errno('EISDIR', `${quoted(given)} is a folder`)
     if (!stat.isFile()) throw this.refused(given, 'it is not a plain file')
-    return { text: fs.readFileSync(real, 'utf8'), real }
+    if (stat.size > maxBytes) throw errno('EFBIG', `${quoted(given)} is larger than ${maxBytes} bytes`)
+    const bytes = fs.readFileSync(real)
+    if (bytes.length > maxBytes) throw errno('EFBIG', `${quoted(given)} is larger than ${maxBytes} bytes`)
+    try {
+      return { text: decodeText(bytes).text, real }
+    } catch (error) {
+      if (error instanceof TextNotDecoded) throw new TextNotDecoded(`${given} ${error.message}`)
+      throw error
+    }
   }
 
   /** The text of a file, or null when there is none. */

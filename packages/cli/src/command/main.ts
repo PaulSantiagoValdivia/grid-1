@@ -19,6 +19,7 @@
 import { planFloors } from '@ongrid/floorplan/geometry'
 import { version } from '../../package.json'
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
+import { TextNotDecoded } from '../fs/textEncoding'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
@@ -262,7 +263,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused) {
+    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

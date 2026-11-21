@@ -570,7 +570,8 @@ const checkTool: GridTool = {
   },
   outputSchema: objectSchema({
     label: STRING,
-    findings: listSchema(objectSchema({ floor: STRING, message: STRING })),
+    // The rooms a finding is about, by id and name, apart from the message: text from the plan file.
+    findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
     notChecked: listSchema(objectSchema({ floor: STRING, message: STRING })),
     drawing: listSchema(objectSchema({ severity: STRING, entity: STRING, id: STRING, message: STRING })),
   }),
@@ -583,7 +584,12 @@ const checkTool: GridTool = {
     } catch (error) {
       throw asRefusal(error)
     }
-    const findings = result.report.findings.map((f) => ({ floor: f.floor, message: f.message }))
+    const roomName = new Map(loaded.plan.rooms.map((r) => [r.id, r.name]))
+    const findings = result.report.findings.map((f) => ({
+      floor: f.floor,
+      message: f.message,
+      rooms: f.rooms.map((id) => ({ id, name: roomName.get(id) ?? '' })),
+    }))
     const notChecked = result.report.notChecked.map((n) => ({ floor: n.floor, message: n.message }))
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]

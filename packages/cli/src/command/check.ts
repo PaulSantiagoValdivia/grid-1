@@ -100,7 +100,7 @@ export function checkText(result: CheckResult, floorCount: number): string {
   if (result.issues.length > 0) {
     lines.push(...section(
       'Problems in the drawing',
-      result.issues.map((issue) => `${issue.severity === 'error' ? 'left out' : 'worth a look'}, ${issue.entity} ${issue.id}: ${issue.message}`),
+      result.issues.map((issue) => `${issue.severity === 'error' ? 'left out' : 'worth a look'}, ${issue.entity} ${JSON.stringify(issue.id)}: ${issue.message}`),
     ))
   }
 
