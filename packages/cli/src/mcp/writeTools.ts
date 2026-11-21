@@ -15,6 +15,7 @@ import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type Mirror, type Patch } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
+import type { SheetLayout } from '../sheet/pages'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan, type Survey } from '../quantities/survey'
@@ -47,7 +48,7 @@ const q = (text: string): string => JSON.stringify(text)
 
 /** The command's messages name its options; a tool names its arguments. */
 function asArguments(message: string): string {
-  return message.replace(/--(format|floor)\b/g, '$1')
+  return message.replace(/--(format|floor|layout|sheet)\b/g, '$1')
 }
 
 const exportTool: GridTool = {
@@ -135,6 +136,16 @@ const previewTool: GridTool = {
 
 export const SHEET_TOOL_NAME = 'grid_sheet'
 
+/** The layout, checked as the command checks it, with the command's refusal in a tool's words. */
+function sheetLayoutOf(layout: unknown, withWords: boolean): SheetLayout {
+  try {
+    return checkSheetRequest({ layout: layout as string | undefined, sheet: withWords ? 'sheet' : undefined })
+  } catch (error) {
+    if (error instanceof UsageError) throw new ToolRefusal(asArguments(error.message))
+    throw error
+  }
+}
+
 const sheetTool: GridTool = {
   name: SHEET_TOOL_NAME,
   title: 'Make a PDF sheet',
@@ -152,7 +163,9 @@ const sheetTool: GridTool = {
       examples: [{ version: '1', name: 'Solace House', headline: 'A private retreat for one', intro: ['A two-storey home for work and rest.'], floors: { ground: ['The study sits beside the entry.'] } }],
       schema: sheetWordsJsonSchema(),
       // The shape and limits here; the plan's floor ids in run(), where the plan is known.
-      read: (value) => {
+      read: (value, earlier) => {
+        // A check sheet takes no words: that refusal comes before any about the words.
+        sheetLayoutOf(earlier['layout'], true)
         const problem = sheetWordsProblem(value, null)
         if (problem !== null) throw new ToolRefusal(`The sheet words: ${problem}.`)
         return value
@@ -163,8 +176,8 @@ const sheetTool: GridTool = {
   async run(args, context) {
     const layoutArg = args['layout'] as string
     const given = args['sheet'] as Record<string, unknown> | undefined
+    const layout = sheetLayoutOf(layoutArg, given !== undefined)
     try {
-      const layout = checkSheetRequest({ layout: layoutArg, sheet: given === undefined ? undefined : 'sheet' })
       const { project, file, loaded } = readPlan(context, args['plan'])
       const words = layout === 'check'
         ? null
@@ -178,7 +191,6 @@ const sheetTool: GridTool = {
       return { text: lines.join('\n'), data: { written, layout, pages: done.pages, note: done.note ?? null } }
     } catch (error) {
       if (error instanceof SheetWordsRefused) throw new ToolRefusal(`The sheet words: ${error.message}.`)
-      if (error instanceof UsageError) throw new ToolRefusal(error.message.replace(/--(layout|sheet)\b/g, '$1'))
       throw asRefusal(error)
     }
   },

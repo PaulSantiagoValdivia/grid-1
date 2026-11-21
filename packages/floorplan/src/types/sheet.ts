@@ -74,11 +74,12 @@ export function sheetWordsProblem(raw: unknown, floorIds: readonly string[] | nu
   if ('floors' in given) {
     const floors = given['floors']
     if (typeof floors !== 'object' || floors === null || Array.isArray(floors)) return 'floors must be an object keyed by floor id'
-    for (const [id, paragraphs] of Object.entries(floors)) {
+    for (const [i, [id, paragraphs]] of Object.entries(floors).entries()) {
       if (floorIds !== null && !floorIds.includes(id)) {
         return PLAIN_KEY.test(id) ? `floors names ${quoted(id)}, which is not a floor of the plan` : 'floors names a floor the plan does not have'
       }
-      const problem = paragraphsProblem(`floors[${quoted(id)}]`, paragraphs)
+      // A key that is not plain may be anything the author or an agent wrote: it is named by its place.
+      const problem = paragraphsProblem(PLAIN_KEY.test(id) ? `floors[${quoted(id)}]` : `floors (key ${i + 1})`, paragraphs)
       if (problem) return problem
     }
   }

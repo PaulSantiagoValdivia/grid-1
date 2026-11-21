@@ -66,8 +66,11 @@ export type ArgSpec =
       readonly examples: readonly Record<string, unknown>[]
       /** The JSON Schema `tools/list` shows. */
       readonly schema: Record<string, unknown>
-      /** Checks the value; throws ToolRefusal with one line. */
-      readonly read: (value: unknown) => unknown
+      /**
+       * Checks the value; throws ToolRefusal with one line. `earlier` holds the arguments
+       * listed before this one, already read, so a refusal they decide can come first.
+       */
+      readonly read: (value: unknown, earlier: Readonly<Record<string, unknown>>) => unknown
       readonly required?: boolean
     }
 
@@ -154,7 +157,7 @@ function listOf(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
-function checkOne(name: string, spec: ArgSpec, value: unknown): unknown {
+function checkOne(name: string, spec: ArgSpec, value: unknown, earlier: Readonly<Record<string, unknown>> = {}): unknown {
   switch (spec.type) {
     case 'string': {
       if (typeof value !== 'string' || value === '') {
@@ -189,7 +192,7 @@ function checkOne(name: string, spec: ArgSpec, value: unknown): unknown {
     }
     case 'object': {
       if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new ToolRefusal(`${name} takes an object.`)
-      return spec.read(value)
+      return spec.read(value, earlier)
     }
   }
 }
@@ -214,7 +217,7 @@ export function readArgs(tool: GridTool, raw: unknown): Record<string, unknown> 
       if (spec.required) throw new ToolRefusal(`Pass ${name}: ${spec.description.split('. ')[0]!.replace(/\.$/, '')}.`)
       continue
     }
-    args[name] = checkOne(name, spec, value)
+    args[name] = checkOne(name, spec, value, args)
   }
   return args
 }
