@@ -450,3 +450,9 @@ Grid now says, quoted from the message.
 | `N/scenarios/d5-block-with-basement.json` | B1: B1-bay-9 | 11.75 | 11.71 | `room/space-mismatch`: 0.04 m² of it lies on wall B1-col-5, which its wall list leaves out |
 | `Q/scenarios/part1-limits/columns.json` | hall | 90.00 | 89.52 | `room/space-mismatch`: 0.48 m² of it lies on walls col-1, col-2 and col-3, which its wall list leaves out |
 | `X/haiku/brief-3/attempt-1.json` | hall | 8.74 | 8.73 | nothing new: 0.0100 m², one corner square (V-10, see "Listed with a reason") |
+
+## Done since
+
+- **The `--floor` filter** (lane B): `checkPlan` now keeps a `floor` issue only on its own floor,
+  so `grid check --floor` and `grid_check` with a floor show the unclaimed floor of that floor
+  alone. `packages/cli/src/command/__tests__/checkFloor.test.ts` holds it.

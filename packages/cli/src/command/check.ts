@@ -67,7 +67,9 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
     // A notice about the whole plan has no floor, and holds for every floor.
     notChecked: full.notChecked.filter((notice) => notice.floor === floor || notice.floor === ''),
   }
-  const issues = loaded.issues.filter((issue) => issue.entity === 'plan' || (on.get(issue.id) ?? floor) === floor)
+  // A `floor` issue (enclosed floor no room claims) has the floor itself as its id.
+  const issues = loaded.issues.filter((issue) =>
+    issue.entity === 'plan' || (issue.entity === 'floor' ? issue.id === floor : (on.get(issue.id) ?? floor) === floor))
   return { label: GENERAL_GUIDANCE_LABEL, floor, issues, report }
 }
 
