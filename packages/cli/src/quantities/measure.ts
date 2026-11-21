@@ -6,7 +6,7 @@
  * Every answer measures the empty room between its wall faces: the plan holds no furniture,
  * fixtures, radiators or door leaves, and says so.
  */
-import { planForFloor, poleOfInaccessibility, spotsInside, type Vec2 } from '@ongrid/floorplan/geometry'
+import { planForFloor, poleOfInaccessibility, spotsInside, tolerance, type Vec2 } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { floorGraph } from '@ongrid/floorplan/geometry/rules/graph'
 import { compassOf, type Compass } from '../describe/facts'
@@ -76,7 +76,7 @@ export interface FitAnswer {
 export function fitInRoom(room: SurveyRoom, shape: { width: number; depth: number } | { diameter: number }): FitAnswer {
   const pole = poleOfInaccessibility(room.polygon)
   if ('diameter' in shape) {
-    const fits = 2 * pole.distance >= shape.diameter - 1e-6
+    const fits = 2 * pole.distance >= shape.diameter - tolerance('joint')
     return { fits, what: `a circle ${shape.diameter.toFixed(2)} m across`, at: fits ? pole.point : null, turned: false, widestCircle: 2 * pole.distance }
   }
   const what = `a ${shape.width.toFixed(2)} × ${shape.depth.toFixed(2)} m rectangle`

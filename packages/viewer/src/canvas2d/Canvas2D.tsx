@@ -9,7 +9,8 @@ import {
   buildFloorPlan,
   ghostsOf,
   planForFloor,
-  resolveFloor
+  resolveFloor,
+  tolerance
 } from '@ongrid/floorplan/geometry'
 import type { PlaybackClock } from '../preview/playback'
 import type { PlanBuild } from '../preview/useBuildFrame'
@@ -142,7 +143,8 @@ interface Canvas2DProps {
 const ZOOM_OUT_MS = 300
 
 function sameBounds(a: Bounds, b: Bounds): boolean {
-  const near = (p: number, q: number) => Math.abs(p - q) < 1e-6
+  const joint = tolerance('joint')
+  const near = (p: number, q: number) => Math.abs(p - q) < joint
   return near(a.min.x, b.min.x) && near(a.min.y, b.min.y) && near(a.max.x, b.max.x) && near(a.max.y, b.max.y)
 }
 

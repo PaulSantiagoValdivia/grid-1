@@ -16,7 +16,7 @@
  * Pure: no DOM measuring, so it runs in tests and on every render without layout reads.
  */
 import type { Dimension, PlanOpening, Rect, Vec2 } from '@ongrid/floorplan/geometry'
-import { doorSwing, poleOfInaccessibility, rectOf, rectTouchesPolygon, spotsInside } from '@ongrid/floorplan/geometry'
+import { doorSwing, poleOfInaccessibility, rectOf, rectTouchesPolygon, spotsInside, tolerance } from '@ongrid/floorplan/geometry'
 import { TEXT_PX } from '../picture/look'
 import type { DoorHanding } from './doorHanding'
 
@@ -151,8 +151,9 @@ export function doorSwingBox(opening: PlanOpening, handing: DoorHanding | undefi
   const open = { x: Math.cos(swing.arc.to), y: Math.sin(swing.arc.to) }
   const points: Vec2[] = [center, swing.leaf[1], { x: center.x + closed.x * radius, y: center.y + closed.y * radius }]
   // The swing is a quarter of a circle: it reaches farthest along an axis that lies inside it.
+  const noTurn = tolerance('noArea')
   for (const axis of [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }, { x: 0, y: -1 }]) {
-    if (axis.x * closed.x + axis.y * closed.y >= -1e-12 && axis.x * open.x + axis.y * open.y >= -1e-12) {
+    if (axis.x * closed.x + axis.y * closed.y >= -noTurn && axis.x * open.x + axis.y * open.y >= -noTurn) {
       points.push({ x: center.x + axis.x * radius, y: center.y + axis.y * radius })
     }
   }
@@ -234,7 +235,7 @@ export function placeRoomLabels(
     (extent.maxX - extent.minX) / 128,
     (extent.maxY - extent.minY) / 128,
     ...sizes.map((size) => 2 * size.halfHeight),
-    1e-6
+    tolerance('joint')
   )
 
   const taken = new BoxIndex<Box>(cell)

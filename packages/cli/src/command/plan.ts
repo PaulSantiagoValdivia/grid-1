@@ -8,6 +8,8 @@
 import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
+import { TextNotDecoded } from '../fs/textEncoding'
+import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
 import { UsageError } from './options'
 
 /** Why a plan was refused. The message is one line. */
@@ -30,13 +32,15 @@ function oneLine(text: string): string {
 
 function readText(project: Project, file: string): { text: string; real: string } {
   try {
-    return project.readText(file)
+    return project.readText(file, PLAN_FILE_MAX_BYTES)
   } catch (error) {
+    if (error instanceof TextNotDecoded) throw new PlanRefused(oneLine(error.message))
     // A path the project refuses is refused as it is: its message names the project folder.
     if (!(error as NodeJS.ErrnoException).code) throw error
     const code = (error as NodeJS.ErrnoException).code
     if (code === 'ENOENT') throw new PlanRefused(`There is no file ${file}.`)
     if (code === 'EISDIR') throw new PlanRefused(`${file} is a folder, not a plan file.`)
+    if (code === 'EFBIG') throw new PlanRefused(`${file} is larger than ${PLAN_FILE_MAX_BYTES / 1024 / 1024} MB, the most Grid reads in a plan file.`)
     if (code === 'EACCES' || code === 'EPERM') throw new PlanRefused(`${file} can't be read: permission denied.`)
     throw new PlanRefused(`${file} can't be read: ${oneLine((error as Error).message)}`)
   }
@@ -93,13 +97,17 @@ export function loadPlan(project: Project, file: string): LoadedPlan {
   const { text, real } = readText(project, file)
   let raw: unknown
   try {
-    raw = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text)
+    // The reader has dropped a byte-order mark already; a second one is not JSON.
+    raw = JSON.parse(text)
   } catch (error) {
     throw new PlanRefused(`${file} is not JSON: ${notJson(text, error)}.`)
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new PlanRefused(`${file} is not a Grid plan: it must be a JSON object with walls, rooms and openings.`)
   }
+  // MSG-9: names and ids are limited and cleaned before the schema reads them.
+  const textProblem = planTextProblem(raw as Record<string, unknown>)
+  if (textProblem !== null) throw new PlanRefused(`${file} is not a Grid plan: ${textProblem}.`)
   const parsed = FloorPlanSchema.safeParse(raw)
   if (!parsed.success) {
     const [first, ...rest] = parsed.error.issues

@@ -11,7 +11,7 @@
 
 import * as THREE from 'three'
 import type { FloorPlan, Opening, Vec3 } from '@ongrid/floorplan/geometry'
-import { pointAlong, wallAxis } from '@ongrid/floorplan/geometry'
+import { pointAlong, tolerance, wallAxis } from '@ongrid/floorplan/geometry'
 import type { InFlight } from '../preview/playback'
 import { progressOf, removalProgress } from '../preview/progress'
 
@@ -151,7 +151,8 @@ const PULSE_GROUND = 0.15
  * just above the ground (a room's label point, an opening's centre).
  */
 export function pulseHeight(plan: FloorPlan, at: { x: number; y: number }): number {
-  const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
+  const joint = tolerance('joint')
+  const near = (a: number, b: number) => Math.abs(a - b) < joint
   const wall = plan.walls.find((w) => near(w.end[0], at.x) && near(w.end[1], at.y))
   return wall ? wall.height : PULSE_GROUND
 }

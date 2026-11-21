@@ -7,6 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
+import { tolerance } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkPlan } from '../command/check'
 import { describePlan } from '../command/describe'
@@ -425,7 +426,7 @@ const measureTool: GridTool = {
     const schedule = planSchedule(survey, { types: ['door', 'opening'], narrowerThan: under })
     const name = (id: string): string => (survey.facts.rooms.has(id) ? q(survey.facts.rooms.get(id)!.name) : id)
     const doors = schedule.rows.flatMap((row) => row.items.map((item) => ({ id: item.id, type: row.type, width: row.width, between: item.between })))
-    const rooms = survey.rooms.filter((r) => r.polygon.length >= 3).map((r) => measureRoom(r)).filter((r) => r.widestCircle < under - 1e-9)
+    const rooms = survey.rooms.filter((r) => r.polygon.length >= 3).map((r) => measureRoom(r)).filter((r) => r.widestCircle < under - tolerance('noLength'))
     const lines = [
       doors.length === 0 ? `No door or opening is narrower than ${L(under)}.` : `Narrower than ${L(under)}: ${doors.map((d) => `${d.type} ${q(d.id)} ${L(d.width)} (${name(d.between[0])} ↔ ${name(d.between[1])})`).join('; ')}.`,
       rooms.length === 0 ? `Every room holds a circle ${L(under)} across.` : `Rooms whose widest circle is under ${L(under)}: ${rooms.map((r) => `${q(r.name)} ${L(r.widestCircle)}`).join(', ')}.`,
@@ -569,7 +570,8 @@ const checkTool: GridTool = {
   },
   outputSchema: objectSchema({
     label: STRING,
-    findings: listSchema(objectSchema({ floor: STRING, message: STRING })),
+    // The rooms a finding is about, by id and name, apart from the message: text from the plan file.
+    findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
     notChecked: listSchema(objectSchema({ floor: STRING, message: STRING })),
     drawing: listSchema(objectSchema({ severity: STRING, entity: STRING, id: STRING, message: STRING })),
   }),
@@ -582,7 +584,12 @@ const checkTool: GridTool = {
     } catch (error) {
       throw asRefusal(error)
     }
-    const findings = result.report.findings.map((f) => ({ floor: f.floor, message: f.message }))
+    const roomName = new Map(loaded.plan.rooms.map((r) => [r.id, r.name]))
+    const findings = result.report.findings.map((f) => ({
+      floor: f.floor,
+      message: f.message,
+      rooms: f.rooms.map((id) => ({ id, name: roomName.get(id) ?? '' })),
+    }))
     const notChecked = result.report.notChecked.map((n) => ({ floor: n.floor, message: n.message }))
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]

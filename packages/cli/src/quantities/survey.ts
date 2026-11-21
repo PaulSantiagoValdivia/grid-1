@@ -12,6 +12,7 @@ import {
   indexPlan,
   planForFloor,
   sub,
+  tolerance,
   wallAxis,
   type FloorPlan,
   type Vec2,
@@ -19,7 +20,7 @@ import {
 } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
-import { planFacts, type OpeningFacts, type PlanFacts, type RoomFacts } from '../describe/facts'
+import { ALONG_WALL_SINE, planFacts, type OpeningFacts, type PlanFacts, type RoomFacts } from '../describe/facts'
 
 /** How far a side of the outline may be from a wall's face and still lie on it, in metres. */
 const ON_FACE_M = 0.02
@@ -53,11 +54,11 @@ export interface Survey {
 function wallOfEdge(from: Vec2, to: Vec2, walls: readonly Wall[]): Wall | null {
   const edge = sub(to, from)
   const length = Math.hypot(edge.x, edge.y)
-  if (length < 1e-9) return null
+  if (length < tolerance('noLength')) return null
   for (const wall of walls) {
     const axis = wallAxis(wall)
-    if (axis.length < 1e-9) continue
-    if (Math.abs(cross(edge, axis.dir)) / length > 1e-3) continue
+    if (axis.length < tolerance('noLength')) continue
+    if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
     const half = wall.virtual === true ? 0 : wall.thickness / 2
     const off = (p: Vec2): number => Math.abs(dot(sub(p, axis.start), axis.normal))
     if (Math.abs(off(from) - half) > ON_FACE_M || Math.abs(off(to) - half) > ON_FACE_M) continue

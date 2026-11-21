@@ -116,6 +116,27 @@ plan or a path was refused or a file could not be written, and 2 when the comman
 refused. A refusal is one line on standard error. Findings in a report are not a refusal:
 `grid check` still exits 0.
 
+### What a plan file may hold
+
+The command and the tool server read a plan file one way (`packages/cli/src/fs/textEncoding.ts`
+and `packages/cli/src/command/planText.ts`). The file may be UTF-8, with or without a byte-order
+mark, or UTF-16; anything else is refused with the first byte that is not UTF-8, so a Latin-1
+file never reaches the exports with its letters turned into question marks. A file larger than
+64 MB is refused before it is read. Then, before the schema:
+
+| Text | At most | Also refused |
+|---|---|---|
+| a room or floor name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening or floor, a wall a room or an opening names, a part's floor | 64 characters | the same |
+| the trace image's path | 1,024 characters | the same |
+| walls, rooms, openings or floors | 50,000 of each | |
+| the walls a room lists | 2,000 | |
+
+A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
+one line`) and never repeats the text. Markup in a name is allowed: it is drawn as text. The
+ids in `grid check`'s drawing problems are quoted, and `grid_check` returns the rooms a finding
+is about, by id and name, apart from its message.
+
 ### Floor no room claims
 
 Besides the findings, `grid check` lists problems in the drawing. Some of them come from the

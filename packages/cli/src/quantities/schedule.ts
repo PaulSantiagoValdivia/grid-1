@@ -3,6 +3,7 @@
  * listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no
  * frame, leaf or clear width.
  */
+import { tolerance } from '@ongrid/floorplan/geometry'
 import { sideNames, type Survey } from './survey'
 
 export const SCHEDULE_RULE =
@@ -40,7 +41,7 @@ export function planSchedule(
     if (options.floors !== undefined && !options.floors.includes(floor.id)) continue
     for (const opening of floor.openings) {
       if (options.types !== undefined && !options.types.includes(opening.type)) continue
-      if (options.narrowerThan !== undefined && !(opening.width < options.narrowerThan - 1e-9)) continue
+      if (options.narrowerThan !== undefined && !(opening.width < options.narrowerThan - tolerance('noLength'))) continue
       const key = [opening.type, opening.width.toFixed(3), opening.height.toFixed(3), opening.sill.toFixed(3)].join('|')
       const group = groups.get(key) ?? { type: opening.type, width: opening.width, height: opening.height, sill: opening.sill, items: [] }
       group.items.push({ id: opening.id, floor: floor.id, between: sideNames(opening) })

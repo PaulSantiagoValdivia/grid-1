@@ -7,9 +7,12 @@
  * anything is listed, the second plan is tried as the first one moved, mirrored or turned a
  * quarter: a flipped flat is said to be flipped, not listed as twenty moved walls (Y-4, Y-5).
  */
-import { wallAxis, type FloorPlan, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { tolerance, wallAxis, type FloorPlan, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { planAreas, type PlanAreas } from './areas'
 import { sideNames, type Survey } from './survey'
+
+/** Two sizes closer than this are one (MSG-15's `joint`; arithmetic, so it never changes). */
+const joint = tolerance('joint')
 
 export interface OptionRow {
   readonly label: string
@@ -137,7 +140,7 @@ function sameWall(a: Wall, b: Wall, map: Transform): boolean {
   const s = map(pt(a.start))
   const e = map(pt(a.end))
   const ends = (close(s, pt(b.start)) && close(e, pt(b.end))) || (close(s, pt(b.end)) && close(e, pt(b.start)))
-  return ends && Math.abs(a.thickness - b.thickness) < 1e-6 && a.virtual === b.virtual
+  return ends && Math.abs(a.thickness - b.thickness) < joint && a.virtual === b.virtual
 }
 
 /** Where an opening's middle is, on its wall's axis. */
@@ -265,7 +268,7 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
     const alike = o.pairs.every(({ a: ia, b: ib }) => {
       const oa = a.plan.openings.find((x) => x.id === ia)!
       const ob = b.plan.openings.find((x) => x.id === ib)!
-      const sized = Math.abs(oa.width - ob.width) < 1e-6 && Math.abs(oa.height - ob.height) < 1e-6 && Math.abs(oa.sill - ob.sill) < 1e-6
+      const sized = Math.abs(oa.width - ob.width) < joint && Math.abs(oa.height - ob.height) < joint && Math.abs(oa.sill - ob.sill) < joint
       const plain = t.likeness === 'same' || t.likeness === 'moved'
       return sized && (!plain || (oa.swing === ob.swing && oa.hinge === ob.hinge) || !sameDirection(a.plan, b.plan, oa.wall, ob.wall, t.map))
     })
@@ -310,9 +313,9 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
       const oa = a.plan.openings.find((o) => o.id === pair.a)!
       const ob = b.plan.openings.find((o) => o.id === pair.b)!
       const changes: string[] = []
-      if (Math.abs(oa.width - ob.width) > 1e-6) changes.push(`width ${oa.width.toFixed(2)} → ${ob.width.toFixed(2)} m`)
-      if (Math.abs(oa.height - ob.height) > 1e-6) changes.push(`height ${oa.height.toFixed(2)} → ${ob.height.toFixed(2)} m`)
-      if (Math.abs(oa.sill - ob.sill) > 1e-6) changes.push(`sill ${oa.sill.toFixed(2)} → ${ob.sill.toFixed(2)} m`)
+      if (Math.abs(oa.width - ob.width) > joint) changes.push(`width ${oa.width.toFixed(2)} → ${ob.width.toFixed(2)} m`)
+      if (Math.abs(oa.height - ob.height) > joint) changes.push(`height ${oa.height.toFixed(2)} → ${ob.height.toFixed(2)} m`)
+      if (Math.abs(oa.sill - ob.sill) > joint) changes.push(`sill ${oa.sill.toFixed(2)} → ${ob.sill.toFixed(2)} m`)
       // The walls may run the other way in the other plan: then left and right, start and end swap.
       const wa = a.plan.walls.find((w) => w.id === oa.wall)
       const wb = b.plan.walls.find((w) => w.id === ob.wall)

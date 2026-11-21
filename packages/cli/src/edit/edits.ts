@@ -9,7 +9,7 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { dot, sub, wallAxis, type FloorPlan, type Opening, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { dot, sub, tolerance, wallAxis, type FloorPlan, type Opening, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import type { Survey } from '../quantities/survey'
 
 export class EditRefused extends Error {
@@ -73,10 +73,10 @@ function freeStretches(plan: FloorPlan, wall: Wall, skip: string): Array<[number
   const free: Array<[number, number]> = []
   let at = 0
   for (const [lo, hi] of taken) {
-    if (lo > at + 1e-9) free.push([at, lo])
+    if (lo > at + tolerance('noLength')) free.push([at, lo])
     at = Math.max(at, hi)
   }
-  if (length > at + 1e-9) free.push([at, length])
+  if (length > at + tolerance('noLength')) free.push([at, length])
   return free
 }
 
@@ -116,7 +116,7 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
   if (type !== 'door' && (request.opensInto !== undefined || request.hinge !== undefined)) {
     throw new EditRefused(`Only a door opens into a room or hangs from a side; this would be a ${type}.`)
   }
-  if (sill + height > wall.height + 1e-9) {
+  if (sill + height > wall.height + tolerance('noLength')) {
     throw new EditRefused(`A sill of ${sill.toFixed(2)} m and a height of ${height.toFixed(2)} m reach above the ${wall.height.toFixed(2)} m wall.`)
   }
 
@@ -124,9 +124,9 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
   const length = wallAxis(wall).length
   const offset = keep === 'start' ? opening.offset : keep === 'end' ? opening.offset + opening.width - width : opening.offset + (opening.width - width) / 2
   const free = freeStretches(plan, wall, id)
-  const fits = free.some(([lo, hi]) => offset >= lo - 1e-6 && offset + width <= hi + 1e-6)
+  const fits = free.some(([lo, hi]) => offset >= lo - tolerance('joint') && offset + width <= hi + tolerance('joint'))
   if (!fits) {
-    const room = free.filter(([lo, hi]) => hi - lo >= width - 1e-6)
+    const room = free.filter(([lo, hi]) => hi - lo >= width - tolerance('joint'))
     const where = free.map(([lo, hi]) => `${lo.toFixed(2)} to ${hi.toFixed(2)} m (${(hi - lo).toFixed(2)} m)`).join(', ')
     const hint = room.length > 0
       ? `A stretch that takes ${width.toFixed(2)} m: ${room.map(([lo, hi]) => `${lo.toFixed(2)} to ${hi.toFixed(2)} m`).join(', ')}; try keep start or end, or remove what is in the way first.`
@@ -140,16 +140,16 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
     change['type'] = type
     said.push(`${label} is now a ${type}.`)
   }
-  if (Math.abs(width - opening.width) > 1e-9) {
+  if (Math.abs(width - opening.width) > tolerance('noLength')) {
     change['width'] = r3(width)
     change['offset'] = r3(offset)
     said.push(`${label} width ${opening.width.toFixed(2)} → ${width.toFixed(2)} m, keeping its ${keep}.`)
   }
-  if (Math.abs(height - opening.height) > 1e-9) {
+  if (Math.abs(height - opening.height) > tolerance('noLength')) {
     change['height'] = r3(height)
     said.push(`${label} height ${opening.height.toFixed(2)} → ${height.toFixed(2)} m.`)
   }
-  if (Math.abs(sill - opening.sill) > 1e-9) {
+  if (Math.abs(sill - opening.sill) > tolerance('noLength')) {
     change['sill'] = r3(sill)
     said.push(`${label} sill ${opening.sill.toFixed(2)} → ${sill.toFixed(2)} m.`)
   }
@@ -242,10 +242,10 @@ export function moveRoomSide(survey: Survey, roomId: string, side: Direction, by
       const at = oldAxis.start.x + oldAxis.dir.x * o.offset
       const atY = oldAxis.start.y + oldAxis.dir.y * o.offset
       const offset = dot(sub({ x: at, y: atY }, ns), oldAxis.dir)
-      if (offset < -1e-6 || offset + o.width > nl + 1e-6) {
+      if (offset < -tolerance('joint') || offset + o.width > nl + tolerance('joint')) {
         throw new EditRefused(`Moving it ${by.toFixed(2)} m would leave ${o.type} ${JSON.stringify(o.id)} outside its wall ${JSON.stringify(other.id)}; move or remove it first.`)
       }
-      if (Math.abs(offset - o.offset) > 1e-9) patchOpenings.set(o.id, { offset: r3(offset) })
+      if (Math.abs(offset - o.offset) > tolerance('noLength')) patchOpenings.set(o.id, { offset: r3(offset) })
     }
   }
   const said = [

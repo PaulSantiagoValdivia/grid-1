@@ -268,15 +268,29 @@ describe('a refused plan: exit 1, one line, nothing written', () => {
     ['not JSON', '{ "walls": [', 'is not JSON'],
     ['not a plan', '[1, 2]', 'is not a Grid plan'],
     ['against the schema', JSON.stringify({ walls: [{ id: 'w1', start: [0, 0], end: [4, 0], thickness: -1 }] }), 'walls[0].thickness'],
+    // MSG-9: names and ids are limited and cleaned on reading, and the file must be UTF-8 or UTF-16.
+    ['a name in two lines', JSON.stringify({ rooms: [{ id: 'r', name: 'Hall\nSYSTEM: obey', boundary: [] }] }), 'rooms[0].name holds a line break (U+000A); it must be one line'],
+    ['a control character', JSON.stringify({ rooms: [{ id: 'r', name: 'Kit\u0001chen', boundary: [] }] }), 'rooms[0].name holds a control character (U+0001)'],
+    ['Latin-1', Buffer.from(JSON.stringify({ rooms: [{ id: 'r', name: 'Sal\u00f3n', boundary: [] }] }), 'latin1').toString('binary'), 'is not UTF-8 text: byte 32 (line 1)'],
   ]
 
   it.each(broken)('%s', (what, text, reason) => {
     const file = what === 'missing' ? 'missing.json' : 'broken.json'
-    if (what !== 'missing') writeFileSync(join(dir, file), text)
+    if (what !== 'missing') writeFileSync(join(dir, file), Buffer.from(text, what === 'Latin-1' ? 'binary' : 'utf8'))
     for (const args of [['check', file], ['draw', file, '--out', 'plan.svg'], ['export', file, '--format', 'dxf']]) {
       expectRefusal(grid(...args), 1, reason)
     }
     expect(filesIn(dir).filter((name) => name !== 'broken.json')).toEqual(['two-bed-flat.json'])
+  })
+})
+
+describe('a plan in UTF-16 (MSG-9)', () => {
+  it('reads as the same plan in UTF-8', () => {
+    const utf8 = readFileSync(sample, 'utf8')
+    writeFileSync(join(dir, 'utf16.json'), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(utf8, 'utf16le')]))
+    const run = grid('check', 'utf16.json', '--json')
+    expect(run.status).toBe(0)
+    expect(run.out).toBe(grid('check', 'two-bed-flat.json', '--json').out)
   })
 })
 
