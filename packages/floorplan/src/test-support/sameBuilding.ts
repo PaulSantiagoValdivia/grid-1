@@ -16,7 +16,7 @@ import type { FloorPlan, Wall } from '../types/floorplan'
 import { indexPlan } from '../geometry/plan'
 import { tryRoomPolygon } from '../geometry/room'
 import { validatePlan } from '../geometry/validate'
-import { checkLocalRules } from '../geometry/rules/check'
+import { checkPlanSanity } from '../geometry/rules/check'
 
 const STEP = 0.01
 
@@ -139,7 +139,7 @@ function areasOf(plan: FloorPlan): Map<string, number> {
 
 function checkCodes(plan: FloorPlan): string[] {
   const drawing = validatePlan(plan).issues.map((i) => `${i.severity} ${i.code}`)
-  const rules = checkLocalRules(plan).findings.map((f) => `rule ${f.code}`)
+  const rules = checkPlanSanity(plan).findings.map((f) => `rule ${f.code}`)
   return [...drawing, ...rules].sort()
 }
 
