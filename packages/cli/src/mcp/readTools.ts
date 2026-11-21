@@ -12,6 +12,7 @@ import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkPlan } from '../command/check'
 import { describePlan } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
+import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
 import { LOOKS, SIDES, type LookName, type Side } from '../draw/viewNames'
 import { AREA_RULES, planAreas } from '../quantities/areas'
@@ -443,6 +444,20 @@ const measureTool: GridTool = {
 
 const COMPASS_HEADING: Record<string, number> = { north: 0, 'north-east': 45, east: 90, 'south-east': 135, south: 180, 'south-west': 225, west: 270, 'north-west': 315 }
 
+/** The part a crop names on the floor: an id first, else a room's name (any case), else refused naming the rooms. */
+function cropPart(plan: FloorPlan, floor: string, crop: string): PartBounds {
+  const parts = partBounds(plan, floor)
+  const byId = parts.find((p) => p.id === crop)
+  if (byId) return byId
+  const wanted = crop.trim().toLowerCase()
+  const named = plan.rooms.filter((r) => floorOf(r) === floor && r.name.trim().toLowerCase() === wanted)
+  if (named.length > 1) throw new ToolRefusal(`${named.length} rooms on that floor are named so: crop by id, one of ${named.map((r) => q(r.id)).join(', ')}.`)
+  const room = named[0] && parts.find((p) => p.id === named[0]!.id)
+  if (room) return room
+  const rooms = plan.rooms.filter((r) => floorOf(r) === floor).slice(0, 30).map((r) => `${q(r.id)} (${q(r.name)})`)
+  throw new ToolRefusal(`crop names no room, door, window or wall drawn on floor ${q(floor)}, nor a room's name. Its rooms: ${rooms.join(', ') || 'none'}.`)
+}
+
 /** The rooms, doors and windows of one floor, by id, as the check view draws them. */
 function idsOnFloor(plan: FloorPlan, floor: string): string[] {
   const walls = new Map(plan.walls.map((w) => [w.id, floorOf(w)]))
@@ -495,30 +510,33 @@ const viewTool: GridTool = {
     eye_height: { type: 'number', description: 'For eye: metres above the floor. 1.6 standing when left out; about 1.2 seated.', examples: [1.6, 1.2], minimum: 0.3, maximum: 3 },
     look: { type: 'string', enum: LOOKS, description: 'For plan: light (the default), dark, or mono for black lines on white.', examples: ['light', 'mono'] },
     dimensions: { type: 'boolean', description: 'For plan: false to leave the sizes off, for a clean drawing. true when left out.', examples: [true, false] },
+    crop: { type: 'string', maxLength: 120, description: 'For plan: frame just this part: a room, door, window or wall id, or a room\'s name. The whole floor when left out.', examples: ['kitchen', 'front-door'] },
     ids: { type: 'boolean', description: 'For plan: true to draw the id of every room, door and window on the picture, as the plan file holds them, and to list them in the text with the areas, what each door joins, the counts and the drawing\'s problems. false when left out.', examples: [true] },
   },
-  outputSchema: objectSchema({ kind: STRING, floor: { type: ['string', 'null'] }, camera: { type: ['object', 'null'] }, pxPerMetre: NULLABLE_NUMBER, sills: { type: 'array' }, ids: listSchema(STRING) }),
+  outputSchema: objectSchema({ kind: STRING, floor: { type: ['string', 'null'] }, camera: { type: ['object', 'null'] }, pxPerMetre: NULLABLE_NUMBER, sills: { type: 'array' }, ids: listSchema(STRING), boxes: { type: 'array' } }),
   async run(args, context) {
     const { loaded } = readPlan(context, args['plan'])
     const survey = surveyPlan(loaded.plan)
     const floor = floorArg(loaded.plan, args['floor'])
     const kind = args['kind'] as 'plan' | '3d' | 'eye'
-    const allowed: Record<string, readonly string[]> = { plan: ['floor', 'look', 'dimensions', 'ids'], '3d': ['floor', 'from'], eye: ['room', 'toward', 'eye_height'] }
-    const stray = ['floor', 'from', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
+    const allowed: Record<string, readonly string[]> = { plan: ['floor', 'look', 'dimensions', 'ids', 'crop'], '3d': ['floor', 'from'], eye: ['room', 'toward', 'eye_height'] }
+    const stray = ['floor', 'from', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids', 'crop'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`kind=${kind} takes ${allowed[kind]!.join(', ')}, not ${stray.join(', ')}.`)
     const plan = survey.plan
     if (kind === 'plan') {
       const look = (args['look'] as LookName | undefined) ?? 'light'
       const { planView } = await import('../draw/views')
       const withIds = args['ids'] === true
-      const view = await planView(plan, { ...(floor ? { floor } : {}), look, dimensions: args['dimensions'] !== false, ids: withIds })
       const shown = floor ?? survey.facts.floors[0]?.id ?? 'ground'
-      const lines = [`Plan of floor ${q(shown)}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
+      const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
+      const view = await planView(plan, { floor: shown, look, dimensions: args['dimensions'] !== false, ids: withIds, ...(crop ? { frame: cropFrame(crop) } : {}) })
+      const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
+      lines.push('Each part\'s box on the picture, in pixels from its top-left corner, is in boxes: id, kind and x, y, width, height.')
       if (withIds) lines.push(...checkViewText(loaded, shown))
       return {
         text: lines.join('\n'),
-        data: { kind, floor: shown, camera: null, pxPerMetre: view.pxPerMetre, sills: [], ids },
+        data: { kind, floor: shown, camera: null, pxPerMetre: view.pxPerMetre, sills: [], ids, boxes: view.boxes ?? [] },
         image: { data: view.png, mimeType: 'image/png' },
       }
     }
@@ -528,7 +546,7 @@ const viewTool: GridTool = {
       const view = await modelView(plan, { from, ...(floor ? { floor } : {}) })
       return {
         text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing. The model has no roof, furniture, glass or door leaves. Look at the picture before you describe it.`,
-        data: { kind, floor: floor ?? null, camera: view.camera, pxPerMetre: null, sills: [], ids: [] },
+        data: { kind, floor: floor ?? null, camera: view.camera, pxPerMetre: null, sills: [], ids: [], boxes: [] },
         image: { data: view.png, mimeType: 'image/png' },
       }
     }
@@ -562,7 +580,7 @@ const viewTool: GridTool = {
       : `Windows in the room, sill and top against the eye at ${m(height)} m: ${sills.map((s) => `${q(s.id)} sill ${m(s.sill)}, top ${m(s.top)} (${s.sill < height ? 'the eye is above the sill' : 'the sill is at or above the eye'})`).join('; ')}.`
     return {
       text: `Standing in ${q(room.facts.name)} at (${m(view.camera.at[0])}, ${m(view.camera.at[1])}), eye ${m(height)} m above the floor, looking level toward ${looking} (heading ${view.camera.heading.toFixed(0)}° from the top of the drawing), 90° across. ${sillText} The model has no ceiling, glass, furniture or anything outside. Look at the picture before you describe it.`,
-      data: { kind, floor: room.facts.floor, camera: view.camera, pxPerMetre: null, sills, ids: [] },
+      data: { kind, floor: room.facts.floor, camera: view.camera, pxPerMetre: null, sills, ids: [], boxes: [] },
       image: { data: view.png, mimeType: 'image/png' },
     }
   },
