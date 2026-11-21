@@ -137,7 +137,7 @@ export function diffPlans(
     type: 'room',
     matched: roomPairs,
     floorOf: (room) => floorOf(room),
-    props: roomProps
+    props: (before, after) => roomProps(before, after, epsilon)
   })
   const wallChanges = new Map(walls.map((c) => [c.entity.id, c] as const))
   const roomChanges = new Map(rooms.map((c) => [c.entity.id, c] as const))

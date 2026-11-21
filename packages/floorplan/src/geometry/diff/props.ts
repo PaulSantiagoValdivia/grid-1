@@ -58,7 +58,14 @@ export function wallProps(before: Wall, after: Wall, epsilon: number): PropChang
   ])
 }
 
-export function roomProps(before: Room, after: Room): PropChange[] {
+/** A number a part may leave unstated: stated or taken out is a change, null on the unstated side. */
+function optionalNumber(key: string, before: number | undefined, after: number | undefined, epsilon: number): PropChange | null {
+  if (before === undefined && after === undefined) return null
+  if (before === undefined || after === undefined) return { key, before: before ?? null, after: after ?? null }
+  return number(key, before, after, epsilon)
+}
+
+export function roomProps(before: Room, after: Room, epsilon: number): PropChange[] {
   const sameBoundary =
     before.boundary.length === after.boundary.length &&
     before.boundary.every((id, i) => id === after.boundary[i])
@@ -68,7 +75,9 @@ export function roomProps(before: Room, after: Room): PropChange[] {
     sameBoundary ? null : { key: 'boundary', before: [...before.boundary], after: [...after.boundary] },
     exact('floor', floorOf(before), floorOf(after)),
     // ARE-5. Unstated and `false` are the same room.
-    exact('inside', before.inside === true, after.inside === true)
+    exact('inside', before.inside === true, after.inside === true),
+    // ARE-10. Unstated is not a height: the room follows its walls.
+    optionalNumber('height', before.height, after.height, epsilon)
   ])
 }
 
