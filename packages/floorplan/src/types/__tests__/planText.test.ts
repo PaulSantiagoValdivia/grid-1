@@ -10,7 +10,7 @@ import { checkLocalRules } from '../../geometry/rules'
 import { validatePlan } from '../../geometry/validate'
 import { indexPlan } from '../../geometry/plan'
 import { diffPlans } from '../../geometry/diff/diff'
-import { flat } from '../../geometry/__tests__/rules-fixtures'
+import { flat } from '../../test-support/plans'
 
 /** The first problem the schema names, as `path: message`, or null when the plan reads. */
 function refusal(raw: unknown): string | null {

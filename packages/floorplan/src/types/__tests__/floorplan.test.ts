@@ -5,6 +5,7 @@ import {
   DEFAULT_FLOOR_ID,
   EMPTY_FLOOR_PLAN,
   FloorPlanSchema,
+  PlanSchemaError,
   ROOM_USES,
   parseFloorPlan,
   safeParseFloorPlan
@@ -93,6 +94,19 @@ describe('a plan that names floors', () => {
     })
 
     expect(parsed.floors?.[0]?.level).toBe(-1)
+  })
+})
+
+describe('the error a plan that does not fit throws (QAR-6)', () => {
+  it('is the one floorplan re-exports, so callers never import the schema library', () => {
+    let thrown: unknown
+    try {
+      parseFloorPlan({ ...v1Plan, units: 'ft' })
+    } catch (error) {
+      thrown = error
+    }
+    expect(thrown).toBeInstanceOf(PlanSchemaError)
+    expect((thrown as PlanSchemaError).issues[0]?.path).toEqual(['units'])
   })
 })
 

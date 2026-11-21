@@ -24,9 +24,8 @@ vi.mock('@react-three/fiber', async (importOriginal) => ({
     return null
   }
 }))
-vi.mock('@react-three/drei', () => ({ Grid: () => null, OrbitControls: () => null }))
 
-const { OrbitControls } = await import('@react-three/drei')
+const { OrbitControls } = await import('../../canvas3d/OrbitControls')
 const { Canvas3D } = await import('../../canvas3d/Canvas3D')
 const { buildingFrame } = await import('../../canvas3d/building')
 const { OPENING_CAMERA, openingCamera, stillScene, LIGHT_COLORS_3D } = await import('..')

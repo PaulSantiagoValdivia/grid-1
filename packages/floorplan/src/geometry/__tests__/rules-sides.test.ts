@@ -3,7 +3,7 @@ import type { FloorPlan } from '../plan'
 import { indexPlan } from '../plan'
 import { openingSides, roomOutlines } from '../rules/graph'
 import { distance, fromTuple } from '../vec2'
-import { door, edit, flat, longWallStrip, withOpening } from './rules-fixtures'
+import { door, edit, flat, longWallStrip, withOpening } from '../../test-support/plans'
 
 /** The rooms on each side of an opening, as a sorted list with `null` for no room. */
 function sides(plan: FloorPlan, openingId: string): (string | null)[] {

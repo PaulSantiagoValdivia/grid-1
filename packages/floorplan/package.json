@@ -10,7 +10,8 @@
     "./types/floorplan": "./src/types/floorplan.ts",
     "./types/sheet": "./src/types/sheet.ts",
     "./export": "./src/export/planExport.ts",
-    "./notes": "./src/notes/notes.ts"
+    "./notes": "./src/notes/notes.ts",
+    "./test-support/plans": "./src/test-support/plans.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

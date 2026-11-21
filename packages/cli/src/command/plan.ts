@@ -6,7 +6,7 @@
  * are left out, as the app leaves them out, and `grid check` says which and why.
  */
 import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
-import { FloorPlanSchema, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
@@ -51,9 +51,6 @@ function pathText(path: readonly (string | number)[]): string {
   return path.reduce<string>((text, key) => (typeof key === 'number' ? `${text}[${key}]` : text ? `${text}.${key}` : key), '')
 }
 
-/** One problem the plan schema found, typed from the schema itself. */
-type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
-
 /**
  * Where the text stops being JSON, in Grid's words. The parser's own message quotes the text
  * around the spot, and the text may be anything: a stranger's sentence to the agent, or the
@@ -72,7 +69,7 @@ function notJson(text: string, error: unknown): string {
  * A schema problem in Grid's words: where it is and what the schema wants, never the value
  * found there, which is text from the plan. Paths are keys of the schema and positions.
  */
-function schemaProblem(issue: ZodIssue): string {
+function schemaProblem(issue: PlanSchemaIssue): string {
   switch (issue.code) {
     case 'invalid_type':
       return issue.received === 'undefined' ? `needs a ${issue.expected}` : `must be a ${issue.expected}, not a ${issue.received}`

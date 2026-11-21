@@ -39,6 +39,13 @@ import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
 export * from './planText'
 
 /**
+ * The error `parseFloorPlan` throws and one problem it lists. Callers take them from here and
+ * never import the schema library themselves, so they always meet the copy the schema uses.
+ */
+export { ZodError as PlanSchemaError } from 'zod'
+export type { ZodIssue as PlanSchemaIssue } from 'zod'
+
+/**
  * A name, an id or a path from the plan (MSG-9): one line, no control or direction characters,
  * no lone half of a character pair, and no longer than its limit (`planText.ts`). A refusal
  * names the part and the limit, never the text.

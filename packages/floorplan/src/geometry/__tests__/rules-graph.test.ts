@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../plan'
 import { floorGraph } from '../rules/graph'
-import { edit, flat, madeVirtual, window_, withOpening, withoutOpening } from './rules-fixtures'
+import { edit, flat, madeVirtual, window_, withOpening, withoutOpening } from '../../test-support/plans'
 
 const links = (plan: FloorPlan) =>
   floorGraph(plan)

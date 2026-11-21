@@ -3,7 +3,7 @@ import { planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { floorGraph } from '@ongrid/floorplan/geometry/rules/graph'
 import { checkLocalRules } from '..'
 import type { RuleFinding } from '..'
-import { door, edit, exterior, flat, twoFloorHouse, withOpening, withoutOpening } from './fixtures'
+import { door, edit, exterior, flat, twoFloorHouse, withOpening, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 /** What was not checked about routes: the fixtures state no room use, which has its own tests. */
 const routeNotes = (report: ReturnType<typeof checkLocalRules>) =>

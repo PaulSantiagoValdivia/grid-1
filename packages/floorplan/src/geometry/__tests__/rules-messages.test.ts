@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../plan'
 import { checkLocalRules } from '../rules'
-import { door, edit, flat, twoFloorHouse, withOpening, withoutOpening } from './rules-fixtures'
+import { door, edit, flat, twoFloorHouse, withOpening, withoutOpening } from '../../test-support/plans'
 
 const unnamed = (plan: FloorPlan): FloorPlan =>
   edit(plan, (copy) => {
