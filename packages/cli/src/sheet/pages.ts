@@ -11,12 +11,12 @@ import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { FRAME_MARGIN } from '@ongrid/viewer/src/canvas2d/viewport'
 import { planPicture } from '@ongrid/viewer/src/picture'
-import { checkPlan, floorIssues } from '../command/check'
+import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { quoted } from '../fs/projectFiles'
-import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
+import { AREA_RULES, GROSS_NOT_KNOWN, planAreas, type FloorAreas } from '../quantities/areas'
 import { surveyPlan } from '../quantities/survey'
 
 export type SheetLayout = 'client' | 'check'
@@ -109,6 +109,11 @@ function heightFigure(loaded: LoadedPlan): SheetFigure | null {
   return { value, label: 'floor to floor' }
 }
 
+/** An area figure, or "not known" when the plan gives none (the reason goes in the notes). */
+function areaFigure(value: number | null, label: string): SheetFigure {
+  return { value: value === null ? 'not known' : `${areaText(value, 1)} m²`, label }
+}
+
 function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string): Body[] {
   const areas = planAreas(surveyPlan(loaded.plan))
   const floors = planFloors(loaded.plan)
@@ -116,9 +121,8 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const facts = planFacts(loaded.plan)
   const bedrooms = loaded.plan.rooms.filter((room) => room.use === 'bedroom').length
   const title = words?.name ?? name
-  const figures: SheetFigure[] = []
-  if (areas.grossInternal !== null) figures.push({ value: `${areaText(areas.grossInternal, 1)} m²`, label: 'gross internal area' })
-  figures.push({ value: String(floors.length), label: 'floors' })
+  const figures: SheetFigure[] = [areaFigure(areas.grossInternal, 'gross internal area')]
+  figures.push({ value: String(floors.length), label: floors.length === 1 ? 'floor' : 'floors' })
   figures.push({ value: String(bedrooms), label: 'bedrooms' })
   const height = heightFigure(loaded)
   if (height) figures.push(height)
@@ -126,7 +130,8 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const limits = facts.stairRooms > 0 ? [CLIENT_LIMITS, STAIR_LIMIT] : [CLIENT_LIMITS]
   const cover: Body = {
     kind: 'cover', topLine: title, title, subtitle: words?.headline ?? null,
-    paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' }, notes: [],
+    paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' },
+    notes: areas.grossInternal === null ? [GROSS_NOT_KNOWN] : [],
   }
   const pages = floors.map((floor): Body => {
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
@@ -158,16 +163,18 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
   const figures: SheetFigure[] = [
     { value: String(whole.report.findings.length), label: 'findings' },
     { value: String(whole.issues.length), label: 'problems in the drawing' },
-    { value: `${areaText(areas.net, 1)} m²`, label: 'net area' },
+    areaFigure(areas.net, 'net area'),
+    areaFigure(areas.grossInternal, 'gross internal area'),
+    areaFigure(areas.grossExternal, 'gross external area'),
   ]
-  if (areas.grossInternal !== null) figures.push({ value: `${areaText(areas.grossInternal, 1)} m²`, label: 'gross internal area' })
-  if (areas.grossExternal !== null) figures.push({ value: `${areaText(areas.grossExternal, 1)} m²`, label: 'gross external area' })
   const summary: Body = {
     kind: 'summary', topLine: `${name} / Check set`, title: 'Check set', subtitle: null,
     paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person').trim()],
     figures, table: null, picture: null,
     notes: [
+      ...(whole.report.findings.length === 0 ? [`Findings: none. ${NOTHING_FOUND}`] : []),
       AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
+      ...(areas.grossInternal === null ? [GROSS_NOT_KNOWN] : []),
       // What belongs to no floor is said once, here; each floor page says the rest.
       ...whole.issues.filter((i) => i.entity === 'plan').map(issueLine),
       ...whole.report.notChecked.filter((n) => n.floor === '').map(noticeLine),
@@ -175,9 +182,10 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     ],
   }
   const pages = floors.map((floor): Body => {
-    const result = checkPlan(loaded, { floor: floor.id })
+    const result = checkOnFloor(loaded, whole, floor.id)
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
     const shown = [
+      ...(result.report.findings.length === 0 ? [`Findings on this floor: none. ${NOTHING_FOUND}`] : []),
       ...result.report.findings.map((finding) => finding.message),
       ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine),
       ...result.report.notChecked.filter((n) => n.floor !== '').map(noticeLine),
@@ -187,9 +195,7 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
       paragraphs: [], figures: [],
       table: floorAreas ? areaTable(floorAreas, true) : null,
       picture: { kind: 'plan', floor: floor.id, frame: frames.get(floor.id)!, ids: true },
-      notes: shown.length === 0
-        ? ['These checks found nothing on this floor. That is not a statement that it meets any rule.']
-        : shown,
+      notes: shown,
     }
   })
   return [summary, ...pages]

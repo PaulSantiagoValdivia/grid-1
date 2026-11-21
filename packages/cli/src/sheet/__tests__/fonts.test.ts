@@ -1,7 +1,9 @@
+import { resolve, sep } from 'path'
+import { pathToFileURL } from 'url'
 import { describe, expect, it, vi } from 'vitest'
 import { GlobalFonts } from '@napi-rs/canvas'
 import * as canvas from '@napi-rs/canvas'
-import { SANS, SERIF, registerSheetFonts } from '../fonts'
+import { fontsFolder, SANS, SERIF, registerSheetFonts } from '../fonts'
 
 describe('the sheet fonts (VEW-7)', () => {
   it('registers a serif and a sans under Grid\'s own names', () => {
@@ -28,5 +30,13 @@ describe('the sheet fonts (VEW-7)', () => {
     fresh.registerSheetFonts(counting)
     fresh.registerSheetFonts(counting)
     expect(faces.sort()).toEqual(['SourceSans3-Regular.otf', 'SourceSans3-Semibold.otf', 'SourceSerif4-Regular.otf', 'SourceSerif4-Semibold.otf'])
+  })
+  it('reads the fonts from the install\'s own folder only', () => {
+    const at = (file: string) => pathToFileURL(resolve(file)).href
+    const folder = (dir: string) => `${resolve(dir)}${sep}`
+    expect(fontsFolder(at('/x/node_modules/ongrid/grid.mjs'))).toBe(folder('/x/node_modules/ongrid/fonts'))
+    expect(fontsFolder(at('/x/node_modules/ongrid/chunks/sheet-AB12.mjs'))).toBe(folder('/x/node_modules/ongrid/fonts'))
+    expect(fontsFolder(at('/x/server/grid.mjs'))).toBe(folder('/x/server/fonts'))
+    expect(fontsFolder(at('/x/packages/cli/src/sheet/fonts.ts'))).toBe(folder('/x/packages/cli/fonts'))
   })
 })

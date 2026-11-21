@@ -21,6 +21,9 @@ export const AREA_RULES = {
   circulation: 'Circulation is the rooms whose use is corridor or stair, as a share of the gross internal area.',
 } as const
 
+/** Why a plan has no gross areas, said wherever the figures would be. */
+export const GROSS_NOT_KNOWN = 'No gross areas: on some floor the walls marked exterior do not close a floor.'
+
 export interface RoomArea {
   readonly id: string
   readonly name: string
@@ -115,7 +118,7 @@ export function planAreas(survey: Survey, outside: ReadonlySet<string> = new Set
   const grossInternal = known ? sum(result.map((f) => f.grossInternal!)) : null
   const grossExternal = known ? sum(result.map((f) => f.grossExternal!)) : null
   const circulation = sum(result.map((f) => f.circulation))
-  if (!known) notes.push('No gross areas: on some floor the walls marked exterior do not close a floor.')
+  if (!known) notes.push(GROSS_NOT_KNOWN)
   const unclaimed = sum(result.map((f) => f.unclaimed))
   if (unclaimed >= 0.01) notes.push(`${unclaimed.toFixed(2)} m² of floor inside the walls belongs to no room; it is in the gross figures only.`)
   if (result.some((f) => f.outsideRooms > 0)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure.')

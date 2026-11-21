@@ -34,7 +34,7 @@ Notes for agents and people changing this repository.
   meaningless one is refused by name.
 - `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 14 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, then the preview, the
-  export, and the tools that change the plan). Each is written once in `readTools.ts` or
+  export, the sheet, and the tools that change the plan). Each is written once in `readTools.ts` or
   `writeTools.ts`; `toolkit.ts` turns its argument list into both the input schema and the
   check. The measuring is in `src/quantities/`, the changes in `src/edit/`, the views in
   `src/draw/views.ts`. `src/mcp/__tests__/tools.test.ts` fails when a tool loses its prefix,

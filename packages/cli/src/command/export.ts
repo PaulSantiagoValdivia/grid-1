@@ -77,7 +77,10 @@ export interface ExportName {
   readonly note?: string
 }
 
-/** The plan file's name made safe to name a file after: no claim, no instruction, no device. */
+/**
+ * The plan file's name made safe to name a file after: no claim and no instruction. A name
+ * Windows keeps for a device is caught by `exportNameOf`, on the whole file name.
+ */
 export function exportBaseOf(planFile: string): { base: string; note?: string } {
   let base = exportFileName(projectNameOf(planFile), 'dxf', null).slice(0, -'.dxf'.length)
   let note: string | undefined

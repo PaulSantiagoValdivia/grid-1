@@ -59,8 +59,8 @@ local one is missing.
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, then the preview and the export, and last the three that change the
-plan. Every tool has a title, a read-only or destructive hint, an input schema with an example
+requests people make most, then the preview, the export and the sheet, and last the three that
+change the plan. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Units are metres.
 

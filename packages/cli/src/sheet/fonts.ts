@@ -4,8 +4,9 @@
  * looks the same on every machine.
  *
  * The canvas reads the files itself, so nothing here imports `fs`. The folder is found from
- * where this code runs: `fonts/` beside the built `grid.mjs`, beside its chunk folder, or two
- * folders up from this source file in tests.
+ * where this code runs, and is only ever the install's own: `./fonts/` beside the built
+ * `grid.mjs`, or `../fonts/` from its `chunks/` folder. Run from the sources (the tests), it is
+ * the package's `fonts/`, two folders up from this file.
  */
 import { fileURLToPath } from 'url'
 
@@ -23,19 +24,19 @@ const FILES = [
   ['SourceSans3-Semibold.otf', SANS],
 ] as const
 
-const CANDIDATES = ['./fonts/', '../fonts/', '../../fonts/']
+/** The one folder the fonts are read from. */
+export function fontsFolder(moduleUrl: string = import.meta.url): string {
+  const relative = moduleUrl.endsWith('.ts') ? '../../fonts/' : /\/chunks\/[^/]*$/.test(moduleUrl) ? '../fonts/' : './fonts/'
+  return fileURLToPath(new URL(relative, moduleUrl))
+}
+
 let registered = false
 
-/** Registers the four fonts once. Throws FontsMissing when none of the folders holds them. */
+/** Registers the four fonts once. Throws FontsMissing when the install's folder lacks them. */
 export function registerSheetFonts(canvas: typeof import('@napi-rs/canvas')): void {
   if (registered) return
-  for (const candidate of CANDIDATES) {
-    const folder = fileURLToPath(new URL(candidate, import.meta.url))
-    const keys = FILES.map(([file, family]) => canvas.GlobalFonts.registerFromPath(`${folder}${file}`, family))
-    if (keys.every((key) => key !== null)) {
-      registered = true
-      return
-    }
-  }
-  throw new FontsMissing('The sheet fonts are missing from this install of Grid: reinstall it.')
+  const folder = fontsFolder()
+  const keys = FILES.map(([file, family]) => canvas.GlobalFonts.registerFromPath(`${folder}${file}`, family))
+  if (keys.some((key) => key === null)) throw new FontsMissing('The sheet fonts are missing from this install of Grid: reinstall it.')
+  registered = true
 }

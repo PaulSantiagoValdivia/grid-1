@@ -6,9 +6,9 @@ import { floorOf, planFloors, validatePlan } from '@ongrid/floorplan/geometry'
 import { areaText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
-import { checkPlan } from '../../command/check'
+import { checkOnFloor, checkPlan, NOTHING_FOUND } from '../../command/check'
 import type { LoadedPlan } from '../../command/plan'
-import { planAreas } from '../../quantities/areas'
+import { GROSS_NOT_KNOWN, planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, sheetPages, type SheetPicture } from '../pages'
@@ -325,5 +325,48 @@ describe('the page list on the lab\'s plans (VEW-7)', () => {
         expect(view.height).toBeCloseTo(views[0]!.height, 9)
       }
     })
+  })
+})
+
+describe('small things a sheet says (VEW-7)', () => {
+  it('says "1 floor" for one floor', () => {
+    const flat = fixture('two-bed-flat.json')
+    const figure = sheetPages(flat, null, 'client', { name: 'x', date }).pages[0]!.figures.find((f) => f.value === '1' && f.label.startsWith('floor'))
+    expect(figure?.label).toBe('floor')
+  })
+
+  it('shows a gross area it cannot work out as not known, with the reason', () => {
+    const plan = structuredClone(house.plan)
+    for (const wall of plan.walls) wall.kind = 'interior'
+    const { issues, broken } = validatePlan(plan)
+    const open: LoadedPlan = { file: 'open', plan, issues, broken }
+    expect(planAreas(surveyPlan(plan)).grossInternal).toBeNull()
+    const client = sheetPages(open, null, 'client', { name: 'x', date }).pages[0]!
+    expect(client.figures.find((f) => f.label === 'gross internal area')!.value).toBe('not known')
+    expect(client.notes).toContain(GROSS_NOT_KNOWN)
+    const summary = sheetPages(open, null, 'check', { name: 'x', date }).pages[0]!
+    expect(summary.figures.find((f) => f.label === 'gross internal area')!.value).toBe('not known')
+    expect(summary.figures.find((f) => f.label === 'gross external area')!.value).toBe('not known')
+    expect(summary.notes).toContain(GROSS_NOT_KNOWN)
+    expect(sheetPages(house, null, 'check', { name: 'x', date }).pages[0]!.notes).not.toContain(GROSS_NOT_KNOWN)
+  })
+
+  it('says a floor with no findings found nothing, even with notices, and so does the summary', () => {
+    const sheet = sheetPages(house, null, 'check', { name: 'x', date })
+    expect(checkPlan(house, {}).report.findings).toEqual([])
+    expect(sheet.pages[0]!.notes).toContain(`Findings: none. ${NOTHING_FOUND}`)
+    const floors = sheet.pages.slice(1)
+    expect(floors.some((p) => p.notes.some((n) => n.startsWith('Not checked: ')))).toBe(true)
+    for (const page of floors) expect(page.notes).toContain(`Findings on this floor: none. ${NOTHING_FOUND}`)
+  })
+
+  it('finds on each floor what a check of that floor finds, from one run of the rules', () => {
+    const flat = fixture('two-bed-flat.json')
+    const shutPlan = { ...flat.plan, openings: flat.plan.openings.filter((o) => o.id !== 'bed2-door') }
+    const { issues, broken } = validatePlan(shutPlan)
+    for (const loaded of [house, brokenStudy(), { file: 'shut', plan: shutPlan, issues, broken }]) {
+      const whole = checkPlan(loaded, {})
+      for (const floor of planFloors(loaded.plan)) expect(checkOnFloor(loaded, whole, floor.id)).toEqual(checkPlan(loaded, { floor: floor.id }))
+    }
   })
 })

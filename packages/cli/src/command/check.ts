@@ -38,6 +38,9 @@ export interface CheckResult {
 
 const COUNTRY = /^[A-Za-z]{2}$/
 
+/** What no findings means, said wherever a check reports none. */
+export const NOTHING_FOUND = 'That only means these checks found nothing, not that the plan meets any rule.'
+
 /** The floor each wall, room and opening is on. */
 function floorsById(plan: FloorPlan): Map<string, string> {
   const floors = new Map<string, string>()
@@ -58,8 +61,13 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   }
   const floor = floorOption(plan, request.floor)
   const full = checkLocalRules(plan, country === undefined ? {} : { country: country.toUpperCase() })
-  if (floor === undefined) return { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full }
+  const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full }
+  return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
+}
 
+/** What a check of the whole plan found on one floor, without running the rules again. */
+export function checkOnFloor(loaded: LoadedPlan, whole: CheckResult, floor: string): CheckResult {
+  const full = whole.report
   const report: RulesReport = {
     ...full,
     findings: full.findings.filter((finding) => finding.floor === floor),
@@ -92,7 +100,7 @@ export function checkText(result: CheckResult, floorCount: number): string {
   lines.push(...section('Checks run', report.rules.map((rule) => `${rule.title} (${rule.source.label})`)))
 
   if (report.findings.length === 0) {
-    lines.push('', 'Findings: none. That only means these checks found nothing, not that the plan meets any rule.')
+    lines.push('', `Findings: none. ${NOTHING_FOUND}`)
   } else {
     lines.push(...section('Findings', report.findings.map((finding) => `${onFloor(finding.floor)}${finding.message}`)))
   }

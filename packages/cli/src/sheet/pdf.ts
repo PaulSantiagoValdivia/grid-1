@@ -36,6 +36,9 @@ type Canvas = typeof import('@napi-rs/canvas')
 
 function font(ctx: Ctx, family: string, size: number, weight: 400 | 600 = 400): void {
   ctx.font = `${weight} ${size}px "${family}"`
+  // No ligatures: a ligature glyph has no text behind it in the PDF, so "Lift" would copy as
+  // "Li". The canvas has no ligature switch of its own; this rendering hint turns them off.
+  ctx.textRendering = 'optimizeSpeed'
 }
 
 /** Breaks a word that is wider than a line, by characters. */
