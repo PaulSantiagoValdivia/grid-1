@@ -4,6 +4,10 @@
  * Every string follows the plan's own text rule (MSG-9): no line break, control character,
  * direction character or lone surrogate. One paragraph is one string. A refusal names the
  * field and the limit, never the text.
+ *
+ * A text is taken in its composed form (NFC), and its length is counted in characters (code
+ * points) of that form, as JSON Schema's `maxLength` counts: an emoji, or a letter written with
+ * a combining accent, is one character, and the sheet prints the composed form.
  */
 import { z } from 'zod'
 import { NAME_MAX, quoted, UNSAFE_TEXT } from './planText'
@@ -24,10 +28,15 @@ export class SheetWordsRefused extends Error {
   override readonly name = 'SheetWordsRefused'
 }
 
+/** A sheet text's length: the characters (code points) of its composed form. */
+function textLength(text: string): number {
+  return [...text.normalize('NFC')].length
+}
+
 function textProblem(where: string, value: unknown, max: number): string | null {
   if (typeof value !== 'string') return `${where} must be text`
   if (value.length === 0) return `${where} is empty`
-  if (value.length > max) return `${where} is longer than ${max} characters`
+  if (textLength(value) > max) return `${where} is longer than ${max} characters`
   if (UNSAFE_TEXT.test(value)) {
     return `${where} holds a character Grid does not take: a line break, a control or direction character, or half of a character pair`
   }
@@ -86,13 +95,30 @@ export function sheetWordsProblem(raw: unknown, floorIds: readonly string[] | nu
   return null
 }
 
-const PARAGRAPHS = z.array(z.string().min(1).max(SHEET_PARAGRAPH_MAX)).max(SHEET_PARAGRAPHS_MAX)
+/** The length limits of each sheet text, for `jsonSchemaOf`: zod keeps them inside a function. */
+const TEXT_LIMITS = new WeakMap<z.ZodTypeAny, { readonly min: number; readonly max: number }>()
+
+/** A sheet text: its composed form, of 1 to `max` characters counted as `textLength` counts. */
+function sheetText(max: number): z.ZodTypeAny {
+  const text = z
+    .string()
+    .transform((value) => value.normalize('NFC'))
+    .superRefine((value, ctx) => {
+      const length = [...value].length
+      if (length < 1) ctx.addIssue({ code: z.ZodIssueCode.too_small, minimum: 1, type: 'string', inclusive: true })
+      if (length > max) ctx.addIssue({ code: z.ZodIssueCode.too_big, maximum: max, type: 'string', inclusive: true })
+    })
+  TEXT_LIMITS.set(text, { min: 1, max })
+  return text
+}
+
+const PARAGRAPHS = z.array(sheetText(SHEET_PARAGRAPH_MAX)).max(SHEET_PARAGRAPHS_MAX)
 
 export const SheetWordsSchema = z
   .object({
     version: z.literal('1'),
-    name: z.string().min(1).max(NAME_MAX).optional(),
-    headline: z.string().min(1).max(SHEET_HEADLINE_MAX).optional(),
+    name: sheetText(NAME_MAX).optional(),
+    headline: sheetText(SHEET_HEADLINE_MAX).optional(),
     intro: PARAGRAPHS.optional(),
     floors: z.record(z.string(), PARAGRAPHS).optional(),
   })
@@ -109,7 +135,7 @@ type Json = Record<string, unknown>
 
 /**
  * JSON Schema for the zod types the sheet schema uses: a strict object, a string with limits, a
- * literal, an array with a limit, a record, and optional fields. Any other zod type throws, so a
+ * sheet text, a literal, an array with a limit, a record, and optional fields. Any other zod type throws, so a
  * new kind of field fails a test instead of being left out of the schema a tool shows.
  */
 export function jsonSchemaOf(schema: z.ZodTypeAny): Json {
@@ -136,6 +162,12 @@ export function jsonSchemaOf(schema: z.ZodTypeAny): Json {
         else throw new Error(`jsonSchemaOf: a string check "${check.kind}" is not handled`)
       }
       return out
+    }
+    case 'ZodEffects': {
+      // Only a sheet text: a string whose limits are kept beside it.
+      const limits = TEXT_LIMITS.get(schema)
+      if (!limits) throw new Error('jsonSchemaOf: a zod effect is handled only on a sheet text')
+      return { type: 'string', minLength: limits.min, maxLength: limits.max }
     }
     case 'ZodLiteral':
       return { type: typeof def.value, const: def.value }

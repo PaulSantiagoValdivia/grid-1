@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { jsonSchemaOf, parseSheetWords, sheetWordsProblem, SHEET_PARAGRAPH_MAX, SheetWordsRefused } from '../sheet'
+import { NAME_MAX } from '../planText'
+import { jsonSchemaOf, parseSheetWords, sheetWordsJsonSchema, sheetWordsProblem, SHEET_HEADLINE_MAX, SHEET_PARAGRAPH_MAX, SheetWordsRefused } from '../sheet'
 
 const floors = ['ground', 'first']
 const ok = { version: '1', name: 'Solace House', headline: 'A retreat', intro: ['One.'], floors: { ground: ['Two.'] } }
@@ -71,5 +72,30 @@ describe('sheet.json (VEW-7)', () => {
     expect(() => jsonSchemaOf(z.number())).toThrow(/ZodNumber is not handled/)
     expect(() => jsonSchemaOf(z.object({ a: z.boolean() }).strict())).toThrow(/ZodBoolean/)
     expect(() => jsonSchemaOf(z.object({ a: z.string() }))).toThrow(/strict/)
+    expect(() => jsonSchemaOf(z.string().transform((t) => t.trim()))).toThrow(/effect/)
+  })
+
+  it('counts a text in characters: 120 emoji are a name, 121 are not', () => {
+    expect(NAME_MAX).toBe(120)
+    expect(sheetWordsProblem({ version: '1', name: '🏠'.repeat(NAME_MAX) }, floors)).toBeNull()
+    expect(parseSheetWords({ version: '1', name: '🏠'.repeat(NAME_MAX) }, floors).name).toBe('🏠'.repeat(NAME_MAX))
+    expect(sheetWordsProblem({ version: '1', name: '🏠'.repeat(NAME_MAX + 1) }, floors)).toBe(`name is longer than ${NAME_MAX} characters`)
+    expect(sheetWordsProblem({ version: '1', headline: '家'.repeat(SHEET_HEADLINE_MAX) }, floors)).toBeNull()
+    expect(sheetWordsProblem({ version: '1', intro: ['😀'.repeat(SHEET_PARAGRAPH_MAX)] }, floors)).toBeNull()
+    expect(sheetWordsProblem({ version: '1', intro: ['😀'.repeat(SHEET_PARAGRAPH_MAX + 1)] }, floors)).toMatch(/intro\[0\] is longer than/)
+  })
+  it('counts a letter written with a combining accent once, and keeps the composed form', () => {
+    const decomposed = 'e\u0301'.repeat(NAME_MAX)
+    expect(sheetWordsProblem({ version: '1', name: decomposed }, floors)).toBeNull()
+    const words = parseSheetWords({ version: '1', name: decomposed, intro: ['Cafe\u0301'], floors: { ground: ['A\u030A'] } }, floors)
+    expect(words.name).toBe('\u00e9'.repeat(NAME_MAX))
+    expect(words.intro).toEqual(['Caf\u00e9'])
+    expect(words.floors?.['ground']).toEqual(['\u00c5'])
+  })
+  it('gives the same limits in the JSON Schema a tool shows', () => {
+    const { properties } = sheetWordsJsonSchema() as { properties: Record<string, { minLength?: number; maxLength?: number; items?: { minLength?: number; maxLength?: number } }> }
+    expect(properties['name']).toEqual({ type: 'string', minLength: 1, maxLength: NAME_MAX })
+    expect(properties['headline']).toEqual({ type: 'string', minLength: 1, maxLength: SHEET_HEADLINE_MAX })
+    expect(properties['intro']!.items).toEqual({ type: 'string', minLength: 1, maxLength: SHEET_PARAGRAPH_MAX })
   })
 })
