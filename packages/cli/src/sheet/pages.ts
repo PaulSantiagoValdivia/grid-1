@@ -196,6 +196,14 @@ function issueLine(issue: { severity: string; entity: string; id: string; messag
   return `${issue.severity === 'error' ? 'Left out' : 'Worth a look'}, ${issue.entity} ${quoted(issue.id)}: ${issue.message}`
 }
 
+/** A finding, by the ids of the rooms and openings it names, as a drawing problem is by its own. */
+export function findingLine(finding: { rooms: readonly string[]; openings: readonly string[]; message: string }): string {
+  const ids = (one: string, list: readonly string[]): string[] =>
+    list.length === 0 ? [] : [`${list.length === 1 ? one : `${one}s`} ${list.map(quoted).join(', ')}`]
+  const named = [...ids('room', finding.rooms), ...ids('opening', finding.openings)]
+  return named.length === 0 ? `Finding: ${finding.message}` : `Finding, ${named.join(', ')}: ${finding.message}`
+}
+
 function noticeLine(notice: { message: string }): string {
   return `Not checked: ${notice.message}`
 }
@@ -231,7 +239,7 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
     const shown = [
       ...(result.report.findings.length === 0 ? [`Findings on this floor: none. ${NOTHING_FOUND}`] : []),
-      ...result.report.findings.map((finding) => finding.message),
+      ...result.report.findings.map(findingLine),
       ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine),
       ...result.report.notChecked.filter((n) => n.floor !== '').map(noticeLine),
     ]

@@ -14,7 +14,7 @@ import { planPicture } from '@ongrid/viewer/src/picture'
 import { buildFloorPlan, planForFloor } from '@ongrid/floorplan/geometry'
 import { pointInPolygon } from '@ongrid/floorplan/geometry/innerPoint'
 import type { Picture } from '@ongrid/viewer/src/picture'
-import { floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, planPictureOptions, sheetPages, type SheetPicture } from '../pages'
+import { findingLine, floorFrames, LEFT_OUT_LIMIT, PLAN_BOX, planPictureOptions, sheetPages, type SheetPicture } from '../pages'
 
 function fixture(name: string): LoadedPlan {
   const plan = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../fixtures', name), 'utf8')))
@@ -211,11 +211,29 @@ describe('the check layout (VEW-7)', () => {
     expect(findings.length).toBeGreaterThan(0)
     const made = sheetPages(shut, null, 'check', { name: 'shut', date })
     expect(made.pages[0]!.figures.find((f) => f.label === 'findings')!.value).toBe(String(findings.length))
+    expect(made.pages[1]!.notes).toContain('Finding, room "bed2": "Bedroom 2" has no door or opening to another space')
     for (const finding of findings) {
       const page = made.pages.find((p) => p.picture?.kind === 'plan' && p.picture.floor === finding.floor)!
-      expect(page.notes).toContain(finding.message)
-      for (const other of made.pages.filter((p) => p !== page)) expect(other.notes).not.toContain(finding.message)
+      const line = findingLine(finding)
+      expect(page.notes).toContain(line)
+      for (const id of [...finding.rooms, ...finding.openings]) expect(line).toContain(`"${id}"`)
+      for (const other of made.pages.filter((p) => p !== page)) expect(other.notes).not.toContain(line)
     }
+  })
+
+  it('names a finding by the ids it carries, rooms then openings', () => {
+    const finding = { rooms: ['bed1'], openings: ['w1', 'w2'], message: 'The window is too high.' }
+    expect(findingLine(finding)).toBe('Finding, room "bed1", openings "w1", "w2": The window is too high.')
+    expect(findingLine({ rooms: ['a', 'b'], openings: [], message: 'M.' })).toBe('Finding, rooms "a", "b": M.')
+    expect(findingLine({ rooms: [], openings: [], message: 'M.' })).toBe('Finding: M.')
+  })
+
+  it('keeps the client layout\'s floor pages free of findings', () => {
+    const flat = fixture('two-bed-flat.json')
+    const plan = { ...flat.plan, openings: flat.plan.openings.filter((o) => o.id !== 'bed2-door') }
+    const { issues, broken } = validatePlan(plan)
+    const client = sheetPages({ file: 'shut', plan, issues, broken }, null, 'client', { name: 'shut', date })
+    expect(JSON.stringify(client)).not.toContain('Finding')
   })
 
   it('says how many findings there are, and never that the plan passes', () => {
