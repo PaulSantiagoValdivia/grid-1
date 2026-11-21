@@ -23,11 +23,11 @@ Notes for agents and people changing this repository.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own.
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `check`,
-  `describe`, `draw`, `export`, `tidy`, `serve` and `mcp`, in `src/command/`. `tidy` (MSG-12) lists the
+  `describe`, `draw`, `export`, `sheet`, `tidy`, `serve` and `mcp`, in `src/command/`. `tidy` (MSG-12) lists the
   library's wall faults and makes the chosen fixes on the plan file as read. `describe` (VEW-5, `src/describe/`)
   prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`). A
   folder holding `grid.json` (`grid init` writes it) is a Grid project: there `check`,
-  `describe`, `draw` and `export` read its `plan.json` when no plan is named. `npm run build` bundles it with esbuild into
+  `describe`, `draw`, `export` and `sheet` read its `plan.json` when no plan is named. `npm run build` bundles it with esbuild into
   `packages/cli/dist/grid.mjs`, which is git-ignored. The `grid` and `ongrid` bins point to
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
@@ -45,6 +45,12 @@ Notes for agents and people changing this repository.
   `src/mcp/protocol.ts` answers both eras of the protocol: `initialize` for older clients, and
   for 2026-07-28 clients the version in each request's `_meta` and `server/discover`; a version
   it does not speak is refused with the ones it does. It keeps no state between lines.
+- `grid sheet` (VEW-7, `src/sheet/`) writes an A3 PDF of the plan: `pages.ts` decides what
+  is on each page from existing code (`planAreas`, `floorElevations`, `planFacts`, `checkPlan`),
+  `pdf.ts` lays it out, and the pictures come from `drawPlan` and `drawStill`. The sheet never
+  draws or measures a part of its own. `coverage.ts` says what it does with each top-level part
+  of `FloorPlan`; a part added to the schema fails the type check there until it is placed.
+  Its fonts, Source Serif 4 and Source Sans 3 (OFL 1.1), are in `packages/cli/fonts/`.
 - Every way Grid is installed comes from one file, `packages/cli/src/distribution/listing.ts`:
   the npm package's manifest, the registry's `server.json`, the plugin folder for Claude Code
   and Codex with its marketplaces, the Cursor link, the set-up lines and the `.mcpb` manifest.

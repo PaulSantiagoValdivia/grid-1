@@ -51,6 +51,7 @@ local one is missing.
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below) |
 | `grid draw [<plan>] [--png \| --3d] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
+| `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid serve` | Starts the tool server on standard input and output, with the 14 tools below |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
@@ -147,6 +148,44 @@ there instead. `--json` prints the list or what was applied as JSON.
 graphics card: the scene is drawn in software, each face lit flat, without shadows. With
 `--floor`, that floor is shown as a cutaway, as in the app; without it, the whole building.
 The PNG is 1200 by 800 pixels, times `--scale` (up to 4).
+
+### A sheet for people: `grid sheet`
+
+`grid sheet [plan.json] --layout client|check` writes the plan as an A3 landscape PDF into
+`exports/` beside the plan (`<name>-client.pdf` or `<name>-check.pdf`), or to the `.pdf` that
+`--out` names.
+
+- `client` is a presentation for the person the house is for: a cover with the name, a headline,
+  a few paragraphs, the 3D picture and four figures (gross area, floors, bedrooms, floor-to-floor
+  height), then a page per floor with its drawing, its room areas and its own paragraphs.
+- `check` is a working set for the person checking the plan: a summary in plain words with the
+  number of findings and the three areas, then a page per floor with every room, door and window
+  id on the drawing, the area of each room with its use, and every finding on that floor.
+
+The words of a client sheet are the author's, in `sheet.json` beside the plan, or the file
+`--sheet` names:
+
+```json
+{
+  "version": "1",
+  "name": "Solace House",
+  "headline": "A private retreat for one",
+  "intro": ["A two-storey home for everyday comfort, work and hosting."],
+  "floors": {
+    "ground": ["A dedicated study sits beside the entry.", "Wide garden openings lead out."]
+  }
+}
+```
+
+Every field but `version` is optional. `floors` is keyed by the plan's floor ids. A name holds
+120 characters, a headline 200, a paragraph 1,200, and `intro` and each floor at most 3
+paragraphs. Each string follows the plan's text rule. Without the file, the sheet carries the
+plan's name and no words: Grid writes none in the author's place. A check sheet takes no words.
+
+Grid draws only what the plan holds: no furniture, stairs or landscape. Every figure comes from
+the same code as `grid check` and the area tools, and every page keeps the label "General
+guidance, not your local rules". The pages use Source Serif 4 and Source Sans 3, under the SIL
+Open Font Licence 1.1, which ship with Grid in `fonts/`. A sheet needs the canvas a PNG needs.
 
 ### Describing a plan: `grid describe`
 
@@ -378,7 +417,7 @@ npx --no grid export --format dxf
 
 With no folder, `grid init` starts the project in the folder it runs in. A folder is a Grid
 project when it holds `grid.json`. In a Grid project (the folder Grid runs in, or the one
-named with `--project`), `check`, `describe`, `draw` and `export` read `plan.json` when no
+named with `--project`), `check`, `describe`, `draw`, `export` and `sheet` read `plan.json` when no
 plan file is named, and `export` writes into `exports/`. A plan file named on the command line is used
 instead. Outside a Grid project a plan file must be named.
 
