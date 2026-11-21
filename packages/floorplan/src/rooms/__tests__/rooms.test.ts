@@ -134,6 +134,19 @@ describe('reading a plan back as rooms text', () => {
     }
   })
 
+  it('writes and reads a room\'s floor above or below its storey (LVL-7), and keeps a key it cannot say', () => {
+    const plan = written('walls outside 0.3 inside 0.1 height 2.7\nroom genkan "Genkan" corridor 2 x 1.5 floor -0.15\nroom hall "Hall" corridor 2 x 3 north of genkan\n')
+    expect(plan.rooms.find((r) => r.id === 'genkan')).toMatchObject({ floorOffset: -0.15 })
+    const reading = readRoomsText(plan)
+    expect(reading.text).toMatch(/^room genkan "Genkan" corridor 2 x 1\.5 at 0,0 floor -0\.15$/m)
+    expect(diffPlans(plan, written(reading.text)).changes).toEqual([])
+    // A key rooms text does not write is kept by giving the floor in the plan's own terms.
+    const unknown = { ...plan, rooms: plan.rooms.map((r) => (r.id === 'hall' ? { ...r, note: 'kept' } : r)) } as unknown as FloorPlan
+    const raw = readRoomsText(unknown)
+    expect(raw.rawFloors.map((f) => f.floor)).toEqual(['ground'])
+    expect(raw.text).toContain('"note":"kept"')
+  })
+
   it('gives a wall height or thickness exception, so a changed wall is never lost', () => {
     const plan = written('walls outside 0.3 inside 0.1 height 2.7\nroom a "A" living 3 x 4\nroom b "B" bedroom 3 x 4 east of a\n')
     const higher = { ...plan, walls: plan.walls.map((w) => (w.id === 'w-a-b' ? { ...w, height: 3.1 } : w)) }

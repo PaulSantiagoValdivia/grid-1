@@ -21,7 +21,7 @@
  *       <where>: at x,y (the south-west inside corner)
  *                <north|south|east|west> of <room or unit> [align <side|centre>] [shift <m>] [until <room>] [open]
  *                inside <room> corner <ne|nw|se|sw> [wall <t> [kind]]  cuts that corner out of the room
- *       then:    walls <t> [kind]  height <h>  first-wall <wall id>
+ *       then:    walls <t> [kind]  height <h>  floor <m> (its floor above or below the storey's)  first-wall <wall id>
  *       a size may be '*': the room stretches as far as the room named after 'until'
  *   wall between <room> and <room> [<side>] [<t>] [kind|virtual] [height <h>] [id <id>] [reversed]
  *   wall <room> <side> [<t>] [kind] [height <h>] [id <id>] [reversed]  an outside wall
@@ -166,6 +166,8 @@ interface RoomDraft {
   wallsT: number | null
   wallsKind: WallKind | null
   height: number | null
+  /** LVL-7: how far the room's floor stands above or below its storey's floor level. */
+  floorOffset: number | null
   firstWall: string | null
   /** The size as written and what it measures to, for the answer. */
   size: { w: number | null; d: number | null; basis: SizeBasis } | null
@@ -573,7 +575,7 @@ class Compiler {
       this.stop('rooms/unknown-use', at, `line ${at}: '${useWord}' is not a room use Grid knows. Use one of: ${USES.join(', ')}; or '-' for none. A name can say more: "Office", "WC".`)
     }
     const fl = this.floor()
-    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, firstWall: null, size: null }
+    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, floorOffset: null, firstWall: null, size: null }
     const mx = ctx?.mx === true
     const my = ctx?.my === true
     let W: string | null = null
@@ -629,6 +631,9 @@ class Compiler {
         i++
       } else if (w === 'height' && i + 1 < t.length) {
         room.height = numberOf(t[i + 1]!, at)
+        i += 2
+      } else if (w === 'floor' && i + 1 < t.length && isNumberWord(t[i + 1]!)) {
+        room.floorOffset = numberOf(t[i + 1]!, at)
         i += 2
       } else if (w === 'first-wall' && i + 1 < t.length) {
         room.firstWall = t[i + 1]!
@@ -1805,6 +1810,7 @@ class Compiler {
             boundary,
             ...(this.explicitFloors ? { floor: fl.id } : {}),
             ...(room.height !== null ? { height: room.height } : {}),
+            ...(room.floorOffset !== null ? { floorOffset: room.floorOffset } : {}),
           }
           plan.rooms.push(item)
           const area = Math.abs(signedArea(room.poly))

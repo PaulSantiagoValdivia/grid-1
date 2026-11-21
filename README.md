@@ -76,6 +76,8 @@ window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
 - A size is east-west by north-south, to the inside faces. `3 x 4 centre` measures to the walls'
   centre lines and `8 x 10 outside` to the outside faces; `sizes outside` makes that the
   default. The answer states for each room what its size measured to, and its inside size.
+- `floor -0.15` on a room line puts its floor that far below its storey's (a genkan; LVL-7),
+  `height 2.4` gives its own height.
 - `*` stretches a side as far as the room named after `until`. `inside <room> corner ne` cuts a
   room out of another's corner. `unit`, `place`, `repeat` and `mirror` write a group of rooms
   once; `copy <floor>` starts a floor from another.

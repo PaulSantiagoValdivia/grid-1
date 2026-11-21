@@ -91,7 +91,7 @@ function wallDiffers(a: Wall, b: Wall): string | null {
   if (a.kind !== b.kind) return 'is of another kind'
   if ((a.virtual === true) !== (b.virtual === true)) return 'is solid in one and a dividing line in the other'
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
-  return null
+  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor'])
 }
 
 function roomDiffers(a: Room, b: Room): string | null {
@@ -101,6 +101,23 @@ function roomDiffers(a: Room, b: Room): string | null {
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
   if ((a.inside === true) !== (b.inside === true)) return 'sits inside another room in one only'
   if (!sameNumber(a.height, b.height)) return 'has another height'
+  return otherKeys(a, b, ['id', 'name', 'use', 'boundary', 'floor', 'inside', 'height'])
+}
+
+/**
+ * Any other key of a part, as the schema reads it: a key rooms text does not write (one a later
+ * step adds) is a difference, so the floor is given in Grid's own terms and nothing is lost.
+ */
+function otherKeys(a: object, b: object, said: readonly string[]): string | null {
+  const ra = a as Record<string, unknown>
+  const rb = b as Record<string, unknown>
+  for (const key of new Set([...Object.keys(ra), ...Object.keys(rb)])) {
+    if (said.includes(key)) continue
+    const x = ra[key]
+    const y = rb[key]
+    if (x === undefined && y === undefined) continue
+    if (typeof x === 'number' && typeof y === 'number' ? !sameNumber(x, y) : JSON.stringify(x) !== JSON.stringify(y)) return `has another ${key}`
+  }
   return null
 }
 
@@ -110,7 +127,7 @@ function openingDiffers(a: Opening, b: Opening): string | null {
   if (!sameNumber(a.offset, b.offset) || !sameNumber(a.width, b.width)) return 'stands elsewhere along its wall'
   if (!sameNumber(a.sill, b.sill) || !sameNumber(a.height, b.height)) return 'has another sill or height'
   if (a.hinge !== b.hinge || a.swing !== b.swing) return 'hangs or swings another way'
-  return null
+  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing'])
 }
 
 interface Difference {
@@ -242,7 +259,8 @@ function roomLine(room: Room, poly: P[], local: string): string {
   const rect = poly.length === 4 && Math.abs(Math.abs(area) - w * d) < tolerance('areaEqual')
   const where = rect ? `${metres(w)} x ${metres(d)} at ${metres(x0)},${metres(y0)}` : `polygon ${poly.map((p) => `${metres(p[0])},${metres(p[1])}`).join(' ')}`
   const height = room.height !== undefined ? ` height ${metres(room.height)}` : ''
-  return `room ${local} ${quote(room.name)} ${use} ${where}${height}`
+  const step = room.floorOffset !== undefined ? ` floor ${metres(room.floorOffset)}` : ''
+  return `room ${local} ${quote(room.name)} ${use} ${where}${height}${step}`
 }
 
 /** The rooms on the two sides of an opening's middle: [left, right] of its wall. */
