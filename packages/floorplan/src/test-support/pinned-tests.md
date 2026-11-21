@@ -125,6 +125,14 @@ Madrid and Berlin flats (room-rows-flats.test.ts) now expect one `wall/kind-diff
 each wall stated exterior that a light well or a balcony drawn as a room lies against. No
 expected figure changed.
 
+QAR-5 fixed no expected failure: the lab's file-order entries (MS-21, L-12, K-13) had none. It
+changed two pins on purpose, both recorded in `reviews/QAR-5.md`. The four IFC golden files
+(`geometry/export/__tests__/golden/`) were written again: every GlobalId changed, because an
+identity is now made from the project id, the element's kind, its floor and its id, as one JSON
+array; no other line changed or moved. `stays unique inside one document even when the seed
+repeats` (ifc.test.ts) now expects that seed. `is pinned: re-exports only stay recognisable
+while this value never changes` is as it was: the hash itself did not change.
+
 ## Kinds of test the suite does not have yet
 
 From the lab's entry Z-7. None of these is built here.

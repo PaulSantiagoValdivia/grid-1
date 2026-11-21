@@ -76,12 +76,14 @@ describe('grid init <folder>', () => {
     expect(run.err).toBe('')
     const demo = join(base, 'demo')
     expect(tree(demo)).toEqual(LAYOUT)
-    expect(readFileSync(join(demo, 'plan.json'), 'utf8')).toBe(starterPlanText())
     expect(readFileSync(join(demo, '.gitignore'), 'utf8')).toBe('exports/\n')
     const marker = JSON.parse(readFileSync(join(demo, 'grid.json'), 'utf8')) as Record<string, unknown>
     expect(Object.keys(marker)).toEqual(['version', 'projectId'])
     expect(marker.version).toBe('1')
     expect(marker.projectId).toMatch(UUID)
+    // QAR-5: the plan stores the same id, which the IFC builds its identities from.
+    expect(readFileSync(join(demo, 'plan.json'), 'utf8')).toBe(starterPlanText(marker.projectId as string))
+    expect((JSON.parse(readFileSync(join(demo, 'plan.json'), 'utf8')) as { projectId: unknown }).projectId).toBe(marker.projectId)
 
     const lines = run.out.split('\n')
     expect(lines[0]).toBe('Made a Grid project in demo:')
@@ -249,6 +251,16 @@ describe('inside a project grid init made', () => {
   it.each(['ifc', 'glb', 'obj'])('grid export --format %s writes into exports/', (format) => {
     expect(grid(['export', '--format', format], demo).status).toBe(0)
     expect(tree(join(demo, 'exports'))).toEqual([`plan.${format}`])
+  })
+
+  it('QAR-5 gives the IFC the same identities whatever the plan file is called', () => {
+    writeFileSync(join(demo, 'House.json'), readFileSync(join(demo, 'plan.json')))
+    expect(grid(['export', '--format', 'ifc'], demo).status).toBe(0)
+    expect(grid(['export', '--format', 'ifc', 'House.json'], demo).status).toBe(0)
+    const guids = (name: string): string[] =>
+      [...readFileSync(join(demo, 'exports', name), 'utf8').matchAll(/^#\d+=IFC\w+\('([0-9A-Za-z_$]{22})'/gm)].map((m) => m[1]!)
+    expect(guids('plan.ifc').length).toBeGreaterThan(10)
+    expect(guids('house.ifc')).toEqual(guids('plan.ifc'))
   })
 
   it('finds the project with --project from another folder too, and writes into its exports/', () => {

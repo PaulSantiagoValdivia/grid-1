@@ -4,9 +4,12 @@
  *
  * DXF, OBJ and GLB are what the 2D and 3D views draw, one floor at a time, so they export the
  * floor the user is looking at. IFC is the whole building, one storey per floor.
+ *
+ * Every format writes the plan's parts in id order (QAR-5), so the same building gives the
+ * same bytes whatever order its file lists them in.
  */
 import type { FloorPlan } from '../types/floorplan'
-import { buildFloorPlan, buildScene, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj } from '../geometry'
+import { buildFloorPlan, buildScene, inIdOrder, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj } from '../geometry'
 
 export type ExportFormat = 'dxf' | 'ifc' | 'obj' | 'glb'
 
@@ -25,6 +28,7 @@ export function isExportFormat(value: unknown): value is ExportFormat {
 }
 
 export interface PlanExportOptions {
+  /** The IFC's project identity when the plan stores none (`FloorPlan.projectId` wins). */
   readonly projectId: string
   readonly projectName: string
   /** The floor shown in the views; a missing or stale id falls back to the lowest floor. */
@@ -64,7 +68,7 @@ export function exportPlan(plan: FloorPlan, format: ExportFormat, options: PlanE
   }
 
   const floorId = resolveFloor(plan, options.floorId)
-  const storey = planForFloor(plan, floorId)
+  const storey = planForFloor(inIdOrder(plan), floorId)
   const data = format === 'dxf' ? toDxf(buildFloorPlan(storey))
     : format === 'obj' ? toObj(buildScene(storey))
     : toGlb(buildScene(storey))

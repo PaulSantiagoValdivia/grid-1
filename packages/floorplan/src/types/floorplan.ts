@@ -216,6 +216,11 @@ export const ReferenceImageSchema = z.object({
 export const FloorPlanSchema = z.object({
   version: z.literal('1').default('1'),
   units: z.literal('m').default('m'),
+  // QAR-5: the project's own id, which the IFC builds every element's identity from (with the
+  // element's kind, floor and id), so a re-export of the project is recognised as the same
+  // model whatever the file is called. `grid init` writes it. Keep it, and the parts' ids,
+  // stable: a new id reads as a new element. Optional and never defaulted (version 1).
+  projectId: text('id').pipe(z.string().min(1)).optional(),
   walls: parts(WallSchema, 'walls').default([]),
   rooms: parts(RoomSchema, 'rooms').default([]),
   openings: parts(OpeningSchema, 'openings').default([]),

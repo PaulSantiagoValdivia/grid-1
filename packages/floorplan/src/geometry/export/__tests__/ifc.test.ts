@@ -704,7 +704,16 @@ describe('GlobalId', () => {
     expect(new Set(issued).size).toBe(50)
     for (const guid of issued) expect(guid).toHaveLength(22)
     // The first one is the plain hash: the counter only appears on a collision.
-    expect(issued[0]).toBe(ifcGuid('proj:wall:w1'))
+    // QAR-5: the seed is the project, the kind, the floor and the id, as one JSON array.
+    expect(issued[0]).toBe(ifcGuid(JSON.stringify(['proj', 'wall', null, 'w1'])))
+  })
+
+  it('QAR-5 depends on the floor, and reads no two seeds as one text', () => {
+    const issuer = createGuidIssuer('proj')
+    expect(issuer.issue('wall', 'w1', 'ground')).toBe(ifcGuid(JSON.stringify(['proj', 'wall', 'ground', 'w1'])))
+    expect(issuer.issue('wall', 'w1', 'first')).not.toBe(issuer.issue('wall', 'w1', 'ground'))
+    // With the parts joined by colons these two would hash the same text.
+    expect(createGuidIssuer('a:b').issue('wall', 'c')).not.toBe(createGuidIssuer('a').issue('b:wall', 'c'))
   })
 
   it('depends on the project identity', () => {

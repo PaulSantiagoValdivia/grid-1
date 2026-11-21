@@ -96,6 +96,11 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
       }
     }
   }
+  const projectId = raw['projectId']
+  if (typeof projectId === 'string') {
+    const problem = textProblem(projectId, 'id')
+    if (problem) return `projectId ${problem}`
+  }
   const image = raw['referenceImage']
   if (isObject(image) && typeof image['path'] === 'string') {
     const problem = textProblem(image['path'], 'path')
