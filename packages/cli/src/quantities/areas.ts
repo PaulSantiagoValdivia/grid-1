@@ -122,6 +122,11 @@ export function planAreas(survey: Survey, outside: ReadonlySet<string> = new Set
   const unclaimed = sum(result.map((f) => f.unclaimed))
   if (unclaimed >= 0.01) notes.push(`${unclaimed.toFixed(2)} m² of floor inside the walls belongs to no room; it is in the gross figures only.`)
   if (result.some((f) => f.outsideRooms > 0)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure.')
+  // LVL-3: a stair the plan states stands in rooms that are already measured, so its flights add
+  // no floor: its area is counted once, in the rooms it stands in.
+  for (const stair of survey.facts.connections.stairs) {
+    notes.push(`Stair ${JSON.stringify(stair.id)} covers ${stair.footprint.toFixed(2)} m² in the rooms it stands in; it adds no floor of its own.`)
+  }
   return {
     floors: result,
     net,

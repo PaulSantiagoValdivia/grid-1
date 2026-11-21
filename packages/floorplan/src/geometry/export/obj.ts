@@ -16,7 +16,7 @@
  */
 
 import type { Scene3D } from '../scene3d'
-import { floorMesh, makeNamer, wallMesh } from './mesh'
+import { floorMesh, makeNamer, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 
 /** Avoids `-0.000000`, which readers parse and nobody wants to read. */
@@ -51,6 +51,7 @@ export function toObj(scene: Scene3D): string {
 
   for (const wall of scene.walls) write('wall', wall.id, wallMesh(wall))
   for (const slab of scene.slabs) write('floor', slab.roomId, floorMesh(slab))
+  for (const stair of scene.stairs) write('stair', stair.id, stairMesh(stair))
 
   return `${lines.join('\n')}\n`
 }

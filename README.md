@@ -211,7 +211,8 @@ Every field but `version` is optional. `floors` is keyed by the plan's floor ids
 paragraphs. Each string follows the plan's text rule. Without the file, the sheet carries the
 plan's name and no words: Grid writes none in the author's place. A check sheet takes no words.
 
-Grid draws only what the plan holds: no furniture, stairs or landscape. Every figure comes from
+Grid draws only what the plan holds: no furniture or landscape, and no stairs but the ones the
+plan states. Every figure comes from
 the same code as `grid check` and the area tools, and every page keeps the label "General
 guidance, not your local rules". The pages use Source Serif 4 and Source Sans 3, under the SIL
 Open Font Licence 1.1, which ship with Grid in `fonts/`. A sheet needs the canvas a PNG needs.
@@ -232,8 +233,9 @@ the study, shows on the first read. It answers in three lengths:
 `--for agent` is terse and carries every id, the offsets along each wall and a key line, so an
 agent can edit the plan from it. A floor laid out like an earlier one is said once. Wall and
 sill heights are one line: the usual height and the exceptions. What the plan cannot say,
-such as where north is, the kind of building, how floors connect when it holds no stairs and
-which rooms make each flat, is said as such. Directions are on the drawing, with north at the
+such as where north is, the kind of building, how floors connect when no stair joins them and
+which rooms make each flat, is said as such. The stairs that join the floors are one line, with
+the risers and going Grid worked out. Directions are on the drawing, with north at the
 top. The card checks nothing; it ends with the label "General guidance, not your local rules".
 
 Every command also takes `--project <folder>` (see below). An unknown, repeated or
@@ -252,10 +254,10 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room or floor name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening or floor, a wall a room or an opening names, a part's floor | 64 characters | the same |
+| a room, floor or stair name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
-| walls, rooms, openings or floors | 50,000 of each | |
+| walls, rooms, openings, floors or stairs | 50,000 of each | |
 | the walls a room lists | 2,000 | |
 
 A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
@@ -312,6 +314,44 @@ dividing line between them. A window gets none. In 3D, in the OBJ and glTF files
 file, the room's floor and space stand at its own level, and a raised room is solid down to the
 storey's floor. A room set more than 1.5 m off its storey, or raised to the height its floor
 states, is asked about (`room/offset-question`): so far off, it is more likely a floor of its own.
+
+### Stairs that join two floors
+
+A stair is stated once, in the plan's `stairs` list, across the two floors it joins. The plan
+says what is meant and Grid works out the rest:
+
+```json
+{ "id": "s1", "name": "Main stair", "from": "ground", "to": "first", "width": 0.9, "run": [[0.6, 0.6], [0.6, 3.4]] }
+```
+
+| Field | What it states |
+|---|---|
+| `from`, `to` | The floor the walking line starts on and the floor it ends on. Either may be the higher |
+| `width` | The width of the flight, in metres |
+| `run` | The walking line, down the middle of the flight: from the stair's edge on `from` to its edge on `to`. Each point between is a turn, with a square landing as wide as the flight. A straight stair may give its two ends as `start` and `end` instead |
+| `risers` | Optional: how many risers, when the design has chosen. Unstated, Grid takes the number that brings twice the riser plus the going nearest 0.63 m |
+| `name` | Optional |
+
+From the two floors' levels (and the floor offset of the rooms the stair starts and ends in),
+Grid works out the rise, the number of risers and their height, the going and the pitch, and
+which room the stair leaves from and arrives in (`planStairs`). For the stair above: a 2.95 m
+rise in 14 risers of 0.211 m, treads of 0.215 m. `grid describe` says them. The 2D drawing
+shows the stair on both floors, with a line at every riser and its walking line ending in an
+arrow pointing up; 3D, the OBJ and glTF files and the IFC file (an `IfcStair` of
+`IfcStairFlight`s and landing slabs) draw a block per tread. The stair adds no floor of its own:
+its area is counted once, in the rooms it stands in. Nothing here judges a riser, a going or a
+width.
+
+The way-out check follows routes up and down the stair, so an upper floor or a basement is
+checked through it down to a door. Rooms used as a stair on neighbouring floors that lie one over
+the other (sharing at least half of the smaller one) are taken as a stair too, as agents already
+draw them; where both floors have stair rooms and none lies over another, they are named as out
+of line (`stair_out_of_line`), and so are lift shafts (rooms used as a `lift`,
+`lift_out_of_line`). A lift is never taken as a way out. A floor no stair joins to the ground floor
+is said not to be checked. A stair that cannot be laid out is said and left out
+(`stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
+`stair/too-few-risers`, `stair/duplicate-id`), and one whose end stands in no room joins nothing
+(`stair/end-in-no-room`, a warning).
 
 ### Floor no room claims
 
@@ -465,6 +505,8 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground floor is named and is not a way out |
 | `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
 | `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
+| `stairRoomOverlap` | tolerance | 0.5 ratio | Rooms used as a stair (or a lift) on neighbouring floors that share at least this of the smaller one are one stair (or shaft); less, and they are named as out of line |
+| `stairStepLength` | limit | 0.63 m | A stair that states no number of risers gets the number that brings twice the riser plus the going nearest this |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
 | `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning |
 | `wallThinnest` | limit | 0.02 m | A thinner solid wall is questioned; a line with no substance should be virtual |

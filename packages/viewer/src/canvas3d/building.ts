@@ -1,10 +1,12 @@
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import {
   SLAB_THICKNESS,
+  brokenOnFloor,
   buildScene,
   floorElevations,
   planBounds,
   planFloors,
+  planStairs,
   type BuildingElevations,
   type Scene3D
 } from '@ongrid/floorplan/geometry'
@@ -241,7 +243,9 @@ const normalize = (a: Vec3): Vec3 => {
 export function createSceneMemo(): (slice: FloorPlan) => Scene3D {
   let last: { key: string; scene: Scene3D } | null = null
   return (slice) => {
-    const key = JSON.stringify([slice.walls, slice.rooms, slice.openings])
+    // A stair (LVL-3) is laid out from both floors it joins, so its blocks are part of the key.
+    const stairs = (slice.stairs ?? []).length === 0 ? [] : planStairs(slice, brokenOnFloor).stairs
+    const key = JSON.stringify([slice.walls, slice.rooms, slice.openings, stairs])
     if (last?.key !== key) last = { key, scene: buildScene(slice) }
     return last.scene
   }

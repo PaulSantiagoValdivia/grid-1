@@ -17,7 +17,7 @@
  */
 
 import type { Scene3D } from '../scene3d'
-import { floorMesh, makeNamer, wallMesh } from './mesh'
+import { floorMesh, makeNamer, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 
 const MAGIC = 0x46546c67 // "glTF"
@@ -93,7 +93,7 @@ interface Part {
   readonly mesh: Mesh
 }
 
-/** Everything the scene could build, walls first and then slabs, as OBJ lists them. */
+/** Everything the scene could build, walls first, then slabs, then stairs, as OBJ lists them. */
 function partsOf(scene: Scene3D): Part[] {
   const nameOf = makeNamer()
   const parts: Part[] = []
@@ -104,6 +104,10 @@ function partsOf(scene: Scene3D): Part[] {
   for (const slab of scene.slabs) {
     const mesh = floorMesh(slab)
     if (mesh) parts.push({ name: nameOf('floor', slab.roomId), mesh })
+  }
+  for (const stair of scene.stairs) {
+    const mesh = stairMesh(stair)
+    if (mesh) parts.push({ name: nameOf('stair', stair.id), mesh })
   }
   return parts
 }

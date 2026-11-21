@@ -2,7 +2,7 @@
  * QAR-5: one order for a plan's parts, so that an export does not depend on the order the
  * file lists them in (lab MS-21, L-12).
  *
- * Walls, rooms and openings are put in id order before an export is written. Two exports of
+ * Walls, rooms, openings and stairs are put in id order before an export is written. Two exports of
  * one building then compare line by line, and a real change shows up as a real difference.
  * The floors list is kept as written, because floors of one level are stacked in that order;
  * each room's outline is kept as written, because it is the room's own description.
@@ -62,7 +62,14 @@ function byId<T extends { readonly id: string }>(parts: readonly T[]): T[] {
     .map(({ part }) => part)
 }
 
-/** The plan with its walls, rooms and openings in id order. The plan given is not changed. */
+/** The plan with its walls, rooms, openings and stairs in id order. The plan given is not changed. */
 export function inIdOrder(plan: FloorPlan): FloorPlan {
-  return { ...plan, walls: byId(plan.walls), rooms: byId(plan.rooms), openings: byId(plan.openings) }
+  return {
+    ...plan,
+    walls: byId(plan.walls),
+    rooms: byId(plan.rooms),
+    openings: byId(plan.openings),
+    // LVL-3: only a plan that states stairs gains the key.
+    ...(plan.stairs !== undefined && { stairs: byId(plan.stairs) })
+  }
 }

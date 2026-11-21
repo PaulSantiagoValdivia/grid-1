@@ -196,7 +196,8 @@ describe('grid check', () => {
     expect(run.status).toBe(0)
     const lines = run.out.split('\n')
     expect(lines[0]).toBe(GENERAL_GUIDANCE_LABEL)
-    expect(run.out).toContain('Checks run (6):')
+    // LVL-3 added the plan check that stairs and lift shafts line up.
+    expect(run.out).toContain('Checks run (7):')
     expect(run.out).toContain('Findings: none. That only means these checks found nothing')
     expect(run.out).toContain('What these checks never look at')
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)

@@ -15,7 +15,17 @@ export const messages = {
   noRouteToAnyDoorOut: (room: string): string =>
     `${quoted(room)} has no route to a door to the outside, nor to a door into a space that is not drawn`,
   noStairs: (floor: string): string =>
-    `The way out of ${quoted(floor)} was not checked: the plan has no stairs`,
+    `The way out of ${quoted(floor)} was not checked: no stair joins it to the ground floor`,
+  outOfLine: (
+    kind: 'stair' | 'lift',
+    upper: readonly string[],
+    upperFloors: readonly string[],
+    lower: readonly string[],
+    lowerFloors: readonly string[]
+  ): string =>
+    `${kind === 'stair' ? 'The stair' : 'The lift shaft'} ${quotedList(upper, ' and ')} on ${quotedList(upperFloors, ' and ')} ` +
+    `does not lie over ${quotedList(lower, ' or ')} on ${quotedList(lowerFloors, ' and ')}, so ` +
+    (kind === 'stair' ? 'it does not join the two floors' : 'the shaft is out of line'),
   wayOutNotDrawn: (floor: string): string =>
     `The way out of ${quoted(floor)} was not checked: its only door out leads to a space that is not drawn`,
   cannotBeDrawn: (floor: string, rooms: readonly string[]): string =>

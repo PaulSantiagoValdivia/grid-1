@@ -32,7 +32,10 @@ import {
 import { tryRoomPolygon } from '../room'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
-import { validatePlan } from '../validate'
+import { brokenOnFloor, validatePlan } from '../validate'
+import type { StairLayout } from '../stairs'
+import { planStairs } from '../stairs'
+import { stairBlocks } from '../scene3d'
 import type { WallEnds } from '../wall'
 import { wallAxis } from '../wall'
 import { wallJoints } from '../joints'
@@ -1008,6 +1011,105 @@ function writeSlabs(building: Context, storeys: readonly Storey[]): void {
   }
 }
 
+/**
+ * The stairs the plan states (LVL-3), each as an IfcStair in the storey it rises from, made of
+ * an IfcStairFlight per flight, with its number of risers and treads, the riser height and the
+ * tread length Grid worked out, and a landing slab per turn. Each part is the block the 3D view
+ * draws (`stairBlocks`): solid from the stair's foot to the riser it tops.
+ *
+ * Written last, after the slabs, so a plan that states no stairs gets the file it always did.
+ */
+function writeStairs(building: Context, plan: FloorPlan, storeys: readonly Storey[]): void {
+  if ((plan.stairs ?? []).length === 0) return
+  const byFloor = new Map(storeys.map((storey) => [storey.model.floor.id, storey] as const))
+  const contained = new Map<string, number[]>()
+  for (const stair of planStairs(plan, brokenOnFloor).stairs) {
+    const storey = byFloor.get(stair.lower.floor)
+    if (storey === undefined) continue
+    try {
+      const id = writeStair(onFloor(building, stair.lower.floor), storey, stair)
+      contained.set(stair.lower.floor, [...(contained.get(stair.lower.floor) ?? []), id])
+    } catch {
+      // A stair that cannot be built is left out.
+    }
+  }
+  for (const [floor, ids] of contained) {
+    relate(onFloor(building, floor), 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `stairs:${floor}`, refs(ids), ref(byFloor.get(floor)!.id))
+  }
+}
+
+function writeStair(c: Context, storey: Storey, stair: StairLayout): number {
+  // The blocks stand on the stair's foot, measured from the storey's level, as in 3D.
+  const blocks = stairBlocks(stair, storey.elevation).blocks
+  const base = blocks[0]?.bottom ?? 0
+  const at = placement(c.w, storey.placement, [0, 0, base])
+  const body = (outlines: readonly { readonly outline: Footprint; readonly height: number }[]): number =>
+    productShape(c, [
+      c.w.add(
+        'IFCSHAPEREPRESENTATION',
+        ref(c.shared.bodyContext),
+        str('Body'),
+        str('SweptSolid'),
+        refs(outlines.map(({ outline, height }) => extrusion(c, footprintProfile(c, outline), height)))
+      )
+    ])
+  const element = c.w.add(
+    'IFCSTAIR',
+    str(c.guid('stair', stair.id)),
+    ref(c.owner),
+    str(stair.name),
+    NULL,
+    NULL,
+    ref(at),
+    NULL,
+    NULL,
+    en(stair.flights.length === 1 ? 'STRAIGHT_RUN_STAIR' : 'NOTDEFINED')
+  )
+  const parts: number[] = []
+  let block = 0
+  stair.flights.forEach((flight, i) => {
+    const treads = flight.risers - 1
+    const steps = blocks.slice(block, block + treads).map((b) => ({ outline: b.outline, height: b.top - b.bottom }))
+    block += treads
+    parts.push(
+      c.w.add(
+        'IFCSTAIRFLIGHT',
+        str(c.guid('stair-flight', `${stair.id}:${i}`)),
+        ref(c.owner),
+        str(`${stair.name} flight ${i + 1}`),
+        NULL,
+        NULL,
+        ref(placement(c.w, at, [0, 0, 0])),
+        ref(body(steps)),
+        NULL,
+        int(flight.risers),
+        int(treads),
+        real(stair.riserHeight),
+        real(flight.going)
+      )
+    )
+  })
+  stair.landings.forEach((_, i) => {
+    const landing = blocks[block + i]!
+    parts.push(
+      c.w.add(
+        'IFCSLAB',
+        str(c.guid('stair-landing', `${stair.id}:${i}`)),
+        ref(c.owner),
+        str(`${stair.name} landing ${i + 1}`),
+        NULL,
+        NULL,
+        ref(placement(c.w, at, [0, 0, 0])),
+        ref(body([{ outline: landing.outline, height: landing.top - landing.bottom }])),
+        NULL,
+        en('LANDING')
+      )
+    )
+  })
+  aggregate(c, `stair:${stair.id}`, element, parts)
+  return element
+}
+
 /** Writes everything a floor holds, and links it to its storey. */
 function writeStoreyContents(building: Context, storey: Storey): void {
   const { index, broken } = storey.model
@@ -1164,6 +1266,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     storeys.map((storey) => storey.id)
   )
   writeSlabs(c, storeys)
+  writeStairs(c, plan, storeys)
 
   return w.toString([
     `FILE_DESCRIPTION((${str('ViewDefinition [CoordinationView_V2.0]')}),${str('2;1')});`,

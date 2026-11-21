@@ -31,6 +31,7 @@ describe('a mesh with more than 65,535 vertices', () => {
     walls: [],
     slabs: [{ roomId: 'big', name: 'Big', polygon: [] }],
     dividers: [],
+    stairs: [],
     bounds: { min: { x: 0, y: 0 }, max: { x: 1, y: 1 }, width: 1, height: 1 },
     height: 0,
     issues: []

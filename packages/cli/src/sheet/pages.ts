@@ -102,7 +102,10 @@ type Body = Omit<SheetPage, 'footer'>
 
 /** What a client sheet always says it does not show. Grid's own words. */
 export const CLIENT_LIMITS = 'Drawn from the plan alone. Furniture, stairs, structure, services and landscape are not shown.'
-export const STAIR_LIMIT = 'Grid cannot show what a stair joins, so the way between floors is not checked.'
+/** The same, for a plan that states its stairs (LVL-3): they are drawn. */
+export const CLIENT_LIMITS_WITH_STAIRS = 'Drawn from the plan alone. Furniture, structure, services and landscape are not shown.'
+/** When some floor with rooms is joined to no other by a stair (LVL-3). */
+export const STAIR_LIMIT = 'No stair joins some of the floors to the others, so the way between them is not checked.'
 /** On a client floor page that leaves out a part Grid cannot draw (the check sheet lists it). */
 export const LEFT_OUT_LIMIT = 'Some parts of the plan on this floor could not be drawn, and are not shown.'
 
@@ -187,7 +190,8 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const height = heightFigure(loaded)
   if (height) figures.push(height)
 
-  const limits = facts.stairRooms > 0 ? [CLIENT_LIMITS, STAIR_LIMIT] : [CLIENT_LIMITS]
+  const shown = facts.connections.stairs.length > 0 ? CLIENT_LIMITS_WITH_STAIRS : CLIENT_LIMITS
+  const limits = facts.connections.unjoined.length > 0 ? [shown, STAIR_LIMIT] : [shown]
   const cover: Body = {
     kind: 'cover', floor: null, topLine: title, title, subtitle: words?.headline ?? null,
     paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' },

@@ -27,7 +27,11 @@ import { wallRevision } from './revision'
 import type { Bounds } from './floorplan'
 import { computeBounds } from './floorplan'
 import type { Issue } from './validate'
-import { validatePlan } from './validate'
+import { brokenOnFloor, validatePlan } from './validate'
+import type { StairLayout } from './stairs'
+import { planStairs } from './stairs'
+import { floorElevations } from './elevations'
+import { wholePlan } from './floors'
 
 /** A point in model space: XY is the plan, Z is height. */
 export interface Vec3 {
@@ -143,10 +147,50 @@ export interface SceneDivider {
   readonly to: Vec2
 }
 
+/** One block of a stair: a tread or a landing, solid from the stair's foot to its top (LVL-3). */
+export interface SceneStairBlock {
+  /** On the model's XY plane, counter-clockwise. */
+  readonly outline: readonly Vec2[]
+  /** Heights above the storey's floor level, in metres. */
+  readonly bottom: number
+  readonly top: number
+}
+
+/**
+ * A stair the plan states, in the scene of the floor it rises from (LVL-3): one block per tread
+ * and per landing, each standing on the floor at the stair's foot and as high as the riser it
+ * tops. The last riser rises onto the floor above, which is that storey's own slab.
+ */
+export interface SceneStair {
+  readonly id: string
+  readonly name: string
+  readonly blocks: readonly SceneStairBlock[]
+}
+
+/** A laid-out stair as blocks, with heights from `floorLevel`, the level of the storey it rises from. */
+export function stairBlocks(stair: StairLayout, floorLevel: number): SceneStair {
+  const base = stair.lower.level - floorLevel
+  const blocks: SceneStairBlock[] = []
+  for (const flight of stair.flights) {
+    for (let k = 0; k + 1 < flight.riserLines.length; k++) {
+      const [a, b] = flight.riserLines[k]!
+      const [c, d] = flight.riserLines[k + 1]!
+      // Left to right across the flight, looking up it: counter-clockwise is right, up, left, down.
+      blocks.push({ outline: [b, d, c, a], bottom: base, top: base + (flight.risersBelow + k + 1) * stair.riserHeight })
+    }
+  }
+  for (const landing of stair.landings) {
+    blocks.push({ outline: landing.outline, bottom: base, top: base + landing.risersBelow * stair.riserHeight })
+  }
+  return { id: stair.id, name: stair.name, blocks }
+}
+
 export interface Scene3D {
   readonly walls: readonly SceneWall[]
   readonly slabs: readonly SceneSlab[]
   readonly dividers: readonly SceneDivider[]
+  /** The stairs that rise from this floor (LVL-3); empty when the plan states none. */
+  readonly stairs: readonly SceneStair[]
   /** Plan envelope, for framing the camera. */
   readonly bounds: Bounds
   /** Height of the tallest wall. */
@@ -287,5 +331,19 @@ export function buildScene(plan: FloorPlan): Scene3D {
     extent.push(...slab.polygon)
   }
 
-  return { walls, slabs, dividers, bounds: computeBounds(extent), height, issues }
+  // The stairs that rise from this floor, read from the plan it was cut from (LVL-3). A plan that
+  // is no slice draws every stair, each rising from its lower floor's z = 0, as its walls do (C5).
+  const stairs: SceneStair[] = []
+  if ((plan.stairs ?? []).length > 0) {
+    const { whole, floor } = wholePlan(plan)
+    const levels = floorElevations(whole).floors
+    for (const stair of planStairs(plan, floor === null ? () => broken : brokenOnFloor).stairs) {
+      if (floor !== null && stair.lower.floor !== floor) continue
+      const scene = stairBlocks(stair, levels.get(stair.lower.floor)?.floorLevel ?? 0)
+      stairs.push(scene)
+      for (const block of scene.blocks) extent.push(...block.outline)
+    }
+  }
+
+  return { walls, slabs, dividers, stairs, bounds: computeBounds(extent), height, issues }
 }

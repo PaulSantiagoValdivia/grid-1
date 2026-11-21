@@ -88,6 +88,24 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* A stair the plan states (LVL-3): flights, landings, risers and the walking line in the wall ink,
+   thin, with a solid arrow head pointing up. Drawing, not a target. */
+.canvas [data-part='stair'] {
+  pointer-events: none;
+}
+.canvas [data-part='stair-outline'],
+.canvas [data-part='stair-riser'],
+.canvas [data-part='stair-line'] {
+  fill: none;
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+.canvas [data-part='stair-arrow'] {
+  fill: var(--plan-wall, #232320);
+  stroke: none;
+}
+
 /* A step between rooms at different levels (LVL-7): where the higher floor ends, across a gap or
    over a dividing line, solid in the wall ink. */
 .canvas [data-part='step'] {

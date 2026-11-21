@@ -80,6 +80,10 @@ export const LINE_PX = {
   jamb: 1,
   /** A step between rooms at different levels (LVL-7). */
   step: 1.5,
+  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  stair: 0.75,
+  /** How long the head of a stair's arrow is. */
+  stairArrow: 8,
   doorLeaf: 1.5,
   doorArc: 0.75,
   dimension: 1,
