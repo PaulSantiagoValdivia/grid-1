@@ -32,11 +32,13 @@ export function checkSheetRequest(request: SheetRequest): SheetLayout {
   return request.layout as SheetLayout
 }
 
-function readNamedFile(project: Project, file: string): string {
+/** The file's text. A missing file is no words (null) when `mayBeMissing`, else a refusal. */
+function readSheetFile(project: Project, file: string, mayBeMissing: boolean): string | null {
   try {
     return project.readText(file, SHEET_FILE_MAX_BYTES).text
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT' && mayBeMissing) return null
     if (code === 'ENOENT') throw new PlanRefused(`There is no file ${quoted(file)}.`)
     if (code === 'EISDIR') throw new PlanRefused(`${quoted(file)} is a folder, not a sheet file.`)
     if (code === 'EFBIG') throw new PlanRefused(`${quoted(file)} is larger than ${SHEET_FILE_MAX_BYTES / 1024} KB, the most Grid reads in a sheet file.`)
@@ -47,7 +49,7 @@ function readNamedFile(project: Project, file: string): string {
 /** The words for a client sheet: the file named, else `sheet.json` beside the plan, else none. */
 export function readSheetWords(project: Project, planFile: string, loaded: LoadedPlan, given: string | undefined): SheetWords | null {
   const file = given ?? path.join(path.dirname(planFile), SHEET_FILE)
-  const text = given === undefined ? project.readTextIfThere(file) : readNamedFile(project, file)
+  const text = readSheetFile(project, file, given === undefined)
   if (text === null) return null
   let raw: unknown
   try {

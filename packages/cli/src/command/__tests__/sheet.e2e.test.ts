@@ -1,5 +1,5 @@
 import { spawnSync } from 'child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -68,5 +68,48 @@ describe('grid sheet (VEW-7)', () => {
   it('ignores sheet.json with the check layout', () => {
     writeFileSync(join(dir, 'sheet.json'), '{ not json')
     expect(grid(['sheet', 'two-floor-house.json', '--layout', 'check']).status).toBe(0)
+  })
+
+  function expectCleanRefusal(run: { status: number | null; err: string }, status: number): void {
+    expect(run.status).toBe(status)
+    expect(run.err.startsWith('grid: ')).toBe(true)
+    expect(run.err.trimEnd().split('\n')).toHaveLength(1)
+    expect(run.err).not.toMatch(/something went wrong|EISDIR|EFBIG|\n\s+at /)
+  }
+
+  it('refuses a folder named sheet.json beside the plan, cleanly', () => {
+    mkdirSync(join(dir, 'sheet.json'))
+    expectCleanRefusal(grid(['sheet', 'two-floor-house.json', '--layout', 'client']), 1)
+  })
+  it('refuses an oversize sheet.json beside the plan, cleanly', () => {
+    writeFileSync(join(dir, 'sheet.json'), ' '.repeat(65 * 1024))
+    expectCleanRefusal(grid(['sheet', 'two-floor-house.json', '--layout', 'client']), 1)
+  })
+  it('uses a named --sheet file instead of sheet.json beside the plan', () => {
+    writeFileSync(join(dir, 'sheet.json'), '{ not json')
+    writeFileSync(join(dir, 'words.json'), JSON.stringify({ version: '1', name: 'Words House', intro: ['A short welcome.'] }))
+    const run = grid(['sheet', 'two-floor-house.json', '--layout', 'client', '--sheet', 'words.json'])
+    expect(run.err).toBe('')
+    expect(run.status).toBe(0)
+  })
+  it('refuses a named --sheet file that is missing', () => {
+    expectCleanRefusal(grid(['sheet', 'two-floor-house.json', '--layout', 'client', '--sheet', 'nope.json']), 1)
+  })
+  it('refuses an unknown --layout, naming both', () => {
+    const run = grid(['sheet', 'two-floor-house.json', '--layout', 'poster'])
+    expect(run.status).toBe(2)
+    expect(run.err).toMatch(/client.*check|check.*client/)
+  })
+  it('refuses a plan that does not validate', () => {
+    writeFileSync(join(dir, 'bad.json'), '{"walls": 1}')
+    expectCleanRefusal(grid(['sheet', 'bad.json', '--layout', 'check']), 1)
+  })
+  it('still writes a check sheet for a plan with findings', () => {
+    writeFileSync(join(dir, 'front-door-into-bedroom.json'), readFileSync(join(cli, 'fixtures', 'front-door-into-bedroom.json')))
+    const check = grid(['check', 'front-door-into-bedroom.json'])
+    expect(check.out).toMatch(/\S/)
+    const run = grid(['sheet', 'front-door-into-bedroom.json', '--layout', 'check'])
+    expect(run.status).toBe(0)
+    expect(existsSync(join(dir, 'exports', 'front-door-into-bedroom-check.pdf'))).toBe(true)
   })
 })

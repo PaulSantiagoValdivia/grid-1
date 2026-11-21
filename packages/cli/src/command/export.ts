@@ -77,19 +77,6 @@ export interface ExportName {
   readonly note?: string
 }
 
-/**
- * The export's file name, made from the plan file's name and never from text inside the plan.
- *
- * - The plan file's name is reduced to lower-case letters, digits and hyphens (by the core's
- *   `exportFileName`).
- * - It is replaced by `floor-plan` when it is longer than five words or 40 characters, or
- *   holds a word in `WORDS_KEPT_OUT`: it would read as a sentence, a claim or an instruction.
- * - A name Windows keeps for a device (`con`, `nul`, `com1` ...) gets `plan-` in front.
- * - One floor of a plan with several is named by its place in the plan, `-floor-2`, not by the
- *   floor's own name or id, which are text from inside the plan.
- *
- * Grid sanitises rather than refuses: the export is still written, and `note` says what changed.
- */
 /** The plan file's name made safe to name a file after: no claim, no instruction, no device. */
 export function exportBaseOf(planFile: string): { base: string; note?: string } {
   let base = exportFileName(projectNameOf(planFile), 'dxf', null).slice(0, -'.dxf'.length)
@@ -107,6 +94,19 @@ export function exportBaseOf(planFile: string): { base: string; note?: string } 
   return note === undefined ? { base } : { base, note }
 }
 
+/**
+ * The export's file name, made from the plan file's name and never from text inside the plan.
+ *
+ * - The plan file's name is reduced to lower-case letters, digits and hyphens (by the core's
+ *   `exportFileName`).
+ * - It is replaced by `floor-plan` when it is longer than five words or 40 characters, or
+ *   holds a word in `WORDS_KEPT_OUT`: it would read as a sentence, a claim or an instruction.
+ * - A name Windows keeps for a device (`con`, `nul`, `com1` ...) gets `plan-` in front.
+ * - One floor of a plan with several is named by its place in the plan, `-floor-2`, not by the
+ *   floor's own name or id, which are text from inside the plan.
+ *
+ * Grid sanitises rather than refuses: the export is still written, and `note` says what changed.
+ */
 export function exportNameOf(planFile: string, format: ExportFormat, floorNumber: number | null): ExportName {
   const made = exportBaseOf(planFile)
   let base = made.base
