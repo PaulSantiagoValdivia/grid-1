@@ -18,7 +18,7 @@ import { floorSpaces, spacesKnown } from '../spaces'
 import { planWallSides } from '../exposure'
 import type { Vec2 } from '../vec2'
 import { add, area, scale } from '../vec2'
-import { wallAxis } from '../wall'
+import { wallFrameAt, wallLength } from '../wall'
 import { TOLERANCES, limit, tolerance } from '../tolerances'
 import { overFigure, underFigure } from '../rounding'
 
@@ -91,8 +91,9 @@ export function sidesAt(
   index: PlanIndex,
   outlines: ReadonlyMap<string, RoomOutline>
 ): [string | null, string | null] {
-  const axis = wallAxis(wall)
-  const centre = add(axis.start, scale(axis.dir, along))
+  // Along a curved wall's curve (CNT-18), the normal where it is.
+  const axis = wallFrameAt(wall, along)
+  const centre = axis.point
   const step = wall.thickness / 2 + tolerance('stepPastFace')
   // A zone is no place of its own (CNT-8): what is in it is in its room.
   const zones = roomZones(index)
@@ -159,9 +160,9 @@ export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
     if (asStated && wall.kind === 'exterior') return true
     const found = spacesOf(floorOf(wall))
     if (found === null) return false
-    const axis = wallAxis(wall)
+    const axis = wallFrameAt(wall, along)
     const step = (wall.virtual === true ? 0 : wall.thickness / 2) + tolerance('stepPastFace')
-    const point = add(add(axis.start, scale(axis.dir, along)), scale(axis.normal, side === 'left' ? step : -step))
+    const point = add(axis.point, scale(axis.normal, side === 'left' ? step : -step))
     return !found.spaces.some((space) => {
       const [outer, ...islands] = space.rings
       return outer !== undefined && contains(outer, point) && !islands.some((ring) => contains(ring, point))
@@ -284,7 +285,7 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
   for (const wall of plan.walls) {
     if (wall.virtual !== true) continue
     const stretches = (sides.get(wall.id)?.stretches ?? []).filter((st) => st.to - st.from > tolerance('lineInside'))
-    const points = stretches.length > 0 ? stretches.map((st) => (st.from + st.to) / 2) : [wallAxis(wall).length / 2]
+    const points = stretches.length > 0 ? stretches.map((st) => (st.from + st.to) / 2) : [wallLength(wall) / 2]
     for (const along of points) passage(wall, wall.id, along, sidesAt(wall, along, index, outlines))
   }
 

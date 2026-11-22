@@ -905,3 +905,82 @@ descriptions (`tolerances.ts` 223 → 235, for people who build Grid) and the ne
 - By hand: `grid check --lang es --full` on a plan with a wide door with no kind, a window of
   kind `garage`, a fixed window with a part, a door whose part is wider than it and two doors with
   no swing gives each of CNT-14's four codes in Spanish, with decimal commas.
+
+### Again after merging main 6ad4146b (CNT-18)
+
+`main` moved again: a curved wall (CNT-18, convention C21), an arc of a circle by its centre and
+sweep, with doors and windows along it and each hole straight between its edges (the chord).
+CNT-14 stays C20; CNT-18 is C21.
+
+**Conflicts and how each was kept**
+
+- `packages/floorplan/src/types/floorplan.ts`: the header has C20 (CNT-14) then C21 (CNT-18).
+- `packages/floorplan/src/geometry/floorplan.ts`: a drawn opening takes CNT-18's hole (the chord,
+  `openingChord`, for its `from`, `to` and `normal`) and CNT-14's `kind` and `opens`.
+- `packages/floorplan/src/geometry/export/mesh.ts`: the import of both sides' scene types
+  (`SceneOpening` and CNT-14's `OpeningPartKind`; CNT-18's `WallBasis` and `WallElevation`).
+- `packages/floorplan/src/geometry/export/ifc.ts`: CNT-18's void on the chord (placed there, as
+  wide as the chord, deep enough for both bowed faces) filled with CNT-14's frame, leaves and
+  glass instead of CNT-18's one plain leaf. On a curved wall the parts' places along the curve
+  are drawn in to the chord (scaled by the chord's length over the opening's width), and a door
+  turned to open to the right face is turned about the chord's width.
+- `packages/cli/src/edit/edits.ts`, `packages/cli/src/mcp/readTools.ts`: the imports of both
+  sides (CNT-14's kinds and handing, CNT-18's `wallLength`, `wallPointAt` and the message keys).
+- `packages/cli/src/__tests__/ownWords.test.ts`: `tolerances.ts` counts both sides' new
+  descriptions, 223 + 12 (CNT-14) + 10 (CNT-18) = 245 (for people who build Grid, outside the
+  ratchet). Every other count and the ratchet merged on their own and the test passes.
+- `packages/cli/src/command/__tests__/grid.e2e.test.ts`: both sides' notes on the bundle cap; the
+  cap is now 700,000 (below).
+- `CHANGELOG.md`: CNT-14's entry first, then CNT-18's, MSG-11's and the rest.
+- `docs/result-contract.md`: the agents' changelog has CNT-14's section first (with one more line
+  on a door or window on a curved wall), then CNT-18's and MSG-11's.
+
+**Where the features meet**
+
+- One gap, fixed: CNT-14's 3D parts (`sceneOpening` in `scene3d.ts`) placed a door's or window's
+  frame, leaves and glass along the wall's straight axis (`wallAxis`), which CNT-18 makes throw
+  for a curved wall, so `buildScene` (the 3D view, the OBJ, the GLB, the stills, and three of
+  CNT-18's own tests on the merge) failed on any curved wall with a door or window. The parts now
+  stand square to the opening's chord on a curved wall, their places along the curve drawn in to
+  it, as the IFC's above. Tests: `floorplan/src/geometry/__tests__/openingKinds.test.ts`, "kinds
+  on a curved wall (CNT-18)": a round room with a door or window of every kind (single, double,
+  sliding, pocket, folding, roller, garage; a double window with its part, a fixed window) has
+  no drawing question, no door left unchecked and nothing in any sweep; every 3D part of each
+  stands between the ends of its chord and within the wall's half thickness of it; a handing said
+  in rooms (`opens into "drum", hinged on the left`) is `swing: left, hinge: end` on the curve;
+  the IFC holds the seven doors and two windows, and the DXF, OBJ and GLB export it.
+  `cli/src/mcp/__tests__/doorKinds.test.ts`, "a kind and a handing on a curved wall (CNT-18)":
+  `grid_change_opening` hangs a door on the curve in the person's terms (no
+  `floor/not-checked-door-swings` after), then makes it sliding (no `opening/` line after).
+- What already worked: the plan symbols, the sweeps and the DXF read the drawn opening, whose
+  `from`, `to` and `normal` CNT-18 makes the chord, so a door sweeps the floor from its straight
+  hole by kind; handing in rooms reads the curve's faces (`openingSides`); rooms text writes a
+  floor with a curved wall as `raw` lines, which keep `kind`, `opens`, `hinge` and `swing`, and
+  writes them back unchanged (checked by hand).
+- Left as it is, for the owner: on a curved wall a door's or window's parts stand square to its
+  chord, as its hole does, so on a wide opening in a tight curve they stand off the curved faces
+  by up to the chord's sagitta (a 2.2 m garage door on a 3 m radius: about 0.2 m at its middle,
+  where the hole itself is cut that deep). Bending a frame or a sliding leaf to the curve would
+  need curved parts in `openingParts` and every 3D format; nothing measures them, so it is drawing
+  only.
+
+**Expectations changed**
+
+- `grid.e2e.test.ts`: the bundle cap 655,000 → 700,000. `dist/grid.mjs` is 660,801 bytes merged
+  (main's was 653,972; CNT-14 with MSG-11 was 655,506), with no new dependency; the reason is
+  beside the cap.
+- `ownWords.test.ts`: `tolerances.ts` 245, as above.
+- No English output, golden file or snapshot changed.
+
+**Scoreboard.** 197, 277, 22, 5, 22, 735, 95: "Same as the stored figures." (131.7 s). No count
+moved, so `current.json` and `scoreboard/README.md` are not touched.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- The affected tests in three parts with the same options (`--exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`), after the fix and the tests above: `packages/floorplan`, 136
+  of 136 files, 3,422 passed, 1 skipped (3,423); `packages/cli`, 108 of 108 files, 1,420 passed,
+  1 skipped (1,421); `packages/rules packages/viewer scoreboard/__tests__`, 111 of 111 files,
+  1,064 passed, 2 skipped (1,066). No timing test failed.
+- `npm run scoreboard`: as above.

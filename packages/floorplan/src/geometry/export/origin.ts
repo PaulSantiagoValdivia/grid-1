@@ -76,7 +76,8 @@ export function nearOrigin<P extends Pick<FloorPlan, 'walls' | 'items' | 'stairs
   return {
     plan: {
       ...plan,
-      walls: plan.walls.map((wall) => ({ ...wall, start: move(wall.start), end: move(wall.end) })),
+      // CNT-18: a curved wall's centre moves with its ends.
+      walls: plan.walls.map((wall) => ({ ...wall, start: move(wall.start), end: move(wall.end), ...(wall.arc === undefined ? {} : { arc: { ...wall.arc, centre: move(wall.arc.centre) } }) })),
       ...(plan.items === undefined ? {} : { items: plan.items.map((item) => ({ ...item, at: move(item.at) })) }),
       ...(plan.stairs === undefined
         ? {}

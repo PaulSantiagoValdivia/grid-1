@@ -537,14 +537,20 @@ describe('the built file', () => {
     // still under it, so the cap stays.
     // BRF-3's plot adds about 7,000 more. 600 kB since CNT-17: its accessibility measurements,
     // merged with BRF-3 and WRT-4 from main, make it 555,889 bytes, again with no new dependency.
+    // CNT-18's curved walls add about 20,000 more, under the same cap.
     // VEW-4's preview tools, record, 3D pick and page server add about 17,000 bytes (the page
     // itself is a chunk of its own); merged with COD-8 and HND-11, 559,890 bytes, under the same cap.
     // 650 kB since HND-12: its phone room scan (the reader, the face pairing and the evidence
     // beside the plan, about 34,000 bytes), merged with WRT-7, CNT-10 and VEW-9 from main, makes it
     // 607,030 bytes, again with no new dependency. BRF-6's first layout from the brief adds about
-    // 11,800 more, also with no new dependency. 700 kB since CNT-14: its kinds of door and window
-    // (the symbols, the parts in 3D and the IFC, the handing), merged with MSG-11's languages from
-    // main (648,688 bytes there), make it 655,506 bytes, again with no new dependency.
+    // 11,800 more, also with no new dependency.
+    // CNT-18 merged with WRT-7, CNT-10, VEW-9 and VEW-4 from main: 578,078 bytes; with BRF-4 and
+    // HND-12 too, 623,324 bytes; with CNT-4, LVL-5 and BRF-6 too, 643,587 bytes, under the same cap.
+    // 655 kB since CNT-18 merged with MSG-11: main was 648,688 bytes, and the curved walls with
+    // their words as keys of the message files make it 653,972, again with no new dependency.
+    // 700 kB since CNT-14 merged with CNT-18: its kinds of door and window (the symbols, the parts
+    // in 3D and the IFC, the handing) with MSG-11's languages made 655,506 bytes, and with the
+    // curved walls too (main was 653,972 bytes) 660,801, again with no new dependency.
     expect(statSync(bundle).size).toBeLessThan(700_000)
   })
 })

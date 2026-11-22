@@ -44,7 +44,7 @@ import { floorElevations, isFiniteWall } from './elevations'
 import { planEnvelope } from './envelope'
 import { groundLevel } from './ground'
 import { wallJoints } from './joints'
-import { SQUARE_ENDS, wallAxis, wallParts, wallSlicePolygon, pointAlong } from './wall'
+import { SQUARE_ENDS, wallAxis, wallParts, wallPointAt, wallSegments, wallSlicePolygon, pointAlong } from './wall'
 import { brokenOnFloor } from './validate'
 import { planStairs } from './stairs'
 import { stairBlocks } from './scene3d'
@@ -421,6 +421,10 @@ export function planSection(stated: FloorPlan, line: SectionLine): PlanSection {
 
   /** The two faces and two ends of a wall, its doors and windows open in its faces. */
   function wallFaces(wall: Wall, ends: typeof SQUARE_ENDS, openings: ReturnType<typeof openingsOf>, base: number, floor: string): void {
+    if (wall.arc !== undefined) {
+      curvedWallFaces(wall, openings, base, floor)
+      return
+    }
     const axis = wallAxis(wall)
     const total = axis.length
     const [l0, l1, r1, r0] = wallSlicePolygon(wall, 0, total, ends)
@@ -437,6 +441,37 @@ export function planSection(stated: FloorPlan, line: SectionLine): PlanSection {
     face('wall', wall.id, floor, r0!, r1!, scale(axis.normal, -1), base, top, holesOn(-half))
     face('wall', wall.id, floor, l1!, r1!, axis.dir, base, top)
     face('wall', wall.id, floor, r0!, l0!, scale(axis.dir, -1), base, top)
+  }
+
+  /**
+   * CNT-18: a curved wall's faces, one flat piece per chord of its curve (each within
+   * `arcSagitta` of it), its doors and windows open where they stand along the curve, and an end
+   * face only where the wall ends.
+   */
+  function curvedWallFaces(wall: Wall, openings: ReturnType<typeof openingsOf>, base: number, floor: string): void {
+    const half = wall.thickness / 2
+    const top = base + wall.height
+    const segments = wallSegments(wall)
+    segments.forEach((segment, i) => {
+      const side = (offset: number, p: Vec2): Vec2 => add(p, scale(segment.normal, offset))
+      const holesOn = (offset: number) =>
+        openings
+          .filter((o) => o.offset < segment.to && o.offset + o.width > segment.from)
+          .map((o) => ({
+            a: side(offset, wallPointAt(wall, Math.max(segment.from, o.offset))),
+            b: side(offset, wallPointAt(wall, Math.min(segment.to, o.offset + o.width))),
+            y0: base + o.sill,
+            y1: base + o.sill + o.height
+          }))
+      const l0 = side(half, segment.start)
+      const l1 = side(half, segment.end)
+      const r0 = side(-half, segment.start)
+      const r1 = side(-half, segment.end)
+      face('wall', wall.id, floor, l0, l1, segment.normal, base, top, holesOn(half))
+      face('wall', wall.id, floor, r0, r1, scale(segment.normal, -1), base, top, holesOn(-half))
+      if (i === segments.length - 1 && wall.arc!.sweep % 360 !== 0) face('wall', wall.id, floor, l1, r1, segment.dir, base, top)
+      if (i === 0 && wall.arc!.sweep % 360 !== 0) face('wall', wall.id, floor, r0, l0, scale(segment.dir, -1), base, top)
+    })
   }
 
   // The slabs, roofs and parapets (LVL-4).
@@ -630,11 +665,16 @@ function mergeStretches(stretches: readonly (readonly [number, number])[]): [num
 function outsideAt(frame: Frame, wall: Wall, sides: ReturnType<typeof planWallSides>): 'left' | 'right' | null {
   const found = sides.get(wall.id)
   if (found === undefined) return null
-  const axis = wallAxis(wall)
+  // CNT-18: on a curved wall, the chord of its curve the line crosses, and how far along the
+  // curve that is; a straight wall is its one chord.
+  const pieces = wallSegments(wall)
+  const crossed = pieces.find((p) => Math.sign(beyondOf(frame, p.start)) !== Math.sign(beyondOf(frame, p.end))) ?? pieces[Math.floor(pieces.length / 2)]!
+  const axis = crossed
   // Where the line crosses the wall's axis, along the wall.
   const da = beyondOf(frame, axis.start)
   const db = beyondOf(frame, axis.end)
-  const s = da === db ? axis.length / 2 : Math.min(axis.length, Math.max(0, (da / (da - db)) * axis.length))
+  const span = axis.to - axis.from
+  const s = axis.from + (da === db ? span / 2 : Math.min(span, Math.max(0, (da / (da - db)) * span)))
   const stretch = stretchAt(found, s)
   if (stretch === null || stretch.worked !== 'exterior') return null
   // The outside is the face with no room on it; the wall's normal points at its left face.

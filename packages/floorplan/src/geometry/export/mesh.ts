@@ -15,7 +15,7 @@
  */
 
 import type { Vec2 } from '../vec2'
-import type { SceneOpening, SceneSlab, SceneSolid, SceneStair, SceneWall, Vec3 } from '../scene3d'
+import type { SceneOpening, SceneSlab, SceneSolid, SceneStair, SceneWall, Vec3, WallBasis, WallElevation } from '../scene3d'
 import type { OpeningPartKind } from '../openingParts'
 import { alongFace } from '../scene3d'
 import { triangulate } from '../triangulate'
@@ -73,7 +73,25 @@ function storable(mesh: Mesh): Mesh | null {
 }
 
 export function wallMesh(wall: SceneWall): Mesh | null {
-  const { elevation, basis } = wall
+  // CNT-18: a curved wall is its straight pieces, one mesh of them.
+  if (wall.pieces !== undefined) return joined(wall.pieces.map((piece) => elevationMesh(piece.elevation, piece.basis)))
+  return elevationMesh(wall.elevation, wall.basis)
+}
+
+/** Meshes one after the other as one: each face's points moved past the points before it. */
+function joined(meshes: readonly (Mesh | null)[]): Mesh | null {
+  const points: Vec3[] = []
+  const faces: Face[] = []
+  for (const mesh of meshes) {
+    if (mesh === null) continue
+    const base = points.length
+    points.push(...mesh.points)
+    for (const [a, b, c] of mesh.faces) faces.push([base + a, base + b, base + c])
+  }
+  return faces.length === 0 ? null : storable({ points, faces })
+}
+
+function elevationMesh(elevation: WallElevation, basis: WallBasis): Mesh | null {
   const { vertices, triangles, rings } = triangulate(elevation.outline, elevation.holes)
   if (triangles.length === 0) return null
 

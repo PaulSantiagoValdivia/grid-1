@@ -13,14 +13,19 @@
  */
 import {
   cross,
+  curveAlong,
   dot,
   lineMouth,
+  openingChord,
   openingMouth,
   pointInPolygon,
   poleOfInaccessibility,
   sub,
   tolerance,
   wallAxis,
+  wallCurve,
+  wallFrameAt,
+  wallSegments,
   type Opening,
   type Vec2,
   type Wall,
@@ -55,6 +60,19 @@ export function crossingOf(survey: Survey, room: SurveyRoom, via: string, other:
   const opening: Opening | undefined = survey.plan.openings.find((o) => o.id === via)
   const wall = wallOf(survey, opening?.wall ?? via)
   if (wall === undefined) return null
+  // CNT-18: a curved wall has no one axis. A doorway in it is crossed square to its own hole,
+  // the straight chord between its edges; a curved dividing line along the curve.
+  if (wall.arc !== undefined) {
+    if (opening === undefined || wall.virtual === true) return curvedLineCrossing(wall, room, other)
+    const chord = openingChord(wall, opening.offset, opening.offset + opening.width)
+    if (chord.length < tolerance('noLength')) return null
+    const mouth = openingMouth(wall, opening, room.polygon, room.holes)
+    if (mouth === null) return null
+    const near = mid(mouth[0], mouth[1])
+    const side = dot(sub(near, chord.start), chord.normal)
+    const inward = side >= 0 ? chord.normal : { x: -chord.normal.x, y: -chord.normal.y }
+    return { near, far: { x: near.x - 2 * side * chord.normal.x, y: near.y - 2 * side * chord.normal.y }, inward }
+  }
   const axis = wallAxis(wall)
   if (axis.length < tolerance('noLength')) return null
   const inwardOf = (near: Vec2): Vec2 => {
@@ -86,6 +104,43 @@ export function crossingOf(survey: Survey, room: SurveyRoom, via: string, other:
   }
   const near = mid(stretch[0], stretch[1])
   return { near, far: near, inward: inwardOf(near) }
+}
+
+/**
+ * CNT-18: where a curved dividing line is crossed from `room`: at the middle, along the curve, of
+ * the stretch it shares with `other` (or of the room's own stretch of it), on the straight piece
+ * the two rooms' outlines follow it by there, square to the curve, into the room.
+ */
+function curvedLineCrossing(wall: Wall, room: SurveyRoom, other: SurveyRoom | null): Crossing | null {
+  const curve = wallCurve(wall)
+  if (curve === null) return null
+  const mine = lineMouth(wall, room.polygon)
+  if (mine === null) return null
+  const span = (mouth: readonly [Vec2, Vec2]): [number, number] => {
+    const a = curveAlong(curve, mouth[0])
+    const b = curveAlong(curve, mouth[1])
+    return [Math.min(a, b), Math.max(a, b)]
+  }
+  let [lo, hi] = span(mine)
+  const theirs = other !== null && other.polygon.length >= 3 ? lineMouth(wall, other.polygon) : null
+  if (theirs !== null) {
+    const [a, b] = span(theirs)
+    if (Math.min(hi, b) > Math.max(lo, a)) [lo, hi] = [Math.max(lo, a), Math.min(hi, b)]
+  }
+  const at = (lo + hi) / 2
+  const frame = wallFrameAt(wall, at)
+  // On the straight piece there, which the rooms' outlines share, a hair inside the true curve.
+  const piece = wallSegments(wall).find((p) => at >= p.from && at <= p.to) ?? null
+  const k = piece === null || piece.to === piece.from ? 0 : ((at - piece.from) * piece.length) / (piece.to - piece.from)
+  const near = piece === null ? frame.point : { x: piece.start.x + piece.dir.x * k, y: piece.start.y + piece.dir.y * k }
+  // The normal that points into the room: the side of the curve the room's floor is on there, a
+  // step past the straight pieces its outline follows the curve by; else toward its middle.
+  const step = tolerance('useRaster')
+  const back = { x: -frame.normal.x, y: -frame.normal.y }
+  const on = (n: Vec2): boolean => pointInPolygon({ x: near.x + n.x * step, y: near.y + n.y * step }, room.polygon, room.holes)
+  const pole = poleOfInaccessibility(room.polygon, undefined, room.holes).point
+  const inward = on(frame.normal) !== on(back) ? (on(frame.normal) ? frame.normal : back) : dot(sub(pole, near), frame.normal) >= 0 ? frame.normal : back
+  return { near, far: near, inward }
 }
 
 // ---------------------------------------------------------------------------------------------

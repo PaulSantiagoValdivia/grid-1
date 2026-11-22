@@ -14,6 +14,9 @@ import { openingParts } from '../openingParts'
 import { buildScene } from '../scene3d'
 import { validatePlan } from '../validate'
 import { doorSwing } from '../door'
+import { openingChord, openingSpan } from '../wall'
+import { exportPlan } from '../../export/planExport'
+import { dot, sub } from '../vec2'
 
 type Tuple = [number, number]
 
@@ -309,5 +312,73 @@ describe('glass, frames and leaves in 3D (done when 3)', () => {
     expect(symbols(byFace)).toEqual(symbols(byCentre))
     const codes = (plan: FloorPlan): string[] => validatePlan(plan).issues.map((i) => `${i.code} ${i.id}`).sort()
     expect(codes(byFace)).toEqual(codes(byCentre))
+  })
+})
+
+describe('kinds on a curved wall (CNT-18)', () => {
+  /** A round room: one wall, a whole circle of radius 3 m round (5, 5), with a door or window of every kind on it. */
+  const on = (id: string, offset: number, extra: Partial<Opening>): Opening => door(id, 'round', offset, extra)
+  const drum = (): FloorPlan => ({
+    version: '1',
+    units: 'm',
+    walls: [wall('round', [8, 5], [8, 5], { kind: 'exterior', arc: { centre: [5, 5], sweep: 360 } })],
+    rooms: [{ id: 'drum', name: 'Drum', boundary: ['round'] }],
+    openings: [
+      on('single', 0.5, { hinge: 'start', swing: 'left' }),
+      on('double', 2, { kind: 'double', width: 1.4, swing: 'left' }),
+      on('sliding', 4, { kind: 'sliding', width: 1.6 }),
+      on('pocket', 6, { kind: 'pocket' }),
+      on('folding', 7.5, { kind: 'folding', width: 1.6, hinge: 'start', swing: 'right' }),
+      on('roller', 10, { kind: 'roller', width: 2 }),
+      on('garage', 13, { kind: 'garage', width: 2.2 }),
+      on('w1', 16, { type: 'window', kind: 'double', sill: 0.9, height: 1.2, width: 1.2, opens: { width: 0.6 } }),
+      on('w2', 17.6, { type: 'window', kind: 'fixed', sill: 0.9, height: 1.2, width: 0.6 })
+    ]
+  })
+
+  it('checks each kind on the curve: no question, no door left unchecked, and nothing in the way', () => {
+    const plan = drum()
+    expect(validatePlan(plan).issues).toEqual([])
+    const checked = checkDoorSweeps(plan, (o) => o)
+    expect(checked.issues).toEqual([])
+    expect(checked.notChecked).toEqual([])
+    // A door that swings or folds sweeps the floor from its straight hole; one that slides or lifts sweeps nothing.
+    const drawn = buildFloorPlan(plan)
+    for (const id of ['sliding', 'pocket', 'roller', 'garage']) expect(drawn.openings.find((o) => o.id === id)!.kind).toBeDefined()
+  })
+
+  it('raises each door and window in 3D square to its straight hole, within the wall', () => {
+    const plan = drum()
+    const scene = buildScene(plan)
+    expect(scene.openings.map((o) => o.id).sort()).toEqual(plan.openings.map((o) => o.id).sort())
+    const round = plan.walls[0]!
+    for (const opening of scene.openings) {
+      const span = openingSpan(plan.openings.find((o) => o.id === opening.id)!)
+      const chord = openingChord(round, span.from, span.to)
+      for (const part of opening.parts) {
+        for (const point of part.outline) {
+          const d = sub(point, chord.start)
+          // Along the chord, between its ends; across it, within the wall's half thickness.
+          expect(dot(d, chord.dir)).toBeGreaterThanOrEqual(-1e-9)
+          expect(dot(d, chord.dir)).toBeLessThanOrEqual(chord.length + 1e-9)
+          expect(Math.abs(dot(d, chord.normal))).toBeLessThanOrEqual(round.thickness / 2 + 1e-9)
+        }
+      }
+    }
+  })
+
+  it('turns a handing said in rooms into the wall\'s terms on the curve', () => {
+    const plan = parseFloorPlan(drum())
+    const single = plan.openings.find((o) => o.id === 'single')!
+    expect(handingFromRooms(plan, single, { opensInto: 'drum', hinged: 'left' })).toEqual({ hinge: 'end', swing: 'left' })
+    expect(handingFromRooms(plan, single, { opensInto: 'outside' })).toEqual({ swing: 'right' })
+  })
+
+  it('exports every kind on the curve, each door and window filled in the IFC', () => {
+    const options = { projectId: 'p', projectName: 'Drum', now: new Date(0) }
+    const ifc = exportPlan(drum(), 'ifc', options).data as string
+    expect(ifc.match(/IFCDOOR\(/g)?.length).toBe(7)
+    expect(ifc.match(/IFCWINDOW\(/g)?.length).toBe(2)
+    for (const format of ['dxf', 'obj', 'glb'] as const) expect(() => exportPlan(drum(), format, options)).not.toThrow()
   })
 })

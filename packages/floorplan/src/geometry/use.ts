@@ -26,6 +26,8 @@ import { limit, tolerance } from './tolerances'
 import type { Issue } from './validate'
 import type { Vec2 } from './vec2'
 import { add, cross, dot, length, lerp, scale, signedArea, sub, vec } from './vec2'
+import { openingChord, wallLength, wallPointAt, wallSegments } from './wall'
+import { curveFault } from './arc'
 
 /** The indicators, by code, each with what it measures in Grid's words and the figure it is set against when the person gives none. */
 export const USE_INDICATORS = {
@@ -124,26 +126,50 @@ const edgesOf = (ring: readonly Vec2[]): Segment[] => ring.map((p, i) => [p, rin
 // ── A hole in a wall ─────────────────────────────────────────────────────────────────────────
 
 interface WallFrame {
-  readonly start: Vec2
+  /** Where a distance along the wall's axis lands on the line the frame measures along. */
+  readonly at: (s: number) => Vec2
+  /** The distance along the wall's axis a point on that line stands for. */
+  readonly along: (p: Vec2) => number
   readonly dir: Vec2
   /** 90° counter-clockwise from `dir`. */
   readonly normal: Vec2
   readonly half: number
 }
 
-function frameOf(wall: Wall): WallFrame | null {
+/**
+ * The line a hole is measured along. On a straight wall it is the wall's axis; on a curved wall
+ * (CNT-18) it is the opening's own chord, its hole being straight between its edges (C21), with
+ * its edges where the opening's offset and far edge are along the curve.
+ */
+function frameOf(wall: Wall, opening?: Opening): WallFrame | null {
+  const half = wall.virtual === true ? 0 : wall.thickness / 2
+  if (wall.arc !== undefined) {
+    if (curveFault(wall) !== null) return null
+    const from = opening?.offset ?? 0
+    const to = opening === undefined ? wallLength(wall) : opening.offset + opening.width
+    const chord = openingChord(wall, from, to)
+    if (chord.length < tolerance('noLength')) return null
+    const k = chord.length / (to - from)
+    return {
+      at: (s) => add(chord.start, scale(chord.dir, (s - from) * k)),
+      along: (p) => from + dot(sub(p, chord.start), chord.dir) / k,
+      dir: chord.dir,
+      normal: chord.normal,
+      half
+    }
+  }
   const start = vec(wall.start[0], wall.start[1])
   const delta = sub(vec(wall.end[0], wall.end[1]), start)
   const len = length(delta)
   if (len < tolerance('noLength')) return null
   const dir = scale(delta, 1 / len)
-  return { start, dir, normal: vec(-dir.y, dir.x), half: wall.virtual === true ? 0 : wall.thickness / 2 }
+  return { at: (s) => add(start, scale(dir, s)), along: (p) => dot(sub(p, start), dir), dir, normal: vec(-dir.y, dir.x), half }
 }
 
 /** The hole's edge on one face of the wall: `side` 1 is the face the normal points at, -1 the other. */
 function holeFace(frame: WallFrame, opening: Opening, side: 1 | -1): Segment {
   const across = scale(frame.normal, side * frame.half)
-  return [add(add(frame.start, scale(frame.dir, opening.offset)), across), add(add(frame.start, scale(frame.dir, opening.offset + opening.width)), across)]
+  return [add(frame.at(opening.offset), across), add(frame.at(opening.offset + opening.width), across)]
 }
 
 /** The floor in front of one face of a hole, `depth` deep, as a counter-clockwise box. */
@@ -162,7 +188,7 @@ function coveredSpans(frame: WallFrame, opening: Opening, fixtures: readonly Obs
     for (const fixture of fixtures) {
       const part = convexOverlap(fixture.outline, zone)
       if (part.length < 3 || Math.abs(signedArea(part)) < tolerance('noArea')) continue
-      const along = part.map((p) => dot(sub(p, frame.start), frame.dir))
+      const along = part.map((p) => frame.along(p))
       const from = Math.max(opening.offset, Math.min(...along))
       const to = Math.min(opening.offset + opening.width, Math.max(...along))
       if (to - from > tolerance('noLength')) spans.push({ id: fixture.id, from, to })
@@ -201,7 +227,7 @@ export interface DoorwayClearance {
 
 /** The clear width a door or doorless opening leaves (`use/doorway-clear-width`). */
 export function doorwayClearance(wall: Wall, opening: Opening, fixtures: readonly Obstacle[]): DoorwayClearance {
-  const frame = frameOf(wall)
+  const frame = frameOf(wall, opening)
   const spans = frame === null ? [] : coveredSpans(frame, opening, fixtures)
   const run = longestFree(opening.offset, opening.offset + opening.width, spans)
   const leaf = opening.type === 'door' ? limit('useOpenLeaf') : 0
@@ -225,7 +251,7 @@ export interface WindowCover {
  * `useApproachDepth` of its hole on either face that are higher than its sill.
  */
 export function windowCover(wall: Wall, opening: Opening, fixtures: readonly (Obstacle & { readonly height: number })[]): WindowCover {
-  const frame = frameOf(wall)
+  const frame = frameOf(wall, opening)
   const higher = fixtures.filter((f) => f.height > opening.sill + tolerance('itemAboveRoom'))
   const spans = frame === null ? [] : coveredSpans(frame, opening, higher)
   const by = higher.flatMap((f) => {
@@ -255,7 +281,7 @@ function longestFreeTotal(from: number, to: number, spans: readonly { from: numb
  * when the room is on neither face.
  */
 export function openingMouth(wall: Wall, opening: Opening, polygon: readonly Vec2[], holes: Holes = []): Segment | null {
-  const frame = frameOf(wall)
+  const frame = frameOf(wall, opening)
   if (frame === null) return null
   const step = tolerance('useRaster')
   for (const side of [1, -1] as const) {
@@ -268,19 +294,28 @@ export function openingMouth(wall: Wall, opening: Opening, polygon: readonly Vec
 
 /** Where a dividing line meets a room: the stretch of its outline that lies on the line, or null. */
 export function lineMouth(wall: Wall, polygon: readonly Vec2[]): Segment | null {
-  const frame = frameOf(wall)
-  if (frame === null) return null
+  if (wall.arc !== undefined && curveFault(wall) !== null) return null
+  if (wall.arc === undefined && frameOf(wall) === null) return null
   const near = tolerance('wallContact')
   const along: number[] = []
-  for (const [a, b] of edgesOf(polygon)) {
-    const off = (p: Vec2): number => Math.abs(dot(sub(p, frame.start), frame.normal))
-    if (off(a) > near || off(b) > near || length(sub(b, a)) < tolerance('noLength')) continue
-    along.push(dot(sub(a, frame.start), frame.dir), dot(sub(b, frame.start), frame.dir))
+  // A curved line is looked along piece by piece (CNT-18); its mouth is the chord between the
+  // ends of the stretch the room's outline runs along.
+  for (const piece of wallSegments(wall)) {
+    const k = piece.length === 0 ? 1 : (piece.to - piece.from) / piece.length
+    for (const [a, b] of edgesOf(polygon)) {
+      const off = (p: Vec2): number => Math.abs(dot(sub(p, piece.start), piece.normal))
+      if (off(a) > near || off(b) > near || length(sub(b, a)) < tolerance('noLength')) continue
+      const sa = dot(sub(a, piece.start), piece.dir)
+      const sb = dot(sub(b, piece.start), piece.dir)
+      // A piece's line runs on past it, where the curve does not.
+      if (wall.arc !== undefined && (Math.max(sa, sb) < -near || Math.min(sa, sb) > piece.length + near)) continue
+      along.push(piece.from + sa * k, piece.from + sb * k)
+    }
   }
   if (along.length === 0) return null
   const from = Math.min(...along)
   const to = Math.max(...along)
-  return [add(frame.start, scale(frame.dir, from)), add(frame.start, scale(frame.dir, to))]
+  return [wallPointAt(wall, from), wallPointAt(wall, to)]
 }
 
 // ── A turning circle ─────────────────────────────────────────────────────────────────────────

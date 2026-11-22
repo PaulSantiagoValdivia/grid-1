@@ -146,6 +146,17 @@ twice, a value a part cannot do without. Each file says so, and so does the comm
     server's receipt gives it).
 - An id that several parts share is named once, with how many (`"bath" 4 times`).
 
+A curved wall (CNT-18) is in every export, but not every format writes an arc. The DXF writes a
+curved wall's faces as true arcs (a polyline with bulges) and a curved dividing line as an `ARC`
+or a `CIRCLE`; the IFC writes its `Axis` as a true arc (an `IfcTrimmedCurve` on an `IfcCircle`).
+Everything else that follows a curve is written as straight pieces that follow it, at most
+`arcSagitta` (1 mm) off it on a curve of ordinary size: the room outlines along a curved wall in
+every format, a curved wall's body in the IFC, and its faces in the OBJ and the GLB, which hold
+only triangles. The command says so on standard error, one line naming the walls and rooms, and
+the file says so beside what it leaves out, with how far off the pieces are at most: the property
+set `Grid_Approximated` in an IFC, the `GRID-LEFT-OUT` layer in a DXF, comment lines in an OBJ and
+`asset.extras.gridApproximated` in a GLB. A plan with no curved wall gets none of it.
+
 DXF, OBJ and GLB hold one floor: they name what is left out of that floor, every opening no
 floor holds, and every part the reader left out, which Grid cannot place on a floor. The IFC
 names what is left out of every floor.

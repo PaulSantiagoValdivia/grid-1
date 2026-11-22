@@ -528,10 +528,15 @@ function agentWallOpening(opening: OpeningFacts): string {
   return `${head} ${first.room}${gaps}${shown}`
 }
 
+/** Degrees as a description says them: whole, or to a tenth. */
+const degrees = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1))
+
 function agentWalls(floor: FloorFacts): string[] {
   return floor.walls.map((wall) => {
     const height = wall.virtual || wall.height === floor.wallHeight ? '' : wall.heightNotStated ? ' h?' : ` h${m(wall.height)}`
-    const head = ` ${wall.id} ${m(wall.start.x)},${m(wall.start.y)}>${m(wall.end.x)},${m(wall.end.y)} ${wall.virtual ? 'v' : `${m(wall.thickness)} ${KIND_LETTER[wall.kind]}`}${height}`
+    // CNT-18: a curved wall says its centre and sweep after its ends.
+    const arc = wall.curve === undefined ? '' : ` arc(${m(wall.curve.centre.x)},${m(wall.curve.centre.y)} ${degrees(wall.curve.sweep)}°)`
+    const head = ` ${wall.id} ${m(wall.start.x)},${m(wall.start.y)}>${m(wall.end.x)},${m(wall.end.y)}${arc} ${wall.virtual ? 'v' : `${m(wall.thickness)} ${KIND_LETTER[wall.kind]}`}${height}`
     const openings = floor.openings.filter((o) => o.wall === wall.id).map(agentWallOpening)
     const open = floor.openSides.find((side) => side.wall === wall.id)
     const joins = open ? ` | ${open.rooms[0]}|${open.rooms[1]}` : ''
@@ -561,7 +566,17 @@ function personWalls(floor: FloorFacts, names: PersonNames, w: Words): string[] 
         b: personSide(opening.sides[1], names, w),
       }))
     const along = openings.length > 0 ? t(w, 'describe.wall.openings', { openings: openings.join(t(w, 'join.semicolon')) }) : ''
-    return `  ${t(w, 'describe.wall', { start: point(w, wall.start.x, wall.start.y), end: point(w, wall.end.x, wall.end.y), what, joins, openings: along })}`
+    // CNT-18: a curved wall's centre, the way it turns and how far, and its length along the curve.
+    const curve = wall.curve === undefined
+      ? ''
+      : t(w, 'describe.wall.curve', {
+          sweep: sayValue(w.language, num(degrees(Math.abs(wall.curve.sweep))), w.options),
+          way: t(w, wall.curve.sweep > 0 ? 'describe.wall.anticlockwise' : 'describe.wall.clockwise'),
+          centre: point(w, wall.curve.centre.x, wall.curve.centre.y),
+          radius: fig(w, wall.curve.radius),
+          length: fig(w, wall.curve.length),
+        })
+    return `  ${t(w, 'describe.wall', { start: point(w, wall.start.x, wall.start.y), end: point(w, wall.end.x, wall.end.y), curve, what, joins, openings: along })}`
   })
 }
 

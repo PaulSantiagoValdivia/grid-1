@@ -136,7 +136,8 @@ export const isFiniteWall = (wall: Wall): boolean =>
   isFinitePoint(wall.start) &&
   isFinitePoint(wall.end) &&
   Number.isFinite(wall.thickness) &&
-  Number.isFinite(wall.height)
+  Number.isFinite(wall.height) &&
+  (wall.arc === undefined || (isFinitePoint(wall.arc.centre) && Number.isFinite(wall.arc.sweep)))
 
 /**
  * Whether the views draw a wall, so it counts toward its storey's height: not

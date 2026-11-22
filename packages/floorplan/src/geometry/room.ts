@@ -33,7 +33,7 @@
 
 import type { PlanIndex, Room, Wall } from './plan'
 import type { Line, Vec2 } from './vec2'
-import { area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
+import { add, area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
 import { tolerance, tolerancesAsStated } from './tolerances'
 import { fixedText, metresText } from './rounding'
 import { likelyId } from '../types/nearest'
@@ -41,7 +41,7 @@ import { quotedList } from '../types/planText'
 import type { Said } from '../messages/say'
 import { english, joined, name, num, said } from '../messages/say'
 import type { WallAxis } from './wall'
-import { wallAxis, wallFaces } from './wall'
+import { wallSegments } from './wall'
 import type { RoomNesting } from './nesting'
 import { NO_NESTING, nestRooms } from './nesting'
 import { pointInPolygon } from './innerPoint'
@@ -136,7 +136,10 @@ export function cornerReach(a: Wall, b: Wall): number {
   return Math.max(thicknessOf(a), thicknessOf(b)) + tolerance('wallContact')
 }
 
-/** One wall of the boundary, with what the outline needs to know about it. */
+/**
+ * One wall of the boundary, with what the outline needs to know about it; or one straight piece
+ * of a curved wall (CNT-18), which stands for the wall in every message.
+ */
 interface Piece {
   readonly wall: Wall
   readonly axis: WallAxis
@@ -145,6 +148,56 @@ interface Piece {
   face: Line
   side: 'left' | 'right'
 }
+
+/** The faces of one piece: a virtual wall's both lie on its axis (`wallFaces`). */
+function pieceFaces(piece: Piece): { left: Line; right: Line } {
+  const half = piece.wall.virtual ? 0 : piece.wall.thickness / 2
+  const { start, dir, normal } = piece.axis
+  return { left: { point: add(start, scale(normal, half)), dir }, right: { point: add(start, scale(normal, -half)), dir } }
+}
+
+/** How near a point comes to a wall's axis, curved or straight. */
+function nearWall(p: Vec2, wall: Wall): number {
+  return Math.min(...wallSegments(wall).map((segment) => distanceToSegment(p, segment.start, segment.end)))
+}
+
+/**
+ * Each listed wall's straight pieces, in the order the ring goes round. A straight wall is one
+ * line and needs no direction; a curved wall (CNT-18) is a chain of chords, and the chain must
+ * start at the end the ring arrives by: the end nearer the wall before it and farther from the
+ * one after. Where both ends meet both neighbours (a half-round bay closed by one straight wall,
+ * or two half circles), either way closes, unless the wall before is curved too: then the chain
+ * starts where that one's ended.
+ */
+function ringPieces(walls: readonly Wall[]): { pieces: WallAxis[]; of: number }[] {
+  const n = walls.length
+  const out: { pieces: WallAxis[]; of: number }[] = []
+  let exit: Vec2 | null = null
+  walls.forEach((wall, i) => {
+    let pieces: WallAxis[] = wallSegments(wall)
+    if (wall.arc !== undefined && n > 1) {
+      const first = pieces[0]!.start
+      const last = pieces.at(-1)!.end
+      const prev = walls[(i + n - 1) % n]!
+      const next = walls[(i + 1) % n]!
+      const forward = nearWall(first, prev) + nearWall(last, next)
+      const backward = nearWall(last, prev) + nearWall(first, next)
+      let reversed = false
+      if (Math.abs(forward - backward) > tolerance('wallContact')) reversed = backward < forward
+      else if (exit !== null && prev.arc !== undefined) reversed = distanceBetween(exit, last) < distanceBetween(exit, first)
+      if (reversed) {
+        pieces = [...pieces].reverse().map((piece) => ({ start: piece.end, end: piece.start, dir: scale(piece.dir, -1), normal: scale(piece.normal, -1), length: piece.length }))
+      }
+      exit = pieces.at(-1)!.end
+    } else {
+      exit = null
+    }
+    out.push({ pieces, of: i })
+  })
+  return out
+}
+
+const distanceBetween = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y)
 
 /**
  * Two walls in a row that show the room exactly one face. Deliberately tight:
@@ -392,15 +445,23 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
   const refuse = (code: RoomFaultCode, sentence: Said): RoomOutlineError => new RoomOutlineError(code, sentence, ring.hole)
   const outside = ring.floor === 'outside'
   const walls = resolveWalls(ring, index)
-  if (walls.length < 3) {
+  // A curved wall is traced as its straight pieces (CNT-18): a whole circle closes on its own.
+  const listed = ringPieces(walls)
+  const pieces: Piece[] = listed.flatMap(({ pieces: axes, of }) =>
+    axes.map((axis) => {
+      const line = { point: axis.start, dir: axis.dir }
+      return { wall: walls[of]!, axis, line, face: line, side: 'left' as const }
+    })
+  )
+  if (pieces.length < 3) {
     throw refuse('room/unclosed', said('issue.room/unclosed.fewWalls', { ring: ring.Name, n: walls.length }))
   }
-
-  const pieces: Piece[] = walls.map((wall) => {
-    const axis = wallAxis(wall)
-    const line = { point: axis.start, dir: axis.dir }
-    return { wall, axis, line, face: line, side: 'left' }
-  })
+  const firstPiece: number[] = []
+  let count0 = 0
+  for (const entry of listed) {
+    firstPiece.push(count0)
+    count0 += entry.pieces.length
+  }
 
   // 1 · Straight runs. Neighbours in a row are one side of the room.
   const runs: Piece[][] = []
@@ -462,7 +523,7 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
           ? cross(piece.axis.dir, sub(middle, piece.axis.start)) > 0
           : along > 0 === counterClockwise
       const roomOnLeft = insideOnLeft !== outside
-      const faces = wallFaces(piece.wall)
+      const faces = pieceFaces(piece)
       piece.side = roomOnLeft ? 'left' : 'right'
       piece.face = roomOnLeft ? faces.left : faces.right
     }
@@ -506,12 +567,15 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
     (edge, i) => intersectLines(edge.line, edges[(i + 1) % edges.length]!.line)!
   )
 
-  const sides: RoomSide[] = pieces.map((piece) => ({ wallId: piece.wall.id, face: piece.side }))
+  // One side per listed wall: a curved wall's pieces all show the room one face.
+  const sides: RoomSide[] = firstPiece.map((at) => ({ wallId: pieces[at]!.wall.id, face: pieces[at]!.side }))
+  // A curved wall's pieces meet at its own stations, which are no corners of the room.
+  const roomCorners = corners.filter((corner) => !(corner.wallA === corner.wallB && index.wallsById.get(corner.wallA)?.arc !== undefined))
   // The outline comes out counter-clockwise and a hole clockwise: the floor on the left of both.
   const done = (fault: RoomOutlineError | null): TracedRing => ({
     polygon: counterClockwise !== outside ? vertices : [...vertices].reverse(),
     sides,
-    corners,
+    corners: roomCorners,
     fault
   })
 

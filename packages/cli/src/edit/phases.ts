@@ -49,11 +49,15 @@ function freeId(taken: Set<string>, id: string): string {
   return next
 }
 
-/** Whether a wall lies along another, on its line and within its length: a piece it was cut into. */
+/**
+ * Whether a wall lies along another, on its line and within its length: a piece it was cut into.
+ * No edit cuts a curved wall (CNT-18, `refuseCurved`), so nothing is a piece of one: taken out,
+ * it stays, to be demolished.
+ */
 function pieceOf(piece: RawRecord, wall: Wall): boolean {
   const start = piece['start'] as [number, number] | undefined
   const end = piece['end'] as [number, number] | undefined
-  if (start === undefined || end === undefined) return false
+  if (start === undefined || end === undefined || wall.arc !== undefined) return false
   const axis = wallAxis(wall)
   const near = (p: [number, number]): boolean => {
     const dx = p[0] - axis.start.x

@@ -30,6 +30,10 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | Entry | Kind | Value | What it decides |
 |---|---|---|---|
 | `openingOverrun` | tolerance | 0.001 m | How far an opening may run past either end of its wall, below the floor, above its wall or into the next opening, and still fit; also how far it may run into a wall that meets its wall, or a wall end into it (MSG-16). A refusal states the overrun and the offset that fits |
+| `arcEnds` | tolerance | 0.005 m | How far a curved wall's end may lie from where its sweep takes its start, and its two ends differ in radius, and still be one arc (CNT-18); further, `wall/arc-ends-apart` names it |
+| `arcSagitta` | tolerance | 0.001 m | How far the straight pieces a curved wall is traced, checked and drawn with may stand off its curve at their middle |
+| `arcStep` | tolerance | 0.03 radian | The most a curved wall turns along one straight piece, so a small round room still measures within a few hundredths of a percent of its true area |
+| `arcPiecesMost` | limit | 1000 count | The most straight pieces one curved wall is traced with; a longer curve is traced with this many, a little further off it |
 | `gap` | tolerance | 0.02 m | A wall reaches the wall it meets when its end is within half the thicker wall plus this. The spaces check lengthens every wall by this much at both ends; the wall faults name a gap or an overrun past it, and two walls on top of each other when their bodies overlap by more than this |
 | `wallContact` | tolerance | 0.01 m | Slack past the walls' bodies when a room outline is traced: walls that touch, carry on in a row or reach a corner |
 | `strayCorner` | tolerance | 1 m | A room corner further than this from both its walls is not a corner, and the wall list is out of order |

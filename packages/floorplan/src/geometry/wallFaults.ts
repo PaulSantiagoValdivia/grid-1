@@ -130,7 +130,13 @@ interface Seg {
 
 const thickness = (wall: Wall): number => (wall.virtual === true ? 0 : wall.thickness)
 
+/**
+ * A straight wall as the faults measure it. A curved wall (CNT-18) is left out: its ends are on
+ * its curve and moving one would move the curve, so no fault here is about it and no fix moves
+ * it. The rooms round it are still traced, and a straight wall in them is still looked at.
+ */
 function segOf(wall: Wall): Seg | null {
+  if (wall.arc !== undefined) return null
   let axis
   try {
     axis = wallAxis(wall)

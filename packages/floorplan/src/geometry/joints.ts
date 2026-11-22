@@ -36,8 +36,60 @@ import { floorOf } from './floors'
 import { tolerance } from './tolerances'
 import { add, cross, dot, perp, scale, sub } from './vec2'
 import type { FaceReach, WallEnds } from './wall'
-import { wallAxis } from './wall'
+import { wallAxis, wallLength, wallPath } from './wall'
 import { boxIndex, boxOfPoints, widenBox } from './boxIndex'
+import { curveFault, curvePointAt, curveTangentAt, wallCurve } from './arc'
+
+/**
+ * A wall as the joints see it: where its two ends are and which way it leaves each, and where a
+ * joint lies on it away from its ends. A curved wall (CNT-18) leaves each end along its curve's
+ * tangent there, and a whole circle has no ends at all.
+ */
+interface Course {
+  readonly ends: readonly { readonly end: 'start' | 'end'; readonly at: Vec2; readonly dir: Vec2 }[]
+  readonly box: readonly Vec2[]
+  /** Where a joint at `p` lies on the wall's axis, away from its ends, and the way the axis runs there; or null. */
+  readonly through: (p: Vec2, near: number) => { readonly at: Vec2; readonly dir: Vec2 } | null
+}
+
+function courseOf(wall: Wall): Course {
+  const curve = wallCurve(wall)
+  if (curve === null) {
+    const axis = wallAxis(wall)
+    return {
+      ends: [
+        { end: 'start', at: axis.start, dir: axis.dir },
+        { end: 'end', at: axis.end, dir: scale(axis.dir, -1) }
+      ],
+      box: [axis.start, axis.end],
+      through: (p, near) => {
+        const s = dot(sub(p, axis.start), axis.dir)
+        if (s <= near || s >= axis.length - near) return null
+        if (Math.abs(cross(axis.dir, sub(p, axis.start))) > near) return null
+        return { at: add(axis.start, scale(axis.dir, s)), dir: axis.dir }
+      }
+    }
+  }
+  const length = curve.length
+  return {
+    ends: curve.closed
+      ? []
+      : [
+          { end: 'start', at: curvePointAt(curve, 0), dir: curveTangentAt(curve, 0) },
+          { end: 'end', at: curvePointAt(curve, length), dir: scale(curveTangentAt(curve, length), -1) }
+        ],
+    box: wallPath(wall),
+    through: (p, near) => {
+      const off = sub(p, curve.centre)
+      if (Math.abs(Math.hypot(off.x, off.y) - curve.radius) > near) return null
+      const turned = Math.atan2(off.y, off.x) - curve.startAngle
+      const turn = ((((turned * Math.sign(curve.sweep)) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI))
+      const s = turn * curve.radius
+      if (!curve.closed && (s <= near || s >= length - near)) return null
+      return { at: curvePointAt(curve, s), dir: curveTangentAt(curve, s) }
+    }
+  }
+}
 
 /** One wall seen from a joint: its axis leaving the joint, and its half thickness. */
 interface Ray {
@@ -195,13 +247,12 @@ function joinFloor(walls: readonly Wall[], indices: readonly number[], out: Map<
     readonly end: 'start' | 'end'
     readonly at: Vec2
   }
-  const axes = new Map(indices.map((i) => [i, wallAxis(walls[i]!)]))
+  const courses = new Map(indices.map((i) => [i, courseOf(walls[i]!)]))
   // Each axis's box, widened by twice `joint` so rounding never drops a joint exactly `joint` off.
-  const nearAxes = boxIndex(indices.map((i) => widenBox(boxOfPoints([axes.get(i)!.start, axes.get(i)!.end]), 2 * near)))
+  const nearAxes = boxIndex(indices.map((i) => widenBox(boxOfPoints(courses.get(i)!.box), 2 * near)))
   const ends: End[] = []
   for (const i of indices) {
-    const axis = axes.get(i)!
-    ends.push({ wall: i, end: 'start', at: axis.start }, { wall: i, end: 'end', at: axis.end })
+    for (const end of courses.get(i)!.ends) ends.push({ wall: i, end: end.end, at: end.at })
   }
   ends.sort((a, b) => a.at.x - b.at.x)
 
@@ -233,8 +284,7 @@ function joinFloor(walls: readonly Wall[], indices: readonly number[], out: Map<
       y: group.reduce((s, e) => s + e.at.y, 0) / group.length
     }
     const rays: Ray[] = group.map((e) => {
-      const axis = axes.get(e.wall)!
-      const dir = e.end === 'start' ? axis.dir : scale(axis.dir, -1)
+      const dir = courses.get(e.wall)!.ends.find((end) => end.end === e.end)!.dir
       return { wall: e.wall, end: e.end, at: e.at, dir, half: walls[e.wall]!.thickness / 2, angle: Math.atan2(dir.y, dir.x) }
     })
     // A wall that carries on through the joint: the joint lies on its axis, away from its ends,
@@ -242,13 +292,11 @@ function joinFloor(walls: readonly Wall[], indices: readonly number[], out: Map<
     for (const k of nearAxes.near(boxOfPoints([centre]))) {
       const i = indices[k]!
       if (members.has(i)) continue
-      const axis = axes.get(i)!
-      const s = dot(sub(centre, axis.start), axis.dir)
-      if (s <= near || s >= axis.length - near) continue
-      if (Math.abs(cross(axis.dir, sub(centre, axis.start))) > near) continue
-      const at = add(axis.start, scale(axis.dir, s))
+      const on = courses.get(i)!.through(centre, near)
+      if (on === null) continue
+      const { at } = on
       const half = walls[i]!.thickness / 2
-      for (const dir of [axis.dir, scale(axis.dir, -1)]) {
+      for (const dir of [on.dir, scale(on.dir, -1)]) {
         rays.push({ wall: i, end: 'through', at, dir, half, angle: Math.atan2(dir.y, dir.x) })
       }
     }
@@ -281,7 +329,8 @@ export function wallJoints(walls: readonly Wall[]): ReadonlyMap<string, WallEnds
   walls.forEach((wall, i) => {
     if (wall.virtual || !(wall.thickness > 0) || !Number.isFinite(wall.thickness)) return
     if (![...wall.start, ...wall.end].every(Number.isFinite)) return
-    if (wall.start[0] === wall.end[0] && wall.start[1] === wall.end[1]) return
+    if (wall.start[0] === wall.end[0] && wall.start[1] === wall.end[1] && wallCurve(wall)?.closed !== true) return
+    if (curveFault(wall) !== null) return
     const floor = floorOf(wall)
     const list = byFloor.get(floor)
     if (list) list.push(i)
@@ -295,7 +344,7 @@ export function wallJoints(walls: readonly Wall[]): ReadonlyMap<string, WallEnds
   const result = new Map<string, WallEnds>()
   for (const [i, reach] of reaches) {
     const wall = walls[i]!
-    const length = wallAxis(wall).length
+    const length = wallLength(wall)
     const all = [reach.start.left, reach.start.right, reach.end.left, reach.end.right]
     // A wall too short for its corners keeps its square ends rather than turning inside out.
     if (!all.every(Number.isFinite)) continue

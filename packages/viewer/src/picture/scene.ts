@@ -339,6 +339,28 @@ type Paints = ReturnType<typeof paints>
 
 const virtualPath = (points: readonly Vec2[]): string => `M${points.map((p) => `${p.x},${-p.y}`).join('L')}`
 
+/** A dividing line's points: its two ends, or a curved one's stations (CNT-18). */
+const linePoints = (wall: PlanWall): readonly Vec2[] => wall.curve?.path ?? wall.centerline
+
+/** The first share `t` of a line, along it, for a line being traced. */
+function lineShare(points: readonly Vec2[], t: number): Vec2[] {
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i]!.x, p.y - points[i]!.y))
+  let left = t * lengths.reduce((sum, length) => sum + length, 0)
+  const out = [points[0]!]
+  for (let i = 0; i < lengths.length; i++) {
+    const [a, b, length] = [points[i]!, points[i + 1]!, lengths[i]!]
+    if (left >= length) {
+      out.push(b)
+      left -= length
+      continue
+    }
+    const k = length === 0 ? 0 : left / length
+    out.push({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k })
+    break
+  }
+  return out
+}
+
 /** SHT-11: the part each kind of a stair symbol's line is drawn as. */
 const STAIR_PARTS = { outline: 'stair-outline', riser: 'stair-riser', walk: 'stair-line' } as const
 
@@ -375,7 +397,7 @@ function roomShape(room: PlanRoom, attrs: Attrs, key?: string): SvgNode {
 /** A solid wall is one path per run between its openings; a virtual wall is a line. */
 function wallShape(wall: PlanWall, attrs: Attrs, key?: string): SvgNode {
   if (wall.virtual) {
-    return el('path', { d: virtualPath(wall.centerline), 'data-part': 'virtual', ...attrs }, [], key)
+    return el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'virtual', ...attrs }, [], key)
   }
   return el(
     'g',
@@ -623,7 +645,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
       if (!ids.has(wall.id)) continue
       if (wall.virtual) {
         children.push(
-          el('path', { d: virtualPath(wall.centerline), 'data-part': 'virtual', 'data-id': wall.id, ...paint.virtual }, [], wall.id)
+          el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'virtual', 'data-id': wall.id, ...paint.virtual }, [], wall.id)
         )
         continue
       }
@@ -781,22 +803,18 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     // CNT-10: a wall to be demolished is drawn as it stands before the work, dashed and unfilled,
     // under what stands after it. Drawing, not a target.
     if (wall.phase === 'demolished') {
-      const shapes = wall.virtual ? [el('path', { d: virtualPath(wall.centerline), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished })] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished }))
+      const shapes = wall.virtual ? [el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished })] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished }))
       out.push(el('g', { 'data-phase': 'demolished', 'pointer-events': 'none' }, shapes, `demolished-${wall.id}`))
       continue
     }
 
     if (wall.virtual) {
-      const [start, end] = wall.centerline
-      const reach =
-        tracing === null
-          ? end
-          : { x: start.x + (end.x - start.x) * tracing, y: start.y + (end.y - start.y) * tracing }
+      const points = linePoints(wall)
       out.push(
         el(
           'path',
           {
-            d: virtualPath([start, reach]),
+            d: virtualPath(tracing === null ? points : lineShare(points, tracing)),
             'data-part': 'virtual',
             'data-id': wall.id,
             'data-moving': offset ? wall.id : undefined,
@@ -959,7 +977,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   for (const room of drawing.rooms) if (room.assumed) assumed.push(el('path', { d: roomPathOf(room), 'data-part': 'assumed-room', 'data-id': room.id, ...paint.assumed }, [], `room:${room.id}`))
   for (const wall of drawing.walls) {
     if (!wall.assumed) continue
-    if (wall.virtual) assumed.push(el('path', { d: virtualPath(wall.centerline), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}`))
+    if (wall.virtual) assumed.push(el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}`))
     else wall.slices.forEach((slice, index) => assumed.push(el('path', { d: pathOf(slice), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}:${index}`)))
   }
   for (const opening of drawing.openings) if (opening.assumed) assumed.push(lineEl('assumed-opening', across(opening, 0), { 'data-id': opening.id, ...paint.assumed }))
@@ -973,7 +991,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
       const colour = picked.get(wall.id)
       if (colour === undefined) continue
       if (wall.virtual) {
-        out.push(el('path', { d: virtualPath(wall.centerline), 'data-part': 'picked', 'data-id': wall.id, fill: 'none', stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${wall.id}`))
+        out.push(el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'picked', 'data-id': wall.id, fill: 'none', stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${wall.id}`))
         continue
       }
       out.push(el('g', { 'data-part': 'picked', 'data-id': wall.id, 'pointer-events': 'none' }, wall.slices.map((slice, index) => el('path', { d: pathOf(slice), fill: colour, 'fill-opacity': 0.75 }, [], String(index))), `picked:${wall.id}`))

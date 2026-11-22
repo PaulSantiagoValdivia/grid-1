@@ -26,7 +26,10 @@
  *   symbol (`openingSymbol`), one block per symbol, and what that symbol shows above the cut or
  *   hidden in the wall is on a dashed layer of its own.
  * - Walls as closed outlines, joined at their corners by the core (SHT-2: `PlanWall.slices`), each
- *   wall filled by a solid hatch on a layer of its own.
+ *   wall filled by a solid hatch on a layer of its own. A curved wall's outline and hatch have its
+ *   faces as true arcs, by their bulges (CNT-18: `PlanWall.curve`), and a curved dividing line is
+ *   an ARC, or a CIRCLE all the way round; the room outlines along a curve are straight pieces,
+ *   and the left-out note says so.
  * - Dimensions as dimension entities, with the core's chains outside the plan and its room
  *   dimensions inside (SHT-4: `buildDimensions`), each drawn in its own block as a dimension is.
  * - A tag in each room: a block with its number, name and area as attributes.
@@ -51,7 +54,8 @@ import { openingSymbol, type SymbolPiece } from '../openingSymbol'
 import { TOLERANCES } from '../tolerances'
 import { areaText, metresText } from '../rounding'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
-import { kindLabel, leftOutByKind, leftOutSummary, partNames, type LeftOutPart } from './leftOut'
+import { approximationLines, kindLabel, leftOutByKind, leftOutSummary, NO_APPROXIMATIONS, partNames, type Approximations, type LeftOutPart } from './leftOut'
+import type { PlanCurve } from '../floorplan'
 import type { FloorPlan } from '../../types/floorplan'
 import { factOf, factText, ROOM_NUMBER_FACT } from '../../types/facts'
 import { indexPlan } from '../plan'
@@ -282,13 +286,29 @@ class Space {
     this.out.point(to, 11)
   }
 
-  /** A light polyline; `closed` makes it an outline that hatches and fills downstream. */
-  polyline(layer: string, points: readonly Vec2[], closed: boolean): void {
-    if (points.length < 2 || !writablePoints(points)) return
+  /**
+   * A light polyline; `closed` makes it an outline that hatches and fills downstream. CNT-18:
+   * `turns`, one per stretch to the next point, makes a curved stretch a true arc: the vertex's
+   * bulge (42) is the tangent of a quarter of its turn.
+   */
+  polyline(layer: string, points: readonly Vec2[], closed: boolean, turns: readonly number[] = []): void {
+    if (points.length < 2 || !writablePoints(points) || !turns.every(Number.isFinite)) return
     this.start('LWPOLYLINE', layer, 'AcDbPolyline')
     this.out.pair(90, points.length)
     this.out.pair(70, closed ? 1 : 0)
-    for (const p of points) this.out.point(p, 10, false)
+    points.forEach((p, i) => {
+      this.out.point(p, 10, false)
+      const turn = turns[i] ?? 0
+      if (turn !== 0) this.out.pair(42, num(Math.tan(turn / 4)))
+    })
+  }
+
+  /** CNT-18: a whole circle, as a curved dividing line that goes all the way round is. */
+  circle(layer: string, centre: Vec2, radius: number): void {
+    if (!writable(centre.x, centre.y, radius)) return
+    this.start('CIRCLE', layer, 'AcDbCircle')
+    this.out.point(centre)
+    this.out.pair(40, num(radius))
   }
 
   /** An arc always runs counter-clockwise from its start angle, so a clockwise one is written from its end. */
@@ -325,9 +345,12 @@ class Space {
     this.out.pair(100, 'AcDbText')
   }
 
-  /** A solid fill bounded by closed outlines, each one a loop of its own. */
-  hatch(layer: string, loops: readonly (readonly Vec2[])[]): void {
-    const kept = loops.filter((loop) => loop.length >= 3 && writablePoints(loop))
+  /**
+   * A solid fill bounded by closed outlines, each one a loop of its own. CNT-18: a loop with
+   * `turns` (one per stretch) has its curved stretches as true arcs, by their bulges.
+   */
+  hatch(layer: string, loops: readonly (readonly Vec2[])[], turns: readonly (readonly number[])[] = []): void {
+    const kept = loops.map((loop, i) => ({ loop, turns: turns[i] ?? [] })).filter(({ loop, turns: t }) => loop.length >= 2 && writablePoints(loop) && t.every(Number.isFinite) && (loop.length >= 3 || t.some((v) => v !== 0)))
     if (kept.length === 0) return
     this.start('HATCH', layer, 'AcDbHatch')
     this.out.point({ x: 0, y: 0 })
@@ -338,13 +361,17 @@ class Space {
     this.out.pair(70, 1)
     this.out.pair(71, 0)
     this.out.pair(91, kept.length)
-    for (const loop of kept) {
-      // An outer polyline loop, straight sides, closed.
+    for (const { loop, turns: bulged } of kept) {
+      // An outer polyline loop, closed; with bulges where a stretch is an arc (CNT-18).
+      const arcs = bulged.some((t) => t !== 0)
       this.out.pair(92, 3)
-      this.out.pair(72, 0)
+      this.out.pair(72, arcs ? 1 : 0)
       this.out.pair(73, 1)
       this.out.pair(93, loop.length)
-      for (const p of loop) this.out.point(p, 10, false)
+      loop.forEach((p, i) => {
+        this.out.point(p, 10, false)
+        if (arcs) this.out.pair(42, num(Math.tan((bulged[i] ?? 0) / 4)))
+      })
       this.out.pair(97, 0)
     }
     this.out.pair(75, 0)
@@ -676,6 +703,35 @@ function noteLines(leftOut: readonly LeftOutPart[]): string[] {
   return lines
 }
 
+/** A line of the note as a TEXT holds it: cut after a comma before `MAX_TEXT`, and carried on. */
+function wrapped(line: string): string[] {
+  const out: string[] = []
+  let rest = line
+  while (dxfText(rest).length >= MAX_TEXT) {
+    const cut = rest.lastIndexOf(', ', MAX_TEXT - 2)
+    if (cut <= 0) break
+    out.push(rest.slice(0, cut + 1))
+    rest = `  ${rest.slice(cut + 2)}`
+  }
+  return [...out, rest]
+}
+
+/** CNT-18: one solid run of a curved wall as one closed outline: its left face, then its right face back, each arc exact. */
+function curvedRun(run: PlanCurve['runs'][number]): { points: Vec2[]; turns: number[] } {
+  // The stretch from the end of one face to the start of the other is straight: a jamb or an end.
+  return { points: [...run.left.points, ...run.right.points], turns: [...run.left.turns, 0, ...run.right.turns, 0] }
+}
+
+/** CNT-18: a curved dividing line, as an ARC, or a CIRCLE when it goes all the way round. */
+function writeCurveLine(space: Space, layer: string, curve: PlanCurve): void {
+  if (Math.abs(Math.abs(curve.sweep) - 2 * Math.PI) <= TOLERANCES.sameAngle.value) {
+    space.circle(layer, curve.centre, curve.radius)
+    return
+  }
+  const [from, to] = curve.sweep > 0 ? [curve.startAngle, curve.startAngle + curve.sweep] : [curve.startAngle + curve.sweep, curve.startAngle]
+  space.arc(layer, { center: curve.centre, radius: curve.radius, from, to, counterClockwise: true })
+}
+
 /** CNT-9: one fact as the DXF writes it: where, and its words. */
 interface FactLine {
   readonly at: Vec2
@@ -710,8 +766,10 @@ function factLines(drawing: PlanDrawing, facts: DxfFacts | undefined, frame: Bou
   const byId = new Map(facts.parts.map((part) => [part.id, part]))
   for (const room of drawing.rooms) place(room.id, room.labelAt, byId.get(room.id), 2)
   for (const wall of drawing.walls) {
+    // A curved wall's facts go at the middle of its curve (CNT-18), not of its chord.
+    const path = wall.curve?.path
     const [a, b] = wall.centerline
-    place(wall.id, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, byId.get(wall.id))
+    place(wall.id, path !== undefined && path.length > 0 ? path[Math.floor(path.length / 2)]! : { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, byId.get(wall.id))
   }
   for (const opening of drawing.openings) place(opening.id, { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }, byId.get(opening.id))
   if (facts.floor !== null && writablePoints([frame.min, frame.max])) {
@@ -763,6 +821,8 @@ export interface DxfOptions {
   readonly profile?: DxfProfile
   /** HND-1: each room's number for its tag (ARE-12, CNT-9), by room id. A room not here has none. */
   readonly roomNumbers?: ReadonlyMap<string, string>
+  /** CNT-18: the curves it writes as straight pieces, named on the left-out layer. */
+  readonly approximations?: Approximations
 }
 
 // ── The document ─────────────────────────────────────────────────────────────────────────────
@@ -864,7 +924,7 @@ export function toDxf(drawing: PlanDrawing, options: DxfOptions = {}): string {
 
   const entities = new Out()
   const model = new Space(doc, entities, frame.modelRecord)
-  const extent = writeModel(model, drawing, { leftOut, facts, frame: planFrame, places: openings.places, names, dims, dimBlocks, tag, numbers: options.roomNumbers })
+  const extent = writeModel(model, drawing, { leftOut, approximations: options.approximations ?? NO_APPROXIMATIONS, facts, frame: planFrame, places: openings.places, names, dims, dimBlocks, tag, numbers: options.roomNumbers })
   const paper = new Space(doc, entities, frame.paperRecord, true)
   writePaper(paper, extent)
 
@@ -912,6 +972,7 @@ function classes(): Out {
 
 interface ModelParts {
   readonly leftOut: readonly LeftOutPart[]
+  readonly approximations: Approximations
   readonly facts: readonly FactLine[]
   readonly frame: Bounds
   readonly places: readonly OpeningPlace[]
@@ -951,15 +1012,23 @@ function writeModel(space: Space, drawing: PlanDrawing, parts: ModelParts): Boun
   // its dashed outline with no fill, a new one with its fill on a layer of its own.
   for (const wall of drawing.walls) {
     if (wall.virtual) {
-      space.line(space.layer(wall.phase === 'demolished' ? 'walls-demolished' : 'dividing-lines'), wall.centerline[0], wall.centerline[1])
+      // CNT-18: a curved dividing line is a true arc, or a circle all the way round.
+      const lineLayer = space.layer(wall.phase === 'demolished' ? 'walls-demolished' : 'dividing-lines')
+      if (wall.curve !== undefined) writeCurveLine(space, lineLayer, wall.curve)
+      else space.line(lineLayer, wall.centerline[0], wall.centerline[1])
       continue
     }
     if (wall.slices.length === 0) continue
-    if (wall.phase !== 'demolished') space.hatch(space.layer(wall.phase === 'new' ? 'wall-fill-new' : 'wall-fill'), wall.slices)
+    // CNT-18: a curved wall's runs, fill and outline, with their faces as true arcs.
+    const runs = wall.curve?.runs.map(curvedRun) ?? null
+    if (wall.phase !== 'demolished') {
+      space.hatch(space.layer(wall.phase === 'new' ? 'wall-fill-new' : 'wall-fill'), runs?.map((run) => run.points) ?? wall.slices, runs?.map((run) => run.turns) ?? [])
+    }
     const layer = space.layer(
       wall.phase === 'demolished' ? 'walls-demolished' : wall.phase === 'new' ? 'walls-new' : wall.phase === 'existing' ? 'walls-existing' : wall.exposure === 'exterior' ? 'walls-outside' : 'walls-inside'
     )
-    for (const slice of wall.slices) space.polyline(layer, slice, true)
+    if (runs !== null) for (const run of runs) space.polyline(layer, run.points, true, run.turns)
+    else for (const slice of wall.slices) space.polyline(layer, slice, true)
   }
 
   // The openings, each its block on its kind's layer.
@@ -1003,9 +1072,11 @@ function writeModel(space: Space, drawing: PlanDrawing, parts: ModelParts): Boun
     if (text !== null && note.at) space.text(space.layer('notes'), note.at, text, size.text)
   }
 
-  // HND-6: the note, one text per line, from a line below the frame's lower left corner.
+  // HND-6: the note, one text per line, from a line below the frame's lower left corner. CNT-18:
+  // the curves written as straight pieces follow what is left out, on the same layer.
   const min = writablePoints([parts.frame.min]) ? parts.frame.min : { x: 0, y: 0 }
-  for (const [n, line] of (parts.leftOut.length === 0 ? [] : noteLines(parts.leftOut)).entries()) {
+  const noted = [...(parts.leftOut.length === 0 ? [] : noteLines(parts.leftOut)), ...approximationLines(parts.approximations).flatMap(wrapped)]
+  for (const [n, line] of noted.entries()) {
     const at = { x: min.x, y: min.y - size.text * 2 * (n + 1) }
     space.text(space.layer('left-out'), at, line, size.text, { centred: false })
     points.push(at)

@@ -2,8 +2,9 @@
  * VEW-4: the part of the model a point on a 3D picture shows, for a click on the preview's 3D
  * picture. The picture is taken through one camera record (VEW-3), so the point is a ray from the
  * camera's position: through the walls as the model stands them (each a box along its centre
- * line, its thickness across and its height up from its floor's level), the doors and windows in
- * them, and each room's floor. The nearest thing the ray meets is the one picked.
+ * line, a curved wall's one along each chord of its curve (CNT-18), its thickness across and its
+ * height up from its floor's level), the doors and windows in them, and each room's floor. The
+ * nearest thing the ray meets is the one picked.
  *
  * It is the model as the 3D view stands it, simplified: no slab thickness, roof, stair or fixture
  * is met, and a door or window is met where its hole is in its wall. Pure: no Three, no DOM.
@@ -15,7 +16,8 @@ import { roomShapes } from './items'
 import { indexPlan, type FloorPlan } from './plan'
 import { wallRise } from './through'
 import { tolerance } from './tolerances'
-import { wallAxis } from './wall'
+import { wallSegments } from './wall'
+import { curveFault } from './arc'
 
 export type ModelPickKind = 'room' | 'wall' | 'door' | 'window' | 'opening'
 
@@ -77,22 +79,28 @@ export function pickInModel(plan: FloorPlan, camera: CameraRecord, x: number, y:
     // LVL-5: a wall through floors stands in the model once, whole, from its own floor's level.
     const height = wallRise(plan, wall)
     if (wall.virtual === true || level === undefined || !shown.has(floor) || wall.thickness <= 0 || !(height > 0)) continue
-    if (Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) < tolerance('noLength')) continue
-    const axis = wallAxis(wall)
-    const ox = origin[0] - axis.start.x
-    const oy = origin[1] - axis.start.y
-    const u0 = ox * axis.dir.x + oy * axis.dir.y
-    const du = direction[0] * axis.dir.x + direction[1] * axis.dir.y
-    const v0 = ox * axis.normal.x + oy * axis.normal.y
-    const dv = direction[0] * axis.normal.x + direction[1] * axis.normal.y
-    const span: [number, number] = [0, Infinity]
-    if (!slab(u0, du, 0, axis.length, span) || !slab(v0, dv, -wall.thickness / 2, wall.thickness / 2, span) || !slab(origin[2], direction[2], level.base, level.base + height, span)) continue
-    const s = span[0]
-    const along = u0 + du * s
-    const up = origin[2] + direction[2] * s - level.base
-    const hole = plan.openings.find((o) => o.wall === wall.id && along >= o.offset && along <= o.offset + o.width && up >= o.sill && up <= o.sill + o.height)
-    if (hole !== undefined) offer(s, { id: hole.id, kind: hole.type === 'door' ? 'door' : hole.type === 'window' ? 'window' : 'opening', floor })
-    else offer(s, { id: wall.id, kind: 'wall', floor })
+    if (wall.arc === undefined && Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) < tolerance('noLength')) continue
+    if (curveFault(wall) !== null) continue
+    // CNT-18: a curved wall is met piece by piece, as the 3D view stands it: one box along each
+    // chord of its curve. A straight wall is one piece, its axis.
+    for (const piece of wallSegments(wall)) {
+      if (piece.length < tolerance('noLength')) continue
+      const ox = origin[0] - piece.start.x
+      const oy = origin[1] - piece.start.y
+      const u0 = ox * piece.dir.x + oy * piece.dir.y
+      const du = direction[0] * piece.dir.x + direction[1] * piece.dir.y
+      const v0 = ox * piece.normal.x + oy * piece.normal.y
+      const dv = direction[0] * piece.normal.x + direction[1] * piece.normal.y
+      const span: [number, number] = [0, Infinity]
+      if (!slab(u0, du, 0, piece.length, span) || !slab(v0, dv, -wall.thickness / 2, wall.thickness / 2, span) || !slab(origin[2], direction[2], level.base, level.base + height, span)) continue
+      const s = span[0]
+      // How far along the wall, along its curve on a curved one.
+      const along = piece.from + ((u0 + du * s) * (piece.to - piece.from)) / piece.length
+      const up = origin[2] + direction[2] * s - level.base
+      const hole = plan.openings.find((o) => o.wall === wall.id && along >= o.offset && along <= o.offset + o.width && up >= o.sill && up <= o.sill + o.height)
+      if (hole !== undefined) offer(s, { id: hole.id, kind: hole.type === 'door' ? 'door' : hole.type === 'window' ? 'window' : 'opening', floor })
+      else offer(s, { id: wall.id, kind: 'wall', floor })
+    }
   }
 
   if (Math.abs(direction[2]) >= tolerance('noLength')) {

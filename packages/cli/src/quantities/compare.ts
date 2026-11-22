@@ -7,7 +7,7 @@
  * anything is listed, the second plan is tried as the first one moved, mirrored or turned a
  * quarter: a flipped flat is said to be flipped, not listed as twenty moved walls (Y-4, Y-5).
  */
-import { tolerance, wallAxis, type FloorPlan, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { curveFault, tolerance, wallAxis, wallLength, wallPath, wallPointAt, type FloorPlan, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { planAreas, type PlanAreas } from './areas'
 import { sideNames, type Survey } from './survey'
 
@@ -125,8 +125,10 @@ type Transform = (p: Vec2) => Vec2
 interface Box { minX: number; minY: number; maxX: number; maxY: number }
 
 function boxOf(plan: FloorPlan): Box {
-  const xs = plan.walls.flatMap((w) => [w.start[0], w.end[0]])
-  const ys = plan.walls.flatMap((w) => [w.start[1], w.end[1]])
+  // A curve bows out past its ends (CNT-18).
+  const points = plan.walls.flatMap((w): Vec2[] => (w.arc !== undefined && curveFault(w) === null ? wallPath(w) : [pt(w.start), pt(w.end)]))
+  const xs = points.map((p) => p.x)
+  const ys = points.map((p) => p.y)
   return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) }
 }
 
@@ -157,7 +159,22 @@ function samePlace(a: Wall, b: Wall, map: Transform): boolean {
   const s = map(pt(a.start))
   const e = map(pt(a.end))
   const ends = (close(s, pt(b.start)) && close(e, pt(b.end))) || (close(s, pt(b.end)) && close(e, pt(b.start)))
-  return ends && (a.virtual === true) === (b.virtual === true)
+  return ends && (a.virtual === true) === (b.virtual === true) && sameCurve(a, b, map)
+}
+
+/** CNT-18: both straight, or both curved through the same middle round the same centre. */
+function sameCurve(a: Wall, b: Wall, map: Transform): boolean {
+  if (a.arc === undefined || b.arc === undefined) return a.arc === b.arc
+  const middle = (w: Wall): Vec2 | null => (curveFault(w) === null ? wallPointAt(w, wallLength(w) / 2) : null)
+  const [ma, mb] = [middle(a), middle(b)]
+  if (ma === null || mb === null) return false
+  return close(map(pt(a.arc.centre)), pt(b.arc.centre)) && close(map(ma), mb)
+}
+
+/** A wall's length along its axis, curved or not; 0 for one that cannot be built. */
+function lengthOf(wall: Wall): number {
+  if (wall.arc !== undefined) return curveFault(wall) === null ? wallLength(wall) : 0
+  return wallAxis(wall).length
 }
 
 /**
@@ -201,8 +218,9 @@ function openingAt(plan: FloorPlan, id: string): Vec2 | null {
   const o = plan.openings.find((x) => x.id === id)
   const wall = o && plan.walls.find((w) => w.id === o.wall)
   if (!o || !wall) return null
-  const axis = wallAxis(wall)
   const along = o.offset + o.width / 2
+  if (wall.arc !== undefined) return curveFault(wall) === null ? wallPointAt(wall, along) : null
+  const axis = wallAxis(wall)
   return { x: axis.start.x + axis.dir.x * along, y: axis.start.y + axis.dir.y * along }
 }
 
@@ -244,7 +262,7 @@ function wallRooms(survey: Survey, wall: Wall): string[] {
 }
 
 function wallDelta(survey: Survey, wall: Wall): WallDelta {
-  const length = wallAxis(wall).length
+  const length = lengthOf(wall)
   return {
     id: wall.id,
     kind: wall.kind,
@@ -364,7 +382,7 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
     const mid = (w: Wall): Vec2 => ({ x: (w.start[0] + w.end[0]) / 2, y: (w.start[1] + w.end[1]) / 2 })
     const from = map(mid(wall))
     const to = mid(same)
-    wallsChanged.push({ id: wall.id, kind: same.kind, lengthBefore: wallAxis(wall).length, lengthAfter: wallAxis(same).length, moved: Math.hypot(to.x - from.x, to.y - from.y) })
+    wallsChanged.push({ id: wall.id, kind: same.kind, lengthBefore: lengthOf(wall), lengthAfter: lengthOf(same), moved: Math.hypot(to.x - from.x, to.y - from.y) })
   }
   const changedIds = new Set(wallsChanged.map((w) => w.id))
   const wallsOut = missing.filter((wall) => !changedIds.has(wall.id)).map((wall) => wallDelta(a, wall))

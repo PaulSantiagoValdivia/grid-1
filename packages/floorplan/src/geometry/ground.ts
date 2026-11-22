@@ -23,7 +23,7 @@ import { indexPlan } from './plan'
 import { planWallSides, stretchAt } from './exposure'
 import { brokenOnFloor } from './validate'
 import { limit, tolerance } from './tolerances'
-import { wallAxis } from './wall'
+import { wallLength } from './wall'
 
 /** The site's stated ground level, or null when the plan states none. */
 export function statedGround(plan: FloorPlan): number | null {
@@ -118,7 +118,7 @@ export function openingsBelowGround(plan: FloorPlan, elevations: BuildingElevati
       const wallSides = sides.get(wall.id)
       let along: number
       try {
-        along = Math.min(opening.offset + opening.width / 2, wallAxis(wall).length)
+        along = Math.min(opening.offset + opening.width / 2, wallLength(wall))
       } catch {
         continue
       }

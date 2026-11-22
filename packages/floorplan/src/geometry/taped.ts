@@ -84,6 +84,34 @@ function sideAlong(polygon: readonly Vec2[], face: Line): number | null {
   return any ? total : null
 }
 
+/**
+ * CNT-18: the outline's length along a curved wall's face that looks into the room: every edge
+ * whose two ends lie on that face's circle, round the wall's centre. Going counter-clockwise the
+ * left face is the inner one.
+ */
+function sideRound(outline: RoomOutline, wall: Wall): number | null {
+  const side = outline.sides.find((s) => s.wallId === wall.id)
+  if (side === undefined || wall.arc === undefined) return null
+  const centre = { x: wall.arc.centre[0], y: wall.arc.centre[1] }
+  const axis = distance(centre, { x: wall.start[0], y: wall.start[1] })
+  const half = wall.virtual ? 0 : wall.thickness / 2
+  const radius = axis - (side.face === 'left' ? 1 : -1) * Math.sign(wall.arc.sweep) * half
+  const near = tolerance('chainPoint')
+  const on = (p: Vec2): boolean => Math.abs(distance(centre, p) - radius) <= near
+  let total = 0
+  let any = false
+  const polygon = outline.polygon
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i]!
+    const b = polygon[(i + 1) % polygon.length]!
+    if (on(a) && on(b)) {
+      total += distance(a, b)
+      any = true
+    }
+  }
+  return any ? total : null
+}
+
 /** The outline's corner where two faces meet, or null when they make none. */
 function cornerOf(polygon: readonly Vec2[], a: Line, b: Line): Vec2 | null {
   const at = intersectLines(a, b)
@@ -123,12 +151,26 @@ function measure(entry: Taped, index: PlanIndex, outlines: Map<string, RoomOutli
   if (outline === null) return { drawn: null, missing: 'not-drawn' }
   const faces = new Map<string, Line>()
   const notTheRooms: string[] = []
+  // CNT-18: a curved wall's face is a circle, not a line: a side along it is measured round that
+  // circle, and a corner on it is not worked out (it is said as no corner Grid finds).
+  const curved: string[] = []
   for (const id of new Set(walls)) {
-    const face = roomFace(index.wallsById.get(id)!, outline)
+    const wall = index.wallsById.get(id)!
+    if (wall.arc !== undefined) {
+      if (outline.sides.some((s) => s.wallId === id)) curved.push(id)
+      else notTheRooms.push(id)
+      continue
+    }
+    const face = roomFace(wall, outline)
     if (face === null) notTheRooms.push(id)
     else faces.set(id, face)
   }
   if (notTheRooms.length > 0) return { drawn: null, missing: 'not-the-rooms', missingWalls: notTheRooms }
+  if (entry.wall !== undefined && curved.includes(entry.wall)) {
+    const drawn = sideRound(outline, index.wallsById.get(entry.wall)!)
+    return drawn === null ? { drawn: null, missing: 'not-drawn' } : { drawn }
+  }
+  if (entry.wall === undefined && curved.length > 0) return { drawn: null, missing: 'no-corner', missingWalls: curved }
   if (entry.wall !== undefined) {
     const drawn = sideAlong(outline.polygon, faces.get(entry.wall)!)
     return drawn === null ? { drawn: null, missing: 'not-drawn' } : { drawn }

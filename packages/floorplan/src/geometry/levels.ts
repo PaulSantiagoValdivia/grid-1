@@ -19,6 +19,8 @@ import { english, joined, name, num, said } from '../messages/say'
 import { withSaid } from './issueWords'
 import { closestId, idEdits } from '../types/nearest'
 import { WALL_DEFAULTS } from '../types/floorplan'
+import { wallPath } from './wall'
+import { curveFault } from './arc'
 
 const issue = (entity: Issue['entity'], id: string, code: string, sentence: Said, severity: Issue['severity'] = 'warning'): Issue =>
   withSaid({ entity, id, code, message: english(sentence), severity }, sentence)
@@ -192,7 +194,10 @@ interface Box {
 }
 
 function boxOf(walls: readonly Wall[]): Box | null {
-  const points = walls.flatMap((wall) => [wall.start, wall.end]).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))
+  // A curve bows out past its ends (CNT-18).
+  const points = walls
+    .flatMap((wall): (readonly [number, number])[] => (wall.arc !== undefined && curveFault(wall) === null ? wallPath(wall).map((p) => [p.x, p.y] as const) : [wall.start, wall.end]))
+    .filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1]))
   if (points.length === 0) return null
   const xs = points.map((p) => p[0])
   const ys = points.map((p) => p[1])

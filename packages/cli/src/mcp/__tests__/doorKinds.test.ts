@@ -138,3 +138,28 @@ describe('kinds in rooms text', () => {
     expect(grouped.text).toContain('1 × sliding door 2.40 m wide')
   })
 })
+
+describe('a kind and a handing on a curved wall (CNT-18)', () => {
+  /** A round room: one wall, a whole circle of radius 3 m round (5, 5), with a door on it and no swing stated. */
+  const drum = (): FloorPlan => ({
+    version: '1',
+    units: 'm',
+    walls: [{ id: 'round', start: [8, 5], end: [8, 5], thickness: 0.2, height: 2.7, kind: 'exterior', arc: { centre: [5, 5], sweep: 360 } }],
+    rooms: [{ id: 'drum', name: 'Drum', use: 'living', boundary: ['round'] }],
+    openings: [{ id: 'd', wall: 'round', type: 'door', offset: 2, width: 0.9, sill: 0, height: 2.1 }]
+  })
+
+  it('hangs a door on the curve in the person\'s terms, then makes it sliding, and checks it each time', async () => {
+    b.write('drum.json', drum())
+    await ok('grid_change_opening', { plan: 'drum.json', opening: 'd', opens_into: 'drum', hinged: 'left' })
+    // The circle turns counter-clockwise, so the room inside is on its left face.
+    expect(opening('d', 'drum.json')).toMatchObject({ swing: 'left', hinge: 'end' })
+    const swung = await ok('grid_check', { plan: 'drum.json' })
+    const codes = (r: Reply) => (r.data!['lines'] as { code: string }[]).map((l) => l.code)
+    expect(codes(swung)).not.toContain('floor/not-checked-door-swings')
+    await ok('grid_change_opening', { plan: 'drum.json', opening: 'd', kind: 'sliding' })
+    expect(opening('d', 'drum.json')).toMatchObject({ kind: 'sliding' })
+    const slid = await ok('grid_check', { plan: 'drum.json' })
+    expect(codes(slid).filter((c) => c.startsWith('opening/'))).toEqual([])
+  }, 30_000)
+})

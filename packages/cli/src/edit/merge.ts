@@ -21,7 +21,7 @@ import { cross, dot, signedArea, sub, tolerance, wallAxis, type Vec2, type Wall 
 import { factOf, statedWall, wallWithEnds } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import type { Survey, SurveyRoom } from '../quantities/survey'
-import { type OpeningChange, type Patch, type RoomChange } from './edits'
+import { refuseCurved, type OpeningChange, type Patch, type RoomChange } from './edits'
 import { EditRefused } from './refused'
 import { r3 } from './seat'
 
@@ -147,6 +147,7 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
     const which = zonesOf(aId).length > 0 ? an : bn
     throw new EditRefused(`${which} has zones already, and a zone is part of a room, not of a zone. Merge without zones, and say the merged room's use.`)
   }
+  refuseCurved([...aRoom.boundary, ...bRoom.boundary].map((id) => plan.walls.find((w) => w.id === id)), 'mergeRooms')
 
   const shared: Array<{ wall: Wall; s0: number; s1: number }> = []
   for (const id of new Set(aRoom.boundary.filter((w) => bRoom.boundary.includes(w)))) {

@@ -18,7 +18,7 @@ import { indexPlan, openingsOf } from './plan'
 import { planWallSides } from './exposure'
 import { tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
-import { openingSpan, pointAlong, wallAxis } from './wall'
+import { openingSpan, wallFrameAt, wallLength } from './wall'
 
 /** How far a room's floor stands above its storey's, in metres: its stated offset, else 0. */
 export function roomFloorOffset(room: Room): number {
@@ -64,15 +64,15 @@ export function planSteps(
     if (broken.has(wall.id)) continue
     const wallSide = sides.get(wall.id)
     if (wallSide === undefined) continue
-    let axis: ReturnType<typeof wallAxis>
+    let total: number
     try {
-      axis = wallAxis(wall)
+      total = wallLength(wall)
     } catch {
       continue
     }
     const half = wall.virtual === true ? 0 : wall.thickness / 2
     const ways = wall.virtual === true
-      ? [{ id: null, from: 0, to: axis.length }]
+      ? [{ id: null, from: 0, to: total }]
       : openingsOf(index, wall.id)
           .filter((opening) => opening.type !== 'window' && !broken.has(opening.id))
           .map((opening) => ({ id: opening.id, ...openingSpan(opening) }))
@@ -86,9 +86,10 @@ export function planSteps(
       // The edge lies on the lower room's face: the left face is the one the normal points at.
       const lowerOnLeft = rise < 0
       const shift = lowerOnLeft ? half : -half
+      // On a curved wall the step is drawn as the chord between its ends, on the lower room's face.
       const at = (s: number): Vec2 => {
-        const p = pointAlong(axis, s)
-        return { x: p.x + axis.normal.x * shift, y: p.y + axis.normal.y * shift }
+        const { point: p, normal } = wallFrameAt(wall, s)
+        return { x: p.x + normal.x * shift, y: p.y + normal.y * shift }
       }
       for (const way of ways) {
         const from = Math.max(way.from, stretch.from)

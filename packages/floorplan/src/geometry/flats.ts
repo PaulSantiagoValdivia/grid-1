@@ -30,6 +30,7 @@ import { english, joined, name, said, type Said } from '../messages/say'
 import { withSaid } from './issueWords'
 import { likelyId } from '../types/nearest'
 import { compareIds } from './order'
+import { straightPieces } from './wall'
 
 /** A flat as Grid reads it: the rooms of the plan it names, each once, in its order. */
 export interface PlanFlat {
@@ -297,9 +298,11 @@ export function flatOutlines(slice: FloorPlan, index: PlanIndex = indexPlan(slic
       if (room === undefined || broken.has(id)) continue
       const shape = tryRoomShape(room, index)
       if (shape === null || shape.polygon.length < 3) continue
+      // A curved wall (CNT-18) is looked along as its straight pieces, which the room's outline
+      // follows it by.
       const own = room.boundary.flatMap((wallId) => {
         const wall = walls.get(wallId)
-        return wall === undefined || broken.has(wallId) ? [] : [wall]
+        return wall === undefined || broken.has(wallId) ? [] : straightPieces(wall)
       })
       pieces.push(...toWallMiddles(shape.polygon, own))
       plain.push([shape.polygon.map((p): Pair => [p.x, p.y])])
