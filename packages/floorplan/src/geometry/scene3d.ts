@@ -483,5 +483,9 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
   // faces, which the bounds do not frame either.
   const shell = options.shell !== undefined ? options.shell : sceneShell(plan)
 
+  // CNT-14: the doors and windows in the plan's order, as the exports list every other part.
+  const order = new Map(plan.openings.map((o, i) => [o.id, i] as const))
+  openings.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
+
   return { walls, openings, slabs, dividers, stairs, shell, bounds: computeBounds(extent), height, issues }
 }
