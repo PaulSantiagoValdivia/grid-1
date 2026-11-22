@@ -276,3 +276,12 @@ For the owner:
 10. **A fixture's lines beside a room not drawn.** Only "stands in no room" follows from the room.
     The doorway and window lines are kept as problems of their own because they hold after the
     room is fixed; holding them back (W-6's cautious reading) would hide true notes.
+
+### Again after merging `main` b58930a (LVL-4)
+
+Two conflicts, both sides kept: the imports of `rules/src/checks/check.ts` (MSG-5's
+`escapeWaitsFor` and `planDamage` beside LVL-4's `groundLevel` and `statedGround`; LVL-4's choice
+of the ground floor by the stated ground level merged on its own), and the contract's changelog
+(MSG-5's entry above LVL-4's). No expectation changed. `npm run build`, `npm run typecheck` and
+`npm run lint` pass; the tests of `packages/floorplan`, `packages/rules`, `packages/cli/src/command`,
+`packages/cli/src/mcp` and `scoreboard/__tests__`: 3,966 passed, 4 skipped, none failed.

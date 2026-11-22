@@ -7,7 +7,7 @@
 import polygonClipping from 'polygon-clipping'
 import type { Geom, MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import type { Vec2 } from './vec2'
-import { TOLERANCES } from './tolerances'
+import { TOLERANCES, tolerance } from './tolerances'
 
 export interface Box {
   readonly x0: number
@@ -173,3 +173,113 @@ export function pointInside(polygon: Polygon, box: Box): Vec2 {
   }
   return best
 }
+
+/** Whether a point lies inside a ring, by the even-odd rule. A closing point repeated at the end changes nothing. */
+export function inRing(p: Vec2, ring: readonly Pair[]): boolean {
+  let odd = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, ay] = ring[i]!
+    const [bx, by] = ring[j]!
+    if (ay > p.y !== by > p.y && p.x < ((bx - ax) * (p.y - ay)) / (by - ay) + ax) odd = !odd
+  }
+  return odd
+}
+
+/** Whether a point lies inside a polygon: in its outer ring and in none of its holes. */
+export const inPolygon = (p: Vec2, polygon: Polygon): boolean =>
+  polygon.length > 0 && inRing(p, polygon[0]!) && !polygon.slice(1).some((ring) => inRing(p, ring))
+
+/** Whether a point lies inside any piece of an outline. */
+export const inPieces = (pieces: MultiPolygon, p: Vec2): boolean => pieces.some((polygon) => inPolygon(p, polygon))
+
+/**
+ * One outline cut by others (LVL-4): what `polygon-clipping` (MIT) gives for `op`, tried as drawn
+ * and then with every point rounded to each of the join grids (`joinGrids`), coarsest last, since
+ * the library can fail to close a ring where two edges almost, but not quite, coincide. Pieces
+ * smaller than `areaReported` are dropped: they are the rounding between two faces drawn to meet.
+ * Null when it fails on every grid.
+ *
+ * - `difference`: the subject less every cutter, as a floor's outline less the floor above it.
+ * - `intersection`: the part of the subject inside every cutter.
+ * - `union`: the subject and every cutter joined.
+ */
+export function cutOutline(op: 'difference' | 'intersection' | 'union', subject: Geom, cutters: readonly Geom[]): MultiPolygon | null {
+  const empty = (geom: Geom): boolean => geom.length === 0
+  if (empty(subject)) return op === 'union' ? cutOutline('union', cutters[0] ?? [], cutters.slice(1)) : []
+  const live = cutters.filter((g) => !empty(g))
+  for (const grid of TOLERANCES.joinGrids.values) {
+    const steps = grid === 0 ? 0 : Math.round(1 / grid)
+    const snap = grid === 0 ? (geom: Geom): Geom => geom : (geom: Geom): Geom => snapGeom(geom, steps)
+    try {
+      const a = snap(subject)
+      const rest = live.map(snap)
+      const result =
+        rest.length === 0
+          ? polygonClipping.union(a)
+          : op === 'difference'
+            ? polygonClipping.difference(a, ...rest)
+            : op === 'intersection'
+              ? polygonClipping.intersection(a, ...rest)
+              : polygonClipping.union(a, ...rest)
+      return result.filter((polygon) => polygonArea(polygon) >= tolerance('areaReported'))
+    } catch {
+      // Tried again on a coarser grid.
+    }
+  }
+  return null
+}
+
+function snapGeom(geom: Geom, steps: number): Geom {
+  const s = (v: number): number => Math.round(v * steps) / steps
+  const ring = (r: readonly Pair[]): Pair[] => r.map(([x, y]): Pair => [s(x), s(y)])
+  // A Geom is a polygon (rings of pairs) or a multipolygon (polygons of rings).
+  const isPolygon = (g: Geom): g is Polygon => typeof (g as Polygon)[0]?.[0]?.[0] === 'number'
+  return isPolygon(geom) ? geom.map(ring) : (geom as MultiPolygon).map((polygon) => polygon.map(ring))
+}
+
+/**
+ * A ring without its repeated points and without the points that lie within `shellGrid` of the
+ * line through their neighbours: where two wall strips meet in line, the join leaves a corner that
+ * is none, and rounding decides whether the library keeps it, so a plan turned off the axes would
+ * triangulate differently.
+ */
+function cleanRing(points: Vec2[]): Vec2[] {
+  let ring = points
+  for (let changed = true; changed && ring.length > 3; ) {
+    changed = false
+    for (let i = 0; i < ring.length && ring.length > 3; i++) {
+      const a = ring[(i + ring.length - 1) % ring.length]!
+      const p = ring[i]!
+      const b = ring[(i + 1) % ring.length]!
+      const same = Math.hypot(p.x - a.x, p.y - a.y) <= TOLERANCES.samePoint.value
+      // Within the grid the points are rounded to of the line through its neighbours: no corner.
+      const span = Math.hypot(b.x - a.x, b.y - a.y)
+      const off = Math.abs((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x))
+      const inLine = span === 0 ? true : off / span <= TOLERANCES.shellGrid.value
+      if (same || inLine) {
+        ring = [...ring.slice(0, i), ...ring.slice(i + 1)]
+        changed = true
+        i--
+      }
+    }
+  }
+  return ring
+}
+
+/**
+ * An outline's rings as points, rounded to `shellGrid`, without the closing point the library
+ * repeats, and without corners that are none (`cleanRing`): each piece's outer ring
+ * counter-clockwise and its holes clockwise, as `polygon-clipping` gives them.
+ */
+export function piecesAsRings(pieces: MultiPolygon): { outline: Vec2[]; holes: Vec2[][] }[] {
+  const points = (ring: readonly Pair[]): Vec2[] => {
+    const open = ring.length > 1 && ring[0]![0] === ring[ring.length - 1]![0] && ring[0]![1] === ring[ring.length - 1]![1] ? ring.slice(0, -1) : ring
+    const steps = Math.round(1 / TOLERANCES.shellGrid.value)
+    const round = (v: number): number => Math.round(v * steps) / steps
+    return cleanRing(open.map(([x, y]) => ({ x: round(x), y: round(y) })))
+  }
+  return pieces.map((polygon) => ({ outline: points(polygon[0]!), holes: polygon.slice(1).map(points) }))
+}
+
+/** A ring of points as `polygon-clipping` takes it. */
+export const ringOf = (points: readonly Vec2[]): Pair[] => points.map((p): Pair => [p.x, p.y])

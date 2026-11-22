@@ -63,6 +63,11 @@ export type FindingCode =
    * figures): too narrow, too low, or with its sill above the floor. It is not a way through.
    */
   | 'opening_too_small_to_pass'
+  /**
+   * LVL-4: a door, window or doorless opening in an outside wall that lies below the ground level
+   * the site states (lab VE-7), wholly or in part. Only when the plan states the ground.
+   */
+  | 'opening_below_ground'
 
 /** One way through from a room: the room on its other side, and the opening or virtual wall. */
 export interface RouteStep {
@@ -98,6 +103,16 @@ export interface RuleFinding {
     readonly short: 'width' | 'height' | 'sill'
     readonly drawn: number
     readonly passable: number
+  }
+  /**
+   * Only on `opening_below_ground`: how far its foot and its top lie under the ground, in m (its
+   * top's depth is 0 or less when it reaches above the ground), and whether it lies wholly below.
+   * Optional, like `through`.
+   */
+  readonly belowGround?: {
+    readonly foot: number
+    readonly top: number
+    readonly wholly: boolean
   }
 }
 

@@ -195,7 +195,7 @@ describe('words Grid does not read (MSG-4)', () => {
     ])
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
-    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site`, WRT-7 `display`.
+    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-7 `display`.
     expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, display, written')
   })
 

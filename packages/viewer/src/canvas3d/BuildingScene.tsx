@@ -81,7 +81,7 @@ export function BuildingScene({
             key={storey.floorId}
             floorPlan={floorPlan}
             storey={storey}
-            roofAt={roof?.floorIds.includes(storey.floorId) ? roof.bottom - storey.base : null}
+            roof={roof !== null}
             build={builds.get(storey.floorId) ?? null}
             colors={colors}
             highlightRoom={highlightRoom}
