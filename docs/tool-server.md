@@ -5,6 +5,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 [README](../README.md#installing-grid-in-an-agent).
 
 - [The tools](#the-tools)
+- [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [Reporting a problem](#reporting-a-problem)
 - [Protocol versions](#protocol-versions)
@@ -16,13 +17,13 @@ Its tools are listed in a fixed order: first those that read the plan, in the or
 requests people make most, with the problem report last of them, then the preview, the export and the sheet, and last the nine that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
-the same facts as data; a view also returns its picture. Units are metres.
+the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
 
 | Tool | Answers |
 |---|---|
 | `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
 | `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), in metres or feet, as text or CSV, each figure with its rule stated |
-| `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
+| `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); text or CSV |
 | `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; and what is narrower than the person's own figure |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`; always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
@@ -66,6 +67,17 @@ that would hold no wall, room or fixture is refused, and nothing is written.
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
+
+## The label, and retelling a report
+
+Every answer's text starts with "General guidance, not your local rules", and its data carries
+it as `label` (MSG-3); the server adds it where it answers, so no tool can leave it out. A
+refusal is not an answer about the plan and has no label. The server's instructions tell the
+agent how to retell a report (`src/mcp/retelling.ts`): start with the label and keep it; never
+say a plan complies, is approved, meets code or has passed anything; give each figure as the
+figure used here, with its basis and its status. The plugin's skill carries the same words.
+`npm run retell` scores how well a model keeps to them (see the scoreboard's
+[README](../scoreboard/README.md#the-retelling-set)).
 
 ## Measuring from faces, and a room's height
 

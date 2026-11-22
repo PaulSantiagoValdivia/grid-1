@@ -243,7 +243,7 @@ describe('grid check', () => {
     expect(run.out).toContain('Checks run (4):')
     expect(run.out).toContain('No findings. That only means these checks found nothing')
     expect(run.out).toContain('Looked at by at least one check: 5 of 5 rooms.')
-    expect(run.out).toContain('Rooms people live or sleep in have a minimum floor area: looked at no rooms; 0 findings.')
+    expect(run.out).toContain('Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms.')
     expect(run.out).toContain('not looked at, 5 rooms: no use stated: "bath", "bed1", "bed2", "kitchen", "lounge"')
     expect(run.out).toContain('What these checks never look at')
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)

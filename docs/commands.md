@@ -168,7 +168,9 @@ sill heights are one line: the usual height and the exceptions. What the plan ca
 such as where north is, the kind of building, how floors connect when no stair joins them and
 which rooms make each flat, is said as such. The stairs that join the floors are one line, with
 the risers and going Grid worked out. Directions are on the drawing, with north at the
-top. The card checks nothing; it ends with the label "General guidance, not your local rules".
+top. The card checks nothing and says so; its first line is the label "General guidance, not
+your local rules", as for every report (MSG-3). `--as rooms` starts with the label as a comment,
+which `grid write` ignores, and `grid draw` puts it in the drawing's top-left corner.
 
 ## Walls that do not meet: `grid tidy`
 
@@ -181,6 +183,15 @@ only after it was tried and left every room it touches with an outline. `grid ti
 again before each fix, and one an earlier fix took care of is skipped and said so. The plan file
 is changed as read, keys Grid does not know included; `--out <file.json>` writes the tidied plan
 there instead. `--json` prints the list or what was applied as JSON.
+
+## Units on the drawing: `grid draw --units`
+
+`grid draw --units m|cm|mm|ft-in` writes the drawing's room areas and dimensions in those
+units, and `--decimal point|comma` with that decimal mark: `--units ft-in` draws `12'-6"`,
+`--units mm` draws `2860`. Left out, the plan's own `display` is used, or metres. A length typed
+on `grid edit` may carry its unit (`--by "12'6\""`, `--width "900 mm"`) and, with
+`--decimal comma`, a decimal comma (`--by 0,3`). The plan file stays in metres either way; see
+[Units](plan-file.md#units).
 
 ## What a drawing shows: `--hide`, `--colour` and `--key`
 

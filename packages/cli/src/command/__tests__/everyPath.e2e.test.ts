@@ -192,7 +192,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plans', call: tool('grid_compare', { plans: [PLAN, '@'] }), given: asIs },
   ],
   grid_areas: [{ arg: 'plan', call: tool('grid_areas', { plan: '@' }), given: asIs }],
-  grid_takeoff: [{ arg: 'plan', call: tool('grid_takeoff', { plan: '@' }), given: asIs }],
+  grid_takeoff: [
+    { arg: 'plan', call: tool('grid_takeoff', { plan: '@' }), given: asIs },
+    // ARE-13: the person's rates file, read like the plan.
+    { arg: 'rates', call: tool('grid_takeoff', { plan: PLAN, for: 'estimate', rates: '@' }), given: asIs },
+  ],
   grid_schedule: [{ arg: 'plan', call: tool('grid_schedule', { plan: '@' }), given: asIs }],
   grid_measure: [{ arg: 'plan', call: tool('grid_measure', { plan: '@', what: 'room', room: 'lounge' }), given: asIs }],
   grid_view: [{ arg: 'plan', call: tool('grid_view', { plan: '@', kind: 'plan' }), given: asIs }],
@@ -219,9 +223,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plan', call: tool('grid_merge_rooms', { plan: '@', room: 'bed1', with: 'bed2' }), given: asIs },
     { arg: 'out', call: tool('grid_merge_rooms', { plan: PLAN, room: 'bed1', with: 'bed2', out: '@.json' }), given: (p) => `${p}.json` },
   ],
+  // MSG-16: 1 m, not 1.5, so the new wall lands clear of the bedroom's window and the call
+  // reaches the path.
   grid_split_room: [
-    { arg: 'plan', call: tool('grid_split_room', { plan: '@', room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store' }), given: asIs },
-    { arg: 'out', call: tool('grid_split_room', { plan: PLAN, room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store', out: '@.json' }), given: (p) => `${p}.json` },
+    { arg: 'plan', call: tool('grid_split_room', { plan: '@', room: 'bed1', side: 'west', size: 1, new_room: 'store', new_name: 'Store' }), given: asIs },
+    { arg: 'out', call: tool('grid_split_room', { plan: PLAN, room: 'bed1', side: 'west', size: 1, new_room: 'store', new_name: 'Store', out: '@.json' }), given: (p) => `${p}.json` },
   ],
   grid_add_room: [
     { arg: 'plan', call: tool('grid_add_room', { plan: '@', room: 'porch', name: 'Porch', against: 'lounge', side: 'north', width: 3, depth: 2, in_the_way: 'remove' }), given: asIs },
@@ -305,15 +311,16 @@ describe('the slots this file lists', () => {
   })
 
   it('cover every tool argument that is a path, and no other', async () => {
+    const PATH_ARGS = ['plan', 'plans', 'out', 'rates']
     const [reply] = await rpc([{ method: 'tools/list' }]) as Array<{ result: { tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown> } }> } }>
     const pathArgs = reply!.result.tools.flatMap((t) => Object.keys(t.inputSchema.properties)
-      .filter((arg) => ['plan', 'plans', 'out'].includes(arg))
+      .filter((arg) => PATH_ARGS.includes(arg))
       .map((arg) => `${t.name} ${arg}`))
     const listed = [...new Set(Object.entries(TOOL_SLOTS).flatMap(([name, slots]) => slots.map((slot) => `${name} ${slot.arg}`)))]
     expect(listed.sort()).toEqual(pathArgs.sort())
     // No other free text argument of any tool is described as a file, a folder or a path.
     const others = reply!.result.tools.flatMap((t) => Object.entries(t.inputSchema.properties as Record<string, { type?: unknown; enum?: unknown; description?: string }>)
-      .filter(([arg, schema]) => !['plan', 'plans', 'out'].includes(arg)
+      .filter(([arg, schema]) => !PATH_ARGS.includes(arg)
         && JSON.stringify(schema.type).includes('string') && schema.enum === undefined
         && /\b(file|folder|path)\b/i.test(schema.description ?? ''))
       .map(([arg]) => `${t.name} ${arg}`))
