@@ -62,7 +62,10 @@ Every change answers with what it changed, what it guessed and what it could not
 names the plan by its path in the project, so its size does not grow with the building. When a
 brief is kept beside the plan, it answers with each of its lines met or missed too, and a size
 written in a room's name is read against the room until the brief gives one; the first plan
-written with no brief beside it gets one line saying so ([brief.md](brief.md)).
+written with no brief beside it gets one line saying so ([brief.md](brief.md)). When the plan
+keeps lengths taped on site, every change, and `grid_check`, answers with the table of each one
+taped against drawn, and `taped` in its data (HND-11,
+[lengths taped on site](plan-file.md#lengths-taped-on-site)).
 
 A tool that names no plan reads the project's `plan.json` in a folder `grid init` made. A floor
 or room the plan does not have is refused with the ones it has, a room, wall, door or window
