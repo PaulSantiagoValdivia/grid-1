@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { checkLicense, checkLock, isBlockedId, parseExpression } from '../check-licenses.mjs'
+import { ACCEPTED_BUNDLED, checkBundled, checkLicense, checkLock, isBlockedId, parseExpression } from '../check-licenses.mjs'
 
 const script = resolve(__dirname, '../check-licenses.mjs')
 
@@ -98,6 +98,59 @@ describe('checkLock', () => {
 
   it('refuses a lock file without a packages section', () => {
     expect(() => checkLock({ lockfileVersion: 1, dependencies: {} })).toThrow(/packages/)
+  })
+})
+
+describe('checkBundled', () => {
+  let dir: string | undefined
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true })
+    dir = undefined
+  })
+
+  /** A folder with one installed package whose binary's parts list names these parts. */
+  function installed(pkg: string, parts: Record<string, unknown>) {
+    dir = mkdtempSync(join(tmpdir(), 'grid-bundled-'))
+    const folder = join(dir, 'node_modules', pkg)
+    mkdirSync(folder, { recursive: true })
+    const components = Object.entries(parts).map(([name, licenses]) => ({ type: 'library', name, version: '1.0.0', licenses }))
+    writeFileSync(join(folder, 'sbom.cdx.json'), JSON.stringify({ bomFormat: 'CycloneDX', components }))
+    const lock = lockWith({ [pkg]: 'MIT' })
+    return { lock, root: dir }
+  }
+
+  it('passes the parts the owner accepted, inside the package they came in', () => {
+    const { lock, root } = installed('@napi-rs/canvas-linux-x64-gnu', {
+      skia: [{ expression: 'BSD-3-Clause' }],
+      cssparser: [{ expression: 'MPL-2.0' }],
+      selectors: [{ license: { id: 'MPL-2.0' } }],
+      nameless: null,
+    })
+    expect(checkBundled(lock, root)).toEqual({ lists: 1, checked: 3, accepted: 2, findings: [] })
+  })
+
+  it('fails a new part under a blocked licence', () => {
+    const { lock, root } = installed('@napi-rs/canvas-darwin-arm64', { libfoo: [{ expression: 'LGPL-2.1-or-later' }] })
+    expect(checkBundled(lock, root).findings).toEqual([
+      { package: '@napi-rs/canvas-darwin-arm64', name: 'libfoo', version: '1.0.0', license: 'LGPL-2.1-or-later', blocked: ['LGPL-2.1-or-later'] },
+    ])
+  })
+
+  it('fails an accepted part found inside another package, or under another licence', () => {
+    const elsewhere = installed('other-native', { cssparser: [{ expression: 'MPL-2.0' }] })
+    expect(checkBundled(elsewhere.lock, elsewhere.root).findings).toHaveLength(1)
+    rmSync(elsewhere.root, { recursive: true, force: true })
+    const relicensed = installed('@napi-rs/canvas-darwin-arm64', { cssparser: [{ expression: 'GPL-3.0' }] })
+    expect(checkBundled(relicensed.lock, relicensed.root).findings).toHaveLength(1)
+  })
+
+  it('names every accepted part in NOTICE, with where its source is', () => {
+    const notice = readFileSync(resolve(__dirname, '../../NOTICE'), 'utf8')
+    for (const part of ACCEPTED_BUNDLED) {
+      expect([part.name, notice.includes(`${part.name} `) && notice.includes(`https://crates.io/crates/${part.name}`)]).toEqual([part.name, true])
+    }
+    expect(notice).toContain('MPL-2.0')
   })
 })
 
