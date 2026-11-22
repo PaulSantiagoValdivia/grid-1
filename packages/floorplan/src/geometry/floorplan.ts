@@ -20,6 +20,8 @@ import type { Issue } from './validate'
 import { validatePlan } from './validate'
 import type { PlanStep } from './steps'
 import { planSteps } from './steps'
+import type { ItemKind } from './items'
+import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
 
 export interface PlanWall {
   readonly id: string
@@ -75,6 +77,21 @@ export interface PlanOpening {
   readonly swing?: Opening['swing']
 }
 
+/** A fixture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
+export interface PlanItem {
+  readonly id: string
+  readonly kind: ItemKind
+  /** What it is called: its label, else its kind's word. */
+  readonly label: string
+  /** The room it stands in, or null. */
+  readonly room: string | null
+  /** The floor it covers, counter-clockwise. */
+  readonly outline: readonly Vec2[]
+  /** Rings to fill with the paper and outline, in order, then lines over them (`itemSymbol`). */
+  readonly rings: readonly (readonly Vec2[])[]
+  readonly lines: readonly (readonly Vec2[])[]
+}
+
 export interface Bounds {
   readonly min: Vec2
   readonly max: Vec2
@@ -93,6 +110,8 @@ export interface PlanDrawing {
    * room stands on its storey's floor.
    */
   readonly steps: readonly PlanStep[]
+  /** The fixtures (CNT-12), drawn over the room fills and under the walls. Empty when the plan has none. */
+  readonly items: readonly PlanItem[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -220,7 +239,28 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
     extent.push(...polygon)
   }
 
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), bounds: computeBounds(extent), issues }
+  const items: PlanItem[] = []
+  if ((plan.items ?? []).length > 0) {
+    const shapes = roomShapes(index, broken)
+    for (const item of plan.items ?? []) {
+      if (broken.has(item.id) || !isItemKind(item.kind)) continue
+      const kind = item.kind
+      const outline = itemFootprint(item)
+      const symbol = itemSymbol({ ...item, kind })
+      items.push({
+        id: item.id,
+        kind,
+        label: item.label ?? ITEM_KIND_WORDS[kind],
+        room: itemRoom(item, shapes)?.id ?? null,
+        outline,
+        rings: symbol.rings,
+        lines: symbol.lines
+      })
+      extent.push(...outline)
+    }
+  }
+
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, bounds: computeBounds(extent), issues }
 }
 
 /** Envelope with a margin, in meters, so the drawing is not flush to the edge. */

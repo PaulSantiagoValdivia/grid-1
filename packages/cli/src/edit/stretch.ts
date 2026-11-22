@@ -88,6 +88,12 @@ export function stretchPlan(survey: Survey, request: StretchRequest): Patch {
     const change = changes.get(o.wall)
     if (change?.start !== undefined && change.end === undefined && o.anchor === undefined) stayed.push(`${o.type} ${quoted(o.id)}`)
   }
+  // CNT-12: a fixture beyond the line moves with the walls round it.
+  const items = new Map<string, { at: [number, number]; turn: number }>()
+  for (const item of plan.items ?? []) {
+    if (onFloor(item.floor) && beyond(item.at)) items.set(item.id, { at: move(item.at), turn: item.turn ?? 0 })
+  }
+  if (items.size > 0) said.push(`${items.size} fixture${items.size === 1 ? '' : 's'} beyond the line moved with ${items.size === 1 ? 'it' : 'them'}.`)
   if (stayed.length > 0) said.push(`${listed(stayed)} ${stayed.length === 1 ? 'stays where it was: its wall grew at its start, so its offset is' : 'stay where they were: their walls grew at their start, so their offsets are'} ${Math.abs(by).toFixed(2)} m ${by >= 0 ? 'longer' : 'shorter'}.`)
-  return { walls: changes, openings, removeOpenings: new Set(), rooms: new Map(), said, guessed: [...guessed, ...seated.guessed], notKept: seated.notKept }
+  return { walls: changes, openings, removeOpenings: new Set(), rooms: new Map(), ...(items.size === 0 ? {} : { items }), said, guessed: [...guessed, ...seated.guessed], notKept: seated.notKept }
 }

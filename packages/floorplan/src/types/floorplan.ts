@@ -43,6 +43,14 @@
  *   wall on it that states no height of its own takes, and `slab` the thickness
  *   of the slab it stands on. All three are optional and never defaulted, so a
  *   plan that states none reads and stacks exactly as before (version 1).
+ *
+ * C6 · Items (CNT-12, on CNT-11's decision)
+ *   A placed item has a kind, a place (`at`, the middle of its footprint), a turn (degrees,
+ *   counter-clockwise), a size (width along its back × depth to its front), a height and a label.
+ *   Items are one list, never walls and never rooms: they add no area and close no outline. The
+ *   room an item is in is found from the outlines (the smallest room on its floor that holds its
+ *   middle), never named. This version holds fixed fixtures only (`ITEM_KINDS`); loose furniture,
+ *   points and seats are later, in the same shape.
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
@@ -288,6 +296,40 @@ export const ReferenceImageSchema = z.object({
 })
 
 /**
+ * CNT-12: the kinds an item may be in this version. CNT-11 decided fixtures now, because the
+ * checks need them, and furniture later; points (a hydrant, a camera) and seats come with it.
+ * `kitchen-run` is a run of base units with its worktop, the sink and hob in it.
+ */
+export const ITEM_KINDS = ['toilet', 'basin', 'shower', 'bath', 'kitchen-run'] as const
+
+export type ItemKind = (typeof ITEM_KINDS)[number]
+
+/**
+ * CNT-12 (C6): a fixture placed on a floor. It is never a wall and never a room: it adds no
+ * floor area, closes no room and takes no part in a room's outline.
+ *
+ * `at` is the middle of its footprint on the plan. `size` is its width, along its back, and its
+ * depth, from its back to its front. Unturned, its back faces -Y (down the 2D view) and its front
+ * +Y; `turn` turns it counter-clockwise about `at`, in degrees. `height` is from the floor of the
+ * room it stands in to its top. Every figure is the author's: Grid gives a fixture no size of its
+ * own. `kind` is read as written, so a kind this version does not hold (a table) is left out with
+ * a note (`item/unknown-kind`) instead of refusing the whole plan.
+ */
+export const ItemSchema = z.object({
+  id: text('id'),
+  kind: text('id'),
+  at: Vec2,
+  size: z.tuple([finite().positive(), finite().positive()]),
+  height: finite().positive(),
+  // Optional and never defaulted: unstated, the item is not turned.
+  turn: finite().optional(),
+  // What the drawing and an export call it: "WC", "Island". Unstated, its kind.
+  label: text('name').optional(),
+  // C5: unstated means the ground floor.
+  floor: text('id').pipe(z.string().min(1)).optional(),
+})
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap, because after that a wall that
  * said 2.7 cannot be told from one that said nothing (lab AU3-6). A floor that states no
@@ -334,6 +376,9 @@ export const FloorPlanFieldsSchema = z.object({
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
   floors: parts(FloorSchema, 'floors').optional(),
   referenceImage: ReferenceImageSchema.optional(),
+  // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
+  // with no key added (version 1).
+  items: parts(ItemSchema, 'items').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -360,6 +405,7 @@ export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
+export type Item = z.infer<typeof ItemSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

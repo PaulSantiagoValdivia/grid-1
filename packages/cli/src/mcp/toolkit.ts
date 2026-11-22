@@ -335,7 +335,7 @@ export function wallArg(plan: FloorPlan, wall: unknown): string {
 }
 
 /** What a measure between two things may name: a wall, an opening or a room. */
-export type ThingKind = 'wall' | 'opening' | 'room'
+export type ThingKind = 'wall' | 'opening' | 'room' | 'item'
 
 /**
  * A wall, opening or room the call named, by id, and which of them it is. An id two kinds
@@ -346,8 +346,9 @@ export function thingArg(plan: FloorPlan, thing: unknown, argument: string): { k
   if (plan.walls.some((w) => w.id === thing)) return { kind: 'wall', id: thing as string }
   if (plan.openings.some((o) => o.id === thing)) return { kind: 'opening', id: thing as string }
   if (plan.rooms.some((r) => r.id === thing)) return { kind: 'room', id: thing as string }
-  const known = [...plan.walls.map((w) => w.id), ...plan.openings.map((o) => o.id), ...plan.rooms.map((r) => r.id)]
-  throw new ToolRefusal(`What ${argument} names is no wall, door, window, opening or room of this plan.${nearestIdText(thing, known) || ' The plan has none.'}`)
+  if ((plan.items ?? []).some((i) => i.id === thing)) return { kind: 'item', id: thing as string }
+  const known = [...plan.walls.map((w) => w.id), ...plan.openings.map((o) => o.id), ...plan.rooms.map((r) => r.id), ...(plan.items ?? []).map((i) => i.id)]
+  throw new ToolRefusal(`What ${argument} names is no wall, door, window, opening${plan.items?.length ? ', room or fixture' : ' or room'} of this plan.${nearestIdText(thing, known) || ' The plan has none.'}`)
 }
 
 /** Every plan argument takes the same: a path inside the project. */

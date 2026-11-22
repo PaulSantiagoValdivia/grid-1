@@ -311,10 +311,10 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room or floor name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| a room or floor name, a fixture's label | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
 | an id: of a wall, room, opening or floor, a wall a room or an opening names, a part's floor | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
-| walls, rooms, openings or floors | 50,000 of each | |
+| walls, rooms, openings, floors or items | 50,000 of each | |
 | the walls a room lists | 2,000 | |
 
 A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
@@ -442,6 +442,37 @@ there, or the outside. A plan with no `holes` reads and measures as before.
 A hole whose wall list cannot close, or is out of order, gets the same codes as an outline
 (`room/unclosed`, `room/out-of-order`, `room/inside-out`), and the line names the hole.
 
+### Fixtures
+
+A plan may list its fixed fixtures in `items`: a toilet, a basin, a shower, a bath or a kitchen
+run (base units with their worktop). Each has a `kind`, `at` (the middle of its footprint), a
+`size` (its width along its back and its depth to its front), a `height`, and may have a `turn`
+(degrees, counter-clockwise; unturned, its back faces down the drawing), a `label` and a
+`floor`. Every figure is the author's: Grid gives a fixture no size of its own.
+
+```json
+{ "id": "wc", "kind": "toilet", "at": [9.575, 5], "size": [0.4, 0.65], "height": 0.8, "turn": 90, "label": "WC" }
+```
+
+A fixture is never a wall and never a room: it adds no floor area and no finding, and the room
+it stands in is the one that holds its middle. The 2D drawing, the sheet and the DXF (layer
+`GRID-FIXTURES`) draw its symbol to scale inside its footprint; the IFC file holds it as an
+`IfcFurnishingElement` on its storey. `grid_schedule` counts the fixtures by kind with their
+rooms, `grid_areas` gives each room with fixtures its free floor (its net area less the floor
+they stand on), `grid_measure` measures between fixtures and fits a box clear of them, and
+`grid check` names a fixture that runs into a wall or is taller than its room. This version holds
+fixtures only: loose furniture, points (a hydrant, a camera) and seats come later, in the same
+shape. A kind it does not hold yet is left out with a note, and the rest of the plan is drawn.
+
+| Code | What it says |
+|---|---|
+| `item/unknown-kind` | A kind the plan does not hold yet, such as a table. The item is left out |
+| `item/too-large`, `item/no-size` | A number Grid does not accept, or no size. The item is left out |
+| `item/duplicate-id`, `item/unknown-floor` | An id another part has, or a floor the plan does not have. The item is left out |
+| `item/outside-rooms` | Its middle is in no room on its floor |
+| `item/into-wall` | It reaches more than 5 mm into a solid wall |
+| `item/too-tall` | It is higher than the room it stands in |
+
 ### Wall faults, each with its fix
 
 A room's outline is made by crossing the lines of its walls, so where a wall ends does not
@@ -551,6 +582,11 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `wallAboveStorey` | tolerance | 0.001 m | How far a wall may rise past the height its floor states; past it, `wall/above-storey` names both heights |
 | `sameLevelOverlap` | tolerance | 0.5 ratio | Two floors at one level whose walls' boxes share more than this of the smaller one stand one over the other (`plan/same-level`) |
 | `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground floor is named and is not a way out |
+| `passableWidth` | limit | 0.4 m | Grid's own size, not a code figure: a door or doorless opening narrower than this is named (`opening/too-small-to-pass`) and is not a way through |
+| `passableHeight` | limit | 1.2 m | Grid's own size, not a code figure: one lower than this is named and is not a way through |
+| `passableSill` | limit | 0.3 m | Grid's own size, not a code figure: one whose sill stands higher than this above its floor is named and is not a way through |
+| `itemIntoWall` | tolerance | 0.005 m | How far a fixture may reach into a solid wall's body and still stand against its face; past it, `item/into-wall` names the wall |
+| `itemAboveRoom` | tolerance | 0.001 m | How far a fixture may rise past the height of its room; past it, `item/too-tall` names both heights |
 | `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
 | `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
@@ -560,7 +596,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `wallLowest` | limit | 0.1 m | A lower solid wall is questioned |
 | `wallHighest` | limit | 40 m (10 in a home) | A higher wall is questioned |
 | `wallHigherThanTypical` | limit | 4 ratio | A wall this many times higher than the typical one on its floor (with three others or more) is questioned |
-| `openingNarrowest` | limit | 0.2 m | A narrower opening is questioned; a door still counts as a way through |
+| `openingNarrowest` | limit | 0.2 m | A narrower opening is questioned; whether a door is a way through is `passableWidth` |
 | `openingLowest` | limit | 0.2 m | A lower opening is questioned |
 | `roomLargest` | limit | 50000 m² (1000 in a home) | A larger room is questioned |
 | `typicalHeightLowest` | limit | 1.8 m | The units question: the typical wall height of a building, from this… |

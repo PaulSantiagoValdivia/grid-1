@@ -33,9 +33,10 @@ import { wallFaults } from './wallFaults'
 import { kindDisagreements } from './exposure'
 import { levelIssues, unknownFloorIssues } from './levels'
 import { buildingKind } from './plausible'
+import { itemIssues } from './items'
 
-/** `floor` issues are about a floor as a whole; their id is the floor's id. */
-export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor'
+/** `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture (CNT-12). */
+export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item'
 
 /**
  * `error` is something that cannot be drawn, or sits on a floor the plan does not know, and gets
@@ -849,6 +850,8 @@ export function validatePlan(
 
   validateDerived(plan, issues, broken)
   validatePlausibility(plan, index, broken, issues)
+  // CNT-12: after the rooms, which a fixture is matched to, and the walls it may run into.
+  issues.push(...itemIssues(plan, index, broken))
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
 

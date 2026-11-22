@@ -33,6 +33,8 @@ export interface Patch {
   readonly openings: ReadonlyMap<string, OpeningChange>
   readonly removeOpenings: ReadonlySet<string>
   readonly rooms: ReadonlyMap<string, RoomChange>
+  /** CNT-12: fixtures moved or turned, by id. Left out by a change that moves none. */
+  readonly items?: ReadonlyMap<string, { at: Pair; turn: number }>
   /** One line per thing changed, in Grid's words. */
   readonly said: readonly string[]
   /** Walls taken out; walls added go where the first one taken out was, or at the end. */
@@ -112,7 +114,16 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
       return change ? merged(room, change) : room
     })
   rooms.push(...(patch.addRooms ?? []))
-  return { ...raw, walls, openings, rooms }
+  // A plan with no items keeps no key.
+  const items = patch.items === undefined || !Array.isArray(raw['items'])
+    ? {}
+    : {
+        items: list('items').map((item) => {
+          const change = patch.items!.get(item['id'] as string)
+          return change ? { ...item, ...change } : item
+        }),
+      }
+  return { ...raw, walls, openings, rooms, ...items }
 }
 
 /** The free stretches of a wall, measured from its start, between the other openings in it. */
@@ -454,11 +465,19 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     if (Object.keys(change).length > 0) openings.set(o.id, change)
   }
   const rooms = new Map(plan.rooms.map((room) => [room.id, { boundary: [...room.boundary].reverse() }]))
+  // CNT-12: a fixture's middle is mirrored, and its front faces the mirrored way: left to right
+  // turns it to minus its turn, top to bottom to a half turn less it.
+  const items = new Map((plan.items ?? []).map((item) => {
+    const turn = item.turn ?? 0
+    const mirrored = how === 'left-right' ? -turn : 180 - turn
+    return [item.id, { at: flip(item.at), turn: r3(((mirrored % 360) + 360) % 360) }]
+  }))
   return {
     walls,
     openings,
     removeOpenings: new Set(),
     rooms,
-    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms.`],
+    ...(items.size === 0 ? {} : { items }),
+    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.`],
   }
 }
