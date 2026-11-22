@@ -86,6 +86,7 @@ describe('resolveFigure', () => {
       value: 0.914,
       unit: 'm',
       origin: 'baseline',
+      readFor: 'homes',
       citations: [
         { document: 'IBC', edition: '2024', clause: 'Table 1020.3' },
         { document: 'IRC', edition: '2024', clause: 'R318.6' }
@@ -103,6 +104,7 @@ describe('resolveFigure', () => {
       value: 1.2,
       unit: 'm',
       origin: 'lookup',
+      readFor: 'homes',
       status: 'ai-found',
       source
     })
@@ -117,7 +119,7 @@ describe('a report with a looked-up figure', () => {
     const [finding] = sizeFindings(withBedroom(), { figures })
     expect(finding).toMatchObject({ rooms: ['bedroom'], minimum: 30, message: '"Bedroom" is under 30 m²' })
     expect(finding!.figures).toEqual([
-      { key: 'habitableRoomMinArea', value: 30, unit: 'm²', origin: 'lookup', status: 'ai-found', source }
+      { key: 'habitableRoomMinArea', value: 30, unit: 'm²', origin: 'lookup', readFor: 'homes', status: 'ai-found', source }
     ])
   })
 

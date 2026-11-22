@@ -32,7 +32,8 @@ import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
-import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
+import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
+import type { LeftOutPart } from '@ongrid/floorplan/export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
 import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
@@ -180,14 +181,22 @@ function checkWritable(project: Project, file: string): void {
   }
 }
 
-/** Says, on standard error, which parts a picture or an export leaves out. */
-function warnLeftOut(io: CommandIo, loaded: LoadedPlan): void {
+/**
+ * Says, on standard error, which parts a picture or an export leaves out. An export says what its
+ * own file leaves out (HND-6, `exported`); a picture, what the plan cannot draw.
+ */
+function warnLeftOut(io: CommandIo, loaded: LoadedPlan, exported?: readonly LeftOutPart[]): void {
   // MSG-6: a part the reader left out is named by its id, or its place when it has none.
   const faults = loaded.faults ?? []
   const read = faults.flatMap((f) => (f.kind === 'read-as-meant' || f.kind === 'value-left-out' ? [] : [f.part.id ?? `${f.part.list}[${f.part.index}]`]))
   const ids = [...new Set([...loaded.broken, ...read])].sort()
   const otherwise = faults.length - read.length
   if (otherwise > 0) io.stderr(`Read ${otherwise} value${otherwise === 1 ? '' : 's'} otherwise than written. grid check says which.\n`)
+  if (exported !== undefined) {
+    const line = leftOutText(exported)
+    if (line !== null) io.stderr(`${line}\n`)
+    return
+  }
   if (ids.length === 0) return
   const list = ids.length > 5 ? `${ids.slice(0, 5).join(', ')} and ${ids.length - 5} more` : ids.join(', ')
   io.stderr(`Left out ${ids.length} part${ids.length === 1 ? '' : 's'} that can't be drawn: ${list}. grid check says why.\n`)
@@ -362,14 +371,14 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   const project = openProject(projectOption, io.cwd)
   if (request.out === undefined) {
     const done = exportIntoProject(project, planFile, format, request)
-    warnLeftOut(io, done.loaded)
+    warnLeftOut(io, done.loaded, done.leftOut)
     if (done.note) io.stderr(`${done.note}\n`)
     io.stdout(`Wrote ${project.shown(done.written)}\n`)
     return EXIT_OK
   }
   const loaded = loadPlan(project, planFile)
   const made = exportFile(loaded, planFile, format, request)
-  warnLeftOut(io, loaded)
+  warnLeftOut(io, loaded, made.leftOut)
   io.stdout(`Wrote ${project.shown(write(project, request.out, made.data))}\n`)
   return EXIT_OK
 }

@@ -48,7 +48,7 @@ record. It never throws: a check that fails inside Grid becomes a line
 | `lookupNotice` | Only with `local-lookup`: the figures were found by an AI and not checked by a person. |
 | `checks` | Every check that ran and looked at something, with where its figures come from. A check that looked at no room, floor or door is not listed (MSG-2). Empty when the plan was refused. |
 | `coverage` | What each check looked at and skipped, one entry per check Grid has, whether it ran or not. See "What each check looked at". Empty when the plan was refused. |
-| `figures` | Every figure a check applied, with its document, edition, clause, place, day read and status. The figures of a check that looked at nothing are not listed. |
+| `figures` | Every figure a check applied, with its document, edition, clause, place, day read, status and `readFor`, the kind of building it was read for (`homes` for every figure today). The figures of a check that looked at nothing are not listed. |
 | `limits` | What these checks never look at, whatever the plan. The same lines every time. |
 
 ### A line
@@ -233,6 +233,7 @@ checks first, then the figure checks, whether it ran or not:
 | `skipped` | The parts it did not look at, by floor and reason: `{ floor, ids, reason, why }`. `floor` is `""` for the whole plan. |
 | `skippedCount` | How many parts that is. |
 | `findings` | How many findings it gave. |
+| `readFor` | Only on a figure check that looked at something: the kinds of building its figures were read for, as `["homes"]` (COD-2). |
 
 A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
 so a record with no findings says what it is: these parts were looked at and nothing was
@@ -329,7 +330,7 @@ its text, which says the same.
 
 | Tool | Receipt (`structuredContent`) |
 |---|---|
-| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (parts that could not be drawn), `note`. |
+| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
@@ -359,6 +360,52 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - New code, worth a look: `plan/note-no-place`, a note in a room the plan does not have, naming
   the note and the room in `also`. The note is not drawn.
 - `grid_view` (kind plan) takes `hide`, `colour` and `key`.
+
+### 2026-11-22: a problem report the person files (CMD-13)
+
+- New tool `grid_report_problem`, read-only, last of the reading tools: a draft issue from a
+  failure you met, with the call, its answer, the record's line for a code you pass, Grid's
+  version and the smallest plan that shows it, cleared of names, ids, addresses and paths. It
+  returns `title`, `body`, `labels`, `link` (the issue form), `linkHasBody`, `code`, `plan`,
+  `kept` and `sent: false`. Grid sends nothing: show the person the draft.
+- A tool call now sees the protocol version a 2026-07-28 request names. No other answer changes.
+
+### 2026-11-22: an export says what it leaves out (HND-6)
+
+- `grid_export` adds `leftOutParts`: each part of the plan the file leaves out, with its kind,
+  id, place, floor and the code of the line that leaves it out. The file says it too: the
+  property set `Grid_LeftOut` in an IFC, the layer `GRID-LEFT-OUT` in a DXF, comment lines in an
+  OBJ, `asset.extras.gridLeftOut` in a GLB. A file that leaves nothing out is as it was.
+- `leftOut` counts what this file leaves out: the parts the reader left out (`plan/id-clash`,
+  `plan/part-left-out`) and the parts its floors cannot draw. Before, it counted the ids
+  `grid_check` calls broken in the whole plan, which named walls a file holds (a wall id used
+  on several floors is drawn on each) and missed parts the reader left out.
+- An export that would hold no wall, room or fixture is refused (`isError: true`, one line that
+  starts "Nothing to export"), and nothing is written. Before, it wrote a valid empty file.
+
+### 2026-11-22: schedules (ARE-12)
+
+- `grid_schedule` takes `of`: `rooms` gives the room schedule, `openings` each door, window and
+  doorless opening once. Its data then holds `rows` (each numbered by Grid, in one order whatever
+  the file's), and for rooms `floors` (each floor's total, with its name) and `total` (all floors),
+  each total with its state, and `rules`. Without `of` the answer is as before. With `of`, `types`
+  and `narrower_than` are refused. A row that cannot be written is an error naming the row.
+- `grid sheet --layout check` ends with two pages, "Room schedule" and "Door and window schedule".
+
+### 2026-11-22: which kind of building a figure was read for (COD-2)
+
+- Every figure, in `figures` and on a finding, adds `readFor`: the kind of building it was read
+  for. Every figure today is `homes`. A plan cannot say yet what kind of building it is, so a
+  figure is applied whatever the building, and every note and pass that used one says so.
+- `coverage` adds `readFor` on a figure check that looked at something, so a pass with no
+  finding says it (lab CH-2: a café's seating marked "dining" passed against a home's figure
+  without a line).
+- `needed` on `room/too-small`, `room/no-escape-opening`, `room/escape-window-too-small` and
+  `room/escape-window-too-high` ends "; this check's figures were read for homes (houses and
+  flats people live in)". No code changes meaning, so `resultVersion` stays.
+- `grid check` prints it after each such check's findings and on each figure used; `grid_check`
+  prints `Needed:` on those lines and the kind on each such check; the notes on a plan and the
+  check sheet add the sentence.
 
 ### 2026-11-22: version 1 (WRT-3)
 

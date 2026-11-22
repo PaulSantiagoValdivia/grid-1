@@ -81,6 +81,9 @@ the rooms by use.
   `main` (c4f773f) too. It now matches `  N. worth a look`.
 - `look.test.ts` gains checks that the sketch line's width and the note's size match
   `plan.css`.
+- `cli/src/command/__tests__/grid.e2e.test.ts`: the built `grid.mjs` may be up to 500 kB, up
+  from 450 kB. With `main` at 3634cae merged in, it is 463,249 bytes. SHT-7 adds code but no
+  dependency; the limit is there to catch a second copy of a dependency, such as zod.
 - No snapshot and no scoreboard figure changed.
 
 ## For the owner
@@ -95,5 +98,7 @@ the rooms by use.
   in words. Grid has no command that turns a sketch item into a fixture.
 - **The title on the sheet.** The sheet leaves off the plan's title and key, because each page
   has its own title and box. Say if the sheet should show them.
+- **The bundle limit** is now 500 kB (see above). Say if a smaller `grid` file matters more
+  than the new drawing code.
 - **Symbols.** Only `north` and `entrance` exist. Others, such as a scale bar or a logo, would
   each need a decision.

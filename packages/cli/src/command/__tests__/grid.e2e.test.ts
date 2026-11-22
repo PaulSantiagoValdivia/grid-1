@@ -141,6 +141,48 @@ describe('grid export: writing into exports/ beside the plan', () => {
   })
 })
 
+describe('grid export: what the file leaves out (HND-6)', () => {
+  /** The sample flat with one wall made zero-length: it, the rooms on it and its doors are left out. */
+  function withZeroWall(): string {
+    const plan = JSON.parse(readFileSync(sample, 'utf8')) as { walls: { id: string; start: number[]; end: number[] }[] }
+    const wall = plan.walls[0]!
+    wall.end = [...wall.start]
+    writeFileSync(join(dir, 'broken.json'), JSON.stringify(plan))
+    return wall.id
+  }
+
+  it.each(['dxf', 'ifc', 'obj', 'glb'])('says on standard error what the %s leaves out, and the file says it too', (format) => {
+    const wall = withZeroWall()
+    const run = grid('export', 'broken.json', '--format', format)
+    expect(run.status).toBe(0)
+    const line = run.err.split('\n').find((l) => l.startsWith('Left out '))!
+    expect(line).toMatch(/^Left out \d+ parts? of the plan, and the file says so: .* that can't be drawn \(.*\)\. grid check says why\.$/)
+    expect(line).toContain(JSON.stringify(wall))
+    const data = readFileSync(join(dir, 'exports', `broken.${format}`)).toString('latin1')
+    expect(data).toContain({ dxf: 'GRID-LEFT-OUT', ifc: "'Grid_LeftOut'", obj: '# Walls left out (1):', glb: '"gridLeftOut"' }[format]!)
+    // The sound flat's file carries no note.
+    expect(grid('export', 'two-bed-flat.json', '--format', format).err).toBe('')
+    expect(readFileSync(join(dir, 'exports', `two-bed-flat.${format}`)).toString('latin1')).not.toMatch(/Grid_LeftOut|GRID-LEFT-OUT|gridLeftOut|left out/)
+  })
+
+  it.each([
+    ['an empty plan', { version: '1', units: 'm', walls: [], rooms: [], openings: [] }, 'Nothing to export: empty.json has no wall, room or fixture that can be drawn. No file was written.'],
+    ['nothing but {}', {}, 'Nothing to export: empty.json has no wall, room or fixture that can be drawn. No file was written.'],
+    [
+      'rooms with no walls',
+      { version: '1', units: 'm', walls: [], rooms: [{ id: 'hall', name: 'Hall', boundary: ['w1'] }], openings: [] },
+      'Nothing to export: empty.json has no wall, room or fixture that can be drawn. Left out: 1 room ("hall"); grid check says why. No file was written.',
+    ],
+  ])('refuses %s in every format, and writes nothing', (_, plan, line) => {
+    writeFileSync(join(dir, 'empty.json'), JSON.stringify(plan))
+    for (const format of ['dxf', 'ifc', 'obj', 'glb']) {
+      expectRefusal(grid('export', 'empty.json', '--format', format), 1, line)
+      expectRefusal(grid('export', 'empty.json', '--format', format, '--out', `empty.${format}`), 1, line)
+    }
+    expect(filesIn(dir)).toEqual(['empty.json', 'two-bed-flat.json'])
+  })
+})
+
 describe('grid draw --out: writing a picture', () => {
   it('writes an SVG and replaces an earlier one, leaving no temporary file', () => {
     writeFileSync(join(dir, 'plan.svg'), 'old')
@@ -421,7 +463,9 @@ describe('the built file', () => {
   it('starts with a shebang and is one file', () => {
     expect(readFileSync(bundle, 'utf8').startsWith('#!/usr/bin/env node\n')).toBe(true)
     // 400 kB since VEW-7, to catch a second zod; 450 kB since WRT-3, whose edits and their tools
-    // take the file just past 400 kB (400,863 bytes) with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(450_000)
+    // take the file just past 400 kB (400,863 bytes) with no new dependency. 500 kB since SHT-7:
+    // the writing on the drawing, with HND-6, COD-2, ARE-12, CMD-13 and QAR-7 on main, made it
+    // 463,249 bytes, again with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(500_000)
   })
 })
