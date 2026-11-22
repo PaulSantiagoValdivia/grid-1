@@ -539,3 +539,32 @@ Main moved no count; nothing stored.
   files it had not reached were run with the same options: 167 of 167 passed, 1,823 tests passed,
   2 skipped (1,825), in 1,387 s. Together that is every test file in the five folders once, none
   failed.
+
+### Again after merging `main` 4fe29ed (COD-8)
+
+`main` moved once more: a firm's own standards as checks (COD-8).
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: both Unreleased entries, CNT-14's first.
+- `docs/result-contract.md`: both agents' changelog entries, CNT-14's at the top.
+
+**Where the two features meet.** COD-8's `firm/door-clear-width` reads a doorway's clear width
+through CNT-13's `doorwayClearance`, as CNT-17 does, so the same follow-up holds (For the owner 12
+and the merge above): a door that slides, rolls or lifts loses a leaf's allowance it does not
+have. Not changed here. Nothing else in COD-8 reads a door's kind.
+
+**Expectations changed.** None.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- The affected tests, the five folders' 316 test files in two halves with the same options
+  (`--exclude '.claude/**' --maxWorkers=2 --minWorkers=1`, `timeout 1500` each), on a machine with
+  a load average between 220 and 310. First half: 157 of 158 files passed, 3,292 tests passed, 1
+  skipped, 1 failed: `geometry/__tests__/diff-size.test.ts`, "diffs 1,000 entities … well inside a
+  second", which took 14.4 s under that load (a timing guard; it passed in every run above).
+  Second half: stopped by its timeout after 154 of 158 files had passed (about 2,175 tests, 3
+  skipped), none failed. The 4 files it had not reached and `diff-size.test.ts` again: 5 of 5
+  passed, 33 tests. Every file has passed once; none fails.
+- `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures."
