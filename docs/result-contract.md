@@ -70,7 +70,8 @@ record. It never throws: a check that fails inside Grid becomes a line
 
 1. `refused`: the plan could not be read. Nothing else was checked.
 2. `left-out`: a part that cannot be drawn. Every view, measure and export skips it.
-3. `worth-a-look`: a part that is drawn and is very likely a mistake, door sweeps among them.
+3. `worth-a-look`: a part that is drawn and is very likely a mistake, door sweeps among them;
+   and first, what the file says that Grid does not read (below).
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
 
@@ -103,6 +104,9 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/unknown-word` | {thing} has a word the format does not know | {wanted} at {place} |
 | `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
+| `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
+| `plan/unknown-use` | Room "{name}" has a use Grid does not know, "{use}" | one of the uses Grid knows: bedroom, living, … |
+| `plan/empty` | The plan has nothing in it: no walls, rooms or openings | walls, and the rooms and openings they hold |
 | `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
 | `plan/part-left-out` | {thing} is left out: a value it needs cannot be read | {wanted} at {place} |
 | `plan/value-left-out` | {thing} has a value the format cannot read, and is read without it | {wanted} at {place} |
@@ -197,6 +201,18 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
+
+### Words Grid does not read
+
+A plan with a field Grid does not know, or a room use it does not know, is still read: without
+that field, and with that room's use not stated. Each is a line worth a look, about the part it
+is on, with the nearest word Grid knows when one was most likely meant: `thick` on a wall gives
+`plan/unknown-field`, whose `found` and `fix` name `thickness` ("Did you mean "thickness"?"). A
+use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line. A plan with no
+walls, rooms or openings, `{}` among them, gives `plan/empty`. A field name or a use that breaks
+the text rule (MSG-9) is never repeated: the line says it is not. The fields each part has are
+read from the format itself (`readingNotes` in `@ongrid/floorplan/types/reading`), so a field
+added to the format is never named as unknown.
 
 A code is never reused for another meaning. Until the drawing's checks give their figures as
 data, `found` for a problem in the drawing is the check's own sentence, and figures are in it.
@@ -330,6 +346,16 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: version 1 (MSG-4)
+
+- New codes, all worth a look: `plan/unknown-field`, `plan/unknown-use` and `plan/empty`. A
+  field or a use Grid does not read was dropped in silence before. `{}` gives `plan/empty`,
+  beside MSG-2's `plan/not-checked-no-rooms`.
+- A room use is read whatever its capitals: `Bedroom` is `bedroom`.
+- `grid check` and `grid_check` read the plan file as written, so they name these words. The
+  edit tools' `toLookAt` counts the file as written, before and after: a change keeps a field
+  Grid does not know, and it is counted on both sides.
 
 ### 2026-11-22: a fault stays local (MSG-6)
 

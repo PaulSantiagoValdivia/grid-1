@@ -88,6 +88,8 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const floor = floorOption(plan, request.floor)
   const options = country === undefined ? {} : { country: country.toUpperCase() }
   const full = checkLocalRules(plan, options)
+  // The file's text (MSG-6), so the record names what the reader did and the words the schema
+  // drops (MSG-4).
   const result = inspectPlan(loaded.text ?? plan, options)
   const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage), numbers: result.lines.map((_, index) => index + 1) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
