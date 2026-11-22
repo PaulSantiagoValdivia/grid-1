@@ -37,6 +37,34 @@ one line`) and never repeats the text. Markup in a name is allowed: it is drawn 
 ids in `grid check`'s drawing problems are quoted, and `grid_check` returns the rooms a finding
 is about, by id and name, apart from its message.
 
+## A fault stays where it is
+
+A value Grid cannot read inside one part no longer refuses the whole plan (MSG-6). The plan is
+read part by part with the format's own rules (`packages/floorplan/src/types/readParts.ts`), and
+`grid check` gives one line for each part or value it could not read as written, by the part's
+id (or its place, when it has no id that can be read) and its place in the file:
+
+| What the file holds | What Grid does | Line |
+|---|---|---|
+| a number written as text (`"2.5"`, `"0.9 m"`), `"true"`, a word in other capitals (`"Exterior"`, `"Door"`, units `"M"`) | reads it as meant | `plan/read-as-meant` |
+| a value a field can do without that cannot be read (a hinge `"left"`, a `null` thickness, units `"mm"`) | uses the field's default, or reads it as not stated; a unit other than metres is read in metres | `plan/value-left-out` |
+| a value the part needs that cannot be read (a negative offset, a missing start, an opening type `"gate"`) | leaves the part out, and the rooms and openings on a wall left out with it | `plan/part-left-out` |
+| a wall's thickness or height, or an opening's sill, stated out of range or as a word | leaves the part out: a default would change what is drawn and measured | `plan/part-left-out` |
+| `NaN`, `Infinity`, or a number with a decimal comma in an object (`"offset": 3,45`) | reads it as a value that is not there, and names it for what it is | as above |
+| git's conflict markers | refuses the plan as an unfinished merge, with the line and what each side adds | `plan/unfinished-merge` |
+
+Ids are unique across the whole plan. Of two parts that share an id, only the clash is left out
+(`plan/id-clash`): the wall keeps its id, since rooms and openings name walls, so the rooms on it
+are still measured. Two walls with one id are both left out (`plan/duplicate-id`), with an id to
+rename one to. A blank id, and an id that differs from an earlier one only in capitals or spaces,
+leave the part out (`plan/blank-id`, `plan/similar-id`). What is wrong at the plan's top level (a
+version Grid does not read, `walls` that is not a list) still refuses the plan.
+
+`grid check`, `draw`, `export`, `describe` and the reading tools read a plan this way. `grid tidy`,
+`grid write` and the tools that change the plan write it back, so they read it whole and refuse a
+plan with anything left out, naming the first. The record's codes are in
+[the result contract](result-contract.md).
+
 ## Floor levels and heights
 
 A floor in the plan's `floors` list has a `level`, which only orders the floors (0 the ground

@@ -121,7 +121,28 @@ Decision of 20 November 2026 (owner): ids stay unique across the whole plan.
 
 ## The scoreboard
 
-SCOREBOARD_FIGURES
+Full run after merging `main` (b92aea4), stored in `scoreboard/current.json` in the same commit:
+
+| Count | Before | After |
+|---|---:|---:|
+| Rooms measured wrong | 197 | 197 |
+| Damage that passes in silence | 386 | 386 |
+| Turns answered, mistakes named, checks fed | 15, 2, 5 | 15, 2, 5 |
+| Guard: rooms Grid does not measure | 727 | 735 |
+| Guard: sound plans with a warning | 95 | 95 |
+
+- Damage: refused by the schema 504 → 0; names the damaged part 1,916 → 2,386; caught vaguely
+  105 → 139 (mostly the units words, which have no id to name); no effect 89; silent 386.
+- Lab plans Grid cannot read: 23 → 0. Rooms compared 16,438 → 16,542, wrong still 194.
+- **The guard rises by 8, for good reasons:** 16 rooms are measured now because an id clash
+  leaves out only the clash (the townhouse landings of MS-9 in two copies, the four rooms of the
+  f13b wall-and-room clash in two copies, two in a round-trip copy), all within 0.01 m² of the
+  referee; 11 rooms are left out because their wall or room has a blank or near-equal id
+  (refused, as the card asks); 13 rooms are in plans the schema refused outright before, and rest
+  on a part now left out (a wall stated −0.3 m thick, walls 0 and −2.7 m high, a room name with a
+  line break, a 337-character id). 727 − 16 + 11 + 13 = 735.
+- Without the rule that a stated size never takes a default, rooms measured wrong rose to 203
+  (six rooms beside the wall stated −0.3 m thick, measured as if 0.2 m).
 
 ## For the owner
 
@@ -156,4 +177,9 @@ SCOREBOARD_FIGURES
 
 ## Checks run
 
-CHECKS_RUN
+After merging `main` at e7cf925, on a machine with a load average above 200 (ten sessions):
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: passed.
+- `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
+- `npm run scoreboard`: as above; stored.
+- Full suite: FULL_SUITE

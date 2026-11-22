@@ -6,16 +6,16 @@
   "turnsAnswered": 15,
   "mistakesNamed": 2,
   "checksFed": 5,
-  "roomsNotMeasured": 727,
+  "roomsNotMeasured": 735,
   "soundPlansWithAlarm": 95
  },
  "detail": {
   "areas:lab": {
    "plans": 1121,
-   "plansGridCannotRead": 23,
-   "compared": 16438,
+   "plansGridCannotRead": 0,
+   "compared": 16542,
    "wrong": 194,
-   "notMeasured": 727
+   "notMeasured": 735
   },
   "areas:generated": {
    "plans": 2300,
@@ -33,10 +33,9 @@
   },
   "damage": {
    "plans": 3000,
-   "caught: names the damaged part": 1916,
+   "caught: names the damaged part": 2386,
    "silent: result changed, nothing said": 386,
-   "refused: schema names the place": 504,
-   "caught vaguely: names something else": 105,
+   "caught vaguely: names something else": 139,
    "no effect at all": 89
   },
   "damage:lab": {
@@ -45,7 +44,7 @@
    "refused: schema names the place": 506,
    "no effect at all": 117,
    "caught vaguely: names something else": 305,
-   "plansWhoseOutcomeDiffersNow": 423
+   "plansWhoseOutcomeDiffersNow": 927
   },
   "sound": {
    "plans": 442,
