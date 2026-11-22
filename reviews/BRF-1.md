@@ -137,6 +137,37 @@ packages/viewer scoreboard/__tests__ scripts --maxWorkers=2 --minWorkers=1`: 3,8
 `npm run scoreboard`: "Same as the stored figures" (197, 278, 16, 5, 12; guards 735 and 95), so
 no stored figure changes.
 
+### After merging `main` at bd2f6a7 (CNT-13, LVL-4, WRT-6, HND-2) and ca2db98 (MSG-5, CNT-9)
+
+Merge commit 3d4962d (main at bd2f6a7). Five files conflicted; both sides were kept in each:
+
+- `CHANGELOG.md`: BRF-1's Unreleased line, then WRT-6's and CNT-13's.
+- `docs/commands.md`: WRT-6's `square` verb in the `grid edit` row, with BRF-1's "the same lines of the brief".
+- `docs/tool-server.md`: the order names the seen mark and the brief, and "the ten that change the plan" (WRT-6's `grid_square_scan`).
+- `docs/result-contract.md`: the edit receipts row names `grid_square_scan` with its `moves` and `leftAsTheyAre`, and BRF-1's `brief` and `reminder`; BRF-1's changelog section on top, then WRT-6's, LVL-4's and CNT-13's.
+- `packages/cli/src/mcp/__tests__/tools.test.ts`: both reasons for the count; 24 tools then, `server.test.ts` 24, `AGENTS.md` and `docs/commands.md` 24.
+
+Then 5a2f908 made the brief's `given` and `assumed` WRT-6's own (For the owner, item 1).
+
+Merge commit bd52964 (main at ca2db98). Seven files conflicted; both sides were kept in each:
+
+- `AGENTS.md`: CNT-9's `query.ts` note with BRF-1's `briefTool.ts`; 27 tools.
+- `CHANGELOG.md`: BRF-1's Unreleased line, then CNT-9's.
+- `README.md`: CNT-9's wording of the tool-server and plan-file rows, and BRF-1's `docs/brief.md` row.
+- `docs/commands.md`: `grid serve` with the 27 tools.
+- `docs/result-contract.md`: BRF-1's changelog section on top (the tools are 27), then CNT-9's and MSG-5's.
+- `packages/cli/src/mcp/__tests__/server.test.ts`: 27 tools listed.
+- `packages/cli/src/mcp/__tests__/tools.test.ts`: CNT-9's reason for 26 and BRF-1's for 27. The order merged cleanly: `grid_fields`, `grid_find` and `grid_count` after `grid_schedule`, `grid_write_brief` after `grid_mark_seen`, `grid_square_scan` last.
+
+After the last merge: `npm run build`, `npm run typecheck` and `npm run lint` exit 0.
+`npx vitest run packages/cli --maxWorkers=2 --minWorkers=1`: 1,084 passed, 1 skipped, in 73 of 73
+files. `npx vitest run packages/floorplan packages/rules scoreboard/__tests__ --maxWorkers=2
+--minWorkers=1`: 3,454 passed, 3 skipped, in 140 of 140 files (`packages/viewer` and `scripts`
+were not in this run). Nothing failed, so nothing was rerun alone. `npm run scoreboard`: "Same as
+the stored figures" (197, 278, 16, 5, 15; guards 735 and 95). Between the two merges, on 5a2f908:
+`packages/cli` 1,061 passed, 1 skipped, in 71 files; the second group 3,399 passed, 3 skipped, in
+134 files; the scoreboard the same figures.
+
 ## For the owner
 
 The owner is away, so each choice took the reversible option; each is one line to change.
