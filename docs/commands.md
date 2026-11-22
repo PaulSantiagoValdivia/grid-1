@@ -11,9 +11,9 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [The project folder](#the-project-folder)
 - [Describing a plan: `grid describe`](#describing-a-plan-grid-describe)
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
-- [A picture of the plan: `grid draw`](#a-picture-of-the-plan-grid-draw)
 - [What went wrong, on the drawing: `grid draw`](#what-went-wrong-on-the-drawing-grid-draw)
 - [The 3D model as a picture: `grid draw --3d`](#the-3d-model-as-a-picture-grid-draw---3d)
+- [A picture of the plan: `grid draw`](#a-picture-of-the-plan-grid-draw)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
 
@@ -181,32 +181,6 @@ again before each fix, and one an earlier fix took care of is skipped and said s
 is changed as read, keys Grid does not know included; `--out <file.json>` writes the tidied plan
 there instead. `--json` prints the list or what was applied as JSON.
 
-## A picture of the plan: `grid draw`
-
-`grid draw plan.json` writes one floor as an SVG file, and `grid draw plan.json --png --out
-plan.png` as a PNG; each is a separate run, and the PNG is the same drawing as the SVG. Neither
-needs a browser or the app: both are plain function calls in Node, which a program can make too
-(`drawPlan` in the `ongrid` package; `planToSvg` in `@ongrid/viewer` for the SVG alone).
-
-The drawing is the app's own. The app's 2D view and `grid draw` lay a floor out with one
-function, `planScene` in `@ongrid/viewer`: for the same plan, size and look, the elements the
-app's view holds are, byte for byte, the ones in the SVG file, which only adds its own root and
-a sheet of paper (a test holds this for the lab's eight buildings, in each look). What the
-command adds on top, the marks of what went wrong and the key under them, is described below.
-
-The PNG is that SVG drawn by Skia, through `@napi-rs/canvas` (MIT). It ships a ready-built
-binary for Linux, macOS and Windows, so nothing is compiled when Grid is installed. It is an
-optional package: where its binary did not come along, `grid draw --png` says so in one line,
-and every command that draws no PNG works without it. The PNG is drawn at its own size, not
-enlarged from a smaller one, so `--scale 2` gives a picture twice as wide and as sharp. Its
-text is set in the first font of the picture's list that the machine has, so letters can differ
-slightly between machines; where each label goes never does.
-
-Over the lab's plans, half the pictures took under 25 ms as SVG and under 70 ms as PNG, and 19 in
-20 under 300 ms, on a heavily loaded machine. The time grows faster than the plan: a floor of a
-hundred rooms in a grid took about 2 s, of five hundred about 17 s. The figures are in
-`reviews/VEW-1.md`.
-
 ## What went wrong, on the drawing: `grid draw`
 
 `grid draw` and `grid_view` show what went wrong on the drawing. Every line `grid check` prints
@@ -223,6 +197,33 @@ reason. `docs/result-contract.md` says how the numbers are given.
 graphics card: the scene is drawn in software, each face lit flat, without shadows. With
 `--floor`, that floor is shown as a cutaway, as in the app; without it, the whole building.
 The PNG is 1200 by 800 pixels, times `--scale` (up to 4).
+
+## A picture of the plan: `grid draw`
+
+`grid draw plan.json` writes one floor as an SVG file, and `grid draw plan.json --png --out
+plan.png` as a PNG; each is a separate run, and the PNG is the same drawing as the SVG. Neither
+needs a browser or the app: both are plain function calls in Node, which a program can make too
+(`drawPlan` in the `ongrid` package; `planToSvg` in `@ongrid/viewer` for the SVG alone).
+
+The drawing is the app's own. The app's 2D view and `grid draw` lay a floor out with one
+function, `planScene` in `@ongrid/viewer`: for the same plan, size and look, the elements the
+app's view holds are, byte for byte, the ones in the SVG file, which only adds its own root and
+a sheet of paper (a test holds this for the lab's eight buildings, in each look). What the
+command adds on top, the marks of what went wrong and the key under them, is in
+[What went wrong, on the drawing](#what-went-wrong-on-the-drawing-grid-draw).
+
+The PNG is that SVG drawn by Skia, through `@napi-rs/canvas` (MIT). It ships a ready-built
+binary for Linux, macOS and Windows, so nothing is compiled when Grid is installed. It is an
+optional package: where its binary did not come along, `grid draw --png` says so in one line,
+and every command that draws no PNG works without it. The PNG is drawn at its own size, not
+enlarged from a smaller one, so `--scale 2` gives a picture twice as wide and as sharp. Its
+text is set in the first font of the picture's list that the machine has, so letters can differ
+slightly between machines; where each label goes never does.
+
+Over the lab's plans, half the pictures took under 25 ms as SVG and under 70 ms as PNG, and 19 in
+20 under 300 ms, on a heavily loaded machine. The time grows faster than the plan: a floor of a
+hundred rooms in a grid took about 2 s, of five hundred about 17 s. The figures are in
+`reviews/VEW-1.md`.
 
 ## A sheet for people: `grid sheet`
 
