@@ -2,3 +2,4 @@
 export * from './languages'
 export * from './say'
 export * from './uses'
+export { en } from './en'

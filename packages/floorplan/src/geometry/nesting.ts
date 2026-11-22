@@ -26,6 +26,9 @@
 
 import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
+import type { Said } from '../messages/say'
+import { english, said } from '../messages/say'
+import { groupedNum } from './issueWords'
 import { floorOf } from './floors'
 import type { Room, Wall } from './plan'
 import type { Vec2 } from './vec2'
@@ -52,8 +55,10 @@ export interface InnerRoom {
   readonly nearest: { readonly room: string; readonly outside: number } | null
   /** How much floor it takes off its host, in square metres: 0 with no host. */
   readonly taken: number
-  /** Set when the host could not be worked out: why. */
+  /** Set when the host could not be worked out: why, in English, made from `reasonSaid`. */
   readonly reason?: string
+  /** MSG-11: the reason by its key and values. */
+  readonly reasonSaid?: Said
 }
 
 /**
@@ -139,8 +144,8 @@ function nest(traced: readonly Traced[], marked: readonly Traced[], wallsById: R
   for (const m of marked) {
     const r = byOrder.get(m.order)!
     if (cuts >= MAX_HOST_CUTS) {
-      const reason = `the plan has more than ${MAX_HOST_CUTS.toLocaleString('en')} pairs of outlines to compare, and the rest were not compared`
-      inner.set(r.room.id, { room: r.room.id, host: null, nearest: null, taken: 0, reason })
+      const reasonSaid = said('issue.part.nesting.tooMany', { most: groupedNum(MAX_HOST_CUTS.toLocaleString('en')) })
+      inner.set(r.room.id, { room: r.room.id, host: null, nearest: null, taken: 0, reason: english(reasonSaid), reasonSaid })
       continue
     }
     let host: Traced | null = null
@@ -213,9 +218,11 @@ function nestMarked(traced: readonly Traced[], wallsById: ReadonlyMap<string, Wa
       failure = error
     }
   }
-  const reason = `the outlines could not be compared (${failure instanceof Error ? failure.message : String(failure)})`
+  // The polygon library's own error, in its words.
+  const reasonSaid = said('issue.part.nesting.failed', { error: failure instanceof Error ? failure.message : String(failure) })
+  const reason = english(reasonSaid)
   return {
-    inner: new Map(marked.map((t) => [t.room.id, { room: t.room.id, host: null, nearest: null, taken: 0, reason }])),
+    inner: new Map(marked.map((t) => [t.room.id, { room: t.room.id, host: null, nearest: null, taken: 0, reason, reasonSaid }])),
     hosts: new Map()
   }
 }

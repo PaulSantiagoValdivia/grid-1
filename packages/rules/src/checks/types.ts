@@ -8,6 +8,7 @@
  * nothing.
  */
 
+import { en, type Said } from '@ongrid/floorplan/messages'
 import type {
   FindingCode as PlanFindingCode,
   NotChecked as PlanNotChecked,
@@ -26,8 +27,7 @@ export type { Rule, RuleCitation, RuleSource, RouteStep } from '@ongrid/floorpla
  * Added to a report that applied at least one looked-up figure. The report keeps its
  * general-guidance label as well.
  */
-export const LOOKUP_NOTICE =
-  'Some figures were found online by an AI and have not been checked by a person. Check their sources' as const
+export const LOOKUP_NOTICE = en['check.lookupNotice']
 
 /** Where a looked-up figure was read: shown to the user, never trusted. */
 export interface FigureCitation {
@@ -176,8 +176,10 @@ export interface CoverageGroup {
 /** Parts a check did not look at, on one floor, and why. */
 export interface CoverageSkip extends CoverageGroup {
   readonly reason: SkipReason
-  /** One wording per reason, in plain words. */
+  /** One wording per reason, in plain words, in English. */
   readonly why: string
+  /** MSG-11: `why` by key and values (`skipWhySaid`); not enumerable. */
+  readonly said?: Said
 }
 
 /**

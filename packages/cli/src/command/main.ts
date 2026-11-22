@@ -25,7 +25,9 @@ import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { FontsMissing } from '../sheet/fonts'
 import { linkSeats, occupancyFileOf, occupancyText, OccupancyRefused, readOccupancy } from '../occupancy/occupancy'
-import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
+import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject, sheetLanguage } from '../sheet/sheetFile'
+import { askedLanguage, languageFor } from './language'
+import { inLanguage } from './words'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
@@ -77,17 +79,17 @@ const COMMANDS = {
     options: {},
   },
   check: {
-    usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--full] [--json] [--seen <n> --reason <text> --by <name> | --unseen <n>] [--project <folder>]',
+    usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--full] [--json] [--seen <n> --reason <text> --by <name> | --unseen <n>] [--lang en|es] [--project <folder>]',
     summary: 'Checks a plan and prints the report: general guidance, not your local rules. Short, about this plan, unless --full. --seen sets a note aside as seen, with your reason and name, in the marks file beside the plan.',
     options: CHECK_OPTIONS,
   },
   describe: {
-    usage: 'grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--project <folder>]',
+    usage: 'grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--lang en|es] [--project <folder>]',
     summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls. --for agent adds the ids. --as rooms reads it back as rooms text to change and write again.',
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    usage: 'grid draw [<plan.json>] [--png | --3d] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--lang en|es] [--project <folder>]',
     summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG.',
     options: DRAW_OPTIONS,
   },
@@ -97,7 +99,7 @@ const COMMANDS = {
     options: EXPORT_OPTIONS,
   },
   sheet: {
-    usage: 'grid sheet [<plan.json>] --layout client|check [--sheet <sheet.json>] [--out <file.pdf>] [--project <folder>]',
+    usage: 'grid sheet [<plan.json>] --layout client|check [--sheet <sheet.json>] [--out <file.pdf>] [--lang en|es] [--project <folder>]',
     summary: 'Writes the plan as an A3 PDF for people: client (with the words of sheet.json) or check (ids and findings).',
     options: SHEET_OPTIONS,
   },
@@ -298,9 +300,14 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
     const country = textOf(parsed, '--country')
+    // MSG-11: the language asked for, else the plan's own, with its messages loaded.
+    const language = await languageFor(askedLanguage(textOf(parsed, '--lang')), loaded.plan)
+    const speech = language === 'en' ? {} : { language }
     // MSG-10: a number is the note's in the whole plan's report, whatever --floor shows.
-    const done: MarkDone | null = ask === null ? null : markNote(project, planFile, loaded, checkPlan(loaded, { country }), ask, ask.mark === 'seen' ? '--seen' : '--unseen')
-    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country }), loaded, readSeen(project, planFile))
+    const marking = (whole: ReturnType<typeof checkPlan>, asked: MarkAsk): MarkDone =>
+      inLanguage(whole.language, whole.decimal, () => markNote(project, planFile, loaded, whole, asked, asked.mark === 'seen' ? '--seen' : '--unseen'))
+    const done: MarkDone | null = ask === null ? null : marking(checkPlan(loaded, { country, ...speech }), ask)
+    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country, ...speech }), loaded, readSeen(project, planFile))
     if (json) io.stdout(checkJson(result, done ?? undefined))
     else {
       const text = checkText(result, planFloors(loaded.plan).length, { full: parsed.values.has('--full') })
@@ -311,10 +318,11 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   }
 
   if (name === 'describe') {
-    const request = { length: textOf(parsed, '--length'), for: textOf(parsed, '--for'), as: textOf(parsed, '--as') }
-    const { length, audience, as } = checkDescribeRequest(request)
+    const request = { length: textOf(parsed, '--length'), for: textOf(parsed, '--for'), as: textOf(parsed, '--as'), lang: textOf(parsed, '--lang') }
+    const { length, audience, as, language: asked } = checkDescribeRequest(request)
     const loaded = loadPlan(openProject(projectOption, io.cwd), planFile)
-    io.stdout(as === 'rooms' ? describeRooms(loaded) : describePlan(loaded, length, audience))
+    const language = await languageFor(asked, loaded.plan)
+    io.stdout(as === 'rooms' ? describeRooms(loaded, { language }) : describePlan(loaded, length, audience, { language }))
     return EXIT_OK
   }
 
@@ -332,6 +340,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       hide: textOf(parsed, '--hide'),
       colour: textOf(parsed, '--colour'),
       key: parsed.values.has('--key'),
+      lang: textOf(parsed, '--lang'),
     }
     const { scale, look } = checkDrawRequest(request)
     if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {
@@ -384,12 +393,12 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   }
 
   if (name === 'sheet') {
-    const request = { layout: textOf(parsed, '--layout'), sheet: textOf(parsed, '--sheet'), out: textOf(parsed, '--out') }
+    const request = { layout: textOf(parsed, '--layout'), sheet: textOf(parsed, '--sheet'), out: textOf(parsed, '--out'), lang: textOf(parsed, '--lang') }
     const layout = checkSheetRequest(request)
     const project = openProject(projectOption, io.cwd)
     const words = layout === 'client' ? readSheetWords(project, planFile, loadPlan(project, planFile), request.sheet) : null
     if (request.out === undefined) {
-      const done = await sheetIntoProject(project, planFile, layout, words)
+      const done = await sheetIntoProject(project, planFile, layout, words, sheetLanguage(request))
       warnLeftOut(io, done.loaded)
       if (done.note) io.stderr(`${done.note}\n`)
       io.stdout(`Wrote ${project.shown(done.written)}\n`)
@@ -397,7 +406,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     }
     // Drawing a large plan takes seconds: a file that can't be written is refused first.
     checkWritable(project, request.out)
-    const made = await makeSheet(project, planFile, layout, words)
+    const made = await makeSheet(project, planFile, layout, words, sheetLanguage(request))
     warnLeftOut(io, made.loaded)
     if (made.note) io.stderr(`${made.note}\n`)
     io.stdout(`Wrote ${project.shown(write(project, request.out, made.pdf))}\n`)

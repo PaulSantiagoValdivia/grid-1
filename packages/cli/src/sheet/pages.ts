@@ -8,15 +8,16 @@
 import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geometry'
 import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
-import { findingReadFor, GENERAL_GUIDANCE_LABEL, readForSentence } from '@ongrid/rules'
+import { DEFAULT_LANGUAGE, joined, name, num, say, sayValue, labelOfUse, type Language, type MessageKey, type Said, type Values } from '@ongrid/floorplan/messages'
+import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { findingReadFor, readForSentence } from '@ongrid/rules'
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 import { pictureView, undecidedDoorsOf, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
-import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND } from '../command/check'
+import { checkOnFloor, checkPlan, floorIssues } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
-import { quoted } from '../fs/projectFiles'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
 import { openingSchedule, roomSchedule } from '../quantities/schedule'
 import { surveyPlan } from '../quantities/survey'
@@ -34,7 +35,7 @@ export const SHEET_LOOK = 'technical' as const
 const POINT_MM = 25.4 / 72
 
 /** On a floor page whose plan has doors drawn as undecided: the key to their mark. */
-export const UNDECIDED_NOTE = 'A door drawn with a dashed line and "?" has no stated swing yet.'
+export const UNDECIDED_NOTE = say('en', 'sheet.undecided')
 
 /** The smallest a room name is printed, in points: below it a name on A3 can't be read. */
 export const MIN_LABEL_PT = 5
@@ -64,7 +65,7 @@ const SHAPE = (() => {
  * 1:N, for a box `PLAN_BOX.width` points wide), so its lines have their width in millimetres on
  * the printed sheet.
  */
-export function planPictureOptions(picture: Extract<SheetPicture, { kind: 'plan' }>): { options: PictureOptions; grow: number } {
+export function planPictureOptions(picture: Extract<SheetPicture, { kind: 'plan' }>, language: Language = DEFAULT_LANGUAGE): { options: PictureOptions; grow: number } {
   const shown = fitTo(picture.frame, PLAN_BOX.width / PLAN_BOX.height)
   const steps = Math.max(1, Math.ceil(shown.width / picture.metresPerPixel / SHAPE.width))
   const width = steps * SHAPE.width
@@ -84,6 +85,8 @@ export function planPictureOptions(picture: Extract<SheetPicture, { kind: 'plan'
       look: SHEET_LOOK,
       paperScale: (shown.width * 1000) / (PLAN_BOX.width * POINT_MM),
       ...(picture.ids ? { labels: { ids: true } } : {}),
+      // MSG-11: the drawing's words in the sheet's language; English leaves the plan's own.
+      ...(language === DEFAULT_LANGUAGE ? {} : { language }),
     },
     grow,
   }
@@ -118,23 +121,57 @@ export interface SheetPage {
   readonly notes: readonly string[]
   readonly footer: { readonly label: string; readonly page: number; readonly pages: number; readonly date: string }
 }
-export interface Sheet { readonly layout: SheetLayout; readonly name: string; readonly pages: readonly SheetPage[] }
-export interface SheetOptions { readonly name: string; readonly date: Date }
+/** MSG-11: `language` is the one the sheet's own words, and its drawings', are written in. */
+export interface Sheet { readonly layout: SheetLayout; readonly name: string; readonly pages: readonly SheetPage[]; readonly language?: Language }
+export interface SheetOptions {
+  readonly name: string
+  readonly date: Date
+  /** MSG-11: the language of the sheet's own words, with its decimal mark. English when left out. */
+  readonly language?: Language
+}
+
+/**
+ * MSG-11: the sheet's words in one language. `say` a key; `n` a figure as Grid rounds it, with
+ * the language's decimal mark. Names from the plan go in as they are: the sheet prints them
+ * unquoted, as the person wrote them.
+ */
+interface Words {
+  readonly language: Language
+  readonly say: (key: MessageKey, values?: Values) => string
+  readonly n: (figure: string) => string
+  /** A sentence Grid made elsewhere: its English as given, else said from its key and values. */
+  readonly said: (message: string, said: Said | undefined) => string
+  /** A room use's own word in the language; a word that is not a use, as written. */
+  readonly use: (use: string) => string
+}
+
+function wordsIn(language: Language): Words {
+  const english = language === DEFAULT_LANGUAGE
+  return {
+    language,
+    say: (key, values) => say(language, key, values),
+    n: (figure) => sayValue(language, num(figure)),
+    said: (message, said) => (english || said === undefined ? message : sayValue(language, said)),
+    use: (use) => (english || !(ROOM_USES as readonly string[]).includes(use) ? use : labelOfUse(language, use as RoomUse)),
+  }
+}
+
+const ENGLISH = wordsIn(DEFAULT_LANGUAGE)
 
 type Body = Omit<SheetPage, 'footer'>
 
 /** What a client sheet always says it does not show. Grid's own words. */
-export const CLIENT_LIMITS = 'Drawn from the plan alone. Furniture, stairs, structure, services and landscape are not shown.'
+export const CLIENT_LIMITS = say('en', 'sheet.limits')
 /** The same, for a plan that states its stairs (LVL-3): they are drawn. */
-export const CLIENT_LIMITS_WITH_STAIRS = 'Drawn from the plan alone. Furniture, structure, services and landscape are not shown.'
+export const CLIENT_LIMITS_WITH_STAIRS = say('en', 'sheet.limits.stairs')
 /** When some floor with rooms is joined to no other by a stair (LVL-3). */
-export const STAIR_LIMIT = 'No stair joins some of the floors to the others, so the way between them is not checked.'
+export const STAIR_LIMIT = say('en', 'sheet.stairLimit')
 /** On a client floor page that leaves out a part Grid cannot draw (the check sheet lists it). */
-export const LEFT_OUT_LIMIT = 'Some parts of the plan on this floor could not be drawn, and are not shown.'
+export const LEFT_OUT_LIMIT = say('en', 'sheet.leftOutLimit')
 
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
-function dateText(date: Date): string {
-  return `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()]} ${date.getUTCFullYear()}`
+function dateText(date: Date, w: Words): string {
+  const months = w.say('sheet.months').split(' ')
+  return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`
 }
 
 /**
@@ -170,63 +207,66 @@ function floorPicture(loaded: LoadedPlan, frames: ReadonlyMap<string, Bounds>, f
   return { kind: 'plan', floor, frame, metresPerPixel: Math.max(drawn.view.width / drawn.width, readable), ids }
 }
 
-function undecidedNote(loaded: LoadedPlan, floor: string): string[] {
-  return undecidedDoorsOf(loaded.plan, floor).length > 0 ? [UNDECIDED_NOTE] : []
+function undecidedNote(loaded: LoadedPlan, floor: string, w: Words): string[] {
+  return undecidedDoorsOf(loaded.plan, floor).length > 0 ? [w.say('sheet.undecided')] : []
 }
 
-function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {
+function areaTable(floor: FloorAreas, withUse: boolean, w: Words): SheetTable {
   // SHT-11: a stair room over the stair below is counted there, so it is in no part of the sum.
   const counted = floor.rooms.filter((r) => r.countedWith === undefined)
   const shown = sumText(counted.map((r) => r.net ?? 0), floor.net, 1)
   const parts = new Map(counted.map((room, i) => [room, shown.parts[i]!] as const))
   return {
-    heading: 'Rooms / m²',
+    heading: w.say('sheet.rooms'),
     // MSG-2: a room that could not be measured has no area, never 0.
-    rows: floor.rooms.map((room) => ({
-      name: room.name,
-      detail: withUse ? room.use : null,
-      area: room.net === null ? 'not measured' : parts.get(room) ?? 'counted below',
-    })),
-    total: { name: 'Net area', detail: null, area: shown.total },
+    rows: floor.rooms.map((room) => {
+      const part = parts.get(room)
+      return {
+        name: room.name,
+        detail: withUse && room.use !== null ? w.use(room.use) : null,
+        area: room.net === null ? w.say('sheet.notMeasured') : part === undefined ? w.say('sheet.countedBelow') : w.n(part),
+      }
+    }),
+    total: { name: w.say('sheet.netArea'), detail: null, area: w.n(shown.total) },
     note: AREA_RULES.net,
   }
 }
 
 /** Floor to floor, from the levels the 3D view stacks; one floor gives its clear height. */
-function heightFigure(loaded: LoadedPlan): SheetFigure | null {
+function heightFigure(loaded: LoadedPlan, w: Words): SheetFigure | null {
   const storeys = [...floorElevations(loaded.plan).floors.values()]
   const levels = [...new Set(storeys.map((s) => s.floorLevel))].sort((a, b) => a - b)
   if (levels.length < 2) {
     const only = storeys[0]
-    return only ? { value: `${metresText(only.clearHeight)} m`, label: 'clear height' } : null
+    return only ? { value: `${w.n(metresText(only.clearHeight))} m`, label: w.say('sheet.figure.clearHeight') } : null
   }
   const steps = levels.slice(1).map((level, i) => level - levels[i]!)
   const low = Math.min(...steps)
   const high = Math.max(...steps)
-  const value = metresText(low) === metresText(high) ? `${metresText(low)} m` : `${metresText(low)}–${metresText(high)} m`
-  return { value, label: 'floor to floor' }
+  const value = metresText(low) === metresText(high) ? `${w.n(metresText(low))} m` : `${w.n(metresText(low))}–${w.n(metresText(high))} m`
+  return { value, label: w.say('sheet.figure.floorToFloor') }
 }
 
 /** An area figure, or "not known" when the plan gives none (the reason goes in the notes). */
-function areaFigure(value: number | null, label: string): SheetFigure {
-  return { value: value === null ? 'not known' : `${areaText(value, 1)} m²`, label }
+function areaFigure(value: number | null, label: string, w: Words): SheetFigure {
+  return { value: value === null ? w.say('sheet.notKnown') : `${w.n(areaText(value, 1))} m²`, label }
 }
 
-function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string): Body[] {
+function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string, w: Words): Body[] {
   const areas = planAreas(surveyPlan(loaded.plan))
   const floors = planFloors(loaded.plan)
   const frames = floorFrames(loaded)
   const facts = planFacts(loaded.plan)
   const bedrooms = loaded.plan.rooms.filter((room) => room.use === 'bedroom').length
   const title = words?.name ?? name
-  const figures: SheetFigure[] = [areaFigure(areas.grossInternal, 'gross internal area')]
-  figures.push({ value: String(floors.length), label: floors.length === 1 ? 'floor' : 'floors' })
-  figures.push({ value: String(bedrooms), label: bedrooms === 1 ? 'bedroom' : 'bedrooms' })
-  const height = heightFigure(loaded)
+  const figures: SheetFigure[] = [areaFigure(areas.grossInternal, w.say('sheet.figure.grossInternal'), w)]
+  figures.push({ value: String(floors.length), label: w.say(floors.length === 1 ? 'sheet.figure.floors.one' : 'sheet.figure.floors.many') })
+  figures.push({ value: String(bedrooms), label: w.say(bedrooms === 1 ? 'sheet.figure.bedrooms.one' : 'sheet.figure.bedrooms.many') })
+  const height = heightFigure(loaded, w)
   if (height) figures.push(height)
 
-  const shown = facts.connections.stairs.length > 0 ? CLIENT_LIMITS_WITH_STAIRS : CLIENT_LIMITS
-  const limits = facts.connections.unjoined.length > 0 ? [shown, STAIR_LIMIT] : [shown]
+  const shown = w.say(facts.connections.stairs.length > 0 ? 'sheet.limits.stairs' : 'sheet.limits')
+  const limits = facts.connections.unjoined.length > 0 ? [shown, w.say('sheet.stairLimit')] : [shown]
   const cover: Body = {
     kind: 'cover', floor: null, topLine: title, title, subtitle: words?.headline ?? null,
     paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' },
@@ -237,60 +277,73 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const pages = floors.map((floor, i): Body => {
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
     const leftOut = floorIssues(loaded, floor.id).some((issue) => loaded.broken.has(issue.id))
-    const floorTitle = named(floor.name) > 1 ? `${floor.name}, floor ${i + 1}` : floor.name
+    const floorTitle = named(floor.name) > 1 ? w.say('sheet.floorNumbered', { floor: floor.name, number: i + 1 }) : floor.name
     return {
       kind: 'floor', floor: floor.id, topLine: `${title} / ${floorTitle}`, title: floorTitle, subtitle: null,
       paragraphs: words?.floors?.[floor.id] ?? [], figures: [],
-      table: floorAreas ? areaTable(floorAreas, false) : null,
+      table: floorAreas ? areaTable(floorAreas, false, w) : null,
       picture: floorPicture(loaded, frames, floor.id, false),
-      notes: [...limits, ...(leftOut ? [LEFT_OUT_LIMIT] : []), ...undecidedNote(loaded, floor.id)],
+      notes: [...limits, ...(leftOut ? [w.say('sheet.leftOutLimit')] : []), ...undecidedNote(loaded, floor.id, w)],
     }
   })
   return [cover, ...pages]
 }
 
-function issueLine(issue: { severity: string; entity: string; id: string; message: string }): string {
-  return `${issue.severity === 'error' ? 'Left out' : 'Worth a look'}, ${issue.entity} ${quoted(issue.id)}: ${issue.message}`
+const ENTITY_KEYS: Readonly<Record<string, MessageKey>> = {
+  wall: 'sheet.entity.wall', room: 'sheet.entity.room', opening: 'sheet.entity.opening', plan: 'sheet.entity.plan',
+  floor: 'sheet.entity.floor', item: 'sheet.entity.item', stair: 'sheet.entity.stair',
+}
+
+function issueLine(issue: { severity: string; entity: string; id: string; message: string; said?: Said }, w: Words = ENGLISH): string {
+  const entityKey = ENTITY_KEYS[issue.entity]
+  return w.say(issue.severity === 'error' ? 'sheet.issue.error' : 'sheet.issue.warning', {
+    entity: entityKey === undefined ? issue.entity : w.say(entityKey),
+    id: name(issue.id),
+    message: w.said(issue.message, issue.said),
+  })
 }
 
 /** A finding, by the ids of the rooms and openings it names, as a drawing problem is by its own. */
-export function findingLine(finding: Parameters<typeof findingReadFor>[0] & { rooms: readonly string[]; openings: readonly string[]; message: string }): string {
-  const ids = (one: string, list: readonly string[]): string[] =>
-    list.length === 0 ? [] : [`${list.length === 1 ? one : `${one}s`} ${list.map(quoted).join(', ')}`]
+export function findingLine(finding: Parameters<typeof findingReadFor>[0] & { rooms: readonly string[]; openings: readonly string[]; message: string; said?: Said }, w: Words = ENGLISH): string {
+  const ids = (kind: 'room' | 'opening', list: readonly string[]): string[] =>
+    list.length === 0 ? [] : [w.say(`sheet.finding.${kind}.${list.length === 1 ? 'one' : 'many'}`, { ids: joined(list.map(name), 'join.comma') })]
   const named = [...ids('room', finding.rooms), ...ids('opening', finding.openings)]
   // COD-2: a finding that used a figure says which kind of building the figure was read for.
   const kinds = findingReadFor(finding)
-  const message = kinds.length === 0 ? finding.message : `${finding.message}. ${readForSentence(kinds)}`
-  return named.length === 0 ? `Finding: ${message}` : `Finding, ${named.join(', ')}: ${message}`
+  const own = w.said(finding.message, finding.said)
+  const message = kinds.length === 0 ? own : `${own}. ${readForSentence(kinds)}`
+  return named.length === 0 ? w.say('sheet.finding', { message }) : w.say('sheet.finding.named', { named: named.join(w.say('join.comma')), message })
 }
 
-function noticeLine(notice: { message: string }): string {
-  return `Not checked: ${notice.message}`
+function noticeLine(notice: { message: string; said?: Said }, w: Words = ENGLISH): string {
+  return w.say('sheet.notChecked', { message: w.said(notice.message, notice.said) })
 }
 
-function checkBodies(loaded: LoadedPlan, name: string): Body[] {
+function checkBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
   const areas = planAreas(surveyPlan(loaded.plan))
   const floors = planFloors(loaded.plan)
   const frames = floorFrames(loaded)
   const whole = checkPlan(loaded, {})
   const figures: SheetFigure[] = [
-    { value: String(whole.report.findings.length), label: 'findings' },
-    { value: String(whole.issues.length), label: 'problems in the drawing' },
-    areaFigure(areas.net, 'net area'),
-    areaFigure(areas.grossInternal, 'gross internal area'),
-    areaFigure(areas.grossExternal, 'gross external area'),
+    { value: String(whole.report.findings.length), label: w.say('sheet.figure.findings') },
+    { value: String(whole.issues.length), label: w.say('sheet.figure.problems') },
+    areaFigure(areas.net, w.say('sheet.figure.net'), w),
+    areaFigure(areas.grossInternal, w.say('sheet.figure.grossInternal'), w),
+    areaFigure(areas.grossExternal, w.say('sheet.figure.grossExternal'), w),
   ]
+  const checkSet = w.say('sheet.checkSet')
+  const why = w.say('sheet.nothingFound')
   const summary: Body = {
-    kind: 'summary', floor: null, topLine: `${name} / Check set`, title: 'Check set', subtitle: null,
-    paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person').trim()],
+    kind: 'summary', floor: null, topLine: `${name} / ${checkSet}`, title: checkSet, subtitle: null,
+    paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person', { language: w.language, options: {} }).trim()],
     figures, table: null, picture: null,
     notes: [
-      ...(whole.report.findings.length === 0 ? [`Findings: none. ${NOTHING_FOUND}`] : []),
+      ...(whole.report.findings.length === 0 ? [w.say('sheet.findings.none', { why })] : []),
       AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
       ...(areas.grossWhy === null ? [] : [areas.grossWhy]),
       // What belongs to no floor is said once, here; each floor page says the rest.
-      ...whole.issues.filter((i) => i.entity === 'plan').map(issueLine),
-      ...whole.report.notChecked.filter((n) => n.floor === '').map(noticeLine),
+      ...whole.issues.filter((i) => i.entity === 'plan').map((i) => issueLine(i, w)),
+      ...whole.report.notChecked.filter((n) => n.floor === '').map((n) => noticeLine(n, w)),
       ...whole.report.limits,
     ],
   }
@@ -298,23 +351,23 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     const result = checkOnFloor(loaded, whole, floor.id)
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
     const shown = [
-      ...(result.report.findings.length === 0 ? [`Findings on this floor: none. ${NOTHING_FOUND}`] : []),
-      ...result.report.findings.map(findingLine),
-      ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine),
-      ...result.report.notChecked.filter((n) => n.floor !== '').map(noticeLine),
-      ...undecidedNote(loaded, floor.id),
+      ...(result.report.findings.length === 0 ? [w.say('sheet.floorFindings.none', { why })] : []),
+      ...result.report.findings.map((f) => findingLine(f, w)),
+      ...result.issues.filter((i) => i.entity !== 'plan').map((i) => issueLine(i, w)),
+      ...result.report.notChecked.filter((n) => n.floor !== '').map((n) => noticeLine(n, w)),
+      ...undecidedNote(loaded, floor.id, w),
     ]
     // The floor's id, as each room's label carries the room's.
     const floorTitle = `${floor.name} [${floor.id}]`
     return {
       kind: 'floor', floor: floor.id, topLine: `${name} / ${floorTitle}`, title: floorTitle, subtitle: null,
       paragraphs: [], figures: [],
-      table: floorAreas ? areaTable(floorAreas, true) : null,
+      table: floorAreas ? areaTable(floorAreas, true, w) : null,
       picture: floorPicture(loaded, frames, floor.id, true),
       notes: shown,
     }
   })
-  return [summary, ...pages, ...scheduleBodies(loaded, name)]
+  return [summary, ...pages, ...scheduleBodies(loaded, name, w)]
 }
 
 /**
@@ -322,51 +375,53 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
  * the same rows as `grid_schedule` (of=rooms, of=openings). The totals cover all floors, and each
  * floor's total names its floor.
  */
-function scheduleBodies(loaded: LoadedPlan, name: string): Body[] {
+function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
   const survey = surveyPlan(loaded.plan)
   const rooms = roomSchedule(survey)
   const openings = openingSchedule(survey)
   const several = rooms.floors.length > 1
   const roomRows: SheetRow[] = rooms.rows.map((r) => ({
     name: `${r.number}. ${r.name}`,
-    detail: [r.use ?? 'use not said', r.height === null ? 'height not known' : `${metresText(r.height)} m high`, ...(several ? [r.floorName] : [])].join(', '),
-    area: r.area === null ? 'not measured' : areaText(r.area, 1),
+    detail: [r.use === null ? w.say('sheet.useNotSaid') : w.use(r.use), r.height === null ? w.say('sheet.heightNotKnown') : w.say('sheet.high', { height: num(metresText(r.height)) }), ...(several ? [r.floorName] : [])].join(w.say('join.comma')),
+    area: r.area === null ? w.say('sheet.notMeasured') : w.n(areaText(r.area, 1)),
   }))
-  for (const t of rooms.floors) if (several) roomRows.push({ name: `Total, ${t.floorName}`, detail: `${t.rooms} rooms`, area: areaText(t.area, 1) })
+  for (const t of rooms.floors) if (several) roomRows.push({ name: w.say('sheet.total.floor', { floor: String(t.floorName) }), detail: w.say('sheet.roomCount', { count: t.rooms }), area: w.n(areaText(t.area, 1)) })
   const total = rooms.total
   const roomTable: SheetTable = {
-    heading: 'Room schedule / m²',
+    heading: w.say('sheet.roomSchedule.heading'),
     rows: roomRows,
-    total: { name: several ? 'Total, all floors' : 'Total', detail: `${total.rooms} rooms, ${Math.round(sqFt(total.area))} sq ft`, area: areaText(total.area, 1) },
+    total: { name: w.say(several ? 'sheet.total.all' : 'sheet.total'), detail: w.say('sheet.total.rooms', { count: total.rooms, sqft: Math.round(sqFt(total.area)) }), area: w.n(areaText(total.area, 1)) },
     note: rooms.rules[0]!,
   }
   const openingRows: SheetRow[] = openings.rows.map((r) => ({
-    name: `${r.number}. ${r.type} ${r.id}`,
-    detail: `${metresText(r.width)} × ${metresText(r.height)} m${r.type === 'window' ? `, sill ${metresText(r.sill)} m` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}`,
+    name: `${r.number}. ${w.say(`sheet.type.${r.type}`)} ${r.id}`,
+    detail: `${w.n(metresText(r.width))} × ${w.n(metresText(r.height))} m${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: num(metresText(r.sill)) })}` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}`,
     area: '1',
   }))
   const c = openings.counts
   const openingTable: SheetTable = {
-    heading: 'Door and window schedule / count',
+    heading: w.say('sheet.openingSchedule.heading'),
     rows: openingRows,
-    total: { name: 'In all', detail: `${c.door} doors, ${c.window} windows, ${c.opening} doorless openings, each once`, area: String(c.door + c.window + c.opening) },
+    total: { name: w.say('sheet.inAll'), detail: w.say('sheet.openingCounts', { doors: c.door, windows: c.window, openings: c.opening }), area: String(c.door + c.window + c.opening) },
     note: openings.rule,
   }
   const body = (title: string, table: SheetTable): Body => ({
     kind: 'summary', floor: null, topLine: `${name} / ${title}`, title, subtitle: null,
     paragraphs: [], figures: [], table, picture: null, notes: [],
   })
-  return [body('Room schedule', roomTable), body('Door and window schedule', openingTable)]
+  return [body(w.say('sheet.roomSchedule'), roomTable), body(w.say('sheet.openingSchedule'), openingTable)]
 }
 
 export function sheetPages(loaded: LoadedPlan, words: SheetWords | null, layout: SheetLayout, options: SheetOptions): Sheet {
   // A check sheet takes nothing from sheet.json, not even its name.
   const name = layout === 'client' ? words?.name ?? options.name : options.name
-  const bodies = layout === 'client' ? clientBodies(loaded, words, options.name) : checkBodies(loaded, options.name)
-  const date = dateText(options.date)
+  const w = wordsIn(options.language ?? DEFAULT_LANGUAGE)
+  const bodies = layout === 'client' ? clientBodies(loaded, words, options.name, w) : checkBodies(loaded, options.name, w)
+  const date = dateText(options.date, w)
+  const label = w.say('label')
   const pages = bodies.map((body, i): SheetPage => ({
     ...body,
-    footer: { label: GENERAL_GUIDANCE_LABEL, page: i + 1, pages: bodies.length, date },
+    footer: { label, page: i + 1, pages: bodies.length, date },
   }))
-  return { layout, name, pages }
+  return { layout, name, pages, language: w.language }
 }

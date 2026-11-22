@@ -15,8 +15,9 @@
 import { indexPlan, planFloors, planForFloor, statedGround, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
-import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
-import { buildingKindsText, type BuildingKind } from './figures'
+import { english, said, withSentence, type Said } from '@ongrid/floorplan/messages'
+import type { BuildingType } from '@ongrid/floorplan/types/floorplan'
+import { buildingKindsSaid, buildingTypeSaid, type BuildingKind } from './figures'
 import type { CheckCoverage, CoverageGroup, CoverageSkip, Rule, SkipReason } from './types'
 
 /** What one check looked at and skipped on one floor, by id. */
@@ -59,35 +60,14 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
  * CNT-5: `not_for_building` names the kinds the check's figures were read for (`readFor`) and the
  * kind the plan says the building is.
  */
+export function skipWhySaid(reason: SkipReason, ruleId: string, building?: { readonly readFor: readonly BuildingKind[]; readonly is: BuildingType | undefined }): Said {
+  if (reason === 'not_for_building') return said('check.skip.not_for_building', { kinds: buildingKindsSaid(building?.readFor ?? []), building: buildingTypeSaid(building?.is) })
+  if (reason === 'use_not_covered') return said(ruleId === 'escape-opening' ? 'check.skip.use_not_covered.escape' : ruleId === 'stairs-line-up' ? 'check.skip.use_not_covered.stairs' : 'check.skip.use_not_covered')
+  return said(`check.skip.${reason}`)
+}
+
 export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonly readFor: readonly BuildingKind[]; readonly is: BuildingType | undefined }): string {
-  switch (reason) {
-    case 'not_for_building':
-      return `the figures were read for ${buildingKindsText(building?.readFor ?? [])}, and the plan says this is ${building?.is === undefined ? 'another kind of building' : BUILDING_TYPE_TEXT[building.is]}`
-    case 'no_figures_for_place':
-      return 'no figures for the place the plan is for: the ones here are from US model codes'
-    case 'no_rooms':
-      return 'no rooms on the floor'
-    case 'cannot_be_drawn':
-      return 'could not be drawn'
-    case 'no_stairs':
-      return 'on a floor Grid cannot follow down to the ground floor'
-    case 'way_out_not_drawn':
-      return "the floor's only door out leads to a space that is not drawn"
-    case 'alone_off_ground':
-      return 'the only room on a floor off the ground, reached by a stair the plan does not draw'
-    case 'above_escape_storeys':
-      return 'above the third storey, where the figures here stop'
-    case 'no_ground_level':
-      return 'the plan states no ground level for the site'
-    case 'no_use':
-      return 'no use stated'
-    case 'use_not_covered':
-      return ruleId === 'escape-opening'
-        ? 'only bedrooms are checked'
-        : ruleId === 'stairs-line-up'
-          ? 'only rooms used as a stair or a lift are lined up'
-          : 'the figure is for bedrooms, living rooms and dining rooms only'
-  }
+  return english(skipWhySaid(reason, ruleId, building))
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -104,7 +84,11 @@ export function coverageOf(rule: Rule, scopes: readonly (readonly [string, Floor
   for (const [floor, scope] of scopes) {
     for (const reason of SKIP_ORDER) {
       const ids = scope.skipped[reason] ?? []
-      if (ids.length > 0) skipped.push({ floor, ids: sorted(ids), reason, why: skipWhy(reason, rule.id, { readFor, is: scope.building }) })
+      if (ids.length > 0) {
+        const why = skipWhySaid(reason, rule.id, { readFor, is: scope.building })
+        // MSG-11: the reason by key and values too, not enumerable, to say it in any language.
+        skipped.push(withSentence({ floor, ids: sorted(ids), reason, why: english(why) }, why))
+      }
     }
   }
   const count = (groups: readonly CoverageGroup[]): number => groups.reduce((sum, group) => sum + group.ids.length, 0)

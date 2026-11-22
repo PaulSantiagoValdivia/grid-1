@@ -189,3 +189,11 @@ export function sayParts(language: Language, key: MessageKey, values: Values = {
   words(text.slice(at))
   return parts
 }
+
+/**
+ * A record with its sentence by key and values (`said`), set so it is not enumerable: the record
+ * reads, compares and prints as it did before it had one. Read it as `record.said`.
+ */
+export function withSentence<T extends object>(record: T, sentence: Said): T & { readonly said: Said } {
+  return Object.defineProperty(record, 'said', { value: sentence, enumerable: false }) as T & { readonly said: Said }
+}

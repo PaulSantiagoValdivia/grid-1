@@ -1,5 +1,6 @@
 export * from './types'
-export { CODES, isLineCode } from './catalogue'
-export type { CodeEntry, LineCode, Subject } from './catalogue'
+export { CODES, isLineCode, wordLine } from './catalogue'
+export type { CodeEntry, LineCode, LineWords, Subject } from './catalogue'
 export { inspectPlan } from './inspect'
+export type { InspectOptions } from './inspect'
 export { approvalWords } from './approvalWords'

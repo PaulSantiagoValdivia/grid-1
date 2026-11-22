@@ -13,24 +13,23 @@ import { floorHasGeometry, floorOf, isFloorSlice, planFloors } from './floors'
 import type { Issue } from './validate'
 import { limit, tolerance } from './tolerances'
 import { metresText } from './rounding'
-import { quoted } from '../types/planText'
+import type { Said, Value } from '../messages/say'
+import { english, joined, name, num, said } from '../messages/say'
+import { withSaid } from './issueWords'
 import { closestId, idEdits } from '../types/nearest'
 import { WALL_DEFAULTS } from '../types/floorplan'
 
-const issue = (entity: Issue['entity'], id: string, code: string, message: string, severity: Issue['severity'] = 'warning'): Issue => ({
-  entity,
-  id,
-  code,
-  message,
-  severity
-})
+const issue = (entity: Issue['entity'], id: string, code: string, sentence: Said, severity: Issue['severity'] = 'warning'): Issue =>
+  withSaid({ entity, id, code, message: english(sentence), severity }, sentence)
 
-const m = (value: number): string => `${metresText(value)} m`
+/** A length in metres, as a figure: the sentence writes the unit. */
+const m = (value: number): Value => num(metresText(value))
 
 /** `a`, `a and b`, `a, b and c`. */
-function and(items: readonly string[]): string {
-  return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`
-}
+const and = (items: readonly Value[]): Value => joined(items, 'join.comma', 'join.and')
+
+/** `.one` for one, `.many` for more. */
+const oneOrMany = (n: number): 'one' | 'many' => (n === 1 ? 'one' : 'many')
 
 // ── Floor ids ─────────────────────────────────────────────────────────────────────────────────
 
@@ -95,11 +94,11 @@ export function unknownFloorIssues(plan: FloorPlan, declared: ReadonlySet<string
   for (const { entity, part } of parts) {
     const floor = floorOf(part)
     const code = `${entity}/unknown-floor`
-    const noun = entity === 'wall' ? 'Wall' : 'Room'
+    const noun = said(`issue.part.Named.${entity}`, { id: name(part.id) })
     if (declared.size > 0) {
       if (declared.has(floor)) continue
       if (part.floor === undefined) {
-        issues.push(issue(entity, part.id, code, `${noun} ${quoted(part.id)} sits on floor ${quoted(floor)}, which the plan does not list`))
+        issues.push(issue(entity, part.id, code, said('issue.unknown-floor.notListed', { part: noun, floor: name(floor) })))
         continue
       }
       const nearest = closestId(floor, listed)
@@ -108,9 +107,9 @@ export function unknownFloorIssues(plan: FloorPlan, declared: ReadonlySet<string
           entity,
           part.id,
           code,
-          `${noun} ${quoted(part.id)} sits on floor ${quoted(floor)}, which the plan does not list` +
-            (nearest === null ? '.' : `; the nearest floor it lists is ${quoted(nearest)}.`) +
-            ` Name a listed floor, or add ${quoted(floor)} to the floors.`,
+          nearest === null
+            ? said('issue.unknown-floor.stated', { part: noun, floor: name(floor) })
+            : said('issue.unknown-floor.statedNearest', { part: noun, floor: name(floor), nearest: name(nearest) }),
           'error'
         )
       )
@@ -123,10 +122,7 @@ export function unknownFloorIssues(plan: FloorPlan, declared: ReadonlySet<string
         entity,
         part.id,
         code,
-        `${noun} ${quoted(part.id)} sits on floor ${quoted(floor)}, which the plan does not know: it lists no ` +
-          `floors, and ${quoted(floor)} is spelt like floor ${quoted(like)}, which more of the plan uses. A floor ` +
-          `spelt differently is a floor of its own, at level 0. If it is ${quoted(like)}, correct the floor; ` +
-          `if it is a floor of its own, list the plan's floors.`,
+        said('issue.unknown-floor.spelt', { part: noun, floor: name(floor), like: name(like) }),
         'error'
       )
     )
@@ -136,7 +132,6 @@ export function unknownFloorIssues(plan: FloorPlan, declared: ReadonlySet<string
 
 // ── Levels and heights ────────────────────────────────────────────────────────────────────────
 
-const levelText = (level: number): string => String(level)
 
 const statesElevation = (floor: Floor): boolean => floor.elevation !== undefined && Number.isFinite(floor.elevation)
 
@@ -171,28 +166,19 @@ function levelGaps(floors: readonly Floor[], issues: Issue[]): void {
     if (unstated.length === 0) continue
     const nearestLevel = upward ? Math.min(...unstated.map((f) => f.level)) : Math.max(...unstated.map((f) => f.level))
     const named = unstated.filter((floor) => floor.level === nearestLevel)
-    const ids = named.map((floor) => quoted(floor.id))
-    const which = named.length === 1 ? `floor ${ids[0]} is` : `floors ${and(ids)} are`
+    const ids = named.map((floor) => name(floor.id))
     const alone = upward && !floors.some((floor) => floor.level >= 0 && floor.level < from)
-    const where = alone
-      ? `${named.length === 1 ? 'it stands' : 'they stand'} at 0.00 m, on the ground`
-      : `${named.length === 1 ? 'it is' : 'they are'} stacked as if no level were missing`
+    const many = oneOrMany(named.length)
+    const where = said(alone ? `issue.plan/level-gap.alone.${many}` : `issue.plan/level-gap.stacked.${many}`)
     const count = to - from + 1
     const missing =
       count === 1
-        ? `level ${levelText(from)}`
+        ? said('issue.plan/level-gap.level', { level: from })
         : count <= 3
-          ? `levels ${and(Array.from({ length: count }, (_, i) => levelText(from + i)))}`
-          : `levels ${levelText(from)} to ${levelText(to)}`
+          ? said('issue.plan/level-gap.levels', { levels: and(Array.from({ length: count }, (_, i) => from + i)) })
+          : said('issue.plan/level-gap.run', { from, to })
     issues.push(
-      issue(
-        'plan',
-        'plan',
-        'plan/level-gap',
-        `The plan has no floor at ${missing}, but ${which} at level ` +
-          `${levelText(nearestLevel)}. A level only orders the floors, so ${where}. If a floor is missing, add it; ` +
-          `if not, state where ${named.length === 1 ? 'it stands' : 'each stands'} with an elevation in metres.`
-      )
+      issue('plan', 'plan', 'plan/level-gap', said(`issue.plan/level-gap.${many}`, { missing, floors: and(ids), level: nearestLevel, where }))
     )
   }
 }
@@ -249,18 +235,10 @@ function sameLevel(plan: FloorPlan, floors: readonly Floor[], issues: Issue[]): 
       }
     }
     if (clashing.size === 0) continue
-    const ids = group.filter((floor) => clashing.has(floor)).map((floor) => quoted(floor.id))
+    const ids = group.filter((floor) => clashing.has(floor)).map((floor) => name(floor.id))
     const first = group.find((floor) => clashing.has(floor))!
-    const stated = statesElevation(first) ? ` and the same elevation, ${m(first.elevation!)}` : ''
-    issues.push(
-      issue(
-        'plan',
-        first.id,
-        'plan/same-level',
-        `Floors ${and(ids)} are all at level ${levelText(first.level)}${stated}, so they stand at the same height, one ` +
-          `over the other. Give each floor its own level, or state where each stands with an elevation in metres.`
-      )
-    )
+    const stated = statesElevation(first) ? said('issue.plan/same-level.elevation', { elevation: m(first.elevation!) }) : ''
+    issues.push(issue('plan', first.id, 'plan/same-level', said('issue.plan/same-level', { floors: and(ids), level: first.level, stated })))
   }
 }
 
@@ -276,16 +254,11 @@ function emptyTop(plan: FloorPlan, floors: readonly Floor[], issues: Issue[]): v
   const atTop = floors.filter((floor) => floor.level === top)
   if (atTop.some((floor) => floorHasGeometry(plan, floor.id))) return
   for (const floor of atTop) {
-    const height = floor.height !== undefined && Number.isFinite(floor.height) ? `${m(floor.height)} high, as it states` : `${m(WALL_DEFAULTS.solid.height)} high, the default`
-    issues.push(
-      issue(
-        'floor',
-        floor.id,
-        'floor/empty-top',
-        `Floor ${quoted(floor.id)} is the top floor and has nothing drawn on it, but it still counts as a storey ` +
-          `${height}, and the roof stands on it. Remove the floor if nothing is on it yet.`
-      )
-    )
+    const height =
+      floor.height !== undefined && Number.isFinite(floor.height)
+        ? said('issue.floor/empty-top.stated', { height: m(floor.height) })
+        : said('issue.floor/empty-top.default', { height: m(WALL_DEFAULTS.solid.height) })
+    issues.push(issue('floor', floor.id, 'floor/empty-top', said('issue.floor/empty-top', { floor: name(floor.id), height })))
   }
 }
 
@@ -308,9 +281,7 @@ function wallsAboveStorey(plan: FloorPlan, floors: readonly Floor[], broken: Rea
         'wall',
         wall.id,
         'wall/above-storey',
-        `Wall ${quoted(wall.id)} is ${m(wall.height)} high, ${m(wall.height - storey)} higher than floor ` +
-          `${quoted(floorOf(wall))}, which states it is ${m(storey)} high. The storey and the roof stay where the ` +
-          `floor puts them; if the wall really is taller, raise the floor's height.`
+        said('issue.wall/above-storey', { wall: name(wall.id), height: m(wall.height), over: m(wall.height - storey), floor: name(floorOf(wall)), storey: m(storey) })
       )
     )
   }
@@ -323,17 +294,14 @@ function floorHeightQuestions(floors: readonly Floor[], building: 'any' | 'home'
     const highest = limit('wallHighest', building)
     const lowest = limit('wallLowest', building)
     if (floor.height <= highest && floor.height >= lowest) continue
-    const bound = floor.height > highest ? `higher than ${m(highest)}` : `lower than ${m(lowest)}`
-    issues.push(
-      issue(
-        'floor',
-        floor.id,
-        'floor/size-question',
-        `Floor ${quoted(floor.id)} states it is ${m(floor.height)} high: is that meant? Grid asks about a storey ` +
-          `${bound}${building === 'home' ? ' in a home' : ''}, and its walls with no height of their own take it. ` +
-          `The limit is Grid's own, for catching a slipped digit or unit, and no rule.`
-      )
-    )
+    const bound = floor.height > highest ? said('issue.floor/size-question.higher', { limit: m(highest) }) : said('issue.floor/size-question.lower', { limit: m(lowest) })
+    const question = said('issue.floor/size-question', {
+      floor: name(floor.id),
+      height: m(floor.height),
+      bound,
+      home: building === 'home' ? said('issue.part.inAHome') : ''
+    })
+    issues.push(issue('floor', floor.id, 'floor/size-question', said('issue.part.both', { first: question, then: said('issue.part.notARule') })))
   }
 }
 
@@ -350,21 +318,12 @@ function floorOffsetQuestions(plan: FloorPlan, floors: readonly Floor[], broken:
     const storey = floors.find((floor) => floor.id === floorOf(room))?.height
     const toCeiling = storey !== undefined && offset >= storey
     if (Math.abs(offset) <= largest && !toCeiling) continue
-    const way = offset > 0 ? 'above' : 'below'
+    const way = said(offset > 0 ? 'issue.room/offset-question.above' : 'issue.room/offset-question.below')
     const why = toCeiling
-      ? `which reaches the ${m(storey)} its floor ${quoted(floorOf(room))} states it is high`
-      : `and Grid asks about a room set more than ${m(largest)} off its storey`
-    issues.push(
-      issue(
-        'room',
-        room.id,
-        'room/offset-question',
-        `Room ${quoted(room.id)} stands ${m(Math.abs(offset))} ${way} its storey's floor: is that meant? It is ` +
-          `drawn and counted at that level, ${why}. A level that far off may be a floor of its own: ` +
-          `give it its own entry in the floor list with its elevation. The limit is Grid's own, for ` +
-          `catching a slipped digit or unit, and no rule.`
-      )
-    )
+      ? said('issue.room/offset-question.ceiling', { storey: m(storey), floor: name(floorOf(room)) })
+      : said('issue.room/offset-question.far', { limit: m(largest) })
+    const question = said('issue.room/offset-question', { room: name(room.id), offset: m(Math.abs(offset)), way, why })
+    issues.push(issue('room', room.id, 'room/offset-question', said('issue.part.both', { first: question, then: said('issue.part.notARule') })))
   }
 }
 

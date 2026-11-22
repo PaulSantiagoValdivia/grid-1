@@ -9,53 +9,56 @@
  * Building codes ask for more than this; `LIMITS` says what these checks leave out.
  */
 
+import { english, said, type MessageKey } from '../../messages/say'
 import type { Rule, RuleSource } from './types'
 
 export const PLAN_SANITY: RuleSource = {
   kind: 'plan-sanity',
-  label: 'Plan sanity check, not a code citation'
+  label: english(said('check.source.planSanity'))
 }
 
 export const RULES: readonly Rule[] = [
   {
     id: 'floor-has-exit',
-    title: 'The ground floor has at least one way out of the building',
+    title: english(said('check.title.floor-has-exit')),
     source: PLAN_SANITY
   },
   {
     id: 'room-has-door',
-    title: 'Every room has a door or an opening to another space',
+    title: english(said('check.title.room-has-door')),
     source: PLAN_SANITY
   },
   {
     id: 'room-reaches-exit',
-    title: 'Every room has a route to a way out of the building',
+    title: english(said('check.title.room-reaches-exit')),
     source: PLAN_SANITY
   },
   {
     id: 'door-leads-somewhere',
-    title: 'Every door leads to a room or to the outside',
+    title: english(said('check.title.door-leads-somewhere')),
     source: PLAN_SANITY
   },
   {
     id: 'stairs-line-up',
-    title: 'A stair or a lift shaft drawn as a room on each floor lies over itself from floor to floor',
+    title: english(said('check.title.stairs-line-up')),
     source: PLAN_SANITY
   },
   {
     id: 'openings-above-ground',
-    title: 'No door or window in an outside wall lies below the ground level the site states',
+    title: english(said('check.title.openings-above-ground')),
     source: PLAN_SANITY
   }
 ]
 
+// The plan file says nothing about structure, so no check can tell a load-bearing wall from a partition (the last limit).
+export const PLAN_LIMIT_KEYS = [
+  'check.limit.plan.0',
+  'check.limit.plan.1',
+  'check.limit.plan.2',
+  'check.limit.plan.3',
+  'check.limit.plan.4',
+  'check.limit.plan.5'
+] as const satisfies readonly MessageKey[]
+
 /** What the plan checks never look at. Shown with every report. */
-export const LIMITS: readonly string[] = [
-  'A route counts whatever it goes through: a bedroom, a bathroom, a kitchen or a garage',
-  'The length of a route and the number of ways out are not checked',
-  'A route may go up or down a stair, but how steep or wide the stair is is not checked, and a lift is never taken as a way out',
-  'Which way a door opens, and how wide doors and corridors are, are not checked, beyond whether a person fits through a door at all',
-  'Whether a door or window lies below the ground is checked only when the plan states the site\'s ground level, and against that one level, not a slope',
-  // The plan file says nothing about structure, so no check can tell a load-bearing wall from a partition.
-  'Which walls carry load is not known: the plan does not record it, so nothing here looks at structure'
-]
+export const LIMITS: readonly string[] = PLAN_LIMIT_KEYS.map((key) => english(said(key)))

@@ -19,13 +19,14 @@ import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, readingAfter, type Direction, type From, type Mirror, type Patch } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
+import { askedLanguage } from '../command/language'
 import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
 import type { SheetLayout } from '../sheet/pages'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { ROOM_NAMES_TRAVEL } from './protocol'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan, type Survey } from '../quantities/survey'
-import { openingBetween } from './readTools'
+import { LANGUAGE_ARG, openingBetween } from './readTools'
 import {
   asRefusal,
   FLOOR_ARG,
@@ -197,6 +198,7 @@ const sheetTool: GridTool = {
         return value
       },
     },
+    language: LANGUAGE_ARG,
   },
   outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: objectSchema({ kind: STRING, title: NULLABLE_STRING, floor: STRING }, ['kind', 'title']) }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
   async run(args, context) {
@@ -210,7 +212,7 @@ const sheetTool: GridTool = {
         : given !== undefined
           ? parseSheetWords(given, planFloors(loaded.plan).map((floor) => floor.id))
           : readSheetWords(project, file, loaded, undefined)
-      const done = await sheetIntoProject(project, file, layout, words)
+      const done = await sheetIntoProject(project, file, layout, words, askedLanguage(args['language'], 'language'))
       const written = project.relative(done.written)
       const lines = [`Wrote ${quoted(written)} in the project folder: ${done.pages.length} pages.`]
       if (done.note) lines.push(done.note)

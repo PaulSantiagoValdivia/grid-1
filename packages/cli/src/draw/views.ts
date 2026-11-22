@@ -6,6 +6,7 @@
  * the frame are chosen here. "North" is the top of the drawing, +y: a plan holds no north.
  */
 import type { Display } from '@ongrid/floorplan/types/units'
+import type { Language } from '@ongrid/floorplan/messages'
 import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
 import { LOOKS as PICTURE_LOOKS, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
@@ -36,7 +37,7 @@ export interface PlanView {
 
 export async function planView(
   plan: FloorPlan,
-  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; display?: Display; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow },
+  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; display?: Display; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow; language?: Language },
 ): Promise<PlanView> {
   // VEW-2's check view: every room, door and window carries its id. VEW-6: a frame crops.
   // MSG-8: the result record's lines, marked on the drawing and listed under it.
@@ -46,6 +47,8 @@ export async function planView(
     ...(options.faults ? { faults: options.faults } : {}),
     // SHT-7: what the picture shows.
     ...(options.show ? { show: options.show } : {}),
+    // MSG-11: Grid's own words on the drawing in this language (the display's own when left out).
+    ...(options.language ? { language: options.language } : {}),
   }
   const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
@@ -57,12 +60,16 @@ const SHEET_WIDTH = 2400
 const GAP = 40
 const TITLE = 48
 
-/** Several plans side by side, every one at the same scale, each under its title. */
-export async function sheetView(plans: readonly { plan: FloorPlan; title: string; floor?: string }[], look: LookName): Promise<PlanView> {
+/**
+ * Several plans side by side, every one at the same scale, each under its title. MSG-11: the
+ * plans' own words and the label in `language`; each plan's own display language when left out.
+ */
+export async function sheetView(plans: readonly { plan: FloorPlan; title: string; floor?: string }[], look: LookName, language?: Language): Promise<PlanView> {
+  const tongue = language === undefined ? {} : { language }
   const { createCanvas, loadImage, GlobalFonts } = await loadCanvas()
   // The pictures' text is written the way Skia draws it right (`forSkia`, VEW-7).
   const installed = (family: string): boolean => GlobalFonts.has(family)
-  const first = plans.map((p) => planPicture(p.plan, { floor: p.floor ?? null, look: lookOf(look) }))
+  const first = plans.map((p) => planPicture(p.plan, { floor: p.floor ?? null, look: lookOf(look), ...tongue }))
   const metres = first.reduce((sum, picture) => sum + picture.view.width, 0)
   const pxPerMetre = (SHEET_WIDTH - GAP * (plans.length - 1)) / metres
   let x = 0
@@ -72,7 +79,7 @@ export async function sheetView(plans: readonly { plan: FloorPlan; title: string
     const view = first[i]!.view
     const width = Math.max(1, Math.round(view.width * pxPerMetre))
     const height = Math.max(1, Math.round(view.height * pxPerMetre))
-    const picture = planPicture(p.plan, { floor: p.floor ?? null, look: lookOf(look), width, height })
+    const picture = planPicture(p.plan, { floor: p.floor ?? null, look: lookOf(look), width, height, ...tongue })
     // One label for the whole sheet, stamped below, not one per plan (MSG-3).
     const svg = pictureToSvg({ ...picture, nodes: forSkia(picture.nodes, installed) }, 1, { label: false })
     parts.push(svg.replace(/^<svg /, `<svg x="${x}" y="${TITLE}" `))
@@ -91,7 +98,7 @@ export async function sheetView(plans: readonly { plan: FloorPlan; title: string
   context.fillStyle = paper
   context.fillRect(0, 0, width, height)
   context.drawImage(image, 0, 0, width, height)
-  stampLabel(context, width, { paper, ink: PICTURE_LOOKS[lookOf(look)].colors.labelSoft })
+  stampLabel(context, width, { paper, ink: PICTURE_LOOKS[lookOf(look)].colors.labelSoft }, language)
   return { png: await canvas.encode('png'), width, height, pxPerMetre }
 }
 
@@ -103,12 +110,12 @@ const STILL_W = 1200
 const STILL_H = 800
 const DEG = Math.PI / 180
 
-async function png(image: { data: Uint8ClampedArray; width: number; height: number }): Promise<Uint8Array> {
+async function png(image: { data: Uint8ClampedArray; width: number; height: number }, language?: Language): Promise<Uint8Array> {
   const { createCanvas, ImageData } = await loadCanvas()
   const canvas = createCanvas(image.width, image.height)
   const context = canvas.getContext('2d')
   context.putImageData(new ImageData(image.data, image.width, image.height), 0, 0)
-  stampLabel(context, image.width)
+  stampLabel(context, image.width, undefined, language)
   return canvas.encode('png')
 }
 
@@ -119,7 +126,7 @@ export interface CameraView {
 }
 
 /** The 3D model seen from one side of the drawing, or from above, as a whole or one floor cut away. */
-export async function modelView(plan: FloorPlan, options: { from: Side; floor?: string }): Promise<CameraView> {
+export async function modelView(plan: FloorPlan, options: { from: Side; floor?: string; language?: Language }): Promise<CameraView> {
   const still = stillScene(plan, { focus: options.floor ?? null, colors: LIGHT_COLORS_3D, width: STILL_W, height: STILL_H })
   try {
     const [tx, ty, tz] = still.frame.target
@@ -140,7 +147,7 @@ export async function modelView(plan: FloorPlan, options: { from: Side; floor?: 
       ground: { ...GROUND_GRID, center: [tx, tz], cellColor: LIGHT_COLORS_3D.grid, sectionColor: LIGHT_COLORS_3D.gridSection },
     })
     const p = camera.position
-    return { png: await png(image), camera: { at: [p.x, -p.z, p.y], heading: (bearing + 180) % 360, tilt: -tilt, fov: camera.fov } }
+    return { png: await png(image, options.language), camera: { at: [p.x, -p.z, p.y], heading: (bearing + 180) % 360, tilt: -tilt, fov: camera.fov } }
   } finally {
     still.close()
   }
@@ -157,7 +164,7 @@ function headingTo(from: Vec2, to: Vec2): number {
  */
 export async function eyeView(
   plan: FloorPlan,
-  options: { floor: string; polygon: readonly Vec2[]; height: number; toward: Vec2 | number; stand?: Vec2 },
+  options: { floor: string; polygon: readonly Vec2[]; height: number; toward: Vec2 | number; stand?: Vec2; language?: Language },
 ): Promise<CameraView> {
   const still = stillScene(plan, { focus: options.floor, colors: LIGHT_COLORS_3D, width: STILL_W, height: STILL_H })
   try {
@@ -176,7 +183,7 @@ export async function eyeView(
     camera.updateProjectionMatrix()
     camera.updateMatrixWorld()
     const image = rasterise(still.scene, camera, { width: STILL_W, height: STILL_H, supersample: 2 })
-    return { png: await png(image), camera: { at: [back.x, back.y, eye], heading, tilt: 0, fov: camera.fov } }
+    return { png: await png(image, options.language), camera: { at: [back.x, back.y, eye], heading, tilt: 0, fov: camera.fov } }
   } finally {
     still.close()
   }

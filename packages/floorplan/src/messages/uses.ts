@@ -74,7 +74,7 @@ export const USE_LABELS: Readonly<Record<Language, Readonly<Record<RoomUse, stri
 }
 
 /** A use's label in a language: `dormitorio` for `bedroom` in Spanish. */
-export function useLabel(language: Language, use: RoomUse): string {
+export function labelOfUse(language: Language, use: RoomUse): string {
   return USE_LABELS[language][use]
 }
 
@@ -82,7 +82,7 @@ export function useLabel(language: Language, use: RoomUse): string {
 export function foldLabel(word: string): string {
   return word
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '')
 }
@@ -92,6 +92,6 @@ const BY_LABEL: ReadonlyMap<string, RoomUse> = new Map(
 )
 
 /** The use a label names in any language Grid writes, whatever its capitals and accents: `Dormitorio` is `bedroom`. Null for any other word. */
-export function useOfLabel(word: string): RoomUse | null {
+export function roomUseOfLabel(word: string): RoomUse | null {
   return BY_LABEL.get(foldLabel(word)) ?? null
 }

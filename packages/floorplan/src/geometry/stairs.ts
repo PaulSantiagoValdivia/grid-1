@@ -32,7 +32,8 @@ import type { Vec2 } from './vec2'
 import { add, area, distance, fromTuple, normalize, perp, scale, sub } from './vec2'
 import { limit, tolerance } from './tolerances'
 import { metresText } from './rounding'
-import { quoted } from '../types/planText'
+import type { Said } from '../messages/say'
+import { english, joined, name as idName, num, said } from '../messages/say'
 
 /** A line across the flight, from its left edge to its right, looking up the stair. */
 export type RiserLine = readonly [Vec2, Vec2]
@@ -114,8 +115,19 @@ export interface StairProblem {
   readonly code: StairProblemCode
   /** An error leaves the stair out; a warning keeps it and says what is worth a look. */
   readonly severity: 'error' | 'warning'
+  /** The sentence in English, made from `said`. */
   readonly message: string
+  /** MSG-11: the sentence by its key and values (`issue.<code>`). */
+  readonly said: Said
 }
+
+const problem = (stair: string, code: StairProblemCode, severity: StairProblem['severity'], sentence: Said): StairProblem => ({
+  stair,
+  code,
+  severity,
+  message: english(sentence),
+  said: sentence
+})
 
 export interface PlanStairs {
   /** Every stair that could be laid out, in the plan's order. */
@@ -247,8 +259,9 @@ function layOut(
   ends: { readonly from: StairEnd; readonly to: StairEnd },
   problems: StairProblem[]
 ): StairLayout | null {
-  const fail = (code: StairProblemCode, message: string): null => {
-    problems.push({ stair: stair.id, code, severity: 'error', message })
+  const id = idName(stair.id)
+  const fail = (code: StairProblemCode, sentence: Said): null => {
+    problems.push(problem(stair.id, code, 'error', sentence))
     return null
   }
   const upward = ends.to.level >= ends.from.level
@@ -256,11 +269,7 @@ function layOut(
   const upper = upward ? ends.to : ends.from
   const rise = upper.level - lower.level
   if (rise < tolerance('sameFloorLevel')) {
-    return fail(
-      'stair/no-rise',
-      `Stair ${quoted(stair.id)} joins floors that stand at one height, so it climbs nothing; ` +
-        'state the floors\' elevations, or join two floors at different heights.'
-    )
+    return fail('stair/no-rise', said('issue.stair/no-rise', { stair: id }))
   }
 
   // From the lower end up, so every figure below reads upwards.
@@ -275,12 +284,8 @@ function layOut(
     const length = distance(a, b)
     const cut = (i > 0 ? half : 0) + (i < line.length - 2 ? half : 0)
     if (length - cut < tolerance('lineInside')) {
-      return fail(
-        'stair/run-too-short',
-        `Stair ${quoted(stair.id)} has a stretch of its walking line ${metresText(length)} m long, too short for a flight ` +
-          (cut > 0 ? `once its landings, as wide as the stair (${metresText(stair.width)} m), are taken off` : 'with a tread on it') +
-          '; lengthen the stretch, or leave out the turn.'
-      )
+      const why = cut > 0 ? said('issue.stair/run-too-short.landings', { width: num(metresText(stair.width)) }) : said('issue.stair/run-too-short.tread')
+      return fail('stair/run-too-short', said('issue.stair/run-too-short', { stair: id, length: num(metresText(length)), why }))
     }
     const dir = normalize(sub(b, a))
     flightsAt.push({ from: i > 0 ? add(a, scale(dir, half)) : a, to: i < line.length - 2 ? sub(b, scale(dir, half)) : b, dir })
@@ -290,10 +295,15 @@ function layOut(
   const risersStated = stair.risers !== undefined
   const risers = stair.risers ?? workedRisers(rise, lengths)
   if (risers < fewest) {
+    const flights = flightsAt.length
     return fail(
       'stair/too-few-risers',
-      `Stair ${quoted(stair.id)} states ${risers} riser${risers === 1 ? '' : 's'}, but its ${flightsAt.length} flight${flightsAt.length === 1 ? '' : 's'} ` +
-        `need at least ${fewest}: one tread on each, and one riser up from each; state more, or leave the number out.`
+      said('issue.stair/too-few-risers', {
+        stair: id,
+        risers: said(risers === 1 ? 'issue.stair/too-few-risers.risers.one' : 'issue.stair/too-few-risers.risers.many', { n: risers }),
+        flights: said(flights === 1 ? 'issue.stair/too-few-risers.flights.one' : 'issue.stair/too-few-risers.flights.many', { n: flights }),
+        fewest
+      })
     )
   }
   const treads = shareTreads(lengths, risers - flightsAt.length)
@@ -379,42 +389,24 @@ export function planStairs(plan: FloorPlan, broken: BrokenOnFloor): PlanStairs {
     if (sliceFloor !== null && stair.from !== sliceFloor && stair.to !== sliceFloor) continue
     const name = stair.name ?? stair.id
     if (seen.has(stair.id)) {
-      problems.push({
-        stair: stair.id,
-        code: 'stair/duplicate-id',
-        severity: 'error',
-        message: `Two stairs share the id ${quoted(stair.id)}; the second is left out. Give each stair an id of its own.`
-      })
+      problems.push(problem(stair.id, 'stair/duplicate-id', 'error', said('issue.stair/duplicate-id', { stair: idName(stair.id) })))
       continue
     }
     seen.add(stair.id)
     const unknown = [stair.from, stair.to].filter((id) => !floors.has(id))
     if (unknown.length > 0) {
-      problems.push({
-        stair: stair.id,
-        code: 'stair/unknown-floor',
-        severity: 'error',
-        message: `Stair ${quoted(stair.id)} joins ${[...new Set(unknown)].map(quoted).join(' and ')}, which the plan does not know as a floor, so it is left out.`
-      })
+      const floorsNamed = joined([...new Set(unknown)].map((floor) => idName(floor)), 'join.and')
+      problems.push(problem(stair.id, 'stair/unknown-floor', 'error', said('issue.stair/unknown-floor', { stair: idName(stair.id), floors: floorsNamed })))
       continue
     }
     if (stair.from === stair.to) {
-      problems.push({
-        stair: stair.id,
-        code: 'stair/same-floor',
-        severity: 'error',
-        message: `Stair ${quoted(stair.id)} starts and ends on ${quoted(floors.get(stair.from)!.name || stair.from)}; a stair joins two floors. A step inside a floor is a room's floorOffset.`
-      })
+      const floor = idName(floors.get(stair.from)!.name || stair.from)
+      problems.push(problem(stair.id, 'stair/same-floor', 'error', said('issue.stair/same-floor', { stair: idName(stair.id), floor })))
       continue
     }
     const points = stair.run.map(fromTuple)
     if (!points.every((p) => known(p.x) && known(p.y)) || !known(stair.width)) {
-      problems.push({
-        stair: stair.id,
-        code: 'stair/run-too-short',
-        severity: 'error',
-        message: `Stair ${quoted(stair.id)} has a point or a width past the size Grid accepts, so it is left out.`
-      })
+      problems.push(problem(stair.id, 'stair/run-too-short', 'error', said('issue.stair/run-too-short.tooLarge', { stair: idName(stair.id) })))
       continue
     }
     // An end's room: the one the walking line's end stands in, stepping away from the stair.
@@ -434,15 +426,8 @@ export function planStairs(plan: FloorPlan, broken: BrokenOnFloor): PlanStairs {
     for (const side of [layout.lower, layout.upper]) {
       if (side.room !== null) continue
       const floorName = floors.get(side.floor)!.name || side.floor
-      problems.push({
-        stair: stair.id,
-        code: 'stair/end-in-no-room',
-        severity: 'warning',
-        message:
-          `Stair ${quoted(stair.id)} ${side === layout.lower ? 'starts' : 'arrives'} on ${quoted(floorName)} in no room, so it joins nothing there ` +
-          'and the way-out check does not go up or down it. Draw the room it ' +
-          `${side === layout.lower ? 'starts from' : 'arrives in'}, or move the end of its walking line into one.`
-      })
+      const key = side === layout.lower ? 'issue.stair/end-in-no-room' : 'issue.stair/end-in-no-room.arrives'
+      problems.push(problem(stair.id, 'stair/end-in-no-room', 'warning', said(key, { stair: idName(stair.id), floor: idName(floorName) })))
     }
   }
   return { stairs: laidOut, problems }

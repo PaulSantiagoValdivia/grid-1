@@ -9,8 +9,11 @@
  */
 import { floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { PATH_MAX } from '../fs/projectFiles'
-import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { GENERAL_GUIDANCE_LABEL, figureUsedSaid, inspectPlan, type ResultLine } from '@ongrid/rules'
+import { checkPlan, checkTitle, countsText, coverageSummary, kindWord, limitsText, nothingCheckedText, partsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { askedLanguage, languageFor } from '../command/language'
+import { inLanguage, t, tv } from '../command/words'
+import { LANGUAGES } from '@ongrid/floorplan/messages'
 import { readSeen, type SeenState } from '../seen/marks'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
@@ -156,6 +159,14 @@ function comparisonLines(c: Comparison): string[] {
   }
   if (c.openingsChanged.length > 0) lines.push(`  Openings changed: ${some(c.openingsChanged, (o) => `${o.type} ${q(o.id)}: ${o.changes.join(', ')}`)}.`)
   return lines
+}
+
+/** MSG-11: the language Grid writes its words in; the codes and values are the same in every language. */
+export const LANGUAGE_ARG: ArgSpec = {
+  type: 'string',
+  enum: [...LANGUAGES],
+  description: "The language Grid writes its own words in: the label, each line's message, found, needed and fix, and the report. The plan's own display.language when left out, else en. Codes and values are the same in every language; room names stay as written.",
+  examples: ['es']
 }
 
 const compareTool: GridTool = {
@@ -960,6 +971,7 @@ const viewTool: GridTool = {
     hide: { type: 'string', maxLength: 120, description: 'For plan: parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings, above (the dashed outline of the floor above). Everything is drawn when left out.', examples: ['areas,swings', 'sketch'] },
     colour: { type: 'string', enum: ['use'], description: 'For plan: use fills each room by its use and lists the uses in the key. One fill for every room when left out.', examples: ['use'] },
     key: { type: 'boolean', description: 'For plan: true to add a key under the drawing, even where the plan asks for none.', examples: [true] },
+    language: LANGUAGE_ARG,
   },
   outputSchema: objectSchema({ kind: STRING, floor: { type: ['string', 'null'] }, camera: { type: ['object', 'null'] }, pxPerMetre: NULLABLE_NUMBER, sills: { type: 'array' }, ids: listSchema(STRING), boxes: { type: 'array' } }),
   async run(args, context) {
@@ -971,6 +983,9 @@ const viewTool: GridTool = {
     const stray = ['floor', 'from', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`kind=${kind} takes ${allowed[kind]!.join(', ')}, not ${stray.join(', ')}.`)
     const plan = survey.plan
+    // MSG-11: the drawing's own words in the language asked for, else the plan's own.
+    const language = await languageFor(askedLanguage(args['language'], 'language'), loaded.plan)
+    const inTongue = language === 'en' ? {} : { language }
     if (kind === 'plan') {
       const asked = (args['look'] as LookName | undefined) ?? 'working'
       const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`
@@ -979,8 +994,8 @@ const viewTool: GridTool = {
       const shown = floor ?? survey.facts.floors[0]?.id ?? 'ground'
       const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
       // What went wrong, numbered as grid_check numbers it, marked on the drawing (MSG-8).
-      const faults = inspectPlan(plan).lines
-      const display = args['units'] === undefined && args['decimal'] === undefined ? undefined : displayFor(args['units'], args['decimal'], plan)
+      const faults = inspectPlan(plan, { ...inTongue, ...(plan.display?.decimal ? { decimal: plan.display.decimal } : {}) }).lines
+      const display = args['units'] === undefined && args['decimal'] === undefined ? undefined : displayFor(args['units'], args['decimal'], plan, language)
       // SHT-7: what the picture shows, read as grid draw reads --hide, --colour and --key.
       let shownParts
       try {
@@ -990,7 +1005,7 @@ const viewTool: GridTool = {
         throw error
       }
       const dimensions = args['dimensions'] !== false && shownParts.showDimensions
-      const view = await planView(plan, { floor: shown, look: asked, dimensions, ids: withIds, faults, show: shownParts.show, ...(display ? { display } : {}), ...(crop ? { frame: cropFrame(crop) } : {}) })
+      const view = await planView(plan, { floor: shown, look: asked, dimensions, ids: withIds, faults, show: shownParts.show, ...inTongue, ...(display ? { display } : {}), ...(crop ? { frame: cropFrame(crop) } : {}) })
       const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. ${plan.north === undefined ? 'North is the top of the drawing; the plan holds no real north.' : `The north arrow in its top-right corner points to the north the plan states, ${northWords(wrapDegrees(plan.north))}; the sides named in other answers are the drawing's, north at the top.`} Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
       const undecided = view.undecidedDoors ?? []
@@ -1010,7 +1025,7 @@ const viewTool: GridTool = {
     if (kind === '3d') {
       const from = (args['from'] as Side | undefined) ?? 'south-east'
       const { modelView } = await import('../draw/views')
-      const view = await modelView(plan, { from, ...(floor ? { floor } : {}) })
+      const view = await modelView(plan, { from, ...(floor ? { floor } : {}), ...inTongue })
       // LVL-4: the whole of a building of several floors is drawn closed, with its roofs; one floor
       // alone, or a floor cut away, is drawn open from above, as the 3D view draws it.
       const roofed = floor === undefined && planFloors(plan).length > 1
@@ -1044,7 +1059,7 @@ const viewTool: GridTool = {
       looking = `${facts.type} ${q(target)}`
     }
     const { eyeView } = await import('../draw/views')
-    const view = await eyeView(plan, { floor: room.facts.floor, polygon: room.polygon, height, toward })
+    const view = await eyeView(plan, { floor: room.facts.floor, polygon: room.polygon, height, toward, ...inTongue })
     const sills = windows.map((w) => ({ id: w.id, sill: w.sill, top: w.sill + w.height, seenOver: w.sill < height }))
     const sillText = sills.length === 0
       ? 'The room has no windows.'
@@ -1074,20 +1089,23 @@ const describeTool: GridTool = {
     length: { type: 'string', enum: DESCRIBE_LENGTHS, description: 'line, rooms or walls. rooms when left out.', examples: ['rooms', 'line'] },
     for: { type: 'string', enum: DESCRIBE_AUDIENCES, description: 'person (names only, no ids) or agent (terse, with ids). agent when left out.', examples: ['agent', 'person'] },
     as: { type: 'string', enum: ['rooms'], description: 'rooms: the plan as rooms text, to change and write again with grid_write_rooms. Takes no length or for.', examples: ['rooms'] },
+    language: LANGUAGE_ARG,
   },
   outputSchema: objectSchema({ length: { type: ['string', 'null'] }, for: { type: ['string', 'null'] }, as: { type: ['string', 'null'] }, text: STRING }),
-  run(args, context) {
+  async run(args, context) {
     if (args['as'] !== undefined && (args['length'] !== undefined || args['for'] !== undefined)) {
       throw new ToolRefusal('as=rooms reads the plan back as rooms text, which has no length or for: leave them out.')
     }
     const { loaded } = readPlan(context, args['plan'])
+    // MSG-11: the description in the language asked for, else the plan's own.
+    const language = await languageFor(askedLanguage(args['language'], 'language'), loaded.plan)
     if (args['as'] === 'rooms') {
-      const text = describeRooms(loaded)
+      const text = describeRooms(loaded, { language })
       return { text, data: { length: null, for: null, as: 'rooms', text } }
     }
     const length = (args['length'] as (typeof DESCRIBE_LENGTHS)[number] | undefined) ?? 'rooms'
     const audience = (args['for'] as (typeof DESCRIBE_AUDIENCES)[number] | undefined) ?? 'agent'
-    const text = describePlan(loaded, length, audience)
+    const text = describePlan(loaded, length, audience, { language })
     return { text, data: { length, for: audience, as: null, text } }
   },
 }
@@ -1097,6 +1115,7 @@ const describeTool: GridTool = {
 
 /** The country argument of grid_check and grid_mark_seen: the numbers follow the record it makes. */
 export const COUNTRY_ARG: ArgSpec = { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code. Figures are applied only where they hold.', examples: ['US', 'GB'] }
+
 
 /** MSG-10: a line's seen state as data: the mark, and with `back` the parts that changed since. */
 function seenData(state: SeenState | undefined): Record<string, unknown> | undefined {
@@ -1110,7 +1129,8 @@ function seenData(state: SeenState | undefined): Record<string, unknown> | undef
 /** One line of grid_check's list. COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for. */
 function toolLine(result: CheckResult, index: number): string {
   const line = result.result.lines[index]!
-  return `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''} Fix: ${line.fix} [${line.code}]`
+  const needed = usedFigures(line) ? t('tool.check.needed', { needed: line.needed }) : ''
+  return `  ${result.numbers[index]}. ${t('tool.check.line', { kind: kindWord(line.kind), thing: thingText(line), message: line.message, needed, fix: line.fix, code: line.code })}`
 }
 
 const checkTool: GridTool = {
@@ -1127,9 +1147,12 @@ const checkTool: GridTool = {
     floor: { ...FLOOR_ARG, description: 'Only what was found on this floor. Every floor when left out.' },
     country: COUNTRY_ARG,
     full: { type: 'boolean', description: 'true for the whole report: the checks run, every figure with its basis and status, each check\'s coverage and what these checks never look at. Short when left out.', examples: [true] },
+    language: LANGUAGE_ARG,
   },
   outputSchema: objectSchema({
     label: STRING,
+    // MSG-11: the language the words are in: en or es.
+    language: STRING,
     // MSG-1: the one list and the one count, as docs/result-contract.md sets them out.
     count: { type: 'number' },
     lines: listSchema(objectSchema({
@@ -1146,6 +1169,8 @@ const checkTool: GridTool = {
       figures: { type: 'array' },
       // MSG-7: the change that would clear the line, as data, and the same as a call to retry.
       fixes: { type: 'array' },
+      // MSG-11: the figures, names and places the line's words were made with, as data.
+      values: { type: 'object' },
       calls: listSchema(objectSchema({ tool: STRING, arguments: { type: 'object' } }, ['tool', 'arguments'])),
       // MSG-10: the person's seen mark, when the line has one: seen, or back (new again, its parts changed since).
       seen: objectSchema({ state: STRING, reason: STRING, by: STRING, at: STRING, changed: listSchema(objectSchema({ kind: STRING, id: STRING })) }, ['state', 'reason', 'by', 'at']),
@@ -1172,13 +1197,15 @@ const checkTool: GridTool = {
     // COD-4: what these checks never look at, whatever the plan (ceiling height, which walls carry load).
     limits: listSchema(STRING),
   }),
-  run(args, context) {
+  async run(args, context) {
     const { loaded, project, file } = readPlan(context, args['plan'])
     const floor = floorArg(loaded.plan, args['floor'])
     const full = args['full'] === true
     let result
     try {
-      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}) })
+      // MSG-11: the language asked for, else the plan's own, with its messages loaded.
+      const language = await languageFor(askedLanguage(args['language'], 'language'), loaded.plan)
+      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}), ...(language === 'en' ? {} : { language }) })
       result = withSeen(result, loaded, readSeen(project, file))
     } catch (error) {
       throw asRefusal(error)
@@ -1191,77 +1218,83 @@ const checkTool: GridTool = {
     }))
     const notChecked = result.report.notChecked.map((n) => ({ floor: n.floor, message: n.message }))
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
-    const record = result.result
-    const states = result.seen?.states ?? []
-    const seen = seenCount(result)
-    const lines: string[] = [GENERAL_GUIDANCE_LABEL]
-    if (result.seen?.problem) lines.push(`The seen marks were not read: ${result.seen.problem}. Every note is listed as new.`)
-    const seenWords = seen > 0 ? `; ${seen} of them seen, under Seen` : ''
-    const checksRun = result.report.rules.length === 0 ? `Checks run: none. ${NOTHING_CHECKED}` : `Checks run: ${result.report.rules.length}.`
-    // NOTHING_FOUND: an empty list only means these checks found nothing.
-    lines.push(`To look at: ${record.count === 0 ? `nothing. ${NOTHING_FOUND}` : `${record.count} (${countsText(record)}${seenWords}).`} ${checksRun}`)
-    if (full) for (const rule of result.report.rules) lines.push(`  - ${rule.title} (${rule.source.label})`)
-    // A seen line is listed under Seen, never left out (MSG-10).
-    const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
-    for (const index of open.slice(0, 12)) {
-      lines.push(toolLine(result, index))
-      const state = states[index]
-      if (state?.state === 'back') lines.push(`      ${seenBeforeText(state)}.`)
-    }
-    if (open.length > 12) lines.push(`  … ${open.length - 12} more in the data, each with what was found and needed.`)
-    // WRT-6 (lab WR-15): what was assumed, for the person to confirm, named even past the first 12.
-    // A seen one is under Seen with the others (MSG-10).
-    const toConfirm = open.map((index) => record.lines[index]!).filter((line) => line.kind === 'to-confirm')
-    if (toConfirm.length > 0) lines.push(`To confirm with the person (${toConfirm.length}), assumed and not given: ${toConfirm.slice(0, 8).map((line) => line.message).join('; ')}${toConfirm.length > 8 ? `; and ${toConfirm.length - 8} more in the data` : ''}.`)
-    if (seen > 0) {
-      lines.push(`Seen (${seen}): ${SEEN_HEADING_NOTE}.`)
-      record.lines.forEach((line, index) => {
+    return inLanguage(result.language, result.decimal, () => {
+      const record = result.result
+      const states = result.seen?.states ?? []
+      const seen = seenCount(result)
+      const lines: string[] = [result.label]
+      if (result.seen?.problem) lines.push(t('report.seenUnread', { problem: result.seen.problem }))
+      const seenWords = seen > 0 ? t('tool.check.ofThemSeen', { count: seen }) : ''
+      const checksRun = result.report.rules.length === 0 ? t('report.checksRun.none') : t('report.checksRun', { count: result.report.rules.length })
+      // NOTHING_FOUND: an empty list only means these checks found nothing.
+      lines.push(`${record.count === 0 ? t('report.toLook.none') : t('tool.check.toLook', { count: record.count, counts: countsText(record), seen: seenWords })} ${checksRun}`)
+      if (full) for (const rule of result.report.rules) lines.push(`  - ${ruleText(rule)}`)
+      // A seen line is listed under Seen, never left out (MSG-10).
+      const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
+      for (const index of open.slice(0, 12)) {
+        lines.push(toolLine(result, index))
         const state = states[index]
-        if (state?.state === 'seen') lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Seen ${seenByText(state.mark)}. [${line.code}]`)
-      })
-    }
-    // MSG-7: each line one call would clear carries that call, ready to send.
-    const withCalls = record.lines.map((line, index) => {
-      const withFix = withFixCalls(line, args['plan'])
-      const mark = seenData(states[index])
-      return mark === undefined ? withFix : { ...withFix, seen: mark }
-    })
-    const callable = withCalls.filter((line) => line.calls !== undefined).length
-    if (callable > 0) lines.push(`${callable === 1 ? 'One line carries' : `${callable} lines carry`} the call that would fix it, under calls in the data.`)
-    if (record.counts.finding === 0 && record.count > 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
-    if (full) {
-      // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
-      const rooms = result.rooms
-      lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
-      for (const check of record.coverage) {
-        const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
-        const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
-        lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}${readFor}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
+        if (state?.state === 'back') lines.push(`      ${seenBeforeText(state)}.`)
       }
-      // MSG-3: each figure as the figure used here, with its basis and status.
-      if (record.figures.length > 0) lines.push(`Figures used (${record.figures.length}):`, ...record.figures.map((figure) => `  ${figureUsedText(figure)}`))
-      // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
-      lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
-    } else {
-      // MSG-10: the counts, the gaps with their reasons, and where the rest is.
-      lines.push(...coverageSummary(result).filter((line) => line !== '').map((line) => line.replace(/^ {2}- /, '  ')), restText(result.report, 'full=true'))
-    }
-    return {
-      text: lines.join('\n'),
-      data: {
-        label: GENERAL_GUIDANCE_LABEL,
-        count: record.count,
-        lines: withCalls,
-        seenCount: seen,
-        marksFile: result.seen?.file ?? '',
-        marksProblem: result.seen?.problem ?? null,
-        findings,
-        notChecked,
-        drawing,
-        coverage: record.coverage,
-        limits: record.limits,
-      },
-    }
+      if (open.length > 12) lines.push(`  ${t('tool.check.more', { count: open.length - 12 })}`)
+      // WRT-6 (lab WR-15): what was assumed, for the person to confirm, named even past the first 12.
+      // A seen one is under Seen with the others (MSG-10).
+      const toConfirm = open.map((index) => record.lines[index]!).filter((line) => line.kind === 'to-confirm')
+      if (toConfirm.length > 0) {
+        const more = toConfirm.length > 8 ? t('tool.check.confirmMore', { count: toConfirm.length - 8 }) : ''
+        lines.push(t('tool.check.toConfirm', { count: toConfirm.length, list: toConfirm.slice(0, 8).map((line) => line.message).join('; '), more }))
+      }
+      if (seen > 0) {
+        lines.push(t('report.seenHeading', { count: seen }))
+        record.lines.forEach((line, index) => {
+          const state = states[index]
+          if (state?.state === 'seen') lines.push(`  ${result.numbers[index]}. ${t('tool.check.seenLine', { kind: kindWord(line.kind), thing: thingText(line), message: line.message, by: seenByText(state.mark), code: line.code })}`)
+        })
+      }
+      // MSG-7: each line one call would clear carries that call, ready to send.
+      const withCalls = record.lines.map((line, index) => {
+        const withFix = withFixCalls(line, args['plan'])
+        const mark = seenData(states[index])
+        return mark === undefined ? withFix : { ...withFix, seen: mark }
+      })
+      const callable = withCalls.filter((line) => line.calls !== undefined).length
+      if (callable > 0) lines.push(callable === 1 ? t('tool.check.calls.one') : t('tool.check.calls.many', { count: callable }))
+      if (record.counts.finding === 0 && record.count > 0) lines.push(t('tool.check.noFindings'))
+      if (full) {
+        // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
+        const rooms = result.rooms
+        lines.push(t('report.lookedAtByOne', { summary: rooms.rooms === 0 ? t('tool.check.rooms.none') : t('tool.check.rooms', { lookedAt: rooms.lookedAt, rooms: partsText(rooms.rooms, 'room') }) }))
+        for (const check of record.coverage) {
+          const skipped = check.skippedCount === 0 ? '' : t('report.gap', { count: check.skippedCount, whys: [...new Set(check.skipped.map((s) => (s.said === undefined ? s.why : tv(s.said))))].join('; ') })
+          const readFor = readForText(check)
+          lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(checkTitle(check), check.looksAt)}${skipped}${readFor}.` : `  ${t('tool.check.coverage', { title: checkTitle(check), parts: partsText(check.lookedAtCount, check.looksAt), skipped, readFor })}`)
+        }
+        // MSG-3: each figure as the figure used here, with its basis and status.
+        if (record.figures.length > 0) lines.push(t('report.section', { title: t('report.figuresUsed'), count: record.figures.length }), ...record.figures.map((figure) => `  ${tv(figureUsedSaid(figure))}`))
+        // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
+        lines.push(t('tool.check.never', { count: record.limits.length }), ...limitsText(record.limits).map((limit) => `  ${limit}.`))
+      } else {
+        // MSG-10: the counts, the gaps with their reasons, and where the rest is.
+        lines.push(...coverageSummary(result).filter((line) => line !== '').map((line) => line.replace(/^ {2}- /, '  ')), restText(result.report, 'full=true'))
+      }
+      return {
+        text: lines.join('\n'),
+        data: {
+          label: result.label,
+          language: result.language ?? 'en',
+          count: record.count,
+          lines: withCalls,
+          seenCount: seen,
+          marksFile: result.seen?.file ?? '',
+          marksProblem: result.seen?.problem ?? null,
+          findings,
+          notChecked,
+          drawing,
+          coverage: record.coverage,
+          limits: record.limits,
+        },
+      }
+    })
   },
 }
 

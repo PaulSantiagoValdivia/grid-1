@@ -42,9 +42,11 @@ import path from 'path'
 import { floorOf, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { readPlanText } from '@ongrid/floorplan/types/jsonText'
 import type { ResultLine, Thing, ThingKind } from '@ongrid/rules'
-import { PathRefused, quoted, type Project } from '../fs/projectFiles'
+import { PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { textProblem } from '../command/planText'
+import { t } from '../command/words'
+import { name } from '@ongrid/floorplan/messages'
 
 /** What the file name adds to the plan's name. */
 export const SEEN_SUFFIX = '.seen.json'
@@ -282,8 +284,8 @@ export function seenStates(source: SeenSource, lines: readonly ResultLine[], mar
 
 /** A part as a line names it: `room "bed2"`, `the plan`. */
 export function partText(part: Pick<MarkedPart, 'kind' | 'id'>): string {
-  if (part.kind === 'plan') return 'the plan'
-  return `${part.kind === 'unknown' ? 'part' : part.kind} ${quoted(part.id)}`
+  if (part.kind === 'plan') return t('report.thing.plan')
+  return t(`report.thing.${part.kind === 'unknown' ? 'part' : part.kind}`, { id: name(part.id) })
 }
 
 // ---------------------------------------------------------------------------------------------

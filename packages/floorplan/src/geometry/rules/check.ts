@@ -20,7 +20,8 @@ import type { FloorGraph } from './graph'
 import { floorJoins } from '../floorJoins'
 import { indexPlan } from '../plan'
 import type { Vec2 } from '../vec2'
-import { messages } from './messages'
+import { english, withSentence } from '../../messages/say'
+import { messages, saids } from './messages'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from './types'
 import type { Opening } from '../plan'
 import { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from './types'
@@ -378,15 +379,21 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
   for (const below of openingsBelowGround(plan, elevations)) {
     const room = below.rooms[0]
     const depth = below.wholly ? below.topBelow : below.sillBelow
-    findings.push({
-      code: 'opening_below_ground',
-      ruleId: RULE_OF.opening_below_ground,
-      floor: below.floor,
-      rooms: [...below.rooms],
-      openings: [below.opening],
-      message: messages.belowGround(below.type, room === undefined ? null : roomName(room), below.wall, below.wholly, metresText(depth)),
-      belowGround: { foot: Number(metresText(below.sillBelow)), top: Number(metresText(below.topBelow)), wholly: below.wholly }
-    })
+    const sentence = saids.belowGround(below.type, room === undefined ? null : roomName(room), below.wall, below.wholly, metresText(depth))
+    findings.push(
+      withSentence(
+        {
+          code: 'opening_below_ground',
+          ruleId: RULE_OF.opening_below_ground,
+          floor: below.floor,
+          rooms: [...below.rooms],
+          openings: [below.opening],
+          message: english(sentence),
+          belowGround: { foot: Number(metresText(below.sillBelow)), top: Number(metresText(below.topBelow)), wholly: below.wholly }
+        } as const,
+        sentence
+      )
+    )
   }
 
   // Stair rooms, or lift shafts, that do not line up from one floor to the next (LVL-3, AU2).
@@ -395,20 +402,14 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
     const lowerFloors = [...new Set(out.lower.map((r) => r.floor))]
     const upperFloors = [...new Set(out.upper.map((r) => r.floor))]
     const code = out.kind === 'stair' ? 'stair_out_of_line' : 'lift_out_of_line'
-    findings.push(
-      finding(
-        code,
-        upperFloor,
-        [...out.upper.map((r) => r.room), ...out.lower.map((r) => r.room)],
-        messages.outOfLine(
-          out.kind,
-          out.upper.map((r) => roomName(r.room)),
-          upperFloors.map(floorName),
-          out.lower.map((r) => roomName(r.room)),
-          lowerFloors.map(floorName)
-        )
-      )
+    const sentence = saids.outOfLine(
+      out.kind,
+      out.upper.map((r) => roomName(r.room)),
+      upperFloors.map(floorName),
+      out.lower.map((r) => roomName(r.room)),
+      lowerFloors.map(floorName)
     )
+    findings.push(withSentence(finding(code, upperFloor, [...out.upper.map((r) => r.room), ...out.lower.map((r) => r.room)], english(sentence)), sentence))
   }
 
   return {

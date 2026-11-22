@@ -8,7 +8,8 @@
  */
 
 import type { PlanFix } from '@ongrid/floorplan/geometry'
-import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
+import type { Language } from '@ongrid/floorplan/messages'
+import type { LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
 
 /** Raised when a field changes meaning or is taken away; adding a field or a code keeps it. */
 export const RESULT_VERSION = 1 as const
@@ -73,12 +74,20 @@ export interface ResultLine {
    * makes it (`calls`). Several when more than one would do.
    */
   readonly fixes?: readonly PlanFix[]
+  /**
+   * MSG-11: the figures, names, ids and places the line's words were made with, by the names
+   * its wording gives them (`{width}` is `width`): a figure as a number, rounded as the words
+   * give it. Absent when there are none. The same in every language.
+   */
+  readonly values?: Readonly<Record<string, string | number>>
 }
 
 export interface GridResult {
   readonly resultVersion: typeof RESULT_VERSION
-  /** First in every record and every rendering of it. */
-  readonly label: typeof GENERAL_GUIDANCE_LABEL
+  /** First in every record and every rendering of it, in the record's language. */
+  readonly label: string
+  /** MSG-11: the language the record's words are in, when it is not English. */
+  readonly language?: Language
   /** False when the plan was refused: then the lines are its refusals and nothing else ran. */
   readonly read: boolean
   /** How many lines there are: the one number for how much there is to look at. */

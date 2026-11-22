@@ -77,8 +77,9 @@
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
+import { en } from '../messages/en'
 import { LANGUAGES } from '../messages/languages'
-import { useOfLabel } from '../messages/uses'
+import { roomUseOfLabel } from '../messages/uses'
 
 export * from './planText'
 
@@ -151,22 +152,10 @@ export const BuildingTypeSchema = z.enum(BUILDING_TYPES)
 
 export type BuildingType = z.infer<typeof BuildingTypeSchema>
 
-/** Each kind of building as a sentence names it, with its article: "this plan is an office". */
-export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = {
-  home: 'a home',
-  office: 'an office',
-  shop: 'a shop',
-  food: 'a café, restaurant or bar',
-  hotel: 'a hotel or hostel',
-  school: 'a school',
-  health: 'a health building, such as a clinic',
-  sport: 'a sports building',
-  assembly: 'a building people gather in, such as a hall',
-  industry: 'a workshop or factory',
-  warehouse: 'a warehouse',
-  parking: 'a car park',
-  other: 'another kind of building',
-}
+/** Each kind of building as a sentence names it, with its article: "this plan is an office" (MSG-11: `check.building.*`, in English). */
+export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = Object.fromEntries(
+  BUILDING_TYPES.map((type) => [type, en[`check.building.${type}`]])
+) as Record<BuildingType, string>
 
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
@@ -437,7 +426,7 @@ export function readUse(value: unknown): unknown {
   if (typeof value !== 'string') return value
   const lower = value.toLowerCase()
   if ((ROOM_USES as readonly string[]).includes(lower)) return lower
-  const labelled = useOfLabel(value)
+  const labelled = roomUseOfLabel(value)
   if (labelled !== null) return labelled
   const folded = foldUseWord(value)
   if ((ROOM_USES as readonly string[]).includes(folded) && !FIGURE_READ_USES.includes(folded)) return folded

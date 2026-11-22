@@ -17,6 +17,7 @@
  * known here the moment it is added. Pure: the file as parsed JSON in, plain data out. A field
  * name or a use is text from the file: one that breaks the text rule of MSG-9 is never repeated.
  */
+import { said, sayValue, withSentence, type Said } from '../messages/say'
 import { z } from 'zod'
 import { FloorPlanSchema, ROOM_USES, foldUseWord, readUse, withRunFromEnds, type RoomUse } from './floorplan'
 import { textProblem } from './planText'
@@ -49,8 +50,9 @@ export type ReadingNote =
       readonly kind: 'unknown-use'
       /** The use as written, or null when it is not text or breaks the text rule. */
       readonly use: string | null
-      /** What it was when it is not text: `a number`, `a list`. */
+      /** What it was when it is not text: `a number`, `a list`. In English; MSG-11: `said` holds it by key, not enumerable. */
       readonly notText: string | null
+      readonly said?: Said
       readonly part: PartAt
       /** The use Grid knows that was most likely meant, or null. */
       readonly nearest: RoomUse | null
@@ -172,11 +174,12 @@ function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], n
   }
 }
 
-function typeName(value: unknown): string {
+function typeName(value: unknown): Said | string {
   if (value === null) return 'null'
-  if (Array.isArray(value)) return 'a list'
-  if (typeof value === 'object') return 'an object'
-  return typeof value === 'boolean' ? 'true or false' : `a ${typeof value}`
+  if (Array.isArray(value)) return said('read.type.array')
+  if (typeof value === 'object') return said('read.type.object')
+  if (typeof value === 'boolean') return said('read.type.boolean')
+  return typeof value === 'number' ? said('read.type.number') : said('read.wants.a', { type: typeof value })
 }
 
 /**
@@ -196,13 +199,15 @@ export function readingNotes(raw: unknown): ReadingNote[] {
       const use = readUse(room['use'])
       if (typeof use === 'string' && (ROOM_USES as readonly string[]).includes(use)) return
       const text = typeof use === 'string' && textProblem(use, 'name') === null ? use : null
-      notes.push({
+      const what = typeof use === 'string' ? null : typeName(use)
+      const note: ReadingNote = {
         kind: 'unknown-use',
         use: text,
-        notText: typeof use === 'string' ? null : typeName(use),
+        notText: what === null ? null : sayValue('en', what),
         part: { list: 'rooms', index },
         nearest: text === null ? null : nearestUse(text),
-      })
+      }
+      notes.push(what === null || typeof what === 'string' ? note : withSentence(note, what))
     })
   }
   const none = (key: string): boolean => !Array.isArray(raw[key]) || (raw[key] as unknown[]).length === 0

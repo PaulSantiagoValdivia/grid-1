@@ -14,6 +14,7 @@ import { planPicture } from '@ongrid/viewer/src/picture'
 import { drawShowOf } from './drawShow'
 import { floorOption, type LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
+import { askedLanguage, LANG_OPTION, languageFor } from './language'
 
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
@@ -28,6 +29,7 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8 (up to 4 with --3d). 1 when left out.' },
   '--units': { takesValue: true, help: 'How areas and dimensions are written: m, cm, mm or ft-in. The plan\'s own display, or m, when left out. Not with --3d.' },
   '--decimal': { takesValue: true, help: 'The decimal mark: point or comma. The plan\'s own display, or point, when left out.' },
+  ...LANG_OPTION,
   ...PROJECT_OPTION,
 }
 
@@ -55,6 +57,8 @@ export interface DrawRequest {
   readonly colour?: string
   /** SHT-7: add a key the plan does not ask for. */
   readonly key?: boolean
+  /** MSG-11: the language Grid's own words on the drawing are in (`--lang`), as given. */
+  readonly lang?: string
 }
 
 /** What a drawn file is: a picture file's text or bytes, and the doors drawn as undecided. */
@@ -79,6 +83,7 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
     if (request.threeD && given !== undefined) throw new UsageError(`${flag} is for a floor plan, not the 3D model: leave ${flag} or --3d out.`)
   }
   drawShowOf(request)
+  askedLanguage(request.lang)
   const look = (request.look ?? DRAW_LOOK) as LookName
   if (!(LOOK_NAMES as readonly string[]).includes(look)) {
     throw new UsageError(`--look ${JSON.stringify(request.look)} is not a look Grid draws: use one of ${LOOK_NAMES.join(', ')}.`)
@@ -101,15 +106,18 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
 
 export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: number, look: LookName = DRAW_LOOK): Promise<DrawnFile> {
   const floor = floorOption(loaded.plan, request.floor)
+  // MSG-11: the language asked for, else the plan's own, else English, with its messages loaded.
+  const asked = askedLanguage(request.lang)
+  const language = await languageFor(asked, loaded.plan)
   if (request.threeD) {
     // Loaded only for a still: it brings Three and React with it.
     const { drawStill } = await import('../draw/drawStill')
-    return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale }), undecidedDoors: [] }
+    return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale, ...(language === 'en' ? {} : { language }) }), undecidedDoors: [] }
   }
-  const display = request.units === undefined && request.decimal === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan)
+  const display = request.units === undefined && request.decimal === undefined && asked === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan, language)
   const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request) }
   // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
-  const faults = inspectPlan(loaded.plan).lines
+  const faults = inspectPlan(loaded.plan, language === 'en' ? {} : { language, ...(loaded.plan.display?.decimal ? { decimal: loaded.plan.display.decimal } : {}) }).lines
   const undecidedDoors = planPicture(loaded.plan, { floor, look, ...labels }).undecidedDoors
   const file = request.png
     ? await drawPlan(loaded.plan, { format: 'png', floor, scale, look, faults, ...labels })

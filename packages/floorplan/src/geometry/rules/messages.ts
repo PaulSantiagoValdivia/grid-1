@@ -1,5 +1,6 @@
 /**
- * The one wording of every finding and notice of the plan checks (MSG-1, AU4-1). Plain English,
+ * The one wording of every finding and notice of the plan checks (MSG-1, AU4-1), by its key in
+ * the message files (MSG-11). Plain words,
  * rooms by their names: these lines are shown to the user as they are, so no data-model words,
  * and never anything that reads as "this plan complies".
  *
@@ -10,6 +11,7 @@
  */
 
 import { quoted } from '../../types/planText'
+import { english, joined, name, num, said, sayParts, type MessageKey, type Said } from '../../messages/say'
 import { metresText } from '../rounding'
 import type { RuleFinding } from './types'
 
@@ -19,131 +21,99 @@ export interface WordingPart {
   readonly name?: true
 }
 
-const name = (text: string): WordingPart => ({ text, name: true })
-const words = (text: string): WordingPart => ({ text })
-
-/** "A", "A, B", each a name: the way a report lists rooms. */
-function listed(names: readonly string[]): WordingPart[] {
-  return names.flatMap((text, i) => (i === 0 ? [name(text)] : [words(', '), name(text)]))
-}
-
-/** Names joined by `separator`, each a name. */
-function joinedWith(names: readonly string[], separator: string): WordingPart[] {
-  return names.flatMap((text, i) => (i === 0 ? [name(text)] : [words(separator), name(text)]))
-}
-
 /** A wording as one line of text, every name in quotes. */
 export function wordingText(parts: readonly WordingPart[]): string {
   return parts.map((part) => (part.name ? quoted(part.text) : part.text)).join('')
 }
 
-export const wordings = {
-  noExit: (floor: string): WordingPart[] => [name(floor), words(' has no door to the outside')],
-  roomWithoutDoor: (room: string): WordingPart[] => [name(room), words(' has no door or opening to another space')],
-  noRoute: (room: string): WordingPart[] => [name(room), words(' has no route to a door to the outside')],
-  noRouteToAnyDoorOut: (room: string): WordingPart[] => [
-    name(room),
-    words(' has no route to a door to the outside, nor to a door into a space that is not drawn')
-  ],
-  noStairs: (floor: string): WordingPart[] => [
-    words('The way out of '),
-    name(floor),
-    words(' was not checked: no stair joins it to the ground floor')
-  ],
+/** A sentence as its runs in English, names set apart: the notes a person reads. */
+const parts = (sentence: Said): WordingPart[] => sayParts('en', sentence.key, sentence.values)
+
+/**
+ * MSG-11: each wording by its key (`check.*` in the message files) and values, so the report,
+ * the notes and the record say it in any language from one wording.
+ */
+export const saids = {
+  noExit: (floor: string): Said => said('check.noExit', { floor: name(floor) }),
+  roomWithoutDoor: (room: string): Said => said('check.roomWithoutDoor', { room: name(room) }),
+  noRoute: (room: string): Said => said('check.noRoute', { room: name(room) }),
+  noRouteToAnyDoorOut: (room: string): Said => said('check.noRouteToAnyDoorOut', { room: name(room) }),
+  noStairs: (floor: string): Said => said('check.noStairs', { floor: name(floor) }),
   /**
    * LVL-3: rooms used as a stair (or a lift) on one level that lie over none on the level below.
    * `upper` and `lower` hold at least one name each; floors likewise.
    */
-  outOfLine: (
-    kind: 'stair' | 'lift',
-    upper: readonly string[],
-    upperFloors: readonly string[],
-    lower: readonly string[],
-    lowerFloors: readonly string[]
-  ): WordingPart[] => [
-    words(kind === 'stair' ? 'The stair ' : 'The lift shaft '),
-    ...joinedWith(upper, ' and '),
-    words(' on '),
-    ...joinedWith(upperFloors, ' and '),
-    words(' does not lie over '),
-    ...joinedWith(lower, ' or '),
-    words(' on '),
-    ...joinedWith(lowerFloors, ' and '),
-    words(kind === 'stair' ? ', so it does not join the two floors' : ', so the shaft is out of line')
-  ],
-  wayOutNotDrawn: (floor: string): WordingPart[] => [
-    words('The way out of '),
-    name(floor),
-    words(' was not checked: its only door out leads to a space that is not drawn')
-  ],
+  outOfLine: (kind: 'stair' | 'lift', upper: readonly string[], upperFloors: readonly string[], lower: readonly string[], lowerFloors: readonly string[]): Said =>
+    said(`check.outOfLine.${kind}`, {
+      upper: joined(upper.map(name), 'join.and'),
+      upperFloors: joined(upperFloors.map(name), 'join.and'),
+      lower: joined(lower.map(name), 'join.or'),
+      lowerFloors: joined(lowerFloors.map(name), 'join.and')
+    }),
+  wayOutNotDrawn: (floor: string): Said => said('check.wayOutNotDrawn', { floor: name(floor) }),
   /** `rooms` holds at least one name. One wording for one room or many (MSG-1). */
-  roomsNotDrawn: (floor: string, rooms: readonly string[]): WordingPart[] => [
-    words('On '),
-    name(floor),
-    words(', rooms that could not be drawn were not checked: '),
-    ...listed(rooms)
-  ],
-  doorsNotDrawn: (floor: string): WordingPart[] => [
-    words('On '),
-    name(floor),
-    words(', some doors could not be drawn and were not checked')
-  ],
-  doorToUndrawnSpace: (room: string): WordingPart[] => [
-    words('A door from '),
-    name(room),
-    words(' leads to a space that is not drawn as a room')
-  ],
+  roomsNotDrawn: (floor: string, rooms: readonly string[]): Said => said('check.roomsNotDrawn', { floor: name(floor), rooms: joined(rooms.map(name), 'join.comma') }),
+  doorsNotDrawn: (floor: string): Said => said('check.doorsNotDrawn', { floor: name(floor) }),
+  doorToUndrawnSpace: (room: string): Said => said('check.doorToUndrawnSpace', { room: name(room) }),
   /** `height` as the check prints it, in metres. */
-  doorOutAboveGround: (room: string, height: string): WordingPart[] => [
-    words('A door from '),
-    name(room),
-    words(` leads outside ${height} m above the ground, so it is not a way out`)
-  ],
+  doorOutAboveGround: (room: string, height: string): Said => said('check.doorOutAboveGround', { room: name(room), height: num(height) }),
   /**
    * LVL-4: a door, window or opening in an outside wall that lies below the ground the site states
    * (lab VE-7). Its depth is the finding's `belowGround`: its top when it lies wholly below, else its foot.
    */
-  belowGround: (kind: 'door' | 'window' | 'opening', room: string | null, wall: string, wholly: boolean, depth: string): WordingPart[] => [
-    words(`The ${kind} in `),
-    ...(room === null ? [words('wall '), name(wall)] : [name(room)]),
-    words(
-      ` lies ${wholly ? 'wholly' : 'partly'} below the ground: its ${wholly ? 'top' : kind === 'window' ? 'sill' : kind === 'door' ? 'threshold' : 'foot'} is ${depth} m under the ground level the site states`
-    )
-  ],
+  belowGround: (kind: 'door' | 'window' | 'opening', room: string | null, wall: string, wholly: boolean, depth: string): Said => {
+    const end = wholly ? 'top' : kind === 'window' ? 'sill' : kind === 'door' ? 'threshold' : 'foot'
+    return said(`check.belowGround.${wholly ? 'wholly' : 'partly'}`, {
+      what: said(`check.below.${kind}.${room === null ? 'wall' : 'room'}` as MessageKey, room === null ? { wall: name(wall) } : { room: name(room) }),
+      end: said(`check.below.end.${end}` as MessageKey),
+      depth: num(depth)
+    })
+  },
   /** MSG-18: a door or doorless opening no person fits through. Its size is the finding's `passage`. */
-  openingTooSmall: (room: string): WordingPart[] => [
-    words('An opening from '),
-    name(room),
-    words(' is too small for a person to get through, so it is not a way through')
-  ]
+  openingTooSmall: (room: string): Said => said('check.openingTooSmall', { room: name(room) })
+}
+
+export const wordings = {
+  noExit: (floor: string): WordingPart[] => parts(saids.noExit(floor)),
+  roomWithoutDoor: (room: string): WordingPart[] => parts(saids.roomWithoutDoor(room)),
+  noRoute: (room: string): WordingPart[] => parts(saids.noRoute(room)),
+  noRouteToAnyDoorOut: (room: string): WordingPart[] => parts(saids.noRouteToAnyDoorOut(room)),
+  noStairs: (floor: string): WordingPart[] => parts(saids.noStairs(floor)),
+  outOfLine: (...args: Parameters<typeof saids.outOfLine>): WordingPart[] => parts(saids.outOfLine(...args)),
+  wayOutNotDrawn: (floor: string): WordingPart[] => parts(saids.wayOutNotDrawn(floor)),
+  roomsNotDrawn: (floor: string, rooms: readonly string[]): WordingPart[] => parts(saids.roomsNotDrawn(floor, rooms)),
+  doorsNotDrawn: (floor: string): WordingPart[] => parts(saids.doorsNotDrawn(floor)),
+  doorToUndrawnSpace: (room: string): WordingPart[] => parts(saids.doorToUndrawnSpace(room)),
+  doorOutAboveGround: (room: string, height: string): WordingPart[] => parts(saids.doorOutAboveGround(room, height)),
+  belowGround: (...args: Parameters<typeof saids.belowGround>): WordingPart[] => parts(saids.belowGround(...args)),
+  openingTooSmall: (room: string): WordingPart[] => parts(saids.openingTooSmall(room))
 }
 
 /**
  * What a door or opening no person fits through falls short at, as drawn (MSG-18): "It is 0.30 m
  * wide", "Its sill is 1.50 m above the floor". `drawn` is already printed against the size.
  */
+export function passageSaid(passage: NonNullable<RuleFinding['passage']>): Said {
+  const size = num(metresText(passage.drawn, 2, passage.passable))
+  return said(`check.passage.${passage.kind}.${passage.short}`, { size })
+}
+
 export function passageText(passage: NonNullable<RuleFinding['passage']>): string {
-  const size = metresText(passage.drawn, 2, passage.passable)
-  const what = passage.kind === 'door' ? 'The door' : 'The opening'
-  return passage.short === 'sill'
-    ? `${what} has its sill ${size} m above the floor`
-    : `${what} is ${size} m ${passage.short === 'width' ? 'wide' : 'high'}`
+  return english(passageSaid(passage))
 }
 
 /** The same wordings as report lines. */
 export const messages = {
-  noExit: (floor: string): string => wordingText(wordings.noExit(floor)),
-  roomWithoutDoor: (room: string): string => wordingText(wordings.roomWithoutDoor(room)),
-  noRoute: (room: string): string => wordingText(wordings.noRoute(room)),
-  noRouteToAnyDoorOut: (room: string): string => wordingText(wordings.noRouteToAnyDoorOut(room)),
-  noStairs: (floor: string): string => wordingText(wordings.noStairs(floor)),
-  outOfLine: (...args: Parameters<typeof wordings.outOfLine>): string => wordingText(wordings.outOfLine(...args)),
-  wayOutNotDrawn: (floor: string): string => wordingText(wordings.wayOutNotDrawn(floor)),
-  cannotBeDrawn: (floor: string, rooms: readonly string[]): string =>
-    wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor)),
-  doorToUndrawnSpace: (room: string): string => wordingText(wordings.doorToUndrawnSpace(room)),
-  doorOutAboveGround: (room: string, height: string): string => wordingText(wordings.doorOutAboveGround(room, height)),
-  belowGround: (kind: 'door' | 'window' | 'opening', room: string | null, wall: string, wholly: boolean, depth: string): string =>
-    wordingText(wordings.belowGround(kind, room, wall, wholly, depth)),
-  openingTooSmall: (room: string): string => wordingText(wordings.openingTooSmall(room))
+  noExit: (floor: string): string => english(saids.noExit(floor)),
+  roomWithoutDoor: (room: string): string => english(saids.roomWithoutDoor(room)),
+  noRoute: (room: string): string => english(saids.noRoute(room)),
+  noRouteToAnyDoorOut: (room: string): string => english(saids.noRouteToAnyDoorOut(room)),
+  noStairs: (floor: string): string => english(saids.noStairs(floor)),
+  outOfLine: (...args: Parameters<typeof saids.outOfLine>): string => english(saids.outOfLine(...args)),
+  wayOutNotDrawn: (floor: string): string => english(saids.wayOutNotDrawn(floor)),
+  cannotBeDrawn: (floor: string, rooms: readonly string[]): string => english(rooms.length > 0 ? saids.roomsNotDrawn(floor, rooms) : saids.doorsNotDrawn(floor)),
+  doorToUndrawnSpace: (room: string): string => english(saids.doorToUndrawnSpace(room)),
+  doorOutAboveGround: (room: string, height: string): string => english(saids.doorOutAboveGround(room, height)),
+  belowGround: (...args: Parameters<typeof saids.belowGround>): string => english(saids.belowGround(...args)),
+  openingTooSmall: (room: string): string => english(saids.openingTooSmall(room))
 }

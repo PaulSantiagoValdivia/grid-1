@@ -8,11 +8,11 @@
  *
  * Pure: no DOM, no React. For PNG, see `drawPlan` in the `ongrid` package.
  */
-import { statedDisplay } from '@ongrid/floorplan/types/units'
+import { statedDisplay, type Display } from '@ongrid/floorplan/types/units'
+import { say, type Language } from '@ongrid/floorplan/messages'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { Bounds, Dimension, PlanDrawing } from '@ongrid/floorplan/geometry'
 import {
-  GENERAL_GUIDANCE_LABEL,
   boundsWithDimensions,
   buildDimensions,
   buildFloorPlan,
@@ -36,6 +36,7 @@ import { keyEntries, northArrowNode, stackBands, writingBand } from './writing'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
+import { ENGLISH_WORDS, drawingText, saidText, wordsOf, type DrawingWords } from './words'
 
 export interface PictureOptions {
   /** Which floor to draw. Unset, or a floor the plan does not have, means its lowest floor. */
@@ -83,6 +84,13 @@ export interface PictureOptions {
    * `colourBy: 'use'` fills each room by its use, and puts the uses in the key.
    */
   readonly show?: PictureShow
+  /**
+   * MSG-11: the language Grid's own words on the picture are written in (its key, its list of
+   * what to look at, its label), with that language's decimal mark unless the display states
+   * one. The display's own language when left out (`labels.display`, else the plan's
+   * `display`), else English. Room names and the plan's own words are drawn as written.
+   */
+  readonly language?: Language
 }
 
 /** SHT-7: what a picture shows. */
@@ -123,6 +131,8 @@ export interface Picture {
    * the plan's `height`. Null otherwise.
    */
   readonly key: PictureKey | null
+  /** MSG-11: the language of its own words, for the label and the description. English when left out. */
+  readonly language?: Language
 }
 
 /** The picture's whole height in pixels: the plan and the key under it. */
@@ -149,13 +159,16 @@ export function handingsOf(plan: FloorPlan): Map<string, DoorHanding> {
  */
 export function doorWarningsOf(
   slice: FloorPlan,
-  drawing: PlanDrawing
+  drawing: PlanDrawing,
+  words: DrawingWords = ENGLISH_WORDS
 ): Map<string, { messages: string[]; hits: Set<string> }> {
   const byDoor = new Map<string, { messages: string[]; hits: Set<string> }>()
   for (const issue of validateFloorDoorSweeps(slice, drawing, doorHandingOf)) {
     if (issue.hits.length === 0) continue
     const entry = byDoor.get(issue.id) ?? { messages: [], hits: new Set<string>() }
-    if (!entry.messages.includes(issue.message)) entry.messages.push(issue.message)
+    // MSG-11: in the drawing's language, from the sentence's key and values.
+    const message = saidText(words, issue.message, issue.said)
+    if (!entry.messages.includes(message)) entry.messages.push(message)
     issue.hits.forEach((id) => entry.hits.add(id))
     byDoor.set(issue.id, entry)
   }
@@ -239,9 +252,24 @@ export function pictureView(plan: FloorPlan, options: PictureOptions = {}): Pick
   return { width, height, view }
 }
 
+/**
+ * WRT-7, MSG-11: the display a picture's labels are written in: the call's, else the plan's own,
+ * with the language asked for. A language asked for on a plan with no display gets that
+ * language's own (a decimal comma for Spanish). Undefined for plain metres in English.
+ */
+function displayOfPicture(plan: FloorPlan, options: PictureOptions): Display | undefined {
+  const asked = options.language
+  const own = options.labels?.display
+  if (own !== undefined) return asked === undefined ? own : { ...own, language: asked }
+  if (plan.display === undefined && (asked === undefined || asked === 'en')) return undefined
+  return statedDisplay({ ...(plan.display ?? {}), ...(asked === undefined ? {} : { language: asked }) })
+}
+
 /** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
 export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
   const { floor, slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
+  const display = displayOfPicture(plan, options)
+  const words = wordsOf(display)
   const look = lookOf(options.look)
   const all = options.faults ?? []
   const faults = faultsOnFloor(all, floor, new Map(slice.openings.map((opening) => [opening.id, opening.wall])))
@@ -254,13 +282,13 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const scene = planScene({
     drawing,
     handings,
-    doorWarnings: warningMessages(doorWarningsOf(slice, drawing)),
+    doorWarnings: warningMessages(doorWarningsOf(slice, drawing, words)),
     dimensions,
     metersPerPixel: view.width / width,
     look,
     ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
     // WRT-7: the labels and dimensions are in the call's display, else the plan's own.
-    labels: options.labels?.display !== undefined || plan.display === undefined ? options.labels : { ...options.labels, display: statedDisplay(plan.display) },
+    labels: display === undefined ? options.labels : { ...options.labels, display },
     faults,
     uses,
     ...(above === undefined ? {} : { above }),
@@ -281,12 +309,13 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))
   const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
   const marked = on('warnings') && faults.length > 0
-  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0 }) : []
-  const writing = writingBand(title, entries, width, look.colors)
-  const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors)
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0 }, words) : []
+  const writing = writingBand(title, entries, width, look.colors, words)
+  const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors, words)
   const key = stackBands(writing, listed)
   const undecidedDoors = look.undecidedDoors ? undecidedIn(drawing, handings) : []
-  return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes, key }
+  const picture: Picture = { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes, key }
+  return words.language === 'en' ? picture : { ...picture, language: words.language }
 }
 
 /** How a picture is written as a file. */
@@ -305,11 +334,12 @@ const LABEL_PX = 11
  * The label on a paper-coloured strip in the top-left corner, in pixels like every label, so it
  * reads the same at any zoom. Its width is estimated, never measured, as room labels are.
  */
-function labelNode(look: Look, x: number, y: number, unitsPerPixel: number): SvgNode {
-  const width = GENERAL_GUIDANCE_LABEL.length * LABEL_PX * 0.56 + 12
+function labelNode(look: Look, x: number, y: number, unitsPerPixel: number, language: Language): SvgNode {
+  const label = say(language, 'label')
+  const width = label.length * LABEL_PX * 0.56 + 12
   return el('g', { 'data-part': 'guidance-label', transform: `translate(${lengthText(x)} ${lengthText(y)}) scale(${lengthText(unitsPerPixel)})` }, [
     el('rect', { x: 0, y: 0, width: lengthText(width), height: LABEL_PX + 10, fill: look.colors.paper, opacity: 0.9 }),
-    el('text', { x: 6, y: LABEL_PX + 3, fill: look.colors.labelSoft, 'font-family': look.colors.font, 'font-size': LABEL_PX }, [GENERAL_GUIDANCE_LABEL])
+    el('text', { x: 6, y: LABEL_PX + 3, fill: look.colors.labelSoft, 'font-family': look.colors.font, 'font-size': LABEL_PX }, [label])
   ])
 }
 
@@ -320,7 +350,8 @@ function labelNode(look: Look, x: number, y: number, unitsPerPixel: number): Svg
 export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOptions = {}): string {
   const { view, look, key } = picture
   const stamp = options.label !== false
-  const label = `Floor plan with ${picture.rooms} rooms`
+  const language = picture.language ?? 'en'
+  const words = { ...ENGLISH_WORDS, language }
   if (key) {
     // The plan in its own frame at the top, in plan metres; the key under it, in pixels.
     const total = fullHeight(picture)
@@ -337,14 +368,14 @@ export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOp
         height: Math.round(total * scale),
         viewBox: `0 0 ${picture.width} ${total}`,
         role: 'img',
-        'aria-label': `${label}, and a key of what to look at`
+        'aria-label': drawingText(words, 'drawing.picture.keyed', { count: picture.rooms })
       },
       [
         el('rect', { 'data-part': 'paper', x: 0, y: 0, width: picture.width, height: total, fill: look.colors.paper }),
         plan,
         el('g', { 'data-part': 'key', transform: `translate(0 ${picture.height})` }, key.nodes),
         // In this frame a unit is a pixel already.
-        ...(stamp ? [labelNode(look, 0, 0, 1)] : [])
+        ...(stamp ? [labelNode(look, 0, 0, 1, language)] : [])
       ]
     )
     return `${toSvg(root)}\n`
@@ -366,9 +397,9 @@ export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOp
       viewBox: viewBoxOf(view),
       preserveAspectRatio: 'xMidYMid meet',
       role: 'img',
-      'aria-label': label
+      'aria-label': drawingText(words, 'drawing.picture', { count: picture.rooms })
     },
-    [paper, ...picture.nodes, ...(stamp ? [labelNode(look, view.x, view.y, view.width / picture.width)] : [])]
+    [paper, ...picture.nodes, ...(stamp ? [labelNode(look, view.x, view.y, view.width / picture.width, language)] : [])]
   )
   return `${toSvg(root)}\n`
 }

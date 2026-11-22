@@ -7,10 +7,13 @@
  * nothing.
  */
 
+import { en } from '../../messages/en'
+import type { Said } from '../../messages/say'
+
 export const RULES_REPORT_SCHEMA_VERSION = 1 as const
 
 /** The label every report carries. */
-export const GENERAL_GUIDANCE_LABEL = 'General guidance, not your local rules' as const
+export const GENERAL_GUIDANCE_LABEL = en.label
 
 /** One place a rule's figure was read: the document, its edition and the clause number. */
 export interface RuleCitation {
@@ -83,6 +86,11 @@ export interface RuleFinding {
   readonly openings: readonly string[]
   /** One line of plain English, built from a fixed template. */
   readonly message: string
+  /**
+   * MSG-11: the sentence by its key and values, where the record cannot word it again from its
+   * other fields (a part below the ground, a stair out of line). Not enumerable (`withSentence`).
+   */
+  readonly said?: Said
   /**
    * Only on `no_route_to_exit`: every way through the room, by the room beyond it, then by id.
    * Optional, so the report stays at schema version 1.

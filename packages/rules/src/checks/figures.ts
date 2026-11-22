@@ -14,7 +14,8 @@
  */
 
 import type { RuleCitation } from '@ongrid/floorplan/geometry'
-import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
+import { english, joined, said, sayValue, type Said, type Value } from '@ongrid/floorplan/messages'
+import type { BuildingType } from '@ongrid/floorplan/types/floorplan'
 import type { AppliedFigure, RuleFigures } from './types'
 
 export const FIGURE_KEYS = [
@@ -64,10 +65,6 @@ export interface Verification {
 export const BUILDING_KINDS = ['homes'] as const
 export type BuildingKind = (typeof BUILDING_KINDS)[number]
 
-/** How a reader is told what a kind of building is, in our own words. */
-const BUILDING_KIND_TEXT: Record<BuildingKind, string> = {
-  homes: 'homes (houses and flats people live in)'
-}
 
 /**
  * CNT-5: the kinds of building a plan may state (`BuildingType` in the plan format) that each
@@ -83,9 +80,19 @@ export function readForCovers(kinds: readonly BuildingKind[], building: Building
   return building === undefined || kinds.some((kind) => READ_FOR_BUILDINGS[kind].includes(building))
 }
 
-/** "homes (houses and flats people live in)", or several kinds joined. */
+/** MSG-11: "homes (houses and flats people live in)", or several kinds joined, by key (`check.kind.*`). */
+export function buildingKindsSaid(kinds: readonly BuildingKind[]): Value {
+  return joined([...new Set(kinds)].map((kind) => said(`check.kind.${kind}`)), 'join.and')
+}
+
+/** "homes (houses and flats people live in)", or several kinds joined, in English. */
 export function buildingKindsText(kinds: readonly BuildingKind[]): string {
-  return [...new Set(kinds)].map((kind) => BUILDING_KIND_TEXT[kind]).join(' and ')
+  return sayValue('en', buildingKindsSaid(kinds))
+}
+
+/** MSG-11: a kind of building as a sentence names it, with its article: "an office". */
+export function buildingTypeSaid(type: BuildingType | undefined): Said {
+  return said(type === undefined ? 'check.building.unknown' : `check.building.${type}`)
 }
 
 /**
@@ -94,10 +101,14 @@ export function buildingKindsText(kinds: readonly BuildingKind[]): string {
  * (`stated` undefined). CNT-5: where the plan says what the building is, the figures ran because
  * it is that kind, and the sentence says so. No full stop at the end.
  */
-export function readForSentence(kinds: readonly BuildingKind[], stated?: BuildingType): string {
+export function readForSaid(kinds: readonly BuildingKind[], stated?: BuildingType): Said {
   return stated === undefined
-    ? `This check's figures were read for ${buildingKindsText(kinds)}; the plan does not say what kind of building it is, so Grid applied them as they are`
-    : `This check's figures were read for ${buildingKindsText(kinds)}, and the plan says this is ${BUILDING_TYPE_TEXT[stated]}`
+    ? said('check.readFor.unstated', { kinds: buildingKindsSaid(kinds) })
+    : said('check.readFor.stated', { kinds: buildingKindsSaid(kinds), building: buildingTypeSaid(stated) })
+}
+
+export function readForSentence(kinds: readonly BuildingKind[], stated?: BuildingType): string {
+  return english(readForSaid(kinds, stated))
 }
 
 export interface Provenance {

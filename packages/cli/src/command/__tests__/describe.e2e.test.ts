@@ -126,7 +126,7 @@ describe('grid describe', () => {
   it('shows its help, and the overview lists it', () => {
     const help = grid(['describe', '--help'])
     expect(help.status).toBe(0)
-    expect(help.out).toContain('Usage: grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--project <folder>]')
+    expect(help.out).toContain('Usage: grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--lang en|es] [--project <folder>]')
     expect(help.out).toContain('--length <value>')
     expect(help.out).toContain('--for <value>')
     expect(grid(['--help']).out).toMatch(/^ {2}describe Describes the plan/m)
