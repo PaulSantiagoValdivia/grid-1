@@ -7,7 +7,7 @@
  */
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { startToolServer } from './serve'
-import { projectTools } from './serveTools'
+import { projectResources, projectTools } from './serveTools'
 
 function project(): Project | PathRefused {
   try {
@@ -18,4 +18,4 @@ function project(): Project | PathRefused {
   }
 }
 
-startToolServer(projectTools(project()))
+startToolServer(projectTools(project()), projectResources())

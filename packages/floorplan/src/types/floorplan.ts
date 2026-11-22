@@ -139,8 +139,19 @@
  *   one of its walls, or the distance between two of its corners (a diagonal), each with the
  *   length taped. They are checks, never geometry: nothing is drawn or placed from them, and
  *   every run says each one taped against drawn. Optional and never defaulted (version 1).
+ * C16 · Phases, and a fit-out on a base plan (CNT-10, lab EL-10, CP4-4)
+ *   A wall, an opening and a room MAY state its `phase`: `existing` (it stands before the work and
+ *   stays), `demolished` (it stands before the work and is taken out) or `new` (the work builds
+ *   it). One plan then holds two states of the building: before the work (existing and
+ *   demolished parts) and after it (existing and new parts). An opening that states no phase is
+ *   in its wall's, when its wall is demolished or new. In a plan that states a phase anywhere, a
+ *   part that states none stands before and after, as an existing one does; a plan that states
+ *   none is read exactly as before. A plan MAY name a `base` plan, by its path from the project
+ *   folder: the shell it is fitted out in. The base's walls and openings, as they stand after its
+ *   own work, are read into the plan as existing and are never written back to it; the plan's own
+ *   parts that state no phase are new. Both optional and never defaulted (version 1).
  *
- * C16 · Floor outlines (BRF-4, lab FD-1)
+ * C17 · Floor outlines (BRF-4, lab FD-1)
  *   A floor MAY state its `outline`: its outside face, its corners in plan metres in order round
  *   it, either way round, as `site.boundary` is written (C13). It is the one shape a floor's slab
  *   covers, its roof is cut from and its gross external area is measured to: joined with what
@@ -370,7 +381,7 @@ export const FloorSchema = z.object({
   building: BuildingTypeSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
-  // BRF-4 (C16): the floor's outside face, its corners in order round it, either way round; a
+  // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
   // last point on the first closes it. Joined with what the walls enclose for the slab, the roof
   // and the gross external area. Optional and never defaulted (version 1).
   outline: z
@@ -383,13 +394,24 @@ export const FloorSchema = z.object({
       if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
     })
     .optional(),
-  // BRF-4 (C16): how many homes the floor holds, and how many parking spaces: the agent's
+  // BRF-4 (C17): how many homes the floor holds, and how many parking spaces: the agent's
   // proposal, counted against the person's own limits. Optional and never defaulted (version 1).
   homes: z.number().int().min(0).max(PARTS_MAX).optional(),
   parking: z.number().int().min(0).max(PARTS_MAX).optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
+
+/**
+ * CNT-10 (C16): what the work does to a wall, an opening or a room: it stands before and stays
+ * (`existing`), it stands before and is taken out (`demolished`), or the work builds it (`new`).
+ */
+export const PHASES = ['existing', 'demolished', 'new'] as const
+export const PhaseSchema = z.enum(PHASES)
+
+/** CNT-10: the fields that carry a phase, for whatever must place each (the sheet's `PHASE_COVERAGE`). */
+export const PHASE_FIELDS = ['walls.phase', 'openings.phase', 'rooms.phase'] as const
+export type PhaseField = (typeof PHASE_FIELDS)[number]
 
 /**
  * What a wall that does not state its thickness or height gets. A virtual wall is a
@@ -603,6 +625,8 @@ export const WallSchema = z.preprocess(
       floor: text('id').pipe(z.string().min(1)).optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
+      // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+      phase: PhaseSchema.optional(),
       // HND-11 (C1, reopened): start→end is this face of the wall, not its centre line. The
       // reading moves the wall to its centre line (`withWallDefaults`), so a wall Grid read has
       // `placedBy` in its place. Optional and never defaulted (version 1).
@@ -872,6 +896,8 @@ export const RoomSchema = z.object({
   number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -921,6 +947,9 @@ export const OpeningSchema = z.object({
   anchor: OpeningAnchorSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it; unstated, its wall's when that is demolished or new.
+  // Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
 })
 
 /** LVL-8: the most floors above its own that one opening pattern may be repeated on. */
@@ -1536,6 +1565,10 @@ export const FloorPlanFieldsSchema = z.object({
   // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
   stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
+  // CNT-10 (C16): the plan this one is fitted out in, by its path from the project folder. Its
+  // walls and openings are read in as existing and never written back. Optional and never
+  // defaulted (version 1).
+  base: text('path').pipe(z.string().min(1)).optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
   items: parts(ItemSchema, 'items').optional(),
@@ -1594,6 +1627,7 @@ export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSch
 export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
+export type Phase = z.infer<typeof PhaseSchema>
 export type Wall = z.infer<typeof WallSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
 export type RoomTenure = z.infer<typeof RoomTenureSchema>

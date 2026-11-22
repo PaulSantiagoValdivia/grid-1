@@ -13,8 +13,11 @@ import {
   floorJoins,
   floorOf,
   indexPlan,
+  phaseCounts,
   planFloors,
   planForFloor,
+  planHasPhases,
+  planInState,
   roomArea,
   roomZones,
   sub,
@@ -186,6 +189,17 @@ export interface PlanFacts {
   readonly connections: Connections
   /** Whether the plan states its north (CNT-3). The descriptions' sides stay the drawing's either way. */
   readonly northStated: boolean
+  /**
+   * CNT-10: what the plan's work holds, for a plan with phases: how many walls, openings and rooms
+   * are in each phase, and the base it is fitted out in. Every other fact is of the building after
+   * the work. Null for a plan with no phases.
+   */
+  readonly work: WorkFacts | null
+}
+
+export interface WorkFacts {
+  readonly counts: ReturnType<typeof phaseCounts>
+  readonly base: string | null
 }
 
 export interface StairFacts {
@@ -522,7 +536,10 @@ function heightsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Heights {
 }
 
 /** Everything `grid describe` says, from a plan that passed the schema. */
-export function planFacts(plan: FloorPlan): PlanFacts {
+export function planFacts(stated: FloorPlan): PlanFacts {
+  // CNT-10: the building as it will be after the work; the work itself is counted apart.
+  const work = planHasPhases(stated) ? { counts: phaseCounts(stated), base: stated.base ?? null } : null
+  const plan = planInState(stated, 'after')
   const registered = new Set((plan.floors ?? []).map((floor) => floor.id))
   const layouts = new Map<string, { floor: string; ids: string[] }>()
   const floors: FloorFacts[] = planFloors(plan).map((floor) => {
@@ -552,5 +569,6 @@ export function planFacts(plan: FloorPlan): PlanFacts {
     },
     connections: connectionsOf(plan, floors),
     northStated: typeof plan.north === 'number',
+    work,
   }
 }

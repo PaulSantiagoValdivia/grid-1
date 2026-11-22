@@ -27,12 +27,15 @@ import { FontsMissing } from '../sheet/fonts'
 import { linkSeats, occupancyFileOf, occupancyText, OccupancyRefused, readOccupancy } from '../occupancy/occupancy'
 import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { startToolServer } from '../mcp/serve'
-import { projectTools } from '../mcp/serveTools'
+import { PREVIEW_PORT, startLocalPreview } from '../preview/localServer'
+import { projectResources, projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
 import { readSeen, SeenRefused } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
-import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
+import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms, describeWalk, walkOf } from './describe'
+import { walkPictures } from '../describe/walkPictures'
+import type { WalkStop } from '../describe/walk'
 import { DIFF_OPTIONS, MARK_OPTIONS, runDiff, runMark } from './diff'
 import { MARKERS_MAX, MarkerRefused } from '../versions/markers'
 import { GitUnread } from '../versions/git'
@@ -42,7 +45,7 @@ import { DxfProfileRefused } from '../export/dxfProfile'
 import type { LeftOutPart } from '@ongrid/floorplan/export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
-import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
+import { floorOption, loadPlan, PlanRefused, type LoadedPlan } from './plan'
 import { SHEET_OPTIONS } from './sheet'
 import { checkTidyRequest, TIDY_OPTIONS, tidyAppliedText, tidyFile, tidyList, tidyListText } from './tidy'
 import { readRoomsFile, RoomsRefused, WRITE_OPTIONS, writeRoomsIntoProject } from './write'
@@ -63,6 +66,12 @@ export interface CommandIo {
 class WriteFailed extends Error {}
 
 const HELP_FLAG: OptionSpecs = { '--help': { takesValue: false, help: 'Show this help.' } }
+
+/** VEW-4: the local preview page's options. */
+const PREVIEW_OPTIONS: OptionSpecs = {
+  '--port': { takesValue: true, help: `The port on 127.0.0.1 to serve the page on, from 1 to 65535. ${PREVIEW_PORT} when left out, or another one free when that is in use.` },
+  ...PROJECT_OPTION,
+}
 
 const COMMANDS = {
   init: {
@@ -97,8 +106,8 @@ const COMMANDS = {
     options: CHECK_OPTIONS,
   },
   describe: {
-    usage: 'grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--project <folder>]',
-    summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls. --for agent adds the ids. --as rooms reads it back as rooms text to change and write again.',
+    usage: 'grid describe [<plan.json>] [--length line|rooms|walls|walk] [--for person|agent] [--as rooms] [--floor <id>] [--pictures <folder>] [--project <folder>]',
+    summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls, and with --length walk the plan walked room by room from its way in, with --pictures a picture from each doorway. --for agent adds the ids. --as rooms reads it back as rooms text to change and write again.',
     options: DESCRIBE_OPTIONS,
   },
   draw: {
@@ -125,6 +134,11 @@ const COMMANDS = {
     usage: 'grid occupancy [<plan.json>] [--project <folder>]',
     summary: 'Lists who sits where, from the occupancy file beside the plan (plan.occupancy.json), by room. No export carries it.',
     options: PROJECT_OPTION,
+  },
+  preview: {
+    usage: 'grid preview [<plan.json>] [--port <n>] [--project <folder>]',
+    summary: 'Opens the preview as a page in your browser, on this computer only: the plan in 2D and 3D, the part you click shared with the agent, and the room it frames or the parts it picks out. It draws again within 2 s of the plan changing. Ctrl+C stops it.',
+    options: PREVIEW_OPTIONS,
   },
   serve: {
     usage: 'grid serve [--project <folder>]',
@@ -269,7 +283,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       if (!(error instanceof PathRefused) || projectOption !== undefined) throw error
       project = error
     }
-    startToolServer(projectTools(project))
+    startToolServer(projectTools(project), projectResources())
     return EXIT_OK
   }
 
@@ -350,9 +364,23 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   }
 
   if (name === 'describe') {
-    const request = { length: textOf(parsed, '--length'), for: textOf(parsed, '--for'), as: textOf(parsed, '--as') }
+    const request = { length: textOf(parsed, '--length'), for: textOf(parsed, '--for'), as: textOf(parsed, '--as'), floor: textOf(parsed, '--floor'), pictures: textOf(parsed, '--pictures') }
     const { length, audience, as } = checkDescribeRequest(request)
-    const loaded = loadPlan(openProject(projectOption, io.cwd), planFile)
+    const project = openProject(projectOption, io.cwd)
+    // VEW-9: the pictures' folder is checked before anything is read or drawn (CMD-15).
+    const pictureFile = (n: number): string => `${request.pictures!.replace(/[\\/]+$/, '')}/walk-${String(n).padStart(2, '0')}.png`
+    if (request.pictures !== undefined) checkWritable(project, pictureFile(1))
+    const loaded = loadPlan(project, planFile)
+    if (length === 'walk') {
+      const { survey, walk } = walkOf(loaded, floorOption(loaded.plan, request.floor))
+      const pictures = new Map<WalkStop, string>()
+      if (request.pictures !== undefined) {
+        const shots = await walkPictures(survey, walk)
+        shots.forEach((shot, i) => pictures.set(shot.stop, project.shown(write(project, pictureFile(i + 1), shot.png))))
+      }
+      io.stdout(describeWalk(survey, walk, audience, pictures))
+      return EXIT_OK
+    }
     io.stdout(as === 'rooms' ? describeRooms(loaded) : describePlan(loaded, length, audience))
     return EXIT_OK
   }
@@ -415,6 +443,25 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const written = done.text === null ? null : project.shown(write(project, out ?? planFile, done.text))
     const result = { label: GENERAL_GUIDANCE_LABEL, applied: done.applied, skipped: done.skipped, left: done.left, written }
     io.stdout(json ? `${JSON.stringify(result, null, 2)}\n` : tidyAppliedText(result))
+    return EXIT_OK
+  }
+
+  if (name === 'preview') {
+    const portText = textOf(parsed, '--port')
+    const port = portText === undefined ? undefined : Number(portText)
+    if (port !== undefined && (!/^\d{1,5}$/.test(portText!) || port > 65535)) throw new UsageError('--port takes a whole number from 1 to 65535, or 0 for any free port.')
+    // The plan is named from the folder Grid runs in; the page names it from the project folder, as the tools do.
+    const named = openProject(projectOption, io.cwd)
+    loadPlan(named, planFile)
+    const plan = named.relative(named.resolve(planFile))
+    const project = openProject(projectOption, io.cwd, 'project')
+    // The page is loaded only here and when a host reads it: no other command reads it at start.
+    const { previewPageHtml } = await import('@ongrid/viewer/src/page/previewPage')
+    const started = await startLocalPreview({ project, plan, ...(port !== undefined ? { port } : {}), page: previewPageHtml({ plan }) })
+    const lines = [`Grid's preview of ${JSON.stringify(plan)}: ${started.url}`]
+    if (started.moved) lines.push(`Port ${port ?? PREVIEW_PORT} was in use, so it took ${started.port}.`)
+    lines.push('Open it in a browser on this computer; no other computer can reach it. Ctrl+C stops it.')
+    io.stdout(`${lines.join('\n')}\n`)
     return EXIT_OK
   }
 

@@ -7,9 +7,13 @@
  * owner chose as the main way agents write (WRT-1). The plan file stays the source of truth:
  * the text is a way of writing it, and `readRoomsText` reads any plan back as text.
  *
- * The language, one statement per line (`#` starts a comment; lengths are metres):
+ * The language, one statement per line (`#` starts a comment). A plain number is metres; a length
+ * may instead carry its unit in one word: `360cm`, `3600mm`, `12ft`, `12ft6in`, `12'6"` (`words.ts`):
  *
  *   plan "<name>"
+ *   display <m|cm|mm|ft-in> [area m2|ft2] [decimal point|comma] [precision <n>]
+ *                                      how the person reads lengths and areas: the plan's `display`
+ *                                      (WRT-7). It changes no length, and the file stays in metres
  *   building <home|office|shop|...>    what kind of building the plan is (CNT-5)
  *   based on <revision>                the plan this text was read from (written by the read-back)
  *   walls outside <t> inside <t> [interior|partition] height <h>      the thickness rule
@@ -60,6 +64,7 @@ import { BUILDING_TYPES, ROOM_TENURES, ROOM_USES, WALL_DEFAULTS, WallKindSchema,
 import { indexPlan } from '../geometry/plan'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
+import { AREA_UNITS, DECIMAL_MARKS, LENGTH_UNITS, type AreaUnit, type DecimalMark } from '../types/units'
 import { f2, isNumberWord, numberOf, pointOf, RoomsStop, wordsOf } from './words'
 
 type P = readonly [number, number]
@@ -85,6 +90,22 @@ const BUILDINGS: readonly string[] = BUILDING_TYPES
 function roomUseOf(word: string): RoomUse | null {
   const read = readUse(word)
   return typeof read === 'string' && USES.includes(read) ? (read as RoomUse) : null
+}
+/** WRT-7: a `display` line, as the plan's `display`. */
+function displayOfWords(t: readonly string[], at: number): NonNullable<FloorPlan['display']> {
+  const usage = `line ${at}: write 'display <m|cm|mm|ft-in> [area m2|ft2] [decimal point|comma] [precision 0-5]': how the person reads lengths and areas.`
+  const length = t[1] as NonNullable<FloorPlan['display']>['length']
+  if (!(LENGTH_UNITS as readonly string[]).includes(t[1] ?? '')) throw new RoomsStop('rooms/syntax', usage, at)
+  const out: { -readonly [K in keyof NonNullable<FloorPlan['display']>]: NonNullable<FloorPlan['display']>[K] } = { length }
+  for (let i = 2; i < t.length; i += 2) {
+    const key = t[i]!
+    const value = t[i + 1]
+    if (key === 'area' && (AREA_UNITS as readonly string[]).includes(value ?? '') && out.area === undefined) out.area = value as AreaUnit
+    else if (key === 'decimal' && (DECIMAL_MARKS as readonly string[]).includes(value ?? '') && out.decimal === undefined) out.decimal = value as DecimalMark
+    else if (key === 'precision' && /^[0-5]$/.test(value ?? '') && out.precision === undefined) out.precision = Number(value)
+    else throw new RoomsStop('rooms/syntax', usage, at)
+  }
+  return out
 }
 const S2 = Math.sqrt(0.5)
 const DIRS: Readonly<Record<string, P>> = { north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] }
@@ -381,6 +402,8 @@ class Compiler {
   basedOn: string | null = null
   /** CNT-5: what kind of building the plan is. */
   building: BuildingType | null = null
+  /** WRT-7: how the person reads lengths and areas, from a `display` line. */
+  display: NonNullable<FloorPlan['display']> | null = null
   // WRT-6 (lab AU3-6): no height until the text states one. A wall the text gives no height is
   // written with none, and the reading gives it its floor's height or Grid's default.
   private rule: { outside: number; inside: number; height: number | null; kind: WallKind } = { outside: 0.3, inside: 0.1, height: null, kind: 'interior' }
@@ -522,6 +545,9 @@ class Compiler {
       case 'building':
         if (t.length !== 2 || !BUILDINGS.includes(t[1]!)) this.stop('rooms/syntax', at, `line ${at}: write 'building <kind>': one of ${BUILDINGS.join(', ')}.`)
         this.building = t[1] as BuildingType
+        return
+      case 'display':
+        this.display = displayOfWords(t, at)
         return
       case 'based':
         if (t[1] !== 'on' || t.length !== 3) this.stop('rooms/syntax', at, `line ${at}: write 'based on <revision>', as the read-back writes it.`)
@@ -820,12 +846,12 @@ class Compiler {
       room.box = boxOf([room.poly])
       return room
     }
-    if (W === null || D === null) this.stop('rooms/size', at, `line ${at}: room '${id}' has no size. Write '<width> x <depth>' in metres, inside faces, or 'polygon ...'.`)
+    if (W === null || D === null) this.stop('rooms/size', at, `line ${at}: room '${id}' has no size. Write '<width> x <depth>' (metres, or with a unit such as 12ft), inside faces, or 'polygon ...'.`)
     let Wn = W === '*' ? null : numberOf(W, at)
     let Dn = D === '*' ? null : numberOf(D, at)
     for (const [label, v] of [['width', Wn], ['depth', Dn]] as const) {
       if (v !== null && v <= 0) this.stop('rooms/size', at, `line ${at}: room '${id}' has a ${label} of ${v}. Sizes are above 0.`)
-      if (v !== null && v > 200) this.stop('rooms/size', at, `line ${at}: room '${id}' is ${v} m in ${label}. That looks like millimetres or feet; write metres.`)
+      if (v !== null && v > 200) this.stop('rooms/size', at, `line ${at}: room '${id}' is ${v} m in ${label}. That looks like millimetres or feet: write metres, or give the unit in the same word, such as 3600mm or 12ft.`)
     }
     const used = basis ?? this.sizes.basis
     room.size = { w: Wn, d: Dn, basis: used }
@@ -1966,6 +1992,7 @@ class Compiler {
       }))
     }
     if (this.building !== null) plan.building = this.building
+    if (this.display !== null) plan.display = this.display
     const multi = this.floors.length > 1
     // An id written on two floors gets its floor's id in front, so it stays one id in the plan.
     const count = new Map<string, number>()

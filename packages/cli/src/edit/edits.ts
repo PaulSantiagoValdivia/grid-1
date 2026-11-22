@@ -10,7 +10,7 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { cameraRecord, compassBearing, dot, drawingBearing, planOrientation, storedView, sub, tolerance, viewSetting, wallAxis, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { cameraRecord, compassBearing, dot, drawingBearing, planOrientation, storedView, sub, tolerance, viewSetting, wallAxis, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, wallWithEnds } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
@@ -23,7 +23,7 @@ type Pair = [number, number]
 type RawRecord = Record<string, unknown>
 
 /** A change to one opening. `null` takes a key out. */
-export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall']: Opening[K] }> & { anchor?: OpeningAnchor | null }
+export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall' | 'phase']: Opening[K] }> & { anchor?: OpeningAnchor | null }
 
 /** A change to one room. `null` takes a key out. `partOf` makes it a zone of that room (CNT-8). */
 export type RoomChange = {
@@ -32,6 +32,8 @@ export type RoomChange = {
   use?: string | null
   partOf?: string | null
   properties?: Readonly<Record<string, string | number | boolean>>
+  /** CNT-10: a room taken out of a plan with phases stays, to be demolished. */
+  phase?: Room['phase']
 }
 
 /** What a change does, by id. */
@@ -40,7 +42,7 @@ export interface Patch {
    * Walls changed, by id: their centre line's new ends, as Grid reads the plan, and their kind.
    * HND-11: `mirrored` turns a wall placed by its face over to its other face, as a mirror does.
    */
-  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind']; mirrored?: boolean }>
+  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind']; mirrored?: boolean; phase?: Wall['phase'] }>
   readonly openings: ReadonlyMap<string, OpeningChange>
   readonly removeOpenings: ReadonlySet<string>
   readonly rooms: ReadonlyMap<string, RoomChange>
@@ -547,7 +549,7 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
       ...(site.things === undefined ? {} : { things: site.things.map((thing) => ({ ...thing, ...(thing.points === undefined ? {} : { points: thing.points.map(flip) }), ...(thing.at === undefined ? {} : { at: flip(thing.at) }) })) }),
     }
   }
-  // BRF-4 (C16): a floor's outline is mirrored with the walls it holds.
+  // BRF-4 (C17): a floor's outline is mirrored with the walls it holds.
   const floors = movedOutlines(plan, flip)
   if (floors !== null) top['floors'] = floors
   // VEW-3: each saved view is mirrored with the building, so it still frames what it framed.
@@ -610,7 +612,7 @@ export function turnPlanBy(survey: Survey, turn: Turn): Patch {
   const items = new Map((plan.items ?? []).map((item) => [item.id, { at: map(item.at), turn: r3((((item.turn ?? 0) + turn) % 360 + 360) % 360) }]))
   const top: Record<string, unknown> = {}
   if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: map(plan.site.origin) }
-  // BRF-4 (C16): a floor's outline turns with the walls it holds.
+  // BRF-4 (C17): a floor's outline turns with the walls it holds.
   const floors = movedOutlines(plan, map)
   if (floors !== null) top['floors'] = floors
   const north = plan.north === undefined ? '' : ` The plan's north is kept at ${wrapDegrees(r3(plan.north))}°, so the building faces new ways: what faced south now faces ${turn === 90 ? 'east' : turn === 180 ? 'north' : 'west'}.`

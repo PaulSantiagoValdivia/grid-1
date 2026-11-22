@@ -1,7 +1,7 @@
 # BRF-4 review: massing before walls, and "how much fits on this plot"
 
 For the owner. A floor may now state its `outline`, its outside face, before any wall (convention
-C16). With its level, height and kind of building it is massing: Grid gives its gross area, its
+C17). With its level, height and kind of building it is massing: Grid gives its gross area, its
 storey, its slab and roof, the plot coverage and the distances to the boundary. With walls and
 rooms inside it, the outline is joined with what the walls enclose, so it gives the slab, the
 roof and the floor no room claims. The person's own site limits (coverage, floor area ratio,
@@ -67,7 +67,7 @@ them a site limit.
 
 ## What changed
 
-1. **The plan format** (`types/floorplan.ts`, convention C16). `FloorSchema` gains `outline`
+1. **The plan format** (`types/floorplan.ts`, convention C17; HND-11 and CNT-10 took C15 and C16 on main). `FloorSchema` gains `outline`
    (3 to 2,000 points, either way round, closed by a last point on the first, refused when it
    crosses itself or encloses no ground: BRF-3's `ringProblem`, moved to `geometry/ring.ts` so
    the schema can read it), and `homes` and `parking` (whole numbers). Optional, never defaulted.
@@ -121,7 +121,7 @@ Run on a laptop shared with other sessions (40 to 50 other vitest processes runn
 
 Merged 17 commits (HND-11, COD-8 and others) in c3a985d1. Conflicts: both changelogs (every
 entry kept, BRF-4's first) and `types/floorplan.ts`'s conventions: HND-11 took C15 for taped
-lengths, so the floor outline is **C16**, renamed in every BRF-4 comment and doc. After the
+lengths, so the floor outline was C16 (now C17, see below), renamed in every BRF-4 comment and doc. After the
 merge: build, typecheck and lint clean; the affected tests (main's 14 changed test files, the
 three BRF-4 test files, the brief, site, tools, coverage, edit, rules result, plan types, rooms
 text, levels and the end-to-end tests), 48 files, 681 passed; scoreboard "Same as the stored

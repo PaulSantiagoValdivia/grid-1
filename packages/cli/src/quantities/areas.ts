@@ -94,7 +94,7 @@ export interface FloorAreas {
   readonly walls: number | null
   /** Enclosed floor that no room covers, on the whole floor. */
   readonly unclaimed: number
-  /** BRF-4 (C16): the floor is massing, an outline it states with no walls yet; left out otherwise. */
+  /** BRF-4 (C17): the floor is massing, an outline it states with no walls yet; left out otherwise. */
   readonly massing?: true
   /** WRT-6: the net area's sureness, from its rooms'; only when one of them has one. */
   readonly sureness?: AreaSureness
@@ -281,7 +281,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       overStairs: f.overStairs,
       walls: f.walls,
       unclaimed: f.unclaimed ?? 0,
-      // BRF-4 (C16): only on a massing floor, an outline with no walls yet.
+      // BRF-4 (C17): only on a massing floor, an outline with no walls yet.
       ...(f.massing ? { massing: true as const } : {}),
       ...(floorSure === undefined ? {} : { sureness: floorSure }),
       why: f.why,
@@ -304,6 +304,12 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   const grossWhy = unknown.length === 0 ? null : `No ${unknown.map((g) => g.rule.name.toLowerCase()).join(' or ')}: ${unknown[0]!.why}`
   const netState = joinStates(floors.map((f) => f.states.net))
   const notes: string[] = grossWhy ? [grossWhy] : []
+  // CNT-10: the state these figures describe, in a plan with phases.
+  const work = survey.facts.work
+  if (work !== null) {
+    const gone = work.counts.demolished.rooms
+    notes.unshift(`These areas are of the building as it will be after the work: ${gone === 0 ? 'no room is' : gone === 1 ? 'the room to be demolished is' : `the ${gone} rooms to be demolished are`} left out, and new rooms are in.`)
+  }
   // AC-9: a room that cannot be measured is named, so a total short by its area is read as such.
   if (netState.leftOut.length > 0) {
     const several = survey.facts.floors.length > 1

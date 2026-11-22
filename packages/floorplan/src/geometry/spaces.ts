@@ -155,7 +155,7 @@ export interface FloorSpaces {
   readonly unclaimed: readonly FloorPiece[]
   readonly mismatches: readonly RoomMismatch[]
   /**
-   * BRF-4 (C16): how much of what the walls enclose lies outside the outline the floor states,
+   * BRF-4 (C17): how much of what the walls enclose lies outside the outline the floor states,
    * m²; null when it states none. The outline and the walls are joined either way.
    */
   readonly pastOutline: number | null
@@ -321,7 +321,7 @@ function joinWalls(walls: readonly Wall[], grid: number, reach: number, outline:
   const solid = union([...solidShapes.map((s) => s.body), ...fills.map((f) => f.polygon)])
   const frame = lineShapes.length === 0 ? solid : union([...solid, ...lineShapes.map((s) => s.body)])
   const walled = union(frame.map((polygon) => [polygon[0]!]))
-  // BRF-4 (C16): the floor's stated outline joins what the walls enclose; floor inside it that no
+  // BRF-4 (C17): the floor's stated outline joins what the walls enclose; floor inside it that no
   // wall encloses is floor too, and what the walls reach past it is measured apart.
   const stated = outline === null ? null : [outline[0]!.map(([x, y]): Pair => [snap(x), snap(y)])]
   const filled = stated === null ? walled : union([...walled, stated])
