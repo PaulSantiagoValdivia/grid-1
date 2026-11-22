@@ -194,8 +194,10 @@ describe('C5 · every floor rises from z = 0', () => {
 
 /**
  * Known failures from the lab (entry Z-4). They ran as expected failures until ARE-1 chose
- * each wall's face from the outline, and pass now. The hand-worked table in
- * room-areas.test.ts holds more cases of the same faults.
+ * each wall's face from the outline, and pass now. Three passed before ARE-1 as well and were
+ * never expected failures: the control rectangle and the two AR-14 cases on the deep L, whose
+ * wrong figure did not change with the turn. The hand-worked table in room-areas.test.ts
+ * holds more cases of the same faults.
  */
 describe('C3 · inside corners and dividing lines (lab failures fixed by ARE-1)', () => {
   const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
@@ -214,6 +216,31 @@ describe('C3 · inside corners and dividing lines (lab failures fixed by ARE-1)'
   it('AR-1 the L room already used in gltf.test.ts measures between its inner faces', () => {
     const { walls, room } = outline(L_GLTF)
     expect(areaOf(planOf({ walls, rooms: [room] }))).toBeCloseTo(insideArea(L_GLTF), 4)
+  })
+
+  // Lab Z-4's control: passed before any fix. Only the rooms with an inside corner read wrong.
+  it('control: a rectangle measures between its inner faces', () => {
+    const RECT: Point[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+    const { walls, room } = outline(RECT)
+    expect(areaOf(planOf({ walls, rooms: [room] }))).toBeCloseTo(insideArea(RECT), 6)
+  })
+
+  // Lab AR-14: passed before ARE-1 too, because this L's proportions read the same wrong
+  // figure (19.20 m²) at every turn. It now reads the right one at every turn.
+  it('AR-14 the L room measures the same turned by 1, 45 and 180 degrees', () => {
+    const at = (deg: number) => {
+      const { walls, room } = outline(L_DEEP, { rotate: deg })
+      return areaOf(planOf({ walls, rooms: [room] }))
+    }
+    const base = at(0)
+    for (const deg of [1, 45, 180]) expect(at(deg), `${deg}°`).toBeCloseTo(base, 4)
+  })
+
+  // Lab AR-14: passed before ARE-1 too, for the same reason.
+  it('AR-14 the L room measures the same with two walls drawn from their other end', () => {
+    const a = outline(L_DEEP)
+    const b = outline(L_DEEP, { reverse: [2, 3] })
+    expect(areaOf(planOf({ walls: b.walls, rooms: [b.room] }))).toBeCloseTo(areaOf(planOf({ walls: a.walls, rooms: [a.room] })), 4)
   })
 
   // Lab AR-14: read 25.80, 25.24, 24.64 and 25.24 m² at 0, 1, 45 and 180 degrees before ARE-1.
