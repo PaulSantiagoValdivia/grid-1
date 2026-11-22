@@ -726,6 +726,17 @@ export const CODES = {
     needed: fixed('doors that can be drawn'),
     fix: fixed('Correct the lines that leave those doors out; the routes are checked once they can be drawn.')
   },
+  'floor/sketch-drawn-only': {
+    says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,
+    found: (s) => `${s.said} on the sketch layer (${s.names.join(', ')})`,
+    needed: fixed('nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture'),
+    fix: fixed('Leave it as a sketch for the drawing. Where it is something Grid holds, such as a fixture, write it as that instead; furniture and site parts will be offered the same way when Grid holds them.')
+  },
+  'plan/note-no-place': {
+    says: (s) => `Note ${s.label} names a room the plan does not have, so it is not drawn`,
+    needed: fixed('a room id from the plan, or a point (at)'),
+    fix: fixed('Name one of the plan\'s rooms by its id, or place the note at a point.')
+  },
   'floor/not-checked-no-use': {
     says: (s) => wordingText(figureWordings.noUse(s.floorName, s.names.length)),
     found: fixed('rooms with no use stated'),

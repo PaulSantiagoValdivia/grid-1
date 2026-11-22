@@ -21,6 +21,8 @@ import { wallExposure } from './exposure'
 import type { Issue } from './validate'
 import { brokenOnFloor, validatePlan } from './validate'
 import type { PlanStep } from './steps'
+import type { PlanNote, PlanSketch } from './writing'
+import { planNotes, planSketch, sketchExtent } from './writing'
 import { planSteps } from './steps'
 import type { RiserLine, StairLayout } from './stairs'
 import { planStairs } from './stairs'
@@ -172,6 +174,12 @@ export interface PlanDrawing {
   readonly undrawn: readonly UndrawnRoom[]
   /** The fixtures (CNT-12), drawn over the room fills and under the walls. Empty when the plan has none. */
   readonly items: readonly PlanItem[]
+  /** SHT-7: the sketch layer, drawn only: never measured, checked or taken as a wall. */
+  readonly sketch: readonly PlanSketch[]
+  /** SHT-7: the notes, tags, symbols and key written on the drawing. */
+  readonly notes: readonly PlanNote[]
+  /** SHT-7: the box round the sketch layer, so a view frames it too; null with none. */
+  readonly sketchBounds: Bounds | null
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -329,7 +337,10 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const stairs = (plan.stairs ?? []).length === 0 ? [] : planStairs(plan, floor === null ? () => broken : brokenOnFloor).stairs.map((stair) => planStair(stair, floor))
   for (const stair of stairs) for (const flight of stair.flights) extent.push(...flight.outline)
 
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, bounds: computeBounds(extent), issues }
+  const sketch = planSketch(plan)
+  const notes = planNotes(plan, (id) => rooms.find((room) => room.id === id)?.labelAt)
+  const sketchBounds = sketch.length === 0 ? null : computeBounds(sketchExtent(sketch))
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, sketch, notes, sketchBounds, bounds: computeBounds(extent), issues }
 }
 
 /**

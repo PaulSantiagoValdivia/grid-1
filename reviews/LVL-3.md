@@ -235,3 +235,9 @@ golden file changed. After this merge every check passed, the two timing tests i
 - `ifc.ts` writes the stairs, then HND-6's `Grid_LeftOut` property set. A stair that cannot be laid
   out is a part kind of its own in the left-out lists (`stair`, "Stairs" and "StairIds" in the
   IFC), between fixtures and floors.
+
+## Merging main again (SHT-7), at cae036c
+
+- The floor drawing lays out the stairs, then SHT-7's sketch, notes and sketch bounds, and returns
+  all of them. The text-limits table in `docs/plan-file.md` keeps both sides' rows.
+- SHT-7 colours rooms by use: the new `lift` use gets a pale grey-blue beside the stair's.

@@ -318,7 +318,9 @@ async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page:
   const { options, grow } = planPictureOptions(page.picture)
   // A box shrunk to fit under a tall header prints the plan smaller: its scale's N grows.
   const paperScale = (options.paperScale! * PLAN_BOX.width) / box.width
-  const png = await drawPlan(plan, { format: 'png', scale: (PLAN_SCALE * PLAN_BOX.width * grow) / options.width!, ...options, paperScale })
+  // SHT-7: the page has its own title and the plan its own box, so the band under the drawing
+  // for the plan's title and key is left off; the notes and the sketch are drawn.
+  const png = await drawPlan(plan, { format: 'png', scale: (PLAN_SCALE * PLAN_BOX.width * grow) / options.width!, ...options, paperScale, show: { title: false, key: false } })
   const w = box.width * grow
   const h = box.height * grow
   ctx.save()

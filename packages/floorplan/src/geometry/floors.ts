@@ -143,7 +143,14 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
       (opening) => wallIds.has(opening.wall) && !collided.has(opening.wall)
     ),
     // CNT-12: an item by its own floor. A plan with no items keeps no key.
-    ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) })
+    ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) }),
+    // SHT-7: a sketch item by its own floor; a note by its room's, or its own when at a point.
+    ...(plan.sketch !== undefined && { sketch: plan.sketch.filter((item) => floorOf(item) === floorId) }),
+    ...(plan.annotations !== undefined && {
+      annotations: plan.annotations.filter((note) =>
+        note.room !== undefined ? plan.rooms.some((room) => room.id === note.room && floorOf(room) === floorId) : floorOf(note) === floorId
+      )
+    })
   }
   // A slice of a slice still leads back to the plan the first was cut from.
   slices.set(slice, { whole: slices.get(plan)?.whole ?? plan, floor: floorId })

@@ -61,6 +61,9 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   stairs: { id: 'id', name: 'name', from: 'id', to: 'id' },
   // CNT-12: a fixture's kind is held to an id's limit, its label to a name's.
   items: { id: 'id', kind: 'id', label: 'name', floor: 'id' },
+  // SHT-7: writing on the drawing and the sketch layer.
+  annotations: { id: 'id', text: 'name', room: 'id', floor: 'id' },
+  sketch: { id: 'id', category: 'id', text: 'name', floor: 'id' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -116,7 +119,13 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
     const problem = textProblem(projectId, 'id')
     if (problem) return `projectId ${problem}`
   }
+  const title = raw['title']
+  if (typeof title === 'string') {
+    const problem = textProblem(title, 'name')
+    if (problem) return `title ${problem}`
+  }
   const image = raw['referenceImage']
+
   if (isObject(image) && typeof image['path'] === 'string') {
     const problem = textProblem(image['path'], 'path')
     if (problem) return `referenceImage.path ${problem}`

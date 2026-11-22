@@ -29,6 +29,8 @@ import { LOOKS, toLook } from './look'
 import { planScene } from './scene'
 import type { FaultLine, PictureKey } from './faults'
 import { faultKey, faultsOnFloor } from './faults'
+import { keyEntries, stackBands, writingBand } from './writing'
+import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
 
@@ -70,6 +72,25 @@ export interface PictureOptions {
    * None by default.
    */
   readonly faults?: readonly FaultLine[]
+  /**
+   * SHT-7: what the picture shows. Each is on by default: `title` and `key` (the plan's own, in
+   * the band under the drawing; `key: true` adds a key the plan does not ask for), `notes`,
+   * `sketch`, `areas`, `swings` and `warnings` (door warnings and MSG-8's marks and list).
+   * `colourBy: 'use'` fills each room by its use, and puts the uses in the key.
+   */
+  readonly show?: PictureShow
+}
+
+/** SHT-7: what a picture shows. */
+export interface PictureShow {
+  readonly title?: boolean
+  readonly key?: boolean
+  readonly notes?: boolean
+  readonly sketch?: boolean
+  readonly areas?: boolean
+  readonly swings?: boolean
+  readonly warnings?: boolean
+  readonly colourBy?: 'use' | null
 }
 
 /** A picture before it is written out. */
@@ -217,6 +238,9 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const all = options.faults ?? []
   const faults = faultsOnFloor(all, floor, new Map(slice.openings.map((opening) => [opening.id, opening.wall])))
   const handings = handingsOf(slice)
+  const show = options.show ?? {}
+  const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key'>): boolean => show[part] !== false
+  const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
   const nodes = planScene({
     drawing,
     handings,
@@ -226,9 +250,26 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     look,
     ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
     labels: options.labels,
-    faults
+    faults,
+    uses,
+    show: {
+      notes: on('notes'),
+      sketch: on('sketch'),
+      areas: on('areas'),
+      swings: on('swings'),
+      warnings: on('warnings'),
+      colourBy: show.colourBy ?? null
+    }
   })
-  const key = options.faults === undefined ? null : faultKey(faults, all.length - faults.length, width, look.colors)
+  // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
+  const title = on('title') ? (plan.title ?? null) : null
+  const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))
+  const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
+  const marked = on('warnings') && faults.length > 0
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked }) : []
+  const writing = writingBand(title, entries, width, look.colors)
+  const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors)
+  const key = stackBands(writing, listed)
   const undecidedDoors = look.undecidedDoors ? undecidedIn(drawing, handings) : []
   return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes, key }
 }

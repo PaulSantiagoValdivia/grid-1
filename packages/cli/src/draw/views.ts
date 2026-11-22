@@ -6,7 +6,7 @@
  * the frame are chosen here. "North" is the top of the drawing, +y: a plan holds no north.
  */
 import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
-import { LOOKS as PICTURE_LOOKS, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine } from '@ongrid/viewer/src/picture'
+import { LOOKS as PICTURE_LOOKS, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
 import { GROUND_GRID } from '@ongrid/viewer/src/canvas3d/BuildingScene'
 import { LIGHT_COLORS_3D, rasterise, stillScene } from '@ongrid/viewer/src/still'
@@ -34,7 +34,7 @@ export interface PlanView {
 
 export async function planView(
   plan: FloorPlan,
-  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; frame?: Bounds; faults?: readonly FaultLine[] },
+  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow },
 ): Promise<PlanView> {
   // VEW-2's check view: every room, door and window carries its id. VEW-6: a frame crops.
   // MSG-8: the result record's lines, marked on the drawing and listed under it.
@@ -42,6 +42,8 @@ export async function planView(
     ...(options.ids ? { labels: { ids: true } } : {}),
     ...(options.frame ? { frame: options.frame } : {}),
     ...(options.faults ? { faults: options.faults } : {}),
+    // SHT-7: what the picture shows.
+    ...(options.show ? { show: options.show } : {}),
   }
   const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })

@@ -42,11 +42,13 @@ import {
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { Look, PlanLook } from './look'
-import { LINE_PX, TEXT_PX, UNDRAWN_TINT, lengthText, lineMetres, toLook } from './look'
+import { LINE_PX, TEXT_PX, UNDRAWN_TINT, USE_FILLS, lengthText, lineMetres, toLook } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 import type { NumberedFault } from './faults'
 import { faultMarks, undrawnRoomText } from './faults'
+import { noteNodes, sketchNodes } from './writing'
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 
 /** The door-sweep warning mark's size on screen, whatever the zoom. */
 export const WARNING_RADIUS_PX = 5
@@ -156,8 +158,27 @@ export interface SceneInput {
    * numbered mark on its part, with its words beside it. None by default.
    */
   readonly faults?: readonly NumberedFault[]
+  /** SHT-7: what the drawing shows. Everything on, and rooms in one fill, by default. */
+  readonly show?: Partial<SceneShow>
+  /** SHT-7: each room's use by id, for `show.colourBy: 'use'`. */
+  readonly uses?: ReadonlyMap<string, RoomUse>
   readonly live?: Partial<SceneLive>
 }
+
+/** SHT-7: the parts of a drawing that can be left out, and how its rooms are filled. */
+export interface SceneShow {
+  readonly notes: boolean
+  readonly sketch: boolean
+  readonly areas: boolean
+  readonly swings: boolean
+  /** The door warning dots and the numbered marks of what went wrong (MSG-8). */
+  readonly warnings: boolean
+  /** `use` fills each room by its use; null gives every room the look's one fill. */
+  readonly colourBy: 'use' | null
+}
+
+/** Everything shown, rooms in one fill. */
+export const SHOW_ALL: SceneShow = { notes: true, sketch: true, areas: true, swings: true, warnings: true, colourBy: null }
 
 /** The paint for each part, for one look, zoom and output scale. */
 function paints(named: Look, mpp: number, paperScale: number | undefined) {
@@ -451,6 +472,11 @@ export function planScene(input: SceneInput): SvgNode[] {
   const decimals = style.areaDecimals ?? 2
   const live: SceneLive = { ...STILL, ...input.live }
   const paint = paints(look, mpp, input.paperScale)
+  const show: SceneShow = { ...SHOW_ALL, ...input.show }
+  const fillOf = (id: string): Attrs => {
+    const use = show.colourBy === 'use' ? input.uses?.get(id) : undefined
+    return use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+  }
   const out: SvgNode[] = []
 
   const selected = (id: string): boolean => id === live.selectedId
@@ -526,7 +552,7 @@ export function planScene(input: SceneInput): SvgNode[] {
           'data-selected': selected(room.id),
           opacity: live.roomFill(room.id) ?? undefined,
           ...live.marks(room.id),
-          ...paint.room
+          ...fillOf(room.id)
         },
         [],
         room.id
@@ -576,6 +602,9 @@ export function planScene(input: SceneInput): SvgNode[] {
       )
     )
   }
+
+  // SHT-7: the sketch layer, over the floors and under the walls. Drawn only.
+  if (show.sketch) out.push(...sketchNodes(drawing.sketch, mpp, look.colors))
 
   for (const wall of drawing.walls) {
     const tracing = live.wallTrace(wall.id)
@@ -684,7 +713,7 @@ export function planScene(input: SceneInput): SvgNode[] {
         opening.id
       )
     )
-    if (door) {
+    if (door && show.swings) {
       // Drawing, not a target: clicks reach the gap or room underneath.
       out.push(
         el(
@@ -792,6 +821,7 @@ export function planScene(input: SceneInput): SvgNode[] {
   // or out of the room with a leader. Measured from the text actually drawn, so a wider
   // "before → after" area still gets the room it needs.
   const areaText = (room: PlanRoom): string => {
+    if (!show.areas) return ''
     const change = live.areaChange(room.id)
     return change
       ? `${areaFigure(change.before, decimals)} → ${areaFigure(change.after, decimals)} m²`
@@ -799,6 +829,7 @@ export function planScene(input: SceneInput): SvgNode[] {
   }
   // The same text in the pieces the app has always drawn it in, one text node each.
   const areaPieces = (room: PlanRoom): string[] => {
+    if (!show.areas) return []
     const change = live.areaChange(room.id)
     return change
       ? [areaFigure(change.before, decimals), ' → ', areaFigure(change.after, decimals), ' m²']
@@ -876,7 +907,7 @@ export function planScene(input: SceneInput): SvgNode[] {
         { transform: labelTransform(label.at, mpp), opacity },
         [
           el('text', { 'data-part': 'label', ...paint.label }, [names[index]!]),
-          el('text', { 'data-part': 'area', dy: String(ROOM_AREA_DY), ...paint.area }, areaPieces(room))
+          ...(show.areas ? [el('text', { 'data-part': 'area', dy: String(ROOM_AREA_DY), ...paint.area }, areaPieces(room))] : [])
         ],
         `label:${room.id}`
       )
@@ -896,6 +927,12 @@ export function planScene(input: SceneInput): SvgNode[] {
         `ghost-label-${room.id}`
       )
     )
+  }
+
+  // SHT-7: the notes, tags and symbols. A note in a room goes under that room's label.
+  if (show.notes) {
+    const labelAt = new Map(labels.flatMap((label) => (label ? [[label.id, label.at] as const] : [])))
+    out.push(...noteNodes(drawing.notes, labelAt, mpp, look.colors))
   }
 
   // The check view: each opening's id just off the middle of its wall, on the side its normal
@@ -919,10 +956,10 @@ export function planScene(input: SceneInput): SvgNode[] {
   }
 
   // Laid out before the warning dots, which a numbered mark on the same door replaces.
-  const marks = faults.length === 0 ? null : faultMarks(faultLayout, faults)
+  const marks = faults.length === 0 || !show.warnings ? null : faultMarks(faultLayout, faults)
   for (const opening of drawing.openings) {
     const message = doorWarnings.get(opening.id)
-    if (message === undefined || marks?.openings.has(opening.id)) continue
+    if (message === undefined || marks?.openings.has(opening.id) || !show.warnings) continue
     const at = { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }
     // Sized in screen pixels like the labels.
     const children: SvgNode[] = [el('circle', { 'data-part': 'door-warning-dot', r: WARNING_RADIUS_PX, ...paint.warningDot })]
