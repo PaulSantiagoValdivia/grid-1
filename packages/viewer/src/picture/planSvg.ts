@@ -26,6 +26,8 @@ import { fitTo, viewBoxOf } from '../canvas2d/viewport'
 import type { PlanLook } from './look'
 import { DARK_LOOK, LIGHT_LOOK } from './look'
 import { planScene } from './scene'
+import type { FaultLine, PictureKey } from './faults'
+import { faultKey, faultsOnFloor } from './faults'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
 
@@ -50,6 +52,13 @@ export interface PictureOptions {
    * whole floor and its dimensions when left out. Labels and lines keep their size in pixels.
    */
   readonly frame?: Bounds
+  /**
+   * What went wrong (MSG-8): every line of the plan's result record (`inspectPlan` in
+   * `@ongrid/rules`), in its order. The lines on the floor drawn get a numbered mark on their
+   * part, with their words beside it, and are listed under the drawing by the same numbers.
+   * None by default.
+   */
+  readonly faults?: readonly FaultLine[]
 }
 
 /** A picture before it is written out. */
@@ -64,6 +73,16 @@ export interface Picture {
   readonly rooms: number
   /** The plan's elements: exactly what the app's 2D view draws inside its `<svg>`. */
   readonly nodes: readonly SvgNode[]
+  /**
+   * The key under the drawing, when the picture was given faults: `height` more pixels below
+   * the plan's `height`. Null otherwise.
+   */
+  readonly key: PictureKey | null
+}
+
+/** The picture's whole height in pixels: the plan and the key under it. */
+export function fullHeight(picture: Pick<Picture, 'height' | 'key'>): number {
+  return picture.height + (picture.key?.height ?? 0)
 }
 
 export const DEFAULT_WIDTH = 1200
@@ -127,12 +146,13 @@ function sizeOf(framed: Bounds, options: PictureOptions): { width: number; heigh
 }
 
 function framePicture(plan: FloorPlan, options: PictureOptions) {
-  const slice = planForFloor(plan, resolveFloor(plan, options.floor))
+  const floor = resolveFloor(plan, options.floor)
+  const slice = planForFloor(plan, floor)
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
   const framed = options.frame ?? framingOf(drawing, dimensions)
   const { width, height } = sizeOf(framed, options)
-  return { slice, drawing, dimensions, width, height, view: fitTo(framed, width / height) }
+  return { floor, slice, drawing, dimensions, width, height, view: fitTo(framed, width / height) }
 }
 
 /**
@@ -146,8 +166,10 @@ export function pictureView(plan: FloorPlan, options: PictureOptions = {}): Pick
 
 /** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
 export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
-  const { slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
+  const { floor, slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
   const look = lookOf(options.look)
+  const all = options.faults ?? []
+  const faults = faultsOnFloor(all, floor, new Map(slice.openings.map((opening) => [opening.id, opening.wall])))
   const nodes = planScene({
     drawing,
     handings: handingsOf(slice),
@@ -155,9 +177,11 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     dimensions,
     metersPerPixel: view.width / width,
     look,
-    labels: options.labels
+    labels: options.labels,
+    faults
   })
-  return { width, height, view, look, rooms: drawing.rooms.length, nodes }
+  const key = options.faults === undefined ? null : faultKey(faults, all.length - faults.length, width, look)
+  return { width, height, view, look, rooms: drawing.rooms.length, nodes, key }
 }
 
 /**
@@ -165,7 +189,34 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
  * drawing is the same, only finer.
  */
 export function pictureToSvg(picture: Picture, scale = 1): string {
-  const { view, look } = picture
+  const { view, look, key } = picture
+  const label = `Floor plan with ${picture.rooms} rooms`
+  if (key) {
+    // The plan in its own frame at the top, in plan metres; the key under it, in pixels.
+    const total = fullHeight(picture)
+    const plan = el(
+      'svg',
+      { x: 0, y: 0, width: picture.width, height: picture.height, viewBox: viewBoxOf(view), preserveAspectRatio: 'xMidYMid meet' },
+      picture.nodes
+    )
+    const root = el(
+      'svg',
+      {
+        xmlns: 'http://www.w3.org/2000/svg',
+        width: Math.round(picture.width * scale),
+        height: Math.round(total * scale),
+        viewBox: `0 0 ${picture.width} ${total}`,
+        role: 'img',
+        'aria-label': `${label}, and a key of what to look at`
+      },
+      [
+        el('rect', { 'data-part': 'paper', x: 0, y: 0, width: picture.width, height: total, fill: look.paper }),
+        plan,
+        el('g', { 'data-part': 'key', transform: `translate(0 ${picture.height})` }, key.nodes)
+      ]
+    )
+    return `${toSvg(root)}\n`
+  }
   const paper = el('rect', {
     'data-part': 'paper',
     x: view.x,
@@ -183,7 +234,7 @@ export function pictureToSvg(picture: Picture, scale = 1): string {
       viewBox: viewBoxOf(view),
       preserveAspectRatio: 'xMidYMid meet',
       role: 'img',
-      'aria-label': `Floor plan with ${picture.rooms} rooms`
+      'aria-label': label
     },
     [paper, ...picture.nodes]
   )

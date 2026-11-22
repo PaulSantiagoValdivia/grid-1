@@ -1,8 +1,10 @@
 /**
- * `grid draw <plan>`: one floor as an SVG picture, or as a PNG with `--png`, through `drawPlan`.
+ * `grid draw <plan>`: one floor as an SVG picture, or as a PNG with `--png`, through `drawPlan`,
+ * with what went wrong marked on it by the numbers `grid check` gives, and listed under it (MSG-8).
  * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`.
  * Written to `--out`, or to standard output when no file is named.
  */
+import { inspectPlan } from '@ongrid/rules'
 import { drawPlan } from '../draw/drawPlan'
 import { floorOption, type LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
@@ -61,7 +63,9 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     return drawStill(loaded.plan, { focus: floor ?? null, scale })
   }
   const labels = request.ids ? { labels: { ids: true } } : {}
+  // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
+  const faults = inspectPlan(loaded.plan).lines
   return request.png
-    ? drawPlan(loaded.plan, { format: 'png', floor, scale, ...labels })
-    : drawPlan(loaded.plan, { format: 'svg', floor, ...labels })
+    ? drawPlan(loaded.plan, { format: 'png', floor, scale, faults, ...labels })
+    : drawPlan(loaded.plan, { format: 'svg', floor, faults, ...labels })
 }

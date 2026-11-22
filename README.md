@@ -142,6 +142,12 @@ from where it stands: `bath-door joined bath and lounge; it now joins kitchen an
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
 
+`grid draw` and `grid_view` show what went wrong on the drawing. Every line `grid check` prints
+for the floor drawn has its number from that list in a small mark on the room, door, window or
+wall it is about, with its words beside it; a line about the whole floor has its mark in the
+top-left corner. The same lines are listed by number under the drawing. A room that cannot be
+drawn is not left blank: it is the dashed box round its walls, with its name and the reason.
+
 ### Measuring from faces, and a room's height
 
 `grid_measure` measures as a person with a tape does, so an agent does no arithmetic of its own.
