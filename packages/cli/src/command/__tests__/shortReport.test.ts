@@ -73,7 +73,7 @@ describe('the default report of the 62.65 m² flat', () => {
     expect(text.split('\n')[1]).toBe('No place is stated, so no figure was applied: the US figures would have given no lines. State it in the plan as site.country, or give --country.')
     expect(text).toContain('To look at: nothing. That only means these checks found nothing, not that the plan meets any rule.')
     expect(text).toContain('Looked at by at least one check: 6 of 6 rooms.')
-    expect(text).toContain('What each check looked at (9):')
+    expect(text).toContain('What each check looked at (8):')
     expect(text).toContain('  - Every room has a door or an opening to another space: 6 rooms.')
     expect(text).toContain('  - Nothing was checked for "A stair or a lift shaft drawn as a room on each floor lies over itself from floor to floor": it looked at no rooms.')
     expect(text).toContain('  - Room sizes and escape openings: not run: no place is stated, so no figure was applied.')
@@ -115,7 +115,7 @@ describe('the default report of the 62.65 m² flat', () => {
     expect(bytes(text) - bytes(`  ${GROUND_LINE}\n`)).toBe(969)
     // The data keeps the whole record: coverage and limits are there either way.
     const data = answer.data as { coverage: unknown[]; limits: string[]; seenCount: number; marksProblem: string | null }
-    expect(data.coverage).toHaveLength(8)
+    expect(data.coverage).toHaveLength(9)
     expect(data.limits).toContain('Ceiling height is not checked, in any room or under a sloping roof')
     expect([data.seenCount, data.marksProblem]).toEqual([0, null])
     const us = await tool('grid_check').run({ plan: 'flat.json', country: 'US' }, { project })
@@ -130,7 +130,7 @@ describe('the default report of the 62.65 m² flat', () => {
     for (const heading of ['Checks run (6):', 'Figures used (6):', 'What these checks never look at (11):', 'What each check looked at (9):']) expect(full).toContain(heading)
     expect(full).toContain('      looked at: "bath", "bed1", "bed2", "hall", "kitchen", "living"')
     const answer = await tool('grid_check').run({ plan: 'flat.json', full: true, country: 'US' }, { project })
-    expect(answer.text).toContain('Never looked at, whatever the plan (10):')
+    expect(answer.text).toContain('Never looked at, whatever the plan (11):')
     expect(answer.text).toContain('Figures used (6):')
     expect(answer.text).toContain('  - Rooms people live or sleep in have a minimum floor area (US model codes: IBC 2024 and IRC 2024)')
   })
