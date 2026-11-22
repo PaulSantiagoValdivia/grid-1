@@ -3,7 +3,6 @@ import { resolve } from 'path'
 import { gunzipSync } from 'zlib'
 import { describe, expect, it } from 'vitest'
 import { FloorPlanSchema, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength } from '../card'
 import { planFacts } from '../facts'
 
@@ -196,11 +195,12 @@ describe("a person's form", () => {
 })
 
 describe('what a card says and never says', () => {
-  it.each(Object.keys(plans))('%s: every card carries the label and says no plan complies', (name) => {
+  // MSG-3: the label leads every description (`describePlan`); the card itself says it checks nothing.
+  it.each(Object.keys(plans))('%s: every card says it checks nothing, and no plan complies', (name) => {
     for (const audience of ['person', 'agent'] as const) {
       for (const length of DESCRIBE_LENGTHS) {
         const text = card(plans[name]!, length, audience)
-        if (length !== 'line') expect(text).toContain(GENERAL_GUIDANCE_LABEL)
+        if (length !== 'line') expect(text).toMatch(audience === 'person' ? /checks nothing: grid check runs the checks\.\n$/ : /CHECKS none here: grid check\.\n$/)
         expect(text).not.toMatch(/\b(compl(y|ies|iant|iance)|approved|passes)\b/i)
       }
     }

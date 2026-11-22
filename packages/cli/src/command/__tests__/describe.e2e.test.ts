@@ -58,10 +58,12 @@ describe('grid describe', () => {
     const run = grid(['describe', 'two-bed-flat.json'])
     expect(run.status).toBe(0)
     expect(run.err).toBe('')
-    expect(run.out.split('\n')[0]).toBe('A plan of one floor with 5 rooms (none says what it is for), 68.8 m² inside; from outside, a door leads into Living room.')
+    // MSG-3: the label is the first line; the card follows it.
+    expect(run.out.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
+    expect(run.out.split('\n')[1]).toBe('A plan of one floor with 5 rooms (none says what it is for), 68.8 m² inside; from outside, a door leads into Living room.')
     expect(run.out).toContain('\nBedroom 2: 3.83 × 3.58, 13.7 m², at 0.13, 0.13.')
     expect(run.out).not.toContain('bed2')
-    expect(run.out.trimEnd().endsWith(`${GENERAL_GUIDANCE_LABEL}.`)).toBe(true)
+    expect(run.out.trimEnd().endsWith('This describes the plan and checks nothing: grid check runs the checks.')).toBe(true)
   })
 
   it('answers in three lengths, for a person and for an agent', () => {
@@ -71,7 +73,8 @@ describe('grid describe', () => {
         const run = grid(['describe', 'two-bed-flat.json', '--length', length, `--for=${audience}`])
         expect(run.status).toBe(0)
         sizes[`${length} ${audience}`] = Buffer.byteLength(run.out)
-        if (length === 'line') expect(run.out.trimEnd().split('\n')).toHaveLength(1)
+        // The label, then the one line (MSG-3).
+        if (length === 'line') expect(run.out.trimEnd().split('\n')).toEqual([GENERAL_GUIDANCE_LABEL, expect.any(String)])
         if (audience === 'agent') expect(run.out).toContain(length === 'line' ? 'into lounge' : 'bed2')
       }
     }
@@ -82,7 +85,7 @@ describe('grid describe', () => {
 
   it('shows the front door that opens into a bedroom on the first line', () => {
     const run = grid(['describe', 'front-door-into-bedroom.json', '--length', 'line'])
-    expect(run.out).toBe('A plan of one floor with 6 rooms (2 bedrooms, 1 bathroom), 62.6 m² inside; from outside, a door leads into Bedroom 2.\n')
+    expect(run.out).toBe(`${GENERAL_GUIDANCE_LABEL}\nA plan of one floor with 6 rooms (2 bedrooms, 1 bathroom), 62.6 m² inside; from outside, a door leads into Bedroom 2.\n`)
   })
 
   it('reads plan.json with no path inside a project grid init made', () => {
@@ -90,8 +93,8 @@ describe('grid describe', () => {
     expect(grid(['init', 'demo']).status).toBe(0)
     const run = grid(['describe', '--length', 'line'], project)
     expect(run.status).toBe(0)
-    expect(run.out.trimEnd().split('\n')).toHaveLength(1)
-    expect(run.out.startsWith('A plan of one floor with 2 rooms')).toBe(true)
+    expect(run.out.trimEnd().split('\n')).toHaveLength(2)
+    expect(run.out.startsWith(`${GENERAL_GUIDANCE_LABEL}\nA plan of one floor with 2 rooms`)).toBe(true)
     // From another folder too, with --project.
     expect(grid(['describe', '--project', project, '--length', 'line']).out).toBe(run.out)
   })

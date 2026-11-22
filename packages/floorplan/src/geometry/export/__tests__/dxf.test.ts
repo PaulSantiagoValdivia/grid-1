@@ -133,7 +133,9 @@ describe('coordinates (C4)', () => {
   it('does not flip Y', () => {
     // A mirrored basis passes every length and area test and still exports the
     // plan upside down. +Y forward in the plan is +Y up in the DXF (C4).
-    const dxf = dxfOf(samplePlan())
+    // MSG-3: the label is written last and sits above the plan; it is not the plan's geometry.
+    const all = dxfOf(samplePlan())
+    const dxf = all.slice(0, all.lastIndexOf('\r\n0\r\nTEXT\r\n'))
 
     expect(Math.max(...ys(dxf))).toBeCloseTo(3.1, 6)
     expect(ys(dxf).every((y) => y >= -0.2)).toBe(true)

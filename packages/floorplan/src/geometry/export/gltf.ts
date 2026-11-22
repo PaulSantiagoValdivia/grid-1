@@ -19,6 +19,7 @@
 import type { Scene3D } from '../scene3d'
 import { floorMesh, makeNamer, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
+import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 
 const MAGIC = 0x46546c67 // "glTF"
 const VERSION = 2
@@ -118,7 +119,8 @@ function partsOf(scene: Scene3D): Part[] {
  */
 export function toGlb(scene: Scene3D): Uint8Array {
   const parts = partsOf(scene)
-  const asset = { version: '2.0', generator: GENERATOR }
+  // MSG-3: the label travels in the file, where glTF keeps data of the file's own.
+  const asset = { version: '2.0', generator: GENERATOR, extras: { label: GENERAL_GUIDANCE_LABEL } }
   if (parts.length === 0) return encodeGlb({ asset, scene: 0, scenes: [{}] }, null)
 
   // Per mesh: its positions, then its indices. Both are 4 bytes a component, so

@@ -318,7 +318,8 @@ async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page:
   const { options, grow } = planPictureOptions(page.picture)
   // A box shrunk to fit under a tall header prints the plan smaller: its scale's N grows.
   const paperScale = (options.paperScale! * PLAN_BOX.width) / box.width
-  const png = await drawPlan(plan, { format: 'png', scale: (PLAN_SCALE * PLAN_BOX.width * grow) / options.width!, ...options, paperScale })
+  // The page carries the label in its footer, so the picture does not (MSG-3).
+  const png = await drawPlan(plan, { format: 'png', scale: (PLAN_SCALE * PLAN_BOX.width * grow) / options.width!, ...options, paperScale, label: false })
   const w = box.width * grow
   const h = box.height * grow
   ctx.save()
@@ -331,7 +332,7 @@ async function drawCover(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetP
   const top = header(ctx, page, true) + 16
   const room = flowing.reduce((sum, p) => sum + measurePiece(ctx, p, TEXT_WIDTH).height, 0)
   const height = Math.max(COVER_IMAGE.min, Math.min(COVER_IMAGE.max, LIMIT - top - 100 - room))
-  const still = await drawStill(plan, { width: Math.round(TEXT_WIDTH), height, scale: 2 })
+  const still = await drawStill(plan, { width: Math.round(TEXT_WIDTH), height, scale: 2, label: false })
   ctx.drawImage(await canvas.loadImage(Buffer.from(still)), MARGIN, top, TEXT_WIDTH, height)
   const y = top + height + 50
   const column = TEXT_WIDTH / Math.max(1, page.figures.length)

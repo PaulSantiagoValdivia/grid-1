@@ -2,6 +2,7 @@
  * How a figure is written: metres, or feet and inches, and CSV for a spreadsheet. Grid's
  * figures are always metres; feet are only a way of writing them.
  */
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/floorplan/geometry'
 
 export const DISPLAY_UNITS = ['m', 'ft'] as const
 export type DisplayUnits = (typeof DISPLAY_UNITS)[number]
@@ -36,6 +37,10 @@ function csvField(value: string | number | null): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
+/**
+ * A table as CSV. Its first row is the label, in one cell (MSG-3), so a spreadsheet shows it
+ * above the table's own header.
+ */
 export function csv(header: readonly string[], rows: readonly (readonly (string | number | null)[])[]): string {
-  return [header, ...rows].map((row) => row.map(csvField).join(',')).join('\n') + '\n'
+  return [[GENERAL_GUIDANCE_LABEL], header, ...rows].map((row) => row.map(csvField).join(',')).join('\n') + '\n'
 }

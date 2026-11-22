@@ -11,6 +11,7 @@
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { Bounds, Dimension, PlanDrawing } from '@ongrid/floorplan/geometry'
 import {
+  GENERAL_GUIDANCE_LABEL,
   boundsWithDimensions,
   buildDimensions,
   buildFloorPlan,
@@ -25,7 +26,7 @@ import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import type { Viewport } from '../canvas2d/viewport'
 import { fitTo, viewBoxOf } from '../canvas2d/viewport'
 import type { Look, LookName, PlanLook } from './look'
-import { LOOKS, toLook } from './look'
+import { LOOKS, lengthText, toLook } from './look'
 import { planScene } from './scene'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
@@ -203,11 +204,37 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes }
 }
 
+/** How a picture is written as a file. */
+export interface PictureFileOptions {
+  /**
+   * MSG-3: the label "General guidance, not your local rules" in the top-left corner. On by
+   * default; off only where the page round the picture carries it already (a sheet).
+   */
+  readonly label?: boolean
+}
+
+/** The label's text size in pixels, as a dimension's. */
+const LABEL_PX = 11
+
+/**
+ * The label on a paper-coloured strip in the top-left corner, in pixels like every label, so it
+ * reads the same at any zoom. Its width is estimated, never measured, as room labels are.
+ */
+function labelNode(picture: Picture): SvgNode {
+  const { view, look } = picture
+  const mpp = view.width / picture.width
+  const width = GENERAL_GUIDANCE_LABEL.length * LABEL_PX * 0.56 + 12
+  return el('g', { 'data-part': 'guidance-label', transform: `translate(${lengthText(view.x)} ${lengthText(view.y)}) scale(${lengthText(mpp)})` }, [
+    el('rect', { x: 0, y: 0, width: lengthText(width), height: LABEL_PX + 10, fill: look.colors.paper, opacity: 0.9 }),
+    el('text', { x: 6, y: LABEL_PX + 3, fill: look.colors.labelSoft, 'font-family': look.colors.font, 'font-size': LABEL_PX }, [GENERAL_GUIDANCE_LABEL])
+  ])
+}
+
 /**
  * The picture as an SVG file. `scale` multiplies its size in pixels and nothing else: the
- * drawing is the same, only finer.
+ * drawing is the same, only finer. It carries the label in its top-left corner (MSG-3).
  */
-export function pictureToSvg(picture: Picture, scale = 1): string {
+export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOptions = {}): string {
   const { view, look } = picture
   const paper = el('rect', {
     'data-part': 'paper',
@@ -228,7 +255,7 @@ export function pictureToSvg(picture: Picture, scale = 1): string {
       role: 'img',
       'aria-label': `Floor plan with ${picture.rooms} rooms`
     },
-    [paper, ...picture.nodes]
+    [paper, ...picture.nodes, ...(options.label === false ? [] : [labelNode(picture)])]
   )
   return `${toSvg(root)}\n`
 }

@@ -20,6 +20,7 @@ import type { PlanDrawing } from '../floorplan'
 import { doorSwing, type SwingArc } from '../door'
 import { TOLERANCES } from '../tolerances'
 import { areaText } from '../rounding'
+import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 
 /**
  * Layer names are the only organisation a DXF carries, so they are part of the
@@ -287,6 +288,15 @@ function writeText(w: DxfWriter, layer: string, at: Vec2, text: string): void {
   w.point(at.x, at.y, [11, 21, 31])
 }
 
+/**
+ * MSG-3: the label, centred above the drawing on the labels layer, where whoever opens the file
+ * reads it first. It is written last, so it is drawn over everything else.
+ */
+function writeLabel(w: DxfWriter, drawing: PlanDrawing): void {
+  const { min, max } = drawing.bounds
+  writeText(w, DXF_LAYERS.labels, { x: (min.x + max.x) / 2, y: max.y + TEXT_HEIGHT * 2 }, GENERAL_GUIDANCE_LABEL)
+}
+
 function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
   w.pair(0, 'SECTION')
   w.pair(2, 'ENTITIES')
@@ -352,6 +362,7 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
     }
   }
 
+  writeLabel(w, drawing)
   w.pair(0, 'ENDSEC')
 }
 

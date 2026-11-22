@@ -262,9 +262,10 @@ describe('exports and --out land only under the project', () => {
       { plan: 'plans/flat.json', format: 'dxf' },
       { plan: join(project, 'plans', 'flat.json'), format: 'ifc' },
     ])
+    // MSG-3: every answer leads with the label.
     expect(answers).toEqual([
-      { text: 'Wrote "plans/exports/flat.dxf" in the project folder.', isError: false },
-      { text: 'Wrote "plans/exports/flat.ifc" in the project folder.', isError: false },
+      { text: 'General guidance, not your local rules\nWrote "plans/exports/flat.dxf" in the project folder.', isError: false },
+      { text: 'General guidance, not your local rules\nWrote "plans/exports/flat.ifc" in the project folder.', isError: false },
     ])
     expect(tree(join(project, 'plans'))).toEqual(['.gitignore', 'exports/flat.dxf', 'exports/flat.ifc', 'flat.json'])
   }, 20_000)
@@ -330,7 +331,7 @@ describe('export names from the plan file (T-4) and from inside the plan (T-1)',
     expect(run.status).toBe(0)
     expect(run.out).toBe(`Wrote ${join('exports', 'house-floor-2.dxf')}\n`)
     const [answer] = await serve([{ plan: 'house.json', format: 'obj' }])
-    expect(answer).toEqual({ text: 'Wrote "exports/house-floor-1.obj" in the project folder.', isError: false })
+    expect(answer).toEqual({ text: 'General guidance, not your local rules\nWrote "exports/house-floor-1.obj" in the project folder.', isError: false })
     writeFileSync(join(project, 'lines.json'), JSON.stringify({ ...plan, floors: [{ id: 'ground', name: T1_PLAN_TEXT[0], level: 0 }] }))
     const refused = grid(['export', 'lines.json', '--format', 'dxf'])
     expect(refused.status).toBe(1)
@@ -343,7 +344,7 @@ describe('export names from the plan file (T-4) and from inside the plan (T-1)',
     expect(run.out).toBe(`Wrote ${join('exports', 'floor-plan.glb')}\n`)
     expect(run.err).toContain('reads as a claim about the plan or as an instruction')
     const [answer] = await serve([{ plan: 'approved.json', format: 'glb' }])
-    expect(answer!.text).toBe('Wrote "exports/floor-plan.glb" in the project folder.\n'
+    expect(answer!.text).toBe('General guidance, not your local rules\nWrote "exports/floor-plan.glb" in the project folder.\n'
       + 'Named the export floor-plan.glb: the plan file\'s name reads as a claim about the plan or as an instruction.')
     expect(answer!.text).not.toMatch(/approved/i)
   }, 20_000)

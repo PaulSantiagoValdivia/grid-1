@@ -18,6 +18,7 @@
 import type { Scene3D } from '../scene3d'
 import { floorMesh, makeNamer, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
+import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 
 /** Avoids `-0.000000`, which readers parse and nobody wants to read. */
 function num(value: number): string {
@@ -33,7 +34,7 @@ function num(value: number): string {
  * part that is sound — the same graceful degradation the canvases apply.
  */
 export function toObj(scene: Scene3D): string {
-  const lines = ['# Grid floor plan', '# Units: metres. X and Y are the plan, Z is up.']
+  const lines = [`# ${GENERAL_GUIDANCE_LABEL}`, '# Grid floor plan', '# Units: metres. X and Y are the plan, Z is up.']
   const nameOf = makeNamer()
   let offset = 0
 
