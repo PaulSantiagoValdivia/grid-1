@@ -45,7 +45,8 @@ describe('grid check', () => {
 
   it('says an empty plan is empty', () => {
     const result = checkPlan(loadPlan(project, 'empty.json'), {})
-    expect(result.result.lines.map((l) => l.code)).toEqual(['plan/empty'])
+    // Beside MSG-2's notice that no check that looks at rooms ran.
+    expect(result.result.lines.map((l) => l.code)).toEqual(['plan/empty', 'plan/not-checked-no-rooms'])
   })
 
   it('grid_check gives the same lines', async () => {

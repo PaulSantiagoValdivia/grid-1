@@ -281,6 +281,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const out = textOf(parsed, '--out')
     const ids = checkTidyRequest({ apply: textOf(parsed, '--apply'), out })
     const project = openProject(projectOption, io.cwd)
+    // CMD-15: --out is checked even when no fix is made and nothing is written.
+    if (out !== undefined) project.resolve(out)
     const loaded = loadPlan(project, planFile)
     if (ids === null) {
       const list = tidyList(loaded)

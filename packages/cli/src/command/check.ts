@@ -7,7 +7,18 @@
  * plan complies, passes or is approved: no findings only means these checks found nothing.
  */
 import { floorOf, type FloorPlan, type Issue } from '@ongrid/floorplan/geometry'
-import { checkLocalRules, GENERAL_GUIDANCE_LABEL, inspectPlan, type GridResult, type LineKind, type ResultLine, type RulesReport } from '@ongrid/rules'
+import {
+  checkLocalRules,
+  coverageOnFloor,
+  GENERAL_GUIDANCE_LABEL,
+  inspectPlan,
+  roomsLookedAt,
+  type CheckCoverage,
+  type GridResult,
+  type LineKind,
+  type ResultLine,
+  type RulesReport,
+} from '@ongrid/rules'
 import { floorOption } from './plan'
 import type { LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
@@ -37,6 +48,11 @@ export interface CheckResult {
   readonly report: RulesReport
   /** Everything above, and the door sweeps, as one list with one count (MSG-1). On one floor, its lines and the plan's. */
   readonly result: GridResult
+  /**
+   * MSG-2 (lab W-8): how many of the rooms at least one check looked at, and those none did,
+   * printed beside the count of lines. On one floor, that floor's rooms.
+   */
+  readonly rooms: ReturnType<typeof roomsLookedAt>
 }
 
 const COUNTRY = /^[A-Za-z]{2}$/
@@ -67,7 +83,9 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const floor = floorOption(plan, request.floor)
   const options = country === undefined ? {} : { country: country.toUpperCase() }
   const full = checkLocalRules(plan, options)
-  const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result: inspectPlan(loaded.raw ?? plan, options) }
+  // The file as written (MSG-4), so the words the schema drops are named.
+  const result = inspectPlan(loaded.raw ?? plan, options)
+  const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }
 
@@ -79,15 +97,17 @@ export function checkOnFloor(loaded: LoadedPlan, whole: CheckResult, floor: stri
     findings: full.findings.filter((finding) => finding.floor === floor),
     // A notice about the whole plan has no floor, and holds for every floor.
     notChecked: full.notChecked.filter((notice) => notice.floor === floor || notice.floor === ''),
+    coverage: coverageOnFloor(full.coverage, floor),
   }
-  return { label: GENERAL_GUIDANCE_LABEL, floor, issues: floorIssues(loaded, floor), report, result: resultOnFloor(whole.result, floor) }
+  const result = resultOnFloor(whole.result, floor)
+  return { label: GENERAL_GUIDANCE_LABEL, floor, issues: floorIssues(loaded, floor), report, result, rooms: roomsLookedAt(loaded.plan, result.coverage, floor) }
 }
 
 /** The record's lines on one floor, and those about the whole plan, counted again. */
 export function resultOnFloor(result: GridResult, floor: string): GridResult {
   const lines = result.lines.filter((line) => line.floor === null || line.floor === floor)
   const counts = Object.fromEntries(Object.keys(result.counts).map((kind) => [kind, lines.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
-  return { ...result, lines, count: lines.length, counts }
+  return { ...result, lines, count: lines.length, counts, coverage: coverageOnFloor(result.coverage, floor) }
 }
 
 /** What each kind of line is called in a list. */
@@ -151,6 +171,7 @@ export function checkText(result: CheckResult, floorCount: number): string {
     }
     if (record.counts.finding === 0) lines.push('', `No findings. ${NOTHING_FOUND}`)
   }
+  lines.push(...coverageText(result))
 
   if (report.figures.length > 0) {
     lines.push(...section('Figures used', report.figures.map((figure) => {
@@ -163,6 +184,50 @@ export function checkText(result: CheckResult, floorCount: number): string {
 
   lines.push(...section('What these checks never look at', report.limits))
   return `${lines.join('\n')}\n`
+}
+
+const PARTS: Record<CheckCoverage['looksAt'], [string, string]> = {
+  floor: ['floor', 'floors'],
+  room: ['room', 'rooms'],
+  door: ['door or opening', 'doors and openings'],
+}
+
+/** "3 rooms", "1 floor". */
+export function partsText(count: number, looksAt: CheckCoverage['looksAt']): string {
+  return `${count} ${PARTS[looksAt][count === 1 ? 0 : 1]}`
+}
+
+/** At most `most` ids in quotes, then how many more. */
+function idsText(ids: readonly string[], most = 8): string {
+  const shown = ids.slice(0, most).map((id) => JSON.stringify(id)).join(', ')
+  return ids.length > most ? `${shown} and ${ids.length - most} more` : shown
+}
+
+/**
+ * What each check looked at (MSG-2, lab CH-1, CH-4): its count beside the count of lines, then each
+ * check with the parts it looked at and the parts it skipped, with the reason and a count. An
+ * empty list of lines is read with it: it only says what these parts gave.
+ */
+export function coverageText(result: CheckResult): string[] {
+  const { rooms } = result
+  const coverage = result.result.coverage
+  if (coverage.length === 0) return []
+  const summary =
+    rooms.rooms === 0
+      ? 'no rooms: there are none to look at'
+      : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}${rooms.byNone.length > 0 ? `; looked at by none: ${idsText(rooms.byNone.map((r) => r.id))}` : ''}`
+  const several = new Set(coverage.flatMap((check) => [...check.lookedAt, ...check.skipped].map((group) => group.floor))).size > 1
+  const lines = ['', `Looked at by at least one check: ${summary}.`, `What each check looked at (${coverage.length}):`]
+  for (const check of coverage) {
+    const looked = check.lookedAtCount === 0 ? `looked at no ${PARTS[check.looksAt][1]}` : `looked at ${partsText(check.lookedAtCount, check.looksAt)}`
+    lines.push(`  - ${check.title}: ${looked}; ${check.findings} finding${check.findings === 1 ? '' : 's'}.`)
+    if (check.lookedAtCount > 0 && check.lookedAtCount <= 8) lines.push(`      looked at: ${idsText(check.lookedAt.flatMap((group) => group.ids))}`)
+    for (const skip of check.skipped) {
+      const where = several && skip.floor !== '' ? ` on ${JSON.stringify(skip.floor)}` : ''
+      lines.push(`      not looked at, ${partsText(skip.ids.length, check.looksAt)}${where}: ${skip.why}: ${idsText(skip.ids)}`)
+    }
+  }
+  return lines
 }
 
 export function checkJson(result: CheckResult): string {
