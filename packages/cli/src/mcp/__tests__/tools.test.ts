@@ -23,6 +23,7 @@ const ORDER = [
   'grid_check',
   'grid_report_problem',
   'grid_preview',
+  'grid_preview_sync',
   'grid_export',
   'grid_sheet',
   'grid_mark_start',
@@ -41,7 +42,7 @@ const ORDER = [
   'grid_save_view',
 ]
 
-const READ_ONLY = new Set(['grid_compare', 'grid_diff', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_fields', 'grid_find', 'grid_count', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
+const READ_ONLY = new Set(['grid_compare', 'grid_diff', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_fields', 'grid_find', 'grid_count', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem'])
 const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan', 'grid_save_view'])
 
 interface Listed {
@@ -94,7 +95,9 @@ describe('tools/list', () => {
     // where there is no git (grid_mark_start).
     // 29 since BRF-1: the brief, what the person asked for, written before the first room.
     // 30 since VEW-3: a view saved by name changes the plan file, which grid_view never does (lab SE-7).
-    expect((await listed()).length).toBeLessThanOrEqual(30)
+    // 31 since VEW-4: the preview page's own call, grid_preview_sync, which a host that shows MCP
+    // Apps lists for the page only (visibility app), never for the agent.
+    expect((await listed()).length).toBeLessThanOrEqual(31)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -131,7 +134,7 @@ describe('tools/list', () => {
 
   it('says the units are metres wherever a tool takes or gives a length', async () => {
     for (const tool of await listed()) {
-      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mark_start', 'grid_mark_seen', 'grid_mirror', 'grid_rename_room'].includes(tool.name)) continue
+      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_preview_sync', 'grid_export', 'grid_sheet', 'grid_mark_start', 'grid_mark_seen', 'grid_mirror', 'grid_rename_room'].includes(tool.name)) continue
       expect(tool.description, tool.name).toMatch(/metres/)
     }
   })
@@ -200,6 +203,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_check: {},
     grid_report_problem: { tool: 'grid_measure', arguments: { what: 'room', room: 'hall' }, expected: 'The hall measured to its inside faces.' },
     grid_preview: { view: '2d' },
+    grid_preview_sync: { look: 'working' },
     grid_export: { plan: 'plan.json', format: 'dxf' },
     grid_sheet: { plan: 'plan.json', layout: 'check' },
     grid_mark_start: { plan: 'noted.json' },

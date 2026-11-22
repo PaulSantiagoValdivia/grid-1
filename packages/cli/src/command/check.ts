@@ -265,8 +265,9 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const full = checkLocalRules(plan, { ...options, leftOut: loaded.leftOut ?? [] })
   // The file's text (MSG-6), so the record names what the reader did and the words the schema
   // drops (MSG-4).
-  // COD-8: the firm's own standards beside the plan, when it has a file of them.
-  const result = inspectPlan(loaded.text ?? plan, request.firm === undefined ? options : { ...options, firm: request.firm })
+  // COD-8: the firm's own standards beside the plan, when it has a file of them. CNT-10: a
+  // fit-out's base, which the record reads in as the command did.
+  const result = inspectPlan(loaded.text ?? plan, { ...options, ...(request.firm === undefined ? {} : { firm: request.firm }), ...(loaded.base === undefined ? {} : { base: loaded.base.plan }) })
   const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage), numbers: result.lines.map((_, index) => index + 1) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }

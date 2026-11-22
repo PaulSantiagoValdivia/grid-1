@@ -145,7 +145,7 @@ function collidingWallIds(plan: FloorPlan): ReadonlySet<string> {
  * the collision as `plan/duplicate-id` so it is not silent.
  */
 export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
-  // LVL-5 (C16): a wall through floors stands on each floor it rises through, as its stretch
+  // LVL-5 (C17): a wall through floors stands on each floor it rises through, as its stretch
   // there, with the part of each of its openings that lies in it (`throughFloorParts`).
   if (hasWallsThrough(plan)) {
     const parts = throughFloorParts(plan, floorId)

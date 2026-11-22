@@ -12,6 +12,7 @@
  * opening is a hole in the outline, and Three triangulates it on extrusion.
  */
 
+import { planInState } from './phases'
 import type { FloorPlan, Opening, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
@@ -389,7 +390,9 @@ export interface SceneOptions {
   readonly shell?: SceneShell | null
 }
 
-export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D {
+export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene3D {
+  // CNT-10: the model is the building as it will be after the work.
+  const plan = planInState(stated, 'after')
   const index = indexPlan(plan)
   const { issues, broken } = validatePlan(plan, index)
 
@@ -410,7 +413,7 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
       continue
     }
 
-    // LVL-5 (C16): a wall through floors is raised once, whole, from its own floor, with its
+    // LVL-5 (C17): a wall through floors is raised once, whole, from its own floor, with its
     // openings as stated; on the floors above it is there already.
     const whole = wholeWall(wall, openingsOf(index, wall.id).filter((o) => !broken.has(o.id)))
     if (whole === null) continue

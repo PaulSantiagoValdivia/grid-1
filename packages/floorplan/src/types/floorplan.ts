@@ -139,8 +139,19 @@
  *   one of its walls, or the distance between two of its corners (a diagonal), each with the
  *   length taped. They are checks, never geometry: nothing is drawn or placed from them, and
  *   every run says each one taped against drawn. Optional and never defaulted (version 1).
+ * C16 · Phases, and a fit-out on a base plan (CNT-10, lab EL-10, CP4-4)
+ *   A wall, an opening and a room MAY state its `phase`: `existing` (it stands before the work and
+ *   stays), `demolished` (it stands before the work and is taken out) or `new` (the work builds
+ *   it). One plan then holds two states of the building: before the work (existing and
+ *   demolished parts) and after it (existing and new parts). An opening that states no phase is
+ *   in its wall's, when its wall is demolished or new. In a plan that states a phase anywhere, a
+ *   part that states none stands before and after, as an existing one does; a plan that states
+ *   none is read exactly as before. A plan MAY name a `base` plan, by its path from the project
+ *   folder: the shell it is fitted out in. The base's walls and openings, as they stand after its
+ *   own work, are read into the plan as existing and are never written back to it; the plan's own
+ *   parts that state no phase are new. Both optional and never defaulted (version 1).
  *
- * C16 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
+ * C17 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
  *   C5 put every wall on one floor. Reopened: a wall MAY state `through`, the highest floor it rises
  *   through. It stands on its own `floor` and on every floor above it up to that one, in order of
  *   `level`: one wall, shared by those floors, so one edit moves it on all of them, and a room on
@@ -344,7 +355,7 @@ export const RoofSchema = z
   })
 
 /**
- * LVL-5 (C16): the one word `overhang` takes, on a floor or on a room used as a stair or a lift:
+ * LVL-5 (C17): the one word `overhang` takes, on a floor or on a room used as a stair or a lift:
  * it does not line up with the floor below on purpose.
  */
 export const OVERHANG_MEANT = ['meant'] as const
@@ -375,7 +386,7 @@ export const FloorSchema = z.object({
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
   building: BuildingTypeSchema.optional(),
-  // LVL-5 (C16): the floor's outline overhangs or sits back from the floor below it on purpose, so
+  // LVL-5 (C17): the floor's outline overhangs or sits back from the floor below it on purpose, so
   // Grid does not say it does not line up. Optional and never defaulted (version 1).
   overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
@@ -383,6 +394,17 @@ export const FloorSchema = z.object({
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
+
+/**
+ * CNT-10 (C16): what the work does to a wall, an opening or a room: it stands before and stays
+ * (`existing`), it stands before and is taken out (`demolished`), or the work builds it (`new`).
+ */
+export const PHASES = ['existing', 'demolished', 'new'] as const
+export const PhaseSchema = z.enum(PHASES)
+
+/** CNT-10: the fields that carry a phase, for whatever must place each (the sheet's `PHASE_COVERAGE`). */
+export const PHASE_FIELDS = ['walls.phase', 'openings.phase', 'rooms.phase'] as const
+export type PhaseField = (typeof PHASE_FIELDS)[number]
 
 /**
  * What a wall that does not state its thickness or height gets. A virtual wall is a
@@ -595,12 +617,14 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
-      // LVL-5 (C16): the highest floor the wall rises through, from its own floor: it is one wall
+      // LVL-5 (C17): the highest floor the wall rises through, from its own floor: it is one wall
       // on each floor between, and its height is measured from this floor's level. Optional and
       // never defaulted: unstated, the wall stands on its own floor only (version 1).
       through: text('id').pipe(z.string().min(1)).optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
+      // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+      phase: PhaseSchema.optional(),
       // HND-11 (C1, reopened): start→end is this face of the wall, not its centre line. The
       // reading moves the wall to its centre line (`withWallDefaults`), so a wall Grid read has
       // `placedBy` in its place. Optional and never defaulted (version 1).
@@ -822,7 +846,7 @@ export const RoomSchema = z.object({
   // written before ARE-6 reads with no key added (version 1).
   holes: parts(wallList(), 'holes in one room').optional(),
   // C5: unstated means the ground floor. Every wall in `boundary` must stand on this
-  // same floor — a cross-floor boundary is a validation error. LVL-5 (C16): a wall that rises
+  // same floor — a cross-floor boundary is a validation error. LVL-5 (C17): a wall that rises
   // through floors stands on each of them.
   floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
@@ -861,7 +885,7 @@ export const RoomSchema = z.object({
   ceiling: CeilingSchema.optional(),
   // CNT-5: who the room is for (`ROOM_TENURES`). Optional and never defaulted (version 1).
   tenure: RoomTenureSchema.optional(),
-  // LVL-5 (C16): a room used as a stair or a lift that does not lie over the one below on
+  // LVL-5 (C17): a room used as a stair or a lift that does not lie over the one below on
   // purpose, so Grid does not say it is shifted. Optional and never defaulted (version 1).
   overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-5: the firm's own type for the room, as its room data sheets name it ("B2 double
@@ -874,6 +898,8 @@ export const RoomSchema = z.object({
   number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -923,6 +949,9 @@ export const OpeningSchema = z.object({
   anchor: OpeningAnchorSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it; unstated, its wall's when that is demolished or new.
+  // Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
 })
 
 /** LVL-8: the most floors above its own that one opening pattern may be repeated on. */
@@ -1540,6 +1569,10 @@ export const FloorPlanFieldsSchema = z.object({
   // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
   stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
+  // CNT-10 (C16): the plan this one is fitted out in, by its path from the project folder. Its
+  // walls and openings are read in as existing and never written back. Optional and never
+  // defaulted (version 1).
+  base: text('path').pipe(z.string().min(1)).optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
   items: parts(ItemSchema, 'items').optional(),
@@ -1598,6 +1631,7 @@ export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSch
 export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
+export type Phase = z.infer<typeof PhaseSchema>
 export type Wall = z.infer<typeof WallSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
 export type RoomTenure = z.infer<typeof RoomTenureSchema>

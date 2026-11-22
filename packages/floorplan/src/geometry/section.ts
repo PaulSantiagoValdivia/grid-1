@@ -33,6 +33,7 @@
  * leaves it out.
  */
 
+import { planInState } from './phases'
 import type { MultiPolygon } from 'polygon-clipping'
 import { heightByDefault } from '../types/floorplan'
 import type { Floor, FloorPlan, RoofShape, Wall } from './plan'
@@ -265,7 +266,9 @@ const ringsOf = (pieces: MultiPolygon): (readonly Vec2[])[] => multiOf(pieces)
  * The section of the plan along `line`. See the module's header. Never throws: a line shorter than
  * `noLength` cuts nothing and gives an empty section.
  */
-export function planSection(plan: FloorPlan, line: SectionLine): PlanSection {
+export function planSection(stated: FloorPlan, line: SectionLine): PlanSection {
+  // CNT-10: the section is cut through the building as it will be after the work.
+  const plan = planInState(stated, 'after')
   const snap = snapper()
   const frame = sectionFrame(line)
   const lineLength = frame.length
@@ -362,7 +365,7 @@ export function planSection(plan: FloorPlan, line: SectionLine): PlanSection {
 
     for (const part of usable) {
       if (part.virtual) continue
-      // LVL-5 (C16): a wall through floors is cut once, whole, from its own floor; its openings
+      // LVL-5 (C17): a wall through floors is cut once, whole, from its own floor; its openings
       // are open through every slab between, as the window through two storeys is.
       const whole = wholeWall(part, openingsOf(index, part.id).filter((o) => !broken.has(o.id)))
       if (whole === null) continue
