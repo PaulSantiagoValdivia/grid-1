@@ -1,5 +1,8 @@
 # Measuring areas
 
+Read this to know what an area figure measures, which gross area comes first where, and how the
+room and opening schedules are made.
+
 Grid gives three areas, per floor and per use, from the spaces the walls enclose. Each is
 described in Grid's own words by what it measures, and no figure is said to follow a published
 standard: a standard's rule would come in only as a figure record, with its document, edition,
@@ -24,3 +27,29 @@ country, or one Grid has no usual measure for, both are given; either or both ca
 In the library: `planAreaFigures(plan, options)`, `MEASURES` and `usualGross(country)`. The
 `grid_areas` tool ([tool-server.md](tool-server.md)) prints each figure with its rule, takes
 `country` and `gross`, and marks each figure's state ([result-contract.md](result-contract.md)).
+
+## Schedules
+
+Two schedules are built on these areas (ARE-12), as data first: the text of `grid_schedule`,
+its CSV and the tables on the check set are all written from the same rows, so no part reads
+another's printed text.
+
+- **The room schedule** (`grid_schedule` with `of=rooms`): one row per room, with its number,
+  name, use, net area, height and floor, then each floor's total, named by its floor, and the
+  total of all floors. The plan holds no room numbers: Grid numbers the rooms 1, 2, 3… floor by
+  floor from the lowest, then by id, so the schedule is the same whatever the order of the file.
+  The height follows the rule in [tool-server.md](tool-server.md) (a height the room states, or
+  the lowest solid wall round it). A room Grid could not draw is listed with no area, and the
+  totals say they leave it out.
+- **The opening schedule** (`grid_schedule` with `of=openings`): every door, window and doorless
+  opening once, numbered by floor, then doors, doorless openings and windows, each by id, with
+  its size (the hole in the wall) and what lies on its two sides: a room's name, `outside`,
+  `nothing drawn` or `a room left out`. A door between two rooms is one row, not one for each
+  room. Without `of`, `grid_schedule` groups the openings by type and size, as before.
+
+With `format=csv`, numbers are bare (a dot for decimals, no units in the cell, never a negative
+zero), so a spreadsheet reads them as numbers; the units are in the column names. A row that
+cannot be written, a missing name or an area that is not a number, stops the schedule with an
+error naming the row; it is never left out in silence. `grid sheet --layout check` ends with
+both schedules as tables.
+
