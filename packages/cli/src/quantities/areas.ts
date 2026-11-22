@@ -313,6 +313,12 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   const grossWhy = unknown.length === 0 ? null : `No ${unknown.map((g) => g.rule.name.toLowerCase()).join(' or ')}: ${unknown[0]!.why}`
   const netState = joinStates(floors.map((f) => f.states.net))
   const notes: string[] = grossWhy ? [grossWhy] : []
+  // CNT-10: the state these figures describe, in a plan with phases.
+  const work = survey.facts.work
+  if (work !== null) {
+    const gone = work.counts.demolished.rooms
+    notes.unshift(`These areas are of the building as it will be after the work: ${gone === 0 ? 'no room is' : gone === 1 ? 'the room to be demolished is' : `the ${gone} rooms to be demolished are`} left out, and new rooms are in.`)
+  }
   // AC-9: a room that cannot be measured is named, so a total short by its area is read as such.
   if (netState.leftOut.length > 0) {
     const several = survey.facts.floors.length > 1

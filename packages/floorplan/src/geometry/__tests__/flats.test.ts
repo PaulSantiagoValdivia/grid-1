@@ -1,5 +1,5 @@
 /**
- * CNT-4: flats, from the plan's own list (C16). The four-flat floor's areas per flat come from
+ * CNT-4: flats, from the plan's own list (C17). The four-flat floor's areas per flat come from
  * the list, not from the rooms' names (lab EL-1); a flat type placed four times, two of them
  * mirrored, writes four flats of one type; a duplex holds rooms on two floors; and the list's own
  * faults are named, each leaving out only what it names.

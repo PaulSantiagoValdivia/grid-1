@@ -58,7 +58,8 @@ import { planStairs } from '../stairs'
 import { stairBlocks } from '../scene3d'
 import type { WallEnds } from '../wall'
 import { wallAxis } from '../wall'
-import { wallJoints } from '../joints'
+import { partPhases, phasedJoints } from '../phases'
+import type { Phase } from '../../types/floorplan'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { roomFloorArea } from '../room'
@@ -341,6 +342,25 @@ interface Context {
    * written, for one property set each at the end (`writeFacts`).
    */
   readonly facts: FactsOn[]
+  /** CNT-10: each part's phase by id, in a plan with phases; empty in one with none. */
+  readonly phaseOf: ReadonlyMap<string, Phase>
+  /** CNT-10: the elements whose part has a phase, in the order they were written (`writePhases`). */
+  readonly phases: PhaseOn[]
+}
+
+/** CNT-10: an element and its part's phase. */
+interface PhaseOn {
+  readonly element: number
+  readonly kind: string
+  readonly id: string
+  readonly guid: Context['guid']
+  readonly phase: Phase
+}
+
+/** CNT-10: notes an element whose part has a phase, for `writePhases`. */
+function notePhase(c: Context, element: number, kind: string, id: string): void {
+  const phase = c.phaseOf.get(id)
+  if (phase !== undefined) c.phases.push({ element, kind, id, guid: c.guid, phase })
 }
 
 /** CNT-9: an element and the facts its part carries. */
@@ -848,6 +868,7 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
   writeWallProperties(c, wall, id, wallExposure(storey.model.index, wall.id) === 'exterior')
   typeWall(c, wall, id)
   noteFacts(c, id, 'wall', wall)
+  notePhase(c, id, 'wall', wall.id)
   const footprint = outline === null ? axis.length * wall.thickness : area(outline)
   // LVL-6 with HND-2: a wall the roof cuts is measured as written, under its cut top.
   const ring = outline ?? [{ x: 0, y: -half }, { x: axis.length, y: -half }, { x: axis.length, y: half }, { x: 0, y: half }]
@@ -1155,6 +1176,7 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   // (CNT-9).
   if (opening.type === 'opening') {
     noteFacts(c, hole, 'opening', opening)
+    notePhase(c, hole, 'opening', opening.id)
     quantitySet(c, `opening:${opening.id}`, 'Qto_OpeningElementBaseQuantities', [
       ['LENGTH', 'Width', opening.width],
       ['LENGTH', 'Height', opening.height],
@@ -1197,6 +1219,7 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   quantitySet(c, `${opening.type}:${opening.id}`, opening.type === 'door' ? 'Qto_DoorBaseQuantities' : 'Qto_WindowBaseQuantities', size, filler)
   typeOpening(c, opening, operation, filler)
   noteFacts(c, filler, opening.type, opening)
+  notePhase(c, filler, opening.type, opening.id)
   return filler
 }
 
@@ -1260,6 +1283,7 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
   // The stated number is a fact of the room's set too, first, as the DXF writes it.
   const facts = room.number === undefined || factOf(room, ROOM_NUMBER_FACT) !== undefined ? room.properties : { [ROOM_NUMBER_FACT]: room.number, ...room.properties }
   noteFacts(c, space, 'space', { id: room.id, properties: facts })
+  notePhase(c, space, 'space', room.id)
   return space
 }
 
@@ -1728,7 +1752,7 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
 
     // The rooms' ceilings, each covering its space. A zone has none of its own (CNT-8, `roomCeiling`).
     for (const room of index.plan.rooms) {
-      if (broken.has(room.id) || room.ceiling === undefined) continue
+      if (broken.has(room.id) || room.ceiling === undefined || c.phaseOf.get(room.id) === 'demolished') continue
       try {
         const pieces = roomCeiling(room, index, storey.height, floorRoofShape(index.plan, floor.id)) ?? []
         const coverings: number[] = []
@@ -1873,7 +1897,8 @@ function writeStoreyContents(building: Context, storey: Storey): void {
   const { index, broken } = storey.model
   const c = onFloor(building, storey.model.floor.id)
   const contained: number[] = []
-  const joints = wallJoints(storey.model.walls)
+  // CNT-10: each state's corners are joined among its own walls, so a demolished wall never bends a new one.
+  const joints = phasedJoints(storey.model.walls, c.phaseOf)
 
   for (const wall of storey.model.walls) {
     let element: WallElement
@@ -1912,7 +1937,8 @@ function writeStoreyContents(building: Context, storey: Storey): void {
   const spaces: number[] = []
   for (const room of index.plan.rooms) {
     // A zone (CNT-8) is no space of its own: its floor is in its room's space, counted once.
-    if (broken.has(room.id) || roomZones(index).zoneOf.has(room.id)) continue
+    // CNT-10: the spaces are the rooms after the work.
+    if (broken.has(room.id) || roomZones(index).zoneOf.has(room.id) || c.phaseOf.get(room.id) === 'demolished') continue
     try {
       const space = writeSpace(c, storey, room)
       if (space !== null) {
@@ -2037,6 +2063,26 @@ function writeFacts(c: Context): void {
   }
 }
 
+/** CNT-10: the name of the property set that says what the work does to an element. */
+export const IFC_PHASE_SET = 'Grid_Phase'
+
+/**
+ * CNT-10: each element of a plan with phases gets one property set, `Grid_Phase`, holding
+ * `Phase`: `existing`, `demolished` or `new`, as the plan says it. A demolished wall or opening is
+ * written as it stood before the work, so a BIM tool can show or hide either state by this set;
+ * the rooms written are those after the work. The set's name is Grid's own: `Pset_` names are the
+ * standard's. Written after the facts, in the order the elements were written; a plan with no
+ * phases writes the file it wrote before.
+ */
+function writePhases(c: Context): void {
+  for (const { element, kind, id, guid, phase } of c.phases) {
+    const on: Context = { ...c, guid }
+    const value = c.w.add('IFCPROPERTYSINGLEVALUE', str('Phase'), NULL, `IFCLABEL(${str(phase)})`, NULL)
+    const set = c.w.add('IFCPROPERTYSET', str(on.guid('phase', `${kind}:${id}`)), ref(c.owner), str(IFC_PHASE_SET), NULL, refs([value]))
+    relate(on, 'IFCRELDEFINESBYPROPERTIES', `phase:${kind}:${id}`, refs([element]), ref(set))
+  }
+}
+
 /** The property names of `Grid_LeftOut`, by kind: a count and the names. */
 const LEFT_OUT_PROPERTIES: Readonly<Record<LeftOutKind, readonly [string, string]>> = {
   wall: ['Walls', 'WallIds'],
@@ -2126,7 +2172,9 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     roomNumbers: new Map(roomNumbers(plan).map((n) => [onFloorKey(n.floor, n.id), n] as const)),
     guid: (kind, id) => issuer.issue(kind, id),
     issuer,
-    facts: []
+    facts: [],
+    phaseOf: partPhases(plan),
+    phases: []
   }
 
   // The fixed entities (project, site, building) use their own kind as the id.
@@ -2217,6 +2265,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeStairs(c, plan, storeys)
   writeZones(c, plan, storeys)
   writeFacts(c)
+  writePhases(c)
   writeLeftOut(c, building, options.leftOut ?? [])
 
   return w.toString([
