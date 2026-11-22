@@ -52,6 +52,11 @@ In the library: `planAreaFigures(plan, options)`, `MEASURES` and `usualGross(cou
 `grid_areas` tool ([tool-server.md](tool-server.md)) prints each figure with its rule, takes
 `country` and `gross`, and marks each figure's state ([result-contract.md](result-contract.md)).
 
+The site's things (BRF-3: fences, gates, paths, paving, trees and pools) are in no area: they are
+never rooms. The plot coverage, the building's shape seen from above against the plot's area, is
+not one of these figures: `grid_measure` with `what=site` gives it, from the outside face of every
+floor at or above the ground floor ([tool-server.md](tool-server.md#the-plot-distances-to-the-boundary-and-the-coverage)).
+
 ## Schedules
 
 Two schedules are built on these areas (ARE-12), as data first: the text of `grid_schedule`,

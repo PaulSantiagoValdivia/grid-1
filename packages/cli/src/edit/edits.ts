@@ -473,7 +473,8 @@ const MIRRORED: Record<string, string> = { north: 'south', south: 'north', east:
  *
  * CNT-3: the north the plan states is mirrored too, to minus itself, so the swap is the real
  * one: left to right, what faced east faces west, and top to bottom, what faced north faces
- * south, whichever way the drawing is turned. The site's origin is mirrored with the walls. The
+ * south, whichever way the drawing is turned. The site's origin, its boundary and its things
+ * (BRF-3) are mirrored with the walls. The
  * y direction is kept: the result is a new design, still drawn as the plan says its y runs, and
  * the front stays the part it names, which is mirrored with the rest.
  */
@@ -504,7 +505,17 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
   }))
   const top: Record<string, unknown> = {}
   if (plan.north !== undefined) top['north'] = wrapDegrees(r3(-plan.north))
-  if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: flip(plan.site.origin) }
+  // BRF-3: the plot's boundary and the site's things are mirrored with the walls. Each edge keeps
+  // its number, so the streets and set-backs still name the same edges.
+  const site = plan.site
+  if (site !== undefined && plan.walls.length > 0 && (site.origin !== undefined || site.boundary !== undefined || site.things !== undefined)) {
+    top['site'] = {
+      ...site,
+      ...(site.origin === undefined ? {} : { origin: flip(site.origin) }),
+      ...(site.boundary === undefined ? {} : { boundary: site.boundary.map(flip) }),
+      ...(site.things === undefined ? {} : { things: site.things.map((thing) => ({ ...thing, ...(thing.points === undefined ? {} : { points: thing.points.map(flip) }), ...(thing.at === undefined ? {} : { at: flip(thing.at) }) })) }),
+    }
+  }
   // VEW-3: each saved view is mirrored with the building, so it still frames what it framed.
   const views = mirroredViews(plan, how, flip, top['north'] as number | undefined)
   if (views !== null) top['views'] = views

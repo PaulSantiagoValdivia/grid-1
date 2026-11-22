@@ -389,11 +389,15 @@ function readTop(work: Record<string, unknown>, faults: ReadFault[], marks: read
         continue
       }
     }
-    // COD-3: a place Grid does not know is left out alone; the rest of the site is kept.
+    // COD-3: a place Grid does not know is left out alone; the rest of the site is kept. BRF-3:
+    // so is any other field of the site, and one street, set-back or thing of its lists.
     const site = work['site']
-    if (field === 'site' && issue.path.length === 2 && issue.path[1] === 'country' && typeof site === 'object' && site !== null && !Array.isArray(site)) {
+    if (field === 'site' && issue.path.length >= 2 && typeof site === 'object' && site !== null && !Array.isArray(site)) {
       const rest = { ...(site as Record<string, unknown>) }
-      delete rest['country']
+      const [, key, at] = issue.path
+      const list = typeof key === 'string' ? rest[key] : undefined
+      if ((key === 'streets' || key === 'setbacks' || key === 'things') && typeof at === 'number' && Array.isArray(list)) rest[key] = list.filter((_, i) => i !== at)
+      else delete rest[String(key)]
       work['site'] = rest
       faults.push({ kind: 'value-left-out', ...said, used: null })
       continue

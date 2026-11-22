@@ -342,7 +342,10 @@ is said after the first line. The stairs that join the floors are one line, with
 going Grid worked out. Directions are on the drawing, with north at the top. A plan that states
 its real north or its front gets a few more lines: that north, which way each side of the drawing
 really faces, and which rooms face each way
-([plan-file.md](plan-file.md#north-front-and-where-the-building-is)). The card checks nothing and
+([plan-file.md](plan-file.md#north-front-and-where-the-building-is)). A plan whose site states
+the plot gets a line on it: its area, how much of it the building covers, and the edge of the
+boundary the building comes nearest, with the set-back asked for it
+([plan-file.md](plan-file.md#the-plot-its-boundary-set-backs-and-what-is-on-it)). The card checks nothing and
 says so; its first line is the label "General guidance, not your local rules", as for every
 report (MSG-3). `--as rooms` starts with the label as a comment, which `grid write` ignores, and
 `grid draw` puts it in the drawing's top-left corner.

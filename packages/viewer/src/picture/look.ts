@@ -210,6 +210,10 @@ export type LinePart =
   | 'windowFace'
   | 'glass'
   | 'undecided'
+  /** BRF-3: the plot's boundary, its street edges, and the site's things (fences, gates, paths, paving, pools, trees). */
+  | 'boundary'
+  | 'street'
+  | 'site'
   /**
    * LVL-8: a facade's lines, heaviest first: the ground, the outline of the facade against the sky,
    * the edges of the faces on its front plane, of the faces set back, of the faces further back,
@@ -224,7 +228,7 @@ export type LinePart =
   | 'elevationLevel'
 
 /** The parts of the drawing a look gives a dash pattern. */
-export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above'
+export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'boundary'
 
 /** Lines for the screen: widths and dashes in screen pixels, whatever the zoom. */
 export interface ScreenLines {
@@ -272,6 +276,72 @@ export interface Look {
    * the number along it. Otherwise plain ends and the number upright, as on screen.
    */
   readonly draftedDimensions: boolean
+  /** BRF-3: the site's colours: the plot and what is on it, drawn in their own style, never as walls or rooms. */
+  readonly site: SiteColors
+}
+
+/** BRF-3: how the site is drawn in a look. A fill of `none` leaves the paper. */
+export interface SiteColors {
+  readonly boundary: string
+  readonly street: string
+  readonly fence: string
+  readonly gate: string
+  readonly pathFill: string
+  readonly pathEdge: string
+  readonly pavingFill: string
+  readonly pavingEdge: string
+  readonly poolFill: string
+  readonly poolEdge: string
+  readonly treeFill: string
+  readonly treeEdge: string
+}
+
+/** BRF-3: the site in the light theme: earth and green, soft beside the walls. */
+export const LIGHT_SITE: SiteColors = {
+  boundary: '#8a6a3c',
+  street: '#4a483f',
+  fence: '#75726a',
+  gate: '#4a483f',
+  pathFill: '#ebe5d6',
+  pathEdge: '#b3afa2',
+  pavingFill: '#e2ded3',
+  pavingEdge: '#a9a598',
+  poolFill: '#cfe5f1',
+  poolEdge: '#5b8fb0',
+  treeFill: '#dce9cf',
+  treeEdge: '#6f9256'
+}
+
+/** BRF-3: the site in the dark theme. */
+export const DARK_SITE: SiteColors = {
+  boundary: '#c9a46b',
+  street: '#c9c4b6',
+  fence: '#8a8175',
+  gate: '#c9c4b6',
+  pathFill: '#2b2820',
+  pathEdge: '#635a4d',
+  pavingFill: '#302c24',
+  pavingEdge: '#6f6758',
+  poolFill: '#1d3542',
+  poolEdge: '#5b8fb0',
+  treeFill: '#22301b',
+  treeEdge: '#7fa566'
+}
+
+/** BRF-3: the site in black on white: lines in black and greys, the pool and the paving a pale tone. */
+export const TECHNICAL_SITE: SiteColors = {
+  boundary: '#000000',
+  street: '#000000',
+  fence: '#000000',
+  gate: '#000000',
+  pathFill: '#ffffff',
+  pathEdge: '#595959',
+  pavingFill: '#f2f2f2',
+  pavingEdge: '#595959',
+  poolFill: '#e6e6e6',
+  poolEdge: '#000000',
+  treeFill: 'none',
+  treeEdge: '#3c3c3c'
 }
 
 /** The names a look is chosen by. */
@@ -314,6 +384,10 @@ const SCREEN_LINES: ScreenLines = {
     windowFace: LINE_PX.opening,
     glass: LINE_PX.opening,
     undecided: LINE_PX.opening,
+    // BRF-3: the plot's boundary a long dash and a dot, its street edges heavier, the site's things fine.
+    boundary: 2,
+    street: 4,
+    site: 1,
     elevationGround: ELEVATION_PX.ground,
     elevationOutline: ELEVATION_PX.outline,
     elevationNear: ELEVATION_PX.near,
@@ -322,7 +396,7 @@ const SCREEN_LINES: ScreenLines = {
     elevationOpening: ELEVATION_PX.opening,
     elevationLevel: ELEVATION_PX.level
   },
-  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash }
+  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, boundary: [12, 3, 2, 3] }
 }
 
 /**
@@ -356,6 +430,9 @@ const PAPER_LINES: PaperLines = {
     windowFace: 'fine',
     glass: 'fine',
     undecided: 'fine',
+    boundary: 'medium',
+    street: 'cut',
+    site: 'finest',
     // LVL-8: a facade: the ground with the cut pen, the outline with the medium one, the front
     // plane fine and what stands back finest, as an elevation is drawn.
     elevationGround: 'cut',
@@ -366,7 +443,7 @@ const PAPER_LINES: PaperLines = {
     elevationOpening: 'finest',
     elevationLevel: 'finest'
   },
-  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1] }
+  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], boundary: [5, 1, 0.6, 1] }
 }
 
 /** Black on white: the technical look's colours. Walls are a grey tone inside a black outline. */
@@ -396,11 +473,12 @@ export const WORKING_LOOK: Look = {
   wallOutline: null,
   glass: false,
   undecidedDoors: false,
-  draftedDimensions: false
+  draftedDimensions: false,
+  site: LIGHT_SITE
 }
 
 /** The working look on dark paper: the app's dark theme. */
-export const DARK_WORKING_LOOK: Look = { ...WORKING_LOOK, name: 'dark', colors: DARK_LOOK, ink: DARK_LOOK.wall }
+export const DARK_WORKING_LOOK: Look = { ...WORKING_LOOK, name: 'dark', colors: DARK_LOOK, ink: DARK_LOOK.wall, site: DARK_SITE }
 
 /** Sheets and files to hand on: black on white, with lines in millimetres on paper. */
 export const TECHNICAL_LOOK: Look = {
@@ -411,7 +489,8 @@ export const TECHNICAL_LOOK: Look = {
   wallOutline: '#000000',
   glass: true,
   undecidedDoors: true,
-  draftedDimensions: true
+  draftedDimensions: true,
+  site: TECHNICAL_SITE
 }
 
 export const LOOKS: Readonly<Record<LookName, Look>> = {
