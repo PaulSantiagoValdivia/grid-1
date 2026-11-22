@@ -88,8 +88,8 @@ export interface CheckSeen {
 }
 
 /** MSG-10: the check with how each of its lines stands against the marks read beside the plan. */
-export function withSeen(result: CheckResult, plan: FloorPlan, read: SeenRead): CheckResult {
-  return { ...result, seen: { file: read.file, problem: read.problem, states: seenStates(plan, result.result.lines, read.marks) } }
+export function withSeen(result: CheckResult, loaded: Pick<LoadedPlan, 'plan' | 'text'>, read: SeenRead): CheckResult {
+  return { ...result, seen: { file: read.file, problem: read.problem, states: seenStates(loaded, result.result.lines, read.marks) } }
 }
 
 /** MSG-10: how many of the check's lines are seen, with a mark that still holds. */
@@ -146,7 +146,7 @@ export function markNote(project: Project, planFile: string, loaded: LoadedPlan,
     const text = removed === null ? `Note ${ask.number} had no seen mark, so nothing was changed: ${note}` : `Took the seen mark off note ${ask.number}, in ${file}; it is listed as new: ${note}`
     return { text, number: ask.number, code: line.code, file, mark: removed, unmarked: removed !== null }
   }
-  const { file, mark } = markSeen(project, planFile, loaded.plan, line, { reason: ask.reason, by: ask.by, ...(ask.at ? { at: ask.at } : {}) })
+  const { file, mark } = markSeen(project, planFile, loaded, line, { reason: ask.reason, by: ask.by, ...(ask.at ? { at: ask.at } : {}) })
   const parts = mark.parts.slice(0, 4).map(partText).join(', ')
   const more = mark.parts.length > 4 ? ` or ${mark.parts.length - 4} more` : ''
   const when = mark.parts.length === 1 ? parts : `one of ${parts}${more}`

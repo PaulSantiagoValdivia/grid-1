@@ -1092,7 +1092,7 @@ const checkTool: GridTool = {
     let result
     try {
       result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}) })
-      result = withSeen(result, loaded.plan, readSeen(project, file))
+      result = withSeen(result, loaded, readSeen(project, file))
     } catch (error) {
       throw asRefusal(error)
     }

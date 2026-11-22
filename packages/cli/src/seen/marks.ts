@@ -35,6 +35,7 @@
 import { createHash } from 'crypto'
 import path from 'path'
 import { floorOf, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { readPlanText } from '@ongrid/floorplan/types/jsonText'
 import type { ResultLine, Thing, ThingKind } from '@ongrid/rules'
 import { PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
@@ -134,6 +135,44 @@ function floorContent(plan: FloorPlan, floor: string): unknown {
   }
 }
 
+/**
+ * What a mark is made from: the plan as Grid reads it, and the file's own text when there is one.
+ * The text matters for a note about what Grid does not read or reads otherwise (`plan/unknown-field`,
+ * `plan/unknown-use`, MSG-6's `plan/value-left-out`, `plan/part-left-out`, `plan/read-as-meant`):
+ * the plan as read leaves those values out or reads them as meant, so each part's hash holds its
+ * entry in the file too, as written, and a change to an unknown field's value brings the note back.
+ */
+export interface SeenSource {
+  readonly plan: FloorPlan
+  readonly text?: string
+}
+
+/** The lists of the file where each kind of part is written. */
+const FILE_LISTS: Readonly<Record<Exclude<MarkedPart['kind'], 'plan'>, readonly string[]>> = {
+  wall: ['walls'],
+  room: ['rooms'],
+  opening: ['openings'],
+  item: ['items'],
+  stair: ['stairs'],
+  floor: ['floors'],
+  unknown: ['walls', 'rooms', 'openings', 'items', 'stairs', 'floors', 'annotations', 'sketch'],
+}
+
+/** The file as written, as JSON: null when there is no text or it can't be read as JSON. */
+function fileOf(source: SeenSource): Record<string, unknown> | null {
+  if (source.text === undefined) return null
+  const read = readPlanText(source.text)
+  return read.ok && typeof read.value === 'object' && read.value !== null && !Array.isArray(read.value) ? (read.value as Record<string, unknown>) : null
+}
+
+/** Every entry of the file with this id, in the lists where a part of this kind is written. */
+function fileEntries(file: Record<string, unknown>, kind: Exclude<MarkedPart['kind'], 'plan'>, id: string): unknown[] {
+  return FILE_LISTS[kind].flatMap((list) => {
+    const entries = file[list]
+    return Array.isArray(entries) ? entries.filter((entry) => typeof entry === 'object' && entry !== null && (entry as Record<string, unknown>)['id'] === id) : []
+  })
+}
+
 /** The parts of the plan each with an id, as a note's `also` may name them: the kind each is. */
 const ALSO_ORDER = ['wall', 'room', 'opening', 'item', 'stair', 'floor'] as const
 
@@ -142,7 +181,9 @@ const ALSO_ORDER = ['wall', 'room', 'opening', 'item', 'stair', 'floor'] as cons
  * names (`also`), a room's outline walls and an opening's wall. In the order the line names
  * them, each once.
  */
-export function partsOf(plan: FloorPlan, line: Pick<ResultLine, 'thing' | 'also'>): MarkedPart[] {
+export function partsOf(source: SeenSource, line: Pick<ResultLine, 'thing' | 'also'>): MarkedPart[] {
+  const { plan } = source
+  const file = fileOf(source)
   const lists = listsOf(plan)
   const parts: MarkedPart[] = []
   const taken = new Set<string>()
@@ -150,7 +191,9 @@ export function partsOf(plan: FloorPlan, line: Pick<ResultLine, 'thing' | 'also'
     const key = `${kind}\u0000${id}`
     if (taken.has(key)) return
     taken.add(key)
-    parts.push({ kind, id, hash: hashOf(content ?? null) })
+    // The part as read, and as written in the file: the whole file for the plan.
+    const written = file === null ? null : kind === 'plan' ? file : fileEntries(file, kind, id)
+    parts.push({ kind, id, hash: hashOf({ read: content ?? null, written }) })
   }
   const addPart = (kind: Exclude<ThingKind, 'plan'>, id: string): void => {
     if (kind === 'floor') {
@@ -187,11 +230,11 @@ export function sameNote(mark: Pick<SeenMark, 'code' | 'thing' | 'also'>, line: 
 }
 
 /** How each line stands against the marks, in the order of the lines. */
-export function seenStates(plan: FloorPlan, lines: readonly ResultLine[], marks: readonly SeenMark[]): SeenState[] {
+export function seenStates(source: SeenSource, lines: readonly ResultLine[], marks: readonly SeenMark[]): SeenState[] {
   return lines.map((line): SeenState => {
     const mark = marks.find((m) => sameNote(m, line))
     if (mark === undefined) return { state: 'new' }
-    const now = partsOf(plan, line)
+    const now = partsOf(source, line)
     const key = (p: MarkedPart): string => `${p.kind}\u0000${p.id}`
     const before = new Map(mark.parts.map((p) => [key(p), p.hash] as const))
     // A part whose content changed, one the note now names, and one it no longer does.
@@ -349,7 +392,7 @@ export interface MarkRequest {
  * Marks a line as seen, replacing a mark of the same note, and writes the marks file. A file
  * that is there and can't be read is refused, not replaced: it may hold marks.
  */
-export function markSeen(project: Project, planFile: string, plan: FloorPlan, line: ResultLine, request: MarkRequest): { readonly file: string; readonly mark: SeenMark } {
+export function markSeen(project: Project, planFile: string, source: SeenSource, line: ResultLine, request: MarkRequest): { readonly file: string; readonly mark: SeenMark } {
   const reason = reasonProblem(request.reason, REASON_MAX)
   if (reason !== null) throw new SeenRefused(`The reason ${reason}.`)
   const by = reasonProblem(request.by, BY_MAX)
@@ -360,7 +403,7 @@ export function markSeen(project: Project, planFile: string, plan: FloorPlan, li
     code: line.code,
     thing: { kind: line.thing.kind, id: line.thing.id },
     also: [...line.also],
-    parts: partsOf(plan, line),
+    parts: partsOf(source, line),
     reason: request.reason,
     by: request.by,
     at: request.at ?? new Date().toISOString(),

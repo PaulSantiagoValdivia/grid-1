@@ -40,7 +40,7 @@ const bytes = (text: string): number => Buffer.byteLength(text, 'utf8')
 /** The check of a plan in the project, with its seen marks read. */
 function check(file: string, request: { floor?: string; country?: string } = {}): CheckResult {
   const loaded = loadPlan(project, file)
-  return withSeen(checkPlan(loaded, request), loaded.plan, readSeen(project, file))
+  return withSeen(checkPlan(loaded, request), loaded, readSeen(project, file))
 }
 
 async function grid(args: string[]): Promise<{ code: number; out: string; err: string }> {
@@ -180,8 +180,42 @@ describe('a note set aside as seen', () => {
   it('a room is its outline: moving one of its walls brings the note back', () => {
     const loaded = loadPlan(project, 'plan.json')
     const line = checkPlan(loaded, { country: 'US' }).result.lines[WINDOW - 1]!
-    const parts = partsOf(loaded.plan, line)
+    const parts = partsOf(loaded, line)
     expect(parts.map((p) => `${p.kind} ${p.id}`)).toEqual(['room loft-loft', 'wall loft-ext-south', 'wall loft-ext-east', 'wall loft-ext-north', 'wall loft-ext-west', 'opening loft-w-loft'])
+  })
+
+  // The coordinator's case: the plan as read leaves an unknown field out, so the file's own
+  // values are part of the mark.
+  it.each([
+    ['a field Grid does not read, at the top of the plan', 'plan/unknown-field', { extra: 1 }, { extra: 2 }, 'the plan'],
+    ['a field Grid does not read, on a wall', 'plan/unknown-field', { wall: { colour: 'red' } }, { wall: { colour: 'blue' } }, 'wall "w-south"'],
+    ['a value Grid leaves out (MSG-6)', 'plan/value-left-out', { opening: { swing: 'sideways' } }, { opening: { swing: 'upwards' } }, 'opening "d-front"'],
+    ['a number written as text, read as meant (MSG-6)', 'plan/read-as-meant', { wall: { height: '2.6' } }, { wall: { height: '2.7' } }, 'wall "w-south"'],
+  ])('%s: a change to the value in the file brings the note back', async (_, code, before, after, part) => {
+    const flat = JSON.parse(FLAT) as Record<string, unknown> & { walls: Array<Record<string, unknown>>; openings: Array<Record<string, unknown>> }
+    const write = (change: { extra?: number; wall?: Record<string, unknown>; opening?: Record<string, unknown> }): void => {
+      const copy = structuredClone(flat)
+      if (change.extra !== undefined) copy['extra'] = change.extra
+      copy.walls[0] = { ...copy.walls[0], id: 'w-south', ...change.wall }
+      copy.openings[0] = { ...copy.openings[0], id: 'd-front', ...change.opening }
+      // The renamed wall and opening keep the rest of the plan pointing at them.
+      const text = JSON.stringify(copy).split(JSON.stringify(flat.walls[0]!['id'])).join('"w-south"').split(JSON.stringify(flat.openings[0]!['id'])).join('"d-front"')
+      writeFileSync(join(dir, 'noted.json'), text)
+    }
+    write(before)
+    const first = check('noted.json')
+    const number = first.result.lines.findIndex((l) => l.code === code) + 1
+    expect(number, first.result.lines.map((l) => l.code).join(', ')).toBeGreaterThan(0)
+    const run = await grid(['check', 'noted.json', '--seen', String(number), '--reason', 'Ours', '--by', 'Owner'])
+    expect(run.code, run.err).toBe(0)
+    // Read again, unchanged: still seen.
+    expect(check('noted.json').seen!.states[number - 1]!.state).toBe('seen')
+    write(after)
+    const again = check('noted.json')
+    const index = again.result.lines.findIndex((l) => l.code === code)
+    const state = again.seen!.states[index]!
+    expect(state.state).toBe('back')
+    expect(checkText(again, 1)).toContain(`but ${part} changed since, so it is new again.`)
   })
 
   it('unmarking takes the mark off; marking again replaces it', async () => {

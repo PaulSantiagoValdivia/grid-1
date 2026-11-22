@@ -300,7 +300,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const country = textOf(parsed, '--country')
     // MSG-10: a number is the note's in the whole plan's report, whatever --floor shows.
     const done: MarkDone | null = ask === null ? null : markNote(project, planFile, loaded, checkPlan(loaded, { country }), ask, ask.mark === 'seen' ? '--seen' : '--unseen')
-    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country }), loaded.plan, readSeen(project, planFile))
+    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country }), loaded, readSeen(project, planFile))
     if (json) io.stdout(checkJson(result, done ?? undefined))
     else {
       const text = checkText(result, planFloors(loaded.plan).length, { full: parsed.values.has('--full') })
