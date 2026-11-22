@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { MEASURES, floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
 import { checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
@@ -248,6 +248,8 @@ const areasTool: GridTool = {
     netToGross: NULLABLE_NUMBER,
     leftOut: { type: 'array' },
     gross: objectSchema({ measures: listSchema(STRING), chosen: STRING, why: STRING }, ['measures', 'chosen', 'why']),
+    // LVL-6: the floor by headroom band over the floors that state their roof, else null.
+    headroom: { type: ['array', 'null'] },
     measures: listSchema(objectSchema({ measure: STRING, name: STRING, measures: STRING, notTakenOff: STRING, cannotSay: STRING })),
     rules: listSchema(STRING),
     notes: listSchema(STRING),
@@ -279,6 +281,7 @@ const areasTool: GridTool = {
       netToGross: areas.netToGross,
       leftOut: areas.leftOut,
       gross: { measures: areas.reader.gross, chosen: areas.reader.chosen, why: areas.reader.why },
+      headroom: areas.headroom,
       measures: areas.measures,
       rules: areas.rules,
       notes: areas.notes,
@@ -302,7 +305,9 @@ const areasTool: GridTool = {
         const measured = r.net === null ? 'not measured: it could not be drawn' : `${size}${areaText(r.net, units)}${free}${r.state === 'not-proven' ? `, not proven: the drawing questions its outline (${r.doubts.join(', ')})` : ''}`
         // SHT-11: a stair room over the stair below is counted once, with it.
         const below = r.countedWith ? `, counted once with ${q(r.countedWith.room)} on floor ${q(r.countedWith.floor)}, the stair it rises from` : ''
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}${below}`)
+        // LVL-6: under a roof the floor states, the room's floor by headroom band.
+        const headroom = r.headroom === undefined ? '' : `; ${bandsText(r.headroom.bands, units)}, headroom ${lengthText(r.headroom.lowest, units)} to ${lengthText(r.headroom.highest, units)}`
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}${below}${headroom}`)
       }
     }
     if (several) {
@@ -320,6 +325,7 @@ const areasTool: GridTool = {
       const state = value === null ? '' : stateText(areas.states[m], several)
       lines.push(`${m === 'grossInternal' ? 'Gross internal' : 'Gross external'}: ${value === null ? 'not known' : areaText(value, units)}${state}. ${AREA_RULES[m]}`)
     }
+    if (areas.headroom !== null) lines.push(`Area by headroom: ${bandsText(areas.headroom, units)}. ${MEASURES.headroom.measures}`)
     lines.push(`Assumed: ${areas.reader.why} Grid's own rule, not checked against any local standard.`)
     if (areas.grossInternal !== null && areas.reader.gross.includes('grossInternal')) {
       lines.push(`Circulation: ${areas.circulation.toFixed(2)} m², ${percent(areas.circulationShare)} of gross internal. Net to gross: ${percent(areas.netToGross)}.`)
@@ -327,13 +333,26 @@ const areasTool: GridTool = {
     const outsideArea = areas.floors.reduce((sum, f) => sum + f.outsideRooms, 0)
     if (outsideArea > 0) lines.push(`Outside, listed apart: ${areaText(outsideArea, units)}.`)
     for (const rule of areas.measures) {
-      if (rule.measure === 'net' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
+      if (rule.measure === 'net' || rule.measure === 'headroom' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
     }
     // Any rule beyond the measures', such as free floor where fixtures stand (CNT-12).
-    const measureRules: readonly string[] = Object.values(AREA_RULES)
+    const measureRules: readonly string[] = [...Object.values(AREA_RULES), MEASURES.headroom.measures]
     lines.push(...areas.rules.filter((rule) => !measureRules.includes(rule)), ...areas.notes)
     return { text: lines.join('\n'), data }
   },
+}
+
+/** LVL-6: a stated roof's shape, pitch, area on its slope and rooflights, after its area on plan. */
+function sloped(roof: { readonly shape: string | null; readonly pitch: number; readonly slopeArea: number; readonly rooflights: number }, units: Display): string {
+  if (roof.shape === null) return ''
+  const slope = roof.pitch > 0 ? `, pitched ${roof.pitch.toFixed(1)}°, ${areaText(roof.slopeArea, units)} on its slope` : ''
+  const lights = roof.rooflights === 0 ? '' : `, ${roof.rooflights === 1 ? 'one rooflight' : `${roof.rooflights} rooflights`}`
+  return `, on plan; a ${roof.shape} roof${slope}${lights}`
+}
+
+/** LVL-6: floor by headroom band, as `at least 1.50 m 18.42 m², at least 2.20 m 12.28 m²`. */
+function bandsText(bands: readonly HeadroomBand[], units: Display): string {
+  return bands.map((b) => `at least ${lengthText(b.height, units)} ${areaText(b.area, units)}`).join(', ')
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -529,7 +548,7 @@ const takeoffTool: GridTool = {
       const openings = f.slab === null || f.slab.openings.length === 0 ? '' : `, open over ${f.slab.openings.map((o) => `${o.kind === 'void' ? 'a void' : o.kind === 'lift' ? 'a lift shaft' : 'a stair'} (${areaText(o.area, units)})`).join(', ')}`
       return [
         ...(f.slab ? [`  ${f.slab.kind === 'base' ? 'Lowest floor slab' : 'Floor slab'}${on}: ${areaText(f.slab.area, units)}${openings}; assumed.`] : []),
-        ...(f.roof ? [`  Roof over${on || ' the floor'}, where nothing is above: ${areaText(f.roof.area, units)}${f.roof.parapet === null ? '' : `, parapet ${lengthText(f.roof.parapet, units)} high`}; assumed.`] : []),
+        ...(f.roof ? [`  Roof over${on || ' the floor'}, where nothing is above: ${areaText(f.roof.area, units)}${f.roof.parapet === null ? '' : `, parapet ${lengthText(f.roof.parapet, units)} high`}${sloped(f.roof, units)}; assumed.`] : []),
       ]
     })
     const assumed = [...new Set(t.envelope.floors.flatMap((f) => f.assumed))]
@@ -653,6 +672,7 @@ const scheduleTool: GridTool = {
 /** A room's height in words (ARE-10), with where it comes from. */
 function heightText(height: RoomHeight, L: (v: number) => string): string {
   const { value, walls } = height
+  if (height.from === 'roof' && height.roof !== undefined) return `Height ${L(height.roof.lowest)} to ${L(height.roof.highest)}, under the roof its floor states; the plan states none for the room.`
   if (value === null || walls === null) {
     return value === null ? 'Height not known: the plan states none for the room and no solid wall bounds it.' : `Height ${L(value)}, as the plan states for the room. No solid wall bounds it.`
   }

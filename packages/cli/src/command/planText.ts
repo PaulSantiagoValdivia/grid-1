@@ -90,6 +90,21 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
         const problem = textProblem(value, kind)
         if (problem) return `${list}[${i}].${field} ${problem}`
       }
+      if (list === 'floors') {
+        // LVL-6: a floor's rooflights, each with an id.
+        const roof = part['roof']
+        const lights = isObject(roof) ? roof['rooflights'] : undefined
+        if (Array.isArray(lights)) {
+          if (lights.length > PARTS_MAX) {
+            return `floors[${i}].roof.rooflights has ${lights.length.toLocaleString('en-US')} entries; a plan may have at most ${PARTS_MAX.toLocaleString('en-US')} rooflights in one roof`
+          }
+          for (let r = 0; r < lights.length; r++) {
+            const light: unknown = lights[r]
+            const problem = isObject(light) && typeof light['id'] === 'string' ? textProblem(light['id'], 'id') : null
+            if (problem) return `floors[${i}].roof.rooflights[${r}].id ${problem}`
+          }
+        }
+      }
       if (list === 'rooms') {
         // The room's own walls, then each of its holes' (ARE-6).
         const lists: [string, unknown][] = [[`rooms[${i}].boundary`, part['boundary']]]
