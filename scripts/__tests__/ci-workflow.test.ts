@@ -44,6 +44,12 @@ describe('the CI workflow', () => {
     expect(ci).toMatch(/^ {4}timeout-minutes: \d+$/m)
     expect(ci).toMatch(/^ {6}fail-fast: false$/m)
   })
+
+  it('gives the scoreboard 10 minutes at most (QAR-1)', () => {
+    const limit = ci.match(/^ {6}- run: npm run scoreboard\r?\n {8}timeout-minutes: (\d+)$/m)
+    expect(limit, 'the scoreboard step has its own time limit').not.toBeNull()
+    expect(Number(limit![1])).toBeLessThanOrEqual(10)
+  })
 })
 
 describe('every workflow', () => {
