@@ -2,7 +2,7 @@
  * CNT-17 (lab EL-15, C-14, J-15): accessibility measurements, as numbers only until figures are
  * confirmed.
  *
- * The plan may mark the rooms and routes that need to be accessible (`accessible`, C13). For
+ * The plan may mark the rooms and routes that need to be accessible (`accessible`, C14). For
  * those (or, with no mark, for every room) this lists what Grid measures on the plan: each door's
  * hole and the clear width past its open leaf, each corridor at its narrowest from end to end,
  * each room's turning space, and the way in from the entrance with every step on it and its

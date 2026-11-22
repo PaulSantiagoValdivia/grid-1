@@ -108,7 +108,18 @@
  *   exporter and check reads plain openings only. The file keeps the pattern, not its openings.
  *   Optional and never defaulted (version 1).
  *
- * C13 · What needs to be accessible (CNT-17, lab EL-15, C-14, J-15)
+ * C13 · The plot (BRF-3, lab EL-16)
+ *   `site.boundary` is the plot's outline, its corners in plan metres in order round it (either
+ *   way round); edge n runs from point n to point n + 1, the last back to the first. `streets`
+ *   names the edges on a street by number, and `setbacks` the set-backs the person asked for,
+ *   from every edge, the street edges or one edge: the person's own figures, never a code's.
+ *   `things` are the site's own fences, gates, paths, paving, trees and pools: never walls,
+ *   rooms or fixtures, so they add no wall, area, note or storey height. The site is the ground:
+ *   it is drawn on the ground floor's plan, and the building is measured to it from its outside
+ *   face, every floor at or above the ground floor seen from above. All four are optional and
+ *   never defaulted (version 1).
+ *
+ * C14 · What needs to be accessible (CNT-17, lab EL-15, C-14, J-15)
  *   A plan MAY say which rooms and routes need to be accessible, in `accessible`: `rooms`, by id,
  *   and `routes`, each `to` a room and `from` a room or, unstated, from the entrance. It is a
  *   mark of what is needed, never a finding: Grid measures the marked rooms and the ways to them
@@ -1002,11 +1013,77 @@ export const FrontSchema = z
   })
 
 /**
+ * BRF-3 (C13): what the site holds on the ground: fences, gates, paths, paving, trees and pools.
+ * Each kind is the site's own, never a wall, a room or a fixture: it adds no wall, no area, no
+ * note and no storey height, and is drawn in its own style on the ground floor's plan.
+ */
+export const SITE_THING_KINDS = ['fence', 'gate', 'path', 'paving', 'tree', 'pool'] as const
+export type SiteThingKind = (typeof SITE_THING_KINDS)[number]
+
+/**
+ * BRF-3 (C13): one thing on the site. A `fence` is a line through `points` (two or more), a
+ * `gate` the line between its two posts (two points), a `path` a line (two or more) with its
+ * `width`, `paving` and a `pool` a closed shape (three or more points), and a `tree` its trunk
+ * `at` a point, with the `canopy` across its crown if known. `height` (a fence's, a gate's, a
+ * tree's) is drawn only: it is never a storey's or a roof's. `label` is the person's word for it.
+ */
+export const SiteThingSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)),
+    kind: z.enum(SITE_THING_KINDS),
+    points: z.array(Vec2).max(BOUNDARY_MAX).optional(),
+    at: Vec2.optional(),
+    width: finite().positive().optional(),
+    canopy: finite().positive().optional(),
+    height: finite().positive().optional(),
+    label: text('name').optional(),
+  })
+  .superRefine((thing, ctx) => {
+    const need = (ok: boolean, message: string, path: string): void => {
+      if (!ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `a ${thing.kind} needs ${message}`, path: [path] })
+    }
+    const points = thing.points?.length ?? 0
+    if (thing.kind === 'fence') need(points >= 2, 'points, two or more, along its line', 'points')
+    if (thing.kind === 'gate') need(points === 2, 'points, its two posts', 'points')
+    if (thing.kind === 'path') {
+      need(points >= 2, 'points, two or more, along its middle', 'points')
+      need(thing.width !== undefined, 'its width', 'width')
+    }
+    if (thing.kind === 'paving' || thing.kind === 'pool') need(points >= 3, 'points, three or more, round its edge', 'points')
+    if (thing.kind === 'tree') need(thing.at !== undefined, 'at, where its trunk stands', 'at')
+  })
+
+/** BRF-3: who a set-back is from, in WRT-6's words (`MARK_SOURCES`): `given` by the person, or `assumed`, for them to confirm. */
+export const SETBACK_SOURCES = ['given', 'assumed'] as const
+
+/**
+ * BRF-3 (C13): a set-back the person asked for: how far the building is to stand `from` the
+ * boundary: `all` its edges, the `street` edges, or one edge by its number. A figure of the
+ * person's own, never a code's: Grid compares the drawing with it and applies no figure of its
+ * own. `source` says whether the person gave it or it was assumed for them to confirm.
+ */
+export const SetbackSchema = z.object({
+  from: z.union([z.enum(['all', 'street']), z.number().int().min(1)]),
+  distance: finite().min(0),
+  source: z.enum(SETBACK_SOURCES).optional(),
+})
+
+/**
+ * BRF-3: how many edges a boundary has: one per point, the last running back to the first. A
+ * last point written on the first again closes the shape and adds no edge.
+ */
+export function boundaryEdgeCount(points: readonly (readonly [number, number])[]): number {
+  const first = points[0]
+  const last = points.at(-1)
+  const closed = points.length > 1 && first !== undefined && last !== undefined && first[0] === last[0] && first[1] === last[1]
+  return closed ? points.length - 1 : points.length
+}
+
+/**
  * CNT-3 (C7): where the building sits. `origin` is a point of the plan, in metres; `latitude` and
  * `longitude` (degrees, north and east positive, given together) and `elevation` (metres above
- * sea level) say where that point is on the earth. Each is optional, so a site an agent wrote
- * with fields Grid does not hold yet (a plot boundary, setbacks) still reads, with those fields
- * named; nothing is placed on the earth until `origin` is stated.
+ * sea level) say where that point is on the earth. Each is optional, and a field Grid does not
+ * hold is named (MSG-4); nothing is placed on the earth until `origin` is stated.
  *
  * LVL-4: `ground` is the level of the ground outside, in metres from the ground floor's floor
  * level (0), the same datum as a floor's `elevation` (not `site.elevation`, which is above sea
@@ -1014,6 +1091,9 @@ export const FrontSchema = z
  * or window in an outside wall that lies below the ground is named, and the ground floor is the
  * floor nearest it. One level for the whole site: a ground level for each wall, for a slope,
  * comes later.
+ *
+ * BRF-3 (C13): `boundary`, `streets`, `setbacks` and `things`, the plot and what is on it.
+ * A fault in one street, set-back or thing leaves that one out alone (`readParts.ts`).
  */
 export const SiteSchema = z
   .object({
@@ -1027,11 +1107,45 @@ export const SiteSchema = z
     // apply; with none stated, no figure is applied. Kept as written; a report names the place
     // from the list, never from this text.
     country: placeText().optional(),
+    // BRF-3 (C13): the plot's boundary, its corners in plan metres, in order round it; edge 1
+    // runs from the first point to the second, and the last edge back to the first point.
+    boundary: z.array(Vec2).min(3).max(BOUNDARY_MAX).optional(),
+    // BRF-3: the edges of the boundary that are on a street, by number.
+    streets: z.array(z.number().int().min(1)).max(BOUNDARY_MAX).optional(),
+    // BRF-3: the set-backs the person asked for, their own figures.
+    setbacks: z.array(SetbackSchema).max(BOUNDARY_MAX).optional(),
+    // BRF-3: the site's own things: fences, gates, paths, paving, trees and pools.
+    things: z.array(SiteThingSchema).max(PARTS_MAX).optional(),
   })
   .superRefine((site, ctx) => {
+    const say = (path: (string | number)[], message: string): void => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message })
     if ((site.latitude === undefined) !== (site.longitude === undefined)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [site.latitude === undefined ? 'latitude' : 'longitude'], message: 'needs latitude and longitude together: one alone places nothing' })
+      say([site.latitude === undefined ? 'latitude' : 'longitude'], 'needs latitude and longitude together: one alone places nothing')
     }
+    const edges = site.boundary === undefined ? 0 : boundaryEdgeCount(site.boundary)
+    if (site.boundary !== undefined && edges < 3) say(['boundary'], 'has fewer than three corners once its last point, which closes it, is set aside')
+    const edgeProblem = (edge: number): string | null =>
+      site.boundary === undefined ? 'names an edge, but the site states no boundary' : edge > edges ? `names edge ${edge}, but the boundary has ${edges} edges` : null
+    const streets = new Set<number>()
+    site.streets?.forEach((edge, i) => {
+      const problem = edgeProblem(edge)
+      if (problem !== null) say(['streets', i], problem)
+      else if (streets.has(edge)) say(['streets', i], `names edge ${edge} twice`)
+      else streets.add(edge)
+    })
+    const asked = new Set<string>()
+    site.setbacks?.forEach((setback, i) => {
+      const key = String(setback.from)
+      const problem = typeof setback.from === 'number' ? edgeProblem(setback.from) : setback.from === 'street' && streets.size === 0 ? 'is from the street, but the site names no street edge' : site.boundary === undefined ? 'is from the boundary, but the site states no boundary' : null
+      if (problem !== null) say(['setbacks', i, 'from'], problem)
+      else if (asked.has(key)) say(['setbacks', i, 'from'], `asks a second set-back from ${typeof setback.from === 'number' ? `edge ${key}` : key === 'all' ? 'every edge' : 'the street'}: give one`)
+      else asked.add(key)
+    })
+    const ids = new Set<string>()
+    site.things?.forEach((thing, i) => {
+      if (ids.has(thing.id)) say(['things', i, 'id'], 'is the id of another of the site\'s things: give each its own')
+      ids.add(thing.id)
+    })
   })
 
 /**
@@ -1125,7 +1239,7 @@ export const ViewSchema = z
   })
 
 /**
- * CNT-17 (C13): a route that needs to be accessible: `to` a room, by id, and `from` a room or,
+ * CNT-17 (C14): a route that needs to be accessible: `to` a room, by id, and `from` a room or,
  * unstated, from the entrance (the front door the plan names, else its doors to the outside on
  * the ground floor).
  */
@@ -1135,7 +1249,7 @@ export const AccessibleRouteSchema = z.object({
 })
 
 /**
- * CNT-17 (C13): the rooms and routes that need to be accessible. A mark of what is needed, never
+ * CNT-17 (C14): the rooms and routes that need to be accessible. A mark of what is needed, never
  * a finding. Optional and never defaulted (version 1).
  */
 export const AccessibleSchema = z.object({
@@ -1248,7 +1362,7 @@ export const FloorPlanFieldsSchema = z.object({
   // VEW-3 (C11): named views, each a camera saved with the plan (`ViewSchema`). Optional and never
   // defaulted (version 1).
   views: parts(ViewSchema, 'views').optional(),
-  // CNT-17 (C13): the rooms and routes that need to be accessible (`AccessibleSchema`). Optional
+  // CNT-17 (C14): the rooms and routes that need to be accessible (`AccessibleSchema`). Optional
   // and never defaulted (version 1).
   accessible: AccessibleSchema.optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
@@ -1303,6 +1417,8 @@ export type Annotation = z.infer<typeof AnnotationSchema>
 export type SketchItem = z.infer<typeof SketchItemSchema>
 export type Front = z.infer<typeof FrontSchema>
 export type Site = z.infer<typeof SiteSchema>
+export type SiteThing = z.infer<typeof SiteThingSchema>
+export type Setback = z.infer<typeof SetbackSchema>
 export type Mark = z.infer<typeof MarkSchema>
 export type View = z.infer<typeof ViewSchema>
 export type Accessible = z.infer<typeof AccessibleSchema>

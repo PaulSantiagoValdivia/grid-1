@@ -12,6 +12,11 @@
  * - with rooms named, the changes outside them (the scope check);
  * - what a picture marks: removed, added, and the rooms that changed with their old and new area.
  *
+ * Before anything is paired, the later plan is tried as the earlier one mirrored or turned a
+ * quarter (WRT-4, `turn.ts`): a flat flipped left to right is said to be mirrored, in the
+ * verdict's first sentence, with whether every room kept its size, and what else changed is
+ * listed from there, not as every wall moved (lab Y-5, WR-16).
+ *
  * A plan written rooms first (both versions carry `written`, WRT-2) is compared at the level of
  * its rooms and openings, whose names the author chose: its walls are worked out from the rooms
  * and named by where they are, so a wall list is no way to say what changed (lab RT-8). A room
@@ -31,7 +36,9 @@ import { tolerance } from '../tolerances'
 import type { Vec2 } from '../vec2'
 import { compareText } from './order'
 import { alignPlans, type Redrawn, type RenamedId } from './place'
+import { findTurn, turnPlan, type PlanTurn } from './turn'
 import { diffPlans } from './diff'
+import { withPatterns } from '../patterns'
 import { changesOutsideScope } from './scope'
 import type { DiffIssue, EntityRef, IssueCode, PlanChange, PlanDiff } from './types'
 
@@ -115,7 +122,14 @@ export interface BuildingComparison {
   }
   /** Walls one version draws as one and the other as several pieces end to end: no change. */
   readonly redrawn: readonly Redrawn[]
-  /** Nothing stands anywhere else and nothing changed: ids aside, the same building. */
+  /**
+   * WRT-4: the later plan is the earlier one mirrored or turned, and everything else is compared
+   * from there; null when it is not. The verdict says it first.
+   */
+  readonly turn: PlanTurn | null
+  /** The verdict's first sentence when the plan is mirrored or turned: the turn, and whether every room kept its size. */
+  readonly turnLine: string | null
+  /** Nothing stands anywhere else and nothing changed: ids aside, the same building. False for a plan mirrored or turned. */
   readonly sameBuilding: boolean
   readonly verdict: string
   readonly rooms: readonly RoomVerdict[]
@@ -326,10 +340,18 @@ const ISSUE_ORDER: Readonly<Record<string, number>> = {
 
 // ── The comparison ────────────────────────────────────────────────────────────────────────
 
-/** Compares two versions of a plan by what stands where in the building. */
-export function compareBuildings(earlier: FloorPlan, later: FloorPlan, options: CompareOptions = {}): BuildingComparison {
+/**
+ * Compares two versions of a plan by what stands where in the building. LVL-8: each is compared
+ * with its opening patterns expanded, so a pattern's openings are paired, mirrored and turned as
+ * plain openings are (a plan already expanded is taken as it is).
+ */
+export function compareBuildings(earlierStated: FloorPlan, laterStated: FloorPlan, options: CompareOptions = {}): BuildingComparison {
+  const earlier = withPatterns(earlierStated)
+  const later = withPatterns(laterStated)
   const roomsFirst = earlier.written?.from === 'rooms' && later.written?.from === 'rooms'
-  const alignment = alignPlans(earlier, later, { idsFirst: roomsFirst })
+  // WRT-4: a mirror or a quarter turn first, so a flipped plan is not every wall moved.
+  const turn = findTurn(earlier, later)
+  const alignment = alignPlans(turn === null ? earlier : turnPlan(earlier, turn.id), later, { idsFirst: roomsFirst })
   const aligned = alignment.aligned
   const diff = diffPlans(aligned, later)
 
@@ -570,7 +592,7 @@ export function compareBuildings(earlier: FloorPlan, later: FloorPlan, options: 
 
   const renamed = alignment.renamed
   const renamedCount = { walls: renamed.filter((r) => r.type === 'wall').length, openings: renamed.filter((r) => r.type === 'opening').length, rooms: renamed.filter((r) => r.type === 'room').length }
-  const sameBuilding = changes.length === 0
+  const sameBuilding = changes.length === 0 && turn === null
   const [sx, sy] = alignment.shift
   const shifted = Math.hypot(sx, sy) > tolerance('diffLength') ? `; the whole drawing sits ${moveWords(sx, sy)} of where it was, which is no change` : ''
   const renamedWords = renamed.length === 0
@@ -582,7 +604,22 @@ export function compareBuildings(earlier: FloorPlan, later: FloorPlan, options: 
     : `${plural(redrawn.reduce((n, r) => n + r.before.length, 0), 'wall')} drawn as ${plural(redrawn.reduce((n, r) => n + r.after.length, 0), 'piece')} standing where ${redrawn.reduce((n, r) => n + r.before.length, 0) === 1 ? 'it' : 'they'} stood`
   const sameWords = [renamedWords, redrawnWords].filter((w) => w !== '').join(', ')
   let verdict: string
-  if (sameBuilding) {
+  let turnFirst = ''
+  if (turn !== null) {
+    // Every room in both versions, at the size it had: the mirror or the turn changed no size.
+    const keepsSize = verdicts.every((v) => v.status !== 'added' && v.status !== 'removed' && (v.before === null || v.after === null || Math.abs(v.after - v.before) <= areaSlack))
+    turnFirst = `${turn.text}${keepsSize ? ', and every room keeps its size' : ''}.`
+    if (changes.length === 0) verdict = `Nothing else changed${sameWords === '' ? '' : `; ${sameWords}`}${shifted}.`
+    else {
+      const parts: string[] = []
+      for (const v of verdicts) if (v.status === 'changed' || v.status === 'added' || v.status === 'removed') parts.push(v.text)
+      const others = changes.length - parts.length
+      if (others > 0) parts.push(plural(others, roomsFirst ? 'other change' : 'wall or opening change'))
+      if (renamed.length > 0) parts.push(renamedWords)
+      if (redrawn.length > 0) parts.push(redrawnWords)
+      verdict = `Besides, ${plural(changes.length, 'change')}, room by room: ${parts.join('; ')}${shifted}.`
+    }
+  } else if (sameBuilding) {
     verdict = `Same building${sameWords === '' ? '' : `, ${sameWords}`}: every room, wall and opening stands where it stood${shifted}.`
   } else {
     const parts: string[] = []
@@ -598,6 +635,8 @@ export function compareBuildings(earlier: FloorPlan, later: FloorPlan, options: 
   }
   if (options.rooms !== undefined) verdict += ` ${outside.length === 0 ? 'Nothing changed' : `${plural(outside.length, 'change')}`} outside the rooms named (${options.rooms.map(quoted).join(', ') || 'none'}).`
   if (issues.length > 0) verdict = `${plural(issues.length, 'issue')} to look at first. ${verdict}`
+  // WRT-4: the mirror or the turn is said first, before anything else.
+  if (turn !== null) verdict = `${turnFirst} ${verdict}`
 
   return {
     version: BUILDING_COMPARISON_VERSION,
@@ -605,6 +644,8 @@ export function compareBuildings(earlier: FloorPlan, later: FloorPlan, options: 
     shift: alignment.shift,
     renamed: { count: renamed.length, ...renamedCount, pairs: renamed },
     redrawn,
+    turn,
+    turnLine: turn === null ? null : turnFirst,
     sameBuilding,
     verdict,
     rooms: verdicts,

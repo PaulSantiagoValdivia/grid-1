@@ -1,5 +1,5 @@
 /**
- * CNT-17 (C13): the rooms and routes a plan marks as needing to be accessible. An optional part,
+ * CNT-17 (C14): the rooms and routes a plan marks as needing to be accessible. An optional part,
  * never defaulted: a plan without it reads exactly as before, and a mark that cannot be read is
  * read as not stated, with the rest of the plan kept.
  */
@@ -9,7 +9,7 @@ import { parseFloorPlan, safeParseFloorPlan } from '../floorplan'
 import { readPlanParts } from '../readParts'
 import { readingNotes } from '../reading'
 
-describe('accessible (C13)', () => {
+describe('accessible (C14)', () => {
   it('reads the rooms and routes as written, and adds no key to a plan without it', () => {
     const mark = { rooms: ['bath'], routes: [{ to: 'bath' }, { from: 'bed1', to: 'bath' }] }
     expect(parseFloorPlan({ ...flat(), accessible: mark }).accessible).toEqual(mark)

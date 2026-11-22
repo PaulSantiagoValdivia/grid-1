@@ -65,7 +65,9 @@ describe('the plan format', () => {
     expect(fails({ site: { origin: [0, 0], latitude: 40 } })).toBe(true)
     // A site with no origin reads, with what Grid does not hold named (lab G/s01b): it places nothing.
     expect(fails({ site: { latitude: 40, longitude: 3 } })).toBe(false)
-    expect(fails({ site: { boundary: [[0, 0], [15, 0]], street: 'south' } })).toBe(false)
+    // BRF-3: the plot's boundary is read now; one of two corners is no plot, and is refused.
+    expect(fails({ site: { boundary: [[0, 0], [15, 0], [15, 30], [0, 30]], street: 'south' } })).toBe(false)
+    expect(fails({ site: { boundary: [[0, 0], [15, 0]] } })).toBe(true)
     expect(fails({ site: { origin: [0, 0], latitude: 91, longitude: 3 } })).toBe(true)
     expect(fails({ yAxis: 'left' })).toBe(true)
     expect(fails({ north: Number.POSITIVE_INFINITY })).toBe(true)

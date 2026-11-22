@@ -2,7 +2,6 @@ plan "Hotel floor: corridor and twelve rooms (same building as the original, to 
 walls outside 0.3 inside 0.15 height 2.8
 windows sill 0.6 height 1.8
 floor l3 "Third floor" level 3
-
 unit guest w=3.45 bw=1.875 door=0.275 win=centred bhinge=south
   room room "Room {n}" bedroom  $w x 7.25
   room bath "Bath {n}" bathroom $bw x 2.25 inside room corner nw wall 0.1 partition
@@ -10,14 +9,9 @@ unit guest w=3.45 bw=1.875 door=0.275 win=centred bhinge=south
   door bdoor in bath east, 0.75 from south, 0.8 wide, opens into bath, hinged $bhinge
   window win in room south, $win, 2.0 wide
 end
-
-# the original was drawn on centre lines 3.6 m apart, so its end rooms are 7.5 cm narrower
-place guest as 301 at 0.15,0.15 w=3.375 bw=1.8 win="0.65 from west"
-repeat guest 4 east of 301 as 302
-place guest as 306 east of 305 w=3.375 door=0.2 win="0.725 from west"
+# one room type, six a side; drawn on centre lines 3.6 m apart, so the end rooms are 7.5 cm narrower
+repeat guest 6 east as 301 at 0.15,0.15 first w=3.375 bw=1.8 win="0.65 from west" last w=3.375 door=0.2 win="0.725 from west"
 room corridor "Corridor" corridor * x 1.4 north of 301 until 306 walls 0.2
-place guest as 307 north of corridor mirror north-south w=3.375 bw=1.8 win="0.65 from west" bhinge=north
-repeat guest 4 east of 307 as 308 mirror north-south bhinge=north
-place guest as 312 east of 311 mirror north-south w=3.375 door=0.2 win="0.725 from west" bhinge=north
+repeat guest 6 east as 307 north of corridor mirror north-south bhinge=north first w=3.375 bw=1.8 win="0.65 from west" last w=3.375 door=0.2 win="0.725 from west"
 door exit-west in corridor west, centred, 1.2 wide, opens in, hinged north
 door exit-east in corridor east, centred, 1.2 wide, opens out, hinged south

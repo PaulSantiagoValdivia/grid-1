@@ -100,7 +100,7 @@ Notes for agents and people changing this repository.
   every change's answer and the one reminder on a first plan with no brief. `grid_write_brief`
   writes it; `docs/brief.md` is its page.
 - Accessibility measurements (CNT-17, `packages/cli/src/quantities/access.ts`, `grid_measure
-  what=access`): for the rooms and routes a plan marks (`accessible`, C13), or every room, each
+  what=access`): for the rooms and routes a plan marks (`accessible`, C14), or every room, each
   door's clear width, each corridor's narrowest point, turning space and the steps on the way in,
   from CNT-13's, LVL-3's, LVL-4's and LVL-7's measures. Numbers are set only against the brief's
   figures, said as "your figure", and a code's once `confirmedFigure` (`packages/rules`) gives

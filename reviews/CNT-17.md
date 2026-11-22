@@ -7,7 +7,7 @@ cannot be given to any check; the narrow flat gets "Notes: 0", "Not checked: (no
 
 ## What CNT-17 adds
 
-**A mark of what needs to be accessible** (C13, `packages/floorplan/src/types/floorplan.ts`). A
+**A mark of what needs to be accessible** (C14, `packages/floorplan/src/types/floorplan.ts`). A
 plan may state `accessible`: `rooms` by id, and `routes`, each `to` a room and `from` a room or,
 left out, from the entrance. Optional and never defaulted (version 1), as the format's change
 rule asks, so no plan, export or snapshot gains a key. A mark that cannot be read is left out
