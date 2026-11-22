@@ -13,6 +13,7 @@
 
 import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
 import { quoted } from '@ongrid/floorplan/types/floorplan'
+import { buildingKindsText, findingReadFor } from '../checks/figures'
 import { wordings as figureWordings } from '../checks/messages'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
 
@@ -76,6 +77,15 @@ const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every
 
 /** "The door is 0.30 m wide" as "the door is 0.30 m wide". */
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1)
+
+/**
+ * COD-2: after what a figure finding needed, the kind of building its figures were read for, as
+ * "; this check's figures were read for homes (houses and flats people live in)".
+ */
+function readFor(s: Subject): string {
+  const kinds = s.finding === undefined ? [] : findingReadFor(s.finding)
+  return kinds.length === 0 ? '' : `; this check's figures were read for ${buildingKindsText(kinds)}`
+}
 
 /** A figure a finding applied, by key, as "6.5 m²". */
 function figure(finding: RuleFinding | undefined, key: AppliedFigure['key']): string | null {
@@ -613,13 +623,13 @@ export const CODES = {
   'room/too-small': {
     says: (s) => wordingText(figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
     found: (s) => `${area(s.finding?.area)} net`,
-    needed: (s) => `at least ${area(s.finding?.minimum)}`,
+    needed: (s) => `at least ${area(s.finding?.minimum)}${readFor(s)}`,
     fix: fixed('Make the room larger, or check the use it is given.')
   },
   'room/no-escape-opening': {
     says: (s) => wordingText(figureWordings.noEscapeOpening(s.name)),
     found: fixed('no window or door in an outside wall'),
-    needed: fixed('a window or door to the outside that someone can climb through'),
+    needed: (s) => `a window or door to the outside that someone can climb through${readFor(s)}`,
     fix: fixed('Add a window or a door in one of its outside walls.')
   },
   'room/escape-window-too-small': {
@@ -631,14 +641,14 @@ export const CODES = {
         figure(s.finding, 'escapeOpeningMinWidth') === null ? null : `${figure(s.finding, 'escapeOpeningMinWidth')} wide`,
         figure(s.finding, 'escapeOpeningMinHeight') === null ? null : `${figure(s.finding, 'escapeOpeningMinHeight')} high`
       ].filter((part): part is string => part !== null)
-      return parts.length === 0 ? 'a window someone can climb through' : `at least ${parts.join(', ')}`
+      return `${parts.length === 0 ? 'a window someone can climb through' : `at least ${parts.join(', ')}`}${readFor(s)}`
     },
     fix: fixed('Make the window larger, or add one that is.')
   },
   'room/escape-window-too-high': {
     says: (s) => wordingText(figureWordings.escapeWindowTooHigh(s.name)),
     found: (s) => `a sill ${metres(s.finding?.sill)} above the floor`,
-    needed: (s) => (s.finding?.maximum === undefined ? 'a lower sill' : `a sill at most ${metres(s.finding.maximum)} above the floor`),
+    needed: (s) => `${s.finding?.maximum === undefined ? 'a lower sill' : `a sill at most ${metres(s.finding.maximum)} above the floor`}${readFor(s)}`,
     fix: fixed("Lower the window's sill.")
   },
 
