@@ -10,6 +10,7 @@ import { DXF_LAYERS, toDxf } from '../dxf'
 import { toGlb } from '../gltf'
 import { toObj } from '../obj'
 import { parseGlb, readMeshes } from './glb-reader'
+import { worldShapes } from './dxf-reader'
 
 /**
  * SHT-2: the exports carry the joined corners too (lab DR-1). Each file is read back here and
@@ -51,26 +52,10 @@ describe('SHT-2 the exports draw the flat 75.05 m² outside (DR-1: 74.96)', () =
   })
 
   it('DXF: the wall outlines with the openings across them', () => {
-    const pairs = toDxf(buildFloorPlan(flat())).split(/\r?\n/)
-    const shapes: Polygon[] = []
-    let current: Pair[] | null = null
-    let layer = ''
-    for (let i = 0; i + 1 < pairs.length; i += 2) {
-      const code = pairs[i]!.trim()
-      const value = pairs[i + 1]!.trim()
-      if (code === '0') {
-        if (value === 'POLYLINE') current = []
-        else if (value === 'SEQEND' && current) {
-          if (layer === DXF_LAYERS.wallExterior || layer === DXF_LAYERS.wallInterior) shapes.push([current])
-          current = null
-        }
-      }
-      if (code === '8' && current && current.length === 0) layer = value
-      if (code === '10' && current) current.push([Number(value), 0])
-      if (code === '20' && current && current.length > 0) current[current.length - 1]![1] = Number(value)
-    }
-    // The POLYLINE's own point (0, 0) is not a vertex.
-    const walls = shapes.map((s): Polygon => [s[0]!.slice(1)])
+    // HND-1: each wall's closed outlines, as light polylines.
+    const walls = worldShapes(toDxf(buildFloorPlan(flat())))
+      .filter((s) => s.type === 'LWPOLYLINE' && (s.layer === DXF_LAYERS.wallExterior || s.layer === DXF_LAYERS.wallInterior))
+      .map((s): Polygon => [s.points.map((p): Pair => [p.x, p.y])])
     const drawing = buildFloorPlan(flat())
     for (const o of drawing.openings) {
       const h = o.thickness / 2
