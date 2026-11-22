@@ -53,6 +53,8 @@ export const SHEET_COVERAGE = {
   // `grid check`; the sheet's checks page lists those lines with the others.
   marks: { shown: 'drawn' },
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
+  // VEW-3: a saved view is a camera for grid_view and grid draw --view; the sheet takes its own.
+  views: { shown: 'not shown', why: 'A saved view is a camera for grid_view and grid draw --view (VEW-3); the sheet takes its own pictures.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**

@@ -133,6 +133,26 @@ describe('the facade of a side', () => {
     expect(facade.openings).toEqual(['front', 'w-first', 'row-ground-1', 'row-ground-2'])
   })
 
+  it('cuts a wall to the roof the floor states, so a gable end is a gable, and shows the slope it looks at (LVL-6)', () => {
+    const w = (id: string, start: [number, number], end: [number, number]) => ({ id, start, end, thickness: 0.2, height: 6 })
+    const plan = parseFloorPlan({
+      version: '1',
+      floors: [{ id: 'ground', name: 'Ground floor', level: 0, roof: { shape: 'gable', eaves: 2.5, ridge: 5, ridgeRuns: 'east-west' } }],
+      walls: [w('s', [0, 0], [10, 0]), w('e', [10, 0], [10, 6]), w('n', [10, 6], [0, 6]), w('w', [0, 6], [0, 0])],
+      rooms: [{ id: 'r', name: 'Room', boundary: ['s', 'e', 'n', 'w'] }],
+      openings: [],
+    })
+    // Seen from the east the end wall rises to the ridge, 5 m, in the middle of its 6 m.
+    const gable = planFacade(plan, 'east').faces.find((f) => f.wall === 'e')!
+    expect(gable.top).toBe(5)
+    expect(gable.outline).toContainEqual([3, 5])
+    expect(gable.outline.filter(([, z]) => z === 2.5).length).toBeGreaterThanOrEqual(2)
+    // Seen from the south the side wall stops at the eaves, and the roof's plane rises behind it.
+    const south = planFacade(plan, 'south')
+    expect(south.faces.find((f) => f.wall === 's')!.top).toBe(2.5)
+    expect(south.faces.some((f) => f.kind === 'roof-plane' && f.top > 5)).toBe(true)
+  })
+
   it('says nothing faces a side when the plan has no outside face', () => {
     const empty = parseFloorPlan({ version: '1', walls: [], rooms: [], openings: [] })
     expect(planFacade(empty, 'north')).toMatchObject({ faces: [], extent: null, walls: [], openings: [] })

@@ -1,5 +1,5 @@
 /**
- * Opening patterns (LVL-8, C11): a facade's rhythm stated once, expanded into the plain openings a
+ * Opening patterns (LVL-8, C12): a facade's rhythm stated once, expanded into the plain openings a
  * person would place by hand.
  *
  * A pattern names one wall, one opening (type, width, height, sill, door fields), a `count` or a

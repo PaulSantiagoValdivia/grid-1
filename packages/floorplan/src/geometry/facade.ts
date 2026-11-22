@@ -30,7 +30,7 @@
  * `outline` is the facade's silhouette above the ground. Stairs stand inside the building and are
  * not seen.
  *
- * Opening patterns (C11) are expanded first (`withPatterns`). Pure, and never throws.
+ * Opening patterns (C12) are expanded first (`withPatterns`). Pure, and never throws.
  */
 
 import type { MultiPolygon, Polygon } from 'polygon-clipping'
@@ -45,6 +45,7 @@ import { bearingOf, compassPoint, planOrientation, type CompassPoint } from './o
 import { withPatterns } from './patterns'
 import { tolerance } from './tolerances'
 import { brokenOnFloor } from './validate'
+import { planeAt, topAt, wallTopProfile } from './roofs'
 import type { Vec2 } from './vec2'
 
 /** The sides a facade is drawn for: the drawing's four (C4). */
@@ -59,8 +60,11 @@ const SIDE_DIRECTION: Readonly<Record<FacadeSide, Vec2>> = {
   west: { x: -1, y: 0 }
 }
 
-/** What a face of a facade is: a wall's outside face, or the edge of a slab, a roof or a parapet. */
-export type FacadeFaceKind = 'wall' | 'slab' | 'roof' | 'parapet'
+/**
+ * What a face of a facade is: a wall's outside face, the edge of a slab, a roof or a parapet, or the
+ * surface of a sloped roof's plane (`roof-plane`, LVL-6).
+ */
+export type FacadeFaceKind = 'wall' | 'slab' | 'roof' | 'parapet' | 'roof-plane'
 
 /** A door, window or doorless opening in a wall face, where it is seen. */
 export interface FacadeOpening {
@@ -75,7 +79,12 @@ export interface FacadeOpening {
   readonly top: number
 }
 
-/** One face of a facade: a rectangle across the view, `u0` to `u1`, from `bottom` to `top`. */
+/**
+ * One face of a facade: `outline`, a polygon across the view in `[u, z]` points, and the box round
+ * it, `u0` to `u1` and `bottom` to `top`. A wall's face is a rectangle unless a roof the floor
+ * states (LVL-6) cuts its top: a gable end is a pentagon. A sloped roof shows its edges as bands
+ * that follow the slope, and each plane of it that turns toward the side as a surface.
+ */
 export interface FacadeFace {
   readonly kind: FacadeFaceKind
   readonly floor: string
@@ -85,6 +94,8 @@ export interface FacadeFace {
   readonly u1: number
   readonly bottom: number
   readonly top: number
+  /** Its corners in order, `[u, z]`, not closed. */
+  readonly outline: readonly (readonly [number, number])[]
   /** How far it stands behind the nearest face of the facade, in metres, at its middle. */
   readonly depth: number
   /** Its plane, front to back: 0 the front, 1 the next set back, 2 anything further. */
@@ -135,13 +146,19 @@ interface Seen {
   readonly kind: FacadeFaceKind
   readonly floor: string
   readonly wall: string | null
-  readonly a: Vec2
-  readonly b: Vec2
-  readonly bottom: number
-  readonly top: number
+  /** Its corners in order: each a point on the plan and its height. */
+  readonly points: readonly { readonly p: Vec2; readonly z: number }[]
   readonly openings: readonly FacadeOpening[]
   readonly order: number
 }
+
+/** A band along an edge, from `bottom` to `top` over each end (a sloped roof's edge rises with it). */
+const band = (a: Vec2, b: Vec2, bottomA: number, bottomB: number, thickness: number): Seen['points'] => [
+  { p: a, z: bottomA },
+  { p: b, z: bottomB },
+  { p: b, z: bottomB + thickness },
+  { p: a, z: bottomA + thickness }
+]
 
 /**
  * A ring of an outline with the points that only bend it by a hair taken out: the join of the
@@ -301,17 +318,49 @@ function openingsIn(
   return out
 }
 
+/**
+ * A wall's face along a stretch of an edge, as corners: along the bottom at its floor's level, then
+ * back along its top: level at its height, or, under a roof the floor states (LVL-6), the top the
+ * roof leaves it (`wallTopProfile`), turning where it turns.
+ */
+function wallPoints(plan: FloorPlan, wall: Wall, edge: { a: Vec2; e: Vec2 }, stretch: { t0: number; t1: number }, floorLevel: number): Seen['points'] {
+  const point = (t: number): Vec2 => ({ x: edge.a.x + edge.e.x * t, y: edge.a.y + edge.e.y * t })
+  const a = point(stretch.t0)
+  const b = point(stretch.t1)
+  const bottom = [{ p: a, z: floorLevel }, { p: b, z: floorLevel }]
+  const profile = wallTopProfile(plan, wall)
+  if (profile === null) return [...bottom, { p: b, z: floorLevel + wall.height }, { p: a, z: floorLevel + wall.height }]
+  const sx = wall.start[0]
+  const sy = wall.start[1]
+  const length = Math.hypot(wall.end[0] - sx, wall.end[1] - sy)
+  const dx = (wall.end[0] - sx) / length
+  const dy = (wall.end[1] - sy) / length
+  // A point of the edge as a distance along the wall from its start, and back.
+  const along = (p: Vec2): number => (p.x - sx) * dx + (p.y - sy) * dy
+  const onEdge = (s: number): number => (sx + dx * s - edge.a.x) * edge.e.x + (sy + dy * s - edge.a.y) * edge.e.y
+  const ts = [stretch.t1, ...profile.map((q) => onEdge(q.u)).filter((t) => t > stretch.t0 && t < stretch.t1).sort((x, y) => y - x), stretch.t0]
+  const top = ts.map((t) => {
+    const p = point(t)
+    return { p, z: floorLevel + topAt(profile, Math.min(length, Math.max(0, along(p)))) }
+  })
+  return [...bottom, ...top]
+}
+
 /** The silhouette of the faces above the ground: their union. Empty when it cannot be worked out. */
 function silhouette(faces: readonly FacadeFace[], ground: number): (readonly (readonly [number, number])[])[] {
-  const rects: Polygon[] = faces
-    .filter((f) => f.top > ground && f.u1 > f.u0)
-    .map((f) => {
-      const bottom = Math.max(f.bottom, ground)
-      return [[[f.u0, bottom], [f.u1, bottom], [f.u1, f.top], [f.u0, f.top], [f.u0, bottom]]]
-    })
-  if (rects.length === 0) return []
+  const shapes: Polygon[] = faces
+    .filter((f) => f.top > ground && f.u1 > f.u0 && f.outline.length >= 3)
+    .map((f) => [[...f.outline.map(([u, z]) => [u, z] as [number, number]), [f.outline[0]![0], f.outline[0]![1]]]])
+  if (shapes.length === 0) return []
   try {
-    return polygonClipping.union(rects[0]!, ...rects.slice(1)).flatMap((polygon) => polygon.map((ring) => ring.map(([u, z]) => [u, z] as const)))
+    const all = polygonClipping.union(shapes[0]!, ...shapes.slice(1))
+    const u0 = Math.min(...faces.map((f) => f.u0)) - 1
+    const u1 = Math.max(...faces.map((f) => f.u1)) + 1
+    const top = Math.max(...faces.map((f) => f.top)) + 1
+    const above = polygonClipping.intersection(all, [[[u0, ground], [u1, ground], [u1, top], [u0, top], [u0, ground]]])
+    // A ring with no area to speak of (`areaReported`), a sliver the join leaves along a gable's slope, is not part of it.
+    const area = (ring: readonly (readonly [number, number])[]): number => Math.abs(ring.slice(0, -1).reduce((sum, [u, z], i) => sum + u * ring[i + 1]![1] - ring[i + 1]![0] * z, 0)) / 2
+    return above.flatMap((polygon) => polygon.map((ring) => ring.map(([u, z]) => [fine(u), fine(z)] as const)).filter((ring) => area(ring) > tolerance('areaReported')))
   } catch {
     return []
   }
@@ -334,7 +383,7 @@ function tiersOf(depths: readonly number[]): Map<number, 0 | 1 | 2> {
   return tiers
 }
 
-const KIND_ORDER: Readonly<Record<FacadeFaceKind, number>> = { slab: 0, wall: 1, roof: 2, parapet: 3 }
+const KIND_ORDER: Readonly<Record<FacadeFaceKind, number>> = { slab: 0, wall: 1, roof: 2, 'roof-plane': 3, parapet: 4 }
 
 /** The facade of one side of the building. See the module's header. */
 export function planFacade(stated: FloorPlan, side: FacadeSide): Facade {
@@ -384,45 +433,61 @@ export function planFacade(stated: FloorPlan, side: FacadeSide): Facade {
     const edges = edgesFacing(env.outline, direction)
     for (const edge of edges) {
       for (const stretch of stretchesOf(edge, coversOf(edge, walls), thickest)) {
-        const a = { x: edge.a.x + edge.e.x * stretch.t0, y: edge.a.y + edge.e.y * stretch.t0 }
-        const b = { x: edge.a.x + edge.e.x * stretch.t1, y: edge.a.y + edge.e.y * stretch.t1 }
         add({
           kind: 'wall',
           floor: floor.id,
           wall: stretch.wall.id,
-          a,
-          b,
-          bottom: storey.floorLevel,
-          top: storey.floorLevel + stretch.wall.height,
+          points: wallPoints(plan, stretch.wall, edge, stretch, storey.floorLevel),
           openings: openingsIn(stretch.wall, openingsOf.get(stretch.wall.id) ?? [], edge, stretch, across, storey.floorLevel)
         })
       }
     }
     if (env.slab !== null) {
-      for (const edge of edges) add({ kind: 'slab', floor: floor.id, wall: null, a: edge.a, b: edge.b, bottom: env.slab.top - env.slab.thickness, top: env.slab.top, openings: [] })
+      const { top, thickness } = env.slab
+      for (const edge of edges) add({ kind: 'slab', floor: floor.id, wall: null, points: band(edge.a, edge.b, top - thickness, top - thickness, thickness), openings: [] })
     }
-    if (env.roof !== null) {
-      const roofTop = env.roof.bottom + env.roof.thickness
-      for (const edge of edgesFacing(env.roof.pieces, direction)) add({ kind: 'roof', floor: floor.id, wall: null, a: edge.a, b: edge.b, bottom: env.roof.bottom, top: roofTop, openings: [] })
+    if (env.roof !== null && env.roof.shape === null) {
+      const { bottom, thickness } = env.roof
+      for (const edge of edgesFacing(env.roof.pieces, direction)) add({ kind: 'roof', floor: floor.id, wall: null, points: band(edge.a, edge.b, bottom, bottom, thickness), openings: [] })
       if (env.roof.parapet !== null) {
         const { height, pieces } = env.roof.parapet
-        for (const edge of edgesFacing(pieces, direction)) add({ kind: 'parapet', floor: floor.id, wall: null, a: edge.a, b: edge.b, bottom: roofTop, top: roofTop + height, openings: [] })
+        for (const edge of edgesFacing(pieces, direction)) add({ kind: 'parapet', floor: floor.id, wall: null, points: band(edge.a, edge.b, bottom + thickness, bottom + thickness, height), openings: [] })
+      }
+    } else if (env.roof !== null) {
+      // LVL-6: a sloped roof, plane by plane: each edge as a band that follows the slope, and each
+      // plane that comes down toward the side as a surface, its top face.
+      const { thickness } = env.roof
+      for (const facet of env.roof.facets) {
+        const at = (p: Vec2): number => storey.floorLevel + planeAt(facet.plane, p)
+        for (const edge of edgesFacing(facet.pieces, direction)) add({ kind: 'roof', floor: floor.id, wall: null, points: band(edge.a, edge.b, at(edge.a), at(edge.b), thickness), openings: [] })
+        if (-(facet.plane.gx * direction.x + facet.plane.gy * direction.y) <= tolerance('facadeFacing')) continue
+        for (const polygon of facet.pieces) {
+          const ring = straightened(polygon[0] ?? [])
+          if (ring.length >= 3) add({ kind: 'roof-plane', floor: floor.id, wall: null, points: ring.map((p) => ({ p, z: at(p) + thickness })), openings: [] })
+        }
       }
     }
   }
   if (seen.length === 0) return empty
 
   // The nearest point of the facade stands furthest the side's way.
-  const front = Math.max(...seen.flatMap((s) => [dot(s.a, direction), dot(s.b, direction)]))
-  const depthOf = (s: Seen): number => front - (dot(s.a, direction) + dot(s.b, direction)) / 2
+  const front = Math.max(...seen.flatMap((s) => s.points.map(({ p }) => dot(p, direction))))
+  // Its middle's depth: over its ends for a face along an edge, over its corners for a roof's plane.
+  const depthOf = (s: Seen): number => {
+    const ds = s.points.map(({ p }) => dot(p, direction))
+    return front - (Math.min(...ds) + Math.max(...ds)) / 2
+  }
   const tiers = tiersOf(seen.map(depthOf))
   const faces: FacadeFace[] = seen
     .map((s) => {
-      const ua = dot(s.a, across)
-      const ub = dot(s.b, across)
+      const outline = s.points.map(({ p, z }) => [fine(dot(p, across)), fine(z)] as const)
+      const us = outline.map(([u]) => u)
+      const zs = outline.map(([, z]) => z)
       const depth = depthOf(s)
-      return { s, face: { kind: s.kind, floor: s.floor, wall: s.wall, u0: fine(Math.min(ua, ub)), u1: fine(Math.max(ua, ub)), bottom: fine(s.bottom), top: fine(s.top), depth: fine(depth), tier: tiers.get(depth)!, openings: s.openings } }
+      const face: FacadeFace = { kind: s.kind, floor: s.floor, wall: s.wall, u0: Math.min(...us), u1: Math.max(...us), bottom: Math.min(...zs), top: Math.max(...zs), outline, depth: fine(depth), tier: tiers.get(depth)!, openings: s.openings }
+      return { s, face }
     })
+    .filter(({ face }) => face.u1 - face.u0 > tolerance('noLength'))
     .sort((x, y) => y.face.depth - x.face.depth || KIND_ORDER[x.face.kind] - KIND_ORDER[y.face.kind] || x.s.order - y.s.order)
     .map(({ face }) => face)
 

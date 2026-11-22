@@ -23,8 +23,8 @@
 
 export type ToleranceKind = 'tolerance' | 'limit' | 'arithmetic'
 
-/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit. */
-export type ToleranceUnit = 'm' | 'm²' | 'radian' | 'sine' | 'ratio' | 'count'
+/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit; `mm` is a lens's focal length (VEW-3). */
+export type ToleranceUnit = 'm' | 'm²' | 'mm' | 'degree' | 'radian' | 'sine' | 'ratio' | 'count'
 
 /** The kinds of building a limit can depend on, as the plan says it (`buildingKind`). */
 export type BuildingKind = 'any' | 'home'
@@ -402,6 +402,26 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Headroom under a sloped roof (LVL-6) ──────────────────────────────────────────────────
+  headroomLow: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      "Grid's own size, not a code figure. The lower headroom band: a room's floor with at least " +
+      'this much height over it, to its ceiling or the roof above it, is reported as one area.',
+    basis: own
+  },
+  headroomFull: {
+    kind: 'limit',
+    value: 2.2,
+    unit: 'm',
+    decides:
+      "Grid's own size, not a code figure. The upper headroom band: a room's floor with at least " +
+      'this much height over it is reported as a second area.',
+    basis: own
+  },
+
   // ── A way through that a person fits (MSG-18) ─────────────────────────────────────────────
   passableWidth: {
     kind: 'limit',
@@ -643,6 +663,37 @@ export const TOLERANCES = {
     value: 500,
     unit: 'm',
     decides: 'A plan reaching further than this from the origin gets a warning: most likely a scale or unit error.',
+    basis: own
+  },
+  // VEW-3: a camera an agent sets. Past these a view call, or a saved view, is refused.
+  cameraTilt: {
+    kind: 'limit',
+    value: 89,
+    unit: 'degree',
+    decides:
+      'How far a camera may look down at, or up to, what it is pointed at, from level. Looking ' +
+      'straight down or up, a picture has no up, so a camera turned further is refused.',
+    basis: own
+  },
+  cameraClosest: {
+    kind: 'limit',
+    value: 0.1,
+    unit: 'm',
+    decides: 'The least distance from a camera to what it is pointed at. Closer, the picture shows nothing of it.',
+    basis: own
+  },
+  lensShortest: {
+    kind: 'limit',
+    value: 8,
+    unit: 'mm',
+    decides: 'The shortest focal length a camera may have, on a 36 by 24 mm sensor: about 132 degrees across. Shorter is refused.',
+    basis: own
+  },
+  lensLongest: {
+    kind: 'limit',
+    value: 800,
+    unit: 'mm',
+    decides: 'The longest focal length a camera may have, on a 36 by 24 mm sensor: under 3 degrees across. Longer is refused.',
     basis: own
   },
 

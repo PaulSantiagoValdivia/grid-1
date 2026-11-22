@@ -29,7 +29,7 @@ Notes for agents and people changing this repository.
   plan records about how it was written (`written`). The plan file is the source of truth and
   rooms text a way of writing and reading it. `fixtures/rooms/` holds the lab's eight buildings
   as rooms text with their originals; `rooms/__tests__/buildings.test.ts` holds them to it.
-- `packages/floorplan/src/geometry/patterns.ts` (LVL-8): opening patterns (`patterns`, C11 in
+- `packages/floorplan/src/geometry/patterns.ts` (LVL-8): opening patterns (`patterns`, C12 in
   `types/floorplan.ts`) expanded into plain openings (`expandPatterns`, `withPatterns`). Every
   reader expands first (`loadPlan` unless read whole, `inspectPlan`, `exportPlan`, the pictures),
   so exporters and checks see plain openings only; the commands that write the plan keep the
@@ -71,15 +71,17 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 29 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 30 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
   export, the sheet, the start marker (WRT-8), the seen mark (MSG-10, `seenTool.ts`), the brief (BRF-1,
-  `briefTool.ts`), and the tools that change the plan).
-  Each is written once in `readTools.ts`, `writeTools.ts`, `reportTool.ts`, `seenTool.ts` or `briefTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
+  `briefTool.ts`), and the tools that change the plan, the saved views last (VEW-3, `viewTool.ts`)).
+  Each is written once in `readTools.ts`, `writeTools.ts`, `reportTool.ts`, `seenTool.ts`, `briefTool.ts` or `viewTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
   check. The measuring is in `src/quantities/` (CNT-9's asking across parts by their fields and
   facts, for `grid_fields`, `grid_find` and `grid_count`, in `query.ts`), the changes in `src/edit/`, the views in
-  `src/draw/views.ts`. `src/mcp/__tests__/tools.test.ts` fails when a tool loses its prefix,
+  `src/draw/views.ts`. A 3D picture is taken from one camera record (VEW-3,
+  `packages/floorplan/src/geometry/camera.ts`): `src/draw/cameraAsk.ts` turns a call into it,
+  and the app's 3D view and the stills open at it (`recordCamera` in `packages/viewer`). `src/mcp/__tests__/tools.test.ts` fails when a tool loses its prefix,
   title, hint, examples or output schema, or when the order changes; `replay/replay.test.ts`
   replays the lab's five Y conversations and holds the score. A description starts "Use this
   when…" and says when not to use the tool.

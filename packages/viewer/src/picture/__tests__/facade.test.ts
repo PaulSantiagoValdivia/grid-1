@@ -40,9 +40,9 @@ const house = (): FloorPlan =>
 
 const tags = (svg: string, part: string): string[] => [...svg.matchAll(new RegExp(`<[a-z]+ [^>]*data-part="${part}"[^>]*>`, 'g'))].map((m) => m[0])
 const width = (tag: string): number => Number(/stroke-width="([^"]+)"/.exec(tag)![1])
-/** The stroke width of the edges of the faces in one plane: the rect inside each face's group. */
+/** The stroke width of the edges of the faces in one plane: the path inside each face's group. */
 const faceWidths = (svg: string, tier: number): number[] =>
-  [...svg.matchAll(new RegExp(`<g data-part="facade-face"[^>]*data-tier="${tier}"[^>]*><rect [^>]*stroke-width="([^"]+)"`, 'g'))].map((m) => Number(m[1]))
+  [...svg.matchAll(new RegExp(`<g data-part="facade-face"[^>]*data-tier="${tier}"[^>]*><path [^>]*stroke-width="([^"]+)"`, 'g'))].map((m) => Number(m[1]))
 
 describe('a facade as a picture', () => {
   it('holds the elevation\'s parts: its faces, its openings, the ground, the outline and each floor\'s level', () => {

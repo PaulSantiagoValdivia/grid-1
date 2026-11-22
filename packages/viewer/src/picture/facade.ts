@@ -125,11 +125,8 @@ export function facadeScene(facade: Facade, look: Look, metresPerPixel: number, 
         'data-tier': face.tier
       },
       [
-        el('rect', {
-          x: lengthText(face.u0),
-          y: lengthText(-face.top),
-          width: lengthText(face.u1 - face.u0),
-          height: lengthText(face.top - face.bottom),
+        el('path', {
+          d: `M${face.outline.map(([u, z]) => `${lengthText(u)},${lengthText(-z)}`).join('L')}Z`,
           fill: look.colors.room,
           stroke: ink,
           'stroke-width': width(TIER_PARTS[face.tier]!),

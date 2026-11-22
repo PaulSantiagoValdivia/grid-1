@@ -17,10 +17,11 @@ ground) and SHT-1 (looks and paper pens).
 
 ## What changed
 
-### The plan format: `patterns` (C11)
+### The plan format: `patterns` (C12)
 
 A new optional top-level list, never defaulted, so every plan written before reads as before and
-the file stays version 1 (C11 in `types/floorplan.ts`, `OpeningPatternSchema`):
+the file stays version 1 (C12 in `types/floorplan.ts`, `OpeningPatternSchema`; it was C11 until
+VEW-3's saved views took that number on main):
 
 ```json
 { "id": "north-row", "wall": "gn", "opening": { "type": "window", "width": 1.2, "height": 1.4, "sill": 0.9 },
@@ -31,7 +32,7 @@ the file stays version 1 (C11 in `types/floorplan.ts`, `OpeningPatternSchema`):
 `height`, `hinge`, `swing`). A pattern states `count`, `spacing` or both (a refinement, so one with
 neither is a part left out). The format's change rule, part by part:
 
-- schema: `OpeningPatternSchema`, `PatternOpeningSchema`, `PATTERN_FLOORS_MAX` (200), C11;
+- schema: `OpeningPatternSchema`, `PatternOpeningSchema`, `PATTERN_FLOORS_MAX` (200), C12;
 - the reader (MSG-6): `patterns` is a part list in `readParts.ts`, so a pattern that cannot be read
   is left out alone (`plan/part-left-out`, "Opening pattern …") and its id takes part in the id
   clash rules; the unknown-field reader (MSG-4, `reading.ts`) knows the list;
@@ -109,6 +110,10 @@ left-out lists name an opening pattern the reader left out (`OpeningPatterns` in
   thickest wall plus `gap` (a corner, a wall end) belongs to the wall beside it; a longer one is open;
 - each floor's slab edge under its walls, each roof's edge over the parts with nothing above, each
   parapet on top (LVL-4);
+- under a roof the floor states (LVL-6, merged from main while this was built): each wall's top as
+  the roof leaves it (`wallTopProfile`), so a gable end is a pentagon; each plane's edges as bands
+  that follow its slope; and each plane that comes down toward the side (by `facadeFacing`) as a
+  surface (`roof-plane`). A face is a polygon (`outline`, `[u, z]` points) with its box;
 - the ground: `groundLevel` (LVL-4), as stated, else the ground floor's floor level 0;
 - each face's depth behind the nearest, and its plane (`tier`: faces within `facadeSameDepth`, new,
   0.05 m, of each other share one; 0 front, 1 the next, 2 any further); faces come farthest first;
@@ -122,7 +127,8 @@ with y; west: against y).
 
 `facadePicture(plan, { side, look, width, height, paperScale })` returns a `Picture` (with a new
 optional `title`, the SVG's accessible name), so `pictureToSvg` writes it with the label (MSG-3) and
-`pictureToPng` draws it, as a plan. `facadeScene` draws the faces farthest first, each filled with
+`pictureToPng` draws it, as a plan. `facadeScene` draws the faces farthest first, each a path of its
+outline filled with
 the look's room colour (white in the technical look) and outlined, its openings filled (window
 colour for windows), then the paper under the ground, the silhouette, the ground line, each floor's
 level mark and name ("First floor +2.95"), and a caption naming the side, and the way it faces when
@@ -140,10 +146,10 @@ than the plane in front even with the same pen. The app's 2D view draws no facad
 
 - `grid draw --facade <side>` (north, east, south, west): SVG, or PNG with `--png`; `--out`,
   `--look` (technical by default, as every `grid draw`), `--scale` (PNG). Refused by name: an
-  unknown side, `--3d`, `--floor`, `--ids`, `--hide`, `--colour`, `--key`, `--units`, `--decimal`;
+  unknown side, `--3d`, `--view` (VEW-3), `--floor`, `--ids`, `--hide`, `--colour`, `--key`, `--units`, `--decimal`;
   given twice, as every option (`options.ts`). Help and usage lines updated.
 - `grid_view kind=facade` with `side` (required for it, refused with another kind) and `look`. Its
-  data adds `facade`: `side`, `compass`, `ground`, `levels`, `walls`, `openings`, `extent`; `ids`
+  `camera` and `view` (VEW-3) are null, and its data adds `facade`: `side`, `compass`, `ground`, `levels`, `walls`, `openings`, `extent`; `ids`
   holds the openings it shows. The output schema gains the optional `facade` object.
 
 ### Docs
@@ -201,9 +207,11 @@ Each of these is reversible; I took the option that keeps the format and the exp
    0.75, 0.5, 0.75 px. Three new tolerances: `facadeFacing` 0.0175 (sine), `facadeOnFace` 0.01 m,
    `facadeSameDepth` 0.05 m.
 8. **What a facade does not show yet**: stairs (inside), garden walls with no room behind them (no
-   outline encloses them), the sketch layer, fixtures, sloped roofs (Grid has flat roofs only), a
-   ground that varies along a slope (LVL-4 has one level per site), dimensions and level heights
-   other than the floor marks. Below the ground is covered, not drawn dashed.
+   outline encloses them), the sketch layer, fixtures, rooflights and dormers (LVL-6 draws no
+   dormer either), a ground that varies along a slope (LVL-4 has one level per site), dimensions
+   and level heights other than the floor marks. Below the ground is covered, not drawn dashed. A
+   sloped roof's planes are ordered by their middle's depth, which is right for gable, hip and
+   mono-pitch roofs over one rectangle; two roofs crossing could be drawn in the wrong order.
 9. **The tool's shape**: `side` is its own argument, not `from`, because `from` takes the eight
    compass points and `above` for the 3D model, and a facade takes four. `look` works as for a plan
    (working by default for an agent; the command's default is technical, as for every `grid draw`).
