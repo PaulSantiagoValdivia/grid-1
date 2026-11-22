@@ -34,7 +34,7 @@ Notes for agents and people changing this repository.
   CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind
   needs its symbol there and a decision first. A fixture is never a wall or a room.
 - `packages/floorplan/src/types/facts.ts` (CNT-9): facts of the person's own, in `properties` on
-  walls, openings, rooms and floors (C8 in `types/floorplan.ts`), and a room's stated `number`. Grid
+  walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
   sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
@@ -65,7 +65,7 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 25 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 26 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
   export, the sheet, the seen mark (MSG-10, `seenTool.ts`), and the tools that change the plan).

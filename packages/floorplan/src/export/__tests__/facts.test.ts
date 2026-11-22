@@ -93,7 +93,13 @@ describe('the facts in the IFC (CNT-9)', () => {
 
   it('names a numbered room\'s space by its number, its name the long name', () => {
     const ifc = text(exportPlan(office(), 'ifc', OPTIONS).data)
-    expect(ifc).toMatch(/IFCSPACE\('[^']*',#\d+,'G\.02',\$,\$,#\d+,#\d+,'Open office',/)
+    expect(ifc).toMatch(/IFCSPACE\('[^']*',#\d+,'G\.02',\$,(?:\$|'[^']*'),#\d+,#\d+,'Open office',/)
+  })
+
+  it('gives HND-2\'s Reference and Grid_Space Number the number the room states, as text', () => {
+    const ifc = text(exportPlan(office(), 'ifc', OPTIONS).data)
+    expect(ifc).toContain("IFCPROPERTYSINGLEVALUE('Reference',$,IFCIDENTIFIER('G.02'),$)")
+    expect(ifc).toContain("IFCPROPERTYSINGLEVALUE('Number',$,IFCLABEL('G.02'),$)")
   })
 
   it('puts each set on its own part: doors, windows, walls, spaces and storeys', () => {

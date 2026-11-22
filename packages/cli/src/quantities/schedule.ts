@@ -3,7 +3,7 @@
  * listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no
  * frame, leaf or clear width.
  */
-import { compareIds, planForFloor, tolerance } from '@ongrid/floorplan/geometry'
+import { compareIds, planForFloor, roomNumbers, tolerance } from '@ongrid/floorplan/geometry'
 import { factText, type Facts } from '@ongrid/floorplan/types/floorplan'
 import type { OpeningFacts } from '../describe/facts'
 import { AREA_RULES, planAreas } from './areas'
@@ -69,7 +69,9 @@ export function planSchedule(
 // rows, so no part reads another's printed text (lab AB-4, AU7-1). Rows are in one order whatever
 // the order of the file: floors by level, then by id, rooms and openings by id (`compareIds`,
 // QAR-5). Room numbers count up in that order; a room that states its own number (CNT-9) comes
-// first on its floor, by that number, and is given it; every row carries its part's facts.
+// first on its floor, by that number, and is given it; every row carries its part's facts. The
+// numbering is the library's (`roomNumbers`), so the IFC file gives every room the same number
+// (HND-2).
 
 /** A room as the room schedule lists it. */
 export interface RoomScheduleRow {
@@ -166,26 +168,21 @@ function floorOrder(survey: Survey, floors: readonly string[] | undefined): { id
 export function roomSchedule(survey: Survey, options: { floors?: readonly string[] } = {}): RoomSchedule {
   const order = floorOrder(survey, options.floors)
   const areas = planAreas(survey, { floors: order.map((f) => f.id) })
+  const numbered = roomNumbers(survey.plan, order.map((f) => f.id))
   const rows: RoomScheduleRow[] = []
   const floors: RoomScheduleTotal[] = []
   for (const floor of order) {
     const figures = areas.floors.find((f) => f.floor === floor.id)
     if (figures === undefined) continue
     const storey = planForFloor(survey.plan, floor.id)
-    const stated = new Map(storey.rooms.map((r) => [r.id, r] as const))
-    // CNT-9: rooms that state a number first, in its order, then the rest by id.
-    const numbered = (id: string): string | undefined => stated.get(id)?.number
-    const order = (a: { id: string }, b: { id: string }): number => {
-      const [x, y] = [numbered(a.id), numbered(b.id)]
-      if (x !== undefined && y !== undefined) return compareIds(x, y) || compareIds(a.id, b.id)
-      if (x !== undefined || y !== undefined) return x !== undefined ? -1 : 1
-      return compareIds(a.id, b.id)
-    }
-    for (const room of [...figures.rooms].sort(order)) {
-      const own = stated.get(room.id)
+    const byId = new Map(figures.rooms.map((room) => [room.id, room] as const))
+    const own = new Map(storey.rooms.map((r) => [r.id, r] as const))
+    for (const { number, stated, id } of numbered.filter((n) => n.floor === floor.id)) {
+      const room = byId.get(id)
+      if (room === undefined) continue
       rows.push({
-        number: rows.length + 1,
-        roomNumber: own?.number ?? null,
+        number,
+        roomNumber: stated,
         id: room.id,
         name: room.name,
         use: room.use,
@@ -194,7 +191,7 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
         area: room.net,
         state: room.state,
         height: roomHeight(storey, room.id).value,
-        properties: own?.properties ?? {},
+        properties: own.get(id)?.properties ?? {},
       })
     }
     floors.push({ floor: floor.id, floorName: floor.name, rooms: figures.rooms.length, area: figures.net, state: figures.states.net })

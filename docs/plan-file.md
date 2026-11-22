@@ -21,6 +21,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
+- [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -510,10 +511,12 @@ or a wall meets one, and no check reads one. What Grid does with them:
 - **Exports carry them.** The IFC gives each part that carries facts one property set,
   `Grid_Properties`, of one `IfcPropertySingleValue` per fact (`IfcLabel`, `IfcInteger`,
   `IfcReal` or `IfcBoolean`), related to its wall, door, window, opening, space or storey by an
-  `IfcRelDefinesByProperties`; a room's number is the space's name, its name the long name, and
-  the number is in its set as `room number` too. The DXF writes each fact as one line of text on
-  the layer `GRID-FACTS`, `[id] name: value`, beside its part (a floor's over the drawing's upper
-  left corner). A plan with no facts exports exactly as before.
+  `IfcRelDefinesByProperties`; a room's stated number is the space's name, its name the long name,
+  and the number is in its set as `room number` too, and in `Pset_SpaceCommon` and `Grid_Space`
+  where a room that states none has Grid's count
+  ([what the IFC holds](commands.md#what-the-ifc-holds-hnd-2)). The DXF writes each fact as one
+  line of text on the layer `GRID-FACTS`, `[id] name: value`, beside its part (a floor's over the
+  drawing's upper left corner). A plan with no facts exports exactly as before.
 - **The tool server asks across them**: `grid_fields`, `grid_find` and `grid_count`
   ([tool-server.md](tool-server.md#asking-across-the-parts-fields-find-and-count)).
 
@@ -642,6 +645,66 @@ front stays the part it names, and `yAxis` is kept.
 |---|---|
 | `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
+
+## Where a value came from
+
+A plan may say where its values came from, and how sure each is (WRT-6). It says so in `marks`,
+one list beside the parts, so no number becomes an object and no part changes shape: a plan with
+no marks reads exactly as before.
+
+```json
+"marks": [
+  { "part": "wall", "id": "s", "source": "scanned", "tolerance": 0.02 },
+  { "part": "wall", "id": "w1", "value": "height", "source": "assumed" },
+  { "part": "room", "id": "bed2", "value": "use", "source": "given" }
+]
+```
+
+| Field | What it states |
+|---|---|
+| `part` | `wall`, `room`, `opening`, `floor` or `item` |
+| `id` | The part's id |
+| `value` | Optional: the one value the mark is about. A wall's `start`, `end`, `thickness`, `height` or `kind`; a room's `name`, `use`, `height` or `floorOffset`; an opening's `type`, `offset`, `width`, `height`, `sill`, `hinge` or `swing`; a floor's `name`, `level`, `elevation`, `height` or `slab`; a fixture's `kind`, `at`, `size`, `height` or `turn`. Left out, the mark is about the whole part |
+| `source` | `given` (by the person), `measured` (taped or lasered), `scanned` (from a capture of the building) or `assumed` (by whoever wrote the plan) |
+| `tolerance` | Optional: how sure, in metres, give or take, on each length the mark covers. Only on a whole part or a length, never on a word such as a kind or a use |
+
+A mark on a value wins over a mark on its part; of two marks on the same value, the first is read.
+A part no mark names says nothing about where it came from: it is not taken as given.
+These marks are part of the plan. A note of `grid check` the person sets aside as seen is kept
+apart, in `plan.seen.json` beside the plan ([a note set aside as seen](tool-server.md#a-note-set-aside-as-seen)).
+
+- **Assumed.** Whatever the plan marks assumed is drawn in its own style in every look (a dashed
+  line in the look's warning colour round the wall, room or fixture, or across the opening; the
+  key says "Assumed, to confirm with the person") and listed by `grid check` and `grid_check`
+  under "To confirm", one `plan/value-assumed` line each, of the kind `to-confirm`. When the
+  person confirms a value, mark it `given` or `measured`, or take the mark out.
+- **Scanned or measured, with a tolerance.** `grid_areas` gives each room whose walls are marked
+  its give or take: "from a scan, about ± 1.6% (± 0.20 m²)". It is each side of the room times
+  its wall's tolerance, added up, over the area: the most the area moves if every marked face
+  moves its full tolerance one way. A scanned wall with no tolerance gives "how sure is not
+  stated", never a figure. The floor and plan totals add up their rooms' the same way.
+- **Squaring a scan** is a step of its own: `grid_square_scan`, or `grid edit square`. It turns
+  each wall marked scanned (every wall with `all`) that is within about 3 degrees of the plan's
+  main directions (`squareWithin`, see [tolerances.md](tolerances.md)) onto them, about its
+  middle, puts each corner back where the new lines cross, and answers with how far each wall
+  turned and how far its ends moved. A wall further off is left as it is and named. The marks
+  stay.
+
+| Code | What it says |
+|---|---|
+| `plan/value-assumed` | A value, or a whole part, the plan marks assumed: for the person to confirm. Listed last, under "To confirm" |
+| `plan/mark-no-part` | A mark names a part the plan does not have, so it is not read: a part renamed or taken out since |
+
+### A value left out stays not stated
+
+A wall may leave out its thickness, height and kind. Grid draws and measures it with its floor's
+`height`, or 2.7 m high, 0.2 m thick and `interior`, but the reading keeps that the file stated
+none (lab AU3-6). `grid describe` says "wall height not stated (drawn 2.7 m high)", never "walls 2.7 m high";
+`grid describe --as rooms` writes no height for such walls; `grid write` writes a wall the rooms
+text gives no height with none, so its floor's height or the default reaches it when the plan is
+read; and Grid's edits never write a filled-in value into a file that stated none: a wall cut in
+two, or a new wall beside walls with no stated height, states none either. A wall that takes its
+floor's height states none of its own, so the height is said once, on the floor.
 
 ## People are kept out of the plan
 

@@ -189,6 +189,18 @@ at main's 500 kB, unchanged by CNT-9.
 14. **The bundle cap stays at 500 kB.** With main's minified build the file is 386,069 bytes.
 15. **The stand-in's name and place**: `packages/floorplan/fixtures/facts-office.json`, read
     through `@ongrid/floorplan/test-support/facts`, so every fixture-wide test reads it too.
+16. **One room number, the plan's `number`, read through HND-2's `roomNumbers`** (decided when
+    merging main at bd2f6a7; reversible). HND-2 added no field: it works a room's number out every
+    time (`packages/floorplan/src/geometry/roomNumbers.ts`), for the schedule and the IFC alike.
+    So the format keeps one field, CNT-9's `number`, and CNT-9's rule moved into the library:
+    on each floor the rooms that state a number come first, by it, then the rest by id, and each
+    `RoomNumber` carries `stated` beside Grid's count (`shownRoomNumber` gives the one shown).
+    The schedule keeps one `number` column (the stated number, else Grid's count) and its row
+    `roomNumber`; the IFC space's `Name`, `Pset_SpaceCommon.Reference` and `Grid_Space.Number`
+    take the stated number (an `IfcLabel` in `Number`, where Grid's count is an `IfcInteger`).
+    The alternatives: leave HND-2's numbers as Grid's count only and give the stated number in
+    `Grid_Properties` alone, or make `Grid_Space.Number` always Grid's count; either is a few
+    lines in `writeSpaceData`.
 
 ## Not done or not verified
 
@@ -238,3 +250,40 @@ conflicted; every one keeps both sides.
 ## After merging main at b58930a
 
 LVL-4 conflicted in three places, each kept whole: the changelog for agents (CNT-9 first, then LVL-4), the tool table in `docs/tool-server.md` (LVL-4's `grid_takeoff` row, CNT-9's `grid_schedule`, `grid_fields`, `grid_find` and `grid_count` rows) and the exports of `packages/floorplan/package.json` (both test-support entries).
+
+## After merging main at bd2f6a7
+
+Main was merged at `bd2f6a7` (WRT-6's `grid_square_scan` and marks, HND-2's IFC room data and
+quantities). Twelve files conflicted; every one keeps both sides.
+
+- **Tools: 26.** WRT-6's `grid_square_scan` stays where main put it, after `grid_rename_room`;
+  CNT-9's three stay after `grid_schedule`. Main's 23 plus three is 26, in `tools.test.ts` (the
+  ceiling, with a line saying why), `server.test.ts`, `AGENTS.md`, `docs/commands.md` and CNT-9's
+  entry in the agents' changelog. `READ_ONLY` and `CHANGES_PLAN`, the every-tool call table and
+  `everyPath.e2e.test.ts` list both sides' tools.
+- **The convention is now C9.** WRT-6 took C8 on main for where a value came from (`marks`), so
+  the facts of the person's own are C9 in `types/floorplan.ts` and `AGENTS.md`. The wall schema
+  keeps WRT-6's `unstated` beside `properties`; rooms text's wall comparison skips both. The
+  known-field lists in `reading.test.ts` and `result.test.ts` matched without a change
+  (`unstated` is never a file's field).
+- **Room numbers: one field.** HND-2 added none; it works numbers out in `roomNumbers`. That now
+  holds CNT-9's rule and carries the stated number, and the schedule and the IFC read it (owner
+  item 16). Two tests added: `roomNumbers.test.ts` (stated numbers first, by number) and
+  `export/__tests__/facts.test.ts` (`Reference` and `Number` are `G.02`); the space-name test now
+  allows HND-2's `ObjectType`.
+- **IFC**: CNT-9's `Grid_Properties` sets sit beside HND-2's `Pset_SpaceCommon`, `Grid_Space`,
+  base quantities, wall types and door and window styles: a wall's facts after its type, a
+  doorless opening's facts on its void with its quantities, a door's or window's after its style,
+  a space's after its data. The four goldens are main's, unchanged: their plans carry no facts or
+  numbers, so CNT-9 writes nothing into them.
+- **Viewer**: the scene draws WRT-6's assumed parts, then CNT-9's picked parts over them.
+- **Changelogs**: CNT-9's entry first, then main's in main's order (WRT-6, HND-2 in `CHANGELOG.md`).
+- **Docs**: `docs/commands.md` (what the IFC holds) and `docs/plan-file.md` (facts in the
+  exports) say the stated number is the IFC's number.
+
+- **Gates**: `npm run build` (the bundle is 439,305 bytes, under the 500 kB cap), `npm run
+  typecheck` and `npm run lint` pass. The test run over `packages/cli/src`, `packages/floorplan/src`,
+  `packages/viewer` and `packages/rules/src/result` found one failure, HND-2's structure check on
+  the facts office, which read `Grid_Space.Number` as a whole number only; it now reads the stated
+  number as text. After that fix the four affected files pass (67 tests), so the run stands at 237
+  files, 4,584 passed and 2 skipped. The scoreboard was not run.
