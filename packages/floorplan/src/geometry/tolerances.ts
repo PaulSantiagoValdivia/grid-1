@@ -280,6 +280,41 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Reading a phone room scan (scan/, HND-12) ─────────────────────────────────────────────
+  scanFaceTurn: {
+    kind: 'tolerance',
+    value: 0.0872,
+    unit: 'sine',
+    decides:
+      'Two scanned wall faces, or an edge of a scanned floor outline and a face, whose directions ' +
+      'differ by less than this (the sine of 5 degrees) may be the two faces of one wall, or the ' +
+      'same face.',
+    basis: own
+  },
+  scanFaceReach: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides: 'An edge of a scanned floor outline this close to a scanned wall face, along its length, lies on that face.',
+    basis: own
+  },
+  scanCornerGap: {
+    kind: 'tolerance',
+    value: 0.15,
+    unit: 'm',
+    decides:
+      'In a scan that gives no floor outline, the end of one wall face this close to the end of ' +
+      'another meets it at a corner of the room.',
+    basis: own
+  },
+  scanOnFloor: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides: 'A scanned door or opening whose bottom is this close to the floor stands on it: its sill is 0.',
+    basis: own
+  },
+
   // ── Comparing two versions of a plan (diff/) ──────────────────────────────────────────────
   diffLength: {
     kind: 'tolerance',
@@ -963,6 +998,15 @@ export const TOLERANCES = {
     decides:
       'Rooms text and the plans written from it hold lengths to a tenth of a millimetre, so two ' +
       'lengths that agree to this are the same when a read-back is checked by writing it again.',
+    basis: own
+  },
+  scanWritten: {
+    kind: 'arithmetic',
+    value: 1e-6,
+    unit: 'm',
+    decides:
+      'A plan written from a phone room scan (HND-12) holds its walls to a micrometre, so each ' +
+      'room keeps the area the scan gives it to far better than a thousandth of a per cent.',
     basis: own
   },
   lineHalfWidth: {

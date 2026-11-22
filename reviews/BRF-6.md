@@ -189,3 +189,54 @@ and `writeTools.ts` (`grid_write_rooms` describes both `layout` and lengths with
 After the merge: build, typecheck and lint clean; the tests either side touched, 49 files (515
 passed, 1 skipped) and `cli/src/command`, 21 files (400 passed); scoreboard "Same as the stored
 figures".
+
+## After merging main at 65e37ca1
+
+Merged BRF-4 (massing before walls) and HND-12 (a plan from a phone room scan). Conflicts, and how
+each was resolved:
+
+- `rooms/compile.ts`: BRF-6's `compileRoomsText(text, offerFixes = true)` against HND-12's
+  `compileRoomsText(text, options: CompileOptions = {})`. Now one `CompileOptions` with `places?`
+  (HND-12) and `offerFixes?` (BRF-6, on by default). The one caller that passed `false` (the
+  alignment fix trying a line) passes `{ offerFixes: false }`; `scan/toPlan.ts` keeps `{ places }`;
+  no other caller in `packages` or `scoreboard` passes a second argument. `rooms/index.ts` exports
+  `CompileOptions`, `RoomsFix` and the layout exports.
+- `mcp/writeTools.ts`: `grid_write_rooms` takes exactly one of `rooms`, `layout` and `scan`. One
+  check, `refuseWaysIn`, refuses none (naming all three), two (naming both, for example "Pass layout
+  or scan, not both.") and all three. Every answer carries both `layout` and `scan`, null unless
+  that way was taken, and both output schemas; the description and the `rooms` argument say one of
+  the three.
+- `command/main.ts`: usage `grid write <plan.rooms> | --layout tidy|sizes | --scan <scan.json> …`.
+  `--scan` with `--layout` is refused by name ("write takes --layout or --scan, not both"), as is
+  `--scan` with a rooms file (HND-12) and `--layout` with one (BRF-6); with none, the refusal names
+  all three.
+- `docs/commands.md` and `docs/tool-server.md`: BRF-6's layout row kept with HND-12's own
+  `--scan` row in commands.md; one `grid_write_rooms` row naming both in tool-server.md.
+  `docs/brief.md` says the three ways in and that every answer carries `layout`.
+- `docs/result-contract.md` and `CHANGELOG.md`: every entry kept, BRF-6's first. BRF-6's contract
+  entry now says one of three; the write tools' row adds `scan`.
+- `everyPath.e2e.test.ts`: both sets of slots. `grid.e2e.test.ts`: main's 650 kB cap, with BRF-6's
+  about 11,800 bytes noted.
+- New tests in `cli/src/brief/__tests__/layout.test.ts`: the tool refuses `layout` with `scan` and
+  all three, names all three when given none, and answers `scan: null` for a layout; `grid write
+  --layout tidy --scan …` is refused with exit 2.
+
+Checks after the merge (load average about 200):
+
+| Gate | Result |
+| --- | --- |
+| `npm run build` | passes; `packages/cli/dist/grid.mjs` is **630,154 bytes**, under the 650 kB cap |
+| `npm run typecheck` | passes |
+| `npm run lint` | passes |
+| `npm run check:licenses` | passes: 363 licences, none GPL, LGPL, AGPL, MPL or EPL |
+| `cli/src/brief`, `floorplan/src/rooms`, `cli/src/mcp`, `rules/src/result`, scoreboard test | 50 files, 522 passed, 1 skipped |
+| `cli/src/command` | 22 files, 405 passed |
+| `floorplan/src/scan`, `floorplan/src/geometry`, `floorplan/src/types`, `viewer/src/picture`, `cli/src/sheet`, `scoreboard` | 148 files, 3,423 passed, 3 skipped |
+| `npm run scoreboard` | **Same as the stored figures**: rooms measured wrong 197, damage silent 278, turns 19 of 67, mistakes 5 of 9, checks 20 of 42; guards 735 and 95. Nothing to store |
+
+For the owner, from this merge:
+
+11. **A layout of a scan is not a thing.** `layout` and `scan` are two separate ways in and are
+    refused together; a first layout from a brief does not use a scan's rooms, and a scan does not
+    take the brief's sizes. Joining them (packing the brief inside a scanned outline) would be new
+    work.

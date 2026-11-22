@@ -34,7 +34,11 @@ export const WRITE_OPTIONS: OptionSpecs = {
   },
   '--replace': {
     takesValue: false,
-    help: 'Write over a plan that was not written from this rooms text, or was changed since. Grid refuses that otherwise, with the difference.',
+    help: 'Write over a plan that was not written from this rooms text or scan, or was changed since. Grid refuses that otherwise, with the difference.',
+  },
+  '--scan': {
+    takesValue: true,
+    help: 'Write the plan from a phone room scan in the project (Apple\'s room model, as JSON) in place of rooms text. The scan is kept beside the plan as <plan>.scan.json.',
   },
   '--layout': {
     takesValue: true,
@@ -85,14 +89,14 @@ function patternsKept(before: FloorPlan, after: FloorPlan): string {
   return `${kept} With the walls written now: ${fresh[0]!.message}${fresh.length > 1 ? ` (and ${fresh.length - 1} more)` : ''}.`
 }
 
-function oneLine(text: string): string {
+export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
 const STARTER_REVISION = planRevision(FloorPlanSchema.parse(starterPlan))
 
 /** A plan that holds nothing yet, or is still the starter plan `grid init` wrote. */
-function nothingToLose(plan: FloorPlan): boolean {
+export function nothingToLose(plan: FloorPlan): boolean {
   if (plan.walls.length + plan.rooms.length + plan.openings.length === 0) return true
   return planRevision(plan) === STARTER_REVISION
 }
@@ -113,7 +117,7 @@ export function readRoomsFile(project: Project, file: string): string {
 }
 
 /** What writing would change, in a sentence, for a refusal. */
-function differenceLine(before: FloorPlan, after: FloorPlan): string {
+export function differenceLine(before: FloorPlan, after: FloorPlan): string {
   return comparePlans(surveyPlan(before), surveyPlan(after), ['the plan now', 'the plan this text writes']).verdict
 }
 

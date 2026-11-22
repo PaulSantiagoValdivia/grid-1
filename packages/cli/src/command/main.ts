@@ -51,6 +51,7 @@ import { checkTidyRequest, TIDY_OPTIONS, tidyAppliedText, tidyFile, tidyList, ti
 import { readRoomsFile, RoomsRefused, WRITE_OPTIONS, writeRoomsIntoProject } from './write'
 import { writeLayout } from '../brief/layout'
 import { LAYOUT_SHAPES, type LayoutShape } from '@ongrid/floorplan/rooms'
+import { writeScanIntoProject } from './scan'
 
 export const EXIT_OK = 0
 export const EXIT_REFUSED = 1
@@ -82,8 +83,8 @@ const COMMANDS = {
     options: INIT_OPTIONS,
   },
   write: {
-    usage: 'grid write <plan.rooms> | --layout tidy|sizes [--plan <plan.json>] [--replace] [--json] [--project <folder>]',
-    summary: 'Writes a plan from rooms text: name the rooms with their sizes and neighbours, and Grid works out the walls. The main way to write a plan. With --layout, a first layout from the brief beside the plan.',
+    usage: 'grid write <plan.rooms> | --layout tidy|sizes | --scan <scan.json> [--plan <plan.json>] [--replace] [--json] [--project <folder>]',
+    summary: 'Writes a plan from rooms text: name the rooms with their sizes and neighbours, and Grid works out the walls. The main way to write a plan. With --layout, a first layout from the brief beside the plan; --scan writes it from a phone room scan instead.',
     options: WRITE_OPTIONS,
   },
   edit: {
@@ -295,12 +296,27 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     return EXIT_OK
   }
 
+  if (name === 'write' && parsed.values.has('--scan')) {
+    // HND-12: a phone room scan in place of rooms text.
+    if (parsed.values.has('--layout')) throw new UsageError('write takes --layout or --scan, not both: --layout writes a first layout from the brief, --scan writes the plan from a phone room scan.')
+    if (parsed.positionals.length > 0) throw new UsageError(`write --scan reads the scan in place of rooms text: name one or the other, not both.`)
+    const project = openProject(projectOption, io.cwd)
+    const target = textOf(parsed, '--plan') ?? projectPlanFile(project)
+    if (target === null) throw new UsageError(`write needs a plan to write: --plan <plan.json>, or run it in a project folder grid init made, which holds ${PROJECT_FILE}.`)
+    const done = writeScanIntoProject(project, textOf(parsed, '--scan')!, target, { replace: parsed.values.has('--replace') })
+    if (parsed.values.has('--json')) {
+      const c = done.conversion
+      io.stdout(`${JSON.stringify({ label: GENERAL_GUIDANCE_LABEL, written: done.written, evidence: done.evidence, rooms: c.rooms, paired: c.paired, oneSided: c.oneSided, openings: c.plan.openings.length, items: c.plan.items?.length ?? 0, assumed: c.assumed, leftOut: c.leftOut, match: c.match, frame: c.frame, verdict: done.verdict, drawingProblems: done.drawingProblems }, null, 2)}\n`)
+    } else io.stdout(`${[GENERAL_GUIDANCE_LABEL, ...done.lines].join('\n')}\n`)
+    return EXIT_OK
+  }
+
   if (name === 'write') {
     // BRF-6: --layout writes a first layout from the brief beside the plan, in place of a rooms file.
     const shape = textOf(parsed, '--layout')
     if (shape !== undefined && !(LAYOUT_SHAPES as readonly string[]).includes(shape)) throw new UsageError(`--layout takes ${LAYOUT_SHAPES.join(' or ')}: tidy for a rectangle, sizes to keep every size.`)
     if (shape !== undefined && parsed.positionals.length > 0) throw new UsageError('write takes a rooms text file or --layout, not both: --layout writes a first layout from the brief beside the plan.')
-    if (shape === undefined && parsed.positionals.length !== 1) throw new UsageError(`write takes one rooms text file: grid write <plan.rooms>, or --layout tidy|sizes${parsed.positionals.length > 1 ? `, but was given ${parsed.positionals.length}` : ''}.`)
+    if (shape === undefined && parsed.positionals.length !== 1) throw new UsageError(`write takes one rooms text file: grid write <plan.rooms>, --layout tidy|sizes or --scan <scan.json>${parsed.positionals.length > 1 ? `, but was given ${parsed.positionals.length}` : ''}.`)
     const roomsFile = parsed.positionals[0]
     if (roomsFile === '-') throw new UsageError('write reads rooms text from a file, not from standard input: name the file.')
     if (roomsFile?.toLowerCase().endsWith('.json')) throw new UsageError(`write reads rooms text, not a plan: ${JSON.stringify(roomsFile)} ends in .json. Name the plan to write with --plan.`)

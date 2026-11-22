@@ -64,7 +64,7 @@ metres above 0…`), never repeating the person's words, and nothing is written.
 
 The figures under `figures` are the person's, not a code's or a standard's. The file holds them
 under the heading "The person's own figures: theirs, not from any code or standard.", and every
-answer lists them under it. Grid knows five, all in metres:
+answer lists them under it. Grid knows five sizes, all in metres, and four site limits (BRF-4):
 
 | Figure | Measured as | Short of it |
 |---|---|---|
@@ -73,13 +73,34 @@ answer lists them under it. Grid knows five, all in metres:
 | `turning_circle` | the widest circle each room holds, in the empty room; `rooms` names the rooms it is for, every room when left out | less |
 | `step` | the sill of every door and doorless opening above its floor; 0 for none | higher |
 | `ceiling_height` | each room's height, as `grid_measure` gives it | lower |
+| `plot_coverage` | a percentage: the building seen from above, every floor at or above the ground floor, inside the plot's boundary, over the plot's area | more |
+| `floor_area_ratio` | the gross area of every floor at or above the ground floor over the plot's area, by `measure`: `gross_external` or `gross_internal` ([areas.md](areas.md)) | more |
+| `building_height` | metres from the ground (`site.ground`, else the ground floor's floor level) to the top of the highest roof | more |
+| `parking_per_home` | the parking spaces the floors state over the homes they state (`floors[].parking`, `floors[].homes`); 0 for none | fewer |
+
+The site limits are measured on the plan as drawn, massing or walls
+([plan-file.md](plan-file.md#a-floor-outline-before-the-walls)), and the plan's own set-backs
+(`site.setbacks`) are reported with them: `grid_measure what=site` gives each as used, allowed and
+met or not, with the area rule named
+([the tool server](tool-server.md#the-plot-distances-to-the-boundary-and-the-coverage)). A ratio
+that names no `measure` is measured by the gross measure usual for the plan's place, else by gross
+external area, and the line says it was assumed, for the person to confirm. A limit that cannot
+be measured (no boundary, a gross internal area on a floor with no walls, no homes stated) is open,
+with the reason. Grid brings no limit of its own, and no line says a plan is allowed.
+
+```json
+"figures": {
+  "plot_coverage": { "value": 40, "level": "must", "source": "given", "quote": "the plot can be 40% built on" },
+  "floor_area_ratio": { "value": 1, "measure": "gross_external", "level": "must", "source": "given", "quote": "a ratio of one" }
+}
+```
 
 `grid_measure what=access` sets its accessibility measurements against `door_width` (by a door's
 clear width past its leaf), `corridor_width` (by a corridor's narrowest point), `turning_circle`
 and `step`, and says each as "your figure" (CNT-17,
 [the tool server](tool-server.md#accessibility-measurements-as-numbers)).
 
-A figure Grid does not know is refused with the five it knows. Each door, room or opening short
+A figure Grid does not know is refused with the ones it knows. Each door, room or opening short
 of a figure is one line; a figure nothing is short of is one line met.
 
 ## Met and missed after every change
@@ -164,8 +185,13 @@ Sizes not kept (3):
   `layoutRooms` rooms.
 - With no brief beside the plan, or one that can't be read, nothing is written. Over a plan
   written some other way it is refused as rooms text is, and `replace` writes over it.
+- `layout` is one of three ways in, with `rooms` and `scan` (a phone room scan,
+  [commands.md](commands.md#a-plan-from-a-phone-room-scan-grid-write---scan)): a call with none of
+  them, or more than one, is refused naming them, and so is `grid write --layout` with a rooms
+  file or `--scan`.
 
 The answer's data adds `layout`: `shape`, `rooms` (the rooms text written), `outline`, `added`
 (the hall Grid added, by name, or null), `notKept` (each `room`, `name`, `text` and `by`, the
-change of its area in m²), `notPlaced` and `touch` (`wished`, `held`).
+change of its area in m²), `notPlaced` and `touch` (`wished`, `held`). Every answer of
+`grid_write_rooms` carries `layout`, null unless a layout was written, as it carries `scan`.
 

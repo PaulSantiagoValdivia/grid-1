@@ -145,6 +145,11 @@ describe('WR-19: the estate agent\'s five rooms', () => {
       expect(none.err).toMatch(/^grid: No first layout was written: there is no brief beside the plan \("plan\.brief\.json"\)/)
       expect((await run('write', '--layout', 'square')).err).toContain('--layout takes tidy or sizes')
       expect((await run('write', 'plan.rooms', '--layout', 'tidy')).err).toContain('a rooms text file or --layout, not both')
+      // HND-12's scan is a third way in: a layout and a scan together are refused, naming both.
+      const withScan = await run('write', '--layout', 'tidy', '--scan', 'scans/flat.json')
+      expect(withScan.status).toBe(2)
+      expect(withScan.err).toContain('write takes --layout or --scan, not both')
+      expect((await run('write')).err).toContain('grid write <plan.rooms>, --layout tidy|sizes or --scan <scan.json>')
       writeFileSync(join(dir, 'plan.brief.json'), JSON.stringify({ version: '1', ...LISTING }))
       const done = await run('write', '--layout', 'tidy')
       expect(done.status, done.err).toBe(0)
@@ -155,7 +160,7 @@ describe('WR-19: the estate agent\'s five rooms', () => {
     }
   })
 
-  it('names the rooms it could not place, and refuses rooms text and a layout together', async () => {
+  it('names the rooms it could not place, and refuses rooms text, a layout and a scan together', async () => {
     b = bench({})
     await b.call('grid_write_brief', { plan: 'plan.json', brief: { rooms: [...LISTING.rooms, { use: 'bedroom', count: 3, level: 'should', source: 'assumed' }] } })
     const done = await b.call('grid_write_rooms', { plan: 'plan.json', layout: 'tidy' })
@@ -166,6 +171,15 @@ describe('WR-19: the estate agent\'s five rooms', () => {
     expect(both.text).toContain('Pass rooms or layout, not both')
     const neither = await b.call('grid_write_rooms', { plan: 'plan.json' })
     expect(neither.isError).toBe(true)
+    expect(neither.text).toContain('Pass rooms (the rooms text to write), layout (tidy or sizes, a first layout from the brief beside the plan) or scan')
+    // HND-12: a scan is the third way in, and the answer carries it, null for a layout.
+    expect(done.data?.['scan']).toBeNull()
+    const withScan = await b.call('grid_write_rooms', { plan: 'plan.json', layout: 'tidy', scan: 'scans/flat.json' })
+    expect(withScan.isError).toBe(true)
+    expect(withScan.text).toContain('Pass layout or scan, not both')
+    const all = await b.call('grid_write_rooms', { plan: 'plan.json', layout: 'tidy', scan: 'scans/flat.json', rooms: 'room a "A" - 3 x 3' })
+    expect(all.isError).toBe(true)
+    expect(all.text).toContain('Pass one of rooms, layout and scan, not all three')
   })
 })
 

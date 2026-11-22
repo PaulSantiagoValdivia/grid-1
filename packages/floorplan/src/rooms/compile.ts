@@ -50,7 +50,8 @@
  *       another takes a number after it (A1, A2, ...), so the ids are the same on every writing.
  *   copy <floor> [with openings]   rename <room> <new id> "<name>" [use]   remove <id>
  *   raw wall|room|opening { ...Grid's own JSON... }     a part written the Grid way
- *   raw floor { "roof": {...}, "parapet": <m> }         the floor's fields rooms text has no words for (LVL-6)
+ *   raw floor { "roof": {...}, "parapet": <m> }         the floor's fields rooms text has no words for (LVL-6);
+ *                                                      BRF-4 adds "outline", "homes" and "parking"
  *
  * An opening pattern (LVL-8) is not rooms text, in a unit or out of one: a `pattern` line is
  * refused with where a pattern goes instead (`patternLine`). It lives in the plan file's
@@ -69,6 +70,9 @@ import { f2, isNumberWord, numberOf, pointOf, RoomsStop, wordsOf } from './words
 type P = readonly [number, number]
 /** A wall as the text writes it into the file: no height when the text states none (WRT-6). */
 type WrittenWall = Omit<Wall, 'height' | 'unstated'> & { height?: number }
+
+/** The floor's fields a `raw floor` line may hold: LVL-6's roof and parapet, BRF-4's outline, homes and parking. */
+export const RAW_FLOOR_KEYS: readonly string[] = ['roof', 'parapet', 'outline', 'homes', 'parking']
 
 /**
  * The plan as rooms text writes it: the file's own JSON, before the reading fills anything in.
@@ -439,9 +443,18 @@ class Compiler {
   /** What each side of a sized room turned out to have. */
   readonly found = new Map<string, number>()
 
-  constructor(text: string, assumed: Map<string, number>) {
+  /** How the walls' ends and thicknesses are written: to a tenth of a millimetre, unless asked finer. */
+  private readonly fix: (value: number) => number
+
+  constructor(text: string, assumed: Map<string, number>, options: CompileOptions = {}) {
     this.lines = text.split(/\r\n|\r|\n/)
     this.assumed = assumed
+    const places = options.places ?? 4
+    const scale = 10 ** places
+    this.fix = places === 4 ? r4 : (v: number): number => {
+      const r = Math.round(v * scale) / scale
+      return Object.is(r, -0) || r === 0 ? 0 : r
+    }
   }
 
   private stop(code: string, at: number | null, message: string): never {
@@ -516,17 +529,17 @@ class Compiler {
     return this.emit()
   }
 
-  /** LVL-6: the current floor's `roof` and `parapet`, as Grid's plan file holds them. */
+  /** LVL-6: the current floor's `roof` and `parapet`, as Grid's plan file holds them; BRF-4: its `outline`, `homes` and `parking`. */
   private rawFloor(json: string, at: number): void {
     let value: unknown
     try {
       value = JSON.parse(json)
     } catch {
-      this.stop('rooms/raw', at, `line ${at}: a raw floor is one JSON object on the rest of the line, with the floor's roof or parapet as Grid's plan file holds them; this one could not be read.`)
+      this.stop('rooms/raw', at, `line ${at}: a raw floor is one JSON object on the rest of the line, with the floor's roof, parapet, outline, homes or parking as Grid's plan file holds them; this one could not be read.`)
     }
     const keys = typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.keys(value) : null
-    if (keys === null || keys.some((k) => k !== 'roof' && k !== 'parapet')) {
-      this.stop('rooms/raw', at, `line ${at}: a raw floor is a JSON object holding only the floor's "roof" and "parapet", as Grid's plan file holds them.`)
+    if (keys === null || keys.some((k) => !RAW_FLOOR_KEYS.includes(k))) {
+      this.stop('rooms/raw', at, `line ${at}: a raw floor is a JSON object holding only the floor's "roof", "parapet", "outline", "homes" and "parking", as Grid's plan file holds them.`)
     }
     Object.assign(this.floor().extra, value)
   }
@@ -1677,12 +1690,13 @@ class Compiler {
     }
     this.nameWalls(walls, edges, prefix)
     for (const w of walls) {
+      const fix = this.fix
       const json: WrittenWall = {
         id: w.id,
-        start: [r4(w.start[0]), r4(w.start[1])],
-        end: [r4(w.end[0]), r4(w.end[1])],
-        thickness: r4(w.t),
-        ...(w.height !== null ? { height: r4(w.height) } : {}),
+        start: [fix(w.start[0]), fix(w.start[1])],
+        end: [fix(w.end[0]), fix(w.end[1])],
+        thickness: fix(w.t),
+        ...(w.height !== null ? { height: fix(w.height) } : {}),
         kind: w.kind,
         ...(w.virtual ? { virtual: true } : {}),
         ...(this.explicitFloors ? { floor: fl.id } : {}),
@@ -1998,7 +2012,7 @@ class Compiler {
         ...(f.height !== null ? { height: f.height } : {}),
         ...(f.slab !== null ? { slab: f.slab } : {}),
         ...(f.building !== null ? { building: f.building } : {}),
-        ...(f.extra as Pick<NonNullable<FloorPlan['floors']>[number], 'roof' | 'parapet'>),
+        ...(f.extra as Pick<NonNullable<FloorPlan['floors']>[number], 'roof' | 'parapet' | 'outline' | 'homes' | 'parking'>),
       }))
     }
     if (this.building !== null) plan.building = this.building
@@ -2235,7 +2249,7 @@ function alignmentFix(text: string, at: number, had: ReadonlySet<string>): Rooms
       const written = now !== null
         ? `${line.slice(0, now.index)}align ${side}${line.slice(now.index + now[0].length)}`
         : `${line.slice(0, place.index + place[0].length)} align ${side}${line.slice(place.index + place[0].length)}`
-      const tried = compileRoomsText([...lines.slice(0, i), written, ...lines.slice(i + 1)].join('\n'), false).problems
+      const tried = compileRoomsText([...lines.slice(0, i), written, ...lines.slice(i + 1)].join('\n'), { offerFixes: false }).problems
       if (tried.every((p) => p.line !== at && had.has(`${p.code}|${p.line}`))) return { line: i + 1, text: written.trim() }
     }
   }
@@ -2250,6 +2264,20 @@ function withAlignmentFix(text: string, problem: RoomsProblem, all: readonly Roo
   return { ...problem, message: `${problem.message} With line ${fix.line} written '${fix.text}', they share a wall.`, fixes: [fix] }
 }
 
+export interface CompileOptions {
+  /**
+   * HND-12: the decimal places the walls' ends, thicknesses and heights are written to: 4 (a
+   * tenth of a millimetre) for rooms text a person or an agent writes, more for a plan read from
+   * a scan, whose rooms keep the scan's own areas.
+   */
+  readonly places?: number
+  /**
+   * BRF-6: whether a door between two rooms that share no wall is refused with the alignment that
+   * would make them share one, when there is one. On (the default) unless a fix is being tried.
+   */
+  readonly offerFixes?: boolean
+}
+
 /**
  * Writes rooms text as a plan. The answer holds the plan, or null with the problems that stop
  * it; every warning and every guess the writing made; and the rooms, walls and openings as
@@ -2257,13 +2285,14 @@ function withAlignmentFix(text: string, problem: RoomsProblem, all: readonly Roo
  * A door between two rooms that share no wall is refused with the alignment that would make
  * them share one, when there is one (`offerFixes`, on unless a fix is being tried).
  */
-export function compileRoomsText(text: string, offerFixes = true): RoomsResult {
+export function compileRoomsText(text: string, options: CompileOptions = {}): RoomsResult {
+  const offerFixes = options.offerFixes ?? true
   let assumed = new Map<string, number>()
   let compiler: Compiler | null = null
   let plan: WrittenPlan | null = null
   let stopped: RoomsProblem | null = null
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
-    compiler = new Compiler(text, assumed)
+    compiler = new Compiler(text, assumed, options)
     try {
       plan = compiler.run()
       stopped = null
