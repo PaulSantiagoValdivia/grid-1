@@ -116,6 +116,8 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `columnRoundPieces` | limit | 32 count | How many straight sides a round column is drawn and exported with, and cut to its room with; its own area, and what it takes off a room it stands wholly in, is the true circle's (CNT-16) |
 | `gridLinesMost` | limit | 100 count | The most lines one set of a structural grid may have; a set with more is refused (CNT-16) |
 | `gridOverrun` | limit | 1.5 m | How far a structural grid's lines are drawn past the outermost line across them, where their names are written and their spacing is dimensioned (CNT-16) |
+| `bayOverlap` | tolerance | 0.01 m² | Two parking bays of one floor that share more floor than this overlap: each is still counted, and the warning says the floor holds fewer bays than it counts (CNT-19) |
+| `rampSlopeDiffers` | tolerance | 0.5 % | A ramp's stated slope further than this, in percentage points, from the slope its two levels and its run give is worth a look; both are kept and returned (CNT-19) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
 | `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning: from `site.origin` where the plan states one, else from (0, 0) (HND-11) |
 | `cameraTilt` | limit | 89 degree | How far a camera may look down at, or up to, what it is pointed at, from level; straight down or up a picture has no up, so a camera turned further is refused (VEW-3) |

@@ -85,6 +85,11 @@ export const SHEET_COVERAGE = {
   // is drawn on each floor's plan with its lines' names and its spacing dimensioned.
   columns: { shown: 'drawn and tabled' },
   grids: { shown: 'drawn' },
+  // CNT-19: the parking bays and the ramps are drawn on each floor's plan by `drawPlan`, each bay
+  // with its number and each ramp with its arrow and its slope; their count and figures are in
+  // grid_takeoff.
+  bays: { shown: 'drawn' },
+  ramps: { shown: 'drawn' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**

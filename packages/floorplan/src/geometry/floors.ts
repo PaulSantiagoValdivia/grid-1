@@ -200,6 +200,8 @@ function cutFloor(plan: FloorPlan, floorId: string, walls: readonly Wall[], cand
     ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) }),
     // CNT-16: a column on each floor it stands on, as a column of that floor (`sliceColumns`).
     ...(plan.columns !== undefined && { columns: sliceColumns(plan, floorId) }),
+    // CNT-19: a parking bay by its own floor. A ramp, as a stair, is kept whole on every slice.
+    ...(plan.bays !== undefined && { bays: plan.bays.filter((bay) => floorOf(bay) === floorId) }),
     // SHT-7: a sketch item by its own floor; a note by its room's, or its own when at a point.
     ...(plan.sketch !== undefined && { sketch: plan.sketch.filter((item) => floorOf(item) === floorId) }),
     ...(plan.annotations !== undefined && {

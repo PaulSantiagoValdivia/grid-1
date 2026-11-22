@@ -32,11 +32,12 @@ import { planSteps } from './steps'
 import type { RiserLine, StairLayout } from './stairs'
 import { planStairs } from './stairs'
 import type { StairSymbol } from './stairSymbol'
-import { stairSymbol } from './stairSymbol'
+import { arrowHead, stairSymbol } from './stairSymbol'
 import type { LiftSymbol } from './liftSymbol'
 import { liftSymbol } from './liftSymbol'
 import { floorOf, planFloors, wholePlan } from './floors'
 import { columnFootprint, columnRoom, columnStandsOn, soundColumns } from './columns'
+import { bayFootprint, planRamps, rampsOnFloor, soundBays } from './parking'
 import { gridsOn, planGrid, type PlanGrid } from './structuralGrid'
 import type { ColumnShape } from '../types/floorplan'
 import { statedOutline } from './massing'
@@ -193,6 +194,43 @@ export interface PlanColumn {
 }
 
 /**
+ * A parking bay, ready to draw (CNT-19): its outline, the usual painted marking, and its number,
+ * which the drawing writes in its middle.
+ */
+export interface PlanBay {
+  readonly id: string
+  /** Its number as marked, else null. */
+  readonly number: string | null
+  /** The floor it covers, counter-clockwise (`bayFootprint`). */
+  readonly outline: readonly Vec2[]
+  readonly centre: Vec2
+}
+
+/**
+ * A ramp, as one of the floors it joins draws it (CNT-19): its outline, its middle line from the
+ * lower end to the upper, which the drawing ends with an arrow pointing up, and its slope, which
+ * the drawing writes along it. The figures are the ones `planRamps` works out.
+ */
+export interface PlanRamp {
+  readonly id: string
+  readonly name: string
+  /** Whether this floor is the ramp's lower end or its upper end. */
+  readonly end: 'lower' | 'upper'
+  /** A band along each stretch of its middle line, then a square at each turn, counter-clockwise. */
+  readonly pieces: readonly (readonly Vec2[])[]
+  /** Its middle line, lower end first. */
+  readonly line: readonly Vec2[]
+  /** Its slope in percent, worked out from its levels and its run. */
+  readonly slope: number
+  /** The slope the plan states, in percent, or null. */
+  readonly statedSlope: number | null
+  /** The arrow head at the upper end of its middle line, a triangle, tip first; null with no last stretch. */
+  readonly arrow: readonly Vec2[] | null
+  /** Where its slope is written: halfway along its middle line. */
+  readonly labelAt: Vec2
+}
+
+/**
  * A stair the plan states, as one of the floors it joins draws it (LVL-3): its flights with a
  * line across at every riser, its landings, and its walking line from the lower end to the upper,
  * which the drawing ends with an arrow pointing up. The figures are the ones `planStairs` works
@@ -331,6 +369,10 @@ export interface PlanDrawing {
    * dimensioned by `buildDimensions`. Drawn only. Left out when none is drawn here.
    */
   readonly grids?: readonly PlanGrid[]
+  /** CNT-19 (C29): the parking bays on this floor, each its marking and number. Left out when the plan states none. */
+  readonly bays?: readonly PlanBay[]
+  /** CNT-19 (C29): the ramps that start or end on this floor, each drawn on both. Left out when the plan states none. */
+  readonly ramps?: readonly PlanRamp[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -587,15 +629,45 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
   for (const column of columns ?? []) extent.push(...column.outline)
   const grids = gridsOn(plan, drawnFloor).map(planGrid)
   for (const grid of grids) for (const line of grid.lines) extent.push(line.from, line.to)
+  // CNT-19 (C29): the parking bays on this floor, and the ramps that start or end on it.
+  const bays = plan.bays === undefined ? undefined : soundBays(plan).map((bay): PlanBay => ({ id: bay.id, number: bay.number ?? null, outline: bayFootprint(bay), centre: { x: bay.at[0], y: bay.at[1] } }))
+  for (const bay of bays ?? []) extent.push(...bay.outline)
+  const ramps = plan.ramps === undefined ? undefined : (drawnFloor === null ? planRamps(plan).ramps : rampsOnFloor(plan, drawnFloor)).map((ramp): PlanRamp => ({
+    id: ramp.id,
+    name: ramp.name,
+    end: drawnFloor !== null && drawnFloor === ramp.upper.floor ? 'upper' : 'lower',
+    pieces: ramp.pieces,
+    line: ramp.line,
+    slope: ramp.slope,
+    statedSlope: ramp.statedSlope,
+    arrow: arrowHead(ramp.line, ramp.width),
+    labelAt: alongLine(ramp.line, ramp.length / 2)
+  }))
+  for (const ramp of ramps ?? []) for (const piece of ramp.pieces) extent.push(...piece)
   return {
     walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds,
     ...(floorRing === null ? {} : { outline: floorRing }),
     ...(context.length === 0 ? {} : { context }),
     ...(columns === undefined ? {} : { columns }),
     ...(grids.length === 0 ? {} : { grids }),
+    ...(bays === undefined ? {} : { bays }),
+    ...(ramps === undefined ? {} : { ramps }),
     bounds: computeBounds(extent),
     issues
   }
+}
+
+/** CNT-19: the point `at` metres along a line from its first point, or its last point past its end. */
+function alongLine(line: readonly Vec2[], at: number): Vec2 {
+  let left = at
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1]!
+    const b = line[i]!
+    const stretch = Math.hypot(b.x - a.x, b.y - a.y)
+    if (stretch > 0 && left <= stretch) return { x: a.x + ((b.x - a.x) * left) / stretch, y: a.y + ((b.y - a.y) * left) / stretch }
+    left -= stretch
+  }
+  return line[line.length - 1] ?? { x: 0, y: 0 }
 }
 
 /** CNT-16: the columns a drawing of this plan (or floor's slice) draws; undefined when the plan states none. */

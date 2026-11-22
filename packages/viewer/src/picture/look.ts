@@ -246,7 +246,10 @@ export const TEXT_PX = {
   note: 12,
   title: 18,
   /** CNT-16: a structural grid line's name, in its circle. */
-  gridName: 11
+  gridName: 11,
+  /** CNT-19: a parking bay's number, and a ramp's slope. */
+  bayNumber: 10,
+  rampSlope: 10
 } as const
 
 /** CNT-16: the radius of the circle a structural grid line's name is written in, in screen pixels. */

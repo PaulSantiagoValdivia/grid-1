@@ -29,6 +29,8 @@ import {
   columnDepth,
   columnRise,
   soundColumns,
+  planBayCounts,
+  planRamps,
   type FloorEnvelope,
   type FloorPlan,
   type RoofShape,
@@ -131,10 +133,46 @@ export interface ColumnRun {
   readonly volume: number
 }
 
+/** CNT-19: one floor's parking bays, counted. */
+export interface BayCount {
+  readonly floor: string
+  readonly floorName: string
+  /** Every bay drawn on the floor, numbered or not. */
+  readonly count: number
+  /** The numbers its bays state, each once, in number order. */
+  readonly numbers: readonly string[]
+  readonly unnumbered: number
+}
+
+/** CNT-19: a ramp's figures: the two levels it joins in metres, its rise, its length and its slope. */
+export interface RampFigures {
+  readonly id: string
+  readonly name: string
+  readonly from: string
+  readonly to: string
+  readonly lower: { readonly floor: string; readonly level: number }
+  readonly upper: { readonly floor: string; readonly level: number }
+  readonly width: number
+  /** Metres up, from the lower level to the upper. */
+  readonly rise: number
+  /** Metres along its middle line, on plan. */
+  readonly length: number
+  /** Percent: metres of rise per 100 metres along it, from the levels and the run. */
+  readonly slope: number
+  /** The same slope as "1 in n". */
+  readonly oneIn: number
+  /** The slope the plan states, in percent, or null. */
+  readonly statedSlope: number | null
+}
+
 export interface Takeoff {
   readonly walls: readonly WallRun[]
   /** CNT-16: the columns, by shape and size. Left out on a plan with none. */
   readonly columns?: readonly ColumnRun[]
+  /** CNT-19: the parking bays, counted per floor. Left out on a plan with none. */
+  readonly bays?: readonly BayCount[]
+  /** CNT-19: the ramps, each with its levels and its slope. Left out on a plan with none. */
+  readonly ramps?: readonly RampFigures[]
   readonly rooms: readonly RoomTakeoff[]
   readonly totals: { readonly floorArea: number; readonly ceiling: number; readonly skirting: number; readonly wallFace: number }
   /** LVL-4: the slabs and the roof, floor by floor. */
@@ -280,14 +318,45 @@ export function planTakeoff(survey: Survey, floors?: readonly string[], rooms?: 
     .map((room) => roomTakeoff(room, ceilingOf, survey.plan))
   const total = (key: 'floorArea' | 'ceiling' | 'skirting' | 'wallFace'): number => list.reduce((sum, room) => sum + room[key], 0)
   const columns = columnRuns(survey.plan, onFloor)
+  const { bays, ramps } = parkingFigures(survey.plan, onFloor)
   return {
     walls: runs,
     ...(columns.length === 0 ? {} : { columns }),
+    ...(bays.length === 0 ? {} : { bays }),
+    ...(ramps.length === 0 ? {} : { ramps }),
     rooms: list,
     totals: { floorArea: total('floorArea'), ceiling: total('ceiling'), skirting: total('skirting'), wallFace: total('wallFace') },
     envelope: envelopeTakeoff(survey, floors),
-    rules: [...Object.values(TAKEOFF_RULES), ...(columns.length === 0 ? [] : [columnRule()])],
+    rules: [...Object.values(TAKEOFF_RULES), ...(columns.length === 0 ? [] : [columnRule()]), ...(bays.length === 0 && ramps.length === 0 ? [] : [parkingRule()])],
   }
+}
+
+/** CNT-19: how the bays are counted and the ramps measured, in Grid's words. */
+export const parkingRule = (): string => english(said('takeoff.rule.parking'))
+
+/** CNT-19: the plan's bays counted on the floors asked for, and the ramps that start or end on one of them. */
+export function parkingFigures(plan: FloorPlan, onFloor: (floor: string) => boolean = () => true): { bays: BayCount[]; ramps: RampFigures[] } {
+  const names = new Map(planFloors(plan).map((floor) => [floor.id, floor.name ?? floor.id]))
+  const bays = planBayCounts(plan)
+    .filter((count) => onFloor(count.floor))
+    .map((count) => ({ floor: count.floor, floorName: names.get(count.floor) ?? count.floor, count: count.count, numbers: count.numbers, unnumbered: count.unnumbered }))
+  const ramps = planRamps(plan)
+    .ramps.filter((ramp) => onFloor(ramp.lower.floor) || onFloor(ramp.upper.floor))
+    .map((ramp) => ({
+      id: ramp.id,
+      name: ramp.name,
+      from: ramp.from,
+      to: ramp.to,
+      lower: { floor: ramp.lower.floor, level: ramp.lower.level },
+      upper: { floor: ramp.upper.floor, level: ramp.upper.level },
+      width: ramp.width,
+      rise: ramp.rise,
+      length: ramp.length,
+      slope: ramp.slope,
+      oneIn: ramp.oneIn,
+      statedSlope: ramp.statedSlope,
+    }))
+  return { bays, ramps }
 }
 
 /** CNT-16: how the columns are taken off, in Grid's words. */

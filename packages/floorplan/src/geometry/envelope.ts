@@ -58,18 +58,19 @@ import { tolerance } from './tolerances'
 import { roomZones } from './zones'
 import { buildingPlan, isOutdoor, outdoorRoofed } from './outdoor'
 import type { Vec2 } from './vec2'
+import { planRamps } from './parking'
 import type { RoofShape } from './plan'
 import { floorRoofShape, regionAtLeast, roofFacets, rooflightPlace, type RoofPlane, type RooflightPlace, type RoofShapeOverFloor } from './roofs'
 
 /** What a slab is open over. */
-export type SlabOpeningKind = 'stair' | 'stair-room' | 'lift' | 'void'
+export type SlabOpeningKind = 'stair' | 'stair-room' | 'lift' | 'void' | 'ramp'
 
 /** A hole in a floor's slab. */
 export interface SlabOpening {
   readonly kind: SlabOpeningKind
   /**
    * What makes it: a stated stair's id; for rooms one over the other, the lower room's id and the
-   * upper's, joined by "|" (as `floorJoins` says them); a void's room id.
+   * upper's, joined by "|" (as `floorJoins` says them); a void's room id; a ramp's id (CNT-19).
    */
   readonly via: string
   /** The room on this floor it opens, when one holds it. */
@@ -453,6 +454,12 @@ function slabOf(
       if (lower === undefined || upper === undefined) continue
       add(join.kind, join.via, join.upper.room, cutOutline('intersection', [[ringOf(upper)]], [[[ringOf(lower)]]]))
     }
+  }
+  // CNT-19 (C29): a ramp opens the floor it arrives at over the whole of it, as a stated stair does.
+  for (const ramp of planRamps(plan).ramps) {
+    if (ramp.upper.floor !== floor.id) continue
+    const parts = ramp.pieces.map((ring): MultiPolygon => [[ringOf(ring)]])
+    add('ramp', ramp.id, null, cutOutline('union', parts[0] ?? [], parts.slice(1)))
   }
   // A room marked as a void has no floor. A zone's floor is its room's (CNT-8): it is no void, and
   // it is not sunk, of its own.

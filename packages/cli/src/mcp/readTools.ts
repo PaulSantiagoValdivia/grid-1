@@ -7,14 +7,14 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { FACADE_SIDES, MEASURES, planHasFinishes, planHasTypes, compassPoint, drawingBearing, findView, floorOf, itemFootprint, kindWords, limit, planFloors, planOrientation, planStoreys, buildingHeights, tolerance, viewSetting, wallPointAt, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
+import { FACADE_SIDES, MEASURES, planHasFinishes, planHasTypes, compassPoint, drawingBearing, findView, floorOf, itemFootprint, kindWords, limit, oneInText, planFloors, planOrientation, planStoreys, buildingHeights, slopeText, tolerance, viewSetting, wallPointAt, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
 import { CameraRefused, cameraFor, eyeCamera, lensProblem, settingOfCamera, type CameraAsk } from '../draw/cameraAsk'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, isFirmLine, type ResultLine } from '@ongrid/rules'
 import { causeText, checkPlan, checkTitle, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmSectionTitle, firmStandardsText, kindWord, limitsText, nothingCheckedText, partsText, placeText, type PlaceWords, problemsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { askedLanguage, languageFor } from '../command/language'
 import { inLanguage, t, tv } from '../command/words'
-import { LANGUAGES, english, joined, num, said, say, type Language, type MessageKey } from '@ongrid/floorplan/messages'
+import { LANGUAGES, english, joined, name, num, said, say, type Language, type MessageKey } from '@ongrid/floorplan/messages'
 import { readSeen, type SeenState } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
 import { describePlan, describeRooms, describeWalk, walkOf } from '../command/describe'
@@ -63,7 +63,7 @@ import { FIGURES_HEADING, readBrief } from '../brief/brief'
 import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantities/survey'
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
 import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
-import { columnRule, planTakeoff, TAKEOFF_RULES, type ColumnRun } from '../quantities/takeoff'
+import { columnRule, parkingRule, planTakeoff, TAKEOFF_RULES, type BayCount, type ColumnRun, type RampFigures } from '../quantities/takeoff'
 import { FINISH_RULE, FINISH_SURFACES, FINISH_UNITS, WALL_TYPE_RULE, planFinishes, wallTypeRuns, type FinishSurface } from '../quantities/finishes'
 import {
   askPlan,
@@ -636,6 +636,28 @@ function columnsLine(runs: readonly ColumnRun[], units: Display): string {
   return english(said('takeoff.columns', { runs: joined(parts, 'join.semicolon') }))
 }
 
+/** CNT-19: the take-off's parking bays per floor, in a line, and one line per ramp with its levels and slope. */
+function parkingLines(bays: readonly BayCount[], ramps: readonly RampFigures[], units: Display): string[] {
+  const names = new Map(bays.map((b) => [b.floor, b.floorName]))
+  return [
+    ...(bays.length === 0 ? [] : [english(said('takeoff.bays', { floors: joined(bays.map((b) => said('takeoff.bays.floor', { count: b.count, floor: name(b.floorName) })), 'join.semicolon') }))]),
+    ...ramps.map((r) => {
+      const values = {
+        ramp: name(r.name),
+        lower: name(names.get(r.lower.floor) ?? r.lower.floor),
+        lowerLevel: num(r.lower.level.toFixed(2)),
+        upper: name(names.get(r.upper.floor) ?? r.upper.floor),
+        upperLevel: num(r.upper.level.toFixed(2)),
+        rise: num(lengthText(r.rise, units)),
+        length: num(lengthText(r.length, units)),
+        slope: num(slopeText(r.slope)),
+        oneIn: num(oneInText(r.oneIn)),
+      }
+      return english(r.statedSlope === null ? said('takeoff.ramp', values) : said('takeoff.ramp.stated', { ...values, stated: num(slopeText(r.statedSlope)) }))
+    }),
+  ]
+}
+
 /** CNT-15: one line per surface with each finish's quantity, a finish not stated last. */
 function finishLines(totals: readonly { readonly surface: FinishSurface; readonly finish: string | null; readonly quantity: number; readonly rooms: readonly string[] }[], units: Display): string[] {
   const words: Record<FinishSurface, string> = { floor: 'Floor', walls: 'Wall faces', ceiling: 'Ceilings', skirting: 'Skirting' }
@@ -661,6 +683,7 @@ const takeoffTool: GridTool = {
     + 'Every figure is worked out from the plan\'s walls and openings by a rule stated in the answer. '
     + 'It also gives each floor\'s slab and the roof over every part with nothing above, worked out from the outlines and marked assumed. '
     + 'On a plan that names wall types or room finishes (types and finishes in the plan), it also gives the walls of each named type (length and face, with its material) and each finish\'s quantity (floor, walls and ceiling by area, skirting by length), a zone\'s finish taking its part of its room; the estimate then prices them by type and by finish. '
+    + 'On a plan with parking bays or ramps (bays and ramps in the plan), it also counts the bays on each floor, with their numbers, and gives each ramp\'s two levels in metres, its rise, its length and its slope in percent, as numbers. '
     + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
@@ -681,6 +704,9 @@ const takeoffTool: GridTool = {
     walls: listSchema(objectSchema({ kind: STRING, count: NUMBER, gross: NUMBER, net: NUMBER })),
     // CNT-16: the columns by shape and size, on a plan that states any.
     columns: listSchema(objectSchema({ shape: STRING, width: NUMBER, depth: NULLABLE_NUMBER, count: NUMBER, length: NUMBER, volume: NUMBER })),
+    // CNT-19: the parking bays per floor and the ramps, on a plan that states any.
+    bays: listSchema(objectSchema({ floor: STRING, floorName: STRING, count: NUMBER, numbers: listSchema(STRING), unnumbered: NUMBER })),
+    ramps: listSchema(objectSchema({ id: STRING, name: STRING, from: STRING, to: STRING, lower: objectSchema({ floor: STRING, level: NUMBER }), upper: objectSchema({ floor: STRING, level: NUMBER }), width: NUMBER, rise: NUMBER, length: NUMBER, slope: NUMBER, oneIn: NUMBER, statedSlope: NULLABLE_NUMBER })),
     // CNT-15, on a plan that names wall types or finishes: the walls of each named type, and each finish's total.
     wallTypes: listSchema(objectSchema({ type: STRING, name: STRING, kind: NULLABLE_STRING, material: NULLABLE_STRING, glazed: BOOLEAN, count: NUMBER, gross: NUMBER, net: NUMBER, face: NUMBER })),
     finishes: listSchema(objectSchema({ surface: STRING, finish: NULLABLE_STRING, unit: STRING, quantity: NUMBER, rooms: listSchema(STRING) })),
@@ -745,6 +771,8 @@ const takeoffTool: GridTool = {
     const data = {
       walls: t.walls,
       ...(t.columns === undefined ? {} : { columns: t.columns }),
+      ...(t.bays === undefined ? {} : { bays: t.bays }),
+      ...(t.ramps === undefined ? {} : { ramps: t.ramps }),
       ...(wallTypes.length === 0 ? {} : { wallTypes }),
       ...(finishes === null ? {} : { finishes }),
       rooms: t.rooms,
@@ -758,6 +786,9 @@ const takeoffTool: GridTool = {
         ...t.walls.map((w) => ['wall', `${w.kind} walls (${w.count})`, null, null, null, null, w.gross, w.net, null]),
         // CNT-16: the columns, their metres as the length.
         ...(t.columns ?? []).map((c) => ['column', `${c.shape} ${c.depth === null ? c.width : `${c.width} x ${c.depth}`} (${c.count})`, null, null, null, null, c.length, null, null]),
+        // CNT-19: the bays per floor, their count in the what; each ramp, its length and its slope in the what.
+        ...(t.bays ?? []).map((b) => ['bays', `parking bays, ${b.floorName} (${b.count})`, null, null, null, null, null, null, null]),
+        ...(t.ramps ?? []).map((r) => ['ramp', `${r.name}: ${r.lower.floor} to ${r.upper.floor}, ${slopeText(r.slope)} %`, null, null, null, null, r.length, null, null]),
         ...t.rooms.map((r) => ['room', r.name, r.floorArea, r.ceiling, r.skirting, r.wallFace, r.perimeter, null, null]),
         ['total', 'all rooms', t.totals.floorArea, t.totals.ceiling, t.totals.skirting, t.totals.wallFace, null, null, null],
         // LVL-4: worked out from the outlines, never stated by the plan (AC-6).
@@ -775,7 +806,7 @@ const takeoffTool: GridTool = {
     const envelopeLines = t.envelope.floors.flatMap((f) => {
       const on = several ? ` (${q(f.floorName)})` : ''
       if (f.slab === null && f.roof === null) return [`  ${q(f.floorName)}: no slab or roof: ${f.why ?? 'none'}.`]
-      const openings = f.slab === null || f.slab.openings.length === 0 ? '' : `, open over ${f.slab.openings.map((o) => `${o.kind === 'void' ? 'a void' : o.kind === 'lift' ? 'a lift shaft' : 'a stair'} (${areaText(o.area, units)})`).join(', ')}`
+      const openings = f.slab === null || f.slab.openings.length === 0 ? '' : `, open over ${f.slab.openings.map((o) => `${o.kind === 'void' ? 'a void' : o.kind === 'lift' ? 'a lift shaft' : o.kind === 'ramp' ? 'a ramp' : 'a stair'} (${areaText(o.area, units)})`).join(', ')}`
       return [
         ...(f.slab ? [`  ${f.slab.kind === 'base' ? 'Lowest floor slab' : 'Floor slab'}${on}: ${areaText(f.slab.area, units)}${openings}; assumed.`] : []),
         ...(f.roof ? [`  Roof over${on || ' the floor'}, where nothing is above: ${areaText(f.roof.area, units)}${f.roof.parapet === null ? '' : `, parapet ${lengthText(f.roof.parapet, units)} high`}${sloped(f.roof, units)}; assumed.`] : []),
@@ -785,6 +816,7 @@ const takeoffTool: GridTool = {
     const lines = [
       `Walls: ${t.walls.map((w) => `${w.kind} ${lengthText(w.gross, units)} (${w.count} wall${w.count === 1 ? '' : 's'}; ${lengthText(w.net, units)} less openings)`).join('; ')}.`,
       ...(t.columns === undefined ? [] : [columnsLine(t.columns, units)]),
+      ...(t.bays === undefined && t.ramps === undefined ? [] : parkingLines(t.bays ?? [], t.ramps ?? [], units)),
       'By room: floor and ceiling, skirting, wall face to plaster.',
       ...t.rooms.map((r) => `  ${q(r.name)}: floor ${areaText(r.floorArea, units)}, ceiling ${areaText(r.ceiling, units)}, skirting ${lengthText(r.skirting, units)}, wall face ${areaText(r.wallFace, units)} (${r.openingsOff.toFixed(2)} m² of openings off, walls ${r.height === null ? 'none' : `${r.height.toFixed(2)} m`} high)`),
       `Totals: floor ${areaText(t.totals.floorArea, units)}, ceiling ${areaText(t.totals.ceiling, units)}, skirting ${lengthText(t.totals.skirting, units)}, wall face ${areaText(t.totals.wallFace, units)}.`,
@@ -800,6 +832,7 @@ const takeoffTool: GridTool = {
       ...(wallTypes.length === 0 ? [] : [WALL_TYPE_RULE]),
       ...(finishes === null ? [] : [FINISH_RULE]),
       ...(t.columns === undefined ? [] : [columnRule()]),
+      ...(t.bays === undefined && t.ramps === undefined ? [] : [parkingRule()]),
       'For a first estimate (finishes, reveals, walls by thickness, doors and windows by size, slab, roof) and a cost from the person\'s rates, ask with for=estimate.',
     ]
     return { text: lines.join('\n'), data }

@@ -87,7 +87,7 @@ describe('EL-15: the narrow flat, measured as numbers', () => {
     // What it could not tell and what it did not look at, plainly.
     expect(text).toContain('Grid cannot tell whether there is a step between the ground outside and the floor inside door "door-entrance": the plan states no ground level for the site (site.ground).')
     expect(text).toContain('Not looked at:\n  - the swing and weight of a door leaf')
-    expect(text).toContain('  - ramps: the plan cannot state one, so no slope, length or landing is measured;')
+    expect(text).toContain('  - ramps: a ramp the plan states between two floors is for vehicles and is not measured here, and one within a floor cannot be stated, so no slope, length or landing is measured;')
     expect(data.notLookedAt.length).toBeGreaterThan(5)
     // With no brief and no confirmed figure, nothing is set against anything.
     expect(comparisons(text)).toEqual([])

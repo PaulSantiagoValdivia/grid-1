@@ -62,7 +62,7 @@ function byId<T extends { readonly id: string }>(parts: readonly T[]): T[] {
     .map(({ part }) => part)
 }
 
-/** The plan with its walls, rooms, openings, items, stairs, flat types, flats, columns and grids in id order. The plan given is not changed. */
+/** The plan with its walls, rooms, openings, items, stairs, flat types, flats, columns, grids, bays and ramps in id order. The plan given is not changed. */
 export function inIdOrder(plan: FloorPlan): FloorPlan {
   return {
     ...plan,
@@ -77,6 +77,9 @@ export function inIdOrder(plan: FloorPlan): FloorPlan {
     ...(plan.flats !== undefined && { flats: byId(plan.flats) }),
     // CNT-16: the columns and the structural grids.
     ...(plan.columns !== undefined && { columns: byId(plan.columns) }),
-    ...(plan.grids !== undefined && { grids: byId(plan.grids) })
+    ...(plan.grids !== undefined && { grids: byId(plan.grids) }),
+    // CNT-19: the parking bays and the ramps.
+    ...(plan.bays !== undefined && { bays: byId(plan.bays) }),
+    ...(plan.ramps !== undefined && { ramps: byId(plan.ramps) })
   }
 }

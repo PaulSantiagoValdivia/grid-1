@@ -24,6 +24,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Columns and a structural grid](#columns-and-a-structural-grid): `plan/column-too-large`, `plan/column-duplicate-id`, `plan/column-unknown-floor`, `plan/column-through-floor`, `plan/grid-unknown-floor`
+- [Parking bays and ramps](#parking-bays-and-ramps): `plan/bay-too-large`, `plan/bay-duplicate-id`, `plan/bay-unknown-floor`, `plan/bay-number-repeated`, `plan/bays-overlap`, `plan/ramp-too-large`, `plan/ramp-duplicate-id`, `plan/ramp-unknown-floor`, `plan/ramp-same-floor`, `plan/ramp-no-rise`, `plan/ramp-no-run`, `plan/ramp-slope-differs`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
 - [Kinds of door and window, their handing and the part that opens](#kinds-of-door-and-window-their-handing-and-the-part-that-opens): `opening/wide-single-leaf`, `opening/kind-not-for-type`, `opening/part-too-large`, `floor/not-checked-door-swings`
@@ -51,8 +52,8 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name, a building's or a context shape's name, a column's label, a structural grid's name or a grid line's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id, a building's id and floors, a context shape's id and floor, a column's id, floor and `through`, a structural grid's id and floors | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name, a building's or a context shape's name, a column's label, a structural grid's name or a grid line's name, a ramp's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id, a building's id and floors, a context shape's id and floor, a column's id, floor and `through`, a structural grid's id and floors, a parking bay's id, number and floor, a ramp's id and the floors it joins | 64 characters | the same |
 | the trace image's path, the base plan's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
@@ -60,7 +61,7 @@ file never reaches the exports with its letters turned into question marks. A fi
 | the wall types, door types or window types | 50,000 of each | |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
-| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats, flat types, buildings, context shapes, columns or structural grids | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats, flat types, buildings, context shapes, columns, structural grids, parking bays or ramps | 50,000 of each | |
 | the floors one building lists | 50,000, and at least one | |
 | the rooms one flat lists | 50,000, and at least one | |
 | the floors one opening pattern repeats on | 200 | |
@@ -978,6 +979,64 @@ centre lines). Both looks draw it, so it is on the screen, in every picture, on 
 `grid draw`; the DXF puts the lines, circles and names on `GRID-STRUCTURAL-GRID` and the spacing
 with the other dimensions. It is in no measure, check or count, and places no column: a column
 states its own `at`.
+
+## Parking bays and ramps
+
+Read this when the plan holds a car park: a basement, a podium, a garage. A parking bay and a ramp
+are things of their own (CNT-19, C29): a bay is never a room closed by dividing lines, and a ramp
+is never a flat room with its slope in its name, so each floor counts its bays and a ramp's slope
+is a number.
+
+```json
+"bays": [
+  { "id": "bay-1", "number": "1", "at": [4.85, 15.4], "width": 2.5, "length": 4.8, "floor": "B1" },
+  { "id": "bay-9", "number": "9", "at": [17.25, 5.1], "width": 2.5, "length": 5, "turn": 0, "floor": "B1" }
+],
+"ramps": [
+  { "id": "ramp", "name": "Car ramp", "from": "B1", "to": "ground", "width": 3.2, "run": [[1.8, 9], [1.8, 27]], "slope": 16.7 }
+]
+```
+
+- A bay's `at` is its middle, `width` its size across (side to side) and `length` its size along
+  (the way a car drives in), in metres. Unturned its length runs along the plan's y; `turn` turns
+  it counter-clockwise about its middle, in degrees. `number` is its number as marked, as text
+  (`"12"`, `"B1-07"`). `floor` is the floor it is on (unstated, the ground floor).
+- Bays are counted per floor, numbered or not, and a floor's numbers are listed in number order (2
+  before 10). A bay takes nothing off the area of the room it stands in: a car park's floor is its
+  room's. Two bays of one floor with one number (`plan/bay-number-repeated`) and two bays that
+  share more than `bayOverlap` (0.01 m²) of floor (`plan/bays-overlap`) are said, and both are
+  counted. A bay with an id another part has, on a floor the plan does not have, or too large to
+  build is left out of every view, count and export (`plan/bay-duplicate-id`,
+  `plan/bay-unknown-floor`, `plan/bay-too-large`).
+- A ramp is stated once across the two floors it joins, as a [stair](#stairs-that-join-two-floors)
+  is: `from` and `to` are the floors (either may be the higher), `width` its width across its
+  middle line, and `run` that middle line from its edge on `from` to its edge on `to`; each point
+  between is a turn. A straight ramp may say `start` and `end` instead of `run`. Its middle line
+  may run past the floor's outline: a ramp out of a basement ends in the street.
+- The two levels it joins are its floors' levels in metres ([Floor levels and
+  heights](#floor-levels-and-heights)). Grid works out its rise (the upper level less the lower),
+  its length along its middle line on plan, and its slope: the rise per 100 m of that length, in
+  percent, and the same as "1 in n". `slope` states the slope the design means, also in percent.
+  Grid keeps it beside the worked one and never puts one in place of the other; when the two are
+  more than `rampSlopeDiffers` (0.5 percentage points) apart, it says so
+  (`plan/ramp-slope-differs`), with the rise and the length.
+- A ramp with an id another part has, a floor the plan does not have, the same floor at both
+  ends, two floors at one level, a middle line with no length, or a number too large to build is
+  left out (`plan/ramp-duplicate-id`, `plan/ramp-unknown-floor`, `plan/ramp-same-floor`,
+  `plan/ramp-no-rise`, `plan/ramp-no-run`, `plan/ramp-too-large`). A slope within one floor, such
+  as a ramp up to a front door, is not a ramp Grid reads yet.
+- A ramp opens the slab of its upper floor over the whole of it, where the slab is (an opening of
+  kind `ramp`, as a stair opens its), so the 3D view, the IFC's slab and `grid_takeoff`'s slab area
+  leave the hole.
+- Each bay is drawn as its marking, its number in its middle; each ramp on both floors it joins,
+  its outline, its middle line ending in an arrow head pointing up, and its slope written halfway
+  along. Both looks draw them, so they are on the screen, in every picture, on the sheet and in
+  `grid draw`, with entries in the drawing's key. `grid_takeoff` counts the bays on each floor
+  with their numbers and gives each ramp's two levels, rise, length and slope as numbers (`bays`
+  and `ramps`), and `grid describe` says each floor's.
+- Whether a car can turn into a bay or up a ramp is a swept-path check: bays and ramps make one
+  possible, and Grid does not make it. Nothing here says a bay or a ramp is large enough or not
+  too steep: General guidance, not your local rules.
 
 ## Writing on the drawing, and the sketch layer
 

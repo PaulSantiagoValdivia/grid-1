@@ -9,6 +9,8 @@
  */
 import {
   columnDepth,
+  planBayCounts,
+  rampsOnFloor,
   columnRoom,
   roomColumnArea,
   roomShapes,
@@ -159,6 +161,22 @@ export interface FloorFacts {
   readonly leftOut: readonly string[]
   /** CNT-16: the columns standing on this floor, in plan order. Left out on a plan with none. */
   readonly columns?: readonly ColumnFacts[]
+  /** CNT-19: the parking bays on this floor, counted. Left out on a plan with none. */
+  readonly bays?: { readonly count: number; readonly numbers: readonly string[]; readonly unnumbered: number }
+  /** CNT-19: the ramps that start or end on this floor, in plan order. Left out on a plan with none. */
+  readonly ramps?: readonly RampFacts[]
+}
+
+/** CNT-19: a ramp, as the description says it: the floors at its two ends, its rise, length and slope. */
+export interface RampFacts {
+  readonly id: string
+  readonly name: string
+  readonly lower: string
+  readonly upper: string
+  readonly rise: number
+  readonly length: number
+  /** Percent, from the levels and the run. */
+  readonly slope: number
 }
 
 /** CNT-16: a column, as the description says it. */
@@ -557,7 +575,15 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     wallHeight: usualHeight(plan, storey.walls),
     leftOut: [...leftOut.rooms, ...leftOut.openings].sort(byText),
     ...(storey.columns === undefined ? {} : { columns: columnFacts(storey, index) }),
+    ...(plan.bays === undefined ? {} : { bays: bayFacts(storey, floor.id) }),
+    ...(plan.ramps === undefined ? {} : { ramps: rampsOnFloor(plan, floor.id).map((r) => ({ id: r.id, name: r.name, lower: r.lower.floor, upper: r.upper.floor, rise: r.rise, length: r.length, slope: r.slope })) }),
   }
+}
+
+/** CNT-19: a floor's bays, counted: none on a floor with none. */
+function bayFacts(storey: FloorPlan, floorId: string): { count: number; numbers: string[]; unnumbered: number } {
+  const found = planBayCounts(storey).find((count) => count.floor === floorId)
+  return found === undefined ? { count: 0, numbers: [], unnumbered: 0 } : { count: found.count, numbers: [...found.numbers], unnumbered: found.unnumbered }
 }
 
 /** CNT-16: the columns a floor's slice holds that are drawn, each with the room it stands in. */

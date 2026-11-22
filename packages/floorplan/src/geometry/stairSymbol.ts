@@ -47,8 +47,8 @@ const BREAK_ZIG = 1 / 10
 const ARROW_LENGTH = 1 / 4
 const ARROW_SHAPE = 2.5
 
-/** The arrow head at the end of `line`, pointing along its last stretch. */
-function arrowHead(line: readonly Vec2[], width: number): Vec2[] | null {
+/** The arrow head at the end of `line`, pointing along its last stretch (a ramp's too, CNT-19). */
+export function arrowHead(line: readonly Vec2[], width: number): Vec2[] | null {
   const tip = line[line.length - 1]
   const back = line[line.length - 2]
   if (tip === undefined || back === undefined) return null

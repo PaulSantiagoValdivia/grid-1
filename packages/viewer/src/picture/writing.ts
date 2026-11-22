@@ -163,6 +163,9 @@ export function keyEntries(
   // CNT-16: the columns, in the outside walls' tone, and the structural grid's chain lines.
   if ((drawing.columns ?? []).length > 0) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.column') })
   if ((drawing.grids ?? []).length > 0) entries.push({ swatch: 'dash', color: look.dimension, words: say('drawing.key.grid') })
+  // CNT-19: the parking bays' marking and the ramps, drawn in ink.
+  if ((drawing.bays ?? []).length > 0) entries.push({ swatch: 'line', color: look.wall, words: say('drawing.key.bay') })
+  if ((drawing.ramps ?? []).length > 0) entries.push({ swatch: 'line', color: look.wall, words: say('drawing.key.ramp') })
   if (drawing.openings.some((o) => o.type === 'window')) entries.push({ swatch: 'fill', color: look.window, words: say('drawing.key.window') })
   if (shown.swings && drawing.openings.some((o) => o.type === 'door' && o.hinge !== undefined && o.swing !== undefined)) {
     entries.push({ swatch: 'door', color: look.wall, words: say('drawing.key.door') })

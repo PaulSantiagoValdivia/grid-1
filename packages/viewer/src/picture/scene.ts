@@ -23,7 +23,7 @@
  * Pure: no DOM, no React.
  */
 import type { Dimension, Ghosts, OpeningSymbol, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, ScheduleMark, SymbolPart, Vec2, WallDrawnKind } from '@ongrid/floorplan/geometry'
-import { boundsWithDimensions, hatchLines, openingDetail, openingSymbol, poleOfInaccessibility, traceWall, wallDrawnKind } from '@ongrid/floorplan/geometry'
+import { boundsWithDimensions, hatchLines, openingDetail, openingSymbol, poleOfInaccessibility, slopeText, traceWall, wallDrawnKind } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import { openingAt, stripAcross } from '../canvas2d/strip'
@@ -54,6 +54,7 @@ import { faultMarks, undrawnRoomText } from './faults'
 import { noteNodes, sketchNodes } from './writing'
 import { scheduleMarkNodes } from './drawingMarks'
 import { drawingText } from './words'
+import { num } from '@ongrid/floorplan/messages'
 import { siteNodes, sitePaints } from './site'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 
@@ -294,6 +295,13 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     gridLine: { fill: 'none', stroke: look.dimension, 'stroke-width': width('grid'), 'stroke-dasharray': dashes('chain') } as Attrs,
     gridBubble: { fill: look.paper, stroke: look.dimension, 'stroke-width': width('grid') } as Attrs,
     gridName: text(look.dimensionText, TEXT_PX.gridName),
+    // CNT-19: a parking bay's marking and a ramp's outline and middle line, at a stair's weight;
+    // the bay's number and the ramp's slope in the dimensions' text colour.
+    bay: { fill: 'none', stroke: ink, 'stroke-width': width('stair'), 'stroke-linejoin': 'miter' } as Attrs,
+    ramp: { fill: 'none', stroke: ink, 'stroke-width': width('stair') } as Attrs,
+    rampArrow: { fill: ink, stroke: 'none' } as Attrs,
+    bayNumber: text(look.dimensionText, TEXT_PX.bayNumber),
+    rampSlope: text(look.dimensionText, TEXT_PX.rampSlope),
     doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
     doorArc: { fill: 'none', stroke: ink, 'stroke-width': width('doorArc') } as Attrs,
     windowFace: { stroke: ink, 'stroke-width': width('windowFace'), 'stroke-linecap': 'butt' } as Attrs,
@@ -1174,6 +1182,26 @@ function planSceneIn(input: SceneInput): SvgNode[] {
         `stair:${stair.id}`
       )
     )
+  }
+
+  // CNT-19 (C29): each parking bay, its marking and its number in the middle, and each ramp on
+  // both floors it joins, its outline, its middle line ending in an arrow head pointing up and its
+  // slope written halfway along. Drawing, not a target: clicks reach the room underneath.
+  for (const bay of drawing.bays ?? []) {
+    const children: SvgNode[] = [el('path', { 'data-part': 'bay-outline', d: pathOf(bay.outline), ...paint.bay })]
+    if (bay.number !== null) children.push(el('g', { transform: labelTransform(bay.centre, mpp) }, [el('text', { 'data-part': 'bay-number', dy: String(DIMENSION_DY), ...paint.bayNumber }, [bay.number])]))
+    out.push(el('g', { 'data-part': 'bay', 'data-id': bay.id, 'data-number': bay.number ?? undefined, 'pointer-events': 'none', 'aria-hidden': 'true' }, children, `bay:${bay.id}`))
+  }
+  for (const ramp of drawing.ramps ?? []) {
+    const children: SvgNode[] = ramp.pieces.map((piece, index) => el('path', { 'data-part': 'ramp-outline', d: pathOf(piece), ...paint.ramp }, [], String(index)))
+    children.push(el('path', { 'data-part': 'ramp-line', d: virtualPath(ramp.line), ...paint.ramp }))
+    if (ramp.arrow !== null) children.push(el('path', { 'data-part': 'ramp-arrow', d: pathOf(ramp.arrow), ...paint.rampArrow }))
+    children.push(
+      el('g', { transform: labelTransform(ramp.labelAt, mpp) }, [
+        el('text', { 'data-part': 'ramp-slope', dy: String(DIMENSION_DY), ...paint.rampSlope }, [drawingText(drawingWords(), 'drawing.ramp.slope', { slope: num(slopeText(ramp.slope)) })])
+      ])
+    )
+    out.push(el('g', { 'data-part': 'ramp', 'data-id': ramp.id, 'data-end': ramp.end, 'data-slope': slopeText(ramp.slope), 'pointer-events': 'none', 'aria-hidden': 'true' }, children, `ramp:${ramp.id}`))
   }
 
   // A step between rooms at different levels (LVL-7): a solid line in the wall's ink across the
