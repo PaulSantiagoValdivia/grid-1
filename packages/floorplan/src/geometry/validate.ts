@@ -40,6 +40,8 @@ import { pointInPolygon } from './innerPoint'
 import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
+import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
+import { roomZones } from './zones'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
@@ -156,6 +158,18 @@ export function exactMetres(value: number): string {
   const fixed = value.toFixed(6).replace(/0+$/, '')
   const [whole, decimals = ''] = fixed.split('.')
   return `${whole}.${decimals.padEnd(2, '0')}`
+}
+
+/**
+ * LVL-6 (lab VE-5): an opening names a wall, and a window in the roof is no opening in a wall. Said
+ * when an opening names the roof, a room or a floor for its wall, as the lab's agents tried.
+ */
+const ROOF_OPENINGS =
+  'An opening sits in a wall; a window in the roof is a rooflight, stated in its floor\'s roof ' +
+  '(floors[].roof.rooflights). Dormers are not supported yet'
+
+function inTheRoof(plan: FloorPlan, id: string): boolean {
+  return /roof|sky|dormer/i.test(id) || plan.rooms.some((r) => r.id === id) || (plan.floors ?? []).some((f) => f.id === id)
 }
 
 /** Whether a number is one Grid accepts: finite, and no larger than `largest`. */
@@ -281,7 +295,7 @@ function validateOpening(
           opening.id,
           'opening/missing-wall',
           `Opening ${quoted(opening.id)} points at wall ${quoted(opening.wall)}, which is not in the plan` +
-            (meant === null ? '' : `: did you mean ${quoted(meant)}?`),
+            (meant === null ? (inTheRoof(index.plan, opening.wall) ? `. ${ROOF_OPENINGS}` : '') : `: did you mean ${quoted(meant)}?`),
           'error',
           meant === null ? [] : [{ part: 'opening', id: opening.id, wall: meant }]
         ),
@@ -360,6 +374,29 @@ function validateOpening(
       )
     )
     ok = false
+  } else if (!wall.virtual) {
+    // LVL-6: a wall the floor's roof cuts is no higher than the roof over its line.
+    const profile = wallTopProfile(index.plan, wall)
+    const under = profile === null ? null : topBetween(profile, Math.max(0, span.from), Math.min(wallLength, span.to))
+    if (under !== null && head > under.low + overrun) {
+      const tallest = under.low - Math.max(opening.sill, 0)
+      const floor = (index.plan.floors ?? []).find((f) => f.id === floorOf(wall))
+      const range = under.high - under.low > tolerance('joint') ? `${metresText(under.low)} to ${metresText(under.high)} m` : `${metresText(under.low)} m`
+      const wholly = opening.sill >= under.high - overrun
+      issues.push(
+        issue(
+          'opening',
+          opening.id,
+          'opening/above-roof',
+          `Opening ${quoted(opening.id)} reaches ${exactMetres(head)} m on wall ${quoted(wall.id)}, where the roof over ` +
+            `floor ${quoted(floor?.name || floorOf(wall))} cuts the wall to ${range}: ${wholly ? 'it lies wholly above the roof' : 'its top is above the roof'}` +
+            (tallest > 0 ? `; at its sill of ${exactMetres(opening.sill)} m, a height up to ${exactMetres(tallest)} m fits` : ''),
+          'error',
+          tallest > 0 ? [{ part: 'opening', id: opening.id, height: down(tallest) }] : []
+        )
+      )
+      ok = false
+    }
   }
 
   if (opening.sill < -overrun) {
@@ -806,6 +843,27 @@ function validateNesting(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<
   }
 }
 
+/**
+ * Rooms that state `partOf` but are not zones of that room (CNT-8, `zones.ts`): it is not on
+ * their floor, is a zone itself, or does not hold them. They are counted as rooms of their own,
+ * which is what the plan said not to do.
+ */
+function validateZones(index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  for (const fault of roomZones(index).faults) {
+    if (broken.has(fault.zone)) continue
+    issues.push(
+      issue(
+        'room',
+        fault.zone,
+        'room/zone-not-in-room',
+        `Room ${quoted(fault.zone)} is marked as a zone of room ${quoted(fault.room)}, but ${fault.why}. It is counted ` +
+          `as a room of its own. Draw it within the room it is part of, on the same floor, or leave out ${quoted('partOf')}.`,
+        'warning'
+      )
+    )
+  }
+}
+
 function overlapMessage(o: RoomOverlap): string {
   const [a, b] = o.rooms
   const [areaA, areaB] = o.areas
@@ -1008,6 +1066,42 @@ function validateDerived(plan: FloorPlan, issues: Issue[], broken: Set<string>):
 }
 
 /**
+ * LVL-6: what a floor's stated roof holds that cannot be drawn. A rooflight that does not lie on
+ * the roof, or lies across a ridge or a hip, is left out; dormers are not drawn yet, and a roof that
+ * lists any says so. Each floor once, and only where its walls are: a floor's slice keeps the whole
+ * floor list.
+ */
+function validateRoofs(plan: FloorPlan, issues: Issue[]): void {
+  const seen = new Set<string>()
+  for (const floor of plan.floors ?? []) {
+    if (seen.has(floor.id)) continue
+    seen.add(floor.id)
+    if (floor.roof === undefined || !plan.walls.some((wall) => floorOf(wall) === floor.id)) continue
+    const shape = floorRoofShape(plan, floor.id)
+    if (shape === null) continue
+    const name = quoted(floor.name || floor.id)
+    for (const rooflight of floor.roof.rooflights ?? []) {
+      const place = rooflightPlace(shape, rooflight)
+      if (!('problem' in place)) continue
+      issues.push(issue('floor', floor.id, 'floor/rooflight-misplaced', `Rooflight ${quoted(rooflight.id)} in the roof over floor ${name} ${place.problem}: it is left out`))
+    }
+    const dormers = (floor.roof.dormers ?? []).length
+    if (dormers > 0) {
+      issues.push(
+        issue(
+          'floor',
+          floor.id,
+          'floor/dormers-not-drawn',
+          `The roof over floor ${name} lists ${dormers === 1 ? 'a dormer' : `${dormers} dormers`}: dormers are not supported yet, so the roof is drawn ` +
+            'and measured without them, and the headroom under one is the roof\'s',
+          'warning'
+        )
+      )
+    }
+  }
+}
+
+/**
  * Checks the whole plan. Never throws, except for a `tolerances` change that is not one
  * (`withTolerances`).
  */
@@ -1058,6 +1152,7 @@ export function validatePlan(
   }
 
   validateOverlaps(index, broken, issues)
+  validateRoofs(plan, issues)
 
   for (const room of plan.rooms) {
     // Already faulted (e.g. it reaches across floors) — one fault, one issue.
@@ -1114,6 +1209,7 @@ export function validatePlan(
     const spaces = validateSpaces(plan, index, broken, issues, options.leftOutParts ?? [])
     traceItemRooms(plan, spaces, broken, options.leftOutParts ?? [], issues)
     validateNesting(plan, index, broken, issues)
+    validateZones(index, broken, issues)
     validateRoomOverlaps(plan, index, broken, issues)
     validateWallFaults(plan, index, broken, issues)
     // MSG-16: where each opening stands, against the walls that meet its wall.

@@ -60,7 +60,7 @@ describe('MS-4: one corridor that could not be drawn', () => {
 
 describe("W-7: E's 26 fault plans", () => {
   const FAULTS = [...plans.keys()].filter((name) => name.startsWith('E/scenarios/faults/f'))
-  const results: [string, GridResult][] = FAULTS.map((name) => [name, inspectPlan(planText(name))])
+  const results: [string, GridResult][] = FAULTS.map((name) => [name, inspectPlan(planText(name), { country: 'US' })])
 
   it('are 26 plans', () => {
     expect(FAULTS).toHaveLength(26)
@@ -112,9 +112,10 @@ describe("W-7: E's 26 fault plans", () => {
   })
 })
 
+// COD-3: with no place stated no figure is applied, so the hotel states the place its figures are for.
 describe('MS-14: twelve hotel rooms with the same window', () => {
   it('are one line listing the twelve rooms, with every id kept', () => {
-    const result = inspectPlan(planText('C/scenarios/hotel-ground-fixed-glazing.json'))
+    const result = inspectPlan(planText('C/scenarios/hotel-ground-fixed-glazing.json'), { country: 'US' })
     const findings = result.lines.filter((l) => l.kind === 'finding')
     expect(findings).toHaveLength(1)
     const [line] = findings

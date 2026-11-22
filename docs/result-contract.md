@@ -220,6 +220,7 @@ label.
 | `opening/degenerate` | {thing} has no size | a width and a height above 0 |
 | `opening/out-of-wall` | {thing} runs off its wall | its offset and width within the wall's length |
 | `opening/too-tall` | {thing} reaches above the top of its wall | its sill and height together no higher than the wall |
+| `opening/above-roof` | {thing} reaches above the roof over its wall | its sill and height together no higher than the roof over that stretch of its wall |
 | `opening/negative-sill` | {thing} has its sill below the floor | a sill at 0 or above |
 | `opening/overlap` | {thing} overlaps another opening on its wall | openings on one wall that share no part of it |
 | `opening/size-question` | {thing} has a size that may not be meant | the size of a door or window in a building |
@@ -245,6 +246,7 @@ label.
 | `room/not-enclosed` | {thing} is not enclosed by its walls | walls that reach each other round the room |
 | `room/space-mismatch` | {thing} does not match the space its walls enclose | a room that covers the space its walls close off, and no more |
 | `room/inside-no-host` | {thing} is marked as inside another room, but no room holds it | a room on its floor that holds it |
+| `room/zone-not-in-room` | {thing} is marked as a zone of a room it does not lie in | a room on its floor, not a zone itself, that holds the whole zone |
 | `room/overlap` | {thing} overlaps another room | rooms that share no floor, or one marked inside the other |
 | `room/overlap-unknown` | {thing} could not be compared with another room to see whether they overlap | room outlines Grid can compare |
 | `room/wall-listed-twice` | {thing} lists a wall more than once | each wall once in its list |
@@ -269,6 +271,8 @@ label.
 | `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
+| `floor/rooflight-misplaced` | {thing} has a rooflight that does not lie on one slope of its roof | a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips |
+| `floor/dormers-not-drawn` | {thing} lists dormers, which are not supported yet | a roof Grid can draw: dormers are not supported yet |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
 | `floor/spaces-unknown` | The spaces the walls enclose on {thing} could not be worked out | walls Grid can join into spaces |
 | `floor/overlaps-unknown` | The rooms on {thing} were not all compared to see whether they overlap | fewer pairs of rooms lying over each other |
@@ -337,6 +341,7 @@ checks first, then the figure checks, whether it ran or not:
 | `findings` | How many findings it gave. |
 | `readFor` | Only on a figure check that looked at something: the kinds of building its figures were read for, as `["homes"]` (COD-2). |
 | `uses`, `buildings` | Only on a figure check: the room uses it looks at, as `["bedroom"]`, and the kinds of building it runs in, as `["home"]` (CNT-5). It runs too where the plan does not say what kind of building it is. |
+| `wholeRooms` | Only on a figure check that looked at a room with zones (CNT-8): each such room as `{ floor, room, use, zone }`, the use the check applied to the room as a whole, and the zone it read that use from (`null` for the room's own). |
 
 A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
 so a record with no findings says what it is: these parts were looked at and nothing was
@@ -357,8 +362,9 @@ found in them. A `reason` is one of:
 | `no_ground_level` | the plan states no ground level for the site (LVL-4: the check of doors and windows below the ground) |
 | `no_use` | no use stated |
 | `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
+| `part_of_room` | a zone (CNT-8), looked at as part of its room, with its use: the size and escape checks and the route checks look at the room as a whole |
 
-Every reason but `use_not_covered` is something the check could not look at. Where a whole
+Every reason but `use_not_covered` and `part_of_room` is something the check could not look at. Where a whole
 floor or plan was skipped for one of those, a `not-checked` line says so too; `coverage` holds
 the rest, room by room. `grid check` prints the count of rooms looked at by at least one check
 beside the count of lines, then each check with what it looked at and skipped; `grid_check`
@@ -372,7 +378,7 @@ Every area Grid gives carries a state (MSG-2, lab AA-12, AC-9), one of:
   A sum of no rooms is 0, and proven.
 - `not-proven`: a room it should hold could not be measured, or the drawing questions a room's
   outline (`room/not-enclosed`, `room/space-mismatch`, `room/overlap`, `room/overlap-unknown`,
-  `room/inside-no-host`). It names those rooms.
+  `room/inside-no-host`, `room/zone-not-in-room`). It names those rooms.
 - `not-looked-at`: nothing it would be made of could be measured. A room that cannot be drawn
   has no area (`net: null`), never 0.
 
@@ -552,7 +558,15 @@ its text, which says the same.
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). |
+| `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was) and `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
+
+A line of the brief (BRF-1, [brief.md](brief.md)) has a `state` (`met`, `missed`, `open`, or
+`differs` for a size in a room's name), `wish` (`room`, `rooms`, `footprint`, `touch`, a figure's
+name, `open` or `name`), `level` (`must`, `should`, `avoid`; null for a name), `source`
+(`given`, `assumed`; null for a name), `quote`, `asked` and `drawn` (as text, `"4.5"`, `"11.93"`;
+null when there is none), `unit`, `parts` (each `{ kind, id }`) and `text`. A line met says only
+that the drawing holds what was asked; no line is a score, and none says a plan is allowed.
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -583,6 +597,125 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `GRID-SHEET`, `GRID-VIEWPORT`); a room's name and area are attributes of its tag, no longer
   texts on `GRID-LABELS`, which now holds the label only. A layer is listed only when something is
   drawn on it. See [what the DXF holds](commands.md#what-the-dxf-holds-hnd-1).
+
+### 2026-11-22: a camera an agent can set, saved as a named view (VEW-3)
+
+- `grid_view` `kind=3d` takes `bearing`, `tilt`, `distance`, `eye_height`, `lens`, `room`,
+  `camera`, `view`, `turn` and `tilt_by` beside `floor` and `from`; a refusal of an argument
+  another kind takes lists them all. `eye_height` is now 0 to 10,000 m in the schema, and
+  `kind=eye` still refuses one outside 0.3 to 3.
+- `camera` in `grid_view`'s data is the camera record for `kind=3d` and `kind=eye` (null for
+  `plan`), in place of `{ at, heading, tilt, fov }`: `target` (`room`, `point`), `bearing`,
+  `bearingFrom` (`north` or `plan up`), `north`, `tilt`, `distance`, `eyeHeight`, `floor`, `lens`
+  (`focalLength` in mm, `sensor` 36 × 24 mm), `cut`, `floors`, `standingIn` (`room`, `name`,
+  `floor`, `words`: `outside any room` when it stands in none), `position`, `direction`, `up`,
+  `fieldOfView` (vertical, degrees) and `aspectRatio`. The old `at` is `position`, the old
+  `heading` is `direction` on the drawing, the old `tilt` (negative looking down) is `tilt`
+  (positive looking down), the old `fov` is `fieldOfView`. Data adds `view`, the saved view's
+  name or null. The text adds the camera in two lines, how to move it, and the plan's saved
+  views. The 3D view's default `from` is read as before.
+- A new tool, `grid_save_view`, the last of the 30: saves a camera record by name in the plan's
+  `views` ([plan-file.md](plan-file.md#saved-views-and-the-camera-record)), with `replace` and
+  `remove`. Its receipt is the change receipt with `view`, `removed`, `camera` and `views`.
+- `grid_mirror` mirrors the plan's saved views and says so in `changed`.
+
+### 2026-11-22: which rooms get the sun, as a table (BRF-5)
+
+- `grid_measure` takes `what=sun`, with `room` for one room: `answer` holds `measures`
+  (`"geometry, not a daylight result"`), `north` and `yAxis` as `what=facing` gives them, and
+  `rooms`, each with `id`, `name`, `floor`, `floorArea` (net, m²), `windowArea` (m²),
+  `windowToFloor` (the ratio of the two, or null for a room with no floor area) and
+  `windowWalls`. Each window wall has `wall`, `from` and `to` (metres along the wall), `faces`
+  (one of the eight points), `bearing` (degrees clockwise from north), `windows` (`id`, `width`,
+  `height`, `area`), `windowArea` and `depth`: metres, square to the wall, from its inside face
+  to the farthest point of the room's floor. A room with no window in an outside wall has an
+  empty `windowWalls`. Every line of the table in the text starts "Geometry,"; a plan that
+  states no north says so on the line after the label. No new message code and no new tool.
+
+### 2026-11-22: sloped ceilings and roofs (LVL-6)
+
+- A floor may state its `roof` (flat, mono-pitch, gable or hip, with `eaves` and a `pitch` or a
+  `ridge`). Its walls are cut to it, so a wall's top may slope: the new refusal
+  `opening/above-roof` names a door or window whose top lies above the roof over its stretch of
+  wall, with the height that fits at its sill as its fix (`height`), as `opening/too-tall` does.
+- New refusal `floor/rooflight-misplaced`: a rooflight (`floors[].roof.rooflights`) outside the roof
+  or across a ridge or a hip is left out. New warning `floor/dormers-not-drawn`: a roof that lists
+  `dormers` is drawn and measured without them; dormers are not supported yet.
+- `opening/missing-wall` on an opening whose wall names the roof, a room or a floor adds that a
+  window in the roof is a rooflight in its floor's roof, and that dormers are not supported yet.
+- `grid_areas` answers `headroom`: the floor by headroom band (at least `headroomLow`, 1.5 m, and
+  `headroomFull`, 2.2 m, Grid's own figures) over the floors that state their roof, else null;
+  such a floor's rooms carry `headroom` (`bands`, `lowest`, `highest`), and `measures` holds the
+  rule `headroom`.
+- `grid_takeoff`'s roof lines gain `shape` (null for the flat roof Grid lays on the walls), `pitch`,
+  `slopeArea` and `rooflights`; a room's `wallFace` is measured under the top the roof leaves each
+  wall. `grid_measure`'s room height under a stated roof comes `from: "roof"`, with `roof`
+  (`lowest`, `highest`).
+- The IFC writes a wall the roof cuts, and a space under the roof, as a clipped solid
+  (`Clipping`), and a sloped roof as an `IfcRoof` of its type over one clipped `ROOF` slab, with
+  each rooflight an `IfcOpeningElement` filled by an `IfcWindow`.
+
+### 2026-11-22: the brief beside the plan, met or missed after every change (BRF-1)
+
+- A new tool, `grid_write_brief`, writes what the person asked for into `<plan>.brief.json`
+  beside the plan, never the plan, in one call and before the first room if need be: room wishes
+  (`name` or `use`, `count`, `area`, `at_least`, `at_most`, `inside`), `footprint`, `touch`, the
+  person's own `figures` (`door_width`, `corridor_width`, `turning_circle`, `step`,
+  `ceiling_height`, under the heading "The person's own figures: theirs, not from any code or
+  standard.") and `open`. Each wish has a `level` (`must`, `should`, `avoid`) and a `source`
+  (`given`, which needs `quote`, or `assumed`). A figure Grid does not know is refused with the
+  ones it knows. Left without `brief`, it reads the brief and writes nothing. With WRT-6's `grid_square_scan`, CNT-9's three reading tools and WRT-8's `grid_diff` and `grid_mark_start`, the tools are 29.
+- Every change to the plan, and `grid_write_rooms`, adds `brief` to its receipt: `{ file,
+  problem, lines }`, each line met, missed, open or differs, with `asked` and `drawn` in words.
+  The text adds the lines, at most 12, missed first. A brief that can't be read is one line and
+  never refuses the change.
+- Until the brief gives a room a size, a size in the room's name (m², ft², mats) is read against
+  the room, as a line `differs` when it is more than 2% off (`nameSize`).
+- `grid_write_rooms` adds `reminder`: one line when a plan is first written with no brief beside
+  it, never a refusal.
+- No new code in the result record: the brief's lines are in the change receipts, not in
+  `grid_check`. `resultVersion` stays 1.
+
+### 2026-11-22: zones inside one room (CNT-8)
+
+- A room may state `partOf`, the id of the room it is a zone of. A zone is drawn and measured, and
+  counted in no total. New code, worth a look: `room/zone-not-in-room`, a room marked as a zone
+  of a room that is not on its floor, is a zone itself, or does not hold it. It also makes a
+  room's area `not-proven`.
+- The size and escape checks look at a room with zones as a whole. New skip reason in
+  `coverage`: `part_of_room`, a zone; the route checks skip zones the same way. A figure check
+  that looked at a room with zones adds `wholeRooms`, each with the use applied and the zone it
+  was read from. A `room/too-small` line about such a room names its zone in `also`, and its
+  `found` ends ", the whole room with its zones, checked as a bedroom, the use of its zone
+  "Sleeping corner"". The report's finding adds `use` and `zone`. Nothing changes on a plan
+  with no zones.
+- `grid_merge_rooms` takes `zones` and `new_room`. Two rooms of different uses with neither
+  `use` nor `zones` are refused, asking for one (lab AB-9). Every edit's `verdict`, and
+  `grid_compare`'s, ends with any use no room or zone has any more: "The plan now has no room or
+  zone used as kitchen, which the plan before had."
+- `grid_areas` adds `zoneOf` on a zone, and its CSV says `zone` in the `counted` column; the room
+  schedule adds `zones` on a room with zones, and a zone is no row of its own.
+- With CNT-5, CNT-13 and SHT-11 (merged from `main`): a zone may have any of the 27 room uses. The
+  size and escape checks read a room with zones by the uses in their `coverage.uses`, in that
+  order; on a floor the plan says is a kind of building a check does not run in, its zones are
+  skipped as `not_for_building` with every other room. A zone is in no stair stack, so it never
+  has `countedWith`. `grid_measure` with `what=use` on a zone, or `what=route` from or to one,
+  measures its room as a whole and says so; the answer names the zone (`zone`, `fromZone`,
+  `toZone`).
+- With LVL-4 (merged from `main`): a zone has no ceiling, slab, void or opening of its own. In
+  `grid_takeoff` its room's ceiling and the floor's `envelope` are the same as for the room drawn
+  without zones, and a zone used as a stair or lift opens no slab.
+- With WRT-6 and HND-2 (merged from `main`): a zone's `sureness` in `grid_areas` is its own, and
+  is added into no floor's or plan's `sureness`, so those are the same as for the room drawn
+  without zones. In the IFC a zone has no space and no number (`roomNumbers` numbers rooms
+  only), so the room schedule and the spaces number every other room as without zones.
+- With CNT-9 and MSG-5 (merged from `main`): a zone keeps its facts of the person's own, and any
+  number it states stays in the plan but is not read: `roomNumbers`, the schedule, the IFC, the
+  DXF and `grid_find`'s `number` give a zone none. A zones merge gives the merged room what a
+  merged room gets without zones (the first room's number and facts, with the second's it does
+  not carry), and both rooms keep theirs as zones. `grid_count` counts no zone in a group or the
+  total, and its text names the zones left out. The schedule lists each zone's facts under its
+  room. No message code changed.
 
 ### 2026-11-22: what a change did, by what stands where (WRT-8)
 

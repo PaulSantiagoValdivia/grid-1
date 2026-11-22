@@ -12,7 +12,7 @@
  * net or the gross internal area. Rooms Grid could not draw are listed with no area, named, and
  * are in no figure.
  */
-import { MEASURES, planMarks, wallSureness, type GrossMeasure, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
+import { MEASURES, floorOf, floorRoofShape, headroomBands, planMarks, roomHeadroom, wallSureness, type GrossMeasure, type HeadroomBand, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
 import { planAreaFigures } from '@ongrid/floorplan/geometry/areas'
 import type { MarkSource } from '@ongrid/floorplan/types/floorplan'
 import type { Survey, SurveyRoom } from './survey'
@@ -62,7 +62,17 @@ export interface RoomArea {
   /** CNT-12, only on a room with fixtures: the floor they stand on, and the net area less it. */
   readonly fixtures?: number
   readonly free?: number
-  /** WRT-6: only on a room whose walls the plan marks: where they came from and how sure the area is. */
+  /**
+   * LVL-6, only on a room on a floor that states its roof: its floor with at least each headroom
+   * band of height over it, and its lowest and highest height.
+   */
+  readonly headroom?: { readonly bands: readonly HeadroomBand[]; readonly lowest: number; readonly highest: number }
+  /** CNT-8, only on a zone: the room it is part of. Measured, and in no total: its floor is its room's. */
+  readonly zoneOf?: string
+  /**
+   * WRT-6: only on a room whose walls the plan marks: where they came from and how sure the area
+   * is. A zone's band is its own, and is added into no total (CNT-8).
+   */
   readonly sureness?: AreaSureness
 }
 
@@ -87,6 +97,8 @@ export interface FloorAreas {
   /** WRT-6: the net area's sureness, from its rooms'; only when one of them has one. */
   readonly sureness?: AreaSureness
   readonly why: string | null
+  /** LVL-6, only on a floor that states its roof: its rooms' floor by headroom band, those counted in net. */
+  readonly headroom?: readonly HeadroomBand[]
   /** MSG-2: the state of each figure, and the rooms it left out or holds in doubt. */
   readonly states: {
     readonly net: AreaState
@@ -113,7 +125,9 @@ export interface PlanAreas {
   readonly reader: ReaderMeasure
   /** Why a gross figure is not known, in a sentence; null when both are. */
   readonly grossWhy: string | null
-  /** The three measures, each with what it measures, does not take off and cannot say. */
+  /** LVL-6: the floor by headroom band, over the floors that state their roof; null when none does. */
+  readonly headroom: readonly HeadroomBand[] | null
+  /** The three measures, each with what it measures, does not take off and cannot say, and area by headroom where a floor states its roof. */
   readonly measures: readonly MeasureRule[]
   readonly rules: readonly string[]
   readonly notes: readonly string[]
@@ -138,6 +152,11 @@ export interface AreasRequest {
 }
 
 const CIRCULATION = new Set(['corridor', 'stair'])
+
+/** Bands of several rooms or floors added up, band by band. */
+function addBands(lists: readonly (readonly HeadroomBand[])[]): HeadroomBand[] {
+  return headroomBands().map((height) => ({ height, area: lists.reduce((total, bands) => total + (bands.find((b) => b.height === height)?.area ?? 0), 0) }))
+}
 
 const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0)
 
@@ -171,6 +190,9 @@ function sumSureness(rooms: readonly RoomArea[], total: number): AreaSureness | 
   const source = sure.some((room) => room.sureness!.source === 'scanned') ? 'scanned' : sure[0]!.sureness!.source
   return { source, plusMinus, percent: plusMinus === null || total <= 0 ? null : (100 * plusMinus) / total }
 }
+/** The rooms the totals count: no outside room, no zone (CNT-8), no stair room counted with the one below (SHT-11). */
+const inTotals = (room: RoomArea): boolean => !room.outside && room.zoneOf === undefined && room.countedWith === undefined
+
 const key = (floor: string, id: string): string => `${floor}\u0000${id}`
 
 export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas {
@@ -182,6 +204,13 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     ...(request.gross ? { gross: request.gross } : {}),
   })
   const { taken } = planFixtures(survey.plan, request.floors)
+  // LVL-6: a room on a floor that states its roof has its floor by headroom band.
+  const headroomOf = (floor: string, id: string, net: number | null): Pick<RoomArea, 'headroom'> => {
+    if (net === null || floorRoofShape(survey.plan, floor) === null) return {}
+    const room = survey.plan.rooms.find((r) => r.id === id && floorOf(r) === floor)
+    const found = room === undefined ? null : roomHeadroom(survey.plan, room)
+    return found === null ? {} : { headroom: { bands: found.bands, lowest: found.lowest, highest: found.highest } }
+  }
   const doubts = roomDoubts(survey.plan, figures.floors.map((f) => f.floor))
   // Lab plans repeat room ids from floor to floor, so a room is found by its floor too.
   const shapes = new Map(survey.rooms.map((room) => [key(room.facts.floor, room.facts.id), room.facts.shape] as const))
@@ -215,17 +244,27 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
         // Fixtures add no area and take none from the totals: only the room's free floor (CNT-12).
         // A room that could not be measured has no free floor either (MSG-2).
         ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
+        ...headroomOf(f.floor, id, net),
+        ...(figure === undefined || figure.zoneOf === null ? {} : { zoneOf: figure.zoneOf }),
         ...(sureness === undefined ? {} : { sureness }),
       }
     })
-    // A stair room counted with the one below is in no total (SHT-11).
-    const inside = rooms.filter((room) => !room.outside && room.countedWith === undefined)
+    // CNT-8: a zone is in no total; its floor is counted in its room's, by the zone's use.
+    // SHT-11: nor is a stair room counted with the one below, nor the zones of such a room.
+    const inside = rooms.filter(inTotals)
+    const zones = rooms.filter((room) => !room.outside && room.zoneOf !== undefined && inside.some((r) => r.id === room.zoneOf))
+    const useOf = (room: RoomArea): string => room.use ?? (room.zoneOf === undefined ? null : rooms.find((r) => r.id === room.zoneOf)?.use) ?? NOT_SAID
     const byUseState: Record<string, AreaState> = {}
-    for (const use of [...new Set(inside.map((room) => room.use ?? NOT_SAID))]) byUseState[use] = sumState(inside.filter((room) => (room.use ?? NOT_SAID) === use))
+    const usesHere = [
+      ...inside.filter((room) => !zones.some((zone) => zone.zoneOf === room.id) || Object.hasOwn(f.byUse, useOf(room))).map(useOf),
+      ...zones.map(useOf),
+    ]
+    for (const use of [...new Set(usesHere)]) byUseState[use] = sumState([...inside, ...zones].filter((room) => useOf(room) === use))
     const circulating = inside.filter((room) => CIRCULATION.has(room.use ?? ''))
     // A use whose rooms could none be measured is still listed, at 0 and not looked at (MSG-2).
     const byUse: Record<string, number> = { ...f.byUse }
     for (const use of Object.keys(byUseState)) byUse[use] ??= 0
+    const headroom = inside.some((room) => room.headroom !== undefined) ? addBands(inside.flatMap((room) => (room.headroom ? [room.headroom.bands] : []))) : null
     const floorSure = sumSureness(inside, f.net)
     return {
       floor: f.floor,
@@ -242,6 +281,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       unclaimed: f.unclaimed ?? 0,
       ...(floorSure === undefined ? {} : { sureness: floorSure }),
       why: f.why,
+      ...(headroom === null ? {} : { headroom }),
       states: {
         net: sumState(inside),
         byUse: byUseState,
@@ -276,7 +316,10 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   for (const stair of survey.facts.connections.stairs) {
     notes.push(`Stair ${JSON.stringify(stair.id)} covers ${stair.footprint.toFixed(2)} m² in the rooms it stands in; it adds no floor of its own.`)
   }
-  const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter((room) => !room.outside)), net)
+  const floorBands = floors.flatMap((f) => (f.headroom ? [f.headroom] : []))
+  // WRT-6: the plan's band adds up the rooms its net counts, so no zone's band (CNT-8) and no
+  // stair room's counted with the one below (SHT-11) is added twice.
+  const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter(inTotals)), net)
   return {
     floors,
     net,
@@ -289,8 +332,9 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     leftOut: figures.leftOut,
     reader: figures.reader,
     grossWhy,
-    measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal],
-    rules: [...Object.values(AREA_RULES), ...(taken.size === 0 ? [] : [FIXTURE_RULES.free]), ...(sureness === undefined ? [] : [SURENESS_RULE])],
+    headroom: floorBands.length === 0 ? null : addBands(floorBands),
+    measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal, ...(floorBands.length === 0 ? [] : [MEASURES.headroom])],
+    rules: [...Object.values(AREA_RULES), ...(taken.size === 0 ? [] : [FIXTURE_RULES.free]), ...(floorBands.length === 0 ? [] : [MEASURES.headroom.measures]), ...(sureness === undefined ? [] : [SURENESS_RULE])],
     notes,
     ...(sureness === undefined ? {} : { sureness }),
     states: {

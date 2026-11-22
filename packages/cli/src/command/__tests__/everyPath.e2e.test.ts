@@ -198,6 +198,9 @@ function tool(name: string, args: Record<string, unknown>): (path: string) => Ca
 }
 
 /** The other arguments each tool needs to get as far as its paths. `@` is the path under test. */
+/** VEW-3: a camera record as grid_view returns it, enough of it to save. */
+const CAMERA = { target: { room: null, point: [5, 4, 1] }, bearing: 135, tilt: 30, distance: 20, lens: { focalLength: 35 }, cut: null }
+
 const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_compare: [
     { arg: 'plans', call: tool('grid_compare', { plans: ['@', PLAN] }), given: asIs },
@@ -227,6 +230,8 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_mark_start: [{ arg: 'plan', call: tool('grid_mark_start', { plan: '@' }), given: asIs }],
   // MSG-10: its marks file is the plan's name beside the plan, never a path of its own.
   grid_mark_seen: [{ arg: 'plan', call: tool('grid_mark_seen', { plan: '@', line: 1, code: 'room/too-small', reason: 'Seen', by: 'Owner' }), given: asIs }],
+  // BRF-1: its brief is the plan's name beside the plan, never a path of its own.
+  grid_write_brief: [{ arg: 'plan', call: tool('grid_write_brief', { plan: '@', brief: { rooms: [{ name: 'Lounge', area: 20, level: 'must', source: 'assumed' }] } }), given: asIs }],
   grid_write_rooms: [{ arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` }],
   grid_change_opening: [
     { arg: 'plan', call: tool('grid_change_opening', { plan: '@', opening: 'bed2-door', hinge: 'end' }), given: asIs },
@@ -266,6 +271,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_square_scan: [
     { arg: 'plan', call: tool('grid_square_scan', { plan: '@', all: true }), given: asIs },
     { arg: 'out', call: tool('grid_square_scan', { plan: PLAN, all: true, out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  // VEW-3: a camera saved by name, written into the plan.
+  grid_save_view: [
+    { arg: 'plan', call: tool('grid_save_view', { plan: '@', name: 'Corner', camera: CAMERA }), given: asIs },
+    { arg: 'out', call: tool('grid_save_view', { plan: PLAN, name: 'Corner', camera: CAMERA, out: '@.json' }), given: (p) => `${p}.json` },
   ],
 }
 

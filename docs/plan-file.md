@@ -12,8 +12,10 @@ section explains. Rooms text, the main way to write a plan, is in
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
 - [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
 - [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
+- [Sloped roofs and ceilings](#sloped-roofs-and-ceilings): `opening/above-roof`, `floor/rooflight-misplaced`, `floor/dormers-not-drawn`, `opening/missing-wall`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
+- [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
@@ -22,6 +24,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
 - [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
+- [Saved views, and the camera record](#saved-views-and-the-camera-record): a camera saved by name, as Grid sets it and as BCF writes it
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -34,15 +37,15 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor, stair or rooflight, a wall a room or an opening names, a part's floor, the floors a stair joins, the room a zone is part of | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
-| walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, annotations, sketch items or saved views | 50,000 of each | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
-| the lowered zones of one ceiling | 50,000 | |
+| the lowered zones of one ceiling, the rooflights of one roof | 50,000 | |
 | the walls a room lists | 2,000 | |
 
 A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
@@ -326,6 +329,58 @@ foot lies under the ground is named, wholly or in part (`opening/below-ground`).
 ground floor is the floor at level 0, as before, and nothing is named: every report says the
 check needs the ground level. A ground level for each side of a house on a slope comes later.
 
+## Sloped roofs and ceilings
+
+A floor may state its roof (LVL-6), and its walls and rooms are cut to it. Unstated, the roof is
+flat on the floor's walls, as above.
+
+```json
+{ "floors": [{ "id": "attic", "name": "Attic", "level": 1,
+               "roof": { "shape": "gable", "eaves": 1.0, "ridge": 3.6, "ridgeRuns": "east-west",
+                         "rooflights": [{ "id": "rl-1", "at": [2, 1.5], "width": 0.78, "length": 1.18 }] } }] }
+```
+
+| Field | What it states |
+|---|---|
+| `roof.shape` | `flat`, `mono-pitch`, `gable` or `hip` |
+| `roof.eaves` | Metres above the floor's level to the roof's underside at its eaves, on the outside walls' lines. A flat roof's underside is level at this height |
+| `roof.pitch` | Degrees, above 0 and under 90. A sloped roof states its pitch or its ridge, never both |
+| `roof.ridge` | Metres above the floor's level to the underside at the top: the ridge of a gable or a hip, the high side of a mono-pitch roof. Higher than the eaves |
+| `roof.ridgeRuns` | A gable's only: `east-west` or `north-south`, along the drawing's sides. Unstated, along the longer sides |
+| `roof.highSide` | A mono-pitch roof's, and needed there: the side it rises to, `north`, `east`, `south` or `west` |
+| `roof.rooflights` | Windows in the slope: each an `id`, `at` (its middle on the plan), `width` along the slope's eaves and `length` up the slope, both measured on the slope |
+| `roof.dormers` | Not supported yet: a roof that lists any is drawn and measured without them (`floor/dormers-not-drawn`) |
+
+Where the roof stands: its eaves run round the smallest rectangle that holds the lines of the
+floor's outside walls (every solid wall when none is stated `exterior`), turned to the longest of
+them, so a plan drawn off the drawing's axes gets a roof square to its walls. A gable's two planes
+rise from the two sides along its ridge, a hip's four from all four sides at one pitch, a
+mono-pitch roof's one from the side opposite its high side. Over an L or a T the planes cover the
+whole rectangle: there are no valleys yet.
+
+What it cuts:
+
+- **Walls.** A wall standing inside the roof's rectangle is no higher, along its line, than the
+  roof's underside over it: a gable is a gable, and a partition under the slope follows it. A wall
+  that states no height, on a floor that states its roof, rises to the roof's top and is cut to it.
+  A door or window whose top lies above the roof over its stretch of wall is refused, with the
+  height that fits at its sill (`opening/above-roof`): the views, the exports and the checks read
+  the cut top, and a floor's height (when it states none) is its tallest wall as cut.
+- **Rooms.** A room's ceiling is the roof's underside, under its own `height` when it states one.
+  Its floor is reported by headroom band ([areas.md](areas.md)), and its height in `grid_measure`
+  is given from its lowest to its highest. A stated ceiling and its lowered zones lie only where
+  the roof stands higher than them.
+- **Rooflights.** Each lies on one slope of the roof, wholly inside it; one that leaves the roof or
+  crosses a ridge or a hip is left out (`floor/rooflight-misplaced`). An opening sits in a wall:
+  an opening whose `wall` names the roof, a room or a floor is told that a window in the roof is a
+  rooflight (`opening/missing-wall`).
+
+The roof is drawn in the 3D view and the OBJ and glTF files on its slopes, open at its rooflights;
+in the IFC it is an `IfcRoof` of its type (`FLAT_ROOF`, `SHED_ROOF`, `GABLE_ROOF`, `HIP_ROOF`) over
+one `IfcSlab` `ROOF`, each rooflight an `IfcOpeningElement` filled by an `IfcWindow`. A wall the
+roof cuts, and a space under it, are clipped solids, so the file holds the volume under the roof.
+A parapet stands on a flat roof only. Rooms text writes the roof as it is, on a `raw floor` line.
+
 ## Floor no room claims
 
 Besides the findings, `grid check` lists problems in the drawing. Some of them come from the
@@ -369,6 +424,56 @@ outline of the room around it stays whole; only its area changes.
 | `room/inside-no-host` | A room marked `inside` that no room on its floor holds, with how much of it lies outside the room that holds most of it. It is counted on its own |
 | `room/overlap-unknown` | Two rooms that could not be compared, with the reason |
 | `floor/overlaps-unknown` | A floor whose rooms were not all compared: the plan has more than 200,000 pairs of rooms lying over each other (thousands of copies piled in one place), and Grid stopped there |
+
+## Zones inside one room
+
+An open-plan room holds several uses: a studio where you sleep, cook and sit. Draw the room once,
+round its own walls, and each zone as a room of its own that names the room in `partOf`:
+
+```json
+"rooms": [
+  { "id": "studio", "name": "Studio", "boundary": ["ext-s", "ext-e", "bath-s", "bath-w", "ext-n", "ext-w"] },
+  { "id": "sleep", "name": "Sleeping corner", "use": "bedroom", "boundary": ["ext-s", "sleep-e", "kit-s", "ext-w"], "partOf": "studio" }
+]
+```
+
+A zone's outline lies inside its room's, along the room's walls and dividing lines (virtual
+walls) of the zone's own. The two overlap on purpose:
+
+- The room is the place. It is measured, counted, reached and checked as a whole. A door or a
+  fixture in it is in the room, whichever zone it is in, and the 3D view, the IFC and the floor
+  slabs have the room's floor only. A zone's `ceiling`, `void` or floor offset is not read: the
+  ceiling, the slab and any opening in it are the room's ([Slabs, roofs, ceilings and the
+  ground](#slabs-roofs-ceilings-and-the-ground)), and a zone used as a stair or a lift opens no
+  slab of its own.
+- A zone is named and measured, and is in no total: `grid_areas` lists it with its room
+  (`zoneOf`) and gives its floor to its own use in the area by use, the room schedule lists it
+  under its room, and the takeoff, the estimate and the comparison of two plans count its floor
+  once, in its room.
+- The size and escape checks look at the room as a whole, at its whole area, with the room's own
+  use or, when the check does not cover that, its zones' uses: a studio with a sleeping corner is
+  checked as a room someone sleeps in, and a finding names the zone it read the use from. The
+  studio drawn with zones and drawn as one bedroom get the same result. In the record's
+  coverage, the zones are skipped as `part_of_room` and the room is listed in `wholeRooms` with
+  the use applied.
+- The overlap check leaves a zone and its room alone, and a dividing line that only zones list
+  divides no room and makes no space of its own. Two zones of one room that share floor are
+  still named (`room/overlap`).
+
+A room is a zone only when the room it names is on its floor, is not a zone itself, and holds all
+of it. Otherwise it is counted as a room of its own and named:
+
+| Code | What it says |
+|---|---|
+| `room/zone-not-in-room` | A room marked as a zone of another that is not on its floor, is a zone itself, or does not hold it, with how much of it lies outside |
+
+Merging two rooms of different uses (`grid_merge_rooms`, `grid edit merge`) asks for the merged
+room's use, or keeps both as zones with `zones`: the stretch of wall between them becomes a
+dividing line, each keeps its id, name and use, and a new room holds them.
+
+`partOf` is optional and never defaulted, so a plan written before it reads with no key added
+(version 1). Rooms text has no word for it yet: a floor with zones is read back in Grid's own
+terms, so nothing is lost.
 
 ## Rooms with holes
 
@@ -629,7 +734,9 @@ North is drawn and written where the plan states it:
   A plan that states no north is answered with north taken as the top of the drawing, and the
   answer says first that this is not known to be north. `grid describe` adds the same in a few
   lines, with which real way each side of the drawing faces, for a plan that states its north
-  or its front.
+  or its front. `grid_measure` with `what=sun` lists each room's window walls, the way each faces,
+  the window area against the floor area and the depth from each wall, as a table of geometry
+  ([tool-server.md](tool-server.md#which-rooms-get-the-sun-a-table-of-geometry)).
 
 A rotation cannot undo a mirror: a plan drawn with its y running down the page is the
 building's mirror image, and no north makes it right. So the plan says which way its y runs.
@@ -737,6 +844,60 @@ text gives no height with none, so its floor's height or the default reaches it 
 read; and Grid's edits never write a filled-in value into a file that stated none: a wall cut in
 two, or a new wall beside walls with no stated height, states none either. A wall that takes its
 floor's height states none of its own, so the height is said once, on the floor.
+
+## Saved views, and the camera record
+
+Every 3D picture Grid takes, in `grid_view`, `grid draw --view` and the app's 3D view when it is
+handed one, comes from one camera record (VEW-3, `cameraRecord` in
+`packages/floorplan/src/geometry/camera.ts`). A plan may keep cameras by name in `views`, saved
+with `grid_save_view`; called up again (`grid_view view=…`, `grid draw --view …`) a view gives
+the same record, digit for digit, while the plan keeps what it was taken of. A plan with no
+`views` reads as before.
+
+A camera is set by six things. Grid works the rest out from them, and reads only these when a
+record is sent back or a view is called up:
+
+| Field | What it sets |
+|---|---|
+| `target` | What the camera is pointed at: `point`, `[x, y, z]` in metres, and `room`, the room it is for (left out for the building as a whole). Grid points a camera at a room at the middle of its floor, half way up its storey |
+| `bearing` | The compass bearing from the target to the camera, in degrees clockwise. With `bearingFrom` `north` it is read from the north the plan states, which the view keeps as `north` (degrees counter-clockwise from the top of the drawing, as the plan's `north`); with `plan up`, the plan states no north and bearing 0 is the top of the drawing. A view saved before the plan's north changed keeps its place, and is given back with its bearing from the north stated now |
+| `tilt` | Degrees the camera looks down at the target, from level; below 0 it looks up. At most 89 either way (`cameraTilt`) |
+| `distance` | Metres from the camera to the target, at least 0.1 (`cameraClosest`) |
+| `lens` | `focalLength` in millimetres, 8 to 800 (`lensShortest`, `lensLongest`), on `sensor` `{ "width": 36, "height": 24 }` |
+| `cut` | The floor shown cut away: it and the floors below it are drawn, nothing above it. Left out, the whole building |
+
+Then, worked out and written for other programs, with no say in the camera:
+
+| Field | What it is |
+|---|---|
+| `floors` | The floors drawn, lowest first |
+| `position`, `direction`, `up` | The camera as the open BCF format writes a perspective camera: where it stands, the unit direction it looks and its unit up, with no roll, in the plan's metres: x and y as the plan's, z up from the ground floor's floor level as the 3D model stands its floors (a plan of one floor stands it at 0) |
+| `fieldOfView` | BCF's field of view: the vertical angle, in degrees, of the lens on its sensor |
+| `aspectRatio` | The picture's width over its height: 1.5, as the sensor and Grid's 1200 by 800 pictures are |
+
+```json
+"views": [
+  { "name": "Garden corner", "target": { "room": "living", "point": [6.9625, 5.0125, 1.3] },
+    "bearing": 200, "bearingFrom": "plan up", "tilt": 25, "distance": 11.121147,
+    "lens": { "focalLength": 28.970563, "sensor": { "width": 36, "height": 24 } },
+    "floors": ["ground"], "position": [3.515217, -4.458833, 6], "direction": [0.309976, 0.851651, -0.422618],
+    "up": [0.144544, 0.397131, 0.906308], "fieldOfView": 45, "aspectRatio": 1.5 }
+]
+```
+
+The record an answer carries adds what the plan says about the camera now: `eyeHeight`, metres
+from `floor`'s floor level up to the camera (the target room's floor, else the floor cut away,
+else the ground floor), and `standingIn`, the room the camera stands in, or `outside any room`
+when it stands in none: outside the walls, inside a wall, above a storey's height or under its
+floor (lab S-16). Every number is rounded to a millionth.
+
+A view's name follows the plan's text rule, and names a view, never a person: it travels with the
+plan file. When a view cannot be read (a tilt past 89 degrees, a lens of 2 mm), the plan's `views`
+are left out as a value that cannot be read (`plan/value-left-out`, [A fault stays where it
+is](#a-fault-stays-where-it-is)), and the rest of the plan is read.
+`grid_mirror` mirrors each saved view with the plan; the other changes leave them where they are,
+so a view of a room that moves keeps pointing where the room was. The sheet does not draw them
+(`coverage.ts`): it takes its own pictures.
 
 ## People are kept out of the plan
 

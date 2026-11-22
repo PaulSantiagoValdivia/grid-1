@@ -15,6 +15,10 @@
  * - **a ceiling** in each room that states one: at the room's height, less its lowered zones, each
  *   at its own height.
  *
+ * A zone of a room (CNT-8, `partOf`) is part of its room's floor: it fills no courtyard, opens no
+ * slab as a void or a stair or lift room, has no sunken slab and no ceiling of its own, so a room
+ * with zones gives the same slab, roof and ceiling as the room drawn without them.
+ *
  * The opening over a stair: a stair the plan states (LVL-3) opens the upper floor over its flights
  * and landings. Rooms used as a stair on two neighbouring floors that lie one over the other
  * (`floorJoins`), with no stated stair between them, open the upper floor over the floor they
@@ -43,7 +47,10 @@ import { tryRoomShape } from './room'
 import { roomFloorOffset } from './steps'
 import { brokenOnFloor } from './validate'
 import { tolerance } from './tolerances'
+import { roomZones } from './zones'
 import type { Vec2 } from './vec2'
+import type { RoofShape } from './plan'
+import { floorRoofShape, regionAtLeast, roofFacets, rooflightPlace, type RoofPlane, type RooflightPlace, type RoofShapeOverFloor } from './roofs'
 
 /** What a slab is open over. */
 export type SlabOpeningKind = 'stair' | 'stair-room' | 'lift' | 'void'
@@ -90,18 +97,42 @@ export interface FloorSlab {
   readonly sunken: readonly SunkenSlab[]
 }
 
+/** One plane of a roof (LVL-6) and the part of the roof under it. */
+export interface RoofFacetPieces {
+  /** The underside's height over the plan, above the floor's level. Level on a flat roof. */
+  readonly plane: RoofPlane
+  readonly pieces: MultiPolygon
+  /** On plan, in square metres. */
+  readonly area: number
+  /** On the slope: the plan area over the cosine of the plane's pitch. */
+  readonly slopeArea: number
+}
+
 /** The roof over the parts of a floor with nothing above. */
 export interface FloorRoof {
   readonly pieces: MultiPolygon
   /** In square metres, on plan: a flat roof's area. */
   readonly area: number
-  /** The underside, on the floor's walls: its floor level plus its clear height. */
+  /**
+   * The underside, on the floor's walls: its floor level plus its clear height. Under a roof the
+   * floor states (LVL-6), its floor level plus the roof's eaves: a sloped roof's lowest line.
+   */
   readonly bottom: number
   readonly thickness: number
   /** The floors above whose outlines were taken off; none for the top level. */
   readonly under: readonly string[]
-  /** The outside walls rising past the roof's edge, when the floor states a parapet. */
+  /** The outside walls rising past the roof's edge, when the floor states a parapet. Flat roofs only. */
   readonly parapet: { readonly height: number; readonly pieces: MultiPolygon } | null
+  /** LVL-6: the shape the floor states for its roof; null for the flat roof Grid lays on its walls. */
+  readonly shape: RoofShape | null
+  /** Its pitch in degrees; 0 when flat. */
+  readonly pitch: number
+  /** The roof cut by the planes of its underside: one level set of pieces when it is flat. */
+  readonly facets: readonly RoofFacetPieces[]
+  /** The roof's area on its slope, in square metres: `area` when it is flat. */
+  readonly slopeArea: number
+  /** Its rooflights, each wholly on one plane of it; one that is not is left out (the check names it). */
+  readonly rooflights: readonly RooflightPlace[]
 }
 
 export interface FloorEnvelope {
@@ -149,8 +180,9 @@ function roomPieces(room: Room, index: PlanIndex): MultiPolygon | null {
  */
 function openToTheSky(outline: FloorOutline | FloorOutlineUnknown, slice: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>): FloorOutline | FloorOutlineUnknown {
   if (!outlineKnown(outline) || outline.pieces.length === 0) return outline
+  const zones = roomZones(index).zoneOf
   const shapes = slice.rooms
-    .filter((room) => !broken.has(room.id))
+    .filter((room) => !broken.has(room.id) && !zones.has(room.id))
     .map((room) => tryRoomShape(room, index))
     .filter((shape): shape is NonNullable<typeof shape> => shape !== null && shape.polygon.length >= 3)
   const holes = shapes.flatMap((shape) => shape.holes.filter((hole) => hole.length >= 3).map(ringOf))
@@ -177,7 +209,7 @@ export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): Pl
   const levels = [...new Set(floors.map(levelOf))].sort((a, b) => a - b)
   const lowest = levels[0] ?? 0
 
-  const slices = new Map<string, { slice: FloorPlan; index: PlanIndex; broken: ReadonlySet<string> }>()
+  const slices = new Map<string, Slice>()
   const sliceOf = (id: string) => {
     let found = slices.get(id)
     if (found === undefined) {
@@ -187,6 +219,8 @@ export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): Pl
     }
     return found
   }
+  // CNT-8: a zone of a room, on its floor.
+  const isZone = (floorId: string, room: string): boolean => roomZones(sliceOf(floorId).index).zoneOf.has(room)
   const outlines = new Map<string, ReturnType<typeof slabOutline>>()
   const outlineOf = (id: string) => {
     let found = outlines.get(id)
@@ -219,7 +253,7 @@ export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): Pl
       return { floor: floor.id, outline: [], outlineArea: 0, slab: null, roof: null, roofKnown: true, why: 'its walls close no floor, so it has no outline for a slab or a roof' }
     }
     const storey = elevations.floors.get(floor.id) ?? { floorLevel: 0, clearHeight: 0 }
-    const slab = slabOf(plan, floor, own, storey.floorLevel, levelOf(floor) === lowest, sliceOf(floor.id), shafts ? joinsOnce : null)
+    const slab = slabOf(plan, floor, own, storey.floorLevel, levelOf(floor) === lowest, sliceOf(floor.id), shafts ? joinsOnce : null, isZone)
 
     // The roof: the outline less every floor on the next level up.
     const next = levels.find((level) => level > levelOf(floor))
@@ -236,7 +270,9 @@ export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): Pl
     }
     let roof: FloorRoof | null = null
     if (pieces.length > 0) {
-      const height = floor.parapet !== undefined && Number.isFinite(floor.parapet) && floor.parapet > 0 ? floor.parapet : null
+      const shape = floorRoofShape(plan, floor.id)
+      const sloped = shape !== null && shape.planes.length > 0
+      const height = !sloped && floor.parapet !== undefined && Number.isFinite(floor.parapet) && floor.parapet > 0 ? floor.parapet : null
       let parapet: FloorRoof['parapet'] = null
       if (height !== null) {
         const { slice, index, broken } = sliceOf(floor.id)
@@ -244,13 +280,19 @@ export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): Pl
         const along = band.length === 0 ? [] : cutOutline('intersection', pieces, [union(band)])
         if (along !== null && along.length > 0) parapet = { height, pieces: along }
       }
+      const { facets, rooflights } = roofPieces(shape, pieces, storey.clearHeight)
       roof = {
         pieces,
         area: multiArea(pieces),
-        bottom: storey.floorLevel + storey.clearHeight,
+        bottom: storey.floorLevel + (shape === null ? storey.clearHeight : shape.roof.eaves),
         thickness: SLAB_THICKNESS,
         under: above.map((f) => f.id),
-        parapet
+        parapet,
+        shape: shape === null ? null : shape.roof.shape,
+        pitch: shape === null ? 0 : shape.pitch,
+        facets,
+        slopeArea: facets.reduce((total, f) => total + f.slopeArea, 0),
+        rooflights
       }
     }
     return { floor: floor.id, outline: own.pieces, outlineArea: own.area, slab, roof, roofKnown: true, why: null }
@@ -264,9 +306,48 @@ export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): Pl
   }
 }
 
+const samePlane = (a: RoofPlane, b: RoofPlane): boolean =>
+  Math.abs(a.z0 - b.z0) <= tolerance('joint') && Math.abs(a.gx - b.gx) <= tolerance('joint') && Math.abs(a.gy - b.gy) <= tolerance('joint')
+
+/**
+ * The roof's pieces cut into the planes of its underside (LVL-6), each less the rooflights on it,
+ * and the rooflights that lie wholly on the roof. With no roof stated, one level set of pieces at the
+ * floor's clear height, as LVL-4 laid it.
+ */
+function roofPieces(shape: RoofShapeOverFloor | null, pieces: MultiPolygon, clearHeight: number): { facets: RoofFacetPieces[]; rooflights: RooflightPlace[] } {
+  if (shape === null) {
+    const area = multiArea(pieces)
+    return { facets: [{ plane: { z0: clearHeight, gx: 0, gy: 0 }, pieces, area, slopeArea: area }], rooflights: [] }
+  }
+  const rooflights = (shape.roof.rooflights ?? []).flatMap((rooflight) => {
+    const place = rooflightPlace(shape, rooflight)
+    if ('problem' in place) return []
+    const ring: MultiPolygon = [[ringOf([...place.outline])]]
+    const inside = cutOutline('intersection', pieces, [ring])
+    const whole = Math.abs(multiArea(ring))
+    return inside !== null && Math.abs(multiArea(inside) - whole) <= tolerance('areaReported') ? [place] : []
+  })
+  const facets = roofFacets(shape).flatMap((facet): RoofFacetPieces[] => {
+    let under = cutOutline('intersection', pieces, [[[ringOf([...facet.polygon])]]])
+    if (under === null || under.length === 0) return []
+    const holes = rooflights.filter((r) => samePlane(r.plane, facet.plane)).map((r): MultiPolygon => [[ringOf([...r.outline])]])
+    if (holes.length > 0) under = cutOutline('difference', under, holes) ?? under
+    const area = multiArea(under)
+    const rise = Math.hypot(facet.plane.gx, facet.plane.gy)
+    return [{ plane: facet.plane, pieces: under, area, slopeArea: area * Math.sqrt(1 + rise * rise) }]
+  })
+  return { facets, rooflights }
+}
+
 /** One floor's slab and roof, from the whole plan: `planEnvelope` for that floor alone. */
 export function floorEnvelope(plan: FloorPlan, floor: string, elevations?: BuildingElevations): FloorEnvelope | null {
   return planEnvelope(plan, { floors: [floor], ...(elevations ? { elevations } : {}) }).floors[0] ?? null
+}
+
+interface Slice {
+  readonly slice: FloorPlan
+  readonly index: PlanIndex
+  readonly broken: ReadonlySet<string>
 }
 
 function slabOf(
@@ -275,8 +356,10 @@ function slabOf(
   own: FloorOutline,
   top: number,
   base: boolean,
-  { slice, index, broken }: { slice: FloorPlan; index: PlanIndex; broken: ReadonlySet<string> },
-  joinsOnce: (() => { joins: ReturnType<typeof floorJoins>; rooms: OutlinesByFloor }) | null
+  { slice, index, broken }: Slice,
+  joinsOnce: (() => { joins: ReturnType<typeof floorJoins>; rooms: OutlinesByFloor }) | null,
+  /** Whether a room on a floor is a zone of another (CNT-8): its floor is its room's. */
+  isZone: (floor: string, room: string) => boolean
 ): FloorSlab {
   const stated = floor.slab !== undefined && Number.isFinite(floor.slab) && floor.slab >= 0
   const thickness = stated ? floor.slab! : SLAB_THICKNESS
@@ -300,22 +383,25 @@ function slabOf(
       if (join.kind === 'stair' || join.upper.floor !== floor.id) continue
       // Rooms one over the other that a stated stair already joins: its flights say where the hole is.
       if (join.kind === 'stair-room' && stated.some((s) => s.upper.room === join.upper.room || s.lower.room === join.lower.room)) continue
+      // A zone is in no stair or lift stack (CNT-8): only its room opens the floor.
+      if (isZone(join.lower.floor, join.lower.room) || isZone(join.upper.floor, join.upper.room)) continue
       const lower = rooms.get(join.lower.floor)?.get(join.lower.room)
       const upper = rooms.get(join.upper.floor)?.get(join.upper.room)
       if (lower === undefined || upper === undefined) continue
       add(join.kind, join.via, join.upper.room, cutOutline('intersection', [[ringOf(upper)]], [[[ringOf(lower)]]]))
     }
   }
-  // A room marked as a void has no floor.
+  // A room marked as a void has no floor. A zone's floor is its room's (CNT-8): it is no void, and
+  // it is not sunk, of its own.
   for (const room of slice.rooms) {
-    if (room.void !== true || broken.has(room.id) || floorOf(room) !== floor.id) continue
+    if (room.void !== true || broken.has(room.id) || floorOf(room) !== floor.id || isZone(floor.id, room.id)) continue
     add('void', room.id, room.id, roomPieces(room, index))
   }
 
   // A room whose floor lies below its storey's has its own slab, lower down.
   const sunken: SunkenSlab[] = []
   for (const room of slice.rooms) {
-    if (broken.has(room.id) || room.void === true) continue
+    if (broken.has(room.id) || room.void === true || isZone(floor.id, room.id)) continue
     const offset = roomFloorOffset(room)
     if (!(offset < -tolerance('sameFloorLevel'))) continue
     const shape = roomPieces(room, index)
@@ -341,10 +427,12 @@ export interface CeilingPiece {
  * A room's ceiling (LVL-4), when it states one: the room's footprint at `height` above its floor,
  * less each lowered zone, and each zone, inside the room, at its own height. `height` is the room's
  * stated height, else `storeyHeight` less its floor offset. Null when the room states no ceiling or
- * cannot be drawn. A zone that lies wholly outside the room is left out.
+ * cannot be drawn. A zone that lies wholly outside the room is left out. Null, too, for a zone of a
+ * room (CNT-8, `partOf`): the ceiling over it is its room's, so it has none of its own. Under a
+ * sloped roof the floor states (LVL-6), each piece is only where the roof stands higher than it.
  */
-export function roomCeiling(room: Room, index: PlanIndex, storeyHeight: number): readonly CeilingPiece[] | null {
-  if (room.ceiling === undefined) return null
+export function roomCeiling(room: Room, index: PlanIndex, storeyHeight: number, roof: RoofShapeOverFloor | null = null): readonly CeilingPiece[] | null {
+  if (room.ceiling === undefined || roomZones(index).zoneOf.has(room.id)) return null
   const footprint = roomPieces(room, index)
   if (footprint === null) return null
   const own = room.height !== undefined && Number.isFinite(room.height) && room.height > 0 ? room.height : storeyHeight - roomFloorOffset(room)
@@ -356,5 +444,14 @@ export function roomCeiling(room: Room, index: PlanIndex, storeyHeight: number):
     zones.push({ zone: zone.name ?? String(i + 1), height: zone.height, pieces, area: multiArea(pieces) })
   })
   const rest = zones.length === 0 ? footprint : cutOutline('difference', footprint, zones.map((z) => z.pieces)) ?? footprint
-  return [{ zone: null, height: own, pieces: rest, area: multiArea(rest) }, ...zones]
+  const pieces = [{ zone: null, height: own, pieces: rest, area: multiArea(rest) }, ...zones]
+  if (roof === null || roof.planes.length === 0) return pieces
+  // LVL-6: under a sloped roof a flat ceiling is only where the roof is higher than it; elsewhere
+  // the roof's underside is the ceiling.
+  const offset = roomFloorOffset(room)
+  return pieces.flatMap((piece) => {
+    const region = regionAtLeast(roof, piece.height + offset)
+    const under = region.length < 3 ? [] : cutOutline('intersection', piece.pieces, [[[ringOf(region)]]]) ?? []
+    return under.length === 0 ? [] : [{ ...piece, pieces: under, area: multiArea(under) }]
+  })
 }

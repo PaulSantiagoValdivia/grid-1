@@ -7,7 +7,8 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, limit, planFloors, planOrientation, tolerance, viewSetting, wrapDegrees, type CameraRecord, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
+import { CameraRefused, cameraFor, eyeCamera, lensProblem, settingOfCamera, type CameraAsk } from '../draw/cameraAsk'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
 import { causeText, checkPlan, countsText, coverageSummary, KIND_WORDS, placeText, type PlaceWords, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
@@ -43,8 +44,9 @@ import {
 import { factsText, openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, shownNumber } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
+import { SUN_RULE, sunAnswer } from '../quantities/sun'
 import { figureOf, roomIndicators, USE_RULE, wideRoute, wideRouteLines } from '../quantities/use'
-import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
+import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantities/survey'
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
 import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
@@ -280,6 +282,8 @@ const areasTool: GridTool = {
     netToGross: NULLABLE_NUMBER,
     leftOut: { type: 'array' },
     gross: objectSchema({ measures: listSchema(STRING), chosen: STRING, why: STRING }, ['measures', 'chosen', 'why']),
+    // LVL-6: the floor by headroom band over the floors that state their roof, else null.
+    headroom: { type: ['array', 'null'] },
     measures: listSchema(objectSchema({ measure: STRING, name: STRING, measures: STRING, notTakenOff: STRING, cannotSay: STRING })),
     rules: listSchema(STRING),
     notes: listSchema(STRING),
@@ -313,6 +317,7 @@ const areasTool: GridTool = {
       netToGross: areas.netToGross,
       leftOut: areas.leftOut,
       gross: { measures: areas.reader.gross, chosen: areas.reader.chosen, why: areas.reader.why },
+      headroom: areas.headroom,
       measures: areas.measures,
       rules: areas.rules,
       notes: areas.notes,
@@ -320,7 +325,7 @@ const areasTool: GridTool = {
       sureness: areas.sureness ?? null,
     }
     if (args['format'] === 'csv') {
-      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
+      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.zoneOf !== undefined ? 'zone' : r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
       rows.push(['all', '', 'Net total', '', null, null, areas.net, sqFt(areas.net), '', areas.states.net.state])
       if (areas.grossInternal !== null) rows.push(['all', '', 'Gross internal', '', null, null, areas.grossInternal, sqFt(areas.grossInternal), '', areas.states.grossInternal.state])
       if (areas.grossExternal !== null) rows.push(['all', '', 'Gross external', '', null, null, areas.grossExternal, sqFt(areas.grossExternal), '', areas.states.grossExternal.state])
@@ -335,9 +340,13 @@ const areasTool: GridTool = {
         // MSG-2: a room that could not be measured has no area, and one in doubt says so.
         const free = r.free === undefined ? '' : `, free floor ${areaText(r.free, units)} (fixtures stand on ${areaText(r.fixtures!, units)})`
         const measured = r.net === null ? 'not measured: it could not be drawn' : `${size}${areaText(r.net, units)}${free}${r.state === 'not-proven' ? `, not proven: the drawing questions its outline (${r.doubts.join(', ')})` : ''}`
+        // CNT-8: a zone's floor is in its room's, so it is not counted again.
+        const zone = r.zoneOf === undefined ? '' : `, a zone of ${q(f.rooms.find((room) => room.id === r.zoneOf)?.name ?? r.zoneOf)}: in its area, not counted again`
         // SHT-11: a stair room over the stair below is counted once, with it.
         const below = r.countedWith ? `, counted once with ${q(r.countedWith.room)} on floor ${q(r.countedWith.floor)}, the stair it rises from` : ''
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.net === null ? '' : surenessText(r.sureness, units)}${r.outside ? ', outside: not counted' : ''}${below}`)
+        // LVL-6: under a roof the floor states, the room's floor by headroom band.
+        const headroom = r.headroom === undefined ? '' : `; ${bandsText(r.headroom.bands, units)}, headroom ${lengthText(r.headroom.lowest, units)} to ${lengthText(r.headroom.highest, units)}`
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.net === null ? '' : surenessText(r.sureness, units)}${r.outside ? ', outside: not counted' : ''}${zone}${below}${headroom}`)
       }
     }
     if (several) {
@@ -355,6 +364,7 @@ const areasTool: GridTool = {
       const state = value === null ? '' : stateText(areas.states[m], several)
       lines.push(`${m === 'grossInternal' ? 'Gross internal' : 'Gross external'}: ${value === null ? 'not known' : areaText(value, units)}${state}. ${AREA_RULES[m]}`)
     }
+    if (areas.headroom !== null) lines.push(`Area by headroom: ${bandsText(areas.headroom, units)}. ${MEASURES.headroom.measures}`)
     lines.push(`Assumed: ${areas.reader.why} Grid's own rule, not checked against any local standard.`)
     if (areas.grossInternal !== null && areas.reader.gross.includes('grossInternal')) {
       lines.push(`Circulation: ${areas.circulation.toFixed(2)} m², ${percent(areas.circulationShare)} of gross internal. Net to gross: ${percent(areas.netToGross)}.`)
@@ -362,13 +372,26 @@ const areasTool: GridTool = {
     const outsideArea = areas.floors.reduce((sum, f) => sum + f.outsideRooms, 0)
     if (outsideArea > 0) lines.push(`Outside, listed apart: ${areaText(outsideArea, units)}.`)
     for (const rule of areas.measures) {
-      if (rule.measure === 'net' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
+      if (rule.measure === 'net' || rule.measure === 'headroom' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
     }
     // Any rule beyond the measures', such as free floor where fixtures stand (CNT-12).
-    const measureRules: readonly string[] = Object.values(AREA_RULES)
+    const measureRules: readonly string[] = [...Object.values(AREA_RULES), MEASURES.headroom.measures]
     lines.push(...areas.rules.filter((rule) => !measureRules.includes(rule)), ...areas.notes)
     return { text: lines.join('\n'), data }
   },
+}
+
+/** LVL-6: a stated roof's shape, pitch, area on its slope and rooflights, after its area on plan. */
+function sloped(roof: { readonly shape: string | null; readonly pitch: number; readonly slopeArea: number; readonly rooflights: number }, units: Display): string {
+  if (roof.shape === null) return ''
+  const slope = roof.pitch > 0 ? `, pitched ${roof.pitch.toFixed(1)}°, ${areaText(roof.slopeArea, units)} on its slope` : ''
+  const lights = roof.rooflights === 0 ? '' : `, ${roof.rooflights === 1 ? 'one rooflight' : `${roof.rooflights} rooflights`}`
+  return `, on plan; a ${roof.shape} roof${slope}${lights}`
+}
+
+/** LVL-6: floor by headroom band, as `at least 1.50 m 18.42 m², at least 2.20 m 12.28 m²`. */
+function bandsText(bands: readonly HeadroomBand[], units: Display): string {
+  return bands.map((b) => `at least ${lengthText(b.height, units)} ${areaText(b.area, units)}`).join(', ')
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -564,7 +587,7 @@ const takeoffTool: GridTool = {
       const openings = f.slab === null || f.slab.openings.length === 0 ? '' : `, open over ${f.slab.openings.map((o) => `${o.kind === 'void' ? 'a void' : o.kind === 'lift' ? 'a lift shaft' : 'a stair'} (${areaText(o.area, units)})`).join(', ')}`
       return [
         ...(f.slab ? [`  ${f.slab.kind === 'base' ? 'Lowest floor slab' : 'Floor slab'}${on}: ${areaText(f.slab.area, units)}${openings}; assumed.`] : []),
-        ...(f.roof ? [`  Roof over${on || ' the floor'}, where nothing is above: ${areaText(f.roof.area, units)}${f.roof.parapet === null ? '' : `, parapet ${lengthText(f.roof.parapet, units)} high`}; assumed.`] : []),
+        ...(f.roof ? [`  Roof over${on || ' the floor'}, where nothing is above: ${areaText(f.roof.area, units)}${f.roof.parapet === null ? '' : `, parapet ${lengthText(f.roof.parapet, units)} high`}${sloped(f.roof, units)}; assumed.`] : []),
       ]
     })
     const assumed = [...new Set(t.envelope.floors.flatMap((f) => f.assumed))]
@@ -881,12 +904,15 @@ const countTool: GridTool = {
       const by = args['by'] === undefined ? null : fieldOf(ask, args['by'] as string, 'by')
       const sums = ((args['sum'] as string[] | undefined) ?? []).map((name, i) => fieldOf(ask, name, `sum item ${i + 1}`))
       checkSums(ask, sums)
-      const found = select(ask, {
+      const picked = select(ask, {
         ...(kinds === undefined ? {} : { kinds }),
         ...(args['floor'] === undefined ? {} : { floor: args['floor'] as string }),
         ...(args['room'] === undefined ? {} : { room: args['room'] as string }),
         ...(args['where'] === undefined ? {} : { where: args['where'] as string[] }),
       })
+      // CNT-8: a zone's floor and facts are its room's to count, so a zone is counted in no group.
+      const found = picked.filter((part) => part.zoneOf === undefined)
+      const zones = picked.filter((part) => part.zoneOf !== undefined)
       const groups = groupParts(ask, found, by, sums)
       const [total] = groupParts(ask, found, null, sums)
       const units = Object.fromEntries(sums.map((field) => [fieldName(field), unitOf(field)]))
@@ -900,6 +926,7 @@ const countTool: GridTool = {
         ? []
         : [`By ${q(fieldName(by))}:`, ...groups.slice(0, 40).map((g) => `  ${g.value === null ? 'not stated' : valueText(by, g.value)}: ${partsWord(kinds, g.count)}${sums.length === 0 ? '' : `, ${sumText(g)}`}`), ...(groups.length > 40 ? [`  … and ${groups.length - 40} more groups in the data.`] : [])]
       lines.push(`In all: ${partsWord(kinds, found.length)}${sums.length === 0 || total === undefined ? '' : `, ${sumText(total)}`}.`)
+      if (zones.length > 0) lines.push(`Not counted: ${zones.length === 1 ? 'a zone' : `${zones.length} zones`} of a room, counted with the room: ${zones.slice(0, 20).map((p) => q(p.id)).join(', ')}${zones.length > 20 ? ', …' : ''}. grid_find lists ${zones.length === 1 ? 'it' : 'them'}.`)
       const { view, floors } = viewOf(ask, found.map((p) => p.id), by === null ? { highlight: found.slice(0, 2000).map((p) => p.id) } : { colour: fieldName(by) })
       if (found.length > 0) lines.push(`To see ${by === null ? 'them picked out' : 'each group in its own colour'}, pass view to grid_view${floors.length > 1 ? `: they are on ${floors.length} floors, so draw each floor in turn` : ''}.`)
       lines.push(QUERY_RULE)
@@ -924,6 +951,7 @@ const countTool: GridTool = {
 /** A room's height in words (ARE-10), with where it comes from. */
 function heightText(height: RoomHeight, L: (v: number) => string): string {
   const { value, walls } = height
+  if (height.from === 'roof' && height.roof !== undefined) return `Height ${L(height.roof.lowest)} to ${L(height.roof.highest)}, under the roof its floor states; the plan states none for the room.`
   if (value === null || walls === null) {
     return value === null ? 'Height not known: the plan states none for the room and no solid wall bounds it.' : `Height ${L(value)}, as the plan states for the room. No solid wall bounds it.`
   }
@@ -960,12 +988,12 @@ const measureTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
-    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door on it and the narrowest one, and with width (a body or a trolley, such as 0.7 for a wheelchair) whether that gets through, measuring each doorway\'s clear width and the way through each room clear of its fixtures, and another way when the shortest is too narrow; what=use gives a room\'s use indicators: the turning circle its free floor holds, each doorway\'s clear width, the way through between its doorways, the floor in front of and beside each fixture, and any window a fixture stands in front of, each set against the person\'s figure (width, diameter, clearance) or Grid\'s own indicator, and said to be one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so). '
+    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door on it and the narrowest one, and with width (a body or a trolley, such as 0.7 for a wheelchair) whether that gets through, measuring each doorway\'s clear width and the way through each room clear of its fixtures, and another way when the shortest is too narrow; what=use gives a room\'s use indicators: the turning circle its free floor holds, each doorway\'s clear width, the way through between its doorways, the floor in front of and beside each fixture, and any window a fixture stands in front of, each set against the person\'s figure (width, diameter, clearance) or Grid\'s own indicator, and said to be one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so); what=sun gives "which rooms get the sun" as a table per room, of geometry and not a daylight result: each window wall\'s way and bearing, the window area against the floor area, and the room\'s depth from each window wall, square to it. '
     + 'It measures the room between wall faces: what=fit, what=use and what=route with width keep clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas) or for what a building code asks (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing', 'use'], description: 'What to measure: room, between, wall, fit, route, narrow, facing or use.', examples: ['between', 'fit', 'route', 'use'] },
-    room: { type: 'string', id: true, description: 'For room, fit, use and route: the room id, where the route starts. For facing: one room only, every room when left out.', examples: ['kitchen', 'hall'] },
+    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing', 'sun', 'use'], description: 'What to measure: room, between, wall, fit, route, narrow, facing, sun or use.', examples: ['between', 'fit', 'route', 'use'] },
+    room: { type: 'string', id: true, description: 'For room, fit, use and route: the room id, where the route starts. For facing and sun: one room only, every room when left out.', examples: ['kitchen', 'hall'] },
     from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening, fixture or room to measure from.', examples: ['front-door', 'w-west'] },
     to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening, fixture or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
     x: { type: 'number', length: true, description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
@@ -982,7 +1010,7 @@ const measureTool: GridTool = {
   outputSchema: objectSchema({ what: STRING, answer: { type: 'object' }, rule: STRING }),
   run(args, context) {
     const { survey } = load(context, args['plan'])
-    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing' | 'use'
+    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing' | 'sun' | 'use'
     const units = displayFor(args['units'], args['decimal'], survey.plan)
     const L = (v: number): string => lengthText(v, units)
     const allowed: Record<string, readonly string[]> = {
@@ -993,6 +1021,7 @@ const measureTool: GridTool = {
       route: ['room', 'to', 'width'],
       narrow: ['under'],
       facing: ['room'],
+      sun: ['room'],
       use: ['room', 'width', 'diameter', 'clearance'],
     }
     const stray = ['room', 'from', 'to', 'x', 'y', 'wall', 'width', 'depth', 'diameter', 'under', 'clearance'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
@@ -1003,6 +1032,13 @@ const measureTool: GridTool = {
       const room = survey.byId.get(id)
       if (!room || room.polygon.length < 3) throw new ToolRefusal('That room has no outline Grid can measure; grid_check says why.')
       return room
+    }
+    // CNT-8: a zone is part of its room, and the room is the place: the use indicators and the
+    // ways through the plan measure the room as a whole, and say so.
+    const wholeOf = (room: SurveyRoom): { room: SurveyRoom; said: string | null } => {
+      const of = room.facts.zoneOf === undefined ? undefined : survey.byId.get(room.facts.zoneOf)
+      if (of === undefined || of.polygon.length < 3) return { room, said: null }
+      return { room: of, said: `${q(room.facts.name)} is a zone of ${q(of.facts.name)}: measured as part of it, the room as a whole.` }
     }
     if (what === 'room') {
       const room = roomOf()
@@ -1017,11 +1053,12 @@ const measureTool: GridTool = {
     }
     if (what === 'use') {
       // CNT-13: the room's use indicators, each set against the person's figure or Grid's own.
-      const room = roomOf()
+      const asked = roomOf()
+      const { room, said } = wholeOf(asked)
       const found = roomIndicators(survey, room, { width: args['width'], diameter: args['diameter'], clearance: args['clearance'] }, L)
       return {
-        text: [...found.lines, USE_RULE].join('\n'),
-        data: { what, answer: { room: room.facts.id, indicators: found.indicators }, rule: USE_RULE },
+        text: [...(said === null ? [] : [said]), ...found.lines, USE_RULE].join('\n'),
+        data: { what, answer: { room: room.facts.id, ...(said === null ? {} : { zone: asked.facts.id }), indicators: found.indicators }, rule: USE_RULE },
       }
     }
     if (what === 'facing') {
@@ -1029,6 +1066,13 @@ const measureTool: GridTool = {
       const id = args['room'] === undefined ? undefined : roomArg(survey.plan, args['room'])
       const facing = facingAnswer(survey.plan, id)
       return { text: [...facing.lines, FACING_RULE].join('\n'), data: { what, answer: facing.data, rule: FACING_RULE } }
+    }
+    if (what === 'sun') {
+      // BRF-5: which rooms get the sun, as a table of geometry: window walls, window area, depth.
+      const id = args['room'] === undefined ? undefined : roomArg(survey.plan, args['room'])
+      const sun = sunAnswer(survey.plan, units, id)
+      if (sun.missing) throw new ToolRefusal('That room has no outline Grid can measure; grid_check says why.')
+      return { text: [...sun.lines, SUN_RULE].join('\n'), data: { what, answer: sun.data, rule: SUN_RULE } }
     }
     if (what === 'between') {
       if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening, fixture or room.')
@@ -1091,25 +1135,33 @@ const measureTool: GridTool = {
       }
     }
     if (what === 'route') {
-      const room = roomOf()
+      const asked = roomOf()
       if (args['to'] === undefined) throw new ToolRefusal('what=route needs to: a room id, or "outside".')
-      const to = args['to'] === 'outside' ? 'outside' : roomArg(survey.plan, args['to'], 'to')
-      if (to !== 'outside' && survey.byId.get(to)?.facts.floor !== room.facts.floor) throw new ToolRefusal('Both rooms of a route must be on the same floor: the plan says nothing of what joins floors.')
+      const askedTo = args['to'] === 'outside' ? 'outside' : roomArg(survey.plan, args['to'], 'to')
+      if (askedTo !== 'outside' && survey.byId.get(askedTo)?.facts.floor !== asked.facts.floor) throw new ToolRefusal('Both rooms of a route must be on the same floor: the plan says nothing of what joins floors.')
+      // CNT-8: a zone is no place of its own: the way starts or ends in its room.
+      const start = wholeOf(asked)
+      const goal = askedTo === 'outside' ? undefined : survey.byId.get(askedTo)
+      const end = goal === undefined ? null : wholeOf(goal)
+      const room = start.room
+      const to = askedTo === 'outside' ? 'outside' : (end?.room.facts.id ?? askedTo)
+      const said = [start.said, end === null ? null : end.said].filter((line): line is string => line !== null)
+      const zones = { ...(start.said === null ? {} : { fromZone: asked.facts.id }), ...(end === null || end.said === null ? {} : { toZone: askedTo }) }
       if (args['width'] !== undefined) {
         // CNT-13: a body or a trolley this wide, clear of the fixtures, room by room and doorway by doorway.
         const wide = wideRoute(survey, room.facts.id, to, args['width'] as number)
         if (wide === null) {
-          return { text: `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.\n${USE_RULE}`, data: { what, answer: { found: false }, rule: USE_RULE } }
+          return { text: [...said, `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.`, USE_RULE].join('\n'), data: { what, answer: { found: false, ...zones }, rule: USE_RULE } }
         }
         const figure = figureOf(args['width'], 'usePassageWidth')
         return {
-          text: [...wideRouteLines(survey, wide, figure, L), USE_RULE].join('\n'),
-          data: { what, answer: { found: true, code: 'use/passage-width', figure, ...wide }, rule: USE_RULE },
+          text: [...said, ...wideRouteLines(survey, wide, figure, L), USE_RULE].join('\n'),
+          data: { what, answer: { found: true, code: 'use/passage-width', figure, ...wide, ...zones }, rule: USE_RULE },
         }
       }
       const route = routeBetween(survey, room.facts.id, to)
       if (route === null) {
-        return { text: `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.\n${EMPTY_ROOM_RULE}`, data: { what, answer: { found: false }, rule: EMPTY_ROOM_RULE } }
+        return { text: [...said, `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.`, EMPTY_ROOM_RULE].join('\n'), data: { what, answer: { found: false, ...zones }, rule: EMPTY_ROOM_RULE } }
       }
       const name = (id: string): string => (id === 'outside' ? 'outside' : q(survey.byId.get(id)?.facts.name ?? id))
       const steps = route.steps.map((s) => `${s.type} ${q(s.via)}${s.width === null ? '' : ` ${L(s.width)}`} into ${name(s.into)}`).join(', then ')
@@ -1118,12 +1170,13 @@ const measureTool: GridTool = {
         return `${name(id)} ${L(measureRoom(r).widestCircle)}`
       }).join(', ')
       const lines = [
+        ...said,
         `From ${name(route.from)} to ${name(route.to)}: ${steps}.`,
         route.narrowestPassage ? `Narrowest door or opening on the way: ${q(route.narrowestPassage.via)}, ${L(route.narrowestPassage.width)}.` : 'No door or opening on the way, only open sides.',
         `Widest circle in each room on the way: ${widths}.`,
         EMPTY_ROOM_RULE,
       ]
-      return { text: lines.join('\n'), data: { what, answer: { found: true, ...route }, rule: EMPTY_ROOM_RULE } }
+      return { text: lines.join('\n'), data: { what, answer: { found: true, ...route, ...zones }, rule: EMPTY_ROOM_RULE } }
     }
     if (args['under'] === undefined) throw new ToolRefusal('what=narrow needs under: the person\'s figure in metres.')
     const under = args['under'] as number
@@ -1145,6 +1198,92 @@ const measureTool: GridTool = {
 // grid_view
 
 const COMPASS_HEADING: Record<string, number> = { north: 0, 'north-east': 45, east: 90, 'south-east': 135, south: 180, 'south-west': 225, west: 270, 'north-west': 315 }
+
+/** VEW-3: the camera record's shape, as `grid_view` and `grid_save_view` give it. */
+const POINT3 = { type: 'array', items: NUMBER, minItems: 3, maxItems: 3 }
+export const CAMERA_SCHEMA = {
+  type: 'object',
+  properties: {
+    target: objectSchema({ room: NULLABLE_STRING, point: POINT3 }),
+    bearing: NUMBER,
+    bearingFrom: { type: 'string', enum: ['north', 'plan up'] },
+    north: NULLABLE_NUMBER,
+    tilt: NUMBER,
+    distance: NUMBER,
+    eyeHeight: NUMBER,
+    floor: STRING,
+    lens: objectSchema({ focalLength: NUMBER, sensor: objectSchema({ width: NUMBER, height: NUMBER }) }),
+    cut: NULLABLE_STRING,
+    floors: listSchema(STRING),
+    standingIn: objectSchema({ room: NULLABLE_STRING, name: NULLABLE_STRING, floor: NULLABLE_STRING, words: STRING }),
+    position: POINT3,
+    direction: POINT3,
+    up: POINT3,
+    fieldOfView: NUMBER,
+    aspectRatio: NUMBER,
+  },
+  required: ['target', 'bearing', 'bearingFrom', 'north', 'tilt', 'distance', 'eyeHeight', 'floor', 'lens', 'cut', 'floors', 'standingIn', 'position', 'direction', 'up', 'fieldOfView', 'aspectRatio'],
+} as const
+
+/** VEW-3: the camera argument: a record grid_view returned, read field by field. */
+export const CAMERA_ARG: ArgSpec = {
+  type: 'object',
+  description: 'A camera record exactly as grid_view returned it in camera, to start from: the view is taken again from its target, bearing, tilt, distance, lens and cut, with any of them changed here or by the other arguments. Its other fields are worked out again.',
+  examples: [{ target: { room: 'living', point: [3.2, 2.5, 1.35] }, bearing: 135, north: null, tilt: 30, distance: 24, lens: { focalLength: 28.970563 }, cut: null }],
+  schema: {
+    type: 'object',
+    properties: {
+      target: { type: 'object', properties: { room: NULLABLE_STRING, point: POINT3 } },
+      bearing: NUMBER,
+      north: NULLABLE_NUMBER,
+      tilt: NUMBER,
+      distance: NUMBER,
+      lens: { type: 'object', properties: { focalLength: NUMBER } },
+      cut: NULLABLE_STRING,
+    },
+    required: ['target', 'bearing', 'tilt', 'distance', 'lens'],
+  },
+  read(value) {
+    try {
+      return settingOfCamera(value as Record<string, unknown>)
+    } catch (error) {
+      if (error instanceof CameraRefused) throw new ToolRefusal(error.message)
+      throw error
+    }
+  },
+}
+
+const deg1 = (value: number): string => `${Number(value.toFixed(1))}°`
+
+/** What bearing 0 is, in the record's words. */
+function bearingFromText(camera: CameraRecord): string {
+  return camera.bearingFrom === 'north' ? `clockwise from the north the plan states (${northWords(camera.north!)})` : 'clockwise from the top of the drawing, as the plan states no north'
+}
+
+/**
+ * VEW-3: the camera in a few lines: what it is pointed at, from where, how high, its lens, where
+ * it stands (S-16), and how to move it in one call.
+ */
+export function cameraLines(plan: FloorPlan, camera: CameraRecord): string[] {
+  const room = camera.target.room === null ? null : plan.rooms.find((r) => r.id === camera.target.room) ?? null
+  const side = compassPoint(drawingBearing(camera.bearing, planOrientation(plan)))
+  const [x, y, z] = camera.target.point
+  const at = `(${m(x)}, ${m(y)}, ${m(z)})${room === null ? '' : ` for ${q(room.name)} (${q(room.id)})`}`
+  const looking = camera.tilt === 0 ? 'looking level' : camera.tilt > 0 ? `looking ${deg1(camera.tilt)} down` : `looking ${deg1(-camera.tilt)} up`
+  return [
+    `Camera: pointed at ${at}, from bearing ${deg1(camera.bearing)} (${bearingFromText(camera)}), on the ${side} side of the drawing; ${looking}, ${m(camera.distance)} m away; the eye ${m(camera.eyeHeight)} m above floor ${q(camera.floor)}; lens ${Number(camera.lens.focalLength.toFixed(2))} mm on a ${camera.lens.sensor.width} × ${camera.lens.sensor.height} mm sensor (${deg1(camera.fieldOfView)} tall). ${camera.cut === null ? 'The whole building is shown.' : `Floor ${q(camera.cut)} is cut away: nothing above it is drawn.`}`,
+    `It stands ${camera.standingIn.words}.`,
+    'The record is in camera. For another view, send it back to grid_view kind=3d as camera with the numbers changed, or with turn (degrees round the target, above 0 to the camera\'s left) and tilt_by (degrees, below 0 lower); grid_save_view saves it by name.',
+  ]
+}
+
+/** The views the plan has saved, for the answer: so an agent knows it can call them up. */
+function savedViewsLine(plan: FloorPlan): string[] {
+  const views = plan.views ?? []
+  if (views.length === 0) return []
+  const names = views.slice(0, 10).map((v) => q(v.name))
+  return [`Views saved with the plan, by name (view): ${names.join(', ')}${views.length > 10 ? ` and ${views.length - 10} more` : ''}.`]
+}
 
 /** The part a crop names on the floor: an id first, else a room's name (any case), else refused naming the rooms. */
 function cropPart(plan: FloorPlan, floor: string, crop: string): PartBounds {
@@ -1257,19 +1396,28 @@ const viewTool: GridTool = {
   title: 'Draw a view of the plan',
   hint: 'read',
   description:
-    'Use this when the person asks to see the plan: "can I see it", a floor plan, a 3D view from the garden side or from above, "stand me in the kitchen looking at the garden", "can I see out sitting down", or a black and white drawing. '
-    + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model from a side of the drawing (north here is the top of the drawing, whatever north the plan states; grid_measure what=facing says which way the rooms face); kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
-    + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export) or to move the person\'s live preview (grid_preview). The model of one floor has no roof; a building of several floors is drawn with a flat roof over every part with nothing above. It has no furniture, glass or door leaves. Units are metres.',
+    'Use this when the person asks to see the plan: "can I see it", a floor plan, a 3D view from the garden side or from above, "the living room from the south-west, from higher up", "a bit lower and more from the left", a view saved by name, "stand me in the kitchen looking at the garden", "can I see out sitting down", or a black and white drawing. '
+    + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model through a camera: from a side or corner of the drawing (from), or a compass bearing from the plan\'s stated north (bearing), with tilt, distance, eye_height, lens, a room to point at and a floor cut away; kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
+    + 'Every 3d and eye picture comes back with its camera record (camera: target, bearing, tilt, distance, eye height, lens in mm on a 36 × 24 mm sensor, cut, floors, where it stands, and position, direction, up and field of view as the BCF format writes them). To change the view, send camera back with turn, tilt_by or changed numbers; view calls up one saved with grid_save_view. '
+    + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export), to move the person\'s live preview (grid_preview) or to save a view (grid_save_view). The model of one floor has no roof; a building of several floors is drawn with a flat roof over every part with nothing above. It has no furniture, glass or door leaves. Units are metres.',
   args: {
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
     plan: PLAN_ARG,
     kind: { type: 'string', required: true, enum: ['plan', '3d', 'eye'], description: 'plan, 3d or eye.', examples: ['plan', 'eye'] },
-    floor: { ...FLOOR_ARG, description: 'For plan: the floor to draw, the lowest when left out. For 3d: that floor cut away, the whole building when left out.' },
-    from: { type: 'string', enum: SIDES, description: 'For 3d: the side of the drawing the camera stands on, or above. south-east when left out.', examples: ['south', 'above'] },
-    room: { type: 'string', id: true, description: 'For eye: the room to stand in.', examples: ['kitchen', 'living'] },
+    floor: { ...FLOOR_ARG, description: 'For plan: the floor to draw, the lowest when left out. For 3d: that floor cut away, the whole building when left out (with room, on a plan of several floors, that room\'s floor).' },
+    from: { type: 'string', enum: SIDES, description: 'For 3d: the side or corner of the drawing the camera stands on, or above (north is the top of the drawing here). south-east when left out. Not with bearing.', examples: ['south', 'above'] },
+    bearing: { type: 'number', description: 'For 3d: the compass bearing from what the camera is pointed at to the camera, in degrees clockwise from the north the plan states, or from the top of the drawing when it states none (the record says which). Not with from.', examples: [135, 200], minimum: 0, maximum: 360 },
+    tilt: { type: 'number', description: 'For 3d: degrees the camera looks down at what it is pointed at; below 0 it looks up. 30 when left out (80 from above).', examples: [30, 10], minimum: -limit('cameraTilt'), maximum: limit('cameraTilt') },
+    distance: { type: 'number', length: true, description: 'For 3d: metres from the camera to what it is pointed at. 2.2 times the building\'s largest side when left out.', examples: [12, 30], minimum: limit('cameraClosest'), maximum: 100000 },
+    lens: { type: 'number', description: `For 3d: the focal length in millimetres on a 36 × 24 mm sensor: 18 is wide, 50 normal, 85 long. 28.97 when left out (45° tall, as the app opens).`, examples: [24, 50], minimum: limit('lensShortest'), maximum: limit('lensLongest') },
+    camera: CAMERA_ARG,
+    view: { type: 'string', maxLength: 120, description: 'For 3d: a view saved with the plan (grid_save_view), by name, to call up. Its camera comes back the same, digit for digit, while the plan keeps what it was taken of.', examples: ['Garden corner'] },
+    turn: { type: 'number', description: 'For 3d: degrees to walk the camera round what it is pointed at, from camera, view or the default: above 0 to the camera\'s left, below 0 to its right.', examples: [20, -15], minimum: -360, maximum: 360 },
+    tilt_by: { type: 'number', description: 'For 3d: degrees to add to the tilt: below 0 the camera comes lower and looks less steeply down, above 0 higher.', examples: [-10, 15], minimum: -178, maximum: 178 },
+    room: { type: 'string', id: true, description: 'For eye: the room to stand in. For 3d: the room to point the camera at, the middle of its floor half way up its storey.', examples: ['kitchen', 'living'] },
     toward: { type: 'string', maxLength: 64, description: 'For eye: an opening id to look at, or a direction (north, north-east, east, south-east, south, south-west, west, north-west). The room\'s first window when left out.', examples: ['back-door', 'north'] },
-    eye_height: { type: 'number', length: true, description: 'For eye: metres above the floor. 1.6 standing when left out; about 1.2 seated.', examples: [1.6, 1.2], minimum: 0.3, maximum: 3 },
+    eye_height: { type: 'number', length: true, description: 'For eye: metres above the floor, 0.3 to 3; 1.6 standing when left out; about 1.2 seated. For 3d: metres from the floor of the room pointed at (or the floor cut away, or the ground floor) up to the camera: with a tilt the camera stands back until it is that high; level, or with a distance, the point it looks at moves to meet it.', examples: [1.6, 1.2], minimum: 0, maximum: 10000 },
     look: { type: 'string', enum: LOOKS, description: 'For plan: working (the default: clear labels and strong contrast), technical for black on white as on a sheet, with lines in millimetres at the scale and doors with no stated swing marked "?", or dark. light and mono are older names for working and technical.', examples: ['working', 'technical'] },
     dimensions: { type: 'boolean', description: 'For plan: false to leave the sizes off, for a clean drawing. true when left out.', examples: [true, false] },
     crop: { type: 'string', maxLength: 120, description: 'For plan: frame just this part: a room, door, window or wall id, or a room\'s name. The whole floor when left out.', examples: ['kitchen', 'front-door'] },
@@ -1279,14 +1427,18 @@ const viewTool: GridTool = {
     highlight: { type: 'array', description: 'For plan: rooms, walls, doors, windows or openings to pick out, by id, in one colour with a key: grid_find\'s view passes its ids here. Nothing picked out when left out.', examples: [['d1', 'd4'], ['office-2']], items: { id: true }, minItems: 1, maxItems: 2000 },
     key: { type: 'boolean', description: 'For plan: true to add a key under the drawing, even where the plan asks for none.', examples: [true] },
   },
-  outputSchema: objectSchema({ kind: STRING, floor: { type: ['string', 'null'] }, camera: { type: ['object', 'null'] }, pxPerMetre: NULLABLE_NUMBER, sills: { type: 'array' }, ids: listSchema(STRING), boxes: { type: 'array' }, painted: { type: 'array' } }, ['kind', 'floor', 'camera', 'pxPerMetre', 'sills', 'ids', 'boxes']),
+  outputSchema: objectSchema({ kind: STRING, floor: { type: ['string', 'null'] }, camera: { ...CAMERA_SCHEMA, type: ['object', 'null'] }, view: NULLABLE_STRING, pxPerMetre: NULLABLE_NUMBER, sills: { type: 'array' }, ids: listSchema(STRING), boxes: { type: 'array' }, painted: { type: 'array' } }, ['kind', 'floor', 'camera', 'view', 'pxPerMetre', 'sills', 'ids', 'boxes']),
   async run(args, context) {
     const { loaded } = readPlan(context, args['plan'])
     const survey = surveyPlan(loaded.plan)
     const floor = floorArg(loaded.plan, args['floor'])
     const kind = args['kind'] as 'plan' | '3d' | 'eye'
-    const allowed: Record<string, readonly string[]> = { plan: ['floor', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key', 'highlight'], '3d': ['floor', 'from'], eye: ['room', 'toward', 'eye_height'] }
-    const stray = ['floor', 'from', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key', 'highlight'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
+    const allowed: Record<string, readonly string[]> = {
+      plan: ['floor', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key', 'highlight'],
+      '3d': ['floor', 'from', 'bearing', 'tilt', 'distance', 'eye_height', 'lens', 'room', 'camera', 'view', 'turn', 'tilt_by'],
+      eye: ['room', 'toward', 'eye_height'],
+    }
+    const stray = ['floor', 'from', 'bearing', 'tilt', 'distance', 'lens', 'camera', 'view', 'turn', 'tilt_by', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key', 'highlight'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`kind=${kind} takes ${allowed[kind]!.join(', ')}, not ${stray.join(', ')}.`)
     const plan = survey.plan
     if (kind === 'plan') {
@@ -1326,21 +1478,60 @@ const viewTool: GridTool = {
       if (painted !== null) lines.push(...painted.lines)
       return {
         text: lines.join('\n'),
-        data: { kind, floor: shown, camera: null, pxPerMetre: view.pxPerMetre, sills: [], ids, boxes: view.boxes ?? [], ...(painted === null ? {} : { painted: painted.groups }) },
+        data: { kind, floor: shown, camera: null, view: null, pxPerMetre: view.pxPerMetre, sills: [], ids, boxes: view.boxes ?? [], ...(painted === null ? {} : { painted: painted.groups }) },
         image: { data: view.png, mimeType: 'image/png' },
       }
     }
     if (kind === '3d') {
-      const from = (args['from'] as Side | undefined) ?? 'south-east'
-      const { modelView } = await import('../draw/views')
-      const view = await modelView(plan, { from, ...(floor ? { floor } : {}) })
+      if (args['camera'] !== undefined && args['view'] !== undefined) throw new ToolRefusal('Pass camera or view, not both: each is a camera to start from.')
+      const lens = args['lens'] as number | undefined
+      if (lens !== undefined && lensProblem(lens) !== null) throw new ToolRefusal(`lens ${lensProblem(lens)}.`)
+      let viewName: string | null = null
+      let start = args['camera'] as CameraAsk['start'] | undefined
+      if (args['view'] !== undefined) {
+        const saved = findView(plan.views, args['view'] as string)
+        if (saved === null) {
+          const names = (plan.views ?? []).slice(0, 20).map((v) => q(v.name))
+          throw new ToolRefusal(`The plan has no view saved under that name. ${names.length === 0 ? 'It has no saved views: grid_save_view saves one.' : `Its views: ${names.join(', ')}.`}`)
+        }
+        viewName = saved.name
+        start = viewSetting(saved)
+      }
+      if (start !== undefined && start.target.room !== null && !plan.rooms.some((r) => r.id === start!.target.room)) start = { ...start, target: { ...start.target, room: null } }
+      const ask: CameraAsk = {
+        ...(start !== undefined ? { start } : {}),
+        ...(args['room'] !== undefined ? { room: roomArg(plan, args['room']) } : {}),
+        ...(args['from'] !== undefined ? { from: args['from'] as Side } : {}),
+        ...(args['bearing'] !== undefined ? { bearing: args['bearing'] as number } : {}),
+        ...(args['tilt'] !== undefined ? { tilt: args['tilt'] as number } : {}),
+        ...(args['distance'] !== undefined ? { distance: args['distance'] as number } : {}),
+        ...(args['eye_height'] !== undefined ? { eyeHeight: args['eye_height'] as number } : {}),
+        ...(lens !== undefined ? { lens } : {}),
+        ...(floor !== undefined ? { cut: floor } : {}),
+        ...(args['turn'] !== undefined ? { turn: args['turn'] as number } : {}),
+        ...(args['tilt_by'] !== undefined ? { tiltBy: args['tilt_by'] as number } : {}),
+      }
+      let camera: CameraRecord
+      try {
+        camera = cameraFor(plan, survey, ask)
+      } catch (error) {
+        if (error instanceof CameraRefused) throw new ToolRefusal(error.message)
+        throw error
+      }
+      const { cameraView } = await import('../draw/views')
+      const view = await cameraView(plan, camera)
       // LVL-4: the whole of a building of several floors is drawn closed, with its roofs; one floor
       // alone, or a floor cut away, is drawn open from above, as the 3D view draws it.
-      const roofed = floor === undefined && planFloors(plan).length > 1
+      const roofed = camera.cut === null && planFloors(plan).length > 1
       const roof = roofed ? 'Every part with nothing above it has a flat roof; the model has no furniture, glass or door leaves.' : 'The model has no roof, furniture, glass or door leaves.'
+      const what = viewName !== null ? `The view ${q(viewName)} saved with the plan` : 'The model'
       return {
-        text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing${plan.north === undefined ? '' : `, not the north the plan states (${northWords(wrapDegrees(plan.north))})`}. ${roof} Look at the picture before you describe it.`,
-        data: { kind, floor: floor ?? null, camera: view.camera, pxPerMetre: null, sills: [], ids: [], boxes: [] },
+        text: [
+          `${what}${camera.cut ? `, floor ${q(camera.cut)} cut away` : ''}. ${roof} Look at the picture before you describe it.`,
+          ...cameraLines(plan, camera),
+          ...savedViewsLine(plan),
+        ].join('\n'),
+        data: { kind, floor: camera.cut, camera, view: viewName, pxPerMetre: null, sills: [], ids: [], boxes: [] },
         image: { data: view.png, mimeType: 'image/png' },
       }
     }
@@ -1349,6 +1540,7 @@ const viewTool: GridTool = {
     const room = survey.byId.get(id)
     if (!room || room.polygon.length < 3) throw new ToolRefusal('That room has no outline Grid can draw; grid_check says why.')
     const height = (args['eye_height'] as number | undefined) ?? 1.6
+    if (height < 0.3 || height > 3) throw new ToolRefusal('For kind=eye, eye_height takes 0.3 to 3 m above the floor; for a camera higher up, use kind=3d with room and eye_height.')
     const windows = room.openings.filter((o) => o.type === 'window')
     let toward: number | { x: number; y: number }
     let looking: string
@@ -1366,15 +1558,20 @@ const viewTool: GridTool = {
       toward = { x: wall.start[0] + (wall.end[0] - wall.start[0]) * t, y: wall.start[1] + (wall.end[1] - wall.start[1]) * t }
       looking = `${facts.type} ${q(target)}`
     }
-    const { eyeView } = await import('../draw/views')
-    const view = await eyeView(plan, { floor: room.facts.floor, polygon: room.polygon, height, toward })
+    const { cameraView, eyeStand } = await import('../draw/views')
+    const camera = eyeCamera(plan, { room: id, polygon: room.polygon, stand: eyeStand(room.polygon, toward), height, toward })
+    const view = await cameraView(plan, camera)
+    const heading = wrapDegrees(drawingBearing(camera.bearing, planOrientation(plan)) + 180)
     const sills = windows.map((w) => ({ id: w.id, sill: w.sill, top: w.sill + w.height, seenOver: w.sill < height }))
     const sillText = sills.length === 0
       ? 'The room has no windows.'
       : `Windows in the room, sill and top against the eye at ${m(height)} m: ${sills.map((s) => `${q(s.id)} sill ${m(s.sill)}, top ${m(s.top)} (${s.sill < height ? 'the eye is above the sill' : 'the sill is at or above the eye'})`).join('; ')}.`
     return {
-      text: `Standing in ${q(room.facts.name)} at (${m(view.camera.at[0])}, ${m(view.camera.at[1])}), eye ${m(height)} m above the floor, looking level toward ${looking} (heading ${view.camera.heading.toFixed(0)}° from the top of the drawing), 90° across. ${sillText} The model has no ceiling, glass, furniture or anything outside. Look at the picture before you describe it.`,
-      data: { kind, floor: room.facts.floor, camera: view.camera, pxPerMetre: null, sills, ids: [], boxes: [] },
+      text: [
+        `Standing in ${q(room.facts.name)} at (${m(camera.position[0])}, ${m(camera.position[1])}), eye ${m(height)} m above the floor, looking level toward ${looking} (heading ${heading.toFixed(0)}° from the top of the drawing), 90° across. ${sillText} The model has no ceiling, glass, furniture or anything outside. Look at the picture before you describe it.`,
+        ...cameraLines(plan, camera),
+      ].join('\n'),
+      data: { kind, floor: room.facts.floor, camera, view: null, pxPerMetre: null, sills, ids: [], boxes: [] },
       image: { data: view.png, mimeType: 'image/png' },
     }
   },
