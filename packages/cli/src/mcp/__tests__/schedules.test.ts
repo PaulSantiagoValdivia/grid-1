@@ -38,7 +38,12 @@ function fields(line: string): (string | number)[] {
     if (line[at] === '"') {
       let text = ''
       at++
-      while (at < line.length && !(line[at] === '"' && line[at + 1] !== '"')) text += line[at] === '"' ? (at++, '"') : line[at], at++
+      while (at < line.length && !(line[at] === '"' && line[at + 1] !== '"')) {
+        // A doubled quote inside a quoted field is one quote.
+        if (line[at] === '"') at++
+        text += line[at]
+        at++
+      }
       out.push(text)
       quoted.push(true)
       at += 2
