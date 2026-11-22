@@ -31,7 +31,7 @@ import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan } from './plan'
 import { floorOf, planFloors, wallsOnFloor } from './floors'
 import { roomFloorArea, tryRoomPolygon } from './room'
-import { floorSpaces, spacesKnown, type FloorSpaces } from './spaces'
+import { floorSpaces, spacesKnown, type FloorSpaces, type Space } from './spaces'
 import { planWallSides, type WallSides } from './exposure'
 import { validatePlan } from './validate'
 import { floorJoins } from './floorJoins'
@@ -44,9 +44,12 @@ import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 import { wallLength, wallSegments } from './wall'
 import { curveFault } from './arc'
+import { buildingPlan, outdoorIds, outdoorKind, outdoorRoofed, planHasOutdoor } from './outdoor'
+import type { OutdoorKind } from '../types/floorplan'
+import { english, num, said } from '../messages/say'
 
-/** The three measures, and the floor by headroom band (LVL-6). */
-export type Measure = 'net' | 'grossInternal' | 'grossExternal' | 'headroom'
+/** The three measures, the floor by headroom band (LVL-6) and outdoor space (CNT-7). */
+export type Measure = 'net' | 'grossInternal' | 'grossExternal' | 'headroom' | 'outdoor'
 export type GrossMeasure = 'grossInternal' | 'grossExternal'
 
 /** A measure described in Grid's own words. No standard's text, and no standard's name. */
@@ -95,6 +98,13 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
     notTakenOff: 'It is part of the net area: nothing standing in the room is taken off, and floor under a lowered zone of the ceiling counts by that zone\'s height.',
     cannotSay: 'The plan cannot say how deep the roof is built up or where a low slope is boxed in, so the height is taken to the roof\'s underside as stated, from its eaves on the outside walls\' lines.',
   },
+  outdoor: {
+    measure: 'outdoor',
+    name: 'Outdoor area',
+    measures: 'Outdoor area is the floor of each room the plan marks as outdoor space, roofed or open, measured to the faces of its walls and edges as a room is.',
+    notTakenOff: 'It is in no net, gross internal or gross external figure, and nor is a wall that bounds outdoor space and no room, such as a fence or a parapet.',
+    cannotSay: 'The plan cannot say how much of an outdoor space a local rule counts, such as part of a balcony: Grid counts none of it unless the caller states such a rule, with where it comes from.',
+  },
 }
 
 /**
@@ -138,6 +148,11 @@ export interface RoomAreaFigure {
    * rises through. The room keeps its area, and is in no net figure. Absent on every other room.
    */
   readonly countedWith?: { readonly floor: string; readonly room: string }
+  /**
+   * CNT-7 (C26): on an outdoor space only, its kind and whether a roof covers it. It is in no net,
+   * gross internal or gross external figure: it is listed apart, in `outdoor`.
+   */
+  readonly outdoor?: { readonly kind: OutdoorKind; readonly roofed: boolean }
 }
 
 /** A room Grid could not draw, so it is in no figure. */
@@ -176,6 +191,8 @@ export interface FloorAreaFigures {
   readonly why: string | null
   /** BRF-4 (C17): the floor is massing, an outline it states with no walls yet: gross external only. */
   readonly massing: boolean
+  /** CNT-7 (C26): the floor of its outdoor spaces, in no other figure; only on a floor that has one. */
+  readonly outdoor?: number
 }
 
 /** A total, with the rule it follows. */
@@ -222,10 +239,33 @@ export interface FlatAreaFigure {
   readonly byFloor: Readonly<Record<string, number>>
   /** The rooms counted, by id. */
   readonly rooms: readonly string[]
-  /** Rooms it holds that are in no net figure, each with why: a zone, a room named outside, a stair counted below. */
-  readonly notCounted: readonly { readonly id: string; readonly why: 'zone' | 'outside' | 'stair-below' }[]
+  /** Rooms it holds that are in no net figure, each with why: a zone, a room named outside, a stair counted below, outdoor space (CNT-7). */
+  readonly notCounted: readonly { readonly id: string; readonly why: 'zone' | 'outside' | 'stair-below' | 'outdoor' }[]
   /** Rooms it holds that Grid could not draw: in no figure. */
   readonly leftOut: readonly string[]
+}
+
+/**
+ * CNT-7 (C26): a share of an outdoor space's floor a rule counts, such as half a balcony: the share,
+ * from 0 to 1, and the rule in words, with where it comes from. Grid holds none of its own: only a
+ * rule the caller states weights an outdoor space.
+ */
+export interface OutdoorWeight {
+  readonly weight: number
+  readonly rule: string
+}
+
+/** CNT-7 (C26): the plan's outdoor space, listed apart from every other figure. */
+export interface OutdoorAreaFigure {
+  /** The floor of every outdoor space on the floors given. */
+  readonly area: number
+  readonly byKind: Readonly<Partial<Record<OutdoorKind, number>>>
+  /** Of `area`, the floor a roof covers, and the floor open to the sky. */
+  readonly roofed: number
+  readonly open: number
+  readonly rule: MeasureRule
+  /** Their floor weighted by the rules the caller stated, and those rules; null when none was stated. */
+  readonly weighted: { readonly area: number; readonly rules: readonly string[] } | null
 }
 
 /** CNT-6 (C23): a building's figures, the sum of its own floors' among the floors given. */
@@ -257,6 +297,8 @@ export interface PlanAreaFigures {
   readonly leftOut: readonly RoomLeftOut[]
   readonly reader: ReaderMeasure
   readonly notes: readonly string[]
+  /** CNT-7 (C26): the outdoor spaces on the floors given, listed apart; only on a plan that has one. */
+  readonly outdoor?: OutdoorAreaFigure
 }
 
 export interface AreaOptions {
@@ -271,6 +313,8 @@ export interface AreaOptions {
   readonly country?: string
   /** The gross measure asked for. The usual one for `country` when not given. */
   readonly gross?: GrossMeasure | 'both'
+  /** CNT-7: the share of each kind of outdoor space a rule the caller states counts. None when not given. */
+  readonly outdoorWeights?: Readonly<Partial<Record<OutdoorKind, OutdoorWeight>>>
 }
 
 const NOT_SAID = 'not said'
@@ -379,7 +423,7 @@ const reachOf = (walls: readonly Wall[]): number => {
  * floor's outline, as `spaces.ts` joins it, less the outer stretches of wall, keeping the parts
  * that hold enclosed floor. Null with a reason when no wall on the floor faces outside.
  */
-function insideFace(walls: readonly Wall[], spaces: FloorSpaces, sides: ReadonlyMap<string, WallSides>): number | string {
+function insideFace(walls: readonly Wall[], spaces: FloorSpaces, sides: ReadonlyMap<string, WallSides>, indoor: (space: Space) => boolean = () => true): number | string {
   if (spaces.spaces.length === 0) return 0
   const join = tolerance('gap')
   const reach = reachOf(walls)
@@ -396,7 +440,8 @@ function insideFace(walls: readonly Wall[], spaces: FloorSpaces, sides: Readonly
       const frame = union([...bodies, ...cornerFills(solid, lineHalf, snap)])
       const filled = union(frame.map((polygon) => [polygon[0]!]))
       const rest: MultiPolygon = polygonClipping.difference(filled, ...outerStrips(solid, sides, lineHalf, snap))
-      return sum(rest.filter((piece) => spaces.spaces.some((space) => inPolygon(space.at, piece))).map(polygonArea))
+      // CNT-7: a piece that holds only outdoor space (a courtyard inside its walls) is no floor.
+      return sum(rest.filter((piece) => spaces.spaces.some((space) => indoor(space) && inPolygon(space.at, piece))).map(polygonArea))
     } catch (error) {
       failure = error
     }
@@ -415,6 +460,18 @@ export function outerWallBand(walls: readonly Wall[], sides: ReadonlyMap<string,
   return outerStrips(solid, sides, lineHalf, (v) => v)
 }
 
+/**
+ * CNT-7 (C26): the building the gross figures are measured on, on a plan with outdoor space: the
+ * plan less the walls that bound outdoor space and no room (`buildingPlan`), with its own index and
+ * wall sides.
+ */
+interface Building {
+  readonly plan: FloorPlan
+  readonly index: PlanIndex
+  readonly sides: () => ReadonlyMap<string, WallSides>
+  readonly outdoor: ReadonlySet<string>
+}
+
 function floorFigures(
   plan: FloorPlan,
   floor: string,
@@ -422,7 +479,8 @@ function floorFigures(
   broken: ReadonlySet<string>,
   outside: ReadonlySet<string>,
   sides: () => ReadonlyMap<string, WallSides>,
-  countedWith: ReadonlyMap<string, { readonly floor: string; readonly room: string }>
+  countedWith: ReadonlyMap<string, { readonly floor: string; readonly room: string }>,
+  building: Building | null
 ): FloorAreaFigures {
   const rooms: RoomAreaFigure[] = []
   const leftOut: RoomLeftOut[] = []
@@ -436,21 +494,25 @@ function floorFigures(
       continue
     }
     const zoneOf = zones.zoneOf.get(room.id) ?? null
-    const below = outside.has(room.id) ? undefined : countedWith.get(`${floor}|${room.id}`)
+    // CNT-7: an outdoor space is listed apart, in no figure, whatever else the caller names it.
+    const kind = outdoorKind(room)
+    const apart = kind === null && outside.has(room.id)
+    const below = apart || kind !== null ? undefined : countedWith.get(`${floor}|${room.id}`)
     rooms.push({
       id: room.id,
       name: nameOf(room),
       use: room.use ?? null,
       floor,
       area: roomFloorArea(room, index, outline),
-      outside: outside.has(room.id),
+      outside: apart,
       zoneOf,
       ...(below === undefined ? {} : { countedWith: below }),
+      ...(kind === null ? {} : { outdoor: { kind, roofed: outdoorRoofed(room)! } }),
     })
   }
   // A zone is in no figure (CNT-8): its floor is its room's, counted once. A zone is in no stair
   // stack either (`stairStacks`), so it never has `countedWith`.
-  const counted = rooms.filter((room) => !room.outside && room.zoneOf === null && room.countedWith === undefined)
+  const counted = rooms.filter((room) => !room.outside && room.outdoor === undefined && room.zoneOf === null && room.countedWith === undefined)
   const overStairs = sum(rooms.filter((room) => room.countedWith !== undefined).map((room) => room.area))
   const byUse: Record<string, number> = {}
   const add = (use: string | null, value: number): void => {
@@ -473,24 +535,31 @@ function floorFigures(
   }
   const net = sum(counted.map((room) => room.area))
   const outsideRooms = sum(rooms.filter((room) => room.outside).map((room) => room.area))
-  const base = { floor, rooms, leftOut, net, byUse, outsideRooms, overStairs }
+  const outdoorRooms = rooms.filter((room) => room.outdoor !== undefined)
+  const base = { floor, rooms, leftOut, net, byUse, outsideRooms, overStairs, ...(outdoorRooms.length === 0 ? {} : { outdoor: sum(outdoorRooms.map((room) => room.area)) }) }
 
-  const spaces = floorSpaces(plan, floor, { index, broken })
+  // CNT-7: the gross figures are the building's, measured without the walls that bound only
+  // outdoor space; an outdoor space inside the building's walls (a courtyard) is taken off them.
+  const measured = building ?? { plan, index, sides, outdoor: new Set<string>() }
+  const spaces = floorSpaces(measured.plan, floor, { index: measured.index, broken })
   if (!spacesKnown(spaces)) {
     return { ...base, grossExternal: null, grossInternal: null, walls: null, outerWalls: null, unclaimed: null, offSpace: null, why: `the walls' outline could not be worked out: ${spaces.reason}`, massing: false }
   }
-  const offSpace = spaces.roomArea - (spaces.floorArea - spaces.unclaimedArea)
-  const walls = floorWalls(plan, floor, broken)
+  const outdoorSpace = (space: Space): boolean => space.rooms.length > 0 && space.rooms.every((r) => measured.outdoor.has(r.room))
+  const enclosedOutdoor = measured.outdoor.size === 0 ? 0 : sum(spaces.spaces.filter(outdoorSpace).map((space) => space.area))
+  const keptOutdoor = measured.outdoor.size === 0 ? 0 : sum(outdoorRooms.filter((room) => measured.plan.rooms.some((r) => r.id === room.id && floorOf(r) === floor)).map((room) => room.area))
+  const offSpace = spaces.roomArea - keptOutdoor - (spaces.floorArea - enclosedOutdoor - spaces.unclaimedArea)
+  const walls = floorWalls(measured.plan, floor, broken)
   if (walls.length === 0 && statedOutline(plan, floor) !== null) {
     // BRF-4 (C17): massing, an outline with no walls yet. Its outline is its outside face; it has
     // no inside face of walls to measure to until the walls are drawn.
     return { ...base, grossExternal: spaces.outlineArea, grossInternal: null, walls: 0, outerWalls: null, unclaimed: spaces.unclaimedArea, offSpace, why: MASSING_WHY, massing: true }
   }
-  const inside = insideFace(walls, spaces, sides())
+  const inside = insideFace(walls, spaces, measured.sides(), (space) => !outdoorSpace(space))
   const known = typeof inside === 'number'
   // CNT-6 (C23): a separating wall with more of the building beyond it counts to its middle.
-  const beyond = pastMiddle(walls, spaces, sides())
-  const gross = Math.max(0, spaces.outlineArea - beyond)
+  const beyond = pastMiddle(walls, spaces, measured.sides())
+  const gross = Math.max(0, spaces.outlineArea - beyond - enclosedOutdoor)
   return {
     ...base,
     grossExternal: gross,
@@ -651,9 +720,10 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
   let sides: ReadonlyMap<string, WallSides> | undefined
   const sidesOnce = (): ReadonlyMap<string, WallSides> => (sides ??= planWallSides(index))
   const stacks = stairStacks(plan, index, broken)
+  const building = buildingOf(plan, index)
   const floors = planFloors(plan)
     .filter((floor) => options.floors === undefined || options.floors.includes(floor.id))
-    .map((floor) => floorFigures(plan, floor.id, index, broken, outside, sidesOnce, stacks))
+    .map((floor) => floorFigures(plan, floor.id, index, broken, outside, sidesOnce, stacks, building))
 
   const byUse: Record<string, number> = {}
   for (const f of floors) for (const [use, area] of Object.entries(f.byUse)) byUse[use] = (byUse[use] ?? 0) + area
@@ -692,6 +762,8 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
     }
   }
   if (rooms(floors).some((room) => room.outside)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure, and their floor is in the gross external one.')
+  const outdoor = outdoorFigure(floors, options.outdoorWeights)
+  if (outdoor !== null) notes.push(english(said('areas.note.outdoor', { area: num(outdoor.area.toFixed(2)) })))
   const flats = flatFigures(plan, floors)
   const notInFlats = sum(floors.map((f) => f.net)) - sum(flats.map((flat) => flat.net))
 
@@ -708,6 +780,38 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
     leftOut,
     reader: readerMeasure(options),
     notes,
+    ...(outdoor === null ? {} : { outdoor }),
+  }
+}
+
+/** CNT-7: the building the gross figures are measured on, or null for a plan with no outdoor space. */
+function buildingOf(plan: FloorPlan, index: PlanIndex): Building | null {
+  if (!planHasOutdoor(plan)) return null
+  const measured = buildingPlan(plan, index)
+  const own = measured === plan ? index : indexPlan(measured)
+  let sides: ReadonlyMap<string, WallSides> | undefined
+  return { plan: measured, index: own, sides: () => (sides ??= planWallSides(own)), outdoor: outdoorIds(measured) }
+}
+
+/** CNT-7: the outdoor spaces on the floors given, and their floor weighted by the rules stated. Null when there is none. */
+function outdoorFigure(floors: readonly FloorAreaFigures[], weights: AreaOptions['outdoorWeights']): OutdoorAreaFigure | null {
+  const outdoor = rooms(floors).filter((room) => room.outdoor !== undefined)
+  if (outdoor.length === 0) return null
+  const byKind: Partial<Record<OutdoorKind, number>> = {}
+  for (const room of outdoor) byKind[room.outdoor!.kind] = (byKind[room.outdoor!.kind] ?? 0) + room.area
+  const weighed = outdoor.flatMap((room) => {
+    const weight = weights?.[room.outdoor!.kind]
+    return weight === undefined || !Number.isFinite(weight.weight) ? [] : [{ room, weight }]
+  })
+  return {
+    area: sum(outdoor.map((room) => room.area)),
+    byKind,
+    roofed: sum(outdoor.filter((room) => room.outdoor!.roofed).map((room) => room.area)),
+    open: sum(outdoor.filter((room) => !room.outdoor!.roofed).map((room) => room.area)),
+    rule: MEASURES.outdoor,
+    weighted: weighed.length === 0
+      ? null
+      : { area: sum(weighed.map(({ room, weight }) => room.area * Math.min(1, Math.max(0, weight.weight)))), rules: [...new Set(weighed.map(({ weight }) => weight.rule))] },
   }
 }
 
@@ -752,6 +856,7 @@ function flatFigures(plan: FloorPlan, floors: readonly FloorAreaFigures[]): Flat
       const room = measured.get(`${floor}|${id}`)
       if (room === undefined) continue
       if (room.zoneOf !== null) notCounted.push({ id, why: 'zone' })
+      else if (room.outdoor !== undefined) notCounted.push({ id, why: 'outdoor' })
       else if (room.outside) notCounted.push({ id, why: 'outside' })
       else if (room.countedWith !== undefined) notCounted.push({ id, why: 'stair-below' })
       else {

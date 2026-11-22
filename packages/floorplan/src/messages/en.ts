@@ -2288,7 +2288,20 @@ export const en = {
   'sheet.handing.toward': 'opens toward {what}',
   'sheet.handing.hinged': '{opens}, hinged on the {side}',
   'sheet.handing.side.left': 'left',
-  'sheet.handing.side.right': 'right'
+  'sheet.handing.side.right': 'right',
+
+  // --- Outdoor space, roofed or open (CNT-7, C26)
+  'areas.note.outdoor': '{area} m² of outdoor space is listed apart: it is in no net, gross internal or gross external figure.',
+  'outdoor.kind.garden': 'garden',
+  'outdoor.kind.courtyard': 'courtyard',
+  'outdoor.kind.terrace': 'terrace',
+  'outdoor.kind.balcony': 'balcony',
+  'outdoor.kind.light-well': 'light well',
+  'outdoor.kind.porch': 'porch',
+  'outdoor.kind.carport': 'carport',
+  'outdoor.kind.other': 'outdoor space',
+  'outdoor.roofed': 'roofed',
+  'outdoor.open': 'open'
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof en

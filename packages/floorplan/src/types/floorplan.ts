@@ -242,6 +242,21 @@
  *   a zone's finish is its part of its room. Grid checks no finish and no material. An id a part
  *   names that no type has is said and read as no type, never refused. Optional and never
  *   defaulted: a plan with none reads exactly as before (version 1).
+ *
+ * C26 · Outdoor space, roofed or open (CNT-7, lab EL-8, EL-18, R-8)
+ *   A room MAY be an outdoor space: `outdoor` names its kind (`OUTDOOR_KINDS`: a garden, a
+ *   courtyard, a terrace, a balcony, a light well, a porch, a carport, or `other`; `true` is one of
+ *   no named kind), and `roofed` says whether a roof covers it. Unstated, a porch and a carport are
+ *   roofed and every other kind is open (`outdoorRoofed`); `roofed` on a room that is not outdoor
+ *   is read as nothing. An outdoor space is drawn and measured as a room, and to the building it is
+ *   the outside: it is in no net, gross internal or gross external area but listed apart, weighted
+ *   only by an area rule the caller states; it needs no door and no route; a wall between it and a
+ *   room faces outside; and a wall that bounds outdoor space and no room (a fence, a parapet, the
+ *   plot's edge drawn as a line) is no part of the building: it adds no area and sets no storey
+ *   height. A route may pass through it: a door onto it is a way out when the space leads on to the
+ *   outside. An outdoor space on the lowest level stands on the ground, with no slab, and only a
+ *   roofed one has a roof. Its `use`, when stated, is kept, and no check reads it. Optional and
+ *   never defaulted: a plan with none reads exactly as before (version 1).
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -992,6 +1007,17 @@ export const ROOM_TENURES = ['private', 'shared', 'common', 'commercial'] as con
 
 export const RoomTenureSchema = z.enum(ROOM_TENURES)
 
+/**
+ * CNT-7 (C26): the kinds of outdoor space a room may be. `other` is one of no kind on the list (a
+ * driveway, a side passage); a room that states `outdoor: true` is read as one too.
+ */
+export const OUTDOOR_KINDS = ['garden', 'courtyard', 'terrace', 'balcony', 'light-well', 'porch', 'carport', 'other'] as const
+
+export const OutdoorKindSchema = z.enum(OUTDOOR_KINDS)
+
+/** CNT-7 (C26): the kinds a roof usually covers, so one that does not state `roofed` is roofed. */
+export const ROOFED_BY_KIND: ReadonlySet<OutdoorKind> = new Set<OutdoorKind>(['porch', 'carport'])
+
 /** A list of wall ids round a room or one of its holes, at most `BOUNDARY_MAX` long (MSG-9). */
 const wallList = () =>
   z.array(text('id')).superRefine((list, ctx) => {
@@ -1121,6 +1147,11 @@ export const RoomSchema = z.object({
   // CNT-15 (C24): its floor, wall, ceiling and skirting finishes, by the person's own names. A
   // zone's are its part of its room. Optional and never defaulted (version 1).
   finishes: FinishesSchema.optional(),
+  // CNT-7 (C26): the room is an outdoor space of this kind (`true`: of no named kind), and whether
+  // a roof covers it. Both optional and never defaulted (version 1); `roofed` is read only with
+  // `outdoor`.
+  outdoor: z.union([OutdoorKindSchema, z.literal(true)]).optional(),
+  roofed: z.boolean().optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -2148,6 +2179,7 @@ export type Wall = z.infer<typeof WallSchema>
 export type WallArc = z.infer<typeof WallArcSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
 export type RoomTenure = z.infer<typeof RoomTenureSchema>
+export type OutdoorKind = z.infer<typeof OutdoorKindSchema>
 export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>

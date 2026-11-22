@@ -12,6 +12,7 @@ import { indexPlan } from './plan'
 import { validatePlan } from './validate'
 import { wallPeak } from './roofs'
 import { buildingOfFloor } from './buildings'
+import { outdoorOnlyWalls } from './outdoor'
 
 /** What a storey with no drawn wall counts as: the plan's default wall height. */
 export const DEFAULT_STOREY_HEIGHT = 2.7
@@ -163,11 +164,14 @@ function tallestDrawnWall(plan: FloorPlan, floor: Floor): number {
   try {
     // LVL-5: a wall through floors counts toward the floor it rises through, with its own height.
     const slice = storeySlice(plan, floor.id)
-    const broken = new Set(validatePlan(slice, indexPlan(slice), { spaces: false }).broken)
+    const index = indexPlan(slice)
+    const broken = new Set(validatePlan(slice, index, { spaces: false }).broken)
+    // CNT-7 (C26): a fence or a parapet round outdoor space is no part of the building's storey.
+    const open = outdoorOnlyWalls(index)
     let tallest = 0
     for (const wall of slice.walls) {
       // LVL-6: a wall the floor's roof cuts is as tall as the roof leaves it.
-      if (isDrawnWall(wall, broken)) tallest = Math.max(tallest, wallPeak(slice, wall))
+      if (isDrawnWall(wall, broken) && !open.has(wall.id)) tallest = Math.max(tallest, wallPeak(slice, wall))
     }
     return tallest
   } catch {

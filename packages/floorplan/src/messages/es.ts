@@ -2302,5 +2302,18 @@ export const es: Messages = {
   'sheet.handing.toward': 'abre hacia {what}',
   'sheet.handing.hinged': '{opens}, con las bisagras a la {side}',
   'sheet.handing.side.left': 'izquierda',
-  'sheet.handing.side.right': 'derecha'
+  'sheet.handing.side.right': 'derecha',
+
+  // --- Espacio exterior, cubierto o descubierto (CNT-7, C26)
+  'areas.note.outdoor': '{area} m² de espacio exterior se dan aparte: no están en la superficie útil ni en la construida, interior o exterior.',
+  'outdoor.kind.garden': 'jardín',
+  'outdoor.kind.courtyard': 'patio',
+  'outdoor.kind.terrace': 'terraza',
+  'outdoor.kind.balcony': 'balcón',
+  'outdoor.kind.light-well': 'patio de luces',
+  'outdoor.kind.porch': 'porche',
+  'outdoor.kind.carport': 'cochera',
+  'outdoor.kind.other': 'espacio exterior',
+  'outdoor.roofed': 'cubierto',
+  'outdoor.open': 'descubierto'
 }
