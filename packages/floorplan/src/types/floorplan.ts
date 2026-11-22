@@ -543,6 +543,18 @@ export const FloorPlanFieldsSchema = z.object({
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
   // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  // WRT-7: how the person reads lengths and areas: the unit, the area unit, the decimal mark and
+  // the precision (`types/units.ts`). It never changes a stored number: the file is in metres.
+  // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  display: z
+    .object({
+      length: z.enum(['m', 'cm', 'mm', 'ft-in']),
+      area: z.enum(['m2', 'ft2']).optional(),
+      decimal: z.enum(['point', 'comma']).optional(),
+      precision: z.number().int().min(0).max(5).optional(),
+    })
+    .optional()
+    .catch(undefined),
   written: z
     .object({
       from: z.literal('rooms'),

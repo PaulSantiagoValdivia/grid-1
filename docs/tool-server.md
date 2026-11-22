@@ -5,6 +5,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 [README](../README.md#installing-grid-in-an-agent).
 
 - [The tools](#the-tools)
+- [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [Reporting a problem](#reporting-a-problem)
 - [Protocol versions](#protocol-versions)
@@ -16,7 +17,7 @@ Its tools are listed in a fixed order: first those that read the plan, in the or
 requests people make most, with the problem report last of them, then the preview, the export and the sheet, and last the nine that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
-the same facts as data; a view also returns its picture. Units are metres.
+the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
 
 | Tool | Answers |
 |---|---|
@@ -66,6 +67,17 @@ that would hold no wall, room or fixture is refused, and nothing is written.
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
+
+## The label, and retelling a report
+
+Every answer's text starts with "General guidance, not your local rules", and its data carries
+it as `label` (MSG-3); the server adds it where it answers, so no tool can leave it out. A
+refusal is not an answer about the plan and has no label. The server's instructions tell the
+agent how to retell a report (`src/mcp/retelling.ts`): start with the label and keep it; never
+say a plan complies, is approved, meets code or has passed anything; give each figure as the
+figure used here, with its basis and its status. The plugin's skill carries the same words.
+`npm run retell` scores how well a model keeps to them (see the scoreboard's
+[README](../scoreboard/README.md#the-retelling-set)).
 
 ## Measuring from faces, and a room's height
 

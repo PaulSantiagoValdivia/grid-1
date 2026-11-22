@@ -9,6 +9,7 @@
  * why. A command that writes the plan back reads it whole (`{ whole: true }`), so nothing the
  * reader left out is lost.
  */
+import { planInMetres } from '@ongrid/floorplan/types/units'
 import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, quoted, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type UnfinishedMerge } from '@ongrid/floorplan/types/jsonText'
@@ -178,7 +179,7 @@ export function loadPlan(project: Project, file: string, options: LoadOptions = 
   const parts = readPlanParts(raw, read.marks)
   const strict = (): void => {
     // The schema's own words, as before MSG-6.
-    const parsed = FloorPlanSchema.safeParse(raw)
+    const parsed = FloorPlanSchema.safeParse(planInMetres(raw).raw)
     if (parsed.success) return
     const [first, ...rest] = parsed.error.issues
     const where = first && first.path.length > 0 ? `${pathText(first.path)}: ` : ''
@@ -189,10 +190,12 @@ export function loadPlan(project: Project, file: string, options: LoadOptions = 
     strict()
     throw new PlanRefused(`${file} is not a Grid plan.`)
   }
-  if (options.whole === true && parts.faults.length > 0) {
+  // WRT-7: lengths stated in another unit are read in it, and the change is written in metres.
+  const faults = parts.faults.filter((f) => !(f.kind === 'read-as-meant' && f.path.length === 1 && f.path[0] === 'units' && planInMetres(raw).from !== null))
+  if (options.whole === true && faults.length > 0) {
     // A value the text could not hold is named for what it is; the rest in the schema's words.
     if (read.marks.length === 0) strict()
-    const [first, ...rest] = parts.faults
+    const [first, ...rest] = faults
     const more = rest.length > 0 ? ` (and ${rest.length} more)` : ''
     throw new PlanRefused(`${file} has a part Grid would leave out or read otherwise: ${faultText(first!)}${more}. grid check names each; correct them first.`)
   }

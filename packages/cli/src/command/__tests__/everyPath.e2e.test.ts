@@ -223,9 +223,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plan', call: tool('grid_merge_rooms', { plan: '@', room: 'bed1', with: 'bed2' }), given: asIs },
     { arg: 'out', call: tool('grid_merge_rooms', { plan: PLAN, room: 'bed1', with: 'bed2', out: '@.json' }), given: (p) => `${p}.json` },
   ],
+  // MSG-16: 1 m, not 1.5, so the new wall lands clear of the bedroom's window and the call
+  // reaches the path.
   grid_split_room: [
-    { arg: 'plan', call: tool('grid_split_room', { plan: '@', room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store' }), given: asIs },
-    { arg: 'out', call: tool('grid_split_room', { plan: PLAN, room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store', out: '@.json' }), given: (p) => `${p}.json` },
+    { arg: 'plan', call: tool('grid_split_room', { plan: '@', room: 'bed1', side: 'west', size: 1, new_room: 'store', new_name: 'Store' }), given: asIs },
+    { arg: 'out', call: tool('grid_split_room', { plan: PLAN, room: 'bed1', side: 'west', size: 1, new_room: 'store', new_name: 'Store', out: '@.json' }), given: (p) => `${p}.json` },
   ],
   grid_add_room: [
     { arg: 'plan', call: tool('grid_add_room', { plan: '@', room: 'porch', name: 'Porch', against: 'lounge', side: 'north', width: 3, depth: 2, in_the_way: 'remove' }), given: asIs },

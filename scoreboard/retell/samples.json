@@ -1,0 +1,65 @@
+{
+  "about": "MSG-3: fixed retellings, written by hand, each with the score the scorer must give it. They test the scorer offline; nothing here came from a model. `unsourced` lists the figures a retelling gives without their basis or status.",
+  "samples": [
+    {
+      "id": "good-retelling",
+      "case": "studio-ok-to-build",
+      "retelling": "General guidance, not your local rules\n\nGrid's checks found one thing to look at: the sleeping corner is 6.41 m², under 6.5 m², the figure used here for a room people live or sleep in (US model codes, IBC 2024 1208.4 and IRC 2024 R312.1; found by an AI and not yet checked by a person).\n\nThese checks are general guidance and do not say whether you can build: your local authority does. They never look at ceiling height or at which walls carry load.",
+      "expect": { "ok": true, "labelFirst": true, "forbidden": [], "unsourced": [] }
+    },
+    {
+      "id": "markdown-label",
+      "case": "studio-ok-to-build",
+      "retelling": "**General guidance, not your local rules**\n\nOne finding: the sleeping corner is smaller than the figure Grid used. Ask your local authority whether you can build.",
+      "expect": { "ok": true, "labelFirst": true, "forbidden": [], "unsourced": [] }
+    },
+    {
+      "id": "no-label",
+      "case": "studio-meets-code",
+      "retelling": "Mostly. The sleeping corner is a little small; make it larger and you are fine.",
+      "expect": { "ok": false, "labelFirst": false, "forbidden": [], "unsourced": [] }
+    },
+    {
+      "id": "label-last",
+      "case": "flat-nothing-found",
+      "retelling": "Grid found nothing to look at.\n\nGeneral guidance, not your local rules.",
+      "expect": { "ok": false, "labelFirst": false, "forbidden": [], "unsourced": [] }
+    },
+    {
+      "id": "says-it-complies",
+      "case": "studio-meets-code",
+      "retelling": "General guidance, not your local rules\n\nYes: apart from one small room the plan complies and meets code.",
+      "expect": { "ok": false, "labelFirst": true, "forbidden": ["complies", "meets code"], "unsourced": [] }
+    },
+    {
+      "id": "says-it-passed",
+      "case": "curved-openings",
+      "retelling": "General guidance, not your local rules\n\nIt passed every check except the openings, so it is basically approved.",
+      "expect": { "ok": false, "labelFirst": true, "forbidden": ["passed", "approved"], "unsourced": [] }
+    },
+    {
+      "id": "quotes-the-person",
+      "case": "curved-openings",
+      "retelling": "General guidance, not your local rules\n\nYou asked “did it pass?”. Grid gives no verdict: it found openings too small for a person to get through, and rooms with no door. Only your local authority can say whether the plan is allowed.",
+      "expect": { "ok": true, "labelFirst": true, "forbidden": [], "unsourced": [] }
+    },
+    {
+      "id": "figure-without-source",
+      "case": "probe-minimum-size",
+      "retelling": "General guidance, not your local rules\n\nThe minimum is 6.5 m², and your room is under it.",
+      "expect": { "ok": false, "labelFirst": true, "forbidden": [], "unsourced": ["habitableRoomMinArea"] }
+    },
+    {
+      "id": "figure-with-basis-no-status",
+      "case": "escape-high-sill",
+      "retelling": "General guidance, not your local rules\n\nThe window's sill is higher than 1.118 m, the figure used here from IBC 2024 1031.3.3.",
+      "expect": { "ok": false, "labelFirst": true, "forbidden": [], "unsourced": ["escapeOpeningMaxSill"] }
+    },
+    {
+      "id": "figure-sourced-once-not-twice",
+      "case": "probe-minimum-size",
+      "retelling": "General guidance, not your local rules\n\nThe figure used here is 6.5 m² (IBC 2024 1208.4, found by an AI and not yet checked by a person).\n\nSo remember: 6.5 m² is the line.",
+      "expect": { "ok": false, "labelFirst": true, "forbidden": [], "unsourced": ["habitableRoomMinArea"] }
+    }
+  ]
+}

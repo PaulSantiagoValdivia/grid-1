@@ -1,9 +1,14 @@
 /**
- * How a figure is written: metres, or feet and inches, and CSV for a spreadsheet. Grid's
- * figures are always metres; feet are only a way of writing them.
+ * How a figure is written: in the person's display (metres, centimetres, millimetres, or feet
+ * and inches, with a decimal point or comma), and CSV for a spreadsheet. Grid's figures are
+ * always metres; the display is only a way of writing them (WRT-7).
  */
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/floorplan/geometry'
 
-export const DISPLAY_UNITS = ['m', 'ft'] as const
+import { displayOf, METRES, showArea, showLength, type DecimalMark, type Display, type LengthKind } from '@ongrid/floorplan/types/units'
+
+/** The units a call may ask for: metres, centimetres, millimetres, feet and inches (`ft` is the same). */
+export const DISPLAY_UNITS = ['m', 'cm', 'mm', 'ft-in', 'ft'] as const
 export type DisplayUnits = (typeof DISPLAY_UNITS)[number]
 
 const FOOT_M = 0.3048
@@ -15,19 +20,28 @@ export function sqFt(m2: number): number {
   return m2 * SQ_FT_PER_M2
 }
 
-/** A length as feet and whole inches, as 15' 1". */
-export function feetAndInches(metres: number): string {
-  const inches = Math.round(Math.abs(metres) / 0.0254)
-  const sign = metres < 0 ? '-' : ''
-  return `${sign}${Math.floor(inches / 12)}' ${inches % 12}"`
+/**
+ * The display a call or a plan asks for (WRT-7): the call's `units` and `decimal` first, then
+ * the plan's own `display`, then metres. It only changes how figures are written.
+ */
+export function displayFor(units: unknown, decimal: unknown, plan?: { readonly display?: Partial<Display> & Pick<Display, 'length'> | undefined }): Display {
+  const stated = plan?.display
+  const own: Display | undefined = stated === undefined ? undefined : displayOf(stated.length, stated.decimal ?? 'point', stated.area, stated.precision)
+  const mark = (decimal as DecimalMark | undefined) ?? own?.decimal ?? 'point'
+  if (units === undefined) return own === undefined ? { ...METRES, decimal: mark } : { ...own, decimal: mark }
+  const length = units === 'ft' ? 'ft-in' : (units as Exclude<DisplayUnits, 'ft'>)
+  return displayOf(length, mark, undefined, own?.length === length ? own.precision : undefined)
 }
 
-export function lengthText(metres: number, units: DisplayUnits): string {
-  return units === 'ft' ? feetAndInches(metres) : `${metres.toFixed(2)} m`
+/** A length as the person reads it; `height` is a sill, written in inches in feet and inches. */
+export function lengthText(metres: number, display: Display, kind: LengthKind = 'length'): string {
+  return showLength(metres, display, { kind })
 }
 
-export function areaText(m2: number, units: DisplayUnits): string {
-  return units === 'ft' ? `${Math.round(sqFt(m2))} sq ft (${m2.toFixed(2)} m²)` : `${m2.toFixed(2)} m²`
+/** An area as the person reads it: square feet keep the square metres beside them, as before. */
+export function areaText(m2: number, display: Display): string {
+  if (display.area === 'ft2') return `${Math.round(sqFt(m2))} sq ft (${showArea(m2, { ...display, area: 'm2' })})`
+  return showArea(m2, display)
 }
 
 /** One CSV field. A field that a spreadsheet would read as a formula is written as text. */
@@ -38,6 +52,10 @@ function csvField(value: string | number | null): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
+/**
+ * A table as CSV. Its first row is the label, in one cell (MSG-3), so a spreadsheet shows it
+ * above the table's own header.
+ */
 export function csv(header: readonly string[], rows: readonly (readonly (string | number | null)[])[]): string {
-  return [header, ...rows].map((row) => row.map(csvField).join(',')).join('\n') + '\n'
+  return [[GENERAL_GUIDANCE_LABEL], header, ...rows].map((row) => row.map(csvField).join(',')).join('\n') + '\n'
 }
