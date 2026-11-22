@@ -9,7 +9,7 @@ report says so.
 
 ### The place in the plan
 
-- **`site.country`** (`packages/floorplan/src/types/floorplan.ts`, convention C8 in its header).
+- **`site.country`** (`packages/floorplan/src/types/floorplan.ts`, convention C9 in its header).
   CNT-3's `site` already says where the building sits, every field optional, so the place goes
   there rather than in a new top-level field. It is a country's name or its two- or three-letter
   code on Grid's list, held to a name's limit (120 characters, MSG-9's character rule) and then
@@ -363,3 +363,29 @@ Checks run after merging `main` at b58930a:
   `ground.test.ts` above. After the fix, `packages/rules` alone: 23 files, 380 passed.
 - `npm run scoreboard` (the merge brought changes to the rules' checks and `scoreboard/`):
   "Same as the stored figures" (checks fed 15 of 42, as stored on `main`).
+
+## Merging main at bd2f6a7 (WRT-6, HND-2)
+
+WRT-6 adds the plan's top-level `marks` (where a value came from); HND-2 the IFC's room data.
+Conflicts, each kept both sides:
+
+- `packages/floorplan/src/types/floorplan.ts`, the conventions in the header: WRT-6's "C8 · Where
+  a value came from", then COD-3's place, renumbered "C9 · The place". The schema itself merged
+  on its own: `site.country` in `SiteSchema`, `marks` at the top level. The reader's known-field
+  list is made from the schema, so it holds both.
+- `packages/cli/src/sheet/coverage.ts`: the `site` entry with COD-3's sentence, and WRT-6's new
+  `marks` entry (drawn).
+- `docs/plan-file.md`: COD-3's "The place", then WRT-6's "Where a value came from".
+- `docs/result-contract.md`, the agents changelog: COD-3's entry first, then WRT-6's, then the
+  rest as on `main`.
+- `CHANGELOG.md`, "Unreleased": COD-3's line first, then WRT-6's.
+
+No test changed in this merge. The flat's short report did not move: 1,196 bytes from
+`grid check` and 1,200 with `--country US` (984 and 988 without LVL-4's ground line), as pinned.
+
+Checks run after merging `main` at bd2f6a7: `npm run build`, `npm run typecheck` and `npm run
+lint` clean; `npx vitest run packages/cli packages/rules packages/floorplan packages/viewer
+scoreboard/__tests__/approvalWords.test.ts scoreboard/__tests__/retell.test.ts --maxWorkers=2
+--minWorkers=1`: 254 files passed, 4,933 tests passed, 2 skipped, none failed. The scoreboard was
+not run: the merge brought no change to `scoreboard/` or the rules' checks (main changed only
+`packages/rules/src/result/`).

@@ -293,6 +293,75 @@ describe('a note set aside as seen', () => {
   })
 })
 
+describe('what the plan marks assumed (WRT-6)', () => {
+  // Two values of one wall and a whole room, marked assumed: three to-confirm lines, two of
+  // them with the same code, thing and parts.
+  const MARKS = [
+    { part: 'wall', id: 'ext-south', value: 'height', source: 'assumed' },
+    { part: 'wall', id: 'ext-south', value: 'thickness', source: 'assumed' },
+    { part: 'room', id: 'bed2', source: 'assumed' },
+  ]
+  const write = (marks: readonly Record<string, unknown>[]): void => {
+    writeFileSync(join(dir, 'marked.json'), JSON.stringify({ ...(JSON.parse(FLAT) as Record<string, unknown>), marks }))
+  }
+  const confirm = (result: CheckResult): number[] => result.result.lines.flatMap((line, index) => (line.kind === 'to-confirm' ? [index + 1] : []))
+
+  it('the short report lists every to-confirm line under To confirm, and grid_check names them', async () => {
+    write(MARKS)
+    const run = await grid(['check', 'marked.json'])
+    expect(run.code).toBe(0)
+    const text = run.out
+    expect(text).toContain('To look at (3): 3 to confirm.')
+    expect(text).toContain('\nTo confirm (3): what the plan marks assumed, not given or measured. Ask the person.\n')
+    expect(text).toContain('The height of Wall "ext-south" was assumed, not given or measured. [plan/value-assumed]')
+    expect(text).toContain('The thickness of Wall "ext-south" was assumed, not given or measured. [plan/value-assumed]')
+    expect(text.match(/\[plan\/value-assumed\]/g)).toHaveLength(3)
+    // Short: no fixed tables.
+    expect(text).not.toMatch(/Figures used|What these checks never look at \(/)
+    const answer = await tool('grid_check').run({ plan: 'marked.json' }, { project })
+    expect(answer.text).toContain('To confirm with the person (3), assumed and not given: ')
+    expect(answer.text.match(/\[plan\/value-assumed\]/g)).toHaveLength(3)
+  })
+
+  it('marking one assumed value seen leaves the other values of that part listed, and a change to its marks brings it back', async () => {
+    write(MARKS)
+    const first = check('marked.json')
+    const [height, thickness, room] = confirm(first)
+    expect(first.result.lines[height! - 1]!.message).toContain('The height of Wall "ext-south"')
+    const run = await grid(['check', 'marked.json', '--seen', String(height), '--reason', 'Taken from the survey', '--by', 'Owner'])
+    expect(run.code, run.err).toBe(0)
+    // The mark keeps the message: the two notes on the wall share their code, thing and parts.
+    expect(readSeen(project, 'marked.json').marks[0]!.message).toBe(first.result.lines[height! - 1]!.message)
+
+    const seen = check('marked.json')
+    expect([height, thickness, room].map((n) => seen.seen!.states[n! - 1]!.state)).toEqual(['seen', 'new', 'new'])
+    const text = checkText(seen, 1)
+    expect(text).toContain('To confirm (3; 1 of them seen, listed under Seen): what the plan marks assumed, not given or measured. Ask the person.')
+    expect(text).toMatch(/Seen \(1\): [^\n]*\n {2}\d+\. to confirm, wall "ext-south": The height of Wall "ext-south" was assumed/)
+    const answer = await tool('grid_check').run({ plan: 'marked.json' }, { project })
+    expect(answer.text).toContain('To confirm with the person (2), assumed and not given: ')
+    expect(answer.text).toMatch(/Seen \(1\): .*\n {2}\d+\. to confirm, wall "ext-south": The height of Wall "ext-south" was assumed/)
+
+    // The mark on the wall's height now says how sure it is: the wall's marks changed, so the
+    // note is new again, saying which part.
+    write([{ ...MARKS[0]!, tolerance: 0.05 }, MARKS[1]!, MARKS[2]!])
+    const again = check('marked.json')
+    expect(again.seen!.states[height! - 1]!.state).toBe('back')
+    expect(checkText(again, 1)).toContain('but wall "ext-south" changed since, so it is new again.')
+  })
+
+  it('a mark made when the note was the only one of its kind on the part holds no more once another joins it', async () => {
+    write([MARKS[0]!])
+    const run = await grid(['check', 'marked.json', '--seen', '1', '--reason', 'Taken from the survey', '--by', 'Owner'])
+    expect(run.code, run.err).toBe(0)
+    expect(readSeen(project, 'marked.json').marks[0]!.message).toBeUndefined()
+    expect(check('marked.json').seen!.states.map((s) => s.state)).toEqual(['seen'])
+    // A second assumed value on the same wall: the mark can't say which note it was, so both are new.
+    write([MARKS[0]!, MARKS[1]!])
+    expect(check('marked.json').seen!.states.map((s) => s.state)).toEqual(['new', 'new'])
+  })
+})
+
 describe('the options and the tool are strict', () => {
   it.each([
     [['--reason', 'x'], '--reason goes with --seen <n>'],

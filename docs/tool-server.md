@@ -15,7 +15,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export, the sheet and the seen mark, and last the nine that
+requests people make most, with the problem report last of them, then the preview, the export, the sheet and the seen mark, and last the ten that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
@@ -44,6 +44,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_add_room` | Builds a room against the outside of a side of a room, saying what happens to openings in the wall it covers |
 | `grid_stretch` | Makes the whole building wider or longer, at its outside wall or through a room |
 | `grid_rename_room` | Renames a room or changes its use, saying which checks now look at it |
+| `grid_square_scan` | Squares a scanned plan: turns each wall marked scanned (every wall with `all`) within about 3 degrees of the plan's main directions onto them, and says how far each wall turned and moved ([Where a value came from](plan-file.md#where-a-value-came-from)) |
 
 Every change answers with what it changed, what it guessed and what it could not keep, and
 names the plan by its path in the project, so its size does not grow with the building.
