@@ -383,6 +383,22 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: quantities for a first estimate (ARE-13)
+
+- `grid_takeoff` takes `for` and `rates`. With `for=estimate` its data holds `label`, `lines`
+  (each with `key`, `what`, `quantity`, `unit` of `m2`, `m` or `nr`, `rule`, `assumed`, and
+  `floors` for the slab, upper floors and roof), `notes` and `rules`; then either `rateCard`
+  (no rates file: `{label, currency, rates: {key: {rate: null, unit}}}`, ready to fill) or `cost`
+  (`file`, `label`, `currency`, `total`, `complete`, `missing`, `wrongUnit`, `unused`,
+  `wholeBuilding`) with `orders` and `orderProblems`, and each line adds `state` (`priced`,
+  `no rate`, `wrong unit`, `alternative`), `rateKey`, `given`, `rate`, `priced` and `amount`.
+  `format=csv` gives the bill as one table. Without `for` the answer is as before, with one more
+  line saying `for=estimate` exists.
+- The rates file is `rates` (a path inside the project) or `rates.json` beside the plan. One
+  that names no currency, holds a negative rate, a unit Grid does not take, a key that is not a
+  key or a field Grid does not read is refused (`isError: true`, one line naming the file and the
+  part). `rates` without `for=estimate`, and `rooms` with it, are refused.
+
 ### 2026-11-22: the label first, and no line reads as approval (MSG-3)
 
 - Every tool answer leads with the label, and its data carries `label`; every output schema
