@@ -170,6 +170,12 @@ describe('the check layout (VEW-7)', () => {
     expect(sheet.pages[1]!.picture).toMatchObject({ kind: 'plan', ids: true })
   })
 
+  it('lists ceiling height and which walls carry load among what the checks never look at (COD-4)', () => {
+    const notes = sheet.pages[0]!.notes
+    expect(notes).toContainEqual(expect.stringMatching(/^Ceiling height is not checked\b/))
+    expect(notes).toContainEqual(expect.stringMatching(/^Which walls carry load is not known\b/))
+  })
+
   it('gives each room its use, and the client cover counts bedrooms', () => {
     const plan = structuredClone(house.plan)
     const room = plan.rooms.find((r) => r.id === 'hall')!
