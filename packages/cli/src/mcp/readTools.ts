@@ -10,7 +10,7 @@
 import { floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { causeText, checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { causeText, checkPlan, countsText, coverageSummary, KIND_WORDS, placeText, type PlaceWords, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { readSeen, type SeenState } from '../seen/marks'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
@@ -70,6 +70,7 @@ import {
 } from '../quantities/query'
 import { areaText, csv, DISPLAY_UNITS, displayFor, lengthText, sqFt } from '../quantities/units'
 import type { Display } from '@ongrid/floorplan/types/units'
+import { PLACE_TEXT_MAX } from '@ongrid/floorplan/types/places'
 import { GROUP_COLOURS, HIGHLIGHT_COLOUR } from '@ongrid/viewer/src/picture/look'
 import { likelyId } from '@ongrid/floorplan/types/nearest'
 import {
@@ -1418,7 +1419,15 @@ const describeTool: GridTool = {
 // grid_check
 
 /** The country argument of grid_check and grid_mark_seen: the numbers follow the record it makes. */
-export const COUNTRY_ARG: ArgSpec = { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code. Figures are applied only where they hold.', examples: ['US', 'GB'] }
+export const COUNTRY_ARG: ArgSpec = {
+  type: 'string',
+  maxLength: PLACE_TEXT_MAX,
+  description: 'Where it will be built, for this check, in place of the plan\'s site.country: a country\'s name or its two- or three-letter code (US, USA, United States, Spain). Figures are applied only where they hold; with no place stated, none is.',
+  examples: ['US', 'United States', 'ES'],
+}
+
+/** COD-3: how grid_check's first line names the place it was given. */
+const TOOL_PLACE: PlaceWords = { request: 'the country argument', give: 'give country' }
 
 /** MSG-10: a line's seen state as data: the mark, and with `back` the parts that changed since. */
 function seenData(state: SeenState | undefined): Record<string, unknown> | undefined {
@@ -1506,6 +1515,10 @@ const checkTool: GridTool = {
     }, ['ruleId', 'title', 'looksAt', 'lookedAt', 'lookedAtCount', 'skipped', 'skippedCount', 'findings'])),
     // COD-4: what these checks never look at, whatever the plan (ceiling height, which walls carry load).
     limits: listSchema(STRING),
+    // COD-3: the place the figure checks were for, from Grid's list, or null when none is stated (then no figure was applied).
+    place: { type: ['object', 'null'], properties: { country: STRING, name: STRING, from: STRING } },
+    // COD-3: with no place, how many lines the US figures would have given.
+    withoutPlace: objectSchema({ usLines: { type: 'number' } }, ['usLines']),
   }),
   run(args, context) {
     const { loaded, project, file } = readPlan(context, args['plan'])
@@ -1513,7 +1526,7 @@ const checkTool: GridTool = {
     const full = args['full'] === true
     let result
     try {
-      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}) })
+      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}) }, 'country')
       result = withSeen(result, loaded, readSeen(project, file))
     } catch (error) {
       throw asRefusal(error)
@@ -1529,7 +1542,8 @@ const checkTool: GridTool = {
     const record = result.result
     const states = result.seen?.states ?? []
     const seen = seenCount(result)
-    const lines: string[] = [GENERAL_GUIDANCE_LABEL]
+    // COD-3: right after the label, the place and the figures applied, or that none was.
+    const lines: string[] = [GENERAL_GUIDANCE_LABEL, placeText(result.report, TOOL_PLACE)]
     if (result.seen?.problem) lines.push(`The seen marks were not read: ${result.seen.problem}. Every note is listed as new.`)
     const seenWords = seen > 0 ? `; ${seen} of them seen, under Seen` : ''
     const checksRun = result.report.rules.length === 0 ? `Checks run: none. ${NOTHING_CHECKED}` : `Checks run: ${result.report.rules.length}.`
@@ -1596,6 +1610,8 @@ const checkTool: GridTool = {
         drawing,
         coverage: record.coverage,
         limits: record.limits,
+        place: record.place,
+        ...(record.withoutPlace ? { withoutPlace: record.withoutPlace } : {}),
       },
     }
   },

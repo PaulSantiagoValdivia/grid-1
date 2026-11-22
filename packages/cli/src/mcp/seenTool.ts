@@ -51,7 +51,7 @@ export const markSeenTool: GridTool = {
     if (!unmark && reason === undefined) throw new ToolRefusal('Pass reason: why the person sets the note aside, in their words.')
     if (!unmark && by === undefined) throw new ToolRefusal('Pass by: the name or role the person gives for who marks it. Never guess one.')
     try {
-      const whole = checkPlan(loaded, args['country'] ? { country: args['country'] as string } : {})
+      const whole = checkPlan(loaded, args['country'] ? { country: args['country'] as string } : {}, 'country')
       const line = whole.result.lines[number - 1]
       // The number and the code must name the same note, so a plan changed since is not marked by mistake.
       if (line !== undefined && line.code !== args['code']) {

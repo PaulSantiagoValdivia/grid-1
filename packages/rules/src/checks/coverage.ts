@@ -29,6 +29,7 @@ export interface FloorScope {
 
 /** The order skips are listed in: what could not be looked at first, then what the check is not about. */
 const SKIP_ORDER: readonly SkipReason[] = [
+  'no_place',
   'not_for_building',
   'no_figures_for_place',
   'no_rooms',
@@ -62,6 +63,8 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
  */
 export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonly readFor: readonly BuildingKind[]; readonly is: BuildingType | undefined }): string {
   switch (reason) {
+    case 'no_place':
+      return 'no place is stated, so no figure was applied'
     case 'not_for_building':
       return `the figures were read for ${buildingKindsText(building?.readFor ?? [])}, and the plan says this is ${building?.is === undefined ? 'another kind of building' : BUILDING_TYPE_TEXT[building.is]}`
     case 'no_figures_for_place':

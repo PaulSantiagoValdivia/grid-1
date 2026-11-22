@@ -233,7 +233,8 @@ describe('grid draw --out: writing a picture', () => {
 
 describe('grid check', () => {
   it('prints the report with its label first, and says no plan meets any rule', () => {
-    const run = grid('check', 'two-bed-flat.json')
+    // COD-3: the US stated, so the figure checks run and say what they could not look at.
+    const run = grid('check', 'two-bed-flat.json', '--country', 'US')
     expect(run.err).toBe('')
     expect(run.status).toBe(0)
     const lines = run.out.split('\n')
@@ -246,7 +247,7 @@ describe('grid check', () => {
     expect(run.out).toContain('Looked at by at least one check: 5 of 5 rooms.')
     expect(run.out).toContain('Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms; not looked at 5: no use stated.')
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)
-    const full = grid('check', 'two-bed-flat.json', '--full')
+    const full = grid('check', 'two-bed-flat.json', '--full', '--country', 'US')
     expect(full.out.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
     expect(full.out).toContain('Checks run (4):')
     expect(full.out).toContain('Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms.')
@@ -392,7 +393,7 @@ describe('options: each command refuses what it does not take, by name', () => {
     [['check', 'two-bed-flat.json', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['draw', 'two-bed-flat.json', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['export', 'two-bed-flat.json', '--format', 'obj', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
-    [['check', 'two-bed-flat.json', '--country', 'Spain'], '--country takes a two-letter country code'],
+    [['check', 'two-bed-flat.json', '--country', 'the moon'], '--country names no place Grid knows'],
     [['check'], 'check needs a plan file'],
     [['check', 'two-bed-flat.json', 'other.json'], 'check takes one plan file'],
     [['serve', 'two-bed-flat.json'], 'serve takes no arguments'],

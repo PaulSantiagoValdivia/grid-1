@@ -386,6 +386,15 @@ function readTop(work: Record<string, unknown>, faults: ReadFault[], marks: read
         continue
       }
     }
+    // COD-3: a place Grid does not know is left out alone; the rest of the site is kept.
+    const site = work['site']
+    if (field === 'site' && issue.path.length === 2 && issue.path[1] === 'country' && typeof site === 'object' && site !== null && !Array.isArray(site)) {
+      const rest = { ...(site as Record<string, unknown>) }
+      delete rest['country']
+      work['site'] = rest
+      faults.push({ kind: 'value-left-out', ...said, used: null })
+      continue
+    }
     // `units` keeps its default, metres; `projectId` and `referenceImage` are read as not stated.
     delete work[field]
     const used = FloorPlanSchema.safeParse(work)

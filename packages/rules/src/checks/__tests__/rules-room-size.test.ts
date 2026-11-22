@@ -5,6 +5,9 @@ import { FIGURES, HABITABLE_USES, RULES, checkLocalRules } from '..'
 import { messages } from '../messages'
 import { edit, flat, twoFloorHouse } from '@ongrid/floorplan/test-support/plans'
 
+/** COD-3: the place the figures here are for. With none stated, no figure applies. */
+const US = { country: 'US' } as const
+
 /**
  * A free-standing rectangular room whose inner faces measure `w` × `h`: four exterior walls
  * 0.2 m thick, their axes 0.1 m outside the inner face (C1), listed counter-clockwise (C3).
@@ -50,8 +53,8 @@ function plan(...boxes: { walls: Wall[]; room: Room }[]): FloorPlan {
   }
 }
 
-const sizeFindings = (p: FloorPlan) => checkLocalRules(p).findings.filter((f) => f.code === 'room_too_small')
-const noUse = (p: FloorPlan) => checkLocalRules(p).notChecked.filter((n) => n.reason === 'no_use')
+const sizeFindings = (p: FloorPlan) => checkLocalRules(p, US).findings.filter((f) => f.code === 'room_too_small')
+const noUse = (p: FloorPlan) => checkLocalRules(p, US).notChecked.filter((n) => n.reason === 'no_use')
 
 describe('the room-area rule', () => {
   it('is in the catalogue as a rule from US model codes, with the clauses its figure was read in', () => {
@@ -163,7 +166,7 @@ describe('small rooms people live or sleep in', () => {
       copy.walls.push(...small.walls)
       copy.rooms.push(small.room)
     })
-    const report = checkLocalRules(p)
+    const report = checkLocalRules(p, US)
     expect(report.findings.filter((f) => f.code === 'room_too_small')).toMatchObject([
       { floor: 'first', rooms: ['attic'], area: 5 }
     ])
@@ -174,7 +177,7 @@ describe('small rooms people live or sleep in', () => {
     const p = edit(plan(box('b', 'Bedroom', [0, 0], 2, 2, 'bedroom')), (copy) => {
       copy.walls[1]!.thickness = 0
     })
-    const report = checkLocalRules(p)
+    const report = checkLocalRules(p, US)
     expect(report.findings.filter((f) => f.code === 'room_too_small')).toEqual([])
     expect(report.notChecked).toMatchObject([{ reason: 'cannot_be_drawn', rooms: ['b'] }])
   })
@@ -264,7 +267,7 @@ describe('the order of findings', () => {
       copy.walls.push(...upstairs.walls)
       copy.rooms.push(upstairs.room)
     })
-    const codes = checkLocalRules(p).findings.map((f) => f.code)
+    const codes = checkLocalRules(p, US).findings.map((f) => f.code)
     expect(codes).toContain('room_too_small')
     expect(codes.lastIndexOf('room_without_door')).toBeLessThan(codes.indexOf('room_too_small'))
   })
@@ -276,6 +279,6 @@ describe('the order of findings', () => {
       box('c', 'Hall', [10, 0], 3, 3)
     )
     const shuffled = { ...p, walls: [...p.walls].reverse(), rooms: [...p.rooms].reverse() }
-    expect(JSON.stringify(checkLocalRules(shuffled))).toBe(JSON.stringify(checkLocalRules(p)))
+    expect(JSON.stringify(checkLocalRules(shuffled, US))).toBe(JSON.stringify(checkLocalRules(p, US)))
   })
 })
