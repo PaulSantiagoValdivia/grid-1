@@ -41,7 +41,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/draw.ts': [34, 'command'],
   'packages/cli/src/command/drawShow.ts': [4, 'command'],
   'packages/cli/src/command/edit.ts': [9, 'command'],
-  'packages/cli/src/command/export.ts': [16, 'command'],
+  'packages/cli/src/command/export.ts': [17, 'command'],
   'packages/cli/src/command/init.ts': [15, 'command'],
   'packages/cli/src/command/language.ts': [2, 'command'],
   'packages/cli/src/command/main.ts': [52, 'command'],
@@ -68,6 +68,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/edit/split.ts': [20, 'notYet'],
   'packages/cli/src/edit/square.ts': [11, 'notYet'],
   'packages/cli/src/edit/stretch.ts': [10, 'notYet'],
+  'packages/cli/src/export/dxfProfile.ts': [5, 'command'],
   'packages/cli/src/export/projectExports.ts': [2, 'command'],
   'packages/cli/src/fs/projectFiles.ts': [49, 'command'],
   'packages/cli/src/fs/textEncoding.ts': [5, 'command'],
@@ -81,7 +82,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/seenTool.ts': [16, 'tools'],
   'packages/cli/src/mcp/toolkit.ts': [27, 'agent'],
   'packages/cli/src/mcp/viewTool.ts': [15, 'tools'],
-  'packages/cli/src/mcp/writeTools.ts': [92, 'tools'],
+  'packages/cli/src/mcp/writeTools.ts': [93, 'tools'],
   'packages/cli/src/occupancy/occupancy.ts': [16, 'notYet'],
   'packages/cli/src/quantities/areas.ts': [6, 'notYet'],
   'packages/cli/src/quantities/compare.ts': [19, 'notYet'],
@@ -113,6 +114,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/diff/summary.ts': [4, 'notYet'],
   'packages/floorplan/src/geometry/diff/validity.ts': [1, 'notYet'],
   'packages/floorplan/src/geometry/envelope.ts': [4, 'notYet'],
+  'packages/floorplan/src/geometry/export/dxfProfile.ts': [8, 'command'],
   'packages/floorplan/src/geometry/export/ifc.ts': [31, 'notYet'],
   'packages/floorplan/src/geometry/export/leftOut.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/export/obj.ts': [2, 'notYet'],
@@ -210,8 +212,8 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     }
     // The ratchet: what is shown to the person and not moved yet only comes down. It was 913 when
     // MSG-11 landed; main's MSG-5, COD-3, CNT-8, CNT-9, BRF-1, BRF-5, LVL-6, WRT-8 and VEW-3 brought
-    // 190 more of the kinds MSG-11 left for later, and LVL-8 8 more (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1111)
+    // 190 more of the kinds MSG-11 left for later, LVL-8 8 and HND-1 14 more (reviews/MSG-11.md, "After merging main").
+    expect(left).toBeLessThanOrEqual(1125)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

@@ -339,3 +339,18 @@ Eight files conflicted.
     that is the next merge.
 16. A facade's level marks (`+2.95`) keep their decimal point in every language, as main draws
     them; the words around them follow the language.
+
+## After merging main at 8a43380
+
+Main's HND-1 (a DXF a drafter can keep working in) merged with two conflicts, the changelog and
+the contract, both kept whole (MSG-11's section first of the day). The DXF's own texts (its label,
+layer names and room tags) stay as main writes them: the export files' texts are among what
+MSG-11 left in English. ownWords: the profile's refusals are listed as the command line's
+(`geometry/export/dxfProfile.ts` 8, `export/dxfProfile.ts` 5, `command/export.ts` 16 → 17), and
+`writeTools.ts` 92 → 93; the ratchet moves from 1111 to 1125, 2,111 literals in 117 files in all.
+
+- `npm run build`: `dist/grid.mjs` 533,616 bytes (under main's 550,000); the Spanish chunk 133,465
+  bytes. `npm run typecheck` and `npm run lint`: clean.
+- Floorplan `geometry/` (the DXF and profile tests among them), `export/`, `messages/`, `types/`,
+  rules `result/`, and the CLI's guard, `export/`, `command/` and `mcp/`: 173 files, 3,908 tests
+  pass (2 skipped). No expectation changed. The full suite and the scoreboard were not run here.
