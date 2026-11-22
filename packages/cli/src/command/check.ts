@@ -83,7 +83,7 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const floor = floorOption(plan, request.floor)
   const options = country === undefined ? {} : { country: country.toUpperCase() }
   const full = checkLocalRules(plan, options)
-  const result = inspectPlan(plan, options)
+  const result = inspectPlan(loaded.text ?? plan, options)
   const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }

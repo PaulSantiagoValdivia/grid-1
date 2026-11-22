@@ -83,11 +83,17 @@ describe('T-9: what held', () => {
     }
   })
 
-  it('refuses 100,000 levels of nesting with an ordinary message', () => {
+  it('reads 100,000 levels of nesting as a part it leaves out, with an ordinary message', () => {
     const dir = mkdtempSync(join(tmpdir(), 'grid-safety-'))
     made.push(dir)
+    // MSG-6: a part that cannot be read is left out, and the rest is read.
     writeFileSync(join(dir, 'plan.json'), `{"walls":${'['.repeat(100_000)}${']'.repeat(100_000)}}`)
-    expect(() => loadPlan(openProject(dir, dir), 'plan.json')).toThrow(PlanRefused)
+    expect(loadPlan(openProject(dir, dir), 'plan.json').faults).toMatchObject([{ kind: 'part-left-out', found: 'a list of 1' }])
+    // Inside a part, as deep: no copy of it is made.
+    const deep = `${'['.repeat(100_000)}${']'.repeat(100_000)}`
+    writeFileSync(join(dir, 'inside.json'), `{"walls":[{"id":"w1","start":${deep},"end":[1,0]}]}`)
+    expect(loadPlan(openProject(dir, dir), 'inside.json').faults).toMatchObject([{ kind: 'part-left-out', part: { id: 'w1' } }])
+    expect(() => loadPlan(openProject(dir, dir), 'inside.json', { whole: true })).toThrow(PlanRefused)
   })
 
   it('handles ids named like the parts of an object', () => {

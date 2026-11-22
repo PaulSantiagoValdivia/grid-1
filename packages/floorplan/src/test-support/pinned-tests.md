@@ -39,6 +39,12 @@ settle them:
   asks that an unknown field is reported. The pinned room-use test reads an unknown *value* as
   not stated, on purpose, so that one bad value does not stop the preview. The two can live
   together if the fix reports the unknown field without refusing the plan.
+- **MS-9.** `catches a collision between two different kinds of entity` (validation.test.ts)
+  pins that `validatePlan` skips a room and a wall that share an id, both of them, because it
+  marks what it skips in one set of ids. MSG-6 settled MS-9 in the reader instead
+  (`types/readParts.ts`): a plan read from a file has the clash left out before `validatePlan`
+  sees it, so only the room is left out and the rooms on the wall are measured. The pinned test
+  still holds for a plan built in code, and is as it was.
 - **CH-3.** The probe `CH-3 "USA" is read as the same place as "US", or refused`
   (rules-escape.test.ts) and `is false for any other country` agree today, because the pinned
   test lists ES, GB, DE, IT and Spain and never USA. A fix that reads more spellings of the US
@@ -59,7 +65,7 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| MS-8, MS-9 | `geometry/__tests__/validation.test.ts` |
+| MS-8 | `geometry/__tests__/validation.test.ts` |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
 | CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
@@ -78,6 +84,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | AR-4 | ARE-5 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by ARE-5" |
 | MS-3, MS-16 | MSG-15 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-15" |
 | VE-2 | MSG-15 | `geometry/__tests__/elevations.test.ts`, "lab failures fixed by MSG-15" |
+| MS-9 (ids that differ only by a trailing space) | MSG-6 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-6" |
 | MS-15 | MSG-12 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-12"; the plans behind MS-2, MS-15, MS-17, W-10 and L-6 in `geometry/__tests__/wallFaults.test.ts` |
 | MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
 | CH-6 (the size half) | MSG-18 | `packages/rules/src/checks/__tests__/rules-check.test.ts`, "lab failures fixed by MSG-18"; the lab's three cases in `geometry/__tests__/passable.test.ts` |

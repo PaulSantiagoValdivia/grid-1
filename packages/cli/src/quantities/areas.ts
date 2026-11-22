@@ -1,30 +1,30 @@
 /**
- * Floor areas with the rule each one is measured by, said in the answer.
+ * Floor areas with the rule each one follows, said in the answer (ARE-9), and the state of each
+ * (MSG-2).
  *
- * - Net: each room between its wall faces, as Grid measures it everywhere (`roomArea`).
- * - Gross internal: the floor inside the inner face of the walls marked `exterior`, inner
- *   walls and partitions included, worked out by `floorSpaces` from those walls alone.
- * - Gross external: the floor inside the outer face of the walls marked `exterior`.
- * - Circulation: rooms whose `use` is corridor or stair, as a share of the gross internal area.
+ * The figures are the library's (`planAreaFigures`): net, gross internal and gross external,
+ * per floor and per use, each described in Grid's own words (`MEASURES`). This file adds what
+ * the measuring tools show beside them: each room's inside size, the floor its fixtures leave
+ * free (CNT-12), circulation (rooms whose `use` is corridor or stair) as a share of the gross
+ * internal area, and the state of every figure (`state.ts`).
  *
- * Rooms the caller names as outside (a balcony, a terrace) are listed apart and are not in
- * the net or the gross internal area.
+ * Rooms the caller names as outside (a balcony, a terrace) are listed apart and are not in the
+ * net or the gross internal area. Rooms Grid could not draw are listed with no area, named, and
+ * are in no figure.
  */
-import { planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { floorSpaces, spacesKnown } from '@ongrid/floorplan/geometry/spaces'
+import { MEASURES, type GrossMeasure, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
+import { planAreaFigures } from '@ongrid/floorplan/geometry/areas'
 import type { Survey } from './survey'
 import { FIXTURE_RULES, planFixtures } from './fixtures'
 import { joinStates, lessRooms, NOT_LOOKED_AT, roomDoubts, roomState, sumState, type AreaState, type NumberState } from './state'
 
+/** What each measure measures, in one sentence each. */
 export const AREA_RULES = {
-  net: 'Net area is each room measured between the faces of its walls, as Grid measures it everywhere.',
-  grossInternal: 'Gross internal area is the floor inside the inner face of the walls marked exterior, inner walls and partitions included.',
-  grossExternal: 'Gross external area is the floor inside the outer face of the walls marked exterior.',
+  net: MEASURES.net.measures,
+  grossInternal: MEASURES.grossInternal.measures,
+  grossExternal: MEASURES.grossExternal.measures,
   circulation: 'Circulation is the rooms whose use is corridor or stair, as a share of the gross internal area.',
 } as const
-
-/** Why a plan has no gross areas, said wherever the figures would be. */
-export const GROSS_NOT_KNOWN = 'No gross areas: on some floor the walls marked exterior do not close a floor.'
 
 export interface RoomArea {
   readonly id: string
@@ -48,15 +48,20 @@ export interface RoomArea {
 export interface FloorAreas {
   readonly floor: string
   readonly rooms: readonly RoomArea[]
+  /** Rooms on this floor Grid could not draw: in no figure. */
+  readonly leftOut: readonly RoomLeftOut[]
   readonly net: number
   readonly byUse: Readonly<Record<string, number>>
   readonly circulation: number
-  /** Null when the walls marked exterior close no floor. */
+  /** Null when it cannot be worked out on this floor (`why`). */
   readonly grossInternal: number | null
   readonly grossExternal: number | null
   readonly outsideRooms: number
+  /** Every solid wall; null with the gross figures. */
+  readonly walls: number | null
   /** Enclosed floor that no room covers, on the whole floor. */
   readonly unclaimed: number
+  readonly why: string | null
   /** MSG-2: the state of each figure, and the rooms it left out or holds in doubt. */
   readonly states: {
     readonly net: AreaState
@@ -77,6 +82,14 @@ export interface PlanAreas {
   readonly circulationShare: number | null
   /** Net over gross internal, 0 to 1; null without a gross internal area. */
   readonly netToGross: number | null
+  readonly byUse: Readonly<Record<string, number>>
+  readonly leftOut: readonly RoomLeftOut[]
+  /** Which gross measure to give first, and why. */
+  readonly reader: ReaderMeasure
+  /** Why a gross figure is not known, in a sentence; null when both are. */
+  readonly grossWhy: string | null
+  /** The three measures, each with what it measures, does not take off and cannot say. */
+  readonly measures: readonly MeasureRule[]
   readonly rules: readonly string[]
   readonly notes: readonly string[]
   /** MSG-2: the state of each total, and the rooms it left out or holds in doubt. */
@@ -90,111 +103,122 @@ export interface PlanAreas {
   }
 }
 
+export interface AreasRequest {
+  readonly outside?: ReadonlySet<string>
+  readonly floors?: readonly string[]
+  readonly country?: string
+  readonly gross?: GrossMeasure | 'both'
+}
+
 const CIRCULATION = new Set(['corridor', 'stair'])
-
-function gross(plan: FloorPlan, floor: string): { internal: number; external: number } | null {
-  const storey = planForFloor(plan, floor)
-  const outer = { ...storey, rooms: [], openings: [], walls: storey.walls.filter((w) => w.kind === 'exterior' && w.virtual !== true) }
-  if (outer.walls.length === 0) return null
-  const spaces = floorSpaces(outer, floor)
-  if (!spacesKnown(spaces) || spaces.floorArea < 0.01) return null
-  return { internal: spaces.floorArea, external: spaces.outlineArea }
-}
-
-function unclaimedOn(plan: FloorPlan, floor: string): number {
-  const spaces = floorSpaces(planForFloor(plan, floor), floor)
-  return spacesKnown(spaces) ? spaces.unclaimedArea : 0
-}
 
 const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0)
 
-export function planAreas(survey: Survey, outside: ReadonlySet<string> = new Set(), floors?: readonly string[]): PlanAreas {
-  const result: FloorAreas[] = []
-  const notes: string[] = []
-  const { taken } = planFixtures(survey.plan, floors)
-  const shown = survey.facts.floors.filter((floor) => floors === undefined || floors.includes(floor.id))
-  const doubts = roomDoubts(survey.plan, shown.map((floor) => floor.id))
-  for (const floor of shown) {
-    const rooms: RoomArea[] = floor.rooms.map((room) => {
-      const net = room.shape?.area ?? null
-      const doubted = doubts.get(floor.id)?.get(room.id) ?? []
-      const fixtures = taken.get(room.id)
+const NOT_SAID = 'not said'
+const key = (floor: string, id: string): string => `${floor}\u0000${id}`
+
+export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas {
+  const outside = request.outside ?? new Set<string>()
+  const figures = planAreaFigures(survey.plan, {
+    outside,
+    ...(request.floors ? { floors: request.floors } : {}),
+    ...(request.country ? { country: request.country } : {}),
+    ...(request.gross ? { gross: request.gross } : {}),
+  })
+  const { taken } = planFixtures(survey.plan, request.floors)
+  const doubts = roomDoubts(survey.plan, figures.floors.map((f) => f.floor))
+  // Lab plans repeat room ids from floor to floor, so a room is found by its floor too.
+  const shapes = new Map(survey.rooms.map((room) => [key(room.facts.floor, room.facts.id), room.facts.shape] as const))
+
+  const floors: FloorAreas[] = figures.floors.map((f) => {
+    const counted = new Map(f.rooms.map((room) => [room.id, room] as const))
+    const unmeasured = new Map(f.leftOut.map((room) => [room.id, room] as const))
+    // Every room on the floor, in plan order: one Grid could not draw is listed with no area.
+    const ids = [...new Set(survey.plan.rooms.map((room) => room.id).filter((id) => counted.has(id) || unmeasured.has(id)))]
+    const uses = new Map(survey.plan.rooms.filter((room) => counted.has(room.id) || unmeasured.has(room.id)).map((room) => [room.id, room.use ?? null] as const))
+    const rooms: RoomArea[] = ids.map((id) => {
+      const figure = counted.get(id)
+      const net = figure?.area ?? null
+      const doubted = doubts.get(f.floor)?.get(id) ?? []
+      const shape = shapes.get(key(f.floor, id))
+      const fixtures = taken.get(id)
       return {
-        id: room.id,
-        name: room.name,
-        use: room.use ?? null,
-        floor: floor.id,
+        id,
+        name: figure?.name ?? unmeasured.get(id)!.name,
+        use: figure?.use ?? uses.get(id) ?? null,
+        floor: f.floor,
         net,
         state: roomState(net, doubted),
         doubts: doubted,
-        size: room.shape?.rectangle ? [room.shape.across, room.shape.up] : null,
-        outside: outside.has(room.id),
+        size: shape?.rectangle ? [shape.across, shape.up] : null,
+        outside: outside.has(id),
         // Fixtures add no area and take none from the totals: only the room's free floor (CNT-12).
         // A room that could not be measured has no free floor either (MSG-2).
         ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
       }
     })
-    const area = (list: readonly RoomArea[]): number => sum(list.map((room) => room.net ?? 0))
     const inside = rooms.filter((room) => !room.outside)
-    const byUse: Record<string, number> = {}
     const byUseState: Record<string, AreaState> = {}
-    for (const use of [...new Set(inside.map((room) => room.use ?? 'not said'))]) {
-      const ofUse = inside.filter((room) => (room.use ?? 'not said') === use)
-      byUse[use] = area(ofUse)
-      byUseState[use] = sumState(ofUse)
-    }
-    const outsideList = rooms.filter((room) => room.outside)
-    const outsideRooms = area(outsideList)
+    for (const use of [...new Set(inside.map((room) => room.use ?? NOT_SAID))]) byUseState[use] = sumState(inside.filter((room) => (room.use ?? NOT_SAID) === use))
     const circulating = inside.filter((room) => CIRCULATION.has(room.use ?? ''))
-    const g = gross(survey.plan, floor.id)
-    // Gross areas come from the walls marked exterior; gross internal takes off the outside rooms.
-    result.push({
-      floor: floor.id,
+    // A use whose rooms could none be measured is still listed, at 0 and not looked at (MSG-2).
+    const byUse: Record<string, number> = { ...f.byUse }
+    for (const use of Object.keys(byUseState)) byUse[use] ??= 0
+    return {
+      floor: f.floor,
       rooms,
-      net: area(inside),
+      leftOut: f.leftOut,
+      net: f.net,
       byUse,
-      circulation: area(circulating),
-      grossInternal: g === null ? null : Math.max(0, g.internal - outsideRooms),
-      grossExternal: g === null ? null : g.external,
-      outsideRooms,
-      unclaimed: unclaimedOn(survey.plan, floor.id),
+      circulation: sum(circulating.map((room) => room.net ?? 0)),
+      grossInternal: f.grossInternal,
+      grossExternal: f.grossExternal,
+      outsideRooms: f.outsideRooms,
+      walls: f.walls,
+      unclaimed: f.unclaimed ?? 0,
+      why: f.why,
       states: {
         net: sumState(inside),
         byUse: byUseState,
         circulation: sumState(circulating),
-        grossInternal: g === null ? NOT_LOOKED_AT : lessRooms(outsideList),
-        grossExternal: g === null ? NOT_LOOKED_AT : lessRooms([]),
+        // Gross areas come from the walls; gross internal takes off the outside rooms.
+        grossInternal: f.grossInternal === null ? NOT_LOOKED_AT : lessRooms(rooms.filter((room) => room.outside)),
+        grossExternal: f.grossExternal === null ? NOT_LOOKED_AT : lessRooms([]),
       },
-    })
-    if (floor.leftOut.length > 0) notes.push(`Floor ${JSON.stringify(floor.id)}: ${floor.leftOut.length} part(s) can't be measured and are left out; grid_check says why.`)
-  }
-  const net = sum(result.map((f) => f.net))
-  const known = result.every((f) => f.grossInternal !== null)
-  const grossInternal = known ? sum(result.map((f) => f.grossInternal!)) : null
-  const grossExternal = known ? sum(result.map((f) => f.grossExternal!)) : null
-  const circulation = sum(result.map((f) => f.circulation))
-  if (!known) notes.push(GROSS_NOT_KNOWN)
-  const netState = joinStates(result.map((f) => f.states.net))
+    }
+  })
+
+  const grossInternal = figures.grossInternal.area
+  const net = figures.net.area ?? 0
+  const circulation = sum(floors.map((f) => f.circulation))
+  const unknown = [figures.grossInternal, figures.grossExternal].filter((g) => g.area === null)
+  const grossWhy = unknown.length === 0 ? null : `No ${unknown.map((g) => g.rule.name.toLowerCase()).join(' or ')}: ${unknown[0]!.why}`
+  const netState = joinStates(floors.map((f) => f.states.net))
+  const notes: string[] = grossWhy ? [grossWhy] : []
   // AC-9: a room that cannot be measured is named, so a total short by its area is read as such.
   if (netState.leftOut.length > 0) {
     const several = survey.facts.floors.length > 1
     const named = netState.leftOut.map((room) => `${JSON.stringify(room.name)}${several ? ` on ${JSON.stringify(room.floor)}` : ''}`).join(', ')
     notes.push(`Every total here leaves out ${netState.leftOut.length === 1 ? 'a room' : `${netState.leftOut.length} rooms`} that could not be measured, and is short by ${netState.leftOut.length === 1 ? 'its' : 'their'} area: ${named}.`)
   }
-  const grossInternalState = known ? joinStates(result.map((f) => f.states.grossInternal)) : NOT_LOOKED_AT
-  const grossExternalState = known ? joinStates(result.map((f) => f.states.grossExternal)) : NOT_LOOKED_AT
-  const circulationState = joinStates(result.map((f) => f.states.circulation))
-  const unclaimed = sum(result.map((f) => f.unclaimed))
-  if (unclaimed >= 0.01) notes.push(`${unclaimed.toFixed(2)} m² of floor inside the walls belongs to no room; it is in the gross figures only.`)
-  if (result.some((f) => f.outsideRooms > 0)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure.')
+  // The library's own note on rooms left out says the same, so it is not said twice.
+  notes.push(...figures.notes.filter((note) => !note.startsWith('Left out of every figure')))
+  const grossInternalState = grossInternal === null ? NOT_LOOKED_AT : joinStates(floors.map((f) => f.states.grossInternal))
+  const grossExternalState = figures.grossExternal.area === null ? NOT_LOOKED_AT : joinStates(floors.map((f) => f.states.grossExternal))
+  const circulationState = joinStates(floors.map((f) => f.states.circulation))
   return {
-    floors: result,
+    floors,
     net,
     grossInternal,
-    grossExternal,
+    grossExternal: figures.grossExternal.area,
     circulation,
     circulationShare: grossInternal ? circulation / grossInternal : null,
     netToGross: grossInternal ? net / grossInternal : null,
+    byUse: Object.fromEntries([...new Set(floors.flatMap((f) => Object.keys(f.byUse)))].map((use) => [use, sum(floors.map((f) => f.byUse[use] ?? 0))])),
+    leftOut: figures.leftOut,
+    reader: figures.reader,
+    grossWhy,
+    measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal],
     rules: taken.size === 0 ? Object.values(AREA_RULES) : [...Object.values(AREA_RULES), FIXTURE_RULES.free],
     notes,
     states: {
