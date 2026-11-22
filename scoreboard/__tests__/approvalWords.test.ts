@@ -6,8 +6,8 @@
  * text and the plan's own names are the user's (`approvalWords`), so they are left out.
  *
  * A sample, because all 1,100 lab plans take about ten minutes here and the sample a few
- * seconds. `GRID_SCAN_ALL=1` scans every lab plan, reports and exports alike; it was run once
- * for MSG-3 and found nothing (reviews/MSG-3.md).
+ * seconds. `GRID_SCAN_ALL=1` scans every lab plan, reports and exports alike (reviews/MSG-3.md
+ * says how far that got).
  */
 import { readdirSync, readFileSync } from 'fs'
 import { resolve } from 'path'

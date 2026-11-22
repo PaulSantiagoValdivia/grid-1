@@ -201,12 +201,27 @@ data); `scoreboard/__tests__/approvalWords.test.ts`; and
 - **The code `opening/too-small-to-pass` still holds the word "pass".** Codes are stable within
   `resultVersion` 1, so renaming it means version 2; the scan leaves codes out.
 - **The scan covers a sample.** Every 20th lab plan for reports and every 100th for exports,
-  because all 1,100 take about ten minutes. `GRID_SCAN_ALL=1` scans them all; the result of the
-  one full run is below.
+  because all 1,100 take ten minutes or more. `GRID_SCAN_ALL=1` scans them all; the one full run
+  did not finish (below).
 - **A finding's short message keeps its figure bare** ("is under 6.5 m²"). The figure's basis
   and status are in `needed` and in the report's "Figures used", so the one-line message stays
   short.
 
 ## Full scan
 
-FULL_SCAN_RESULT
+Not finished. `GRID_SCAN_ALL=1` was started once, after the "pass" wordings were changed. It hit
+its 25-minute limit with no result, on a laptop running about ten sessions' tests at once.
+Before those wordings were changed, the full run had found 21 lines. All of them came from the
+`opening/too-small-to-pass` wording and its tolerance descriptions, which no fixture reaches.
+Those wordings are changed now, and the sample is clean. Run it again on a quiet machine:
+
+```bash
+GRID_SCAN_ALL=1 npx vitest run scoreboard/__tests__/approvalWords.test.ts
+```
+
+## Checks run
+
+After merging main (3634cae, QAR-7): `npm run build`, `npm run typecheck`, `npm run lint` and
+`npm run scoreboard` pass, and the scoreboard matches the stored figures. The full suite,
+`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`, passes: 230 files,
+4,609 tests, 2 skipped.
