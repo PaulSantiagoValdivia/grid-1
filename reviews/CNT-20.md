@@ -121,4 +121,16 @@ an item's `library`, `clearance` and `fromLibrary`). The page is [docs/library.m
 
 ## Checks run
 
-See the session's report for the final results after merging main.
+On the branch after merging main at 739066d0 (CMD-4, CMD-14; a clean merge):
+
+- `npm run typecheck`, `npm run lint`, `npm run check:licenses`: pass.
+- `npm run scoreboard`: "Same as the stored figures" (no count moved; no lab plan holds items).
+- Package runs before the merge, each failure fixed and its file rerun: `packages/floorplan`
+  (145 files), `packages/rules`, `packages/floorplan/src/messages`, `scripts/`, and
+  `packages/cli` with `packages/viewer` (10 failures, all from this change, each fixed above).
+- The full suite (`timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2
+  --minWorkers=1`) was cut off by its 25-minute cap after 50 of about 370 files: the machine's
+  load average was about 265 on 12 cores, with ten sessions running. In those 50 files, three
+  timing tests failed (`grid.e2e` speed, the diff tool's picture timing out at 5 s, and the
+  `MAX_HOST_CUTS` time limit), and the first two failed again run alone (a single `grid check`
+  took 1.8 to 4.4 s under that load). They need a rerun on a quiet machine before merging.
