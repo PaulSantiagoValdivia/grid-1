@@ -516,3 +516,54 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}`],
   }
 }
+
+/** WRT-4: the turns `grid_mirror` makes, in degrees counter-clockwise on the drawing as Grid draws it (y up). */
+export const TURNS = [90, 180, 270] as const
+export type Turn = (typeof TURNS)[number]
+
+const TURN_WORDS: Record<Turn, string> = { 90: 'a quarter counter-clockwise (90°)', 180: 'half round (180°)', 270: 'a quarter clockwise (270°, or -90°)' }
+
+/**
+ * WRT-4: the whole plan turned a quarter or half round about the middle of its walls' box,
+ * counter-clockwise as Grid draws it, y up, as a stated north is measured. Every room keeps its
+ * size and its walls in the same order, every door its swing and the room it opens into; an
+ * anchor kept from a side of the drawing turns with it, a fixture turns with the plan, and the
+ * site's origin turns with the walls. The stated north is kept: the building turns on its site,
+ * so what faced south faces another way, as `grid_mirror`'s mirror is a new design too. The y
+ * direction is kept, so on a page whose y runs down the plan turns the other way.
+ */
+export function turnPlanBy(survey: Survey, turn: Turn): Patch {
+  const plan = survey.plan
+  const xs = plan.walls.flatMap((w) => [w.start[0], w.end[0]])
+  const ys = plan.walls.flatMap((w) => [w.start[1], w.end[1]])
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+  const [cos, sin] = turn === 90 ? [0, 1] : turn === 180 ? [-1, 0] : [0, -1]
+  const map = (p: readonly [number, number]): Pair => {
+    const x = p[0] - cx
+    const y = p[1] - cy
+    return [r3(cx + cos * x - sin * y), r3(cy + sin * x + cos * y)]
+  }
+  const sides = ['north', 'west', 'south', 'east'] as const
+  const turned = (side: string): string => {
+    const k = sides.indexOf(side as (typeof sides)[number])
+    return k < 0 ? side : sides[(k + turn / 90) % 4]!
+  }
+  const walls = new Map(plan.walls.map((w) => [w.id, { start: map(w.start), end: map(w.end) }]))
+  const openings = new Map<string, OpeningChange>()
+  for (const o of plan.openings) if (o.anchor !== undefined && turned(o.anchor.from) !== o.anchor.from) openings.set(o.id, { anchor: { ...o.anchor, from: turned(o.anchor.from) as From } })
+  const items = new Map((plan.items ?? []).map((item) => [item.id, { at: map(item.at), turn: r3((((item.turn ?? 0) + turn) % 360 + 360) % 360) }]))
+  const top: Record<string, unknown> = {}
+  if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: map(plan.site.origin) }
+  const north = plan.north === undefined ? '' : ` The plan's north is kept at ${wrapDegrees(r3(plan.north))}°, so the building faces new ways: what faced south now faces ${turn === 90 ? 'east' : turn === 180 ? 'north' : 'west'}.`
+  const down = plan.yAxis === 'down' ? ' The plan says its y runs down the page, so on that page it turned the other way.' : ''
+  return {
+    walls,
+    openings,
+    removeOpenings: new Set(),
+    rooms: new Map(),
+    ...(items.size === 0 ? {} : { items }),
+    ...(Object.keys(top).length === 0 ? {} : { plan: top }),
+    said: [`Turned the plan ${TURN_WORDS[turn]} about the middle of its walls: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${down}`],
+  }
+}
