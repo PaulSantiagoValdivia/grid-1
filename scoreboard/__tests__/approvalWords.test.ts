@@ -76,9 +76,13 @@ describe('no line Grid writes reads as a pass (MSG-3)', () => {
       }
       const one = loaded(name, plan)
       const result = checkPlan(one, {})
+      // MSG-10: the short report, the default, and the whole one.
       const text = checkText(result, 1)
       expect(text.split('\n')[0], name).toBe(GENERAL_GUIDANCE_LABEL)
       say('grid check', text)
+      const full = checkText(result, 1, { full: true })
+      expect(full.split('\n')[0], name).toBe(GENERAL_GUIDANCE_LABEL)
+      say('grid check --full', full)
       for (const line of result.result.lines) say(line.code, [line.message, line.found, line.needed, line.fix].join(' | '))
       const notes = planNotes(plan, result.report)
       for (const note of notes.notes) say(`note ${note.id}`, `${own(note.title)} ${note.detail.map((d) => own([d])).join(' ')}`)

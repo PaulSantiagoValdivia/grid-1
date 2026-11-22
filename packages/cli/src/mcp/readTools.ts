@@ -7,9 +7,11 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, tolerance, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
-import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { causeText, checkPlan, countsText, KIND_WORDS, nothingCheckedText, partsText, problemsText, thingText, usedFigures } from '../command/check'
+import { floorOf, itemFootprint, limit, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { PATH_MAX } from '../fs/projectFiles'
+import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
+import { causeText, checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { readSeen, type SeenState } from '../seen/marks'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
 import { UsageError } from '../command/options'
@@ -40,17 +42,22 @@ import {
 } from '../quantities/measure'
 import { openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
+import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
 import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
+import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
+import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
 import { areaText, csv, DISPLAY_UNITS, displayFor, lengthText, sqFt } from '../quantities/units'
 import type { Display } from '@ongrid/floorplan/types/units'
 import {
   asRefusal,
+  BOOLEAN,
   FLOOR_ARG,
   floorArg,
   listSchema,
   m,
   NULLABLE_NUMBER,
+  NULLABLE_STRING,
   NUMBER,
   objectSchema,
   openingArg,
@@ -329,18 +336,117 @@ const areasTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_takeoff
 
+/** ARE-13: a quantity as the bill writes it. */
+function quantityText(quantity: number, unit: QuantityUnit, units: Display): string {
+  if (unit === 'nr') return `${Math.round(quantity)} nr`
+  return unit === 'm2' ? areaText(quantity, units) : lengthText(quantity, units)
+}
+
+const money = (amount: number, currency: string): string =>
+  `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+
+const UNIT_SHOWN: Readonly<Record<QuantityUnit, string>> = { m2: 'm²', m: 'm', nr: 'nr' }
+
+/** ARE-13: the bill of quantities, priced from the person's rates or as a rate card. */
+function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Display, asCsv: boolean): Answer {
+  const rules = [...new Set(estimate.lines.map((line) => line.rule))]
+  const data: Record<string, unknown> = {
+    label: GENERAL_GUIDANCE_LABEL,
+    lines: pricing?.lines ?? estimate.lines,
+    notes: estimate.notes,
+    rules,
+    ...(pricing === null
+      ? { rateCard: rateCard(estimate) }
+      : {
+          cost: {
+            file: pricing.file,
+            label: pricing.label,
+            currency: pricing.currency,
+            total: pricing.total,
+            complete: pricing.complete,
+            missing: pricing.missing,
+            wrongUnit: pricing.wrongUnit,
+            unused: pricing.unused,
+            wholeBuilding: pricing.wholeBuilding,
+          },
+          orders: pricing.orders,
+          orderProblems: pricing.orderProblems,
+        }),
+  }
+  if (asCsv) return { text: estimateCsv(estimate, pricing), data }
+  const lines: string[] = [
+    `Quantities for a first estimate, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`,
+    pricing === null
+      ? 'Rate card: no rates given, so no cost. Each line with its key and unit, ready to fill:'
+      : `Priced from ${q(pricing.file)}${pricing.label ? ` (${q(pricing.label)})` : ''}, in ${q(pricing.currency)}: the person's rates, not a price list.`,
+  ]
+  const shown: readonly (EstimateLine & Partial<PricedLine>)[] = pricing?.lines ?? estimate.lines
+  shown.forEach((line, i) => {
+    let cost = ''
+    if (pricing !== null) {
+      if (line.state === 'priced' || line.state === 'alternative') {
+        const waste = line.given!.waste === 0 ? '' : ` + ${+(line.given!.waste * 100).toFixed(2)}% waste`
+        cost = `${waste} × ${money(line.rate!, pricing.currency)}/${UNIT_SHOWN[line.unit]} = ${money(line.amount!, pricing.currency)}${line.state === 'alternative' ? ', an alternative to the total' : ''}`
+      } else if (line.state === 'wrong unit') {
+        cost = `, not priced: the rate ${q(line.rateKey!)} is per ${line.given!.unit}`
+      } else {
+        cost = line.key === WHOLE_BUILDING_KEY ? '' : line.rateKey === null || line.rateKey === undefined ? ', no rate' : `, no rate: ${q(line.rateKey)} is not filled in`
+      }
+    }
+    const assumed = line.assumed ? ', assumed' : ''
+    lines.push(`  ${line.key}: ${line.what}, ${quantityText(line.quantity, line.unit, units)}${pricing === null ? `${assumed}; rate per ${line.unit}` : `${cost}${assumed}`}`)
+    // Each line's rule follows it, once for a run of lines that share one (AC-14).
+    if (shown[i + 1]?.rule !== line.rule) lines.push(`    Rule: ${line.rule}`)
+  })
+  if (pricing === null) {
+    lines.push(
+      `To price it, save the rate card as ${RATES_FILE} beside the plan, or pass the file as rates: {"currency": "EUR", "label": "where the rates come from", "rates": {"<key>": {"rate": 40, "unit": "m2"}}}. `
+        + 'A shorter key covers longer ones: "wall:exterior" prices every outside wall, "door" every door, "floor" every floor finish. '
+        + `Units: ${RATE_UNITS.join(', ')}; a rate per ft2 or ft is turned into one per m² or m. The data's rateCard is the file, ready to fill.`,
+    )
+  } else {
+    const gaps: string[] = []
+    if (pricing.missing.length > 0) gaps.push(`${pricing.missing.length} ${pricing.missing.length === 1 ? 'line has' : 'lines have'} no rate (${pricing.missing.join(', ')})`)
+    if (pricing.wrongUnit.length > 0) {
+      gaps.push(`${pricing.wrongUnit.length} ${pricing.wrongUnit.length === 1 ? 'line has its rate' : 'lines have their rate'} in the wrong unit (${pricing.wrongUnit.map((w) => `${w.key}: ${q(w.rateKey)} is per ${w.rateUnit}, the line is in ${w.unit}`).join('; ')})`)
+    }
+    lines.push(`Total of the priced lines: ${money(pricing.total, pricing.currency)}.${gaps.length === 0 ? ' Every line is priced.' : ` Not the whole cost: ${gaps.join(', and ')}.`}`)
+    if (pricing.wholeBuilding !== null) lines.push(`The whole building at the ${WHOLE_BUILDING_KEY} rate: ${money(pricing.wholeBuilding, pricing.currency)}, an alternative to the total, never added to it.`)
+    if (pricing.unused.length > 0) lines.push(`Rates that price no line of this plan: ${pricing.unused.map(q).join(', ')}.`)
+    if (pricing.orders.length > 0) {
+      lines.push('Orders, from the rates file:')
+      for (const order of pricing.orders) {
+        lines.push(`  ${q(order.name)}: ${order.packs} ${order.pack} (${order.needed.toFixed(2)} ${UNIT_SHOWN[order.unit]} needed)${order.assumed ? ', assumed: it rests on an assumed line' : ''}`)
+        lines.push(`    Rule: ${order.rule}`)
+      }
+    }
+    lines.push(...pricing.orderProblems)
+  }
+  lines.push(...estimate.notes)
+  return { text: lines.join('\n'), data }
+}
+
 const takeoffTool: GridTool = {
   name: 'grid_takeoff',
   title: 'Quantities for pricing',
   hint: 'read',
   description:
     'Use this when a builder or the person asks for quantities to price work: metres of wall (outside walls, inner walls, partitions), plaster or paint area per room less openings, ceiling areas, skirting lengths, or these as a spreadsheet. '
+    + 'With for=estimate, or when the person asks what the plan will cost, how much flooring, paint or plasterboard it takes, or for a bill of quantities, it gives the figures a first estimate needs instead: floor finishes and wall faces by room use, ceilings, skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size, the slab, upper floors and the roof (assumed: the plan holds none), and the gross internal area, each line with a key, its rule and an assumed mark. '
+    + `A cost comes only from the person's own rates file (rates, or ${RATES_FILE} beside the plan), which must name its currency; with none, the answer is a rate card to fill in and holds no money. Lines with no rate and rates in the wrong unit are listed apart. Grid has no prices. `
     + 'Every figure is worked out from the plan\'s walls and openings by a rule stated in the answer. '
     + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). The plan holds no finishes, ceilings or fixtures. Units are metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
-    rooms: { type: 'array', description: 'Only these rooms, by id. Every room when left out.', examples: [['kitchen', 'bath']], items: { id: true }, minItems: 1, maxItems: 200 },
+    rooms: { type: 'array', description: 'Only these rooms, by id. Every room when left out. Not with for=estimate.', examples: [['kitchen', 'bath']], items: { id: true }, minItems: 1, maxItems: 200 },
+    for: { type: 'string', enum: ['estimate'], description: 'estimate for the bill of quantities of a first estimate, priced from the person\'s rates or as a rate card. The take-off by room when left out.', examples: ['estimate'] },
+    rates: {
+      type: 'string',
+      maxLength: PATH_MAX,
+      description: `The person's rates file, as a path inside the project folder: JSON with a currency and a rate per line key. ${RATES_FILE} beside the plan when left out, if there is one. Only with for=estimate.`,
+      examples: [RATES_FILE, 'costs/rates-2027.json'],
+    },
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
@@ -350,8 +456,33 @@ const takeoffTool: GridTool = {
     rooms: listSchema(objectSchema({ id: STRING, name: STRING, floor: STRING, floorArea: NUMBER, ceiling: NUMBER, perimeter: NUMBER, skirting: NUMBER, wallFace: NUMBER, openingsOff: NUMBER, height: NULLABLE_NUMBER })),
     totals: objectSchema({ floorArea: NUMBER, ceiling: NUMBER, skirting: NUMBER, wallFace: NUMBER }),
     rules: listSchema(STRING),
-  }),
+    // ARE-13, with for=estimate: the lines, and the cost from the person's rates or the rate card.
+    label: STRING,
+    lines: listSchema(objectSchema({ key: STRING, what: STRING, quantity: NUMBER, unit: STRING, rule: STRING, assumed: BOOLEAN }, ['key', 'what', 'quantity', 'unit', 'rule', 'assumed'])),
+    notes: listSchema(STRING),
+    rateCard: objectSchema({ label: STRING, currency: STRING, rates: { type: 'object' } }),
+    cost: objectSchema({ file: STRING, label: NULLABLE_STRING, currency: STRING, total: NUMBER, complete: BOOLEAN, missing: listSchema(STRING), wrongUnit: { type: 'array' }, unused: listSchema(STRING), wholeBuilding: NULLABLE_NUMBER }),
+    orders: { type: 'array' },
+    orderProblems: listSchema(STRING),
+  }, ['rules']),
   run(args, context) {
+    if (args['for'] === 'estimate') {
+      if (args['rooms'] !== undefined) throw new ToolRefusal('for=estimate takes no rooms: its walls, outside face, slab and roof belong to no one room. Pass floor for one floor.')
+      const { project, file, loaded } = readPlan(context, args['plan'])
+      const survey = surveyPlan(loaded.plan)
+      const floor = floorArg(loaded.plan, args['floor'])
+      let rates: Rates | null
+      try {
+        rates = readRates(project, file, args['rates'] as string | undefined)
+      } catch (error) {
+        if (error instanceof RatesRefused) throw new ToolRefusal(error.message)
+        throw asRefusal(error)
+      }
+      const estimate = planEstimate(survey, floor === undefined ? {} : { floors: [floor] })
+      const units = displayFor(args['units'], args['decimal'], loaded.plan)
+      return estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv')
+    }
+    if (args['rates'] !== undefined) throw new ToolRefusal('rates goes with for=estimate: the take-off by room holds no cost.')
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const rooms = args['rooms'] as string[] | undefined
     for (const id of rooms ?? []) roomArg(survey.plan, id, 'rooms item')
@@ -372,6 +503,7 @@ const takeoffTool: GridTool = {
       ...t.rooms.map((r) => `  ${q(r.name)}: floor ${areaText(r.floorArea, units)}, ceiling ${areaText(r.ceiling, units)}, skirting ${lengthText(r.skirting, units)}, wall face ${areaText(r.wallFace, units)} (${r.openingsOff.toFixed(2)} m² of openings off, walls ${r.height === null ? 'none' : `${r.height.toFixed(2)} m`} high)`),
       `Totals: floor ${areaText(t.totals.floorArea, units)}, ceiling ${areaText(t.totals.ceiling, units)}, skirting ${lengthText(t.totals.skirting, units)}, wall face ${areaText(t.totals.wallFace, units)}.`,
       ...Object.values(TAKEOFF_RULES),
+      'For a first estimate (finishes, reveals, walls by thickness, doors and windows by size, slab, roof) and a cost from the person\'s rates, ask with for=estimate.',
     ]
     return { text: lines.join('\n'), data }
   },
@@ -517,12 +649,12 @@ const measureTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
-    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under. '
+    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so). '
     + 'It measures the room between wall faces: what=fit keeps clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas) or for what a building code asks (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow'], description: 'What to measure: room, between, wall, fit, route or narrow.', examples: ['between', 'fit', 'route'] },
-    room: { type: 'string', id: true, description: 'For room, fit and route: the room id, where the route starts.', examples: ['kitchen', 'hall'] },
+    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing'], description: 'What to measure: room, between, wall, fit, route, narrow or facing.', examples: ['between', 'fit', 'route', 'facing'] },
+    room: { type: 'string', id: true, description: 'For room, fit and route: the room id, where the route starts. For facing: one room only, every room when left out.', examples: ['kitchen', 'hall'] },
     from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening, fixture or room to measure from.', examples: ['front-door', 'w-west'] },
     to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening, fixture or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
     x: { type: 'number', length: true, description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
@@ -538,7 +670,7 @@ const measureTool: GridTool = {
   outputSchema: objectSchema({ what: STRING, answer: { type: 'object' }, rule: STRING }),
   run(args, context) {
     const { survey } = load(context, args['plan'])
-    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow'
+    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing'
     const units = displayFor(args['units'], args['decimal'], survey.plan)
     const L = (v: number): string => lengthText(v, units)
     const allowed: Record<string, readonly string[]> = {
@@ -548,6 +680,7 @@ const measureTool: GridTool = {
       fit: ['room', 'width', 'depth', 'diameter'],
       route: ['room', 'to'],
       narrow: ['under'],
+      facing: ['room'],
     }
     const stray = ['room', 'from', 'to', 'x', 'y', 'wall', 'width', 'depth', 'diameter', 'under'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`what=${what} takes ${allowed[what]!.join(', ')}, not ${stray.join(', ')}.`)
@@ -568,6 +701,12 @@ const measureTool: GridTool = {
         text: `${q(r.name)}: ${size}, ${areaText(r.area, units)}, perimeter ${L(r.perimeter)}. Sides, going round: ${sides}. The widest circle it holds is ${L(r.widestCircle)} across.\n${heightText(height, L)}\n${EMPTY_ROOM_RULE}\n${HEIGHT_RULE}`,
         data: { what, answer: { ...r, height }, rule: `${EMPTY_ROOM_RULE} ${HEIGHT_RULE}` },
       }
+    }
+    if (what === 'facing') {
+      // CNT-3: which way the rooms, their outside walls and their windows face.
+      const id = args['room'] === undefined ? undefined : roomArg(survey.plan, args['room'])
+      const facing = facingAnswer(survey.plan, id)
+      return { text: [...facing.lines, FACING_RULE].join('\n'), data: { what, answer: facing.data, rule: FACING_RULE } }
     }
     if (what === 'between') {
       if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening, fixture or room.')
@@ -727,7 +866,7 @@ const viewTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks to see the plan: "can I see it", a floor plan, a 3D view from the garden side or from above, "stand me in the kitchen looking at the garden", "can I see out sitting down", or a black and white drawing. '
-    + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model from a side of the drawing (north is the top of the drawing: the plan holds no real north); kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
+    + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model from a side of the drawing (north here is the top of the drawing, whatever north the plan states; grid_measure what=facing says which way the rooms face); kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
     + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export) or to move the person\'s live preview (grid_preview). The model has no roof, furniture, glass or door leaves. Units are metres.',
   args: {
     units: UNITS_ARG,
@@ -777,7 +916,7 @@ const viewTool: GridTool = {
       }
       const dimensions = args['dimensions'] !== false && shownParts.showDimensions
       const view = await planView(plan, { floor: shown, look: asked, dimensions, ids: withIds, faults, show: shownParts.show, ...(display ? { display } : {}), ...(crop ? { frame: cropFrame(crop) } : {}) })
-      const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
+      const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. ${plan.north === undefined ? 'North is the top of the drawing; the plan holds no real north.' : `The north arrow in its top-right corner points to the north the plan states, ${northWords(wrapDegrees(plan.north))}; the sides named in other answers are the drawing's, north at the top.`} Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
       const undecided = view.undecidedDoors ?? []
       if (undecided.length > 0) {
@@ -798,7 +937,7 @@ const viewTool: GridTool = {
       const { modelView } = await import('../draw/views')
       const view = await modelView(plan, { from, ...(floor ? { floor } : {}) })
       return {
-        text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing. The model has no roof, furniture, glass or door leaves. Look at the picture before you describe it.`,
+        text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing${plan.north === undefined ? '' : `, not the north the plan states (${northWords(wrapDegrees(plan.north))})`}. The model has no roof, furniture, glass or door leaves. Look at the picture before you describe it.`,
         data: { kind, floor: floor ?? null, camera: view.camera, pxPerMetre: null, sills: [], ids: [], boxes: [] },
         image: { data: view.png, mimeType: 'image/png' },
       }
@@ -877,6 +1016,25 @@ const describeTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_check
 
+/** The country argument of grid_check and grid_mark_seen: the numbers follow the record it makes. */
+export const COUNTRY_ARG: ArgSpec = { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code. Figures are applied only where they hold.', examples: ['US', 'GB'] }
+
+/** MSG-10: a line's seen state as data: the mark, and with `back` the parts that changed since. */
+function seenData(state: SeenState | undefined): Record<string, unknown> | undefined {
+  if (state === undefined || state.state === 'new') return undefined
+  const { reason, by, at } = state.mark
+  return state.state === 'seen'
+    ? { state: 'seen', reason, by, at }
+    : { state: 'back', reason, by, at, changed: state.changed.map((p) => ({ kind: p.kind, id: p.id })) }
+}
+
+/** One line of grid_check's list. COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for. */
+function toolLine(result: CheckResult, index: number): string {
+  const line = result.result.lines[index]!
+  // MSG-5: a line that follows from another is set under it, and says so.
+  return `  ${line.causedBy ? '  ' : ''}${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''}${line.causedBy ? ` Follows from ${causeText(line.causedBy)}.` : ` Fix: ${line.fix}`} [${line.code}]`
+}
+
 const checkTool: GridTool = {
   name: 'grid_check',
   title: 'Check the plan',
@@ -884,11 +1042,13 @@ const checkTool: GridTool = {
   description:
     'Use this when you have changed the plan, or when the person asks whether the plan is drawn right or what Grid\'s checks find: problems in the drawing itself, and notes from the general checks it runs (room sizes, ways out, door swings). '
     + 'Every answer carries the label "General guidance, not your local rules". It never says a plan complies or is allowed: "is it allowed" is for the person\'s local authority, and the answer says what was not checked. '
+    + 'The answer is short and about this plan: the notes, the figures they used, what each check looked at, and the notes the person set aside as seen (grid_mark_seen), each still listed under Seen; full=true adds the checks run, every figure and what these checks never look at. '
     + 'Do not use to measure (grid_measure) or for areas (grid_areas).',
   args: {
     plan: PLAN_ARG,
     floor: { ...FLOOR_ARG, description: 'Only what was found on this floor. Every floor when left out.' },
-    country: { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code. Figures are applied only where they hold.', examples: ['US', 'GB'] },
+    country: COUNTRY_ARG,
+    full: { type: 'boolean', description: 'true for the whole report: the checks run, every figure with its basis and status, each check\'s coverage and what these checks never look at. Short when left out.', examples: [true] },
   },
   outputSchema: objectSchema({
     label: STRING,
@@ -921,7 +1081,13 @@ const checkTool: GridTool = {
         also: listSchema(STRING),
         waitsFor: listSchema(STRING),
       })),
+      // MSG-10: the person's seen mark, when the line has one: seen, or back (new again, its parts changed since).
+      seen: objectSchema({ state: STRING, reason: STRING, by: STRING, at: STRING, changed: listSchema(objectSchema({ kind: STRING, id: STRING })) }, ['state', 'reason', 'by', 'at']),
     }, ['code', 'kind', 'thing', 'floor', 'also', 'message', 'found', 'needed', 'fix'])),
+    // MSG-10: how many lines are seen, the marks file beside the plan, and why it could not be read.
+    seenCount: { type: 'number' },
+    marksFile: STRING,
+    marksProblem: { type: ['string', 'null'] },
     // The rooms a finding is about, by id and name, apart from the message: text from the plan file.
     findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
     notChecked: listSchema(objectSchema({ floor: STRING, message: STRING })),
@@ -941,11 +1107,13 @@ const checkTool: GridTool = {
     limits: listSchema(STRING),
   }),
   run(args, context) {
-    const { loaded } = readPlan(context, args['plan'])
+    const { loaded, project, file } = readPlan(context, args['plan'])
     const floor = floorArg(loaded.plan, args['floor'])
+    const full = args['full'] === true
     let result
     try {
       result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}) })
+      result = withSeen(result, loaded, readSeen(project, file))
     } catch (error) {
       throw asRefusal(error)
     }
@@ -958,31 +1126,72 @@ const checkTool: GridTool = {
     const notChecked = result.report.notChecked.map((n) => ({ floor: n.floor, message: n.message }))
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
     const record = result.result
+    const states = result.seen?.states ?? []
+    const seen = seenCount(result)
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]
-    lines.push(`To look at: ${record.count === 0 ? 'nothing' : `${record.count} (${countsText(record)})`}.${problemsText(record)} Checks run: ${result.report.rules.length}.`)
-    // COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for.
-    // MSG-5: a line that follows from another is set under it, and says so.
-    record.lines.slice(0, 12).forEach((line, index) =>
-      lines.push(`  ${line.causedBy ? '  ' : ''}${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''}${line.causedBy ? ` Follows from ${causeText(line.causedBy)}.` : ` Fix: ${line.fix}`} [${line.code}]`))
-    if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
+    if (result.seen?.problem) lines.push(`The seen marks were not read: ${result.seen.problem}. Every note is listed as new.`)
+    const seenWords = seen > 0 ? `; ${seen} of them seen, under Seen` : ''
+    const checksRun = result.report.rules.length === 0 ? `Checks run: none. ${NOTHING_CHECKED}` : `Checks run: ${result.report.rules.length}.`
+    // NOTHING_FOUND: an empty list only means these checks found nothing.
+    lines.push(`To look at: ${record.count === 0 ? `nothing. ${NOTHING_FOUND}` : `${record.count} (${countsText(record)}${seenWords}).${problemsText(record)}`} ${checksRun}`)
+    if (full) for (const rule of result.report.rules) lines.push(`  - ${rule.title} (${rule.source.label})`)
+    // A seen line is listed under Seen, never left out (MSG-10).
+    const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
+    for (const index of open.slice(0, 12)) {
+      lines.push(toolLine(result, index))
+      const state = states[index]
+      if (state?.state === 'back') lines.push(`${record.lines[index]!.causedBy ? '  ' : ''}      ${seenBeforeText(state)}.`)
+    }
+    if (open.length > 12) lines.push(`  … ${open.length - 12} more in the data, each with what was found and needed.`)
+    if (seen > 0) {
+      lines.push(`Seen (${seen}): ${SEEN_HEADING_NOTE}.`)
+      record.lines.forEach((line, index) => {
+        const state = states[index]
+        if (state?.state === 'seen') lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Seen ${seenByText(state.mark)}. [${line.code}]`)
+      })
+    }
     // MSG-7: each line one call would clear carries that call, ready to send.
-    const withCalls = record.lines.map((line) => withFixCalls(line, args['plan']))
+    const withCalls = record.lines.map((line, index) => {
+      const withFix = withFixCalls(line, args['plan'])
+      const mark = seenData(states[index])
+      return mark === undefined ? withFix : { ...withFix, seen: mark }
+    })
     const callable = withCalls.filter((line) => line.calls !== undefined).length
     if (callable > 0) lines.push(`${callable === 1 ? 'One line carries' : `${callable} lines carry`} the call that would fix it, under calls in the data.`)
-    if (record.counts.finding === 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
-    // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
-    const rooms = result.rooms
-    lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
-    for (const check of record.coverage) {
-      const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
-      const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
-      lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}${readFor}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
+    if (record.counts.finding === 0 && record.count > 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
+    if (full) {
+      // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
+      const rooms = result.rooms
+      lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
+      for (const check of record.coverage) {
+        const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
+        const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
+        lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}${readFor}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
+      }
+      // MSG-3: each figure as the figure used here, with its basis and status.
+      if (record.figures.length > 0) lines.push(`Figures used (${record.figures.length}):`, ...record.figures.map((figure) => `  ${figureUsedText(figure)}`))
+      // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
+      lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
+    } else {
+      // MSG-10: the counts, the gaps with their reasons, and where the rest is.
+      lines.push(...coverageSummary(result).filter((line) => line !== '').map((line) => line.replace(/^ {2}- /, '  ')), restText(result.report, 'full=true'))
     }
-    // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
-    lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
     return {
       text: lines.join('\n'),
-      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, problems: record.problems, lines: withCalls, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
+      data: {
+        label: GENERAL_GUIDANCE_LABEL,
+        count: record.count,
+        problems: record.problems,
+        lines: withCalls,
+        seenCount: seen,
+        marksFile: result.seen?.file ?? '',
+        marksProblem: result.seen?.problem ?? null,
+        findings,
+        notChecked,
+        drawing,
+        coverage: record.coverage,
+        limits: record.limits,
+      },
     }
   },
 }

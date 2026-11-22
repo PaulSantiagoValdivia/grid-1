@@ -14,6 +14,7 @@
 import {
   floorOf,
   itemNoun,
+  planFacing,
   planFloors,
   validateDoorSweeps,
   validatePlan,
@@ -518,6 +519,10 @@ function noticeCode(notice: NotChecked): string {
       return 'floor/not-checked-above-escape-storeys'
     case 'no_rooms':
       return 'plan/not-checked-no-rooms'
+    case 'not_for_building': {
+      const what = notice.ruleId === 'habitable-room-area' ? 'sizes' : 'escapes'
+      return notice.floor === '' ? `plan/not-checked-${what}-for-building` : `floor/not-checked-${what}-for-building`
+    }
   }
 }
 
@@ -715,6 +720,15 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       if (note.room === undefined || rooms.has(note.room)) continue
       lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(quoted(note.id)), also: [note.id, note.room], floors: names.floors, said: `room ${note.room}` }))
     }
+  })
+  // CNT-3: a front that names no outside part, and a plan whose y runs down the page.
+  stage('orientation', () => {
+    if (plan.yAxis === 'down') lines.push(line('plan/y-down', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank('The plan'), floors: names.floors }))
+    const front = plan.front === undefined ? null : planFacing(plan).front
+    if (front === null || !('missing' in front)) return
+    const label = `${front.part === 'wall' ? 'wall' : 'opening'} ${quoted(front.id)}`
+    const said = front.missing === 'no-such-part' ? 'the plan does not have' : front.part === 'wall' ? 'does not face outside' : 'is not in a wall that faces outside'
+    lines.push(line('plan/front-not-said', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(label), also: [front.id], floors: names.floors, said }))
   })
   // MSG-5: a plan that may not be in metres (`plan/units-question`): what is measured against a
   // size follows from it, and it follows from the unit the plan states, which is read as metres.

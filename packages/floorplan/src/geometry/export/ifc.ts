@@ -15,7 +15,9 @@
  * (`validatePlan`) and an element is written exactly when the views draw it.
  *
  * Coordinates are the model's own: metres, X and Y as on the plan, Z up (C4).
- * That is already a right-handed basis with Z up, so nothing is flipped.
+ * That is already a right-handed basis with Z up, so nothing is flipped. A plan
+ * whose y runs down (CNT-3, C7) is written as it is, so its model is the
+ * building's mirror image; `grid check` says so (`plan/y-down`).
  */
 
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall } from '../plan'
@@ -42,6 +44,7 @@ import { wallJoints } from '../joints'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
+import { directionOfTurn, planOrientation } from '../orientation'
 
 export interface IfcOptions {
   /**
@@ -351,12 +354,18 @@ function writeUnits(w: StepWriter): number {
   )
 }
 
-function writeModelContext(w: StepWriter): { model: number; shared: Shared } {
+/**
+ * The model's context. Its `TrueNorth` is the north the plan states (CNT-3, C7), as a direction
+ * in the plan's X and Y; a plan that states none gets none (`$`), where Grid once wrote +Y for
+ * every plan (lab EL-14). IFC reads an absent `TrueNorth` as +Y, but the file no longer claims it.
+ */
+function writeModelContext(w: StepWriter, stated: number | null): { model: number; shared: Shared } {
   const origin = w.add('IFCCARTESIANPOINT', reals([0, 0, 0]))
   const up = w.add('IFCDIRECTION', reals([0, 0, 1]))
   const east = w.add('IFCDIRECTION', reals([1, 0, 0]))
   const world = w.add('IFCAXIS2PLACEMENT3D', ref(origin), ref(up), ref(east))
-  const north = w.add('IFCDIRECTION', reals([0, 1]))
+  const toward = stated === null ? null : directionOfTurn(stated)
+  const north = toward === null ? NULL : ref(w.add('IFCDIRECTION', reals([toward.x, toward.y])))
 
   const model = w.add(
     'IFCGEOMETRICREPRESENTATIONCONTEXT',
@@ -365,7 +374,7 @@ function writeModelContext(w: StepWriter): { model: number; shared: Shared } {
     int(3),
     '1.E-05',
     ref(world),
-    ref(north)
+    north
   )
 
   // The views a shape names. Their dimension, precision and axes are derived
@@ -1270,6 +1279,25 @@ function writeLeftOut(c: Context, building: number, leftOut: readonly LeftOutPar
   c.w.add('IFCRELDEFINESBYPROPERTIES', str(c.guid('left-out', 'relation')), ref(c.owner), NULL, NULL, refs([building]), ref(set))
 }
 
+/** CNT-3: where the plan says it sits: only with an origin, and when every number of it can be written. */
+function siteOf(plan: FloorPlan): (NonNullable<FloorPlan['site']> & { readonly origin: readonly [number, number] }) | null {
+  const site = plan.site
+  if (site === undefined || site.origin === undefined) return null
+  const numbers = [...site.origin, site.latitude ?? 0, site.longitude ?? 0, site.elevation ?? 0]
+  return numbers.every(Number.isFinite) ? { ...site, origin: site.origin } : null
+}
+
+/**
+ * Degrees as IFC2x3's compound plane angle: degrees, minutes, seconds and millionths of a
+ * second, each with the angle's sign.
+ */
+function compoundAngle(degrees: number): string {
+  const sign = degrees < 0 ? -1 : 1
+  const micro = Math.round(Math.abs(degrees) * 3600 * 1_000_000)
+  const parts = [Math.floor(micro / 3_600_000_000), Math.floor(micro / 60_000_000) % 60, Math.floor(micro / 1_000_000) % 60, micro % 1_000_000]
+  return `(${parts.map((part) => int(sign * part + 0)).join(',')})`
+}
+
 /** The id the plan stores (QAR-5), else the caller's, else the default. */
 function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
   const stored: unknown = plan.projectId
@@ -1287,7 +1315,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   const issuer = createGuidIssuer(projectIdOf(plan, options))
   const owner = writeOwnerHistory(w, timestamp)
   const units = writeUnits(w)
-  const { model: context, shared } = writeModelContext(w)
+  const { model: context, shared } = writeModelContext(w, planOrientation(plan).north)
   const c: Context = {
     w,
     owner,
@@ -1321,7 +1349,10 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     ref(units)
   )
 
-  const sitePlacement = placement(w, null, [0, 0, 0])
+  // CNT-3: a plan that says where it sits puts the site's origin on that point of the plan, with
+  // its latitude, longitude and elevation; the building stays in the plan's own coordinates.
+  const where = siteOf(plan)
+  const sitePlacement = placement(w, null, where === null ? [0, 0, 0] : [where.origin[0], where.origin[1], 0])
   const site = rooted(
     'IFCSITE',
     'site',
@@ -1333,14 +1364,14 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     NULL,
     NULL,
     en('ELEMENT'),
-    NULL,
-    NULL,
-    NULL,
+    where?.latitude === undefined ? NULL : compoundAngle(where.latitude),
+    where?.longitude === undefined ? NULL : compoundAngle(where.longitude),
+    where?.elevation === undefined ? NULL : real(where.elevation),
     NULL,
     NULL
   )
 
-  const buildingPlacement = placement(w, sitePlacement, [0, 0, 0])
+  const buildingPlacement = placement(w, sitePlacement, where === null ? [0, 0, 0] : [-where.origin[0], -where.origin[1], 0])
   const building = rooted(
     'IFCBUILDING',
     'building',

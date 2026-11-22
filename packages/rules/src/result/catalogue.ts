@@ -12,8 +12,9 @@
  */
 
 import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix, type WordingPart } from '@ongrid/floorplan/geometry'
-import { quoted } from '@ongrid/floorplan/types/floorplan'
-import { buildingKindsText, findingReadFor } from '../checks/figures'
+import { BUILDING_TYPE_TEXT, quoted } from '@ongrid/floorplan/types/floorplan'
+import { RULE_READ_FOR } from '../checks/catalogue'
+import { buildingKindsText, findingReadFor, type BuildingKind } from '../checks/figures'
 import { wordings as figureWordings } from '../checks/messages'
 import { figureNeededText } from '../checks/figureWords'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
@@ -135,6 +136,21 @@ function readFor(s: Subject): string {
   const kinds = s.finding === undefined ? [] : findingReadFor(s.finding)
   return kinds.length === 0 ? '' : `; this check's figures were read for ${buildingKindsText(kinds)}`
 }
+
+/** CNT-5: the kind of building a `not_for_building` notice names, as a sentence names it: "an office". */
+function buildingText(s: Subject): string {
+  const building = s.notice?.building
+  return building === undefined ? 'another kind of building' : BUILDING_TYPE_TEXT[building]
+}
+
+/** CNT-5: the kinds of building the figures of a notice's check were read for. */
+function ruleReadFor(s: Subject): readonly BuildingKind[] {
+  const rule = s.notice?.ruleId
+  return rule === 'habitable-room-area' || rule === 'escape-opening' ? RULE_READ_FOR[rule] : []
+}
+
+const NOT_FOR_BUILDING_FIX =
+  'Nothing to change in the plan if the kind of building is right: read how this is set out for that kind of building where it will be built. If it is not, correct the plan\'s building.'
 
 /** A figure a finding applied, by key, as "6.5 m²". */
 function figure(finding: RuleFinding | undefined, key: AppliedFigure['key']): string | null {
@@ -856,6 +872,18 @@ export const CODES = {
     needed: fixed('a room id from the plan, or a point (at)'),
     fix: fixed('Name one of the plan\'s rooms by its id, or place the note at a point.')
   },
+  // CNT-3: the front, and which way the plan's y runs.
+  'plan/front-not-said': {
+    says: (s) => `The front names ${s.label}, which ${s.said}, so no front is said`,
+    needed: fixed('a wall that faces outside, or an opening in one, such as the front door'),
+    fix: fixed('Name in front a wall of the plan that faces outside (wall), or the front door (opening).')
+  },
+  'plan/y-down': {
+    says: () => 'The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round',
+    found: fixed('yAxis is down: the coordinates are the building\'s mirror image, and Grid draws and exports them with y up'),
+    needed: fixed('a plan whose y runs up the page, as Grid draws it'),
+    fix: fixed('To have the drawings and exports the right way round, write the plan with y up: every y negated, north as 180 less what it was, and yAxis up.')
+  },
   'floor/not-checked-no-use': {
     says: (s) => wordingText(figureWordings.noUse(s.floorName, s.names.length)),
     found: fixed('rooms with no use stated'),
@@ -873,6 +901,32 @@ export const CODES = {
     found: (s) => `a plan for ${s.country}, and figures carried for the US only`,
     needed: fixed('figures for the place, looked up and given to the check'),
     fix: fixed('Look up the figures for the place and give them to the check, or read the local rules.')
+  },
+  // CNT-5 (lab EL-2): a figure check the plan's kind of building leaves out, for the whole plan
+  // or one floor of it. The figures carried here were read for homes.
+  'plan/not-checked-sizes-for-building': {
+    says: (s) => wordingText(figureWordings.notForBuilding('Room sizes', buildingKindsText(ruleReadFor(s)), buildingText(s))),
+    found: (s) => `a plan that says it is ${buildingText(s)}`,
+    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
+    fix: fixed(NOT_FOR_BUILDING_FIX)
+  },
+  'plan/not-checked-escapes-for-building': {
+    says: (s) => wordingText(figureWordings.notForBuilding('Escape openings', buildingKindsText(ruleReadFor(s)), buildingText(s))),
+    found: (s) => `a plan that says it is ${buildingText(s)}`,
+    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
+    fix: fixed(NOT_FOR_BUILDING_FIX)
+  },
+  'floor/not-checked-sizes-for-building': {
+    says: (s) => wordingText(figureWordings.floorNotForBuilding(s.floorName, 'Room sizes', buildingKindsText(ruleReadFor(s)), buildingText(s))),
+    found: (s) => `a floor the plan says is ${buildingText(s)}`,
+    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
+    fix: fixed(NOT_FOR_BUILDING_FIX)
+  },
+  'floor/not-checked-escapes-for-building': {
+    says: (s) => wordingText(figureWordings.floorNotForBuilding(s.floorName, 'Escape openings', buildingKindsText(ruleReadFor(s)), buildingText(s))),
+    found: (s) => `a floor the plan says is ${buildingText(s)}`,
+    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
+    fix: fixed(NOT_FOR_BUILDING_FIX)
   },
   // MSG-2: what a check skipped, said where it used to pass in silence.
   'floor/not-checked-above-escape-storeys': {

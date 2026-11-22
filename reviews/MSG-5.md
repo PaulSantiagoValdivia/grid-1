@@ -129,6 +129,16 @@ identical notes in one line, the units chain) and `packages/cli/src/command/__te
 8. **Not traced**: the walls that run past their corner because the wall they meet was left out
    (f20), and rooms on a floor slip (f15), which would need a line for the wall on the other
    floor. Both stay problems of their own.
+9. **A seen mark on a line for several rooms** (after merging MSG-10). The grouped line is one
+   note, keyed by its code, its first room and the others in `also`, so marking it holds every
+   room with its outline, and a change to any room brings it back. A mark made on one room's
+   note before the rooms were one line (or on the line when it named other rooms) finds the
+   line but never holds: the line is back, naming the rooms that joined or left, rather than
+   seen. The alternative was to hold the line as seen when every room in it had a mark of its
+   own that still holds; I took the stricter reading, since a mark on one room says nothing about
+   the others. A line that splits apart again (one room's note now reads differently) is new,
+   not back: its rooms' notes are notes the person did not mark. MSG-10 is not published, so no
+   marks file in use holds marks from before grouping.
 
 ## Checks run
 
@@ -165,3 +175,53 @@ After the merge: `npm run build`, `npm run typecheck` and `npm run lint` pass. T
 `packages/floorplan`, `packages/rules`, `packages/cli` and `scoreboard/__tests__`: 4,169 of 4,169
 pass, 3 skipped (two failed before the two changes above, then passed). `npm run scoreboard`:
 "Same as the stored figures".
+
+### Again after merging `main` 56458e5 (SHT-4, CNT-3, MSG-10, CNT-5)
+
+Conflicts, each keeping both sides:
+
+- `docs/result-contract.md`: the changelog keeps every entry, newest first: MSG-5, then CNT-5,
+  MSG-10, CNT-3, SHT-4 and ARE-13 as `main` has them. The code, field and reason tables merged
+  without conflict and hold both sides' rows (`plan/no-walls`, the four `…-for-building` codes,
+  `problems`, `causedBy`, `each`, `held`, `seenCount`, `waits_for_part`, `not_for_building`).
+- `packages/rules/src/checks/check.ts`: the imports of both; every floor is drawn first for
+  `planDamage`, then CNT-5's building gate runs; the escape check runs only where the plan's kind
+  of building reads it (CNT-5) and, where its figures ran, each finding on a broken part is held
+  back (MSG-5).
+- `checks/types.ts`: `NotChecked` keeps both `held` (MSG-5) and `building` (CNT-5).
+- `checks/coverage.ts`: both import lines (`RuleFinding` for `heldCoverage`, the building texts
+  for `skipWhy`); `SKIP_ORDER` holds `not_for_building` and `waits_for_part`.
+- `result/catalogue.ts`: the imports of both; every code of both sides kept its one wording.
+- `result/inspect.ts`: CNT-3's orientation lines come first, then MSG-5's units chain, so the
+  chain sees every line.
+- `packages/cli/src/command/check.ts`: MSG-10 moved a line's text into `lineText`; it now sets a
+  follow-on under its cause with "follows from" (also in the Seen list) and the notes held back.
+  The count line is MSG-10's, with MSG-5's problems sentence after it.
+- `packages/cli/src/mcp/readTools.ts`: MSG-10's short text and `toolLine`, which now says
+  "Follows from …" in place of the fix for a follow-on; the schema holds `problems`, `causedBy`,
+  `each`, `held` and `seen`; the data holds `problems` beside MSG-10's seen fields.
+
+**Seen marks on a grouped line.** MSG-10 keys a mark by `code`, `thing` and `also` (as a set),
+and hashes each part: the thing, every `also` id, a room with its outline walls. A grouped line's
+thing is its first room and `also` the others, so the mark already covers every room: marking it
+holds on the next check, and a change to any one room brings it back naming the part. New:
+`earlierNote` in `packages/cli/src/seen/marks.ts`, so a mark made on one room's note before the
+rooms were one line (or on the line when it named other rooms) finds the line but never holds:
+the line is back, naming the rooms that joined. Marking or unmarking the line replaces such a
+mark. Tests: `shortReport.test.ts`, "a line for several rooms (MSG-5)" (two doorless rooms
+marked, seen again, back when a bedroom wall changes; a bathroom mark made before the bedroom's
+door went, back on the grouped line, then replaced and taken off). The contract's seen section
+and MSG-5's changelog entry say so. Owner choice 9 above.
+
+**The short report for the flat** prints no follow-on and no problems sentence (it has no lines):
+`grid check` 988 bytes and `grid_check`'s text 973 bytes, as MSG-10 pinned them.
+
+Expectation changed: `packages/cli/src/command/__tests__/coverage.test.ts`, CNT-5's "a plan that
+says it is a home runs the home figures": twelve sill lines are one line with `each` of twelve
+(MS-14), with a comment. No other expectation changed; W-7 stays 90 lines, 30 problems, 43
+beneath.
+
+After the merge: `npm run build`, `npm run typecheck` and `npm run lint` pass. The tests of
+`packages/floorplan`, `packages/rules`, `packages/cli` and `scoreboard/__tests__`: 193 files,
+4,307 tests pass, 2 skipped (4,309); the first run failed only the CNT-5 expectation above.
+`npm run scoreboard`: "Same as the stored figures", so `current.json` is unchanged.

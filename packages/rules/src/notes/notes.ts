@@ -12,6 +12,7 @@ import {
   GENERAL_GUIDANCE_LABEL,
   areaText,
   figureText,
+  floorBuilding,
   metresText,
   planFloors,
   rounded,
@@ -20,6 +21,7 @@ import {
   type FloorPlan
 } from '@ongrid/floorplan/geometry'
 import { planNotes as planCheckNotes, type NoteText, type PlanNote as PlanCheckNote } from '@ongrid/floorplan/notes'
+import type { BuildingType } from '@ongrid/floorplan/types/floorplan'
 import { ESCAPE_TOP_LEVEL, readForSentence, type VerificationStatus } from '../checks/figures'
 import { FIGURE_STATUS_WORDS } from '../checks/figureWords'
 import { wordings } from '../checks/messages'
@@ -81,24 +83,27 @@ const STATUS = Object.fromEntries(
  * Where a finding's figures come from and how far they have been checked, as one or two
  * sentences. Empty for a finding that compared nothing.
  */
-function basisText(figures: readonly AppliedFigure[]): string {
+function basisText(figures: readonly AppliedFigure[], stated: BuildingType | undefined): string {
   if (figures.length === 0) return ''
   const lookedUp = figures.filter((f) => f.origin === 'lookup')
   if (lookedUp.length > 0) {
     const urls = [...new Set(lookedUp.flatMap((f) => (f.source === undefined ? [] : [f.source.url])))]
     const where = urls.length === 0 ? '' : ` Source: ${urls.join(', ')}.`
-    return ` Basis: figures found online for this place. ${STATUS['ai-found']}.${where}${readFor(figures)}`
+    return ` Basis: figures found online for this place. ${STATUS['ai-found']}.${where}${readFor(figures, stated)}`
   }
   const baselines = figures.filter((f) => f.origin === 'baseline')
   const cited = [...new Set(baselines.flatMap((f) => f.citations.map((c) => `${c.document} ${c.edition} ${c.clause}`)))]
   const place = [...new Set(baselines.map((f) => f.jurisdiction))].join(', ')
   const status = [...new Set(baselines.map((f) => STATUS[f.status]))].join('. ')
-  return ` Basis: ${place} (${cited.join(', ')}). ${status}.${readFor(figures)}`
+  return ` Basis: ${place} (${cited.join(', ')}). ${status}.${readFor(figures, stated)}`
 }
 
-/** COD-2: which kind of building the figures were read for, as one more sentence. */
-function readFor(figures: readonly AppliedFigure[]): string {
-  return ` ${readForSentence(figures.map((f) => f.readFor))}.`
+/**
+ * COD-2: which kind of building the figures were read for, as one more sentence. CNT-5: and, when
+ * the plan says what kind of building the floor is, that it is that kind.
+ */
+function readFor(figures: readonly AppliedFigure[], stated: BuildingType | undefined): string {
+  return ` ${readForSentence(figures.map((f) => f.readFor), stated)}.`
 }
 
 export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
@@ -119,7 +124,8 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
       floorName: floors.length > 1 ? floorName(finding.floor) : null
     }
     const figures = finding.figures ?? []
-    const basis = basisText(figures)
+    const stated = floorBuilding(plan, finding.floor)
+    const basis = basisText(figures, stated)
     const figure = (key: AppliedFigure['key']): AppliedFigure | undefined => figures.find((f) => f.key === key)
     switch (finding.code) {
       case 'room_too_small': {
@@ -139,7 +145,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ...base,
           tag: 'Escape',
           title: wordings.noEscapeOpening(shown),
-          detail: [words(`The check looks for a window or a door to the outside that someone can climb through, and finds none. ${readForSentence([ESCAPE_TOP_LEVEL.provenance.readFor])}.`)]
+          detail: [words(`The check looks for a window or a door to the outside that someone can climb through, and finds none. ${readForSentence([ESCAPE_TOP_LEVEL.provenance.readFor], stated)}.`)]
         }
       case 'escape_window_too_small': {
         const width = figure('escapeOpeningMinWidth')

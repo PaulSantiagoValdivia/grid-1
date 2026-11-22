@@ -14,6 +14,7 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- `grid check` and `grid_check` are short by default and about your plan: what to look at, the figures those notes used, and what each check looked at. `--full` (or `full` for the tool) gives the whole report. A note you have looked at can be set aside as seen, with why and who (`grid check --seen 3 --reason … --by …`, or `grid_mark_seen`): it stays listed under Seen, in `plan.seen.json` beside the plan, and comes back as new when its part of the plan changes (MSG-10).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 
 Grid has not been released yet. The first release will hold:
@@ -30,8 +31,14 @@ Grid has not been released yet. The first release will hold:
   from and how far a person has checked it.
 - `grid tidy` lists the walls that do not meet and makes the fixes you choose.
 - Every note and pass that used a figure says which kind of building the figure was read for:
-  today, homes. A plan cannot say yet what kind of building it is, so a café or a hotel is
-  measured with a home's figures, and the report now says so.
+  today, homes.
+- A plan can say what kind of building it is (a home, an office, a shop, a school…), and a floor
+  can say otherwise for itself, such as a shop under flats. The home figures then run only where
+  it is a home, or where the plan does not say, and the report says in plain words which checks
+  did not apply to an office or a shop. Rooms have 27 uses, from office and classroom to plant
+  and parking; a plain word such as "WC" or "staff room" is read as its use, and the person's
+  own word stays the room's name. A room can say who it is for (private, shared, common or
+  commercial) and carry the firm's own room type.
 - `grid describe`, `grid draw`, `grid export` and `grid sheet` describe a plan, draw it, export
   it and lay it out as an A3 sheet in PDF.
 - `grid init` makes a folder a Grid project, where the commands read its `plan.json`.
@@ -42,12 +49,21 @@ Grid has not been released yet. The first release will hold:
   the tests, the licence check and the scoreboard.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 21 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 22 tools.
 - A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
   all floors) and a door and window schedule that lists each opening once with the two rooms it
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.
+- Quantities for a first estimate: floor finishes and wall faces by room use, ceilings,
+  skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size,
+  and the slab, upper floors and roof worked out from the outlines and marked assumed, each line
+  with its rule. A cost comes only from your own rates file beside the plan, which must name its
+  currency; without one you get a rate card to fill in, and lines with no rate or a rate in the
+  wrong unit are listed, never filled.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.
+- A plan can say where north is, which way its y runs, which side is its front and where it
+  sits. The drawing then shows a north arrow, the IFC file states that north (and no north for
+  a plan that states none), and an agent can ask which rooms face east.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
   only the floor it shows.
 - `grid check` says where an opening does not fit: a door or window that runs into a wall meeting

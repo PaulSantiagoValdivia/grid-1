@@ -15,16 +15,21 @@
 import { indexPlan, planFloors, planForFloor, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
+import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
+import { buildingKindsText, type BuildingKind } from './figures'
 import type { CheckCoverage, CoverageGroup, CoverageSkip, Rule, RuleFinding, SkipReason } from './types'
 
 /** What one check looked at and skipped on one floor, by id. */
 export interface FloorScope {
   readonly lookedAt: string[]
   readonly skipped: Partial<Record<SkipReason, string[]>>
+  /** CNT-5: on a floor skipped as `not_for_building`, the kind the plan says it is. */
+  readonly building?: BuildingType
 }
 
 /** The order skips are listed in: what could not be looked at first, then what the check is not about. */
 const SKIP_ORDER: readonly SkipReason[] = [
+  'not_for_building',
   'no_figures_for_place',
   'no_rooms',
   'cannot_be_drawn',
@@ -48,9 +53,15 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
   'escape-opening': 'room'
 }
 
-/** Why a part was skipped, in plain words: one wording per reason, and per check where it differs. */
-export function skipWhy(reason: SkipReason, ruleId: string): string {
+/**
+ * Why a part was skipped, in plain words: one wording per reason, and per check where it differs.
+ * CNT-5: `not_for_building` names the kinds the check's figures were read for (`readFor`) and the
+ * kind the plan says the building is.
+ */
+export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonly readFor: readonly BuildingKind[]; readonly is: BuildingType | undefined }): string {
   switch (reason) {
+    case 'not_for_building':
+      return `the figures were read for ${buildingKindsText(building?.readFor ?? [])}, and the plan says this is ${building?.is === undefined ? 'another kind of building' : BUILDING_TYPE_TEXT[building.is]}`
     case 'no_figures_for_place':
       return 'no figures for the place the plan is for: the ones here are from US model codes'
     case 'no_rooms':
@@ -84,7 +95,7 @@ const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 const sorted = (ids: readonly string[]): string[] => [...ids].sort(byText)
 
 /** One check's coverage from its scopes, floor by floor, in floor order; ids by text. */
-export function coverageOf(rule: Rule, scopes: readonly (readonly [string, FloorScope])[], findings: number): CheckCoverage {
+export function coverageOf(rule: Rule, scopes: readonly (readonly [string, FloorScope])[], findings: number, readFor: readonly BuildingKind[] = []): CheckCoverage {
   const lookedAt: CoverageGroup[] = scopes
     .filter(([, scope]) => scope.lookedAt.length > 0)
     .map(([floor, scope]) => ({ floor, ids: sorted(scope.lookedAt) }))
@@ -92,7 +103,7 @@ export function coverageOf(rule: Rule, scopes: readonly (readonly [string, Floor
   for (const [floor, scope] of scopes) {
     for (const reason of SKIP_ORDER) {
       const ids = scope.skipped[reason] ?? []
-      if (ids.length > 0) skipped.push({ floor, ids: sorted(ids), reason, why: skipWhy(reason, rule.id) })
+      if (ids.length > 0) skipped.push({ floor, ids: sorted(ids), reason, why: skipWhy(reason, rule.id, { readFor, is: scope.building }) })
     }
   }
   const count = (groups: readonly CoverageGroup[]): number => groups.reduce((sum, group) => sum + group.ids.length, 0)
@@ -109,8 +120,8 @@ export function coverageOf(rule: Rule, scopes: readonly (readonly [string, Floor
 }
 
 /** Every room of a floor skipped for one reason: how a check that did not run is told. */
-export function allSkipped(storey: FloorPlan, reason: SkipReason): FloorScope {
-  return { lookedAt: [], skipped: { [reason]: storey.rooms.map((room) => room.id) } }
+export function allSkipped(storey: FloorPlan, reason: SkipReason, building?: BuildingType): FloorScope {
+  return { lookedAt: [], skipped: { [reason]: storey.rooms.map((room) => room.id) }, ...(building === undefined ? {} : { building }) }
 }
 
 /**
