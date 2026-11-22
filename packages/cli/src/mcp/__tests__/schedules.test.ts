@@ -165,7 +165,7 @@ describe('ARE-12 the opening schedule', () => {
     const csv = openingScheduleCsv(openingSchedule(survey(flat))).trim().split('\n')
     // MSG-3: the label row, the header and 13 openings.
     expect(csv).toHaveLength(2 + 13)
-    expect(fields(csv[2]!).slice(3, 6).every((v) => typeof v === 'number')).toBe(true)
+    expect(fields(csv[2]!).slice(4, 7).every((v) => typeof v === 'number')).toBe(true)
   })
 })
 

@@ -20,7 +20,8 @@ import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
-import { factsText, flatSchedule, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
+import { factsText, flatSchedule, openingSchedule, openingTypeSchedule, roomSchedule, scheduleMarkLabels, shownNumber } from '../quantities/schedule'
+import type { ScheduleMarkLabels } from '@ongrid/floorplan/geometry/drawingMarks'
 import { surveyPlan } from '../quantities/survey'
 import { displayFor, sqFt } from '../quantities/units'
 import { showLength, type Display } from '@ongrid/floorplan/types/units'
@@ -87,6 +88,8 @@ export function planPictureOptions(picture: Extract<SheetPicture, { kind: 'plan'
       look: SHEET_LOOK,
       paperScale: (shown.width * 1000) / (PLAN_BOX.width * POINT_MM),
       ...(picture.ids ? { labels: { ids: true } } : {}),
+      // ARE-15: the schedules' marks, tied to the rows on the schedule pages.
+      ...(picture.marks === undefined ? {} : { marks: { schedule: picture.marks } }),
       // MSG-11: the drawing's words in the sheet's language; English leaves the plan's own.
       ...(language === DEFAULT_LANGUAGE ? {} : { language }),
     },
@@ -107,7 +110,11 @@ export type SheetPicture =
    * in `grid draw`'s picture of the floor, or more where that would print names under
    * `MIN_LABEL_PT`: the zoom its labels are placed at (`planPictureOptions`).
    */
-  | { readonly kind: 'plan'; readonly floor: string; readonly frame: Bounds; readonly metresPerPixel: number; readonly ids: boolean }
+  | {
+      readonly kind: 'plan'; readonly floor: string; readonly frame: Bounds; readonly metresPerPixel: number; readonly ids: boolean
+      /** ARE-15: on the check set, each room's and opening's mark in its schedules, by id. */
+      readonly marks?: ScheduleMarkLabels
+    }
   | { readonly kind: 'model' }
 export interface SheetPage {
   readonly kind: 'cover' | 'floor' | 'summary'
@@ -197,14 +204,14 @@ export function floorFrames(loaded: LoadedPlan): ReadonlyMap<string, Bounds> {
 }
 
 /** A floor page's picture, with the zoom of `grid draw`'s picture of that floor. */
-function floorPicture(loaded: LoadedPlan, frames: ReadonlyMap<string, Bounds>, floor: string, ids: boolean): SheetPicture {
+function floorPicture(loaded: LoadedPlan, frames: ReadonlyMap<string, Bounds>, floor: string, ids: boolean, marks?: ScheduleMarkLabels): SheetPicture {
   const frame = frames.get(floor)!
   const drawn = pictureView(loaded.plan, { floor })
   // The zoom at which a room name is MIN_LABEL_PT on paper: pixels of a name, times metres per
   // pixel, times points per metre of the box. `grid draw`'s zoom stands unless it is smaller.
   const shown = fitTo(frame, PLAN_BOX.width / PLAN_BOX.height)
   const readable = (MIN_LABEL_PT * shown.width) / (TEXT_PX.roomName * PLAN_BOX.width)
-  return { kind: 'plan', floor, frame, metresPerPixel: Math.max(drawn.view.width / drawn.width, readable), ids }
+  return { kind: 'plan', floor, frame, metresPerPixel: Math.max(drawn.view.width / drawn.width, readable), ids, ...(marks === undefined ? {} : { marks }) }
 }
 
 function undecidedNote(loaded: LoadedPlan, floor: string, w: Words): string[] {
@@ -411,6 +418,8 @@ function checkBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
       ...whole.report.limits,
     ],
   }
+  // ARE-15: each floor's drawing carries the marks of the schedule pages that follow it.
+  const marks = scheduleMarkLabels(surveyPlan(loaded.plan))
   const pages = floors.map((floor): Body => {
     const result = checkOnFloor(loaded, whole, floor.id)
     const floorAreas = areas.floors.find((f) => f.floor === floor.id)
@@ -427,7 +436,7 @@ function checkBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
       kind: 'floor', floor: floor.id, topLine: `${name} / ${floorTitle}`, title: floorTitle, subtitle: null,
       paragraphs: [], figures: [],
       table: floorAreas ? areaTable(floorAreas, true, units, w) : null,
-      picture: floorPicture(loaded, frames, floor.id, true),
+      picture: floorPicture(loaded, frames, floor.id, true, marks),
       notes: shown,
     }
   })
@@ -475,7 +484,8 @@ function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
   const sizeText = (width: number, height: number): string => units.metric ? `${units.mark(metresText(width))} × ${units.mark(metresText(height))} m` : `${units.length(width)} × ${units.length(height)}`
   const openingRows: SheetRow[] = openings.rows.map((r) => ({
     // CNT-14: its kind, as the plan states it.
-    name: `${r.number}. ${w.say((r.type === 'opening' || r.kind === null ? `sheet.type.${r.type}` : `sheet.kind.${r.type}.${r.kind}`) as MessageKey)} ${r.id}`,
+    // ARE-15: by its mark, as the floor's drawing shows it.
+    name: `${r.mark} ${w.say((r.type === 'opening' || r.kind === null ? `sheet.type.${r.type}` : `sheet.kind.${r.type}.${r.kind}`) as MessageKey)} ${r.id}`,
     detail: `${sizeText(r.width, r.height)}${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: units.length(r.sill, 'height') })}` : ''}${r.opens === null ? '' : `, ${w.say('sheet.opens', { size: sizeText(r.opens.width, r.opens.height) })}`}${r.handing === null ? '' : `, ${w.said(r.handing, r.handingSaid ?? undefined)}`}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
     area: '1',
   }))
@@ -490,7 +500,24 @@ function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
     kind: 'summary', floor: null, topLine: `${name} / ${title}`, title, subtitle: null,
     paragraphs: [], figures: [], table, picture: null, notes: [...notes],
   })
-  const bodies = [body(w.say('sheet.roomSchedule'), roomTable), body(w.say('sheet.openingSchedule'), openingTable)]
+  // ARE-15: the doors and windows by type, kind and size, each with its openings' marks.
+  const types = [openingTypeSchedule(survey, 'door'), openingTypeSchedule(survey, 'window')]
+  const typeRows: SheetRow[] = types.flatMap((t) => t.rows).map((r, i) => ({
+    name: `${i + 1}. ${w.say((r.kind === null ? `sheet.type.${r.type}` : `sheet.kind.${r.type}.${r.kind}`) as MessageKey)} ${sizeText(r.width, r.height)}`,
+    detail: [
+      ...(r.opens === null ? [] : [w.say('sheet.opens', { size: sizeText(r.opens.width, r.opens.height) })]),
+      ...(r.type === 'window' ? [w.say('sheet.sill', { sill: r.sills.map((sill) => units.length(sill, 'height')).join(' / ') })] : []),
+      w.say('sheet.openingType.marks', { marks: r.marks.join(', ') }),
+    ].join(w.say('join.comma')),
+    area: String(r.count),
+  }))
+  const typeTable: SheetTable = {
+    heading: w.say('sheet.openingTypes.heading'),
+    rows: typeRows,
+    total: { name: w.say('sheet.inAll'), detail: w.say('sheet.openingTypes.count', { types: typeRows.length, doors: types[0]!.count, windows: types[1]!.count }), area: String(types[0]!.count + types[1]!.count) },
+    note: types[0]!.rule,
+  }
+  const bodies = [body(w.say('sheet.roomSchedule'), roomTable), body(w.say('sheet.openingSchedule'), openingTable), body(w.say('sheet.openingTypes'), typeTable)]
   // CNT-4: on a plan that lists flats, the flats and the mix by type, from grid_schedule of=flats's rows.
   // MSG-11: in the sheet's words; the areas are in square metres, as CNT-4 writes them, with the sheet's decimal mark.
   if ((loaded.plan.flats ?? []).length > 0) {

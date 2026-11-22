@@ -33,7 +33,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid write --scan <scan.json> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from a phone room scan, and keeps the scan beside it as `<plan>.scan.json` (see below) |
 | `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below). With `firm-standards.json` beside the plan, the firm's own standards are set against it too, under their own heading ([a firm's own standards](firm-standards.md)) |
 | `grid describe [<plan>] [--length line\|rooms\|walls\|walk] [--for person\|agent] [--as rooms] [--floor <id>] [--pictures <folder>]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, with `--length walls` its walls, and with `--length walk` the plan walked room by room, with `--pictures` a picture from each doorway (see below). `--as rooms` reads it back as rooms text |
-| `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation and section marks to a plan (see below) |
+| `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation, section and schedule marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
@@ -690,10 +690,16 @@ A section cuts every floor and writes its levels in metres, so `--floor`, `--hid
   the side `grid draw --facade` draws from the drawing's side nearest it, north at its top;
 - `section`: the line of `--section` as a chain line, heavy at its ends, with an arrow at each end
   looking the way the section looks, named A. With `section` in `--marks`, `--section` marks the
-  plan instead of drawing the section.
+  plan instead of drawing the section;
+- `schedule` (ARE-15): each room's and opening's mark in the schedules, in a box: a room's number
+  over its name, and each door's, window's and doorless opening's `D1`, `W1` or `O1` beside it,
+  on its wall's face away from a door's swing, or on a window's room side. Each mark is the one
+  its row has in `grid_schedule` ([areas.md](areas.md#schedules)), so every mark has one row and
+  every row one mark. `grid sheet --layout check` draws them on its floor pages.
 
 ```bash
 grid draw plan.json --floor first --marks levels,elevations,section --section 4.9,-2:4.9,13
+grid draw plan.json --marks schedule
 ```
 
 A plan drawn without `--marks` is drawn as before.

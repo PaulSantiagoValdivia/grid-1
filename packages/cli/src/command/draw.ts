@@ -23,6 +23,7 @@ import { askedLanguage, LANG_OPTION, languageFor } from './language'
 import type { SectionLine } from '@ongrid/floorplan/geometry/section'
 import type { DrawingMarksAsked } from '@ongrid/floorplan/geometry/drawingMarks'
 import { marksAsked, readMarks, readSectionOption, towardOf } from './section'
+import { withScheduleMarks } from '../quantities/schedule'
 
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
@@ -42,7 +43,7 @@ export const DRAW_OPTIONS: OptionSpecs = {
   ...LANG_OPTION,
   '--section': { takesValue: true, help: 'Draw a section instead of a floor plan: the line to cut along, x1,y1:x2,y2 in metres, through every floor, with its levels and room heights, and what it takes that the plan does not state hatched and listed. Not with --3d, --view or --facade.' },
   '--toward': { takesValue: true, help: 'With --section: the side of the line the section looks toward, walking from its first point to its second: left (the default) or right.' },
-  '--marks': { takesValue: true, help: 'Marks to add to a floor plan, joined by commas: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of --section and the way it looks, on the plan, instead of drawing the section). Not with --3d, --view or --facade.' },
+  '--marks': { takesValue: true, help: 'Marks to add to a floor plan, joined by commas: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of --section and the way it looks, on the plan, instead of drawing the section), schedule (each room\'s and opening\'s mark in the schedules: the room\'s number, D1, W1, O1). Not with --3d, --view or --facade.' },
   ...PROJECT_OPTION,
 }
 
@@ -90,6 +91,8 @@ export interface SectionAsked {
   readonly section: SectionLine | null
   /** The marks on a floor plan, when any are asked for. */
   readonly marks: DrawingMarksAsked | null
+  /** ARE-15: the schedules' marks are asked for, added once the plan is read. */
+  readonly schedule: boolean
 }
 
 /** What a drawn file is: a picture file's text or bytes, and the doors drawn as undecided. */
@@ -121,9 +124,9 @@ export function sectionAsked(request: DrawRequest): SectionAsked {
     for (const [given, flag] of [[request.floor, '--floor'], [request.hide, '--hide'], [request.colour, '--colour'], [request.key || undefined, '--key'], [request.ids || undefined, '--ids'], [request.units, '--units'], [request.decimal, '--decimal']] as const) {
       if (given !== undefined) throw new UsageError(`${flag} is for a floor plan; a section cuts every floor and writes its levels in metres: leave ${flag} or --section out.`)
     }
-    return { section: line, marks: null }
+    return { section: line, marks: null, schedule: false }
   }
-  return { section: null, marks: words === null ? null : marksAsked(words, line) }
+  return { section: null, marks: words === null ? null : marksAsked(words, line), schedule: words?.has('schedule') === true }
 }
 
 /** Checks the options against each other, before the plan is read. */
@@ -217,7 +220,7 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale, ...(language === 'en' ? {} : { language }) }), undecidedDoors: [] }
   }
   const display = request.units === undefined && request.decimal === undefined && asked === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan, language)
-  const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request), ...(drawing.marks === null ? {} : { marks: drawing.marks }) }
+  const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request), ...(drawing.marks === null ? {} : { marks: drawing.schedule ? withScheduleMarks(drawing.marks, loaded.plan) : drawing.marks }) }
   // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
   const faults = inspectPlan(loaded.plan, language === 'en' ? {} : { language, ...(loaded.plan.display?.decimal ? { decimal: loaded.plan.display.decimal } : {}) }).lines
   const undecidedDoors = planPicture(loaded.plan, { floor, look, ...labels }).undecidedDoors
