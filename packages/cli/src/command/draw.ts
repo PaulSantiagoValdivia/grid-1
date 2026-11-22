@@ -3,13 +3,16 @@
  * in the technical look, as a file to hand on, unless `--look` names another (SHT-1), with what went wrong marked on it by the numbers
  * `grid check` gives, and listed under it (MSG-8), and the plan's title, notes, key and sketch
  * (SHT-7); `--hide`, `--colour` and `--key` choose what it shows.
- * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`.
+ * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`; with `--view`, a
+ * view saved with the plan (VEW-3), through its camera record. With `--facade` (LVL-8), one side of
+ * the building in elevation, every floor at its level, through `drawFacade`.
  * Written to `--out`, or to standard output when no file is named.
  */
 import { DISPLAY_UNITS, displayFor } from '../quantities/units'
 import { LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
 import { inspectPlan } from '@ongrid/rules'
-import { drawPlan } from '../draw/drawPlan'
+import { FACADE_SIDES, cameraRecord, findView, viewSetting, type FacadeSide } from '@ongrid/floorplan/geometry'
+import { drawFacade, drawPlan } from '../draw/drawPlan'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { drawShowOf } from './drawShow'
 import { floorOption, type LoadedPlan } from './plan'
@@ -18,6 +21,8 @@ import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
   '--3d': { takesValue: false, help: 'Draw the 3D model as the app opens it, as a PNG of 1200 by 800 pixels.' },
+  '--facade': { takesValue: true, help: 'Draw one side of the building in elevation instead of a floor plan: north, east, south or west, the sides of the drawing (north is its top). Every floor at its level. Not with --3d, --view or --floor.' },
+  '--view': { takesValue: true, help: 'Draw a view saved with the plan (grid_save_view), by name: the 3D model through its camera, as a PNG of 1200 by 800 pixels.' },
   '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png or --3d). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out. With --3d, that floor as a cutaway; the whole building when left out.' },
   '--look': { takesValue: true, help: 'How the plan is drawn: technical (the default: black on white, lines in millimetres on paper), working (as on screen) or dark. Not with --3d.' },
@@ -39,6 +44,10 @@ export interface DrawRequest {
   readonly png: boolean
   /** The 3D model instead of a floor plan. */
   readonly threeD?: boolean
+  /** VEW-3: a saved view's name: the 3D model through its camera. */
+  readonly view?: string
+  /** LVL-8: one side of the building in elevation instead of a floor plan, as given. */
+  readonly facade?: string
   readonly out?: string
   readonly floor?: string
   readonly scale?: string
@@ -68,8 +77,10 @@ export const DRAW_LOOK: LookName = 'technical'
 
 /** Checks the options against each other, before the plan is read. */
 export function checkDrawRequest(request: DrawRequest): { scale: number; look: LookName } {
+  if (request.view !== undefined && request.floor !== undefined) throw new UsageError('--view draws the floors its camera was saved with: leave --floor or --view out.')
   // A still is always a PNG, so --png would say nothing.
   if (request.threeD && request.png) throw new UsageError('--png does nothing with --3d, which always draws a PNG: leave --png out.')
+  if (request.facade !== undefined) checkFacadeRequest(request)
   if (request.threeD && request.ids) throw new UsageError('--ids draws the ids on a floor plan, not on the 3D model: leave --ids or --3d out.')
   if (request.threeD && request.look !== undefined) throw new UsageError('--look is for a floor plan, not the 3D model: leave --look or --3d out.')
   if (request.threeD && (request.units !== undefined || request.decimal !== undefined)) throw new UsageError('--units and --decimal write the labels of a floor plan, not the 3D model: leave them or --3d out.')
@@ -99,8 +110,41 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
   return { scale, look }
 }
 
+/**
+ * LVL-8: a facade is one side of the whole building, in elevation: it takes the side, and how it is
+ * drawn and written (--look, --png, --scale, --out), and refuses what belongs to a floor plan or
+ * to the 3D model, by name.
+ */
+function checkFacadeRequest(request: DrawRequest): void {
+  const side = request.facade!
+  if (!(FACADE_SIDES as readonly string[]).includes(side)) {
+    throw new UsageError(`--facade ${JSON.stringify(side)} is not a side Grid draws: use one of ${FACADE_SIDES.join(', ')}, the sides of the drawing (north is its top).`)
+  }
+  if (request.view !== undefined) throw new UsageError('--facade draws one side of the building and --view a saved view of the model: give one of them.')
+  if (request.threeD) throw new UsageError('--facade draws one side of the building and --3d the model: give one of them.')
+  if (request.floor !== undefined) throw new UsageError('--floor picks a floor plan; a facade shows every floor at its level: leave --floor or --facade out.')
+  const planOnly: [unknown, string][] = [[request.ids || undefined, '--ids'], [request.hide, '--hide'], [request.colour, '--colour'], [request.key || undefined, '--key'], [request.units, '--units'], [request.decimal, '--decimal']]
+  for (const [given, flag] of planOnly) {
+    if (given !== undefined) throw new UsageError(`${flag} is for a floor plan, not a facade: leave ${flag} or --facade out.`)
+  }
+}
+
 export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: number, look: LookName = DRAW_LOOK): Promise<DrawnFile> {
+  if (request.facade !== undefined) {
+    const side = request.facade as FacadeSide
+    const file = request.png ? await drawFacade(loaded.plan, { format: 'png', side, look, scale }) : await drawFacade(loaded.plan, { format: 'svg', side, look })
+    return { file, undecidedDoors: [] }
+  }
   const floor = floorOption(loaded.plan, request.floor)
+  if (request.view !== undefined) {
+    const saved = findView(loaded.plan.views, request.view)
+    if (saved === null) {
+      const names = (loaded.plan.views ?? []).slice(0, 20).map((v) => JSON.stringify(v.name))
+      throw new UsageError(`--view names no view saved with this plan. ${names.length === 0 ? 'It has no saved views.' : `Its views: ${names.join(', ')}.`}`)
+    }
+    const { drawStill } = await import('../draw/drawStill')
+    return { file: await drawStill(loaded.plan, { camera: cameraRecord(loaded.plan, viewSetting(saved)), scale }), undecidedDoors: [] }
+  }
   if (request.threeD) {
     // Loaded only for a still: it brings Three and React with it.
     const { drawStill } = await import('../draw/drawStill')

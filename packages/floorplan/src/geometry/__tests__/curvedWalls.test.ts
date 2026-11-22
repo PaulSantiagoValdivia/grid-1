@@ -30,6 +30,8 @@ import { readRoomsText } from '../../rooms/read'
 import { compileRoomsText } from '../../rooms/compile'
 import { readPlanParts } from '../../types/readParts'
 import { planEnvelope } from '../envelope'
+import { planFacade } from '../facade'
+import { expandPatterns } from '../patterns'
 
 type Tuple = [number, number]
 
@@ -70,7 +72,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C11)', () => {
+describe('a curved wall in the plan file (C13)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
@@ -386,5 +388,32 @@ describe('a curved wall in the parts merged from main (HND-2, LVL-4)', () => {
     const disc = Math.PI * 3.1 * 3.1
     expect(Math.abs(envelope.slabArea! - disc) / disc).toBeLessThan(0.002)
     expect(Math.abs(envelope.roofArea! - disc) / disc).toBeLessThan(0.002)
+  })
+})
+
+describe('a curved wall in the parts merged from main (LVL-8)', () => {
+  it('shows a round wall on every facade, and its door on the side it faces', () => {
+    // The door is 2 m along the curve from (8, 5): about 38° round, facing north-east.
+    for (const side of ['north', 'east', 'south', 'west'] as const) {
+      const facade = planFacade(roundRoom(), side)
+      expect(facade.walls, side).toEqual(['round'])
+      const width = facade.extent!.u1 - facade.extent!.u0
+      expect(width, side).toBeGreaterThan(6.1)
+      expect(width, side).toBeLessThan(6.21)
+    }
+    expect(planFacade(roundRoom(), 'north').openings).toEqual(['d1'])
+    expect(planFacade(roundRoom(), 'south').openings).toEqual([])
+  })
+
+  it('spreads a pattern along a curved wall, by its length along the curve', () => {
+    const plan = { ...bayRoom(), openings: [door('d1', 's', 1.5)], patterns: [{ id: 'row', wall: 'bay', opening: { type: 'window' as const, width: 0.6, height: 1.2, sill: 0.9 }, count: 3, margins: { start: 0.5, end: 0.5 } }] }
+    const { plan: expanded, issues } = expandPatterns(plan as never)
+    expect(issues).toEqual([])
+    const placed = expanded.openings.filter((o) => o.wall === 'bay').map((o) => o.offset)
+    // 2π m along the bay: 0.5 to 2π − 0.5, three windows of 0.6 m spread evenly.
+    expect(placed).toHaveLength(3)
+    expect(placed[0]).toBeCloseTo(0.5, 6)
+    expect(placed[2]! + 0.6).toBeCloseTo(2 * Math.PI - 0.5, 5)
+    expect(validatePlan(expanded).issues.filter((i) => i.severity === 'error')).toEqual([])
   })
 })

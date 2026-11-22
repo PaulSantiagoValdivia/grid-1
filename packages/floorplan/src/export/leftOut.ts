@@ -36,7 +36,8 @@ const KIND_OF_LIST: Readonly<Record<PartList, LeftOutKind>> = {
   rooms: 'room',
   openings: 'opening',
   floors: 'floor',
-  items: 'item'
+  items: 'item',
+  patterns: 'pattern'
 }
 
 /** The code of the first line that names the part, an error before a warning. */

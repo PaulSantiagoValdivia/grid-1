@@ -14,8 +14,8 @@
  * puts it (`forSkia`).
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import type { Picture, PictureOptions } from '@ongrid/viewer/src/picture'
-import { fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
+import type { FacadePictureOptions, Picture, PictureOptions } from '@ongrid/viewer/src/picture'
+import { facadePicture, fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
 import { loadCanvas } from './canvas'
 import { forSkia } from './skiaText'
 
@@ -61,6 +61,22 @@ export function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string 
 export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string | Uint8Array> {
   const { format, scale = 1, label = true, ...pictureOptions } = options
   const picture = planPicture(plan, pictureOptions)
+  if (format === 'svg') return pictureToSvg(picture, 1, { label })
+  if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
+  return pictureToPng(picture, { scale, label })
+}
+
+/**
+ * LVL-8: one facade of a plan, as SVG or PNG: the side of the drawing (`side`, north its top),
+ * every floor at its level, in the look's elevation line weights, with the label (MSG-3). The
+ * geometry is the core's (`planFacade`); the viewer draws it (`facadePicture`).
+ */
+export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg'; label?: boolean }): Promise<string>
+export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'png'; scale?: number; label?: boolean }): Promise<Uint8Array>
+export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg' | 'png'; scale?: number; label?: boolean }): Promise<string | Uint8Array>
+export async function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg' | 'png'; scale?: number; label?: boolean }): Promise<string | Uint8Array> {
+  const { format, scale = 1, label = true, ...pictureOptions } = options
+  const picture = facadePicture(plan, pictureOptions)
   if (format === 'svg') return pictureToSvg(picture, 1, { label })
   if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
   return pictureToPng(picture, { scale, label })

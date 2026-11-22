@@ -352,7 +352,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
 
     for (const opening of usable) {
       const span = openingSpan(opening)
-      // The hole is straight between its edges (C11): on a curved wall, the chord between them.
+      // The hole is straight between its edges (C13): on a curved wall, the chord between them.
       const hole = openingChord(wall, span.from, span.to)
       openings.push({
         id: opening.id,

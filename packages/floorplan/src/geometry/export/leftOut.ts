@@ -18,7 +18,7 @@ import type { EntityKind } from '../validate'
 export type LeftOutKind = Exclude<EntityKind, 'plan'>
 
 /** In the order a note lists them. */
-export const LEFT_OUT_KINDS: readonly LeftOutKind[] = ['wall', 'room', 'opening', 'item', 'stair', 'floor']
+export const LEFT_OUT_KINDS: readonly LeftOutKind[] = ['wall', 'room', 'opening', 'item', 'stair', 'floor', 'pattern']
 
 /** One part of the plan an export left out. */
 export interface LeftOutPart {
@@ -40,7 +40,9 @@ const PLURAL: Readonly<Record<LeftOutKind, readonly [string, string]>> = {
   item: ['fixture', 'fixtures'],
   // LVL-3: a stair that cannot be laid out.
   stair: ['stair', 'stairs'],
-  floor: ['floor', 'floors']
+  floor: ['floor', 'floors'],
+  // LVL-8: an opening pattern the reader could not read.
+  pattern: ['opening pattern', 'opening patterns']
 }
 
 /** `1 wall`, `3 openings`. */

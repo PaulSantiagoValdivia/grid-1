@@ -18,6 +18,7 @@ import type { Vec2 } from '../vec2'
 import type { SceneSlab, SceneSolid, SceneStair, SceneWall, Vec3, WallBasis, WallElevation } from '../scene3d'
 import { alongFace } from '../scene3d'
 import { triangulate } from '../triangulate'
+import { planeAt } from '../roofs'
 
 export type Face = readonly [number, number, number]
 
@@ -191,7 +192,8 @@ export function stairMesh(stair: SceneStair): Mesh | null {
 /**
  * Flat solids of the shell (LVL-4: a slab, a roof, a parapet) as one mesh: every piece a closed
  * prism from its bottom to its top, open through its holes, its top facing up, its bottom down, and
- * a band of faces round every ring of its edge, out of the solid.
+ * a band of faces round every ring of its edge, out of the solid. A piece of a sloped roof (LVL-6)
+ * is the same prism with every point raised by its plane's height there, so it lies on the slope.
  */
 export function shellMesh(solids: readonly SceneSolid[]): Mesh | null {
   const points: Vec3[] = []
@@ -201,10 +203,11 @@ export function shellMesh(solids: readonly SceneSolid[]): Mesh | null {
     for (const piece of solid.pieces) {
       const { vertices, triangles, rings } = triangulate(piece.outline, piece.holes)
       if (triangles.length === 0) continue
+      const lift = (v: Vec2): number => (piece.rise === undefined ? 0 : planeAt(piece.rise, v))
       const top = points.length
-      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.top })
+      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.top + lift(v) })
       const bottom = points.length
-      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.bottom })
+      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.bottom + lift(v) })
       for (const [a, b, c] of triangles) faces.push([top + a, top + b, top + c], [bottom + a, bottom + c, bottom + b])
       // Outer rings wind counter-clockwise and holes clockwise: the solid lies on the left of every
       // edge, so its outside is on the right.

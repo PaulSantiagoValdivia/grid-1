@@ -3,7 +3,7 @@
  *
  * `parseFloorPlan` is all or nothing: one negative offset, one number written as text or one
  * `null` refuses the whole plan with a position such as `openings.3.offset` (lab MS-6). This
- * reader checks each wall, room, opening, floor and fixture with the schema's own rules, keeps
+ * reader checks each wall, room, opening, floor, fixture and opening pattern (LVL-8) with the schema's own rules, keeps
  * what is sound, and says what it did with the rest, part by part:
  *
  * - **read as meant**: a number written as text (`"2.5"`, `"0.9 m"`), `"true"` for true, a word
@@ -38,6 +38,7 @@ import {
   FloorPlanSchema,
   FloorSchema,
   ItemSchema,
+  OpeningPatternSchema,
   OpeningSchema,
   RoomSchema,
   WallSchema,
@@ -48,7 +49,7 @@ import type { JsonPath, TextMark } from './jsonText'
 import { quoted, textProblem } from './planText'
 import { FILE_UNITS, planInMetres } from './units'
 
-export type PartList = 'walls' | 'rooms' | 'openings' | 'floors' | 'items'
+export type PartList = 'walls' | 'rooms' | 'openings' | 'floors' | 'items' | 'patterns'
 
 /** The part a fault is about: where it is in the file, and its id when it can be read. */
 export interface PartRef {
@@ -110,13 +111,15 @@ export type PlanRead =
       readonly refusal: { readonly kind: 'not-an-object' } | { readonly kind: 'schema'; readonly issues: readonly PlanSchemaIssue[] }
     }
 
-const LISTS: readonly PartList[] = ['walls', 'rooms', 'openings', 'floors', 'items']
+const LISTS: readonly PartList[] = ['walls', 'rooms', 'openings', 'floors', 'items', 'patterns']
 const SCHEMAS: Record<PartList, z.ZodTypeAny> = {
   walls: WallSchema,
   rooms: RoomSchema,
   openings: OpeningSchema,
   floors: FloorSchema,
-  items: ItemSchema
+  items: ItemSchema,
+  // LVL-8: an opening pattern that cannot be read is left out on its own.
+  patterns: OpeningPatternSchema
 }
 /**
  * The sizes with a default. A size stated there that cannot be read (out of range, NaN, a
@@ -130,7 +133,7 @@ const SCHEMAS: Record<PartList, z.ZodTypeAny> = {
 const STATED_SIZES: Partial<Record<PartList, readonly string[]>> = { walls: ['thickness', 'height'], openings: ['sill'] }
 
 /** The order ids are kept in: walls first, because rooms and openings name them. */
-const ID_ORDER: readonly PartList[] = ['walls', 'rooms', 'openings', 'items']
+const ID_ORDER: readonly PartList[] = ['walls', 'rooms', 'openings', 'items', 'patterns']
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const sameKeys = (a: JsonPath, b: JsonPath): boolean => a.length === b.length && a.every((key, i) => key === b[i])

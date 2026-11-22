@@ -491,6 +491,15 @@ export const CODES = {
       fixOf(s, 'height') === null ? 'its sill and height together no higher than the wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
     fix: (s) => (fixOf(s, 'height') === null ? 'Lower its height or its sill.' : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, or lower its sill.`)
   },
+  'opening/above-roof': {
+    says: (s) => `${s.label} reaches above the roof over its wall`,
+    needed: (s) =>
+      fixOf(s, 'height') === null ? 'its sill and height together no higher than the roof over that stretch of its wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
+    fix: (s) =>
+      fixOf(s, 'height') === null
+        ? 'Lower it under the roof, move it along the wall to where the roof is higher, or, for a window in the slope, state it as a rooflight in the floor\'s roof.'
+        : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, lower its sill, or move it to where the roof is higher.`
+  },
   'opening/negative-sill': {
     says: (s) => `${s.label} has its sill below the floor`,
     needed: fixed('a sill at 0 or above'),
@@ -693,6 +702,40 @@ export const CODES = {
     fix: fixed('Give the second stair another id; until then it is left out.')
   },
 
+  // --- Opening patterns (LVL-8) ---------------------------------------------------------------
+  // What kept a pattern's openings from being placed. The found is the expansion's own sentence:
+  // which wall, how much room it needed and had, which opening it would have covered.
+  'pattern/unknown-wall': {
+    says: (s) => `${s.label} names a wall Grid cannot find`,
+    needed: fixed('the id of one wall of the plan'),
+    fix: fixed('Name the wall the openings go in by its id, as the plan file holds it; until then none of them is placed.')
+  },
+  'pattern/does-not-fit': {
+    says: (s) => `${s.label} does not fit its wall`,
+    needed: fixed('room on the wall, between its margins, for every opening of the pattern'),
+    fix: fixed('Make the margins smaller, the openings narrower, the count smaller or the spacing wider, or put the pattern on a longer wall.')
+  },
+  'pattern/unknown-floor': {
+    says: (s) => `${s.label} is to be repeated on a floor the plan does not have`,
+    needed: fixed('a floor of the plan in the pattern\'s floors'),
+    fix: fixed('Name the floors above by their ids, as the floor list holds them.')
+  },
+  'pattern/no-wall-above': {
+    says: (s) => `${s.label} finds no wall above to repeat on`,
+    needed: fixed('on each floor it is repeated on, a wall in the same line as its own, holding the opening\'s whole width'),
+    fix: fixed('Draw the wall above in line with the pattern\'s wall, or take that floor out of the pattern\'s floors.')
+  },
+  'pattern/overlaps-opening': {
+    says: (s) => `${s.label} would place an opening over another`,
+    needed: fixed('each opening of the pattern clear of the other openings on its wall'),
+    fix: fixed('Move the other opening, or change the pattern\'s margins, count or spacing so its openings stand clear of it.')
+  },
+  'pattern/id-clash': {
+    says: (s) => `${s.label} would give an opening an id another part has`,
+    needed: fixed('an id of its own for each opening a pattern places: the pattern\'s id, the floor and the number'),
+    fix: fixed('Rename the pattern, or the part that has the id.')
+  },
+
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {
     says: (s) => `${s.label} has a number Grid does not accept`,
@@ -757,6 +800,16 @@ export const CODES = {
     says: (s) => `${s.label} is the top floor and has nothing drawn on it`,
     needed: fixed('a top floor with something on it'),
     fix: fixed('Remove the floor if nothing is on it yet: it still counts as a storey and the roof stands on it.')
+  },
+  'floor/rooflight-misplaced': {
+    says: (s) => `${s.label} has a rooflight that does not lie on one slope of its roof`,
+    needed: fixed("a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips"),
+    fix: fixed("Move the rooflight's middle (at) onto one slope, or make it smaller, so it neither leaves the roof nor crosses where two slopes meet. Until then it is left out.")
+  },
+  'floor/dormers-not-drawn': {
+    says: (s) => `${s.label} lists dormers, which are not supported yet`,
+    needed: fixed('a roof Grid can draw: dormers are not supported yet'),
+    fix: fixed("Grid draws and measures the roof without its dormers. A window in a dormer's face can be drawn in an outside wall raised to it; a window in the slope is a rooflight.")
   },
   'floor/size-question': {
     says: (s) => `${s.label} states a height that may not be meant`,
