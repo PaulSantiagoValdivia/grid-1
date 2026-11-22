@@ -88,7 +88,27 @@
  *   It picks the figures the checks apply (`@ongrid/rules`); a plan that states no place gets
  *   no figure applied, and its report says so. Optional and never defaulted (version 1).
  *
- * C11 · The plot (BRF-3, lab EL-16)
+ * C11 · Saved views (VEW-3, lab SE-4, SE-7, S-16)
+ *   A plan MAY keep named views in `views`: each a camera, by what it is pointed at (`target`: a
+ *   point, and the room it is in), the compass bearing to the camera from the north the plan
+ *   states (`bearingFrom: 'north'`, with that `north`) or from the top of the drawing (`'plan
+ *   up'`), its tilt, distance and lens (focal length in millimetres on a sensor), the floor shown
+ *   cut away and the floors drawn; and the same camera as the open BCF format writes one:
+ *   `position`, `direction`, `up`, `fieldOfView` (vertical, degrees) and `aspectRatio`, in plan
+ *   metres with z up from the ground floor's floor level. Grid writes both and reads the setting
+ *   (`geometry/camera.ts`). Optional and never defaulted (version 1).
+ *
+ * C12 · Opening patterns (LVL-8)
+ *   A facade's rhythm may be stated once, in the plan's `patterns`: one opening (its type, width,
+ *   height, sill and door fields), a wall, a `count` or a `spacing` (or both), the `margins` kept
+ *   clear at the wall's start and end (measured along its axis, as C2's offset is), and the
+ *   `floors` above it is repeated on, onto the wall in the same line on each. A pattern is never an
+ *   opening: it is expanded into plain openings (`expandPatterns` in the geometry core), with ids
+ *   `<pattern>-<floor>-<n>`, before anything is drawn, measured, checked or exported, so every
+ *   exporter and check reads plain openings only. The file keeps the pattern, not its openings.
+ *   Optional and never defaulted (version 1).
+ *
+ * C13 · The plot (BRF-3, lab EL-16)
  *   `site.boundary` is the plot's outline, its corners in plan metres in order round it (either
  *   way round); edge n runs from point n to point n + 1, the last back to the first. `streets`
  *   names the edges on a street by number, and `setbacks` the set-backs the person asked for,
@@ -100,6 +120,7 @@
  *   never defaulted (version 1).
  */
 import { z } from 'zod'
+import { limit } from '../geometry/tolerances'
 import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
 import { factKey } from './facts'
 import { placeProblem } from './places'
@@ -735,6 +756,51 @@ export const OpeningSchema = z.object({
   properties: PropertiesSchema.optional(),
 })
 
+/** LVL-8: the most floors above its own that one opening pattern may be repeated on. */
+export const PATTERN_FLOORS_MAX = 200
+
+/**
+ * LVL-8 (C12): the one opening a pattern repeats: an opening without its id, wall and place, which
+ * the pattern gives each copy.
+ */
+export const PatternOpeningSchema = z.object({
+  type: OpeningTypeSchema,
+  width: finite().positive(),
+  sill: finite().nonnegative().default(0),
+  height: finite().positive(),
+  hinge: z.enum(['start', 'end']).optional(),
+  swing: z.enum(['left', 'right']).optional(),
+})
+
+/**
+ * LVL-8 (C12): a facade's rhythm, stated once. On `wall`, between `margins.start` metres from its
+ * start and `margins.end` from its end (each 0 when unstated), along its axis:
+ *
+ * - `count` alone: that many openings, spread evenly, the first at the start margin and the last
+ *   at the end margin (one alone sits in the middle);
+ * - `spacing` alone: an opening every `spacing` metres, centre to centre, from the start margin,
+ *   as many as fit before the end margin;
+ * - both: `count` openings `spacing` apart, from the start margin.
+ *
+ * `floors` names the floors above to repeat it on: on each, the openings stand where they stand on
+ * this wall, on the wall in the same line. Optional and never defaulted (version 1).
+ */
+export const OpeningPatternSchema = z
+  .object({
+    id: text('id'),
+    wall: text('id'),
+    opening: PatternOpeningSchema,
+    count: z.number().int().positive().max(PARTS_MAX).optional(),
+    spacing: finite().positive().optional(),
+    margins: z.object({ start: finite().nonnegative().optional(), end: finite().nonnegative().optional() }).optional(),
+    floors: z.array(text('id').pipe(z.string().min(1))).max(PATTERN_FLOORS_MAX).optional(),
+  })
+  .superRefine((pattern, ctx) => {
+    if (pattern.count === undefined && pattern.spacing === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['count'], message: 'needs a count, a spacing or both: how many openings, or how far apart' })
+    }
+  })
+
 export const ReferenceImageSchema = z.object({
   // Path relative to the project directory
   path: text('path'),
@@ -939,7 +1005,7 @@ export const FrontSchema = z
   })
 
 /**
- * BRF-3 (C11): what the site holds on the ground: fences, gates, paths, paving, trees and pools.
+ * BRF-3 (C13): what the site holds on the ground: fences, gates, paths, paving, trees and pools.
  * Each kind is the site's own, never a wall, a room or a fixture: it adds no wall, no area, no
  * note and no storey height, and is drawn in its own style on the ground floor's plan.
  */
@@ -947,7 +1013,7 @@ export const SITE_THING_KINDS = ['fence', 'gate', 'path', 'paving', 'tree', 'poo
 export type SiteThingKind = (typeof SITE_THING_KINDS)[number]
 
 /**
- * BRF-3 (C11): one thing on the site. A `fence` is a line through `points` (two or more), a
+ * BRF-3 (C13): one thing on the site. A `fence` is a line through `points` (two or more), a
  * `gate` the line between its two posts (two points), a `path` a line (two or more) with its
  * `width`, `paving` and a `pool` a closed shape (three or more points), and a `tree` its trunk
  * `at` a point, with the `canopy` across its crown if known. `height` (a fence's, a gate's, a
@@ -983,7 +1049,7 @@ export const SiteThingSchema = z
 export const SETBACK_SOURCES = ['given', 'assumed'] as const
 
 /**
- * BRF-3 (C11): a set-back the person asked for: how far the building is to stand `from` the
+ * BRF-3 (C13): a set-back the person asked for: how far the building is to stand `from` the
  * boundary: `all` its edges, the `street` edges, or one edge by its number. A figure of the
  * person's own, never a code's: Grid compares the drawing with it and applies no figure of its
  * own. `source` says whether the person gave it or it was assumed for them to confirm.
@@ -1018,7 +1084,7 @@ export function boundaryEdgeCount(points: readonly (readonly [number, number])[]
  * floor nearest it. One level for the whole site: a ground level for each wall, for a slope,
  * comes later.
  *
- * BRF-3 (C11): `boundary`, `streets`, `setbacks` and `things`, the plot and what is on it.
+ * BRF-3 (C13): `boundary`, `streets`, `setbacks` and `things`, the plot and what is on it.
  * A fault in one street, set-back or thing leaves that one out alone (`readParts.ts`).
  */
 export const SiteSchema = z
@@ -1033,7 +1099,7 @@ export const SiteSchema = z
     // apply; with none stated, no figure is applied. Kept as written; a report names the place
     // from the list, never from this text.
     country: placeText().optional(),
-    // BRF-3 (C11): the plot's boundary, its corners in plan metres, in order round it; edge 1
+    // BRF-3 (C13): the plot's boundary, its corners in plan metres, in order round it; edge 1
     // runs from the first point to the second, and the last edge back to the first point.
     boundary: z.array(Vec2).min(3).max(BOUNDARY_MAX).optional(),
     // BRF-3: the edges of the boundary that are on a street, by number.
@@ -1120,6 +1186,50 @@ export const MarkSchema = z
     }
   })
 
+/** C11: a point in plan metres, z up from the ground floor's floor level. */
+const Vec3 = z.tuple([finite(), finite(), finite()])
+
+/** VEW-3 (C11): what a saved view's bearing is read from. */
+export const VIEW_BEARING_FROM = ['north', 'plan up'] as const
+
+/**
+ * VEW-3 (C11): a named view, saved with the plan. The setting (`target` to `cut`) is what Grid
+ * reads; `floors` and the BCF camera (`position` to `aspectRatio`) are what it worked out, for
+ * other programs. Optional and never defaulted (version 1).
+ */
+export const ViewSchema = z
+  .object({
+    name: text('name').pipe(z.string().min(1)),
+    target: z.object({
+      room: text('id').pipe(z.string().min(1)).optional(),
+      point: Vec3,
+    }),
+    bearing: finite().min(0).lt(360),
+    bearingFrom: z.enum(VIEW_BEARING_FROM),
+    north: finite().optional(),
+    tilt: finite(),
+    distance: finite(),
+    lens: z.object({
+      focalLength: finite(),
+      sensor: z.object({ width: finite().positive(), height: finite().positive() }),
+    }),
+    cut: text('id').pipe(z.string().min(1)).optional(),
+    floors: parts(text('id'), 'floors').optional(),
+    position: Vec3,
+    direction: Vec3,
+    up: Vec3,
+    fieldOfView: finite().positive().lt(180),
+    aspectRatio: finite().positive(),
+  })
+  .superRefine((view, ctx) => {
+    const most = limit('cameraTilt')
+    if (Math.abs(view.tilt) > most) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tilt'], message: `is more than ${most} degrees from level: a camera looking straight down or up has no up` })
+    if (!(view.distance >= limit('cameraClosest'))) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['distance'], message: `is less than ${limit('cameraClosest')} m, the least distance a camera may stand from what it is pointed at` })
+    const [shortest, longest] = [limit('lensShortest'), limit('lensLongest')]
+    if (!(view.lens.focalLength >= shortest && view.lens.focalLength <= longest)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lens', 'focalLength'], message: `takes a focal length from ${shortest} to ${longest} mm` })
+    if (view.bearingFrom === 'north' && view.north === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['north'], message: 'is needed when the bearing is from north: the north it was read from' })
+  })
+
 /**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
@@ -1194,6 +1304,9 @@ export const FloorPlanFieldsSchema = z.object({
   walls: parts(WallSchema, 'walls').default([]),
   rooms: parts(RoomSchema, 'rooms').default([]),
   openings: parts(OpeningSchema, 'openings').default([]),
+  // LVL-8 (C12): opening patterns, each expanded into plain openings before anything reads the
+  // plan (`expandPatterns`). Optional and never defaulted (version 1).
+  patterns: parts(OpeningPatternSchema, 'opening patterns').optional(),
   // C5: names and orders the floors. Advisory — a floor named only by a wall or
   // room still counts as a floor of the plan, so geometry can never become
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
@@ -1219,6 +1332,9 @@ export const FloorPlanFieldsSchema = z.object({
   // WRT-6 (C8): where values came from, given, measured, scanned or assumed, and how sure each is
   // (`MarkSchema`). Optional and never defaulted (version 1).
   marks: parts(MarkSchema, 'marks').optional(),
+  // VEW-3 (C11): named views, each a camera saved with the plan (`ViewSchema`). Optional and never
+  // defaulted (version 1).
+  views: parts(ViewSchema, 'views').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -1256,6 +1372,8 @@ export type RoomTenure = z.infer<typeof RoomTenureSchema>
 export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
+export type OpeningPattern = z.infer<typeof OpeningPatternSchema>
+export type PatternOpening = z.infer<typeof PatternOpeningSchema>
 export type Stair = z.infer<typeof StairSchema>
 export type Ceiling = z.infer<typeof CeilingSchema>
 export type Roof = z.infer<typeof RoofSchema>
@@ -1272,6 +1390,7 @@ export type Site = z.infer<typeof SiteSchema>
 export type SiteThing = z.infer<typeof SiteThingSchema>
 export type Setback = z.infer<typeof SetbackSchema>
 export type Mark = z.infer<typeof MarkSchema>
+export type View = z.infer<typeof ViewSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

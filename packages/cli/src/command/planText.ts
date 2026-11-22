@@ -20,6 +20,8 @@ export const PARTS_MAX = 50_000
 export const BOUNDARY_MAX = 2_000
 /** CNT-9: the most facts of the person's own one wall, opening, room or floor may carry. */
 export const PROPERTIES_MAX = 100
+/** LVL-8: the most floors one opening pattern may be repeated on. */
+export const PATTERN_FLOORS_MAX = 200
 /** The largest plan file Grid reads, in bytes. */
 export const PLAN_FILE_MAX_BYTES = 64 * 1024 * 1024
 
@@ -67,6 +69,10 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   // SHT-7: writing on the drawing and the sketch layer.
   annotations: { id: 'id', text: 'name', room: 'id', floor: 'id' },
   sketch: { id: 'id', category: 'id', text: 'name', floor: 'id' },
+  // LVL-8: an opening pattern names its wall, and the floors it repeats on (below).
+  patterns: { id: 'id', wall: 'id' },
+  // VEW-3: a saved view's name, and the floor it shows cut away.
+  views: { name: 'name', cut: 'id' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -119,6 +125,16 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
           const value = facts[name]
           const problem = typeof value === 'string' ? textProblem(value, 'name') : null
           if (problem) return `${list}[${i}].properties, fact ${n + 1}, has a value that ${problem}`
+        }
+      }
+      // LVL-8: the floors an opening pattern is repeated on, each an id.
+      const repeats = part['floors']
+      if (list === 'patterns' && Array.isArray(repeats)) {
+        if (repeats.length > PATTERN_FLOORS_MAX) return `patterns[${i}].floors lists ${repeats.length.toLocaleString('en-US')} floors; a pattern may be repeated on at most ${PATTERN_FLOORS_MAX}`
+        for (let k = 0; k < repeats.length; k++) {
+          const id: unknown = repeats[k]
+          const problem = typeof id === 'string' ? textProblem(id, 'id') : null
+          if (problem) return `patterns[${i}].floors[${k}] ${problem}`
         }
       }
       if (list === 'rooms') {

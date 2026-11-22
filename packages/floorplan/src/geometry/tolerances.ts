@@ -23,8 +23,8 @@
 
 export type ToleranceKind = 'tolerance' | 'limit' | 'arithmetic'
 
-/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit. */
-export type ToleranceUnit = 'm' | 'm²' | 'radian' | 'sine' | 'ratio' | 'count'
+/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit; `mm` is a lens's focal length (VEW-3). */
+export type ToleranceUnit = 'm' | 'm²' | 'mm' | 'degree' | 'radian' | 'sine' | 'ratio' | 'count'
 
 /** The kinds of building a limit can depend on, as the plan says it (`buildingKind`). */
 export type BuildingKind = 'any' | 'home'
@@ -638,6 +638,36 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Facades and opening patterns (LVL-8) ──────────────────────────────────────────────────
+  facadeFacing: {
+    kind: 'tolerance',
+    value: 0.0175,
+    unit: 'sine',
+    decides:
+      'A face of the building is drawn on a facade when it turns at least this much toward the ' +
+      'side the facade is seen from (about one degree): a face edge-on to it, or turned away, is ' +
+      'not seen.',
+    basis: own
+  },
+  facadeOnFace: {
+    kind: 'tolerance',
+    value: 0.01,
+    unit: 'm',
+    decides:
+      'A wall whose outside face lies within this of a stretch of the floor\'s outline is the wall ' +
+      'that stretch of the facade shows, with its height and its openings.',
+    basis: own
+  },
+  facadeSameDepth: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'Faces of a facade that stand within this of each other, front to back, are drawn as one ' +
+      'plane, with one line weight; a face set back further is drawn lighter.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',
@@ -654,6 +684,37 @@ export const TOLERANCES = {
     value: 500,
     unit: 'm',
     decides: 'A plan reaching further than this from the origin gets a warning: most likely a scale or unit error.',
+    basis: own
+  },
+  // VEW-3: a camera an agent sets. Past these a view call, or a saved view, is refused.
+  cameraTilt: {
+    kind: 'limit',
+    value: 89,
+    unit: 'degree',
+    decides:
+      'How far a camera may look down at, or up to, what it is pointed at, from level. Looking ' +
+      'straight down or up, a picture has no up, so a camera turned further is refused.',
+    basis: own
+  },
+  cameraClosest: {
+    kind: 'limit',
+    value: 0.1,
+    unit: 'm',
+    decides: 'The least distance from a camera to what it is pointed at. Closer, the picture shows nothing of it.',
+    basis: own
+  },
+  lensShortest: {
+    kind: 'limit',
+    value: 8,
+    unit: 'mm',
+    decides: 'The shortest focal length a camera may have, on a 36 by 24 mm sensor: about 132 degrees across. Shorter is refused.',
+    basis: own
+  },
+  lensLongest: {
+    kind: 'limit',
+    value: 800,
+    unit: 'mm',
+    decides: 'The longest focal length a camera may have, on a 36 by 24 mm sensor: under 3 degrees across. Longer is refused.',
     basis: own
   },
 

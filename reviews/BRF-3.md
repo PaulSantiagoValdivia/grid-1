@@ -48,7 +48,7 @@ outside face runs x 3 to 12, y 10 to 20, 90 m². The plot 15 × 30 m, 450 m², e
 
 ## What changed
 
-1. **The plan format** (`types/floorplan.ts`, new convention C11). `SiteSchema` gains `boundary`
+1. **The plan format** (`types/floorplan.ts`, new convention C13 (C11 and C12 went to VEW-3 and LVL-8 on main)). `SiteSchema` gains `boundary`
    (3 to 2,000 points, either way round; a last point on the first closes it), `streets` (edge
    numbers), `setbacks` (`{ from: 'all' | 'street' | n, distance, source?: 'given' | 'assumed' }`)
    and `things` (`SiteThingSchema`, kinds `SITE_THING_KINDS`). Cross-field checks: an edge the

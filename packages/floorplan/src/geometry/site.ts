@@ -1,5 +1,5 @@
 /**
- * BRF-3 (C11, lab EL-16): how far the building stands from each edge of its plot, and how much of
+ * BRF-3 (C13, lab EL-16): how far the building stands from each edge of its plot, and how much of
  * the plot it covers.
  *
  * The building is measured from its outside face as one shape: the footprint. It is LVL-4's slab

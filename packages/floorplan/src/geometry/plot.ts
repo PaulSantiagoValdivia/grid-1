@@ -1,5 +1,5 @@
 /**
- * BRF-3 (C11): the plot as the plan states it, ready to measure and to draw.
+ * BRF-3 (C13): the plot as the plan states it, ready to measure and to draw.
  *
  * `site.boundary` is the plot's outline, its corners in order round it, either way round. Each edge
  * gets its number (edge 1 from the first point to the second), the way it faces out of the plot,

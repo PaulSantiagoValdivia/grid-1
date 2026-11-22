@@ -17,6 +17,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
+- [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
@@ -24,6 +25,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
 - [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
+- [Saved views, and the camera record](#saved-views-and-the-camera-record): a camera saved by name, as Grid sets it and as BCF writes it
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -36,14 +38,15 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor, stair or rooflight, a wall a room or an opening names, a part's floor, the floors a stair joins, the room a zone is part of | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
-| walls, rooms, openings, floors, items, stairs, annotations, sketch items or things on the site | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views or things on the site | 50,000 of each | |
+| the floors one opening pattern repeats on | 200 | |
 | the points of the site's boundary, or of one of its things | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
 | the lowered zones of one ceiling, the rooflights of one roof | 50,000 | |
@@ -502,6 +505,54 @@ there, or the outside. A plan with no `holes` reads and measures as before.
 A hole whose wall list cannot close, or is out of order, gets the same codes as an outline
 (`room/unclosed`, `room/out-of-order`, `room/inside-out`), and the line names the hole.
 
+## Opening patterns
+
+A facade's rhythm may be stated once, in the plan's `patterns` (LVL-8): one opening, the wall it
+goes in, how many or how far apart, the margins kept clear at the wall's ends, and the floors
+above to repeat it on.
+
+```json
+"patterns": [
+  { "id": "north-row", "wall": "gn", "opening": { "type": "window", "width": 1.2, "height": 1.4, "sill": 0.9 },
+    "count": 4, "margins": { "start": 1, "end": 1 }, "floors": ["first", "second"] }
+]
+```
+
+| Field | What it states |
+|---|---|
+| `id` | The pattern's id, unique in the plan like every id |
+| `wall` | The wall the openings go in, by id |
+| `opening` | The opening repeated: `type`, `width`, `height`, `sill` (0 when unstated) and, for a door, `hinge` and `swing`, as an opening states them |
+| `count` | How many: spread evenly, the first one's near edge at the start margin and the last one's far edge at the end margin; one alone sits in the middle |
+| `spacing` | How far apart, centre to centre, in metres: the first at the start margin, as many as fit before the end margin. With `count` too, that many, from the start margin |
+| `margins` | `start` and `end`: metres kept clear from the wall's start and from its end, along its axis, as an opening's offset is measured. Each 0 when unstated |
+| `floors` | Optional: the floors above to repeat it on. On each, the openings stand where they stand on the pattern's wall, on the wall of that floor in the same line, whichever way it is drawn |
+
+A pattern states one of `count` and `spacing`, or both; with neither it is left out, as any part
+Grid cannot read is (`plan/part-left-out`).
+
+A pattern is never an opening. Grid expands it into plain openings, with ids
+`<pattern>-<floor>-<n>` (`north-row-first-2`), before it draws, measures, checks or exports the
+plan, so every view, the checks (a window a pattern places counts for escape like one placed by
+hand), the schedules and every export read plain openings only: a plan with a pattern exports
+exactly the DXF, IFC, OBJ and GLB of the same plan with those openings written out by hand. Each
+offset is kept to the micrometre, as a person writes it. The file keeps the pattern, never its
+openings: `grid write`, `grid tidy` and the tools that change the plan leave `patterns` as the
+file has them, and rooms text (`grid describe --as rooms`) holds the openings the file states and
+says the patterns are kept apart. A pattern on a wall that moves follows it; one whose wall is cut
+or renamed by an edit names a wall that is gone, and says so.
+
+What a pattern cannot place is said, never dropped in silence. Each is left out, the rest placed:
+
+| Code | What it says |
+|---|---|
+| `pattern/unknown-wall` | It names a wall the plan does not have (with the nearest id), or one two walls share. None of its openings is placed |
+| `pattern/does-not-fit` | Its openings do not fit between the margins: how much room they need and how much there is; or its spacing is less than its openings' width. None is placed |
+| `pattern/unknown-floor` | It is to be repeated on a floor the plan does not have. Nothing is placed there |
+| `pattern/no-wall-above` | On a floor it repeats on, no wall in the line of its own holds an opening's whole width: which openings are not placed there |
+| `pattern/overlaps-opening` | One of its openings would lie over another opening on its wall, one placed by hand or by another pattern. That one is not placed |
+| `pattern/id-clash` | An id it would give is another part's. That opening is not placed |
+
 ## Fixtures
 
 A plan may list its fixed fixtures in `items`: a toilet, a basin, a shower, a bath or a kitchen
@@ -926,6 +977,60 @@ text gives no height with none, so its floor's height or the default reaches it 
 read; and Grid's edits never write a filled-in value into a file that stated none: a wall cut in
 two, or a new wall beside walls with no stated height, states none either. A wall that takes its
 floor's height states none of its own, so the height is said once, on the floor.
+
+## Saved views, and the camera record
+
+Every 3D picture Grid takes, in `grid_view`, `grid draw --view` and the app's 3D view when it is
+handed one, comes from one camera record (VEW-3, `cameraRecord` in
+`packages/floorplan/src/geometry/camera.ts`). A plan may keep cameras by name in `views`, saved
+with `grid_save_view`; called up again (`grid_view view=…`, `grid draw --view …`) a view gives
+the same record, digit for digit, while the plan keeps what it was taken of. A plan with no
+`views` reads as before.
+
+A camera is set by six things. Grid works the rest out from them, and reads only these when a
+record is sent back or a view is called up:
+
+| Field | What it sets |
+|---|---|
+| `target` | What the camera is pointed at: `point`, `[x, y, z]` in metres, and `room`, the room it is for (left out for the building as a whole). Grid points a camera at a room at the middle of its floor, half way up its storey |
+| `bearing` | The compass bearing from the target to the camera, in degrees clockwise. With `bearingFrom` `north` it is read from the north the plan states, which the view keeps as `north` (degrees counter-clockwise from the top of the drawing, as the plan's `north`); with `plan up`, the plan states no north and bearing 0 is the top of the drawing. A view saved before the plan's north changed keeps its place, and is given back with its bearing from the north stated now |
+| `tilt` | Degrees the camera looks down at the target, from level; below 0 it looks up. At most 89 either way (`cameraTilt`) |
+| `distance` | Metres from the camera to the target, at least 0.1 (`cameraClosest`) |
+| `lens` | `focalLength` in millimetres, 8 to 800 (`lensShortest`, `lensLongest`), on `sensor` `{ "width": 36, "height": 24 }` |
+| `cut` | The floor shown cut away: it and the floors below it are drawn, nothing above it. Left out, the whole building |
+
+Then, worked out and written for other programs, with no say in the camera:
+
+| Field | What it is |
+|---|---|
+| `floors` | The floors drawn, lowest first |
+| `position`, `direction`, `up` | The camera as the open BCF format writes a perspective camera: where it stands, the unit direction it looks and its unit up, with no roll, in the plan's metres: x and y as the plan's, z up from the ground floor's floor level as the 3D model stands its floors (a plan of one floor stands it at 0) |
+| `fieldOfView` | BCF's field of view: the vertical angle, in degrees, of the lens on its sensor |
+| `aspectRatio` | The picture's width over its height: 1.5, as the sensor and Grid's 1200 by 800 pictures are |
+
+```json
+"views": [
+  { "name": "Garden corner", "target": { "room": "living", "point": [6.9625, 5.0125, 1.3] },
+    "bearing": 200, "bearingFrom": "plan up", "tilt": 25, "distance": 11.121147,
+    "lens": { "focalLength": 28.970563, "sensor": { "width": 36, "height": 24 } },
+    "floors": ["ground"], "position": [3.515217, -4.458833, 6], "direction": [0.309976, 0.851651, -0.422618],
+    "up": [0.144544, 0.397131, 0.906308], "fieldOfView": 45, "aspectRatio": 1.5 }
+]
+```
+
+The record an answer carries adds what the plan says about the camera now: `eyeHeight`, metres
+from `floor`'s floor level up to the camera (the target room's floor, else the floor cut away,
+else the ground floor), and `standingIn`, the room the camera stands in, or `outside any room`
+when it stands in none: outside the walls, inside a wall, above a storey's height or under its
+floor (lab S-16). Every number is rounded to a millionth.
+
+A view's name follows the plan's text rule, and names a view, never a person: it travels with the
+plan file. When a view cannot be read (a tilt past 89 degrees, a lens of 2 mm), the plan's `views`
+are left out as a value that cannot be read (`plan/value-left-out`, [A fault stays where it
+is](#a-fault-stays-where-it-is)), and the rest of the plan is read.
+`grid_mirror` mirrors each saved view with the plan; the other changes leave them where they are,
+so a view of a room that moves keeps pointing where the room was. The sheet does not draw them
+(`coverage.ts`): it takes its own pictures.
 
 ## People are kept out of the plan
 
