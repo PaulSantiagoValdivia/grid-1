@@ -302,9 +302,10 @@ GRID_SCAN_ALL=1 npx vitest run scoreboard/__tests__/approvalWords.test.ts
 
 ## Checks run
 
-After merging main (666bb01, QAR-3): `npm run build`, `npm run typecheck`, `npm run lint` and
-`npm run scoreboard` pass, and the scoreboard prints "Same as the stored figures". The affected
-tests, `npx vitest run packages/cli packages/viewer/src/picture packages/rules packages/floorplan
-scoreboard/__tests__/approvalWords.test.ts scoreboard/__tests__/retell.test.ts --exclude
-'.claude/**' --maxWorkers=2 --minWorkers=1`, pass: 183 files, 4,155 tests, 1 skipped. The full
-suite was not run in this round.
+After merging main (4abf0b6, WRT-7), on the branch at 16d556c: `npm run build`,
+`npm run typecheck` and `npm run lint` pass. `npm run scoreboard` prints "Same as the stored
+figures" (112 s). The affected tests, `npx vitest run packages/cli packages/viewer/src/picture
+packages/rules packages/floorplan scoreboard/__tests__/approvalWords.test.ts
+scoreboard/__tests__/retell.test.ts --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`, pass:
+185 files, 4,167 tests, 1 skipped, in 343 s. The full suite and the full scan
+(`GRID_SCAN_ALL=1`) were not run in this round.
