@@ -6,7 +6,7 @@
  * the frame are chosen here. "North" is the top of the drawing, +y: a plan holds no north.
  */
 import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
-import { pictureToSvg, planPicture, PICTURE_FONT, type PlanLook } from '@ongrid/viewer/src/picture'
+import { LOOKS as PICTURE_LOOKS, pictureToSvg, planPicture, PICTURE_FONT } from '@ongrid/viewer/src/picture'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
 import { GROUND_GRID } from '@ongrid/viewer/src/canvas3d/BuildingScene'
 import { LIGHT_COLORS_3D, rasterise, stillScene } from '@ongrid/viewer/src/still'
@@ -15,28 +15,10 @@ import { drawPlan } from './drawPlan'
 import { partBounds, pixelBoxes, type PartBox } from './partBoxes'
 import { forSkia } from './skiaText'
 
-import type { LookName, Side } from './viewNames'
+import { namedLook, type LookName, type Side } from './viewNames'
 
-/** Black lines on white, for a print or a black and white brochure. */
-export const MONO_LOOK: PlanLook = {
-  paper: '#ffffff',
-  room: '#ffffff',
-  wall: '#000000',
-  wallExterior: '#000000',
-  virtual: '#8c8c8c',
-  window: '#ffffff',
-  label: '#000000',
-  labelSoft: '#3c3c3c',
-  dimension: '#3c3c3c',
-  dimensionSoft: '#8c8c8c',
-  dimensionText: '#000000',
-  dimensionSoftText: '#3c3c3c',
-  warning: '#000000',
-  font: PICTURE_FONT,
-}
-
-function lookOf(look: LookName): 'light' | 'dark' | PlanLook {
-  return look === 'mono' ? MONO_LOOK : look
+function lookOf(look: LookName): 'working' | 'technical' | 'dark' {
+  return namedLook(look)
 }
 
 export interface PlanView {
@@ -46,6 +28,8 @@ export interface PlanView {
   readonly pxPerMetre: number
   /** Plan views: where each room, opening and wall is on the picture, in image pixels (VEW-6). */
   readonly boxes?: readonly PartBox[]
+  /** Plan views: the doors drawn with the "undecided" mark (`Picture.undecidedDoors`). */
+  readonly undecidedDoors?: readonly string[]
 }
 
 export async function planView(
@@ -57,7 +41,7 @@ export async function planView(
   const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const boxes = pixelBoxes(partBounds(plan, options.floor), picture)
-  return { png, width: picture.width, height: picture.height, pxPerMetre: picture.width / picture.view.width, boxes }
+  return { png, width: picture.width, height: picture.height, pxPerMetre: picture.width / picture.view.width, boxes, undecidedDoors: picture.undecidedDoors }
 }
 
 const SHEET_WIDTH = 2400
@@ -89,7 +73,7 @@ export async function sheetView(plans: readonly { plan: FloorPlan; title: string
   })
   const width = x - GAP
   const height = tallest + TITLE
-  const paper = look === 'dark' ? '#15150f' : '#ffffff'
+  const paper = PICTURE_LOOKS[lookOf(look)].colors.paper
   const sheet = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="${paper}"/>${parts.join('')}</svg>`
   const image = await loadImage(Buffer.from(sheet))
   const canvas = createCanvas(width, height)

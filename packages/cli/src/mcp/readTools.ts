@@ -14,7 +14,7 @@ import { describePlan, describeRooms } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
-import { LOOKS, SIDES, type LookName, type Side } from '../draw/viewNames'
+import { LOOKS, SIDES, namedLook, type LookName, type Side } from '../draw/viewNames'
 import { AREA_RULES, planAreas } from '../quantities/areas'
 import { comparePlans, optionRow, type Comparison, type OptionRow } from '../quantities/compare'
 import {
@@ -172,7 +172,7 @@ const compareTool: GridTool = {
       const floor = args['floor']
       surveys.forEach((survey) => floorArg(survey.plan, floor))
       const { sheetView } = await import('../draw/views')
-      const sheet = await sheetView(surveys.map((survey, i) => ({ plan: survey.plan, title: labels[i]!, ...(floor ? { floor: floor as string } : {}) })), 'light')
+      const sheet = await sheetView(surveys.map((survey, i) => ({ plan: survey.plan, title: labels[i]!, ...(floor ? { floor: floor as string } : {}) })), 'working')
       image = { data: sheet.png, mimeType: 'image/png' as const }
       lines.push(`The sheet: ${labels.join(', ')} side by side, all at 1 m = ${sheet.pxPerMetre.toFixed(1)} px. Look at it before you describe it.`)
     }
@@ -608,7 +608,7 @@ const viewTool: GridTool = {
     room: { type: 'string', id: true, description: 'For eye: the room to stand in.', examples: ['kitchen', 'living'] },
     toward: { type: 'string', maxLength: 64, description: 'For eye: an opening id to look at, or a direction (north, north-east, east, south-east, south, south-west, west, north-west). The room\'s first window when left out.', examples: ['back-door', 'north'] },
     eye_height: { type: 'number', description: 'For eye: metres above the floor. 1.6 standing when left out; about 1.2 seated.', examples: [1.6, 1.2], minimum: 0.3, maximum: 3 },
-    look: { type: 'string', enum: LOOKS, description: 'For plan: light (the default), dark, or mono for black lines on white.', examples: ['light', 'mono'] },
+    look: { type: 'string', enum: LOOKS, description: 'For plan: working (the default: clear labels and strong contrast), technical for black on white as on a sheet, with lines in millimetres at the scale and doors with no stated swing marked "?", or dark. light and mono are older names for working and technical.', examples: ['working', 'technical'] },
     dimensions: { type: 'boolean', description: 'For plan: false to leave the sizes off, for a clean drawing. true when left out.', examples: [true, false] },
     crop: { type: 'string', maxLength: 120, description: 'For plan: frame just this part: a room, door, window or wall id, or a room\'s name. The whole floor when left out.', examples: ['kitchen', 'front-door'] },
     ids: { type: 'boolean', description: 'For plan: true to draw the id of every room, door and window on the picture, as the plan file holds them, and to list them in the text with the areas, what each door joins, the counts and the drawing\'s problems. false when left out.', examples: [true] },
@@ -624,14 +624,19 @@ const viewTool: GridTool = {
     if (stray.length > 0) throw new ToolRefusal(`kind=${kind} takes ${allowed[kind]!.join(', ')}, not ${stray.join(', ')}.`)
     const plan = survey.plan
     if (kind === 'plan') {
-      const look = (args['look'] as LookName | undefined) ?? 'light'
+      const asked = (args['look'] as LookName | undefined) ?? 'working'
+      const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`
       const { planView } = await import('../draw/views')
       const withIds = args['ids'] === true
       const shown = floor ?? survey.facts.floors[0]?.id ?? 'ground'
       const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
-      const view = await planView(plan, { floor: shown, look, dimensions: args['dimensions'] !== false, ids: withIds, ...(crop ? { frame: cropFrame(crop) } : {}) })
+      const view = await planView(plan, { floor: shown, look: asked, dimensions: args['dimensions'] !== false, ids: withIds, ...(crop ? { frame: cropFrame(crop) } : {}) })
       const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
+      const undecided = view.undecidedDoors ?? []
+      if (undecided.length > 0) {
+        lines.push(`Drawn with a dashed line and "?" as undecided, ${undecided.length === 1 ? 'a door' : `${undecided.length} doors`} with no stated swing: ${undecided.map(q).join(', ')}. Ask the person which side each is hinged on and which way it opens, then set its hinge and swing.`)
+      }
       lines.push('Each part\'s box on the picture, in pixels from its top-left corner, is in boxes: id, kind and x, y, width, height.')
       if (withIds) lines.push(...checkViewText(loaded, shown))
       return {
