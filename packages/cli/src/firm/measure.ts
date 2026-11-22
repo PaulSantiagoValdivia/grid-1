@@ -1,29 +1,27 @@
 /**
  * COD-8: the drawing measured for each of the firm's standards, by the measures Grid already
- * has: CNT-13's use indicators (the way through a room, a doorway's clear width, the turning
- * space, the floor in front of a fixture, `quantities/use.ts` and the library's `use.ts`),
+ * has. Where CNT-17's accessibility numbers measure the same thing, the same measure: a
+ * corridor's narrowest point from end to end (`corridorEnds`), a doorway's clear width and a
+ * room's turning space (CNT-13's `doorwayClearance` and `turningSpace`, as CNT-17 reads them).
+ * Then CNT-13's floor in front of a fixture (`quantities/use.ts` and the library's `use.ts`),
  * ARE-9's net area (`planAreas`) and the widest circle an empty room holds (`measureRoom`). The
  * firm's figures go to the front door (`inspectPlan`'s `firm`), which says which parts are short
  * of them, under their own heading.
  *
  * Pure but for `firmForCheck`, which reads the firm's file beside the plan through the project.
  */
-import { add, doorwayClearance, fixtureSpace, floorOf, itemName, lerp, normalize, passageWidth, perp, pointInPolygon, pointMouth, scale, signedDistanceToOutline, sub, tolerance, turningSpace, type FloorPlan, type Segment, type Vec2 } from '@ongrid/floorplan/geometry'
+import { doorwayClearance, fixtureSpace, floorOf, itemName, turningSpace, type FloorPlan } from '@ongrid/floorplan/geometry'
 import type { FirmInput, FirmMeasured, FirmStandard } from '@ongrid/rules'
 import type { Project } from '../fs/projectFiles'
 import { planAreas } from '../quantities/areas'
 import { measureRoom } from '../quantities/measure'
 import { surveyPlan, type Survey, type SurveyRoom } from '../quantities/survey'
-import { besideText, fixturesOf, mouthOf, waysOf } from '../quantities/use'
+import { corridorEnds } from '../quantities/access'
+import { besideText, fixturesOf } from '../quantities/use'
 import { readFirm } from './standards'
 
 const q = (text: string): string => JSON.stringify(text)
 const m = (value: number): string => `${value.toFixed(2)} m`
-
-/** The most ways between a corridor's doorways measured, as `grid_measure what=use` measures them. */
-export const CORRIDOR_WAYS_MAX = 10
-/** How many steps across the reach a corridor's start near a doorway is looked for on, at most: finer steps add nothing a person would notice. */
-const CORRIDOR_START_STEPS = 100
 
 /** The rooms a room standard is for: its uses, else every room (for a corridor width, the rooms used as corridor). Zones are part of a room, and not measured on their own. */
 function roomsFor(survey: Survey, standard: FirmStandard): SurveyRoom[] {
@@ -32,74 +30,17 @@ function roomsFor(survey: Survey, standard: FirmStandard): SurveyRoom[] {
 }
 
 /**
- * Where a way through a corridor starts from a doorway: the point near the doorway with the most
- * clear floor round it, so the corridor's own width is measured and not the doorway's (that is the
- * clear width of a doorway, a standard of its own). Near is within the reach of the room straight
- * in from the middle of the doorway, to its far side; points are tried a few centimetres apart.
- */
-function startIn(room: SurveyRoom, mouth: Segment, obstacles: readonly { readonly outline: readonly Vec2[] }[]): Vec2 {
-  const holes = [...room.holes, ...obstacles.map((o) => o.outline)]
-  const middle = lerp(mouth[0], mouth[1], 0.5)
-  const raster = tolerance('useRaster')
-  // How far the room reaches straight in from the doorway, on whichever side the room is.
-  let reach = 0
-  for (const sign of [1, -1]) {
-    const inward = scale(normalize(perp(sub(mouth[1], mouth[0]))), sign)
-    let t = raster
-    while (pointInPolygon(add(middle, scale(inward, t)), room.polygon)) t += raster
-    reach = Math.max(reach, t - raster)
-  }
-  const step = Math.max(raster, reach / CORRIDOR_START_STEPS)
-  let best = middle
-  let clear = -Infinity
-  for (let x = -reach; x <= reach; x += step) {
-    for (let y = -reach; y <= reach; y += step) {
-      if (x * x + y * y > reach * reach) continue
-      const p = add(middle, { x, y })
-      const d = signedDistanceToOutline(p, room.polygon, holes)
-      if (d > clear) {
-        clear = d
-        best = p
-      }
-    }
-  }
-  return best
-}
-
-/**
- * The narrowest of the ways through a room between its doorways, as CNT-13 measures each (the
- * widest body that gets through, clear of the walls and fixtures), from the corridor's own middle
- * in front of each doorway; from its one doorway to its widest point; or, with none, its widest
- * circle.
+ * A corridor's width: CNT-17's narrowest point from end to end (`corridorEnds`, CNT-13's way
+ * through a room between the corridor's two ends), so the firm's figure and the accessibility
+ * numbers read the same measure; the widest circle it holds when Grid finds no two ends.
  */
 function corridorWay(survey: Survey, room: SurveyRoom, i: number): FirmMeasured {
-  const { items, obstacles: onFloor } = fixturesOf(survey)
-  const obstacles = onFloor(room.facts.floor)
+  const { items, obstacles } = fixturesOf(survey)
+  const { way, widest } = corridorEnds(room, obstacles(room.facts.floor))
   const base = { standard: i, thing: { kind: 'room', id: room.facts.id } as const, floor: room.facts.floor }
-  const mouths = waysOf(survey, room).flatMap((way) => {
-    const mouth = mouthOf(survey, room, way.via)
-    return mouth === null ? [] : [{ via: way.via, at: startIn(room, mouth, obstacles) }]
-  })
-  const widest = turningSpace(room.polygon, room.holes, obstacles)
-  if (mouths.length === 0) return { ...base, measured: widest.diameter, precision: 0, said: 'it has no doorway, so the widest circle its free floor holds', also: [] }
-  const pairs: { from: string; to: string; a: Vec2; b: Vec2 }[] = []
-  if (mouths.length === 1) pairs.push({ from: mouths[0]!.via, to: 'its widest point', a: mouths[0]!.at, b: widest.at })
-  for (let a = 0; a < mouths.length; a++) for (let b = a + 1; b < mouths.length; b++) pairs.push({ from: mouths[a]!.via, to: q(mouths[b]!.via), a: mouths[a]!.at, b: mouths[b]!.at })
-  const measured = pairs.slice(0, CORRIDOR_WAYS_MAX)
-  const more = pairs.length > measured.length ? `, the narrowest of the first ${measured.length} of its ${pairs.length} ways between doorways` : ''
-  let narrowest: { width: number | null; said: string; step: number; beside: readonly string[] } | null = null
-  for (const pair of measured) {
-    const way = passageWidth(room.polygon, room.holes, obstacles, pointMouth(pair.a), pointMouth(pair.b))
-    const between = `from ${q(pair.from)} to ${pair.to}`
-    if (way === null) {
-      narrowest = { width: null, said: `${between}, no way through clear of its fixtures`, step: 0, beside: [] }
-      break
-    }
-    if (narrowest !== null && narrowest.width !== null && narrowest.width <= way.width) continue
-    narrowest = { width: way.width, said: `${between}, at its narrowest at (${way.at.x.toFixed(2)}, ${way.at.y.toFixed(2)})${besideText(way, items)}`, step: way.step, beside: way.beside.fixtures }
-  }
-  const found = narrowest!
-  return { ...base, measured: found.width, precision: found.step, said: `${found.said}${more}`, also: [...found.beside] }
+  if (way === null) return { ...base, measured: widest, precision: 0, said: 'Grid finds no two ends to it, so the widest circle its free floor holds', also: [] }
+  const where = way.atDoorway ? '' : besideText(way, items)
+  return { ...base, measured: way.width, precision: way.step, said: `from end to end, at its narrowest at (${way.at.x.toFixed(2)}, ${way.at.y.toFixed(2)})${where}`, also: [...way.beside.fixtures] }
 }
 
 /** Every part each standard looks at, measured. */

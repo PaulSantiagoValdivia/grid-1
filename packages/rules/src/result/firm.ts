@@ -6,9 +6,9 @@
  * Each is the firm's, never a code's: it cites no document, has no status, and is not tied to a
  * place, so it is set against the plan wherever the file is, whatever place the plan states.
  *
- * The drawing is measured by the same measures as CNT-13's use indicators (the way through a
- * room, a doorway's clear width, the turning space, the floor in front of a fixture) and ARE-9's
- * net area. The caller measures and hands the figures in (`FirmInput`); the front door words
+ * The drawing is measured by the same measures as CNT-17's accessibility numbers (a corridor's
+ * narrowest point from end to end, a doorway's clear width, the turning space), CNT-13's floor in
+ * front of a fixture and ARE-9's net area. The caller measures and hands the figures in (`FirmInput`); the front door words
  * each part that is short of the firm's figure as a `firm/` line, a finding, listed under its own
  * heading in every report, and the record says what each standard looked at (`firm`).
  *
@@ -35,7 +35,7 @@ export const FIRM_MEASURES = {
     unit: 'm',
     what: 'corridor width',
     about: 'room',
-    measures: "the widest body or trolley that gets through each room used as a corridor, between each pair of its doorways (or from its one doorway to its widest point), clear of its walls and fixtures: CNT-13's way through a room, measured on a grid of points a few centimetres apart"
+    measures: "the narrowest point of each room used as a corridor from end to end, its ends the sides of its outline no wider than it and farthest apart, as grid_measure what=access gives it: the widest body or trolley that gets through, clear of its walls and fixtures, measured on a grid of points a few centimetres apart; the widest circle it holds when Grid finds no two ends"
   },
   door_clear_width: {
     code: 'firm/door-clear-width',

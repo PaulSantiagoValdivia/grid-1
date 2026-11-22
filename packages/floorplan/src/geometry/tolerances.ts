@@ -362,6 +362,27 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── The plot (BRF-3) ──────────────────────────────────────────────────────────────────────
+  setbackShort: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'The building stands short of a set-back the person asked for when its outside face is more ' +
+      'than this nearer the boundary than the figure they gave: a distance that rounds to the ' +
+      'figure at the centimetre is not named.',
+    basis: own
+  },
+  pastBoundary: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'The building stands over an edge of the plot\'s boundary when its outside face reaches more ' +
+      'than this past the edge, out of the plot. Less is the edge drawn on the face.',
+    basis: own
+  },
+
   // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
   wallAboveStorey: {
     kind: 'tolerance',
@@ -604,6 +625,24 @@ export const TOLERANCES = {
       'How high above a floor its plan is cut. A stair that climbs from the floor is drawn solid ' +
       'up to where its flight reaches this height, with a break line across it there, and dashed ' +
       'above. It only draws the plan; it judges nothing.',
+    basis: own
+  },
+  sectionGroundRun: {
+    kind: 'limit',
+    value: 1,
+    unit: 'm',
+    decides:
+      'How far the ground line of a section runs past the building on each side (LVL-9). It only ' +
+      'draws the section; it judges nothing.',
+    basis: own
+  },
+  elevationMarkOffset: {
+    kind: 'limit',
+    value: 1.2,
+    unit: 'm',
+    decides:
+      'How far outside the drawing and its dimensions an elevation mark stands on a plan (LVL-9). ' +
+      'It only draws the mark; it judges nothing.',
     basis: own
   },
   aboveSameEdge: {

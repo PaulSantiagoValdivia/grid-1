@@ -150,3 +150,41 @@ describe('mirroring keeps the real directions (grid_mirror)', () => {
     expect(Object.keys(written).filter((k) => ['north', 'site', 'front', 'yAxis'].includes(k))).toEqual([])
   })
 })
+
+describe('turning the plan a quarter (grid_mirror turn, WRT-4)', () => {
+  it('turns the walls counter-clockwise and keeps the stated north, so the building faces new ways', async () => {
+    const before = answer(await ok('grid_measure', { plan: 'tilted.json', what: 'facing' }))
+    const reply = await ok('grid_mirror', { plan: 'tilted.json', turn: 90, out: 'tilted-turned.json' })
+    expect(reply.text).toContain('Turned the plan a quarter counter-clockwise (90°) about the middle of its walls: 7 walls, 4 openings and 2 rooms.')
+    expect(reply.text).toContain("The plan's north is kept at 30°, so the building faces new ways: what faced south now faces east.")
+    const written = JSON.parse(readFileSync(join(b.folder, 'tilted-turned.json'), 'utf8')) as { north: number; walls: { id: string; start: number[]; end: number[] }[] }
+    expect(written.north).toBe(30)
+    // The 6 × 4 m box about its middle (3, 2): the south wall's start (0, 0) goes to (5, -1).
+    expect(written.walls.find((w) => w.id === 's1')).toMatchObject({ start: [5, -1], end: [5, 2] })
+    const after = answer(await ok('grid_measure', { plan: 'tilted-turned.json', what: 'facing' }))
+    // A quarter counter-clockwise on the drawing, north kept: each way is two of eight points back.
+    const turned: Record<string, string> = { north: 'west', 'north-east': 'north-west', east: 'north', 'south-east': 'north-east', south: 'east', 'south-west': 'south-east', west: 'south', 'north-west': 'south-west' }
+    for (const w of before.walls) expect(after.walls.find((x) => x.wall === w.wall)!.faces, w.wall).toBe(turned[w.faces])
+  })
+
+  it('turns half round and clockwise, keeps every room its size, and turns the site with the walls', async () => {
+    const areas = async (file: string): Promise<unknown> => ((await ok('grid_areas', { plan: file })).data!['floors'] as { rooms: { id: string; net: number }[] }[])[0]!.rooms.map((r) => [r.id, Math.round(r.net * 1e6) / 1e6])
+    await ok('grid_mirror', { plan: 'north.json', turn: 180, out: 'north-half.json' })
+    expect(await areas('north-half.json')).toEqual(await areas('north.json'))
+    const half = JSON.parse(readFileSync(join(b.folder, 'north-half.json'), 'utf8')) as Record<string, unknown>
+    expect(half['site']).toEqual({ origin: [5, 3], latitude: 40.5, longitude: -3.25 })
+    expect(half['north']).toBe(90)
+    expect(half['front']).toEqual({ opening: 'entry' })
+    const back = await ok('grid_mirror', { plan: 'north-half.json', turn: -90, out: 'north-three.json' })
+    expect(back.text).toContain('Turned the plan a quarter clockwise (270°, or -90°)')
+    const down = await ok('grid_mirror', { plan: 'down.json', turn: 90, out: 'down-turned.json' })
+    expect(down.text).toContain('The plan says its y runs down the page, so on that page it turned the other way.')
+  })
+
+  it('refuses a turn that is not a quarter turn, and how and turn together or neither', async () => {
+    expect((await b.call('grid_mirror', { plan: 'plain.json', turn: 45 })).text).toContain('turn is 45: Grid turns a plan by quarter turns only, 90, 180, 270 or -90 degrees.')
+    expect((await b.call('grid_mirror', { plan: 'plain.json', turn: 0 })).isError).toBe(true)
+    expect((await b.call('grid_mirror', { plan: 'plain.json', how: 'left-right', turn: 90 })).text).toContain('not both')
+    expect((await b.call('grid_mirror', { plan: 'plain.json' })).text).toContain('Pass how (left-right or top-bottom) to mirror the plan, or turn')
+  })
+})

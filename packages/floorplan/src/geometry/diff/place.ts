@@ -346,9 +346,8 @@ function piecesOf(target: Wall, targetShift: Point, others: readonly Wall[], oth
   return found.length >= 2 && Math.abs(at - length) <= near ? found : null
 }
 
-/** Lays `earlier` on `later` and pairs what stands in the same place, then what keeps its id. */
-export function alignPlans(earlier: FloorPlan, later: FloorPlan, options: AlignOptions = {}): Alignment {
-  // The origin: kept unless moving the earlier plan to the later one's corner pairs more walls.
+/** The origin, kept unless moving the earlier plan to the later one's corner pairs more walls, and the walls it pairs by place. */
+function placeWalls(earlier: FloorPlan, later: FloorPlan): { shift: Point; chosen: Candidate[] } {
   const shifts: Point[] = [[0, 0]]
   const a = lowCorner(earlier)
   const b = lowCorner(later)
@@ -364,6 +363,18 @@ export function alignPlans(earlier: FloorPlan, later: FloorPlan, options: AlignO
       wallChoice = chosen
     }
   }
+  return { shift, chosen: wallChoice }
+}
+
+/** How many walls of `earlier` stand in the place of a wall of `later`, the origin moved as `alignPlans` moves it (WRT-4). */
+export function wallsInPlace(earlier: FloorPlan, later: FloorPlan): number {
+  return placeWalls(earlier, later).chosen.length
+}
+
+/** Lays `earlier` on `later` and pairs what stands in the same place, then what keeps its id. */
+export function alignPlans(earlier: FloorPlan, later: FloorPlan, options: AlignOptions = {}): Alignment {
+  // The origin: kept unless moving the earlier plan to the later one's corner pairs more walls.
+  const { shift, chosen: wallChoice } = placeWalls(earlier, later)
 
   const wallTaken = { before: new Set(wallChoice.map((c) => c.before)), after: new Set(wallChoice.map((c) => c.after)) }
   const walls = [...wallChoice, ...assign(byId(earlier.walls, later.walls, wallTaken), wallTaken)]

@@ -109,7 +109,7 @@ The owner is away, so each choice took the reversible option.
    floor in front of a fixture, room area, room width. "Desks 1.6 m" has no measure: Grid holds
    no desks (CNT-11: fixtures now, furniture later); the docs say so. A largest size (`at_most`)
    is not offered.
-4. **A corridor's width is the narrowest way between its doorways, from the corridor's own
+4. **(Superseded after merging CNT-17, see below.)** A corridor's width was the narrowest way between its doorways, from the corridor's own
    middle near each**, not CNT-13's way from doorway to doorway, which a narrow door narrows
    (a 1.15 m hall read 0.78 m that way). The start is the point of most clear floor within the
    room's reach straight in from the doorway; a pinch within that reach of a doorway can be
@@ -158,3 +158,51 @@ kept: `CHANGELOG.md` (COD-8's Unreleased line, then HND-1's) and `docs/result-co
 - The full suite, `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2
   --minWorkers=1`, after the build: 305 of 305 files passed, 5,412 tests passed and 4 skipped,
   exit 0, in 691 s. Nothing failed, so nothing was rerun alone.
+
+## After merging `main` at e486ccb (LVL-9, CNT-17)
+
+Conflicts, both sides kept: `CHANGELOG.md` (COD-8's Unreleased line first, then CNT-17's, LVL-9's,
+WRT-4's and BRF-3's), the agents' changelog in `docs/result-contract.md` (COD-8's entry first,
+then CNT-17's and the others), the imports of `packages/cli/src/mcp/readTools.ts` (COD-8's
+firm names beside CNT-17's `confirmedFigure`) and the comment on `fixturesOf` in
+`packages/cli/src/quantities/use.ts` (both features named).
+
+**How the firm's figures relate to CNT-17.** CNT-17 adds no file of its own: its access answer
+(`grid_measure what=access`) reads the person's figures from BRF-1's brief and a code's only once
+a named person confirmed it, so `firm-standards.json` clashes with nothing; the brief
+(`<plan>.brief.json`, the person's own), the firm's file (`firm-standards.json`, the firm's own)
+and the code figures stay three sources, each said as such. Where CNT-17 measures what a firm's
+standard sets, the firm now reads CNT-17's measure:
+
+- **Corridor width**: CNT-17's narrowest point from end to end. `corridorNarrowest` in
+  `quantities/access.ts` now calls a new exported `corridorEnds`, which returns the whole
+  passage (its grid step and what stands beside the narrowest point) and the widest circle;
+  CNT-17's answer is unchanged (its `access.test.ts` passes as it was). COD-8's own start point
+  near each doorway (`startIn`, at most 10 ways a room) is gone. On CNT-13's flat the hall
+  still reads 1.14 m and 0.64 m past the cupboard, and the lab's two-bed hall 1.30 m, so no
+  expected value in COD-8's tests changed; the line's `found` says "from end to end" now.
+- **A doorway's clear width and the turning circle**: CNT-17 reads them by CNT-13's
+  `doorwayClearance` and `turningSpace`, which COD-8 already used: one measure each.
+- **Not added**: CNT-17's step at a door (a sill, a largest height) and the steps on the way in.
+  Every firm measure is a least size; a largest one needs `at_most`, its own wording and the
+  short test turned round. For the owner: a `step` measure for the firm's file is the next one to
+  add if wanted.
+- **The firm's figures are not set against the numbers in the access answer itself**: that
+  answer's `against` holds the person's figure and a confirmed code's only. Adding the firm's as
+  a third source changes `grid_measure what=access`'s data; for the owner.
+
+**Apart, each under its own heading.** CNT-17's lines in `grid check` are one not-checked line,
+`plan/not-checked-access`, and its numbers are in the access answer under its own head; the
+firm's notes stay `firm/` findings under "The firm's own standards"; the code figures' findings
+before them. `docs/firm-standards.md` says the corridor, doorway and turning numbers are the ones
+`grid_measure what=access` gives.
+
+**Tests changed**: none. The descriptions of `corridor_width` changed in `firm.ts` (its
+`measures`, in every firm corridor line's `found`) and in `docs/firm-standards.md`.
+
+**Checks run on the merge** (main at e486ccb): `npm run build`, `npm run typecheck`, `npm run lint`
+exit 0. `npx vitest run packages/cli packages/rules packages/floorplan
+scoreboard/__tests__/approvalWords.test.ts --maxWorkers=2 --minWorkers=1`: 241 of 241 files,
+4,855 passed and 2 skipped, exit 0 (1,179 s). The merge brought main's changes to `scoreboard/`
+and the rules' checks, so `npm run scoreboard` ran too: "Same as the stored figures." (Turns 19
+of 67, checks 20 of 42, mistakes 5 of 9.) `packages/viewer` and `scripts` were not in this run.

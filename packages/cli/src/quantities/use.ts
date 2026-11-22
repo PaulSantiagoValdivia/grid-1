@@ -88,7 +88,7 @@ export interface SurveyFixtures {
 
 const fixturesCache = new WeakMap<Survey, SurveyFixtures>()
 
-/** The plan's fixtures that can be drawn, as obstacles, each with its row; worked out once a survey. COD-8's firm standards measure with it too. */
+/** The plan's fixtures that can be drawn, as obstacles, each with its row; worked out once a survey. CNT-17's access measures and COD-8's firm standards keep clear of them too. */
 export function fixturesOf(survey: Survey): SurveyFixtures {
   const known = fixturesCache.get(survey)
   if (known) return known

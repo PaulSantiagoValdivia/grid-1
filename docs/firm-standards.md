@@ -52,12 +52,16 @@ drawing are measured the same way as everywhere else.
 
 | `measure` | What is measured | Unit |
 |---|---|---|
-| `corridor_width` | The widest body or trolley that gets through each room used as a corridor (or each room of `uses`), between each pair of its doorways, clear of its walls and fixtures: the way through a room of [tool-server.md](tool-server.md#use-indicators-will-it-fit-can-you-turn-is-the-window-blocked). It starts from the corridor's own middle near each doorway, so a narrow door does not narrow the corridor; a door is `door_clear_width`. Measured on a grid of points a few centimetres apart, read in the plan's favour. At most 10 ways a room. | m |
+| `corridor_width` | The narrowest point of each room used as a corridor (or each room of `uses`) from end to end, as `grid_measure what=access` gives it ([tool-server.md](tool-server.md#accessibility-measurements-as-numbers)): its ends are the sides of its outline no wider than it, farthest apart, and the width is the widest body or trolley that gets from one to the other, clear of its walls and fixtures. A door does not narrow it; a door is `door_clear_width`. Measured on a grid of points a few centimetres apart, read in the plan's favour. With no two ends, the widest circle it holds. | m |
 | `door_clear_width` | What each door and doorless opening leaves clear: its hole in the wall, less what an open leaf and its stop take and what fixtures stand in front of it | m |
 | `turning_circle` | The widest circle each room's free floor holds, clear of its walls and fixtures | m |
 | `fixture_clearance` | The clear floor straight out from the front of each fixture to the nearest wall face, doorway or other fixture | m |
 | `room_area` | Each room's net area, to the faces of its walls, as `grid_areas` gives it | m² |
 | `room_width` | The widest circle each empty room holds between its wall faces: for a rectangle, its shorter side | m |
+
+A corridor's width, a doorway's clear width and a turning circle are the same numbers
+`grid_measure what=access` gives (CNT-17): the firm's figure is set against those numbers in
+`grid check`, and the access answer keeps its own figures, the person's and a confirmed code's.
 
 The room measures look at every room but zones, which are part of a room; `corridor_width` looks
 at the rooms used as `corridor` unless `uses` names others. Grid holds no desks or other
@@ -72,7 +76,7 @@ heading:
 ```text
 The firm's own standards (1), from "firm-standards.json": the firm's own figures, from its file beside the plan: not from any code or standard, and not tied to a place, so they are set against the plan wherever that file is.
   1. finding, room "hall": Room "Hall": the way through is 1.30 m wide at its narrowest, under the firm's own figure of 1.5 m for corridor width ("Corridors"). [firm/corridor-width]
-      found: 1.30 m, from "door-entrance" to "door-bath", at its narrowest at (5.30, 4.00), between walls, …
+      found: 1.30 m, from end to end, at its narrowest at (5.30, 7.42); measured as the narrowest point of each room used as a corridor from end to end, …
       needed: at least 1.5 m: the firm's figure used here ("Corridors"), from "firm-standards.json", the firm's own and not from any code or standard
 ```
 
