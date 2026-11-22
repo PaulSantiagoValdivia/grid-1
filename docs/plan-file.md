@@ -13,6 +13,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`
+- [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
@@ -27,10 +28,11 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room or floor name, a fixture's label | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| a room or floor name, a fixture's label, the plan's title, a note's or a sketch's text | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
 | an id: of a wall, room, opening or floor, a wall a room or an opening names, a part's floor | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
-| walls, rooms, openings, floors or items | 50,000 of each | |
+| walls, rooms, openings, floors, items, annotations or sketch items | 50,000 of each | |
+| the points of one sketch line or shape | 2,000 | |
 | the walls a room lists | 2,000 | |
 
 A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
@@ -248,6 +250,47 @@ shape. A kind it does not hold yet is left out with a note, and the rest of the 
 | `item/outside-rooms` | Its middle is in no room on its floor |
 | `item/into-wall` | It reaches more than 5 mm into a solid wall |
 | `item/too-tall` | It is higher than the room it stands in |
+
+## Writing on the drawing, and the sketch layer
+
+A plan may carry writing for its drawings (SHT-7). None of it is measured or checked, and none
+of it changes an area, a check or a wall count.
+
+- `title`: one line, drawn in the band under every floor's picture. The sheet leaves it off,
+  because each page has its own title.
+- `annotations`: notes, tags, symbols and a key. Each has an `id` and a `kind`:
+  - `note`: `text`, drawn as it is;
+  - `tag`: `text` in a box;
+  - `symbol`: `symbol`, `north` (an arrow pointing up the drawing, turned by `turn` degrees
+    counter-clockwise) or `entrance`, with `text` under it if given;
+  - `key`: the drawing's key, in the band under it. It lists only what the drawing shows: the
+    kinds of wall, windows, doors with their swing, the room uses when rooms are coloured by
+    use, each sketch category, and the marks of what went wrong.
+
+  A note, tag or symbol is placed `at` a point, `[x, y]` in metres, on its `floor` (unstated,
+  the ground floor), or in a `room`, by id, where it goes under the room's name. Both at once is
+  refused. A note in a room the plan does not have is not drawn (`plan/note-no-place`).
+- `sketch`: lines, arcs, rectangles, shapes and text, each with an `id`, a `kind`, a `category`
+  (the author's word for it: `garden`, `street`, `fence`) and a `floor` (unstated, the ground
+  floor). Each kind needs its own fields:
+
+  | Kind | Fields |
+  |---|---|
+  | `line` | `points`, two or more |
+  | `shape` | `points`, three or more, closed back to the first |
+  | `rect` | `from` and `to`, two opposite corners |
+  | `arc` | `at` (its centre), `radius`, and `start` and `end` in degrees counter-clockwise from +x; it runs counter-clockwise |
+  | `text` | `at` and `text` |
+
+  A sketch is drawn in a soft line in every plan picture, the app's 2D view and the sheet, under
+  the walls, and framed with the plan. A DXF puts each category on a layer of its own,
+  `GRID-SKETCH-` and the category in capitals. Grid never takes a sketch as a wall, a room or
+  anything it understands, and the record says so once per floor, as a line not checked
+  (`floor/sketch-drawn-only`). Where a sketch is something Grid holds, such as a fixture, write
+  it as that instead; furniture and site parts will be offered the same way once Grid holds them.
+
+A field the format does not have, on a note or a sketch item, is named like any other
+(`plan/unknown-field`). The 3D views do not show the sketch yet.
 
 ## Wall faults, each with its fix
 

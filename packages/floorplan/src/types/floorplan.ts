@@ -341,6 +341,95 @@ export const ItemSchema = z.object({
 })
 
 /**
+ * SHT-7: what writing on the drawing can be. A `note` is text, a `tag` short text in a box, a
+ * `symbol` one of `ANNOTATION_SYMBOLS`, and a `key` the drawing's key, listing what it shows.
+ */
+export const ANNOTATION_KINDS = ['note', 'tag', 'symbol', 'key'] as const
+export type AnnotationKind = (typeof ANNOTATION_KINDS)[number]
+
+/** SHT-7: the symbols a drawing can carry: a north arrow, and the way in. */
+export const ANNOTATION_SYMBOLS = ['north', 'entrance'] as const
+
+/**
+ * SHT-7: writing on the drawing. It is drawn and exported as text, and never measured or checked.
+ *
+ * It is placed at a point (`at`, in plan metres) or in a room (`room`, by id: under the room's
+ * name), never both; a key placed by neither goes under the drawing. `floor` is the floor a note
+ * placed at a point is on (C5: unstated, the ground floor); a note in a room is on its room's.
+ * `turn` turns a symbol, in degrees counter-clockwise: a north arrow points up the drawing when
+ * unturned. One object for every kind, so a field the format does not have is named (MSG-4).
+ */
+export const AnnotationSchema = z
+  .object({
+    id: text('id'),
+    kind: z.enum(ANNOTATION_KINDS),
+    text: text('name').optional(),
+    symbol: z.enum(ANNOTATION_SYMBOLS).optional(),
+    at: Vec2.optional(),
+    room: text('id').optional(),
+    floor: text('id').pipe(z.string().min(1)).optional(),
+    turn: finite().optional(),
+  })
+  .superRefine((note, ctx) => {
+    const say = (message: string, path: string): void => ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: [path] })
+    if (note.at !== undefined && note.room !== undefined) say('is placed both at a point and in a room: give one, at or room', 'room')
+    if ((note.kind === 'note' || note.kind === 'tag') && (note.text === undefined || note.text.trim() === '')) say(`a ${note.kind} needs its text`, 'text')
+    if (note.kind === 'symbol' && note.symbol === undefined) say(`a symbol needs which one: ${ANNOTATION_SYMBOLS.join(' or ')}`, 'symbol')
+    if (note.kind !== 'key' && note.at === undefined && note.room === undefined) say(`a ${note.kind} needs a place: at, a point, or room, a room's id`, 'at')
+  })
+
+/** SHT-7: what a sketch item is: a line through points, an arc, a rectangle, a closed shape, or text. */
+export const SKETCH_KINDS = ['line', 'arc', 'rect', 'shape', 'text'] as const
+export type SketchKind = (typeof SKETCH_KINDS)[number]
+
+/**
+ * SHT-7: a sketch item, drawn in every plan view and exported on a layer of its own, and never
+ * measured, checked or taken as a wall, a room or anything Grid understands: a garden, a street,
+ * a fence, a hatch, an option's outline.
+ *
+ * `category` is the author's word for what it is ("garden", "street"): it names its layer in an
+ * export and its entry in the key. `points` for a line (two or more) and a shape (three or
+ * more); `from` and `to`, two opposite corners, for a rect; `at`, `radius`, `start` and `end`
+ * (degrees counter-clockwise from +X, the arc running counter-clockwise) for an arc; `at` and
+ * `text` for text. `floor`: C5, unstated is the ground floor.
+ */
+export const SketchItemSchema = z
+  .object({
+    id: text('id'),
+    kind: z.enum(SKETCH_KINDS),
+    category: text('id').pipe(z.string().min(1)),
+    floor: text('id').pipe(z.string().min(1)).optional(),
+    points: z.array(Vec2).max(BOUNDARY_MAX).optional(),
+    from: Vec2.optional(),
+    to: Vec2.optional(),
+    at: Vec2.optional(),
+    radius: finite().positive().optional(),
+    start: finite().optional(),
+    end: finite().optional(),
+    text: text('name').optional(),
+  })
+  .superRefine((item, ctx) => {
+    const need = (ok: boolean, message: string, path: string): void => {
+      if (!ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `a sketch ${item.kind} needs ${message}`, path: [path] })
+    }
+    if (item.kind === 'line') need((item.points?.length ?? 0) >= 2, 'points, two or more', 'points')
+    if (item.kind === 'shape') need((item.points?.length ?? 0) >= 3, 'points, three or more', 'points')
+    if (item.kind === 'rect') {
+      need(item.from !== undefined, 'from, one corner', 'from')
+      need(item.to !== undefined, 'to, the opposite corner', 'to')
+    }
+    if (item.kind === 'arc') {
+      need(item.at !== undefined, 'at, its centre', 'at')
+      need(item.radius !== undefined, 'radius', 'radius')
+      need(item.start !== undefined && item.end !== undefined, 'start and end, in degrees', 'start')
+    }
+    if (item.kind === 'text') {
+      need(item.at !== undefined, 'at, where the text goes', 'at')
+      need(item.text !== undefined && item.text.trim() !== '', 'its text', 'text')
+    }
+  })
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap, because after that a wall that
  * said 2.7 cannot be told from one that said nothing (lab AU3-6). A floor that states no
@@ -390,6 +479,11 @@ export const FloorPlanFieldsSchema = z.object({
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
   items: parts(ItemSchema, 'items').optional(),
+  // SHT-7: writing on the drawing: the title over it, then notes, tags, symbols and a key, and a
+  // sketch layer that is drawn only. Optional and never defaulted (version 1).
+  title: text('name').optional(),
+  annotations: parts(AnnotationSchema, 'annotations').optional(),
+  sketch: parts(SketchItemSchema, 'sketch items').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -429,6 +523,8 @@ export type Opening = z.infer<typeof OpeningSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
+export type Annotation = z.infer<typeof AnnotationSchema>
+export type SketchItem = z.infer<typeof SketchItemSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

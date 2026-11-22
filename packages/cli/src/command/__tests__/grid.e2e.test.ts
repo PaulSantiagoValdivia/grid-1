@@ -463,8 +463,9 @@ describe('the built file', () => {
   it('starts with a shebang and is one file', () => {
     expect(readFileSync(bundle, 'utf8').startsWith('#!/usr/bin/env node\n')).toBe(true)
     // 400 kB since VEW-7, to catch a second zod; 450 kB since WRT-3, whose edits and their tools
-    // take the file just past 400 kB (400,863 bytes) with no new dependency. 500 kB, the figure
-    // before VEW-7, since WRT-7 merged with ARE-12, HND-6 and CMD-13 (462,325 bytes), no new dependency.
+    // take the file just past 400 kB (400,863 bytes) with no new dependency. 500 kB since SHT-7:
+    // the writing on the drawing, with HND-6, COD-2, ARE-12, CMD-13 and QAR-7 on main, made it
+    // 463,249 bytes, again with no new dependency.
     expect(statSync(bundle).size).toBeLessThan(500_000)
   })
 })

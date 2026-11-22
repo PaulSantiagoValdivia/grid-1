@@ -86,7 +86,7 @@ const COMMANDS = {
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d] [--look <name>] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    usage: 'grid draw [<plan.json>] [--png | --3d] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
     summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG.',
     options: DRAW_OPTIONS,
   },
@@ -293,6 +293,9 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       units: textOf(parsed, '--units'),
       decimal: textOf(parsed, '--decimal'),
       look: textOf(parsed, '--look'),
+      hide: textOf(parsed, '--hide'),
+      colour: textOf(parsed, '--colour'),
+      key: parsed.values.has('--key'),
     }
     const { scale, look } = checkDrawRequest(request)
     if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {

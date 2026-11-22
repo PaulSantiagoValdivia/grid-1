@@ -56,11 +56,9 @@ and the choices taken while you were away.
 
 ## For the owner
 
-0. **The built file's size cap, 450 → 500 kB** (`command/__tests__/grid.e2e.test.ts`), back to
-   its figure before VEW-7. WRT-7 adds about 9 kB; merged with main's ARE-12, HND-6 and CMD-13
-   the file is 462,325 bytes. No dependency was added. The other choice is to look for what in
-   the bundle can be loaded only when needed, as the 3D still already is.
-
+0. **The built file's size cap** is 500 kB on main since SHT-7, which raised it on its own; this
+   branch had raised it the same way and now takes main's comment. WRT-7 adds about 9 kB, and the
+   merged file is 466,329 bytes. No dependency was added.
 1. **What stays in metres for now.** The check's report (its figures come from building codes,
    printed in metres), the sheet, the edit answers and the exports (DXF, IFC are metric by their
    own rules) do not follow the display yet. The card lists "reports and messages"; I covered the

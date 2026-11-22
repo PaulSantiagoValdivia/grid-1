@@ -1,7 +1,8 @@
 /**
  * `grid draw <plan>`: one floor as an SVG picture, or as a PNG with `--png`, through `drawPlan`,
  * in the technical look, as a file to hand on, unless `--look` names another (SHT-1), with what went wrong marked on it by the numbers
- * `grid check` gives, and listed under it (MSG-8).
+ * `grid check` gives, and listed under it (MSG-8), and the plan's title, notes, key and sketch
+ * (SHT-7); `--hide`, `--colour` and `--key` choose what it shows.
  * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`.
  * Written to `--out`, or to standard output when no file is named.
  */
@@ -10,6 +11,7 @@ import { LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
 import { inspectPlan } from '@ongrid/rules'
 import { drawPlan } from '../draw/drawPlan'
 import { planPicture } from '@ongrid/viewer/src/picture'
+import { drawShowOf } from './drawShow'
 import { floorOption, type LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
@@ -19,6 +21,9 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png or --3d). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out. With --3d, that floor as a cutaway; the whole building when left out.' },
   '--look': { takesValue: true, help: 'How the plan is drawn: technical (the default: black on white, lines in millimetres on paper), working (as on screen) or dark. Not with --3d.' },
+  '--hide': { takesValue: true, help: 'Parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings. Not with --3d.' },
+  '--colour': { takesValue: true, help: 'use: fill each room by its use, with the uses in the key. Not with --3d.' },
+  '--key': { takesValue: false, help: 'Add a key under the drawing, even where the plan asks for none. Not with --3d.' },
   '--ids': { takesValue: false, help: 'The check view: draw the id of every room, door and window, as the plan file holds them. Not with --3d.' },
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8 (up to 4 with --3d). 1 when left out.' },
   '--units': { takesValue: true, help: 'How areas and dimensions are written: m, cm, mm or ft-in. The plan\'s own display, or m, when left out. Not with --3d.' },
@@ -44,6 +49,12 @@ export interface DrawRequest {
   /** WRT-7: the display's unit and decimal mark, as given. */
   readonly units?: string
   readonly decimal?: string
+  /** SHT-7: the parts to leave off, as given: words joined by commas. */
+  readonly hide?: string
+  /** SHT-7: how rooms are filled, as given. */
+  readonly colour?: string
+  /** SHT-7: add a key the plan does not ask for. */
+  readonly key?: boolean
 }
 
 /** What a drawn file is: a picture file's text or bytes, and the doors drawn as undecided. */
@@ -64,6 +75,10 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
   if (request.threeD && (request.units !== undefined || request.decimal !== undefined)) throw new UsageError('--units and --decimal write the labels of a floor plan, not the 3D model: leave them or --3d out.')
   if (request.units !== undefined && !(DISPLAY_UNITS as readonly string[]).includes(request.units)) throw new UsageError(`--units takes one of ${DISPLAY_UNITS.join(', ')}.`)
   if (request.decimal !== undefined && request.decimal !== 'point' && request.decimal !== 'comma') throw new UsageError('--decimal takes point or comma.')
+  for (const [given, flag] of [[request.hide, '--hide'], [request.colour, '--colour'], [request.key || undefined, '--key']] as const) {
+    if (request.threeD && given !== undefined) throw new UsageError(`${flag} is for a floor plan, not the 3D model: leave ${flag} or --3d out.`)
+  }
+  drawShowOf(request)
   const look = (request.look ?? DRAW_LOOK) as LookName
   if (!(LOOK_NAMES as readonly string[]).includes(look)) {
     throw new UsageError(`--look ${JSON.stringify(request.look)} is not a look Grid draws: use one of ${LOOK_NAMES.join(', ')}.`)
@@ -92,7 +107,7 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale }), undecidedDoors: [] }
   }
   const display = request.units === undefined && request.decimal === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan)
-  const labels = request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}
+  const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request) }
   // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
   const faults = inspectPlan(loaded.plan).lines
   const undecidedDoors = planPicture(loaded.plan, { floor, look, ...labels }).undecidedDoors
