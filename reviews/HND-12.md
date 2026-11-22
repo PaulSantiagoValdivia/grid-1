@@ -216,3 +216,14 @@ Run on the shared laptop with two workers, while about ten other sessions ran th
 - Storeys are read (one floor per `story`, at its floor level), but only the one-storey flat is
   tested.
 - Curved walls are drawn straight, end to end.
+
+## After merging main at fbe5160e (WRT-7, CNT-10, VEW-9, VEW-4)
+
+- Conflicts were in `writeTools.ts`, `packages/floorplan/package.json`, the bundle-cap comment,
+  AGENTS.md, CHANGELOG.md, `docs/commands.md` and `docs/result-contract.md`. Both sides are kept:
+  `grid_write_rooms` describes WRT-7's units and the scan; the scan section in `commands.md` comes
+  after VEW-9's walk paragraph; and the tool count is main's 31, since HND-12 adds no tool.
+- The bundle is now 607,030 bytes, over the 600 kB cap. The cap is raised to 650 kB, with no new
+  dependency and the reason written beside it.
+- Typecheck and lint are clean. The affected tests (79 files, 1,046 passed, 1 skipped) pass, and
+  the scoreboard is "Same as the stored figures."

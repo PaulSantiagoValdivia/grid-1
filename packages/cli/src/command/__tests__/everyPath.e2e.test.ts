@@ -134,7 +134,11 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
     // MSG-10: marking a note writes the marks file beside the plan, named after it.
     { label: 'the plan, marking a note seen', args: (p) => ['check', p, '--seen', '1', '--reason', 'Seen', '--by', 'Owner'], given: asIs },
   ],
-  describe: [{ label: 'the plan', args: (p) => ['describe', p], given: asIs }],
+  describe: [
+    { label: 'the plan', args: (p) => ['describe', p], given: asIs },
+    // VEW-9: the walk's pictures go into a folder, each named in it.
+    { label: '--pictures', args: (p) => ['describe', PLAN, '--length', 'walk', '--pictures', p], given: (p) => `${p}/walk-01.png` },
+  ],
   // WRT-8: the markers file is the plan's name beside the plan, never a path of its own.
   mark: [{ label: '--plan', args: (p) => ['mark', 'start', '--plan', p], given: asIs }],
   diff: [
@@ -164,6 +168,8 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
   ],
   // HND-9: its occupancy file is the plan's name beside the plan, never a path of its own.
   occupancy: [{ label: 'the plan', args: (p) => ['occupancy', p], given: asIs }],
+  // VEW-4: the plan is refused before the page's server starts; its preview record is the plan's name beside it.
+  preview: [{ label: 'the plan', args: (p) => ['preview', p, '--port', '0'], given: asIs }],
   // The tool server: its tools' paths are below. --project is the project folder itself.
   serve: [],
   mcp: [],
@@ -227,6 +233,8 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_check: [{ arg: 'plan', call: tool('grid_check', { plan: '@' }), given: asIs }],
   grid_report_problem: [{ arg: 'plan', call: tool('grid_report_problem', { plan: '@', tool: 'grid_check', expected: 'The plan read.' }), given: asIs }],
   grid_preview: [{ arg: 'plan', call: tool('grid_preview', { plan: '@', view: '2d', note: 'A look' }), given: asIs }],
+  // VEW-4: the page's own call; its record is the plan's name beside the plan, never a path of its own.
+  grid_preview_sync: [{ arg: 'plan', call: tool('grid_preview_sync', { plan: '@' }), given: asIs }],
   grid_export: [{ arg: 'plan', call: tool('grid_export', { plan: '@', format: 'glb' }), given: asIs }],
   grid_sheet: [{ arg: 'plan', call: tool('grid_sheet', { plan: '@', layout: 'check' }), given: asIs }],
   grid_mark_start: [{ arg: 'plan', call: tool('grid_mark_start', { plan: '@' }), given: asIs }],
@@ -484,6 +492,43 @@ describe('the trace image a plan names (T-5)', () => {
     // Inside the project folder by its text, but outside once `..` is followed.
     tracePlan('up.json', 'assets/../../outside/victim.svg')
     expectCommandRefused(grid(['check', 'up.json']), 'assets/../../outside/victim.svg', 'referenceImage.path', 'outside the project folder')
+  }, 20_000)
+})
+
+describe('the base plan a fit-out names (CNT-10)', () => {
+  /** A copy of the sample plan fitted out in the base at `path`. */
+  function fitOut(name: string, path: string): string {
+    writeFileSync(join(project, name), JSON.stringify({ ...JSON.parse(sample) as object, base: path }))
+    return name
+  }
+
+  it.each(T5_TRACE_IMAGE_PATHS)('%j makes every command refuse the plan', (path, why) => {
+    const plan = fitOut('fitted.json', path)
+    for (const [, args] of PLAN_READERS) {
+      expectCommandRefused(grid(args(plan)), path, 'base plan', why)
+    }
+    expect(tree(project)).toEqual([ROOMS, PLAN, plan].sort())
+    expectOutsideUntouched()
+  }, 120_000)
+
+  it('makes every tool refuse the plan, for each of the six', async () => {
+    const plans = T5_TRACE_IMAGE_PATHS.map(([path], i) => fitOut(`fitted-${i}.json`, path))
+    const calls = plans.flatMap((plan) => PLAN_TOOLS.map(([, call]) => call(plan)))
+    const answers = await callTools(calls)
+    answers.forEach((answer, i) => {
+      const [path, why] = T5_TRACE_IMAGE_PATHS[Math.floor(i / PLAN_TOOLS.length)]!
+      expectToolRefused(answer, path, 'base plan', why)
+    })
+    expect(tree(project)).toEqual([ROOMS, PLAN, ...plans].sort())
+    expectOutsideUntouched()
+  }, 60_000)
+
+  it('is refused through a link to a folder outside, by the command and the tool server', async () => {
+    linkFolder(outside, join(project, 'linked'))
+    const plan = fitOut('fitted.json', 'linked/victim.json')
+    expectCommandRefused(grid(['check', plan]), 'linked/victim.json', 'base plan', 'through a symbolic link')
+    const [answer] = await callTools([{ name: 'grid_check', arguments: { plan } }])
+    expectToolRefused(answer!, 'linked/victim.json', 'base plan', 'through a symbolic link')
   }, 20_000)
 })
 

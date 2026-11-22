@@ -24,12 +24,12 @@ export const diffTool: GridTool = {
   hint: 'read',
   description:
     'Use this when you have changed the plan and need to check what the change did, after every save: "what did that change", "did anything else move", "is it the same building", "what changed since we started". '
-    + 'It compares the plan with an earlier version of itself by what stands where, not by ids: the start marker set with grid_mark_start, or the version last committed in the project\'s git folder (since: git). It reads both itself, so pass no plans. '
+    + 'It compares the plan with an earlier version of itself by what stands where, not by ids: the start marker set with grid_mark_start, or the version last committed in the project\'s git folder (since: git). For a plan with existing, demolished and new parts, since: phase compares it before its work with after it: what is removed is to be demolished, what is added is new. It reads both itself, so pass no plans. '
     + 'It answers issues first (a door that now joins other rooms, a wall that now meets an opening, notes of grid_check that came and went), then a short verdict room by room with how many ids were only renamed, then the changes one line each. A plan that is the earlier one mirrored or turned a quarter or half round is said to be so first, with whether every room kept its size, and compared from there. Pass rooms, the rooms you meant to edit, to have every change outside them named. With picture true (the default) it returns one picture: removed in red, added in green, changed rooms in amber with their old and new area, the rest pale. '
     + 'Do not use to compare options or separate plans side by side (grid_compare), or to check the plan itself (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    since: { type: 'string', maxLength: 40, description: `What to compare with: a marker's name, or git for the version last committed. The marker ${DEFAULT_MARKER} when the plan has one, else git, when left out.`, examples: [DEFAULT_MARKER, 'git'] },
+    since: { type: 'string', maxLength: 40, description: `What to compare with: a marker's name, git for the version last committed, or phase for a plan with existing, demolished and new parts as it stands before its work (removed is to be demolished, added is new). The marker ${DEFAULT_MARKER} when the plan has one, else git, when left out.`, examples: [DEFAULT_MARKER, 'git', 'phase'] },
     rooms: {
       type: 'array',
       description: 'The rooms you meant to edit, by id, for the scope check: every change outside them is named. Nothing is checked when left out.',
