@@ -207,17 +207,19 @@ function validateOpening(
   opening: Opening,
   index: PlanIndex,
   brokenWalls: ReadonlySet<string>,
-  issues: Issue[]
+  issues: Issue[],
+  leftOut: ReadonlySet<string> = new Set()
 ): boolean {
   // If the wall is already broken there is nothing to measure against, and its
   // geometry cannot be built either.
   if (brokenWalls.has(opening.wall)) {
+    const why = leftOut.has(opening.wall) ? 'which was left out when the plan was read' : 'which is invalid'
     issues.push(
       issue(
         'opening',
         opening.id,
         'opening/broken-wall',
-        `Opening ${quoted(opening.id)} hangs off wall ${quoted(opening.wall)}, which is invalid`
+        `Opening ${quoted(opening.id)} hangs off wall ${quoted(opening.wall)}, ${why}`
       )
     )
     return false
@@ -364,26 +366,82 @@ function validateDuplicateIds(
 ): ReadonlySet<string> {
   const seen = new Set<string>()
   const duplicated = new Set<string>()
+  const parts = [
+    ...plan.walls.map(({ id }) => ({ id, noun: 'wall' })),
+    ...plan.rooms.map(({ id }) => ({ id, noun: 'room' })),
+    ...plan.openings.map(({ id }) => ({ id, noun: 'opening' }))
+  ]
 
-  for (const { id } of [...plan.walls, ...plan.rooms, ...plan.openings]) {
+  for (const { id } of parts) {
     if (seen.has(id)) duplicated.add(id)
     else seen.add(id)
   }
 
   for (const id of duplicated) {
+    // MSG-6: both parts named, and a free id to rename one to.
+    const named = parts.filter((part) => part.id === id).map((part) => part.noun)
+    const counts = [...new Set(named)].map((noun) => {
+      const n = named.filter((m) => m === noun).length
+      return n === 1 ? `a ${noun}` : `${n} ${noun}s`
+    })
+    let free = 2
+    while (seen.has(`${id}-${free}`)) free++
     issues.push(
       issue(
         'plan',
         id,
         'plan/duplicate-id',
-        `Id ${quoted(id)} names more than one wall, room or opening. Every lookup resolves to ` +
-          `only one of them, so all of them are skipped`
+        `Id ${quoted(id)} names ${counts.join(' and ')}. Every lookup resolves to only one of them, so ` +
+          `all of them are skipped. Rename one, for example to ${quoted(`${id}-${free}`)}, and update what points at it`
       )
     )
     broken.add(id)
   }
 
   return duplicated
+}
+
+/**
+ * MSG-6 (lab MS-9): a blank id, and an id that differs from an earlier one only in capitals or
+ * spaces (`W1` and `w1`, `s` and `s `). Ids are unique across the whole plan, and these are
+ * refused: the part is skipped and named. Of two ids alike, the first in the order walls, rooms,
+ * openings keeps its id and the other is skipped, so what points at the first still finds it.
+ * The two ids differ as text, so skipping one never skips the other. Two parts with exactly one
+ * id are `plan/duplicate-id`'s.
+ */
+function validateIdSpelling(plan: FloorPlan, issues: Issue[], broken: Set<string>): void {
+  const parts: [EntityKind, string, string][] = [
+    ...plan.walls.map((p): [EntityKind, string, string] => ['wall', 'Wall', p.id]),
+    ...plan.rooms.map((p): [EntityKind, string, string] => ['room', 'Room', p.id]),
+    ...plan.openings.map((p): [EntityKind, string, string] => ['opening', 'Opening', p.id])
+  ]
+  const shapes = new Map<string, { noun: string; id: string }>()
+  for (const [entity, noun, id] of parts) {
+    if (id.trim() === '') {
+      issues.push(
+        issue(entity, id, 'plan/blank-id', `${noun} ${quoted(id)} has a blank id. Every part needs an id of its own, so it is skipped`)
+      )
+      broken.add(id)
+      continue
+    }
+    const shape = id.trim().toLowerCase().replace(/\s+/g, ' ')
+    const first = shapes.get(shape)
+    if (first === undefined) {
+      shapes.set(shape, { noun, id })
+      continue
+    }
+    if (first.id === id) continue
+    issues.push(
+      issue(
+        entity,
+        id,
+        'plan/similar-id',
+        `${noun} ${quoted(id)} has an id that differs from the id of ${first.noun.toLowerCase()} ${quoted(first.id)} only in ` +
+          `capitals or spaces, so it is skipped. If it is ${quoted(first.id)}, use that id letter for letter; if not, rename it`
+      )
+    )
+    broken.add(id)
+  }
 }
 
 /**
@@ -781,6 +839,12 @@ export interface ValidateOptions {
    * exact than a drawing (`withTolerances` in `tolerances.ts`).
    */
   readonly tolerances?: ToleranceChanges
+  /**
+   * MSG-6: the ids of walls the reader left out (`readPlanParts`). A room or an opening that rests
+   * on one is left out too, and its line names the wall and why it is not there, instead of a
+   * wall the plan does not have.
+   */
+  readonly leftOutWalls?: ReadonlySet<string>
 }
 
 /**
@@ -819,11 +883,17 @@ export function validatePlan(
   }
   const issues: Issue[] = []
   const broken = new Set<string>()
+  // MSG-6: a wall the reader left out is not in the plan; what rests on it is left out with it.
+  // An id a part of the plan still has is not one of them.
+  const present = new Set([...plan.walls, ...plan.rooms, ...plan.openings].map((part) => part.id))
+  const leftOut = new Set([...(options.leftOutWalls ?? [])].filter((id) => !present.has(id)))
+  for (const id of leftOut) broken.add(id)
 
   validateOrigin(plan, issues)
   // First: every check below resolves entities by id, so it has to know which
   // ids cannot be resolved at all.
   const duplicated = validateDuplicateIds(plan, issues, broken)
+  validateIdSpelling(plan, issues, broken)
   validateFloorIdSpelling(plan, issues)
   validateFloors(plan, index, duplicated, issues, broken)
 
@@ -832,7 +902,7 @@ export function validatePlan(
   }
 
   for (const opening of plan.openings) {
-    if (!validateOpening(opening, index, broken, issues)) broken.add(opening.id)
+    if (!validateOpening(opening, index, broken, issues, leftOut)) broken.add(opening.id)
   }
 
   validateOverlaps(index, broken, issues)
@@ -842,9 +912,12 @@ export function validatePlan(
     if (broken.has(room.id)) continue
 
     if (roomWallIds(room).some((wallId) => broken.has(wallId))) {
-      issues.push(
-        issue('room', room.id, 'room/broken-wall', `Room ${quoted(room.id)} rests on an invalid wall`)
-      )
+      const gone = roomWallIds(room).filter((wallId) => leftOut.has(wallId))
+      const message =
+        gone.length > 0
+          ? `Room ${quoted(room.id)} rests on ${gone.length === 1 ? 'wall' : 'walls'} ${quotedList([...new Set(gone)])}, left out when the plan was read`
+          : `Room ${quoted(room.id)} rests on an invalid wall`
+      issues.push(issue('room', room.id, 'room/broken-wall', message))
       broken.add(room.id)
       continue
     }

@@ -206,3 +206,13 @@ golden file changed. After this merge every check passed, the two timing tests i
   expectations changed with it: `coverage.test.ts` (cli) lists `stairs-line-up` among the
   coverage, and `rules-lookup-figures.test.ts` leaves it out of the rules a stairless plan lists.
 - Every code row and changelog section of `docs/result-contract.md` is kept from both sides.
+
+## Merging main again (ARE-9, SHT-1, HND-9, MSG-6, COD-4)
+
+- `areas.ts`: ARE-9's rewrite of `planAreas` is kept; the note that a stated stair adds no floor of
+  its own follows its notes. `geometry/index.ts` exports both `areas` and the stair modules.
+- `scene.ts` and `look.ts`: SHT-1 made line widths part of each look. The stair takes the line part
+  `stair` (0.75 px on screen, the finest pen on paper, like a fixture) and the look's ink.
+- `scoreboard/current.json`: main's figures (turns answered 16, rooms not measured 735, from the
+  features merged there) with LVL-3's checks fed, 5 → 11, for the reason given above. Stored with
+  `npm run scoreboard -- --write-current`; no other count moved.

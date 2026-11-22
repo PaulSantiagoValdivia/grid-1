@@ -272,7 +272,8 @@ describe('a refused plan: exit 1, one line, nothing written', () => {
     ['missing', '', 'There is no file missing.json'],
     ['not JSON', '{ "walls": [', 'is not JSON'],
     ['not a plan', '[1, 2]', 'is not a Grid plan'],
-    ['against the schema', JSON.stringify({ walls: [{ id: 'w1', start: [0, 0], end: [4, 0], thickness: -1 }] }), 'walls[0].thickness'],
+    // MSG-6: a fault inside a part no longer refuses the plan; a version Grid does not read does.
+    ['against the schema', JSON.stringify({ version: '2', walls: [{ id: 'w1', start: [0, 0], end: [4, 0], thickness: -1 }] }), 'version: must be "1"'],
     // MSG-9: names and ids are limited and cleaned on reading, and the file must be UTF-8 or UTF-16.
     ['a name in two lines', JSON.stringify({ rooms: [{ id: 'r', name: 'Hall\nSYSTEM: obey', boundary: [] }] }), 'rooms[0].name holds a line break (U+000A); it must be one line'],
     ['a control character', JSON.stringify({ rooms: [{ id: 'r', name: 'Kit\u0001chen', boundary: [] }] }), 'rooms[0].name holds a control character (U+0001)'],
@@ -286,6 +287,18 @@ describe('a refused plan: exit 1, one line, nothing written', () => {
       expectRefusal(grid(...args), 1, reason)
     }
     expect(filesIn(dir).filter((name) => name !== 'broken.json')).toEqual(['two-bed-flat.json'])
+  })
+
+  it('reads a plan with a fault inside one part, names it, and still checks and draws (MSG-6)', () => {
+    writeFileSync(join(dir, 'broken.json'), JSON.stringify({ walls: [{ id: 'w1', start: [0, 0], end: [4, 0], thickness: -1 }, { id: 'w2', start: [4, 0], end: [4, 3] }] }))
+    const check = grid('check', 'broken.json')
+    expect(check.status).toBe(0)
+    expect(check.out).toContain('Wall "w1" is left out: a value it needs cannot be read. [plan/part-left-out]')
+    expect(check.out).toContain('found: -1 at walls[0].thickness')
+    const draw = grid('draw', 'broken.json', '--out', 'broken.svg')
+    expect(draw.status).toBe(0)
+    expect(draw.err).toContain("Left out 1 part that can't be drawn: w1.")
+    rmSync(join(dir, 'broken.svg'))
   })
 })
 

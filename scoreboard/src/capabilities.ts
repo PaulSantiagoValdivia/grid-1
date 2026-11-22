@@ -71,8 +71,22 @@ export const CAPABILITIES = {
   'outdoor-space': { what: 'holds outdoor spaces (garden, courtyard, balcony)', probe: schema('rooms.0.outdoor', true) },
   flats: { what: 'groups rooms into homes or flats', probe: schema('flats', [{ id: 'a', rooms: ['r1'] }]) },
   'ceiling-height': { what: 'holds ceiling heights', probe: schema('rooms.0.ceilingHeight', 2.5) },
-  'gross-area': { what: 'gives gross areas (to the outside of the walls)', probe: none },
-  'area-table': { what: 'gives a table of areas by home, use or floor', probe: none },
+  'gross-area': {
+    what: 'gives gross areas (to the outside of the walls)',
+    // ARE-9: gross external, and gross internal, each with the rule it follows.
+    probe: lib((s) => {
+      const areas = geometry.planAreaFigures(parseFloorPlan(s))
+      return (areas.grossExternal.area ?? 0) > (areas.net.area ?? 0) && areas.grossExternal.rule.measures.length > 0
+    }),
+  },
+  'area-table': {
+    what: 'gives a table of areas by home, use or floor',
+    // ARE-9: net by use and every area by floor (by home is ARE-14).
+    probe: lib((s) => {
+      const areas = geometry.planAreaFigures(parseFloorPlan(s))
+      return areas.floors.length > 0 && Object.keys(areas.byUse).length > 0
+    }),
+  },
   'room-width': { what: 'measures the narrowest width of a room or corridor', probe: none },
   'route-length': { what: 'measures a walking route (to an exit, along a corridor)', probe: none },
   'take-offs': { what: 'measures lengths and surfaces of walls, skirting and plaster', probe: none },

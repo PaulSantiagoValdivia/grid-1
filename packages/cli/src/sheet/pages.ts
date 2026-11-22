@@ -10,20 +10,29 @@ import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/roundi
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
-import { pictureView, type PictureOptions } from '@ongrid/viewer/src/picture'
+import { pictureView, undecidedDoorsOf, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
 import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { quoted } from '../fs/projectFiles'
-import { AREA_RULES, GROSS_NOT_KNOWN, planAreas, type FloorAreas } from '../quantities/areas'
+import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
 import { surveyPlan } from '../quantities/survey'
 
 export type SheetLayout = 'client' | 'check'
 export const SHEET_LAYOUTS: readonly SheetLayout[] = ['client', 'check']
 /** The drawing box on a floor page, in PDF points: what the frames are fitted to. */
 export const PLAN_BOX = { width: 700, height: 640 } as const
+
+/** A sheet is drawn in the technical look (SHT-1): black on white, lines in millimetres on paper. */
+export const SHEET_LOOK = 'technical' as const
+
+/** Millimetres in a PDF point. */
+const POINT_MM = 25.4 / 72
+
+/** On a floor page whose plan has doors drawn as undecided: the key to their mark. */
+export const UNDECIDED_NOTE = 'A door drawn with a dashed line and "?" has no stated swing yet.'
 
 /** The smallest a room name is printed, in points: below it a name on A3 can't be read. */
 export const MIN_LABEL_PT = 5
@@ -48,6 +57,10 @@ const SHAPE = (() => {
  * 1,820 pixels and one step). Pixels come whole and the
  * box keeps its shape, so the picture shows a little more than the frame (at most one step of
  * `SHAPE`) at the frame's scale; what is beyond the frame is cut, as it always was.
+ *
+ * The picture is drawn in `SHEET_LOOK` at the box's own scale on the paper (`paperScale`, N in
+ * 1:N, for a box `PLAN_BOX.width` points wide), so its lines have their width in millimetres on
+ * the printed sheet.
  */
 export function planPictureOptions(picture: Extract<SheetPicture, { kind: 'plan' }>): { options: PictureOptions; grow: number } {
   const shown = fitTo(picture.frame, PLAN_BOX.width / PLAN_BOX.height)
@@ -61,7 +74,15 @@ export function planPictureOptions(picture: Extract<SheetPicture, { kind: 'plan'
   const h = picture.frame.height * grow
   const frame: Bounds = { min: { x: cx - w / 2, y: cy - h / 2 }, max: { x: cx + w / 2, y: cy + h / 2 }, width: w, height: h }
   return {
-    options: { floor: picture.floor, frame, width, height: steps * SHAPE.height, ...(picture.ids ? { labels: { ids: true } } : {}) },
+    options: {
+      floor: picture.floor,
+      frame,
+      width,
+      height: steps * SHAPE.height,
+      look: SHEET_LOOK,
+      paperScale: (shown.width * 1000) / (PLAN_BOX.width * POINT_MM),
+      ...(picture.ids ? { labels: { ids: true } } : {}),
+    },
     grow,
   }
 }
@@ -147,6 +168,10 @@ function floorPicture(loaded: LoadedPlan, frames: ReadonlyMap<string, Bounds>, f
   return { kind: 'plan', floor, frame, metresPerPixel: Math.max(drawn.view.width / drawn.width, readable), ids }
 }
 
+function undecidedNote(loaded: LoadedPlan, floor: string): string[] {
+  return undecidedDoorsOf(loaded.plan, floor).length > 0 ? [UNDECIDED_NOTE] : []
+}
+
 function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {
   const shown = sumText(floor.rooms.map((r) => r.net ?? 0), floor.net, 1)
   return {
@@ -196,7 +221,7 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const cover: Body = {
     kind: 'cover', floor: null, topLine: title, title, subtitle: words?.headline ?? null,
     paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' },
-    notes: areas.grossInternal === null ? [GROSS_NOT_KNOWN] : [],
+    notes: areas.grossInternal === null && areas.grossWhy !== null ? [areas.grossWhy] : [],
   }
   // Never an id here: floors that share a name are told apart by their place in the plan.
   const named = (name: string) => floors.filter((f) => f.name === name).length
@@ -209,7 +234,7 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
       paragraphs: words?.floors?.[floor.id] ?? [], figures: [],
       table: floorAreas ? areaTable(floorAreas, false) : null,
       picture: floorPicture(loaded, frames, floor.id, false),
-      notes: leftOut ? [...limits, LEFT_OUT_LIMIT] : limits,
+      notes: [...limits, ...(leftOut ? [LEFT_OUT_LIMIT] : []), ...undecidedNote(loaded, floor.id)],
     }
   })
   return [cover, ...pages]
@@ -250,7 +275,7 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     notes: [
       ...(whole.report.findings.length === 0 ? [`Findings: none. ${NOTHING_FOUND}`] : []),
       AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
-      ...(areas.grossInternal === null ? [GROSS_NOT_KNOWN] : []),
+      ...(areas.grossWhy === null ? [] : [areas.grossWhy]),
       // What belongs to no floor is said once, here; each floor page says the rest.
       ...whole.issues.filter((i) => i.entity === 'plan').map(issueLine),
       ...whole.report.notChecked.filter((n) => n.floor === '').map(noticeLine),
@@ -265,6 +290,7 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
       ...result.report.findings.map(findingLine),
       ...result.issues.filter((i) => i.entity !== 'plan').map(issueLine),
       ...result.report.notChecked.filter((n) => n.floor !== '').map(noticeLine),
+      ...undecidedNote(loaded, floor.id),
     ]
     // The floor's id, as each room's label carries the room's.
     const floorTitle = `${floor.name} [${floor.id}]`

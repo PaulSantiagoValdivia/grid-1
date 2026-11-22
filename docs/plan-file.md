@@ -16,6 +16,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
+- [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
 
@@ -37,6 +38,34 @@ A refusal names the part and the limit (`rooms[0].name holds a line break (U+000
 one line`) and never repeats the text. Markup in a name is allowed: it is drawn as text. The
 ids in `grid check`'s drawing problems are quoted, and `grid_check` returns the rooms a finding
 is about, by id and name, apart from its message.
+
+## A fault stays where it is
+
+A value Grid cannot read inside one part no longer refuses the whole plan (MSG-6). The plan is
+read part by part with the format's own rules (`packages/floorplan/src/types/readParts.ts`), and
+`grid check` gives one line for each part or value it could not read as written, by the part's
+id (or its place, when it has no id that can be read) and its place in the file:
+
+| What the file holds | What Grid does | Line |
+|---|---|---|
+| a number written as text (`"2.5"`, `"0.9 m"`), `"true"`, a word in other capitals (`"Exterior"`, `"Door"`, units `"M"`) | reads it as meant | `plan/read-as-meant` |
+| a value a field can do without that cannot be read (a hinge `"left"`, a `null` thickness, units `"mm"`) | uses the field's default, or reads it as not stated; a unit other than metres is read in metres | `plan/value-left-out` |
+| a value the part needs that cannot be read (a negative offset, a missing start, an opening type `"gate"`) | leaves the part out, and the rooms and openings on a wall left out with it | `plan/part-left-out` |
+| a wall's thickness or height, or an opening's sill, stated out of range or as a word | leaves the part out: a default would change what is drawn and measured | `plan/part-left-out` |
+| `NaN`, `Infinity`, or a number with a decimal comma in an object (`"offset": 3,45`) | reads it as a value that is not there, and names it for what it is | as above |
+| git's conflict markers | refuses the plan as an unfinished merge, with the line and what each side adds | `plan/unfinished-merge` |
+
+Ids are unique across the whole plan. Of two parts that share an id, only the clash is left out
+(`plan/id-clash`): the wall keeps its id, since rooms and openings name walls, so the rooms on it
+are still measured. Two walls with one id are both left out (`plan/duplicate-id`), with an id to
+rename one to. A blank id, and an id that differs from an earlier one only in capitals or spaces,
+leave the part out (`plan/blank-id`, `plan/similar-id`). What is wrong at the plan's top level (a
+version Grid does not read, `walls` that is not a list) still refuses the plan.
+
+`grid check`, `draw`, `export`, `describe` and the reading tools read a plan this way. `grid tidy`,
+`grid write` and the tools that change the plan write it back, so they read it whole and refuse a
+plan with anything left out, naming the first. The record's codes are in
+[the result contract](result-contract.md).
 
 ## Floor levels and heights
 
@@ -278,3 +307,37 @@ states no kind reads as. Where they disagree, one warning says so:
 
 In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
 worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.
+
+## People are kept out of the plan
+
+A plan travels. Room names and ids go into every export and sheet: the DXF writes each room's
+name, the IFC its name and id, OBJ and GLB its id, and the sheet its name (its `check` layout its
+id too). Whoever is handed the plan file reads both. So a room is named for what it is
+(`Office 2`, `bed1`), never for a person, in its name or its id. The same holds for a floor's
+name and a fixture's label.
+
+Who sits where is kept in a file of its own beside the plan, named after it:
+`plan.occupancy.json` beside `plan.json`. The plan knows nothing of it, and no export, sheet or
+tool of the tool server reads it.
+
+```json
+{
+  "version": "1",
+  "seats": [
+    { "room": "bedroom", "occupants": ["A. Person"] },
+    { "room": "office", "desk": "Desk 2", "occupants": ["B. Person", "C. Person"] }
+  ]
+}
+```
+
+| Field | What it states |
+|---|---|
+| `room` | The id of a room of the plan. The seat is linked to it |
+| `desk` | Optional: a desk in that room, by a label of this file's own. The plan has no desks: Grid keeps fixtures now and furniture later |
+| `occupants` | The people at that seat, at most 100 |
+
+Ids, desk labels and names follow the plan's text rule: an id at most 64 characters, a label or
+name 120, each one line. A file that is wrong is refused naming the place (`seats[2].occupants[0]`)
+and never the text, which is a person's name. `grid occupancy` lists who sits where by room name
+and names any seat whose room the plan no longer has ([commands.md](commands.md#who-sits-where-grid-occupancy)).
+Keep the file out of what you hand over: an export or a sheet never needs it.

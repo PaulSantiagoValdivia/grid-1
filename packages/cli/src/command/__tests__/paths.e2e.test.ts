@@ -367,11 +367,12 @@ describe('what a refusal hands the agent', () => {
   it('never the value a plan holds where the schema wants something else', async () => {
     const plan = twoBedFlat()
     writeFileSync(join(project, 'evil.json'), JSON.stringify({ ...plan, walls: [{ ...plan.walls[0]!, kind: injected }, ...plan.walls.slice(1)] }))
+    // MSG-6: the plan is read, the wall's kind read as not stated, and the line names the place.
     const run = grid(['check', 'evil.json'])
-    expect(run.status).toBe(1)
-    expect(run.err).toContain('walls[0].kind: must be one of "exterior", "interior", "partition"')
+    expect(run.status).toBe(0)
+    expect(run.out).toContain('a text at walls[0].kind, so the default, "interior", is used')
     const [answer] = await serve([{ plan: 'evil.json', format: 'dxf' }])
-    for (const text of [run.err, answer!.text]) {
+    for (const text of [run.out, run.err, answer!.text]) {
       expect(text).not.toMatch(/approved|delete|Assistant/)
     }
   }, 20_000)
