@@ -248,6 +248,8 @@ export const ROOM_USES = [
   'assembly',
   'corridor',
   'stair',
+  // LVL-3: a lift shaft, drawn as a room on every floor it serves. The drawing checks line the
+  // shafts up from floor to floor; a lift is never taken as a way out.
   'lift',
   'storage',
   'plant',
@@ -475,6 +477,56 @@ export const ReferenceImageSchema = z.object({
   updatedAt: finite().optional(),
 })
 
+/** LVL-3: the most points a stair's walking line may have: a foot, a head and the turns between. */
+export const STAIR_RUN_MAX = 64
+
+/**
+ * LVL-3 (decided in LVL-2): a stair is a designed object, stated once across the two floors it
+ * joins. The plan says what is meant (where it starts and ends, how wide it is, and the line a
+ * person walks up it) and Grid works out the rest: the rise from the floors' levels (LVL-1), the
+ * number of risers, their height, the going and the pitch (`planStairs` in the geometry core),
+ * and which room it leaves from and arrives in, which joins the two floors for the way-out check.
+ * Optional and never defaulted, so a plan written before LVL-3 reads with no key added (version 1).
+ */
+/**
+ * A straight stair said by its two ends, `start` and `end`, as the lab's agents first wrote one
+ * (lab H-1, h01a), is read as the walking line `[start, end]`. Only when it states no `run`.
+ */
+export function withRunFromEnds(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const stair = raw as Record<string, unknown>
+  if (stair.run !== undefined || stair.start === undefined || stair.end === undefined) return raw
+  const { start, end, ...rest } = stair
+  return { ...rest, run: [start, end] }
+}
+
+export const StairSchema = z.preprocess(withRunFromEnds, z.object({
+  id: text('id'),
+  name: text('name').optional(),
+  // The floor the walking line starts on and the floor it ends on. Either may be the higher.
+  from: text('id').pipe(z.string().min(1)),
+  to: text('id').pipe(z.string().min(1)),
+  // Metres: the width of the flight, measured across the walking line, which runs down its middle.
+  width: finite().positive(),
+  // The walking line, in plan coordinates (C4): from the edge of the stair on `from` (the middle
+  // of its first riser there) to its edge on `to`. A straight flight has two points; each point
+  // between is a turn, with a square landing as wide as the flight centred on it. A straight
+  // stair may say its two points as `start` and `end` instead (`withRunFromEnds`).
+  run: z
+    .array(Vec2)
+    .min(2)
+    .superRefine((list, ctx) => {
+      if (list.length <= STAIR_RUN_MAX) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `has ${list.length.toLocaleString('en-US')} points; a stair's walking line may have at most ${STAIR_RUN_MAX}`,
+      })
+    }),
+  // How many risers, when the design has chosen. Unstated, Grid works it out from the rise and
+  // the walking line's length. Optional and never defaulted.
+  risers: z.number().int().positive().optional(),
+}))
+
 /**
  * CNT-12: the kinds an item may be in this version. CNT-11 decided fixtures now, because the
  * checks need them, and furniture later; points (a hydrant, a camera) and seats come with it.
@@ -508,6 +560,95 @@ export const ItemSchema = z.object({
   // C5: unstated means the ground floor.
   floor: text('id').pipe(z.string().min(1)).optional(),
 })
+
+/**
+ * SHT-7: what writing on the drawing can be. A `note` is text, a `tag` short text in a box, a
+ * `symbol` one of `ANNOTATION_SYMBOLS`, and a `key` the drawing's key, listing what it shows.
+ */
+export const ANNOTATION_KINDS = ['note', 'tag', 'symbol', 'key'] as const
+export type AnnotationKind = (typeof ANNOTATION_KINDS)[number]
+
+/** SHT-7: the symbols a drawing can carry: a north arrow, and the way in. */
+export const ANNOTATION_SYMBOLS = ['north', 'entrance'] as const
+
+/**
+ * SHT-7: writing on the drawing. It is drawn and exported as text, and never measured or checked.
+ *
+ * It is placed at a point (`at`, in plan metres) or in a room (`room`, by id: under the room's
+ * name), never both; a key placed by neither goes under the drawing. `floor` is the floor a note
+ * placed at a point is on (C5: unstated, the ground floor); a note in a room is on its room's.
+ * `turn` turns a symbol, in degrees counter-clockwise: a north arrow points up the drawing when
+ * unturned. One object for every kind, so a field the format does not have is named (MSG-4).
+ */
+export const AnnotationSchema = z
+  .object({
+    id: text('id'),
+    kind: z.enum(ANNOTATION_KINDS),
+    text: text('name').optional(),
+    symbol: z.enum(ANNOTATION_SYMBOLS).optional(),
+    at: Vec2.optional(),
+    room: text('id').optional(),
+    floor: text('id').pipe(z.string().min(1)).optional(),
+    turn: finite().optional(),
+  })
+  .superRefine((note, ctx) => {
+    const say = (message: string, path: string): void => ctx.addIssue({ code: z.ZodIssueCode.custom, message, path: [path] })
+    if (note.at !== undefined && note.room !== undefined) say('is placed both at a point and in a room: give one, at or room', 'room')
+    if ((note.kind === 'note' || note.kind === 'tag') && (note.text === undefined || note.text.trim() === '')) say(`a ${note.kind} needs its text`, 'text')
+    if (note.kind === 'symbol' && note.symbol === undefined) say(`a symbol needs which one: ${ANNOTATION_SYMBOLS.join(' or ')}`, 'symbol')
+    if (note.kind !== 'key' && note.at === undefined && note.room === undefined) say(`a ${note.kind} needs a place: at, a point, or room, a room's id`, 'at')
+  })
+
+/** SHT-7: what a sketch item is: a line through points, an arc, a rectangle, a closed shape, or text. */
+export const SKETCH_KINDS = ['line', 'arc', 'rect', 'shape', 'text'] as const
+export type SketchKind = (typeof SKETCH_KINDS)[number]
+
+/**
+ * SHT-7: a sketch item, drawn in every plan view and exported on a layer of its own, and never
+ * measured, checked or taken as a wall, a room or anything Grid understands: a garden, a street,
+ * a fence, a hatch, an option's outline.
+ *
+ * `category` is the author's word for what it is ("garden", "street"): it names its layer in an
+ * export and its entry in the key. `points` for a line (two or more) and a shape (three or
+ * more); `from` and `to`, two opposite corners, for a rect; `at`, `radius`, `start` and `end`
+ * (degrees counter-clockwise from +X, the arc running counter-clockwise) for an arc; `at` and
+ * `text` for text. `floor`: C5, unstated is the ground floor.
+ */
+export const SketchItemSchema = z
+  .object({
+    id: text('id'),
+    kind: z.enum(SKETCH_KINDS),
+    category: text('id').pipe(z.string().min(1)),
+    floor: text('id').pipe(z.string().min(1)).optional(),
+    points: z.array(Vec2).max(BOUNDARY_MAX).optional(),
+    from: Vec2.optional(),
+    to: Vec2.optional(),
+    at: Vec2.optional(),
+    radius: finite().positive().optional(),
+    start: finite().optional(),
+    end: finite().optional(),
+    text: text('name').optional(),
+  })
+  .superRefine((item, ctx) => {
+    const need = (ok: boolean, message: string, path: string): void => {
+      if (!ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `a sketch ${item.kind} needs ${message}`, path: [path] })
+    }
+    if (item.kind === 'line') need((item.points?.length ?? 0) >= 2, 'points, two or more', 'points')
+    if (item.kind === 'shape') need((item.points?.length ?? 0) >= 3, 'points, three or more', 'points')
+    if (item.kind === 'rect') {
+      need(item.from !== undefined, 'from, one corner', 'from')
+      need(item.to !== undefined, 'to, the opposite corner', 'to')
+    }
+    if (item.kind === 'arc') {
+      need(item.at !== undefined, 'at, its centre', 'at')
+      need(item.radius !== undefined, 'radius', 'radius')
+      need(item.start !== undefined && item.end !== undefined, 'start and end, in degrees', 'start')
+    }
+    if (item.kind === 'text') {
+      need(item.at !== undefined, 'at, where the text goes', 'at')
+      need(item.text !== undefined && item.text.trim() !== '', 'its text', 'text')
+    }
+  })
 
 /**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
@@ -559,10 +700,17 @@ export const FloorPlanFieldsSchema = z.object({
   // room still counts as a floor of the plan, so geometry can never become
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
   floors: parts(FloorSchema, 'floors').optional(),
+  // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
+  stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
   items: parts(ItemSchema, 'items').optional(),
+  // SHT-7: writing on the drawing: the title over it, then notes, tags, symbols and a key, and a
+  // sketch layer that is drawn only. Optional and never defaulted (version 1).
+  title: text('name').optional(),
+  annotations: parts(AnnotationSchema, 'annotations').optional(),
+  sketch: parts(SketchItemSchema, 'sketch items').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -588,9 +736,12 @@ export type RoomTenure = z.infer<typeof RoomTenureSchema>
 export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
+export type Stair = z.infer<typeof StairSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
+export type Annotation = z.infer<typeof AnnotationSchema>
+export type SketchItem = z.infer<typeof SketchItemSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

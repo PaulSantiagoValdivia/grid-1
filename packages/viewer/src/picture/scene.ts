@@ -42,11 +42,13 @@ import {
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { Look, PlanLook } from './look'
-import { LINE_PX, TEXT_PX, UNDRAWN_TINT, lengthText, lineMetres, toLook } from './look'
+import { LINE_PX, TEXT_PX, UNDRAWN_TINT, USE_FILLS, lengthText, lineMetres, toLook } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 import type { NumberedFault } from './faults'
 import { faultMarks, undrawnRoomText } from './faults'
+import { noteNodes, sketchNodes } from './writing'
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 
 /** The door-sweep warning mark's size on screen, whatever the zoom. */
 export const WARNING_RADIUS_PX = 5
@@ -156,8 +158,27 @@ export interface SceneInput {
    * numbered mark on its part, with its words beside it. None by default.
    */
   readonly faults?: readonly NumberedFault[]
+  /** SHT-7: what the drawing shows. Everything on, and rooms in one fill, by default. */
+  readonly show?: Partial<SceneShow>
+  /** SHT-7: each room's use by id, for `show.colourBy: 'use'`. */
+  readonly uses?: ReadonlyMap<string, RoomUse>
   readonly live?: Partial<SceneLive>
 }
+
+/** SHT-7: the parts of a drawing that can be left out, and how its rooms are filled. */
+export interface SceneShow {
+  readonly notes: boolean
+  readonly sketch: boolean
+  readonly areas: boolean
+  readonly swings: boolean
+  /** The door warning dots and the numbered marks of what went wrong (MSG-8). */
+  readonly warnings: boolean
+  /** `use` fills each room by its use; null gives every room the look's one fill. */
+  readonly colourBy: 'use' | null
+}
+
+/** Everything shown, rooms in one fill. */
+export const SHOW_ALL: SceneShow = { notes: true, sketch: true, areas: true, swings: true, warnings: true, colourBy: null }
 
 /** The paint for each part, for one look, zoom and output scale. */
 function paints(named: Look, mpp: number, paperScale: number | undefined) {
@@ -205,6 +226,8 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
           },
     jamb: { stroke: ink, 'stroke-width': width('jamb') } as Attrs,
     step: { stroke: ink, 'stroke-width': width('step'), 'stroke-linecap': 'butt' } as Attrs,
+    stair: { fill: 'none', stroke: ink, 'stroke-width': width('stair') } as Attrs,
+    stairArrow: { fill: ink, stroke: 'none' } as Attrs,
     fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
     fixtureLine: { fill: 'none', stroke: ink, 'stroke-width': width('fixture'), 'stroke-linecap': 'butt' } as Attrs,
     doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
@@ -268,6 +291,27 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
 type Paints = ReturnType<typeof paints>
 
 const virtualPath = (points: readonly Vec2[]): string => `M${points.map((p) => `${p.x},${-p.y}`).join('L')}`
+
+/**
+ * The head of a stair's arrow: a triangle `size` long at the upper end of its walking line,
+ * pointing up the stair. Null when the last stretch has no length.
+ */
+function stairArrow(line: readonly Vec2[], size: number): string | null {
+  const tip = line[line.length - 1]
+  const back = line[line.length - 2]
+  if (tip === undefined || back === undefined) return null
+  const dx = tip.x - back.x
+  const dy = tip.y - back.y
+  const length = Math.hypot(dx, dy)
+  if (!(length > 0)) return null
+  const ux = dx / length
+  const uy = dy / length
+  const base = { x: tip.x - ux * size, y: tip.y - uy * size }
+  const half = size / 2.5
+  const left = { x: base.x - uy * half, y: base.y + ux * half }
+  const right = { x: base.x + uy * half, y: base.y - ux * half }
+  return `M${tip.x},${-tip.y}L${left.x},${-left.y}L${right.x},${-right.y}Z`
+}
 
 /** A label group: placed in metres, then scaled so its contents are in pixels. */
 /** How far an opening's id sits off its wall's face, in screen pixels. */
@@ -428,6 +472,11 @@ export function planScene(input: SceneInput): SvgNode[] {
   const decimals = style.areaDecimals ?? 2
   const live: SceneLive = { ...STILL, ...input.live }
   const paint = paints(look, mpp, input.paperScale)
+  const show: SceneShow = { ...SHOW_ALL, ...input.show }
+  const fillOf = (id: string): Attrs => {
+    const use = show.colourBy === 'use' ? input.uses?.get(id) : undefined
+    return use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+  }
   const out: SvgNode[] = []
 
   const selected = (id: string): boolean => id === live.selectedId
@@ -503,7 +552,7 @@ export function planScene(input: SceneInput): SvgNode[] {
           'data-selected': selected(room.id),
           opacity: live.roomFill(room.id) ?? undefined,
           ...live.marks(room.id),
-          ...paint.room
+          ...fillOf(room.id)
         },
         [],
         room.id
@@ -553,6 +602,9 @@ export function planScene(input: SceneInput): SvgNode[] {
       )
     )
   }
+
+  // SHT-7: the sketch layer, over the floors and under the walls. Drawn only.
+  if (show.sketch) out.push(...sketchNodes(drawing.sketch, mpp, look.colors))
 
   for (const wall of drawing.walls) {
     const tracing = live.wallTrace(wall.id)
@@ -661,7 +713,7 @@ export function planScene(input: SceneInput): SvgNode[] {
         opening.id
       )
     )
-    if (door) {
+    if (door && show.swings) {
       // Drawing, not a target: clicks reach the gap or room underneath.
       out.push(
         el(
@@ -691,6 +743,32 @@ export function planScene(input: SceneInput): SvgNode[] {
     }
     if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
     if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
+  }
+
+  // A stair the plan states (LVL-3), on both floors it joins: its flights and landings in outline,
+  // a line across at every riser, and its walking line with an arrow pointing up. Drawing, not a
+  // target: clicks reach the room underneath.
+  for (const stair of drawing.stairs) {
+    const children: SvgNode[] = []
+    for (const outline of [...stair.flights.map((f) => f.outline), ...stair.landings]) {
+      children.push(el('path', { d: pathOf(outline), 'data-part': 'stair-outline', ...paint.stair }))
+    }
+    for (const flight of stair.flights) {
+      for (const [a, b] of flight.riserLines) {
+        children.push(el('line', { 'data-part': 'stair-riser', x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, ...paint.stair }))
+      }
+    }
+    children.push(el('path', { d: virtualPath(stair.line), 'data-part': 'stair-line', ...paint.stair }))
+    const head = stairArrow(stair.line, LINE_PX.stairArrow * mpp)
+    if (head !== null) children.push(el('path', { d: head, 'data-part': 'stair-arrow', ...paint.stairArrow }))
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'stair', 'data-id': stair.id, 'data-end': stair.end, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        children,
+        `stair:${stair.id}`
+      )
+    )
   }
 
   // A step between rooms at different levels (LVL-7): a solid line in the wall's ink across the
@@ -743,6 +821,7 @@ export function planScene(input: SceneInput): SvgNode[] {
   // or out of the room with a leader. Measured from the text actually drawn, so a wider
   // "before → after" area still gets the room it needs.
   const areaText = (room: PlanRoom): string => {
+    if (!show.areas) return ''
     const change = live.areaChange(room.id)
     return change
       ? `${areaFigure(change.before, decimals)} → ${areaFigure(change.after, decimals)} m²`
@@ -750,6 +829,7 @@ export function planScene(input: SceneInput): SvgNode[] {
   }
   // The same text in the pieces the app has always drawn it in, one text node each.
   const areaPieces = (room: PlanRoom): string[] => {
+    if (!show.areas) return []
     const change = live.areaChange(room.id)
     return change
       ? [areaFigure(change.before, decimals), ' → ', areaFigure(change.after, decimals), ' m²']
@@ -827,7 +907,7 @@ export function planScene(input: SceneInput): SvgNode[] {
         { transform: labelTransform(label.at, mpp), opacity },
         [
           el('text', { 'data-part': 'label', ...paint.label }, [names[index]!]),
-          el('text', { 'data-part': 'area', dy: String(ROOM_AREA_DY), ...paint.area }, areaPieces(room))
+          ...(show.areas ? [el('text', { 'data-part': 'area', dy: String(ROOM_AREA_DY), ...paint.area }, areaPieces(room))] : [])
         ],
         `label:${room.id}`
       )
@@ -847,6 +927,12 @@ export function planScene(input: SceneInput): SvgNode[] {
         `ghost-label-${room.id}`
       )
     )
+  }
+
+  // SHT-7: the notes, tags and symbols. A note in a room goes under that room's label.
+  if (show.notes) {
+    const labelAt = new Map(labels.flatMap((label) => (label ? [[label.id, label.at] as const] : [])))
+    out.push(...noteNodes(drawing.notes, labelAt, mpp, look.colors))
   }
 
   // The check view: each opening's id just off the middle of its wall, on the side its normal
@@ -870,10 +956,10 @@ export function planScene(input: SceneInput): SvgNode[] {
   }
 
   // Laid out before the warning dots, which a numbered mark on the same door replaces.
-  const marks = faults.length === 0 ? null : faultMarks(faultLayout, faults)
+  const marks = faults.length === 0 || !show.warnings ? null : faultMarks(faultLayout, faults)
   for (const opening of drawing.openings) {
     const message = doorWarnings.get(opening.id)
-    if (message === undefined || marks?.openings.has(opening.id)) continue
+    if (message === undefined || marks?.openings.has(opening.id) || !show.warnings) continue
     const at = { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }
     // Sized in screen pixels like the labels.
     const children: SvgNode[] = [el('circle', { 'data-part': 'door-warning-dot', r: WARNING_RADIUS_PX, ...paint.warningDot })]

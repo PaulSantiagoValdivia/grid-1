@@ -16,7 +16,7 @@
 import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
-import { floorOf, planFloors } from './floors'
+import { floorOf, isFloorSlice, planFloors } from './floors'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
 import { RoomOutlineError, roomNesting, roomPolygon } from './room'
@@ -28,15 +28,20 @@ import type { ToleranceChanges } from './tolerances'
 import { tolerance, withTolerances } from './tolerances'
 import { fixedText, metresText } from './rounding'
 import { quoted, quotedList } from '../types/planText'
+import { likelyId } from '../types/nearest'
 import { validatePlausibility } from './plausible'
 import { wallFaults } from './wallFaults'
 import { kindDisagreements } from './exposure'
 import { levelIssues, unknownFloorIssues } from './levels'
 import { buildingKind } from './plausible'
+import { planStairs } from './stairs'
 import { itemIssues } from './items'
 
-/** `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture (CNT-12). */
-export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item'
+/**
+ * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
+ * (CNT-12); `stair` (LVL-3), a stated stair.
+ */
+export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair'
 
 /**
  * `error` is something that cannot be drawn, or sits on a floor the plan does not know, and gets
@@ -51,7 +56,32 @@ export interface Issue {
   readonly id: string
   readonly message: string
   readonly severity: Severity
+  /**
+   * MSG-7: each change to one part that would clear this problem, as data, when there is one. The
+   * tool server turns each into the call that makes it.
+   */
+  readonly fixes?: readonly PlanFix[]
 }
+
+/**
+ * MSG-7: one change to an opening that clears a problem with it. `width` keeps the end nearer
+ * the wall's start where it is; `offset` moves it, keeping its width; `wall` is the id most
+ * likely meant. Lengths in metres, rounded
+ * down to the tenth of a millimetre, so the change stays inside what fits.
+ */
+export interface PlanFix {
+  readonly part: 'opening'
+  readonly id: string
+  readonly width?: number
+  readonly offset?: number
+  readonly height?: number
+  readonly sill?: number
+  /** The wall most likely meant, for an opening on a wall the plan does not have. */
+  readonly wall?: string
+}
+
+/** A length rounded down to the tenth of a millimetre, for a fix that must stay inside a limit. */
+const down = (metres: number): number => Math.floor(Math.round(metres * 10_000_000) / 1000) / 10_000
 
 export interface ValidationResult {
   readonly issues: readonly Issue[]
@@ -64,9 +94,10 @@ function issue(
   id: string,
   code: string,
   message: string,
-  severity: Severity = 'error'
+  severity: Severity = 'error',
+  fixes: readonly PlanFix[] = []
 ): Issue {
-  return { entity, id, code, message, severity }
+  return fixes.length > 0 ? { entity, id, code, message, severity, fixes } : { entity, id, code, message, severity }
 }
 
 /**
@@ -167,7 +198,9 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
   const [ex, ey] = wall.end
 
   if (sx === ex && sy === ey) {
-    issues.push(issue('wall', wall.id, 'wall/zero-length', `Wall ${quoted(wall.id)} has start === end`))
+    issues.push(
+      issue('wall', wall.id, 'wall/zero-length', `Wall ${quoted(wall.id)} starts and ends at the same point, (${exactMetres(sx)}, ${exactMetres(sy)}), so it has no length`)
+    )
     return false
   }
 
@@ -223,12 +256,17 @@ function validateOpening(
 
   const wall = index.wallsById.get(opening.wall)
   if (!wall) {
+    // MSG-7: the wall most likely meant, from the one nearest-id helper.
+    const meant = likelyId(opening.wall, [...index.wallsById.keys()])
     issues.push(
       issue(
         'opening',
         opening.id,
         'opening/missing-wall',
-        `Opening ${quoted(opening.id)} points at wall ${quoted(opening.wall)}, which does not exist`
+        `Opening ${quoted(opening.id)} points at wall ${quoted(opening.wall)}, which is not in the plan` +
+          (meant === null ? '' : `: did you mean ${quoted(meant)}?`),
+        'error',
+        meant === null ? [] : [{ part: 'opening', id: opening.id, wall: meant }]
       )
     )
     return false
@@ -261,10 +299,14 @@ function validateOpening(
   if (before > overrun || after > overrun) {
     const past = after >= before ? `${millimetres(after)} past the end of the wall` : `${millimetres(before)} before its start`
     const fits = wallLength - opening.width
-    const fix =
-      fits >= 0
-        ? `An offset from 0.00 to ${exactMetres(fits)} m fits.`
-        : `It is ${millimetres(-fits)} wider than the wall is long.`
+    // MSG-7 (lab MS-13): what would be right, not only what is wrong. Keeping its width, the
+    // offsets that fit; keeping its offset, the widest that fits there.
+    const room = wallLength - opening.offset
+    const fixes: PlanFix[] = []
+    if (fits >= 0) fixes.push({ part: 'opening', id: opening.id, offset: down(fits) })
+    if (room > 0 && opening.offset >= 0) fixes.push({ part: 'opening', id: opening.id, width: down(room) })
+    const keepWidth = fits >= 0 ? `An offset from 0.00 to ${exactMetres(fits)} m fits` : `It is ${millimetres(-fits)} wider than the wall is long`
+    const keepOffset = room > 0 && opening.offset >= 0 ? `; at its offset of ${exactMetres(opening.offset)} m, a width up to ${exactMetres(room)} m fits` : ''
     issues.push(
       issue(
         'opening',
@@ -272,7 +314,9 @@ function validateOpening(
         'opening/out-of-wall',
         `Opening ${quoted(opening.id)} runs from ${exactMetres(span.from)} to ${exactMetres(span.to)} m ` +
           `on wall ${quoted(wall.id)}, which is ${exactMetres(wallLength)} m long: it runs ${past}, more ` +
-          `than the ${millimetres(overrun)} Grid allows. ${fix}`
+          `than the ${millimetres(overrun)} Grid allows. ${keepWidth}${keepOffset}.`,
+        'error',
+        fixes
       )
     )
     ok = false
@@ -282,13 +326,18 @@ function validateOpening(
   // too tall for it.
   const head = opening.sill + opening.height
   if (!wall.virtual && head > wall.height + overrun) {
+    // MSG-7: the tallest it can be at its sill, when it can be any height at all there.
+    const tallest = wall.height - Math.max(opening.sill, 0)
     issues.push(
       issue(
         'opening',
         opening.id,
         'opening/too-tall',
         `Opening ${quoted(opening.id)} reaches ${exactMetres(head)} m on a wall ` +
-          `${exactMetres(wall.height)} m high`
+          `${exactMetres(wall.height)} m high` +
+          (tallest > 0 ? `: at its sill of ${exactMetres(opening.sill)} m, a height up to ${exactMetres(tallest)} m fits` : ''),
+        'error',
+        tallest > 0 ? [{ part: 'opening', id: opening.id, height: down(tallest) }] : []
       )
     )
     ok = false
@@ -300,7 +349,9 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/negative-sill',
-        `Opening ${quoted(opening.id)} has its sill below the floor (${opening.sill} m)`
+        `Opening ${quoted(opening.id)} has its sill ${exactMetres(-opening.sill)} m below the floor: a sill of 0.00 m, at the floor, or above fits`,
+        'error',
+        [{ part: 'opening', id: opening.id, sill: 0 }]
       )
     )
     ok = false
@@ -800,6 +851,24 @@ function validateKinds(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<st
   }
 }
 
+/**
+ * Stairs that cannot be laid out, and ends of a stair in no room (`planStairs`, LVL-3). An error
+ * leaves the stair out of every view and of the way-out check; it never makes a wall or a room
+ * broken. A floor's slice says the problems of the stairs that start or end on it.
+ */
+function validateStairs(plan: FloorPlan, broken: ReadonlySet<string>, issues: Issue[]): void {
+  // A slice keeps the plan's stairs (`planForFloor`), so this costs nothing in a plan with none.
+  if ((plan.stairs ?? []).length === 0) return
+  for (const problem of planStairs(plan, isFloorSlice(plan) ? brokenOnFloor : () => broken).problems) {
+    issues.push(issue('stair', problem.stair, problem.code, problem.message, problem.severity))
+  }
+}
+
+/** The rooms, walls and openings validation leaves out of one floor's slice, without the checks on the whole plan. */
+export function brokenOnFloor(slice: FloorPlan): ReadonlySet<string> {
+  return validatePlan(slice, undefined, { spaces: false }).broken
+}
+
 export interface ValidateOptions {
   /**
    * Whether to work out the spaces the walls enclose and report floor no room claims and rooms
@@ -927,6 +996,7 @@ export function validatePlan(
   issues.push(...itemIssues(plan, index, broken))
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
+  if (options.spaces !== false) validateStairs(plan, broken, issues)
 
   if (options.spaces !== false) {
     validateSpaces(plan, index, broken, issues)

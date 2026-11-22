@@ -200,6 +200,7 @@ describe('a room’s use', () => {
       expect(JSON.parse(JSON.stringify(parsed)).rooms[0].use).toBe(use)
     }
     expect([...ROOM_USES]).toEqual([
+      // LVL-3 added `lift`; CNT-5 the uses past homes.
       'bedroom', 'living', 'dining', 'kitchen', 'bathroom', 'toilet', 'utility', 'study',
       'office', 'meeting', 'reception', 'retail', 'classroom', 'treatment', 'waiting', 'sport', 'changing', 'staff', 'worship', 'assembly',
       'corridor', 'stair', 'lift', 'storage', 'plant', 'parking', 'other'

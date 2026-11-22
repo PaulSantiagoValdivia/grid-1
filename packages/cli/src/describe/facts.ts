@@ -10,6 +10,7 @@
 import {
   cross,
   dot,
+  floorJoins,
   floorOf,
   indexPlan,
   planFloors,
@@ -161,10 +162,69 @@ export interface PlanFacts {
   readonly heights: Heights
   readonly wallCount: number
   readonly openingCount: number
-  /** Rooms with a stair use: the plan may say a stair is there, never what it joins. */
+  /** Rooms with a stair use. */
   readonly stairRooms: number
   /** CNT-5: what kind of building the plan says it is, and each floor that says otherwise for itself. */
   readonly building: { readonly plan: BuildingType | undefined; readonly floors: readonly { readonly floor: string; readonly building: BuildingType }[] }
+  /**
+   * How the floors are joined (LVL-3): stairs the plan states, with the figures Grid works out,
+   * stair rooms and lift shafts that lie one over the other, and stair rooms or shafts out of line.
+   */
+  readonly connections: Connections
+}
+
+export interface StairFacts {
+  readonly id: string
+  readonly name: string
+  readonly lower: string
+  readonly upper: string
+  readonly risers: number
+  readonly riserHeight: number
+  readonly going: number
+  readonly width: number
+  /** The plan area of its flights and landings, m²: floor of the rooms it stands in, not added. */
+  readonly footprint: number
+}
+
+export interface Connections {
+  readonly stairs: readonly StairFacts[]
+  /** Pairs of floors whose rooms used as a stair (or a lift) lie one over the other, lower first. */
+  readonly stairRooms: readonly (readonly [string, string])[]
+  readonly lifts: readonly (readonly [string, string])[]
+  /** Pairs of floors whose stair rooms (or shafts) do not line up, lower first. */
+  readonly outOfLine: readonly { readonly kind: 'stair' | 'lift'; readonly floors: readonly [string, string] }[]
+  /** Floors with rooms that no stair, stated or drawn as a room, joins to another floor. */
+  readonly unjoined: readonly string[]
+}
+
+/** How the floors are joined, from the one answer the way-out check reads (`floorJoins`). */
+function connectionsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Connections {
+  const empty: Connections = { stairs: [], stairRooms: [], lifts: [], outOfLine: [], unjoined: [] }
+  if (floors.length < 2) return empty
+  const found = floorJoins(plan)
+  const pairs = (kind: 'stair-room' | 'lift'): [string, string][] => {
+    const seen = new Map<string, [string, string]>()
+    for (const join of found.joins) if (join.kind === kind) seen.set(`${join.lower.floor}|${join.upper.floor}`, [join.lower.floor, join.upper.floor])
+    return [...seen.values()]
+  }
+  const joined = new Set(found.joins.filter((j) => j.kind !== 'lift').flatMap((j) => [j.lower.floor, j.upper.floor]))
+  return {
+    stairs: found.stairs.map((stair) => ({
+      id: stair.id,
+      name: stair.name,
+      lower: stair.lower.floor,
+      upper: stair.upper.floor,
+      risers: stair.risers,
+      riserHeight: stair.riserHeight,
+      going: stair.going,
+      width: stair.width,
+      footprint: stair.footprint,
+    })),
+    stairRooms: pairs('stair-room'),
+    lifts: pairs('lift'),
+    outOfLine: found.outOfLine.map((out) => ({ kind: out.kind, floors: [out.lower[0]!.floor, out.upper[0]!.floor] as const })),
+    unjoined: floors.filter((floor) => floor.rooms.length > 0 && !joined.has(floor.id)).map((floor) => floor.id),
+  }
 }
 
 /** How far a point may be from a wall's face and still be on it, in metres. */
@@ -458,5 +518,6 @@ export function planFacts(plan: FloorPlan): PlanFacts {
         return own === undefined || own === plan.building ? [] : [{ floor: floor.id, building: own }]
       }),
     },
+    connections: connectionsOf(plan, floors),
   }
 }

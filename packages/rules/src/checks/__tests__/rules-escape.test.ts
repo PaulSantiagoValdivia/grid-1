@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FloorPlan, Opening, Room, Wall } from '@ongrid/floorplan/geometry'
 import { ESCAPE_TOP_LEVEL, FIGURES, RULES, checkLocalRules } from '..'
 import { messages } from '../messages'
+import { inspectPlan } from '../../result'
 
 /**
  * The bedroom escape-opening rule (US model codes: IBC 2024 1031, IRC 2024 R319).
@@ -317,5 +318,17 @@ describe('known failures (expected to fail until fixed)', () => {
     const plan = bedroom([])
     const codes = (country: string) => checkLocalRules(plan, { country }).findings.map((f) => f.code)
     expect(codes('USA')).toEqual(codes('US'))
+  })
+})
+
+describe('the escape window line in the record (MSG-7, lab MS-13)', () => {
+  it('names the measure that fails, 0.60 m high against 0.61 m, before the area that passes', () => {
+    const plan = bedroom([win('o1', 1.0, 0.6, 0.9)], { level: 1 })
+    const [finding] = escapes(plan)
+    const line = inspectPlan(plan).lines.find((l) => l.code === 'room/escape-window-too-small')!
+    expect(line.found).toBe('0.6 m high, under the 0.61 m needed; 0.6 m² in area and 1 m wide, which are enough')
+    // The figures, their sources and their status are the check's own, as before.
+    expect(line.figures).toEqual(finding!.figures)
+    expect(inspectPlan(plan).label).toBe('General guidance, not your local rules')
   })
 })

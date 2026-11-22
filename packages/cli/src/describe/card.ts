@@ -181,18 +181,62 @@ function agentLine(facts: PlanFacts): string {
 }
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */
-function unsaid(facts: PlanFacts): { person: string[]; agent: string[] } {
+function unsaid(facts: PlanFacts, names: PersonNames): { person: string[]; agent: string[] } {
   // CNT-5: a plan may say what kind of building it is; one that says it for every floor is not asked.
   const said = facts.building.plan !== undefined || (facts.floors.length > 0 && facts.floors.every((f) => facts.building.floors.some((b) => b.floor === f.id)))
   const person = ['where north is', ...(said ? [] : ['what kind of building it is'])]
   const agent = ['north', ...(said ? [] : ['kind of building'])]
   if (facts.floors.length > 1) {
-    const stairs = facts.stairRooms > 0 ? plural(facts.stairRooms, 'room') : ''
-    person.push(`how its floors connect (it holds no stairs or lifts${stairs ? `, only ${stairs} marked as a stair` : ''})`)
+    // Floors no stair joins (LVL-3): a stair the plan states, or stair rooms one over the other.
+    const { unjoined } = facts.connections
+    if (unjoined.length > 0) {
+      const stairs = facts.stairRooms > 0 ? plural(facts.stairRooms, 'room') : ''
+      const all = unjoined.length === facts.floors.length
+      const one = !all && unjoined.length === 1
+      const subject = all ? 'its floors connect' : `${listed(unjoined.map((id) => names.floor(id)))} ${one ? 'connects' : 'connect'} to the other floors`
+      person.push(`how ${subject} (no stair joins ${one ? 'it' : 'them'}${stairs ? `; ${stairs} marked as a stair` : ''})`)
+      agent.push(`how floors connect (no stair joins ${unjoined.join(' ')}${stairs ? `; ${stairs} with use stair` : ''})`)
+    }
     person.push('which rooms make up each flat or home')
-    agent.push(`how floors connect (no stairs or lifts${stairs ? `; ${stairs} with use stair` : ''})`, 'which rooms make each flat')
+    agent.push('which rooms make each flat')
   }
   return { person, agent }
+}
+
+/** Pairs of floors, lower first, joined into runs: ground to first and first to second is one run. */
+function runs(pairs: readonly (readonly [string, string])[]): string[][] {
+  const out: string[][] = []
+  for (const [a, b] of pairs) {
+    const run = out.find((r) => r[r.length - 1] === a)
+    if (run) run.push(b)
+    else out.push([a, b])
+  }
+  return out
+}
+
+/** The stairs and shafts that join the floors (LVL-3), or nothing in a plan with none. */
+function personStairs(facts: PlanFacts, names: PersonNames): string[] {
+  const { stairs, stairRooms, lifts, outOfLine } = facts.connections
+  const parts = [
+    ...stairs.map((stair) =>
+      `${JSON.stringify(stair.name)} from ${names.floor(stair.lower)} up to ${names.floor(stair.upper)}, ${stair.risers} risers of ${m(stair.riserHeight)} m, going ${m(stair.going)} m, ${m(stair.width)} m wide`),
+    ...runs(stairRooms).map((run) =>
+      `the stair rooms lie one over the other from ${names.floor(run[0]!)} to ${names.floor(run[run.length - 1]!)}`),
+    ...runs(lifts).map((run) => `the lift shaft runs from ${names.floor(run[0]!)} to ${names.floor(run[run.length - 1]!)}`),
+    ...outOfLine.map((out) => `the ${out.kind === 'stair' ? 'stair rooms' : 'lift shafts'} on ${names.floor(out.floors[0])} and ${names.floor(out.floors[1])} do not line up`),
+  ]
+  return parts.length === 0 ? [] : [`Stairs: ${parts.join('; ')}.`]
+}
+
+function agentStairs(facts: PlanFacts): string[] {
+  const { stairs, stairRooms, lifts, outOfLine } = facts.connections
+  const parts = [
+    ...stairs.map((stair) => `${stair.id} ${stair.lower}->${stair.upper} ${stair.risers}x${m(stair.riserHeight)} going ${m(stair.going)} width ${m(stair.width)}`),
+    ...runs(stairRooms).map((run) => `stair rooms ${run.join('->')}`),
+    ...runs(lifts).map((run) => `lift ${run.join('->')}`),
+    ...outOfLine.map((out) => `${out.kind} rooms out of line ${out.floors[0]}->${out.floors[1]}`),
+  ]
+  return parts.length === 0 ? [] : [`STAIRS ${parts.join('; ')}`]
 }
 
 /** How a person can tell an opening apart: by its type and the rooms it joins. */
@@ -425,7 +469,7 @@ function agentFloorHead(floor: FloorFacts): string {
 
 function personCard(facts: PlanFacts, withWalls: boolean): string[] {
   const names = new PersonNames(facts)
-  const lines = [personLine(facts, names), PERSON_KEY, `Not in the plan: ${listed(unsaid(facts).person)}.`, personHeights(facts, names)]
+  const lines = [personLine(facts, names), PERSON_KEY, `Not in the plan: ${listed(unsaid(facts, names).person)}.`, personHeights(facts, names), ...personStairs(facts, names)]
   const groups = repeatGroups(facts)
   for (const floor of facts.floors) {
     if (floor.repeats !== null) {
@@ -442,7 +486,7 @@ function personCard(facts: PlanFacts, withWalls: boolean): string[] {
 }
 
 function agentCard(facts: PlanFacts, withWalls: boolean): string[] {
-  const lines = [agentLine(facts), withWalls ? AGENT_KEY_WALLS : AGENT_KEY_ROOMS, `NOT IN PLAN ${unsaid(facts).agent.join('; ')}`, agentHeights(facts)]
+  const lines = [agentLine(facts), withWalls ? AGENT_KEY_WALLS : AGENT_KEY_ROOMS, `NOT IN PLAN ${unsaid(facts, new PersonNames(facts)).agent.join('; ')}`, agentHeights(facts), ...agentStairs(facts)]
   const groups = repeatGroups(facts)
   for (const floor of facts.floors) {
     const repeat = floor.repeats

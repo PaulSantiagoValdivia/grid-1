@@ -29,12 +29,12 @@ import { readingNotes, type ReadingNote } from '@ongrid/floorplan/types/reading'
 import { FIGURE_LIMITS } from '../checks/catalogue'
 import { checkLocalRules, type CheckOptions } from '../checks/check'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from '../checks/types'
-import { CODES, isLineCode, type Subject } from './catalogue'
+import { CODES, isLineCode, type CodeEntry, type Subject } from './catalogue'
 import { LINE_KINDS, RESULT_VERSION, type GridResult, type LineKind, type ResultLine, type Thing, type ThingKind } from './types'
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
 
-const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item' }
+const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item', stair: 'Stair' }
 const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as const
 /** An id from a file the format refused, when it is one Grid would read: else it is not repeated. */
 const safeId = (value: unknown): string | null =>
@@ -50,7 +50,9 @@ const FINDING_CODES: Record<FindingCode, string> = {
   room_too_small: 'room/too-small',
   no_escape_opening: 'room/no-escape-opening',
   escape_window_too_small: 'room/escape-window-too-small',
-  escape_window_too_high: 'room/escape-window-too-high'
+  escape_window_too_high: 'room/escape-window-too-high',
+  stair_out_of_line: 'room/stair-out-of-line',
+  lift_out_of_line: 'room/lift-out-of-line'
 }
 
 function oneLine(text: string): string {
@@ -62,10 +64,10 @@ function errorText(error: unknown): string {
 }
 
 /** One line from its code and what the code is told. */
-function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures'>> = {}): ResultLine {
+function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures' | 'fixes'>> = {}): ResultLine {
   // A code missing from the catalogue still gives a line: the check's own words, and a test fails.
-  const entry = isLineCode(code) ? CODES[code] : null
-  const found = entry && 'found' in entry && entry.found ? entry.found(subject) : subject.said
+  const entry: CodeEntry | null = isLineCode(code) ? CODES[code] : null
+  const found = entry?.found ? entry.found(subject) : subject.said
   return {
     code,
     kind,
@@ -94,7 +96,7 @@ function placeText(path: readonly (string | number)[]): string {
 function partAt(raw: Record<string, unknown>, path: readonly (string | number)[]): { thing: Thing; floor: string | null; label: string } {
   const whole = { thing: { kind: 'plan' as const, id: '' }, floor: null, label: NOUN.plan }
   const [list, at] = path
-  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item' }
+  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item', stairs: 'stair' }
   if (typeof list !== 'string' || typeof at !== 'number' || !Object.hasOwn(kinds, list)) return whole
   const items = raw[list]
   const item = Array.isArray(items) ? (items[at] as unknown) : undefined
@@ -321,6 +323,8 @@ function namesOf(plan: FloorPlan): Names {
   for (const wall of plan.walls) if (!walls.has(wall.id)) walls.set(wall.id, wall)
   const openings = new Map<string, FloorPlan['openings'][number]>()
   for (const opening of plan.openings) if (!openings.has(opening.id)) openings.set(opening.id, opening)
+  const stairs = new Map<string, NonNullable<FloorPlan['stairs']>[number]>()
+  for (const stair of plan.stairs ?? []) if (!stairs.has(stair.id)) stairs.set(stair.id, stair)
   const items = new Map<string, NonNullable<FloorPlan['items']>[number]>()
   for (const item of plan.items ?? []) if (!items.has(item.id)) items.set(item.id, item)
   const floorName = (id: string): string => floorNames.get(id) ?? id
@@ -335,6 +339,11 @@ function namesOf(plan: FloorPlan): Names {
           return { label: NOUN.plan, name: '', floor: null }
         case 'floor':
           return { label: `${NOUN.floor} ${quoted(floorName(id))}`, name: floorName(id), floor: id }
+        case 'stair': {
+          // LVL-3: a stair is on the floor its walking line starts from.
+          const stair = stairs.get(id)
+          return { label: `${NOUN.stair} ${quoted(stair?.name ?? id)}`, name: stair?.name ?? id, floor: stair ? stair.from : null }
+        }
         case 'room': {
           const room = rooms.get(id)
           return { label: `${NOUN.room} ${quoted(roomName(id))}`, name: roomName(id), floor: room ? floorOf(room) : null }
@@ -379,9 +388,10 @@ function issueLine(issue: Issue & { readonly hits?: readonly string[] }, names: 
     floorName: at.floor === null ? '' : names.floorName(at.floor),
     said: oneLine(issue.message),
     also: [...also, ...(issue.hits ?? [])],
-    floors: names.floors
+    floors: names.floors,
+    ...(issue.fixes ? { fixes: issue.fixes } : {})
   }
-  return line(issue.code, issue.severity === 'error' ? 'left-out' : 'worth-a-look', thing, at.floor, subject)
+  return line(issue.code, issue.severity === 'error' ? 'left-out' : 'worth-a-look', thing, at.floor, subject, issue.fixes ? { fixes: issue.fixes } : {})
 }
 
 function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: ReadonlySet<string>): ResultLine {
@@ -512,6 +522,32 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     const country = (options.country ?? '').trim().toUpperCase()
     lines.push(...report.findings.map((finding) => findingLine(finding, names, wayOutNotDrawn)))
     lines.push(...report.notChecked.map((notice) => noticeLine(notice, names, country)))
+  })
+  // SHT-7: what is written on the drawing. The sketch is drawn and never measured or checked,
+  // and the record says so, floor by floor. A note in a room the plan lacks is not drawn.
+  stage('writing', () => {
+    const byFloor = new Map<string, NonNullable<FloorPlan['sketch']>>()
+    for (const item of plan.sketch ?? []) byFloor.set(floorOf(item), [...(byFloor.get(floorOf(item)) ?? []), item])
+    for (const [floor, items] of byFloor) {
+      const label = names.thingOf('floor', floor).label
+      const categories = [...new Set(items.map((item) => item.category))]
+      lines.push(
+        line('floor/sketch-drawn-only', 'not-checked', { kind: 'floor', id: floor }, floor, {
+          ...blank(label),
+          name: names.floorName(floor),
+          floorName: names.floorName(floor),
+          said: `${items.length} sketch item${items.length === 1 ? '' : 's'}`,
+          also: items.map((item) => item.id),
+          names: categories,
+          floors: names.floors
+        })
+      )
+    }
+    const rooms = new Set(plan.rooms.map((room) => room.id))
+    for (const note of plan.annotations ?? []) {
+      if (note.room === undefined || rooms.has(note.room)) continue
+      lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(quoted(note.id)), also: [note.id, note.room], floors: names.floors, said: `room ${note.room}` }))
+    }
   })
   return record(lines, true, report)
 }

@@ -52,6 +52,13 @@ export type FindingCode =
   /** LVL-1: a door or opening to the outside on a floor standing above the ground; never a way out. */
   | 'door_to_outside_above_ground'
   /**
+   * LVL-3: rooms used as a stair on two neighbouring levels, none lying over one on the other, so
+   * they join nothing. On the upper floor; its rooms are the upper level's, then the lower's.
+   */
+  | 'stair_out_of_line'
+  /** LVL-3: the same for rooms used as a lift: the shaft is out of line. */
+  | 'lift_out_of_line'
+  /**
    * MSG-18: a door or doorless opening no person fits through, by Grid's own sizes (not code
    * figures): too narrow, too low, or with its sill above the floor. It is not a way through.
    */
@@ -95,7 +102,10 @@ export interface RuleFinding {
 }
 
 export type NotCheckedReason =
-  /** Not the ground floor: with no stairs in the plan, it cannot reach an exit. */
+  /**
+   * Not the ground floor, and no stair joins it to the ground floor (LVL-3): no stair the plan
+   * states, and no room used as a stair lying over one on the floor below.
+   */
   | 'no_stairs'
   /** The plan validation rejects it, so it was left out of the routes. */
   | 'cannot_be_drawn'

@@ -108,6 +108,21 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           title: wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation ?? 0)),
           detail: [words('It is not counted as a way out. If it opens onto a balcony, a terrace or an outside stair, draw that as a room.')]
         }
+      case 'stair_out_of_line':
+      case 'lift_out_of_line': {
+        const stair = finding.code === 'stair_out_of_line'
+        return {
+          ...base,
+          title: [words(stair ? 'The stair ' : 'The lift shaft '), name(roomName(room!)), words(' does not line up with the floor below')],
+          detail: [
+            words(
+              stair
+                ? 'It lies over no stair room on the floor below, so the way out is not followed down it. Move it over the stair below, or state the stair in the plan\'s stairs.'
+                : 'It lies over no lift shaft on the floor below. Move it over the shaft below.'
+            )
+          ]
+        }
+      }
       case 'opening_too_small_to_pass': {
         const p = finding.passage
         return {

@@ -21,7 +21,8 @@ describe('the sheet fonts (VEW-7)', () => {
       GlobalFonts: {
         registerFromPath: (file: string, family?: string) => {
           const key = canvas.GlobalFonts.registerFromPath(file, family)
-          if (key !== null) faces.push(file.slice(file.lastIndexOf('/') + 1))
+          // QAR-4: the folder ends in `\` on Windows, so the name is taken by either separator.
+          if (key !== null) faces.push(file.split(/[\\/]/).pop()!)
           return key
         },
       },

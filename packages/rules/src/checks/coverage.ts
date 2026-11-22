@@ -47,6 +47,7 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
   'room-has-door': 'room',
   'room-reaches-exit': 'room',
   'door-leads-somewhere': 'door',
+  'stairs-line-up': 'room',
   'habitable-room-area': 'room',
   'escape-opening': 'room'
 }
@@ -79,7 +80,9 @@ export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonl
     case 'use_not_covered':
       return ruleId === 'escape-opening'
         ? 'only bedrooms are checked'
-        : 'the figure is for bedrooms, living rooms and dining rooms only'
+        : ruleId === 'stairs-line-up'
+          ? 'only rooms used as a stair or a lift are lined up'
+          : 'the figure is for bedrooms, living rooms and dining rooms only'
   }
 }
 
@@ -159,6 +162,14 @@ export function planCheckScopes(
     add('room-reaches-exit', floor.id, {
       lookedAt: followed ? drawn : [],
       skipped: { cannot_be_drawn: cannot, ...(followed ? {} : { no_stairs: drawn }) }
+    })
+
+    // Stairs and lift shafts line up (LVL-3): the rooms used as a stair or a lift, on every floor.
+    const used = new Map(storey.rooms.map((room) => [room.id, room.use] as const))
+    const shafts = drawn.filter((id) => used.get(id) === 'stair' || used.get(id) === 'lift')
+    add('stairs-line-up', floor.id, {
+      lookedAt: shafts,
+      skipped: { cannot_be_drawn: cannot, use_not_covered: drawn.filter((id) => !shafts.includes(id)) }
     })
 
     // Every door leads somewhere: every door and opening that can be drawn, on every floor with

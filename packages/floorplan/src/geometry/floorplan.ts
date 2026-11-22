@@ -19,9 +19,14 @@ import { roomFloorArea, tryRoomShape } from './room'
 import { poleOfInaccessibility } from './innerPoint'
 import { wallExposure } from './exposure'
 import type { Issue } from './validate'
-import { validatePlan } from './validate'
+import { brokenOnFloor, validatePlan } from './validate'
 import type { PlanStep } from './steps'
+import type { PlanNote, PlanSketch } from './writing'
+import { planNotes, planSketch, sketchExtent } from './writing'
 import { planSteps } from './steps'
+import type { RiserLine, StairLayout } from './stairs'
+import { planStairs } from './stairs'
+import { wholePlan } from './floors'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
 
@@ -94,6 +99,41 @@ export interface PlanItem {
   readonly lines: readonly (readonly Vec2[])[]
 }
 
+/**
+ * A stair the plan states, as one of the floors it joins draws it (LVL-3): its flights with a
+ * line across at every riser, its landings, and its walking line from the lower end to the upper,
+ * which the drawing ends with an arrow pointing up. The figures are the ones `planStairs` works
+ * out, so a label can say them without measuring.
+ */
+export interface PlanStair {
+  readonly id: string
+  readonly name: string
+  /** Whether this floor is the stair's lower end or its upper end. */
+  readonly end: 'lower' | 'upper'
+  readonly flights: readonly { readonly outline: readonly Vec2[]; readonly riserLines: readonly RiserLine[] }[]
+  readonly landings: readonly (readonly Vec2[])[]
+  /** The walking line, lower end first. */
+  readonly line: readonly Vec2[]
+  readonly risers: number
+  readonly riserHeight: number
+  readonly going: number
+}
+
+/** A laid-out stair as the floor `floor` draws it; on a plan that is no slice, as its lower floor does. */
+export function planStair(stair: StairLayout, floor: string | null): PlanStair {
+  return {
+    id: stair.id,
+    name: stair.name,
+    end: floor !== null && floor === stair.upper.floor ? 'upper' : 'lower',
+    flights: stair.flights.map((f) => ({ outline: f.outline, riserLines: f.riserLines })),
+    landings: stair.landings.map((l) => l.outline),
+    line: stair.line,
+    risers: stair.risers,
+    riserHeight: stair.riserHeight,
+    going: stair.going
+  }
+}
+
 export interface Bounds {
   readonly min: Vec2
   readonly max: Vec2
@@ -123,12 +163,23 @@ export interface PlanDrawing {
    */
   readonly steps: readonly PlanStep[]
   /**
+   * The stairs the plan states that start or end on this floor (LVL-3), each drawn on both. Empty
+   * when the plan states none.
+   */
+  readonly stairs: readonly PlanStair[]
+  /**
    * The rooms that could not be drawn, each as the box round the walls it lists that the plan
    * holds (MSG-8). A room none of whose walls can be found has no box and is not here.
    */
   readonly undrawn: readonly UndrawnRoom[]
   /** The fixtures (CNT-12), drawn over the room fills and under the walls. Empty when the plan has none. */
   readonly items: readonly PlanItem[]
+  /** SHT-7: the sketch layer, drawn only: never measured, checked or taken as a wall. */
+  readonly sketch: readonly PlanSketch[]
+  /** SHT-7: the notes, tags, symbols and key written on the drawing. */
+  readonly notes: readonly PlanNote[]
+  /** SHT-7: the box round the sketch layer, so a view frames it too; null with none. */
+  readonly sketchBounds: Bounds | null
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -281,7 +332,15 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
     }
   }
 
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, bounds: computeBounds(extent), issues }
+  // The stairs that start or end here, read from the plan this floor was cut from.
+  const floor = wholePlan(plan).floor
+  const stairs = (plan.stairs ?? []).length === 0 ? [] : planStairs(plan, floor === null ? () => broken : brokenOnFloor).stairs.map((stair) => planStair(stair, floor))
+  for (const stair of stairs) for (const flight of stair.flights) extent.push(...flight.outline)
+
+  const sketch = planSketch(plan)
+  const notes = planNotes(plan, (id) => rooms.find((room) => room.id === id)?.labelAt)
+  const sketchBounds = sketch.length === 0 ? null : computeBounds(sketchExtent(sketch))
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, sketch, notes, sketchBounds, bounds: computeBounds(extent), issues }
 }
 
 /**
