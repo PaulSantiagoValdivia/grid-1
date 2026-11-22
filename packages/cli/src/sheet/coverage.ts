@@ -25,6 +25,9 @@ export const SHEET_COVERAGE = {
   projectId: { shown: 'not shown', why: 'It names the project to other programs (QAR-5), not the building.' },
   walls: { shown: 'drawn' },
   openings: { shown: 'drawn' },
+  // LVL-8: an opening pattern is drawn as the plain openings it expands into, on every page that
+  // draws its walls, as every other picture and export draws them.
+  patterns: { shown: 'drawn' },
   rooms: { shown: 'drawn and tabled' },
   floors: { shown: 'a page each' },
   stairs: { shown: 'drawn' },
@@ -43,9 +46,12 @@ export const SHEET_COVERAGE = {
   yAxis: { shown: 'not shown', why: 'It says how the file\'s coordinates run (CNT-3); every page draws them as the file holds them, with y up.' },
   front: { shown: 'not shown', why: 'The front is said by grid describe and the tool server; the drawing marks no front yet.' },
   // CNT-3 and LVL-4: where the building is goes into the IFC file; the ground level (`site.ground`)
-  // feeds the checks, whose findings the sheet lists. No drawing shows the ground yet. COD-3: the
-  // check page names the place the figures were for (`site.country`).
-  site: { shown: 'not shown', why: 'Where the building is on the earth goes into the IFC file, and its ground level is read by the checks, whose findings the sheet lists; the sheet prints no location and no drawing shows the ground yet. The check page names the place the figures were for (site.country).' },
+  // feeds the checks, whose findings the sheet lists. COD-3: the check page names the place the
+  // figures were for (`site.country`). BRF-3: the plot's boundary, its street edges and the
+  // site's things are drawn on the ground floor's plan by `drawPlan`; the distances to the
+  // boundary and the plot coverage are `grid_measure what=site`'s, and the set-back lines are on
+  // the check page.
+  site: { shown: 'drawn' },
   // WRT-6: what is assumed is drawn in its own style by `drawPlan`, and listed to confirm by
   // `grid check`; the sheet's checks page lists those lines with the others.
   marks: { shown: 'drawn' },
@@ -55,6 +61,8 @@ export const SHEET_COVERAGE = {
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
   // VEW-3: a saved view is a camera for grid_view and grid draw --view; the sheet takes its own.
   views: { shown: 'not shown', why: 'A saved view is a camera for grid_view and grid draw --view (VEW-3); the sheet takes its own pictures.' },
+  // CNT-17: what needs to be accessible is a mark for the measurements, not part of the drawing.
+  accessible: { shown: 'not shown', why: 'It marks the rooms and routes that need to be accessible (CNT-17), which grid_measure what=access measures; the sheet draws no mark and states no figure for them.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**

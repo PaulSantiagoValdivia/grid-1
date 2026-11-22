@@ -36,7 +36,8 @@ import { DIFF_OPTIONS, MARK_OPTIONS, runDiff, runMark } from './diff'
 import { MARKERS_MAX, MarkerRefused } from '../versions/markers'
 import { GitUnread } from '../versions/git'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
-import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
+import { checkExportRequest, dxfProfileLine, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
+import { DxfProfileRefused } from '../export/dxfProfile'
 import type { LeftOutPart } from '@ongrid/floorplan/export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
@@ -100,8 +101,8 @@ const COMMANDS = {
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d | --view <name>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
-    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG.',
+    usage: 'grid draw [<plan.json>] [--png | --3d | --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left|right]] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --section, draws a section along a line through every floor instead. With --3d, draws the 3D model as the app opens it, as a PNG. With --facade north (east, south or west), draws that side of the building in elevation, every floor at its level.',
     options: DRAW_OPTIONS,
   },
   export: {
@@ -359,6 +360,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       // VEW-3: a saved view is the 3D model through its camera.
       threeD: parsed.values.has('--3d') || parsed.values.has('--view'),
       view: textOf(parsed, '--view'),
+      facade: textOf(parsed, '--facade'),
       out: textOf(parsed, '--out'),
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
@@ -369,6 +371,9 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       hide: textOf(parsed, '--hide'),
       colour: textOf(parsed, '--colour'),
       key: parsed.values.has('--key'),
+      section: textOf(parsed, '--section'),
+      toward: textOf(parsed, '--toward'),
+      marks: textOf(parsed, '--marks'),
     }
     const { scale, look } = checkDrawRequest(request)
     if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {
@@ -376,10 +381,11 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     }
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
-    const { file: picture, undecidedDoors } = await drawFile(loaded, request, scale, look)
+    const { file: picture, undecidedDoors, sectionNote } = await drawFile(loaded, request, scale, look)
     warnLeftOut(io, loaded)
     const undecided = undecidedNote(undecidedDoors)
     if (undecided) io.stderr(undecided)
+    if (sectionNote) io.stderr(sectionNote)
     if (request.out === undefined) {
       io.stdout(picture)
     } else {
@@ -448,12 +454,14 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const done = exportIntoProject(project, planFile, format, request)
     warnLeftOut(io, done.loaded, done.leftOut)
     if (done.note) io.stderr(`${done.note}\n`)
+    if (done.dxfProfile !== null) io.stderr(`${dxfProfileLine(done.dxfProfile)}\n`)
     io.stdout(`Wrote ${project.shown(done.written)}\n`)
     return EXIT_OK
   }
   const loaded = loadPlan(project, planFile)
-  const made = exportFile(loaded, planFile, format, request)
+  const made = exportFile(project, loaded, planFile, format, request)
   warnLeftOut(io, loaded, made.leftOut)
+  if (made.dxfProfile !== null) io.stderr(`${dxfProfileLine(made.dxfProfile)}\n`)
   io.stdout(`Wrote ${project.shown(write(project, request.out, made.data))}\n`)
   return EXIT_OK
 }
@@ -489,7 +497,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof SeenRefused || error instanceof MarkerRefused || error instanceof GitUnread || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof DxfProfileRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof SeenRefused || error instanceof MarkerRefused || error instanceof GitUnread || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

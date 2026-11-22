@@ -89,6 +89,9 @@ export interface CodeEntry {
 }
 
 const fixed = (text: string) => (): string => text
+/** BRF-3: the way an edge of the plot's boundary faces, and whether it is on a street, in words. */
+const edgeWords = (b: NonNullable<RuleFinding['boundary']>): string =>
+  `which faces ${b.faces}${b.northStated ? '' : ' (with north as the top of the drawing: the plan states no north)'}${b.street ? ', on the street' : ''}`
 /** How a use reads in a sentence: "a bedroom". */
 const USE_WORDS: Readonly<Record<string, string>> = { bedroom: 'a bedroom', living: 'a living room', dining: 'a dining room' }
 /**
@@ -699,6 +702,40 @@ export const CODES = {
     fix: fixed('Give the second stair another id; until then it is left out.')
   },
 
+  // --- Opening patterns (LVL-8) ---------------------------------------------------------------
+  // What kept a pattern's openings from being placed. The found is the expansion's own sentence:
+  // which wall, how much room it needed and had, which opening it would have covered.
+  'pattern/unknown-wall': {
+    says: (s) => `${s.label} names a wall Grid cannot find`,
+    needed: fixed('the id of one wall of the plan'),
+    fix: fixed('Name the wall the openings go in by its id, as the plan file holds it; until then none of them is placed.')
+  },
+  'pattern/does-not-fit': {
+    says: (s) => `${s.label} does not fit its wall`,
+    needed: fixed('room on the wall, between its margins, for every opening of the pattern'),
+    fix: fixed('Make the margins smaller, the openings narrower, the count smaller or the spacing wider, or put the pattern on a longer wall.')
+  },
+  'pattern/unknown-floor': {
+    says: (s) => `${s.label} is to be repeated on a floor the plan does not have`,
+    needed: fixed('a floor of the plan in the pattern\'s floors'),
+    fix: fixed('Name the floors above by their ids, as the floor list holds them.')
+  },
+  'pattern/no-wall-above': {
+    says: (s) => `${s.label} finds no wall above to repeat on`,
+    needed: fixed('on each floor it is repeated on, a wall in the same line as its own, holding the opening\'s whole width'),
+    fix: fixed('Draw the wall above in line with the pattern\'s wall, or take that floor out of the pattern\'s floors.')
+  },
+  'pattern/overlaps-opening': {
+    says: (s) => `${s.label} would place an opening over another`,
+    needed: fixed('each opening of the pattern clear of the other openings on its wall'),
+    fix: fixed('Move the other opening, or change the pattern\'s margins, count or spacing so its openings stand clear of it.')
+  },
+  'pattern/id-clash': {
+    says: (s) => `${s.label} would give an opening an id another part has`,
+    needed: fixed('an id of its own for each opening a pattern places: the pattern\'s id, the floor and the number'),
+    fix: fixed('Rename the pattern, or the part that has the id.')
+  },
+
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {
     says: (s) => `${s.label} has a number Grid does not accept`,
@@ -839,6 +876,33 @@ export const CODES = {
     needed: fixed('a door or window above the ground outside, or a light well or an outside stair in front of it'),
     fix: fixed('If the ground in front of it is dug away, as for a light well or an area, draw that space; if the ground level is not right, change site.ground.')
   },
+  // BRF-3 (lab EL-16): the building against its plot. The set-backs are the person's own figures:
+  // a line says how far short of one the building stands, and never that a distance is enough.
+  'plan/setback-short': {
+    says: (s) => s.finding?.message ?? 'The building stands nearer an edge of the plot\'s boundary than the set-back asked for',
+    found: (s) => {
+      const b = s.finding?.boundary
+      if (b === undefined) return 'the building\'s outside face nearer the boundary than the set-back asked for'
+      return `the building's outside face ${metresText(b.distance, 2, b.asked?.distance)} m from edge ${b.edge} of the plot's boundary, ${edgeWords(b)}`
+    },
+    needed: (s) => {
+      const asked = s.finding?.boundary?.asked
+      if (asked === null || asked === undefined) return 'the set-back asked for'
+      const from = asked.from === 'edge' ? 'that edge' : asked.from === 'street' ? 'the street edges' : 'every edge'
+      return `${metresText(asked.distance)} m from it, the set-back ${asked.source === 'assumed' ? 'assumed for the person, to confirm,' : 'the person asked for'} from ${from}: their own figure, not a code's`
+    },
+    fix: fixed('Move the building, or its walls on that side, away from that edge; if the set-back is not the one meant, change it in site.setbacks.')
+  },
+  'plan/over-boundary': {
+    says: (s) => s.finding?.message ?? 'The building reaches over an edge of the plot\'s boundary',
+    found: (s) => {
+      const b = s.finding?.boundary
+      if (b === undefined) return 'the building\'s outside face past the plot\'s boundary'
+      return `the building's outside face ${metresText(b.past)} m past edge ${b.edge} of the plot's boundary, ${edgeWords(b)}`
+    },
+    needed: fixed('the building inside the plot\'s boundary'),
+    fix: fixed('Move the building, or its walls on that side, back inside the boundary; if the boundary is not the plot\'s, change site.boundary.')
+  },
   'room/stair-out-of-line': {
     says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
     found: fixed('no room used as a stair on the floor below lies under half of it'),
@@ -941,7 +1005,25 @@ export const CODES = {
     says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,
     found: (s) => `${s.said} on the sketch layer (${s.names.join(', ')})`,
     needed: fixed('nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture'),
-    fix: fixed('Leave it as a sketch for the drawing. Where it is something Grid holds, such as a fixture, write it as that instead; furniture and site parts will be offered the same way when Grid holds them.')
+    fix: fixed('Leave it as a sketch for the drawing. Where it is something Grid holds, such as a fixture, or a fence, a path, a tree or a pool on the site (site.things), write it as that instead; furniture will be offered the same way when Grid holds it.')
+  },
+  // BRF-3: the site's things are drawn only, never measured or checked.
+  'plan/site-things-drawn-only': {
+    says: (s) => `The site's things are drawn only: ${s.said}, not measured or checked, and never taken as a wall, a room or a storey's height`,
+    found: (s) => `${s.said} on the site`,
+    needed: fixed('nothing: the site\'s things are for the drawing'),
+    fix: fixed('Leave them as they are. A part of the building, such as a shed with walls and a roof, is written as walls and a room instead.')
+  },
+  'plan/not-checked-boundary': {
+    says: (s) => s.said || 'No distance to the plot\'s boundary was measured: the building has no outline',
+    found: fixed('a boundary on the site, but no outline of the building to measure from'),
+    needed: fixed('walls that close the building\'s outline, on a floor at or above the ground floor'),
+    fix: fixed('Correct the lines that leave the outline unknown; the distances to the boundary are measured once it can be worked out.')
+  },
+  'plan/boundary-crosses': {
+    says: () => 'The site\'s boundary is not one closed shape, so no distance to it and no plot coverage is measured',
+    needed: fixed('the plot\'s corners in order round it, each edge meeting only the next'),
+    fix: fixed('List the corners of the plot once each, in order round it; the last edge runs back to the first point by itself.')
   },
   'plan/note-no-place': {
     says: (s) => `Note ${s.label} names a room the plan does not have, so it is not drawn`,
@@ -1036,6 +1118,13 @@ export const CODES = {
     found: (s) => (s.taped === undefined ? s.said : `${s.taped.what}, taped ${s.taped.figures}`),
     needed: fixed('a taped length that names a room the plan has, and one of its walls or two of its corners, each corner by the two walls that meet there'),
     fix: fixed('Name the room and its walls by the ids the plan gives them now; a corner is two walls of the room that meet there. Once the room is drawn, its taped lengths are measured.')
+  },
+  // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured, never checked.
+  'plan/not-checked-access': {
+    says: (s) => `What the plan marks as needing to be accessible (${s.said}) was not checked: Grid holds no figure for it that a named person has confirmed`,
+    found: (s) => `${s.said} marked as needing to be accessible`,
+    needed: fixed('figures for the widths of doors and corridors, turning space and steps that a named person has confirmed against their source, or the person\'s own figures in the brief beside the plan'),
+    fix: fixed('Nothing to change in the plan: grid_measure what=access measures the doors, corridors, turning space and steps of what is marked, as numbers, against the person\'s own figures.')
   },
   'plan/not-checked-no-rooms': {
     says: () => wordingText(figureWordings.noRooms()),

@@ -17,6 +17,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
+- [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
@@ -28,6 +29,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Survey coordinates at a stored origin](#survey-coordinates-at-a-stored-origin): `plan/far-from-origin`
 - [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
 - [Saved views, and the camera record](#saved-views-and-the-camera-record): a camera saved by name, as Grid sets it and as BCF writes it
+- [What needs to be accessible](#what-needs-to-be-accessible): `plan/not-checked-access`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -41,12 +43,15 @@ file never reaches the exports with its letters turned into question marks. A fi
 | Text | At most | Also refused |
 |---|---|---|
 | a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor, stair or rooflight, a wall a room or an opening names, a part's floor, the floors a stair joins, the room a zone is part of | 64 characters | the same |
+| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
-| walls, rooms, openings, floors, items, stairs, annotations, sketch items, saved views or taped lengths | 50,000 of each | |
+| a thing on the site: its id; its label | 64 characters; 120 | the same |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site or taped lengths | 50,000 of each | |
+| the floors one opening pattern repeats on | 200 | |
+| the points of the site's boundary, or of one of its things | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
 | the lowered zones of one ceiling, the rooflights of one roof | 50,000 | |
 | the walls a room lists | 2,000 | |
@@ -504,6 +509,54 @@ there, or the outside. A plan with no `holes` reads and measures as before.
 A hole whose wall list cannot close, or is out of order, gets the same codes as an outline
 (`room/unclosed`, `room/out-of-order`, `room/inside-out`), and the line names the hole.
 
+## Opening patterns
+
+A facade's rhythm may be stated once, in the plan's `patterns` (LVL-8): one opening, the wall it
+goes in, how many or how far apart, the margins kept clear at the wall's ends, and the floors
+above to repeat it on.
+
+```json
+"patterns": [
+  { "id": "north-row", "wall": "gn", "opening": { "type": "window", "width": 1.2, "height": 1.4, "sill": 0.9 },
+    "count": 4, "margins": { "start": 1, "end": 1 }, "floors": ["first", "second"] }
+]
+```
+
+| Field | What it states |
+|---|---|
+| `id` | The pattern's id, unique in the plan like every id |
+| `wall` | The wall the openings go in, by id |
+| `opening` | The opening repeated: `type`, `width`, `height`, `sill` (0 when unstated) and, for a door, `hinge` and `swing`, as an opening states them |
+| `count` | How many: spread evenly, the first one's near edge at the start margin and the last one's far edge at the end margin; one alone sits in the middle |
+| `spacing` | How far apart, centre to centre, in metres: the first at the start margin, as many as fit before the end margin. With `count` too, that many, from the start margin |
+| `margins` | `start` and `end`: metres kept clear from the wall's start and from its end, along its axis, as an opening's offset is measured. Each 0 when unstated |
+| `floors` | Optional: the floors above to repeat it on. On each, the openings stand where they stand on the pattern's wall, on the wall of that floor in the same line, whichever way it is drawn |
+
+A pattern states one of `count` and `spacing`, or both; with neither it is left out, as any part
+Grid cannot read is (`plan/part-left-out`).
+
+A pattern is never an opening. Grid expands it into plain openings, with ids
+`<pattern>-<floor>-<n>` (`north-row-first-2`), before it draws, measures, checks or exports the
+plan, so every view, the checks (a window a pattern places counts for escape like one placed by
+hand), the schedules and every export read plain openings only: a plan with a pattern exports
+exactly the DXF, IFC, OBJ and GLB of the same plan with those openings written out by hand. Each
+offset is kept to the micrometre, as a person writes it. The file keeps the pattern, never its
+openings: `grid write`, `grid tidy` and the tools that change the plan leave `patterns` as the
+file has them, and rooms text (`grid describe --as rooms`) holds the openings the file states and
+says the patterns are kept apart. A pattern on a wall that moves follows it; one whose wall is cut
+or renamed by an edit names a wall that is gone, and says so.
+
+What a pattern cannot place is said, never dropped in silence. Each is left out, the rest placed:
+
+| Code | What it says |
+|---|---|
+| `pattern/unknown-wall` | It names a wall the plan does not have (with the nearest id), or one two walls share. None of its openings is placed |
+| `pattern/does-not-fit` | Its openings do not fit between the margins: how much room they need and how much there is; or its spacing is less than its openings' width. None is placed |
+| `pattern/unknown-floor` | It is to be repeated on a floor the plan does not have. Nothing is placed there |
+| `pattern/no-wall-above` | On a floor it repeats on, no wall in the line of its own holds an opening's whole width: which openings are not placed there |
+| `pattern/overlaps-opening` | One of its openings would lie over another opening on its wall, one placed by hand or by another pattern. That one is not placed |
+| `pattern/id-clash` | An id it would give is another part's. That opening is not placed |
+
 ## Fixtures
 
 A plan may list its fixed fixtures in `items`: a toilet, a basin, a shower, a bath or a kitchen
@@ -577,7 +630,8 @@ of it changes an area, a check or a wall count.
   `GRID-SKETCH-` and the category in capitals. Grid never takes a sketch as a wall, a room or
   anything it understands, and the record says so once per floor, as a line not checked
   (`floor/sketch-drawn-only`). Where a sketch is something Grid holds, such as a fixture, write
-  it as that instead; furniture and site parts will be offered the same way once Grid holds them.
+  it as that instead: a fence, a path, a tree or a pool is one of [the site's things](#the-plot-its-boundary-set-backs-and-what-is-on-it);
+  furniture will be offered the same way once Grid holds it.
 
 A field the format does not have, on a note or a sketch item, is named like any other
 (`plan/unknown-field`). The 3D views do not show the sketch yet.
@@ -625,7 +679,7 @@ or a wall meets one, and no check reads one. What Grid does with them:
   where a room that states none has Grid's count
   ([what the IFC holds](commands.md#what-the-ifc-holds-hnd-2)). The DXF writes each fact as one
   line of text on the layer `GRID-FACTS`, `[id] name: value`, beside its part (a floor's over the
-  drawing's upper left corner). A plan with no facts exports exactly as before.
+  drawing's upper left corner, above its dimensions). A plan with no facts writes none.
 - **The tool server asks across them**: `grid_fields`, `grid_find` and `grid_count`
   ([tool-server.md](tool-server.md#asking-across-the-parts-fields-find-and-count)).
 
@@ -769,7 +823,7 @@ before, with no north and y up the page.
 | `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
 | `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
 | `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
-| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. A plan kept at survey coordinates states a point near the building as `origin`, and is measured and exported from it ([survey coordinates at a stored origin](#survey-coordinates-at-a-stored-origin)). `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold is named and read without. A plan kept at survey coordinates states a point near the building as `origin`, and is measured and exported from it ([survey coordinates at a stored origin](#survey-coordinates-at-a-stored-origin)). `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for, and `boundary`, `streets`, `setbacks` and `things` are [the plot](#the-plot-its-boundary-set-backs-and-what-is-on-it) |
 
 North is drawn and written where the plan states it:
 
@@ -818,8 +872,17 @@ way round.
 
 `grid_mirror` makes a new design, the old one mirrored. The stated north is mirrored with it,
 to minus itself, so the swap it promises is the real one: left to right, what faced east faces
-west, whichever way the drawing is turned. The site's origin is mirrored with the walls, the
+west, whichever way the drawing is turned. The site's origin, its boundary and its things are
+mirrored with the walls (each edge keeps its number), the
 front stays the part it names, and `yAxis` is kept.
+
+`grid_mirror` with `turn` turns the plan a quarter or half round about the middle of its walls
+(WRT-4): 90 degrees is a quarter counter-clockwise on the drawing as Grid draws it, with y up,
+the way `north` is measured; 270 or -90 a quarter clockwise. Every room keeps its size and its
+walls, every door its swing, and the fixtures and the site's origin turn with the walls. The
+stated north is kept: the building turns on its site, so what faced south faces east after a
+quarter counter-clockwise. `yAxis` is kept too, so on a page whose y runs down the same turn
+looks clockwise, and the answer says so.
 
 | Code | What it says |
 |---|---|
@@ -852,6 +915,85 @@ numbers, and at 4,580 km from (0, 0) an area can come out a few tenths of a squa
 (HND-2's 4.8003 m² for 4.8). A plan drawn near (0, 0) avoids that, and says where it is on the
 earth with `site.origin`, `latitude` and `longitude` (above). LVL-4's `site.ground` and COD-3's
 `site.country` need no origin.
+
+## The plot: its boundary, set-backs and what is on it
+
+The site may hold the plot as well as where the building is (BRF-3): its boundary, which edges
+are on a street, the set-backs the person asked for, and what stands on the ground outside. All
+four are optional and never defaulted, so a plan that states none reads as before.
+
+```json
+"site": {
+  "boundary": [[0, 0], [15, 0], [15, 30], [0, 30]],
+  "streets": [1],
+  "setbacks": [{ "from": "all", "distance": 3, "source": "given" }, { "from": "street", "distance": 5 }],
+  "things": [
+    { "id": "fence", "kind": "fence", "points": [[0, 0], [15, 0], [15, 30], [0, 30], [0, 0]], "height": 1.8 },
+    { "id": "oak", "kind": "tree", "at": [3, 4], "canopy": 5 },
+    { "id": "pool", "kind": "pool", "points": [[1, 21], [5, 21], [5, 29], [1, 29]] }
+  ]
+}
+```
+
+| Field | What it states |
+|---|---|
+| `boundary` | The plot's corners, in plan metres, in order round it, either way round. Edge 1 runs from the first point to the second, and the last edge back to the first point; a last point written on the first again closes it and adds no edge. Three corners at least |
+| `streets` | The edges on a street, by number |
+| `setbacks` | The set-backs the person asked for: each `from` every edge (`all`), the street edges (`street`) or one edge by its number, with its `distance` in metres and, if known, its `source`: `given` by the person, or `assumed` for them to confirm. An edge takes the one asked for it, else the street's when it is on the street, else the one for every edge. One set-back for each `from` |
+| `things` | What is on the site, each with an `id` and a `kind`, and a `label` if wanted (below) |
+
+The set-backs are the person's own figures, never a code's: Grid compares the drawing with them,
+applies no figure of its own, and never says a distance is enough. A street or a set-back that
+names an edge the boundary does not have, a second set-back from the same edge, or one from the
+street with no street edge, is left out alone, and `grid check` says so (`plan/value-left-out`).
+
+Each of the site's things has a kind of its own: never a wall, a room or a fixture, so it adds no
+wall, no area, no note and no storey height, and the roof stays where the walls put it.
+
+| Kind | Fields |
+|---|---|
+| `fence` | `points`, two or more, along it; `height` if known |
+| `gate` | `points`, its two posts |
+| `path` | `points`, two or more, along its middle, and its `width` |
+| `paving` | `points`, three or more, round it |
+| `pool` | `points`, three or more, round its edge |
+| `tree` | `at`, its trunk; `canopy`, across its crown, and `height` if known |
+
+The site is the ground: it is drawn on the ground floor's plan, in every look, in its own style:
+the boundary in a long dash and a dot, its street edges heavier, paving and paths a pale fill, a
+pool its water, a tree its crown, a fence a fine line and a gate its posts, all under the building.
+The view frames the whole plot. The 3D views and the exports do not show it yet; `grid check`
+says once that the site's things are drawn only (`plan/site-things-drawn-only`).
+
+Grid measures the building against the plot from its outside face: the outer faces of the walls
+of every floor at or above the ground floor, joined into one shape seen from above. A basement is
+under the ground and is left out; an upper floor that reaches out past the one below counts where
+it reaches; nothing outside the walls, such as eaves or steps, is drawn to measure.
+
+- **Each edge.** The least distance from the building to the edge, as a tape between the two
+  nearest points measures it. A building nearer an edge than the set-back asked for, by more than
+  `setbackShort` (0.005 m), is a finding: "The building is 1.00 m from the east boundary; you
+  asked for 3.00 m" (`plan/setback-short`). One reaching past an edge, by more than
+  `pastBoundary`, is "The building reaches 0.50 m over the east boundary, out of the plot"
+  (`plan/over-boundary`). An edge is named by the way it faces out of the plot, by the plan's
+  north (the top of the drawing when it states none, and the answer says so), with its number when
+  two edges face one way.
+- **Each face.** The distance from each face of the building to the edge of the boundary in
+  front of it, square to the face.
+- **The plot coverage.** The part of the building's shape inside the boundary against the
+  boundary's area: 90 m² on 450 m² is 20%.
+
+`grid_measure` with `what=site` answers with all three
+([tool-server.md](tool-server.md#the-plot-distances-to-the-boundary-and-the-coverage)), and
+`grid describe` with the plot's area, its coverage and the edge the building comes nearest.
+
+| Code | What it says |
+|---|---|
+| `plan/setback-short` | The building is nearer an edge than the set-back the person asked for, with both figures |
+| `plan/over-boundary` | The building reaches past an edge of the boundary, out of the plot |
+| `plan/boundary-crosses` | The boundary crosses itself or encloses no ground: nothing is measured from it |
+| `plan/not-checked-boundary` | The building has no outline to measure from, so no distance was measured |
+| `plan/site-things-drawn-only` | The site's things are drawn only, never measured or checked |
 
 ## The place
 
@@ -997,6 +1139,32 @@ is](#a-fault-stays-where-it-is)), and the rest of the plan is read.
 `grid_mirror` mirrors each saved view with the plan; the other changes leave them where they are,
 so a view of a room that moves keeps pointing where the room was. The sheet does not draw them
 (`coverage.ts`): it takes its own pictures.
+
+## What needs to be accessible
+
+A plan may say which rooms and routes need to be accessible, in `accessible` (CNT-17, C14):
+
+```json
+"accessible": { "rooms": ["bath", "bed1"], "routes": [{ "to": "kitchen" }, { "from": "bed1", "to": "bath" }] }
+```
+
+| Field | What it states |
+|---|---|
+| `rooms` | Rooms that need to be accessible, by id: each is measured, and the way in to it from the entrance |
+| `routes` | Ways that need to be accessible: `to` a room, and `from` a room or, left out, from the entrance (the front door the plan names, else its doors to the outside on the ground floor) |
+
+It is a mark of what is needed, never a finding. `grid_measure what=access` measures what it
+marks, as numbers ([the tool server](tool-server.md#accessibility-measurements-as-numbers)):
+each door's hole and clear width, each corridor's narrowest point, each room's turning space and
+the steps on the way in with their heights, set only against the person's own figures from the
+brief. With no mark it measures every room, and says so. An id the mark names that is no room
+is said in that answer and not measured; the plan is never refused for it. A mark that cannot be
+read is left out with a line (`plan/value-left-out`) and the rest of the plan is kept.
+
+`grid check` gives a plan that marks anything one line, `plan/not-checked-access`: what is
+marked was not checked, as Grid holds no figure for it that a named person has confirmed. No
+line says a room, a route or the plan is accessible. The sheet draws no mark. Grid's edits do
+not carry the mark yet: a room merged or split away is named in the answer as no room.
 
 ## People are kept out of the plan
 

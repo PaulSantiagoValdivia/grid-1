@@ -14,6 +14,7 @@ import { indexPlan } from '../plan'
 import { planWallSides, stretchAt, wallExposure, wallSides } from '../exposure'
 import { buildFloorPlan } from '../floorplan'
 import { toDxf } from '../export/dxf'
+import { modelEntities } from '../export/__tests__/dxf-reader'
 import { toIfc } from '../export/ifc'
 import { validatePlan } from '../validate'
 import { checkPlanSanity } from '../rules'
@@ -38,8 +39,8 @@ const exposures = (plan: FloorPlan): Record<string, string> => {
 }
 /** How many wall outlines the DXF puts on each wall layer. */
 const dxfLayers = (plan: FloorPlan): { exterior: number; interior: number } => {
-  const entities = toDxf(buildFloorPlan(plan)).split('ENTITIES')[1] ?? ''
-  const count = (layer: string): number => entities.split(`POLYLINE\r\n8\r\n${layer}\r\n`).length - 1
+  const outlines = modelEntities(toDxf(buildFloorPlan(plan)), 'LWPOLYLINE')
+  const count = (layer: string): number => outlines.filter((e) => e.layer === layer).length
   return { exterior: count('GRID-WALLS-EXTERIOR'), interior: count('GRID-WALLS-INTERIOR') }
 }
 /** How many walls the IFC marks external, and how many not. */

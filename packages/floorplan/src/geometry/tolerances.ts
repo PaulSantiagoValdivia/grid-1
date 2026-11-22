@@ -374,6 +374,27 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── The plot (BRF-3) ──────────────────────────────────────────────────────────────────────
+  setbackShort: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'The building stands short of a set-back the person asked for when its outside face is more ' +
+      'than this nearer the boundary than the figure they gave: a distance that rounds to the ' +
+      'figure at the centimetre is not named.',
+    basis: own
+  },
+  pastBoundary: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'The building stands over an edge of the plot\'s boundary when its outside face reaches more ' +
+      'than this past the edge, out of the plot. Less is the edge drawn on the face.',
+    basis: own
+  },
+
   // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
   wallAboveStorey: {
     kind: 'tolerance',
@@ -618,6 +639,24 @@ export const TOLERANCES = {
       'above. It only draws the plan; it judges nothing.',
     basis: own
   },
+  sectionGroundRun: {
+    kind: 'limit',
+    value: 1,
+    unit: 'm',
+    decides:
+      'How far the ground line of a section runs past the building on each side (LVL-9). It only ' +
+      'draws the section; it judges nothing.',
+    basis: own
+  },
+  elevationMarkOffset: {
+    kind: 'limit',
+    value: 1.2,
+    unit: 'm',
+    decides:
+      'How far outside the drawing and its dimensions an elevation mark stands on a plan (LVL-9). ' +
+      'It only draws the mark; it judges nothing.',
+    basis: own
+  },
   aboveSameEdge: {
     kind: 'tolerance',
     value: 0.02,
@@ -626,6 +665,36 @@ export const TOLERANCES = {
       'A stretch of the outline of the floor above that lies within this of the outline of the ' +
       'floor drawn, along it, is the same wall face seen twice, and is not drawn dashed as what ' +
       'lies above.',
+    basis: own
+  },
+
+  // ── Facades and opening patterns (LVL-8) ──────────────────────────────────────────────────
+  facadeFacing: {
+    kind: 'tolerance',
+    value: 0.0175,
+    unit: 'sine',
+    decides:
+      'A face of the building is drawn on a facade when it turns at least this much toward the ' +
+      'side the facade is seen from (about one degree): a face edge-on to it, or turned away, is ' +
+      'not seen.',
+    basis: own
+  },
+  facadeOnFace: {
+    kind: 'tolerance',
+    value: 0.01,
+    unit: 'm',
+    decides:
+      'A wall whose outside face lies within this of a stretch of the floor\'s outline is the wall ' +
+      'that stretch of the facade shows, with its height and its openings.',
+    basis: own
+  },
+  facadeSameDepth: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'Faces of a facade that stand within this of each other, front to back, are drawn as one ' +
+      'plane, with one line weight; a face set back further is drawn lighter.',
     basis: own
   },
 

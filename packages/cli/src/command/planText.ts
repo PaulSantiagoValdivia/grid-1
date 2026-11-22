@@ -20,6 +20,8 @@ export const PARTS_MAX = 50_000
 export const BOUNDARY_MAX = 2_000
 /** CNT-9: the most facts of the person's own one wall, opening, room or floor may carry. */
 export const PROPERTIES_MAX = 100
+/** LVL-8: the most floors one opening pattern may be repeated on. */
+export const PATTERN_FLOORS_MAX = 200
 /** The largest plan file Grid reads, in bytes. */
 export const PLAN_FILE_MAX_BYTES = 64 * 1024 * 1024
 
@@ -67,6 +69,8 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   // SHT-7: writing on the drawing and the sketch layer.
   annotations: { id: 'id', text: 'name', room: 'id', floor: 'id' },
   sketch: { id: 'id', category: 'id', text: 'name', floor: 'id' },
+  // LVL-8: an opening pattern names its wall, and the floors it repeats on (below).
+  patterns: { id: 'id', wall: 'id' },
   // VEW-3: a saved view's name, and the floor it shows cut away.
   views: { name: 'name', cut: 'id' },
 }
@@ -121,6 +125,16 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
           const value = facts[name]
           const problem = typeof value === 'string' ? textProblem(value, 'name') : null
           if (problem) return `${list}[${i}].properties, fact ${n + 1}, has a value that ${problem}`
+        }
+      }
+      // LVL-8: the floors an opening pattern is repeated on, each an id.
+      const repeats = part['floors']
+      if (list === 'patterns' && Array.isArray(repeats)) {
+        if (repeats.length > PATTERN_FLOORS_MAX) return `patterns[${i}].floors lists ${repeats.length.toLocaleString('en-US')} floors; a pattern may be repeated on at most ${PATTERN_FLOORS_MAX}`
+        for (let k = 0; k < repeats.length; k++) {
+          const id: unknown = repeats[k]
+          const problem = typeof id === 'string' ? textProblem(id, 'id') : null
+          if (problem) return `patterns[${i}].floors[${k}] ${problem}`
         }
       }
       if (list === 'rooms') {
@@ -189,6 +203,30 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
   if (isObject(site) && typeof site['country'] === 'string') {
     const problem = textProblem(site['country'], 'name')
     if (problem) return `site.country ${problem}`
+  }
+  // BRF-3: the plot's boundary and the site's things, each with an id and a label.
+  if (isObject(site)) {
+    const boundary = site['boundary']
+    if (Array.isArray(boundary) && boundary.length > BOUNDARY_MAX) {
+      return `site.boundary has ${boundary.length.toLocaleString('en-US')} points; a boundary may have at most ${BOUNDARY_MAX.toLocaleString('en-US')}`
+    }
+    const things = site['things']
+    if (Array.isArray(things)) {
+      if (things.length > PARTS_MAX) return `site.things has ${things.length.toLocaleString('en-US')} entries; a plan may have at most ${PARTS_MAX.toLocaleString('en-US')} things on its site`
+      for (let i = 0; i < things.length; i++) {
+        const thing: unknown = things[i]
+        if (!isObject(thing)) continue
+        for (const [field, kind] of [['id', 'id'], ['label', 'name']] as const) {
+          const value = thing[field]
+          const problem = typeof value === 'string' ? textProblem(value, kind) : null
+          if (problem) return `site.things[${i}].${field} ${problem}`
+        }
+        const points = thing['points']
+        if (Array.isArray(points) && points.length > BOUNDARY_MAX) {
+          return `site.things[${i}].points has ${points.length.toLocaleString('en-US')} points; one of the site's things may have at most ${BOUNDARY_MAX.toLocaleString('en-US')}`
+        }
+      }
+    }
   }
   const image = raw['referenceImage']
 

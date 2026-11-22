@@ -40,14 +40,16 @@ import { pointInPolygon } from './innerPoint'
 import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
+import { expandPatterns } from './patterns'
 import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
 import { roomZones } from './zones'
+import { plotBoundary } from './plot'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
- * (CNT-12); `stair` (LVL-3), a stated stair.
+ * (CNT-12); `stair` (LVL-3), a stated stair; `pattern` (LVL-8), an opening pattern.
  */
-export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair'
+export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair' | 'pattern'
 
 /**
  * `error` is something that cannot be drawn, or sits on a floor the plan does not know, and gets
@@ -156,6 +158,25 @@ function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
       )
     )
   }
+}
+
+/**
+ * BRF-3: a plot boundary that crosses itself, or encloses no ground, measures nothing: no distance
+ * to it and no plot coverage. Drawn as it is written, and worth a look.
+ */
+function validateBoundary(plan: FloorPlan, issues: Issue[]): void {
+  if (isFloorSlice(plan)) return
+  const boundary = plotBoundary(plan)
+  if (boundary === null || boundary.problem === null) return
+  issues.push(
+    issue(
+      'plan',
+      'plan',
+      'plan/boundary-crosses',
+      `The site's boundary is not one closed shape: ${boundary.problem}. No distance to it and no plot coverage is measured.`,
+      'warning'
+    )
+  )
 }
 
 /**
@@ -1122,6 +1143,13 @@ export function validatePlan(
     const { tolerances, ...rest } = options
     return withTolerances(tolerances, () => validatePlan(plan, index, rest))
   }
+  // LVL-8: a plan's opening patterns are checked as the plain openings they expand into, after
+  // what stopped any of them being placed.
+  if (plan.patterns !== undefined) {
+    const expanded = expandPatterns(plan)
+    const result = validatePlan(expanded.plan, undefined, options)
+    return { issues: [...expanded.issues, ...result.issues], broken: result.broken }
+  }
   const issues: Issue[] = []
   const broken = new Set<string>()
   // MSG-6: a wall the reader left out is not in the plan; what rests on it is left out with it.
@@ -1134,6 +1162,7 @@ export function validatePlan(
   const noWalls = plan.walls.length === 0 && leftOut.size === 0 && plan.rooms.length + plan.openings.length > 0
 
   validateOrigin(plan, issues)
+  validateBoundary(plan, issues)
   if (noWalls) {
     issues.push(
       issue(

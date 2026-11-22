@@ -25,7 +25,7 @@ import { likelyMeant } from './nearest'
 /** A part of the plan a note is about, by where it is in the file. */
 export interface PartAt {
   /** The list it is in. */
-  readonly list: 'walls' | 'rooms' | 'openings' | 'floors' | 'items' | 'stairs'
+  readonly list: 'walls' | 'rooms' | 'openings' | 'floors' | 'items' | 'stairs' | 'patterns'
   readonly index: number
 }
 
@@ -128,7 +128,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-const LISTS = new Set(['walls', 'rooms', 'openings', 'floors', 'items', 'stairs'])
+const LISTS = new Set(['walls', 'rooms', 'openings', 'floors', 'items', 'stairs', 'patterns'])
 
 function where(path: readonly (string | number)[]): string {
   return path.reduce<string>((text, key) => (typeof key === 'number' ? `${text}[${key}]` : text ? `${text}.${key}` : key), '')

@@ -11,6 +11,7 @@ import { readRoomsText } from '@ongrid/floorplan/rooms'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { facingDescription } from '../quantities/facing'
+import { siteDescription } from '../quantities/site'
 import { fixtureCountText, planFixtures } from '../quantities/fixtures'
 import type { LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
@@ -62,7 +63,12 @@ export function checkDescribeRequest(request: DescribeRequest): { length: Descri
  * is the label as a comment (MSG-3), which writing it back ignores.
  */
 export function describeRooms(loaded: LoadedPlan): string {
-  return `# ${GENERAL_GUIDANCE_LABEL}\n${readRoomsText(loaded.plan).text}`
+  // LVL-8: the openings the file states, not the ones its patterns place: `grid write` keeps the
+  // patterns as the file has them, so their openings written here would be placed twice.
+  const plan = loaded.stated ?? loaded.plan
+  const patterns = plan.patterns?.length ?? 0
+  const kept = patterns === 0 ? '' : `# The plan's ${patterns === 1 ? 'opening pattern is' : `${patterns} opening patterns are`} not rooms text: grid write keeps ${patterns === 1 ? 'it' : 'them'} as the file has ${patterns === 1 ? 'it' : 'them'}, and ${patterns === 1 ? 'its' : 'their'} openings are not written here.\n`
+  return `# ${GENERAL_GUIDANCE_LABEL}\n${kept}${readRoomsText(plan).text}`
 }
 
 export function describePlan(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience): string {
@@ -74,7 +80,8 @@ function describeBody(loaded: LoadedPlan, length: DescribeLength, audience: Desc
   const described = describeText(planFacts(loaded.plan), length, audience)
   // CNT-3: north, the ways the rooms face and the front, on the longer descriptions of a plan
   // that states any of them.
-  const facing = length === 'line' ? [] : facingDescription(loaded.plan, audience)
+  // BRF-3: and the plot, its coverage and the edge the building comes nearest.
+  const facing = length === 'line' ? [] : [...facingDescription(loaded.plan, audience), ...siteDescription(loaded.plan, audience)]
   // They go before the closing line, which says the description checks nothing.
   const close = described.lastIndexOf('\n', described.length - 2) + 1
   const gap = audience === 'person' ? '\n' : ''

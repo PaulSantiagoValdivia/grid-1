@@ -65,7 +65,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
-| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3) or an opening pattern (`pattern`, LVL-8). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
 | `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
@@ -178,6 +178,9 @@ label.
 | `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
 | `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
+| `plan/site-things-drawn-only` | The site's things are drawn only: {1 fence, 3 trees and 1 pool}, not measured or checked, and never taken as a wall, a room or a storey's height | nothing: the site's things are for the drawing |
+| `plan/not-checked-boundary` | No distance to the plot's boundary was measured: {why the building has no outline} | walls that close the building's outline, on a floor at or above the ground floor |
+| `plan/boundary-crosses` | The site's boundary is not one closed shape, so no distance to it and no plot coverage is measured | the plot's corners in order round it, each edge meeting only the next |
 | `plan/note-no-place` | Note "{id}" names a room the plan does not have, so it is not drawn | a room id from the plan, or a point (at) |
 | `plan/front-not-said` | The front names wall "{id}", which the plan does not have, so no front is said | a wall that faces outside, or an opening in one, such as the front door |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round | a plan whose y runs up the page, as Grid draws it |
@@ -260,6 +263,12 @@ label.
 | `stair/too-few-risers` | {thing} states fewer risers than its flights need | at least two risers on each flight |
 | `stair/end-in-no-room` | {thing} starts or ends in no room, so it joins nothing there | each end of its walking line in a room |
 | `stair/duplicate-id` | {thing} shares its id with another stair | an id of its own for each stair |
+| `pattern/unknown-wall` | {thing} names a wall Grid cannot find | the id of one wall of the plan |
+| `pattern/does-not-fit` | {thing} does not fit its wall | room on the wall, between its margins, for every opening of the pattern |
+| `pattern/unknown-floor` | {thing} is to be repeated on a floor the plan does not have | a floor of the plan in the pattern's floors |
+| `pattern/no-wall-above` | {thing} finds no wall above to repeat on | on each floor it is repeated on, a wall in the same line as its own, holding the opening's whole width |
+| `pattern/overlaps-opening` | {thing} would place an opening over another | each opening of the pattern clear of the other openings on its wall |
+| `pattern/id-clash` | {thing} would give an opening an id another part has | an id of its own for each opening a pattern places: the pattern's id, the floor and the number |
 | `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
 | `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
@@ -284,6 +293,8 @@ label.
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
 | `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
 | `opening/below-ground` | The {window} in "{name}" lies wholly below the ground: its top is {depth} m under the ground level the site states (partly: its sill, threshold or foot) | a door or window above the ground outside, or a light well or an outside stair in front of it |
+| `plan/setback-short` | The building is {distance} m from the {east} boundary; you asked for {set-back} m ({set-back} m is assumed for you, to confirm, for one the site marks assumed) | {set-back} m from it, the set-back the person asked for from that edge, the street edges or every edge: their own figure, not a code's |
+| `plan/over-boundary` | The building reaches {distance} m over the {east} boundary, out of the plot | the building inside the plot's boundary |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
 | `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
@@ -304,6 +315,7 @@ label.
 | `floor/not-checked-sizes-for-building` | On "{floor}", room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
+| `plan/not-checked-access` | What the plan marks as needing to be accessible ({count} rooms and {count} routes) was not checked: Grid holds no figure for it that a named person has confirmed | figures for the widths of doors and corridors, turning space and steps that a named person has confirmed against their source, or the person's own figures in the brief beside the plan |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 | `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
 | `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
@@ -336,7 +348,7 @@ checks first, then the figure checks, whether it ran or not:
 | Field | What it holds |
 |---|---|
 | `ruleId`, `title` | The check, as in `checks`. |
-| `looksAt` | What it looks at: `floor`, `room` or `door` (doors and openings). |
+| `looksAt` | What it looks at: `floor`, `room`, `door` (doors and openings) or `edge`, the edges of the plot's boundary, by number as text (`"1"`, BRF-3), on `floor` `""`. |
 | `lookedAt` | The parts it looked at, by floor: `{ floor, ids }`, the ids sorted. |
 | `lookedAtCount` | How many parts that is. |
 | `skipped` | The parts it did not look at, by floor and reason: `{ floor, ids, reason, why }`. `floor` is `""` for the whole plan. |
@@ -363,6 +375,8 @@ found in them. A `reason` is one of:
 | `alone_off_ground` | the only room on a floor off the ground, reached by a stair the plan does not draw |
 | `above_escape_storeys` | above the third storey, where the figures here stop |
 | `no_ground_level` | the plan states no ground level for the site (LVL-4: the check of doors and windows below the ground) |
+| `no_building_outline` | the building has no outline to measure from (BRF-3: the distances to the plot's boundary) |
+| `boundary_not_closed` | the boundary is not one closed shape (BRF-3) |
 | `no_use` | no use stated |
 | `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
 | `part_of_room` | a zone (CNT-8), looked at as part of its room, with its use: the size and escape checks and the route checks look at the room as a whole |
@@ -583,7 +597,7 @@ its text, which says the same.
 
 | Tool | Receipt (`structuredContent`) |
 |---|---|
-| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
+| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`, `dxfProfile` (HND-1: for a DXF, the project's profile file its layers and pens came from, `dxf-layers.json`; null for Grid's own layers and for the other formats). An export that would hold no wall, room or fixture is refused, and so is a DXF whose project profile is wrong. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
@@ -629,6 +643,135 @@ A change that would add a problem that leaves a part out is refused, and nothing
   puts its building on the site's point, and the GLB holds the model in one node, `origin`,
   moved by that offset, with `asset.extras.gridOrigin`. A plan near (0, 0) exports as before.
   `resultVersion` stays 1.
+
+### 2026-11-22: accessibility measurements, as numbers (CNT-17)
+
+- The plan format takes `accessible` (C14): `rooms` by id and `routes` (`to` a room, `from` a
+  room or, left out, the entrance). It is optional and never defaulted; `plan/unknown-field`'s
+  list of the plan's fields now names it after `views`.
+- `grid_measure` takes `what=access`, with no argument but `plan`, `units` and `decimal`. Its
+  `answer` holds `marked`, `rooms`, `routes`, `unknown` (ids the mark names that are no room),
+  `entrance` (`floor`, `doors`, `front`), `doors`, `corridors`, `turning`, `ways`, `figures`
+  (`yours`, each with `label: "your figure"`, and `code`, the confirmed code figures used, empty
+  today), `notLookedAt` and `brief` (the brief file read, or null). Each measure carries
+  `against`: `{ figure, short }`, where `figure.from` is `yours` (with `label: "your figure"`) or
+  `code` (only a figure a named person confirmed, `confirmedFigure`). Every step on a way has
+  `kind` (`sill`, `level`, `ground`, `stair`), `at`, `height` (null where Grid cannot tell),
+  `count`, `up`. The text starts with the label, then "Accessibility measurements:", and ends
+  with "Not looked at:" and the rule.
+- A new not-checked line, `plan/not-checked-access`, on a plan that marks any room or route:
+  what is marked was not checked, as Grid holds no figure for it that a named person has
+  confirmed. Its `also` lists the rooms the mark names. A plan that marks nothing gets no new
+  line. `resultVersion` stays 1.
+- `@ongrid/rules` exports `confirmedFigure`, `isConfirmed` and `CONFIRMED_STATUSES`: a figure is
+  confirmed only with status `checked-once` or `checked-twice` and every check by a named person.
+
+### 2026-11-22: sections, and the marks on a plan (LVL-9)
+
+- `grid_view` takes `kind` `section`: a cut along `cut` (`{ "from": [x, y], "to": [x, y] }`, in
+  metres) through every floor, looking to the `toward` side of it (`left`, the default, or
+  `right`, walking from `from` to `to`), in `look`. The answer's `data` gains `section`: the
+  line, `levels` (each floor's `level` and `source`, `stated`, `datum` or `worked-out`), `roofs`,
+  `ground` (`level`, `stated`), `rooms` (`floorLevel`, `height`, `heightStated`), `cut` (each part
+  cut: `kind`, `id`, `floor`), `shapes` (how many connected shapes they join into) and `assumed`
+  (`kind`, `ids`, `words`, `hatched`). The text says the same, and lists every line of `assumed`.
+- `grid_view` with `kind` `plan` takes `marks` (`levels`, `elevations`, `section`); `section`
+  needs `cut`, and `cut` and `toward` are refused on a plan without it. A plan with no `marks`
+  is drawn as before.
+- `grid draw` takes `--section`, `--toward` and `--marks` the same way.
+- `kind=section` refuses VEW-3's camera arguments (`bearing`, `tilt`, `distance`, `eye_height`,
+  `lens`, `room`, `camera`, `view`, `turn`, `tilt_by`) by name, and `kind=3d` refuses `cut`,
+  `toward` and `marks`; `grid draw` refuses `--section` and `--marks` with `--view`. A section's
+  `data` has `view` null.
+- After LVL-8: `kind=facade` refuses `cut`, `toward` and `marks`, and `kind=section` refuses
+  `side`; `grid draw` refuses `--section` and `--marks` with `--facade`.
+- No new code in the result record: a section and its marks are pictures. `resultVersion`
+  stays 1.
+
+### 2026-11-22: repeat, mirror and turn, and a mirrored plan recognised (WRT-4)
+
+- `grid_diff` data gains `turn`: null, or `id` (`mirror-left-right`, `mirror-top-bottom`,
+  `turn-90`, `turn-180`, `turn-270`, `mirror-diagonal`, `mirror-other-diagonal`), `mirrored`,
+  `degrees` (counter-clockwise, after any mirror) and `text`, the line the text answer gives
+  right after "Compared with". The verdict then starts with that line. A mirrored or turned plan
+  has `sameBuilding` false, and gets no picture when nothing else changed. The core's
+  `compareBuildings` gives the same `turn` and `turnLine`.
+- `grid_mirror` takes `turn` (90, 180, 270 or -90) in place of `how`, which is no longer
+  required: one of the two, never both. Its title is "Mirror or turn the plan". The answer's
+  fields are as for every change.
+- `grid_write_rooms`: rooms text's `repeat` may say where its first placement goes and take
+  `first` and `last` settings; a `floor` line may end with `copy <floor> [with openings]`; a room
+  line may say `through <floor>`. A room that rises through a floor not written after its own is
+  refused with `rooms/unknown-floor`. No new message code and no new tool.
+- With LVL-8's opening patterns: `grid_mirror` swings a pattern's door the other way with every
+  plain door's, and its text, mirror or turn, adds `Its opening pattern stays a pattern, and the
+  openings it places follow its wall.` when the plan has patterns. `grid_write_rooms` adds one
+  line when the plan file has patterns, `Kept the plan's opening pattern as the file has it: …`,
+  ending with the first thing the walls just written keep a pattern from placing, if any; its
+  `drawingProblems.after` counts the plan with its kept patterns, as `before` does. A `pattern`
+  line in rooms text is refused (`rooms/syntax`), saying where a pattern goes.
+
+### 2026-11-22: the plot, its set-backs and the distances to it (BRF-3)
+
+- The plan's `site` may hold `boundary`, `streets`, `setbacks` and `things`
+  ([plan-file.md](plan-file.md#the-plot-its-boundary-set-backs-and-what-is-on-it)). A street,
+  a set-back or a thing the format cannot read is left out alone (`plan/value-left-out`), the
+  rest of the site kept.
+- A new plan check, `site-boundary`, looks at the edges of the boundary (`looksAt: "edge"`, ids
+  the edges' numbers as text, on `floor` `""`), with two new skip reasons, `no_building_outline`
+  and `boundary_not_closed`. Its findings are about the plan (`thing` `{ kind: "plan" }`), on the
+  floor whose outline comes nearest the edge, and carry `boundary` (`edge`, `faces`, `street`,
+  `name`, `distance`, `past`, `asked` with `distance`, `from` and `source`, and `northStated`):
+  `plan/setback-short`, the building nearer an edge than the set-back the person asked for, and
+  `plan/over-boundary`, the building past an edge. Every record lists one more check in
+  `coverage` and one more line in `limits`.
+- New codes: `plan/boundary-crosses` (worth a look: the boundary crosses itself or encloses no
+  ground), `plan/not-checked-boundary` (not checked: the building has no outline to measure
+  from), and `plan/site-things-drawn-only` (not checked: the site's things are drawn only).
+- `floor/sketch-drawn-only`'s fix now offers the site's things (`site.things`) for a fence, a
+  path, a tree or a pool drawn as a sketch.
+- `grid_measure` takes `what=site`, with no other argument: `answer` holds `measures`, `north`
+  and `yAxis` as `what=facing` gives them, `boundary` (each edge with its distance, set-back and
+  shortfall), `setbacksAre`, `footprint`, `why`, `coverage` (`ratio`, `percent`, `covered`,
+  `plot`), `faces` and `things`. `grid describe` adds the plot's area, its coverage and the edge
+  the building comes nearest. `grid_mirror` mirrors the boundary and the things with the walls.
+- The plan's drawing holds `site` and `siteBounds` (`PlanDrawing`), on the ground floor's plan.
+
+### 2026-11-22: a DXF a drafter can keep working in (HND-1)
+
+- `grid_export` adds `dxfProfile`: for a DXF, the profile file in the project folder its layers
+  and pens came from (`dxf-layers.json`), else null; the text adds `Layers and pens from
+  dxf-layers.json.` when one was used. A profile that is there and wrong is refused, naming each
+  part that is wrong (`layers.doors.colour must be a whole number from 1 to 255`); no file is
+  written. No new code in the record: it is a refusal of the tool, as an empty export is.
+- The DXF itself changed: AutoCAD 2013's version (`AC1027`) in UTF-8, in metres
+  (`$INSUNITS` 6), with doors, windows and openings as blocks, filled wall outlines, dimension
+  entities, a tag block per room and an A3 layout. The old layer names stay, with new ones beside
+  them (`GRID-WALLS-FILL`, `GRID-DOORS`, `GRID-WINDOWS`, `GRID-ROOM-TAGS`, `GRID-DIMENSIONS`,
+  `GRID-SHEET`, `GRID-VIEWPORT`); a room's name and area are attributes of its tag, no longer
+  texts on `GRID-LABELS`, which now holds the label only. A layer is listed only when something is
+  drawn on it. See [what the DXF holds](commands.md#what-the-dxf-holds-hnd-1).
+
+### 2026-11-22: facades, and opening patterns (LVL-8)
+
+- `grid_view` takes `kind: "facade"` with `side` (`north`, `east`, `south` or `west`, the sides
+  of the drawing, north its top) and `look`: one side of the building in elevation, every floor
+  at its level. Its data: `kind` `facade`, `floor` and `camera` null, `pxPerMetre`, `ids` (the
+  openings it shows) and a new optional `facade`: `side`, `compass` (`{ bearing, faces }` by the
+  plan's north, or null), `ground` (`{ level, stated }`), `levels` (`floor`, `name`, `level`,
+  `height`), `walls`, `openings` and `extent` (`u0`, `u1`, `bottom`, `top`, or null when nothing
+  faces that side). `side` with any other kind is refused, as the other kinds' arguments are.
+- A plan may state opening patterns, `patterns`. Every tool and check reads the plain openings
+  they expand into, with ids `<pattern>-<floor>-<n>`, as if written by hand: `grid_check`'s
+  escape and route checks count them, the schedules list them, the exports hold them. The tools
+  that change the plan keep the patterns as patterns.
+- A new kind of thing, `pattern`, and six codes for what kept a pattern's openings from being
+  placed, each `left-out`: `pattern/unknown-wall`, `pattern/does-not-fit`,
+  `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening` and
+  `pattern/id-clash`. A pattern the reader cannot read is `plan/part-left-out`, named
+  `Opening pattern "id"`. `resultVersion` stays 1: no field changed meaning.
+- `plan/unknown-field`'s `needed` on the plan lists `patterns` among the plan's fields.
+
 ### 2026-11-22: a camera an agent can set, saved as a named view (VEW-3)
 
 - `grid_view` `kind=3d` takes `bearing`, `tilt`, `distance`, `eye_height`, `lens`, `room`,

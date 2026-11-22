@@ -478,6 +478,8 @@ const PARTS: Record<CheckCoverage['looksAt'], [string, string]> = {
   floor: ['floor', 'floors'],
   room: ['room', 'rooms'],
   door: ['door or opening', 'doors and openings'],
+  // BRF-3: the edges of the plot's boundary, by number.
+  edge: ['edge of the boundary', 'edges of the boundary'],
 }
 
 /** "3 rooms", "1 floor". */
@@ -534,7 +536,9 @@ export function coverageText(result: CheckResult): string[] {
  * A part a check is not about (`use_not_covered`) is no gap and is left to the full report.
  */
 export function coverageSummary(result: CheckResult): string[] {
-  const coverage = result.result.coverage
+  // BRF-3: the check of the building against its plot, on a plan that states no plot, looked at
+  // nothing and could not have: the short report leaves it to the full one.
+  const coverage = result.result.coverage.filter((check) => !(check.looksAt === 'edge' && check.lookedAtCount === 0 && check.skipped.length === 0))
   if (coverage.length === 0) return []
   // COD-2: the kind of building, once when every check that used figures read them for the same.
   const withFigures = coverage.filter((check) => check.lookedAtCount > 0 && (check.readFor?.length ?? 0) > 0)

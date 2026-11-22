@@ -62,6 +62,8 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `nameSize` | tolerance | 0.02 ratio | A size written in a room's name and the size drawn differ when they are further apart than this share of the size named (BRF-1) |
 | `diffPlace` | tolerance | 0.05 m | Two walls whose ends are this close, or two openings whose middles are, stand in the same place when two versions are compared by what stands where (WRT-8) |
 | `tapedAgree` | tolerance | 0.01 m | A length taped on site and the same length drawn agree when they are no further apart than this, unless the taped length states its own tolerance; further apart, `room/taped-differs` names both figures (HND-11) |
+| `setbackShort` | tolerance | 0.005 m | The building stands short of a set-back the person asked for when its outside face is more than this nearer the boundary than their figure; less rounds to the figure (`plan/setback-short`, BRF-3) |
+| `pastBoundary` | tolerance | 0.005 m | The building stands over an edge of the plot's boundary when its outside face reaches more than this past it (`plan/over-boundary`, BRF-3) |
 | `wallAboveStorey` | tolerance | 0.001 m | How far a wall may rise past the height its floor states; past it, `wall/above-storey` names both heights |
 | `sameLevelOverlap` | tolerance | 0.5 ratio | Two floors at one level whose walls' boxes share more than this of the smaller one stand one over the other (`plan/same-level`) |
 | `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground (the level the site states, else the ground floor's) is named and is not a way out |
@@ -86,7 +88,12 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `stairRoomOverlap` | tolerance | 0.5 ratio | Rooms used as a stair (or a lift) on neighbouring floors that share at least this of the smaller one are one stair (or shaft); less, and they are named as out of line |
 | `stairStepLength` | limit | 0.63 m | A stair that states no number of risers gets the number that brings twice the riser plus the going nearest this |
 | `planCutHeight` | limit | 1.2 m | How high above a floor its plan is cut: a stair rising from the floor is drawn solid up to this height, with a break line there, and dashed above (SHT-11) |
+| `sectionGroundRun` | limit | 1 m | How far the ground line of a section runs past the building on each side (LVL-9) |
+| `elevationMarkOffset` | limit | 1.2 m | How far outside the drawing and its dimensions an elevation mark stands on a plan (LVL-9) |
 | `aboveSameEdge` | tolerance | 0.02 m | A stretch of the outline of the floor above this close to the outline of the floor drawn, along it, is the same wall face, and is not drawn dashed (SHT-11) |
+| `facadeFacing` | tolerance | 0.0175 sine | A face of the building is drawn on a facade when it turns at least this much (about one degree) toward the side the facade is seen from (LVL-8) |
+| `facadeOnFace` | tolerance | 0.01 m | A wall whose outside face lies within this of a stretch of the floor's outline is the wall that stretch of a facade shows, with its height and openings (LVL-8) |
+| `facadeSameDepth` | tolerance | 0.05 m | Faces of a facade within this of each other, front to back, are one plane, drawn with one line weight; a face set back further is drawn lighter (LVL-8) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
 | `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning: from `site.origin` where the plan states one, else from (0, 0) (HND-11) |
 | `cameraTilt` | limit | 89 degree | How far a camera may look down at, or up to, what it is pointed at, from level; straight down or up a picture has no up, so a camera turned further is refused (VEW-3) |
