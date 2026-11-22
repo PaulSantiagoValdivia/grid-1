@@ -24,13 +24,13 @@ import {
 } from '@ongrid/floorplan/geometry'
 import { DEFAULT_FLOOR_ID, FloorPlanSchema, ROOM_USES, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type TextMark, type TextRead } from '@ongrid/floorplan/types/jsonText'
-import { readPlanParts, type PartRef, type ReadFault } from '@ongrid/floorplan/types/readParts'
+import { readPlanParts, type LeftOutPart, type PartRef, type ReadFault } from '@ongrid/floorplan/types/readParts'
 import { readingNotes, type ReadingNote } from '@ongrid/floorplan/types/reading'
 import { FIGURE_LIMITS } from '../checks/catalogue'
 import { checkLocalRules, type CheckOptions } from '../checks/check'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from '../checks/types'
 import { CODES, isLineCode, type CodeEntry, type Subject } from './catalogue'
-import { LINE_KINDS, RESULT_VERSION, type GridResult, type LineKind, type ResultLine, type Thing, type ThingKind } from './types'
+import { LINE_KINDS, RESULT_VERSION, type Cause, type GridResult, type HeldNote, type LineKind, type ResultLine, type Thing, type ThingKind } from './types'
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
 
@@ -64,7 +64,7 @@ function errorText(error: unknown): string {
 }
 
 /** One line from its code and what the code is told. */
-function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures' | 'fixes'>> = {}): ResultLine {
+function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures' | 'fixes' | 'each' | 'held'>> = {}): ResultLine {
   // A code missing from the catalogue still gives a line: the check's own words, and a test fails.
   const entry: CodeEntry | null = isLineCode(code) ? CODES[code] : null
   const found = entry?.found ? entry.found(subject) : subject.said
@@ -248,7 +248,11 @@ function faultLines(raw: Record<string, unknown>, faults: readonly ReadFault[]):
     const at = fault.part === null ? { thing: { kind: 'plan' as const, id: '' }, floor: null, label: NOUN.plan } : faultPart(raw, fault.part)
     const subject: Subject = { ...blank(at.label), said: fault.found, place: placeText(fault.path), wants: fault.wants }
     if (fault.kind === 'read-as-meant') return line('plan/read-as-meant', 'worth-a-look', at.thing, at.floor, { ...subject, read: fault.read })
-    if (fault.kind === 'value-left-out') return line('plan/value-left-out', 'worth-a-look', at.thing, at.floor, { ...subject, used: fault.used })
+    if (fault.kind === 'value-left-out') {
+      const made = line('plan/value-left-out', 'worth-a-look', at.thing, at.floor, { ...subject, used: fault.used })
+      if (fault.part === null && fault.path.length === 1 && fault.path[0] === 'units') UNITS_READ.add(made)
+      return made
+    }
     return line('plan/part-left-out', 'left-out', at.thing, at.floor, subject)
   })
 }
@@ -279,7 +283,7 @@ function textFaultLine(fault: Extract<TextRead, { ok: false }>['fault']): Result
 }
 
 type Read =
-  | { plan: FloorPlan; raw: Record<string, unknown>; lines: ResultLine[]; leftOutWalls: ReadonlySet<string> }
+  | { plan: FloorPlan; raw: Record<string, unknown>; lines: ResultLine[]; leftOutWalls: ReadonlySet<string>; leftOut: readonly LeftOutPart[] }
   | { plan: null; lines: ResultLine[] }
 
 function readPlan(raw: unknown): Read {
@@ -301,7 +305,13 @@ function readPlan(raw: unknown): Read {
     if (read.refusal.kind === 'not-an-object') return { plan: null, lines: [line('plan/not-an-object', 'refused', { kind: 'plan', id: '' }, null, blank(NOUN.plan))] }
     return { plan: null, lines: refusalLines(value as Record<string, unknown>, read.refusal.issues) }
   }
-  return { plan: read.plan, raw: value as Record<string, unknown>, lines: faultLines(value as Record<string, unknown>, read.faults), leftOutWalls: read.leftOutWalls }
+  return {
+    plan: read.plan,
+    raw: value as Record<string, unknown>,
+    lines: faultLines(value as Record<string, unknown>, read.faults),
+    leftOutWalls: read.leftOutWalls,
+    leftOut: read.leftOut
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -378,6 +388,18 @@ function issueThing(issue: Issue): { thing: Thing; also: string[] } {
   return { thing: { kind: issue.entity, id: issue.id }, also: [] }
 }
 
+/**
+ * MSG-5: the id of the part each drawing line follows from, as `validatePlan` gives it (`plan`
+ * for the plan as a whole), until the record finds the line about that part.
+ */
+const CAUSE_IDS = new WeakMap<ResultLine, string>()
+/** MSG-5: a line's cause where the record finds it itself, not the drawing check. */
+const CAUSE_LINES = new WeakMap<ResultLine, ResultLine>()
+/** MSG-5: the reader's line for a plan's stated unit, which it reads as metres. */
+const UNITS_READ = new WeakSet<ResultLine>()
+/** MSG-5: what is measured against a size, and so follows from a plan that may not be in metres. */
+const SIZED = new Set(['plan/far-from-origin', 'wall/size-question', 'opening/size-question', 'room/size-question', 'floor/size-question', 'room/too-small', 'room/escape-window-too-small', 'room/escape-window-too-high'])
+
 function issueLine(issue: Issue & { readonly hits?: readonly string[] }, names: Names): ResultLine {
   const { thing, also } = issueThing(issue)
   const at = names.thingOf(thing.kind, thing.id)
@@ -391,10 +413,13 @@ function issueLine(issue: Issue & { readonly hits?: readonly string[] }, names: 
     floors: names.floors,
     ...(issue.fixes ? { fixes: issue.fixes } : {})
   }
-  return line(issue.code, issue.severity === 'error' ? 'left-out' : 'worth-a-look', thing, at.floor, subject, issue.fixes ? { fixes: issue.fixes } : {})
+  const made = line(issue.code, issue.severity === 'error' ? 'left-out' : 'worth-a-look', thing, at.floor, subject, issue.fixes ? { fixes: issue.fixes } : {})
+  if (issue.causedBy !== undefined) CAUSE_IDS.set(made, issue.causedBy)
+  return made
 }
 
-function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: ReadonlySet<string>): ResultLine {
+/** A finding's code and the thing its line is about. */
+function findingThing(finding: RuleFinding, wayOutNotDrawn: ReadonlySet<string>): { code: string; thing: Thing } {
   let code = FINDING_CODES[finding.code]
   if (finding.code === 'no_route_to_exit' && wayOutNotDrawn.has(finding.floor)) code = 'room/no-route-to-door-out'
   const thing: Thing =
@@ -406,8 +431,12 @@ function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: Readonl
         finding.openings[0] !== undefined
       ? { kind: 'opening', id: finding.openings[0] }
       : { kind: 'room', id: finding.rooms[0] ?? '' }
+  return { code, thing }
+}
+
+function findingSubject(finding: RuleFinding, names: Names, thing: Thing): Subject {
   const room = finding.rooms[0]
-  const subject: Subject = {
+  return {
     ...blank(names.thingOf(thing.kind, thing.id).label),
     name: room === undefined ? names.floorName(finding.floor) : names.roomName(room),
     floorName: names.floorName(finding.floor),
@@ -417,7 +446,60 @@ function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: Readonl
     finding,
     said: finding.message
   }
-  return line(code, 'finding', thing, finding.floor, subject, finding.figures ? { figures: finding.figures } : {})
+}
+
+function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: ReadonlySet<string>): ResultLine {
+  const { code, thing } = findingThing(finding, wayOutNotDrawn)
+  return line(code, 'finding', thing, finding.floor, findingSubject(finding, names, thing), finding.figures ? { figures: finding.figures } : {})
+}
+
+/** MSG-5 (lab MS-14): the findings whose notes may stand as one line for several rooms. */
+const GROUPED = new Set([
+  'room/no-door',
+  'room/no-route-out',
+  'room/no-route-to-door-out',
+  'opening/to-undrawn-space',
+  'opening/door-out-above-ground',
+  'opening/too-small-to-pass',
+  'room/too-small',
+  'room/no-escape-opening',
+  'room/escape-window-too-small',
+  'room/escape-window-too-high'
+])
+
+/**
+ * MSG-5 (lab MS-14): identical notes as one line. Findings of one code on one floor that say the
+ * same in every word but the room's name (what was found, what is needed, the fix and the
+ * figures) become one line that lists the rooms, in the order the check gave them; `each` and
+ * `also` keep every id. Twelve hotel rooms with the same window are one line, not twelve.
+ */
+function groupedFindings(findings: readonly RuleFinding[], names: Names, wayOutNotDrawn: ReadonlySet<string>): ResultLine[] {
+  const made = findings.map((finding) => ({ finding, line: findingLine(finding, names, wayOutNotDrawn) }))
+  const groups = new Map<string, typeof made>()
+  const order: (typeof made)[] = []
+  for (const one of made) {
+    const { line: l } = one
+    if (!GROUPED.has(l.code) || l.fixes !== undefined) {
+      order.push([one])
+      continue
+    }
+    const key = JSON.stringify([l.code, l.floor, l.found, l.needed, l.fix, l.figures ?? null])
+    const group = groups.get(key)
+    if (group === undefined) {
+      const fresh = [one]
+      groups.set(key, fresh)
+      order.push(fresh)
+    } else group.push(one)
+  }
+  return order.map((group) => {
+    if (group.length === 1) return group[0]!.line
+    const first = group[0]!
+    const { code, thing } = findingThing(first.finding, wayOutNotDrawn)
+    const each = group.map((one) => one.line.thing)
+    const also = [...new Set(group.flatMap((one) => [one.line.thing.id, ...one.line.also]))].filter((id) => id !== thing.id)
+    const subject: Subject = { ...findingSubject(first.finding, names, thing), also, group: group.map((one) => findingSubject(one.finding, names, one.line.thing).name) }
+    return line(code, 'finding', thing, first.finding.floor, subject, { ...(first.line.figures ? { figures: first.line.figures } : {}), each })
+  })
 }
 
 function noticeCode(notice: NotChecked): string {
@@ -439,8 +521,44 @@ function noticeCode(notice: NotChecked): string {
   }
 }
 
-function noticeLine(notice: NotChecked, names: Names, country: string): ResultLine {
+/** MSG-5: what a held note was about, in words, as a "could not be drawn" line's `found` says it. */
+const HELD_WORDS: Record<string, (names: string, many: boolean) => string> = {
+  'floor/no-exit': (n) => `whether ${n} has a door to the outside`,
+  'room/no-door': (n, many) => `whether ${n} ${many ? 'have' : 'has'} a door`,
+  'room/no-route-out': (n, many) => `whether ${n} ${many ? 'have' : 'has'} a route out`,
+  'room/no-route-to-door-out': (n, many) => `whether ${n} ${many ? 'have' : 'has'} a route out`,
+  'opening/to-undrawn-space': (n, many) => `where ${many ? 'doors' : 'a door'} from ${n} ${many ? 'lead' : 'leads'}`,
+  'room/no-escape-opening': (n, many) => `whether ${n} ${many ? 'have' : 'has'} a window or door to escape through`,
+  'room/escape-window-too-small': (n, many) => `whether ${many ? 'the windows' : 'the window'} of ${n} can be escaped through`,
+  'room/escape-window-too-high': (n, many) => `whether ${many ? 'the windows' : 'the window'} of ${n} can be escaped through`
+}
+
+/** The notes a "could not be drawn" notice holds back, as data and in words. */
+function heldNotes(notice: NotChecked, names: Names, wayOutNotDrawn: ReadonlySet<string>): { held: HeldNote[]; said: string } {
+  const held = (notice.held ?? []).map(({ finding, waitsFor }): HeldNote => {
+    const { code, thing } = findingThing(finding, wayOutNotDrawn)
+    const also = [...finding.rooms, ...finding.openings].filter((id) => id !== thing.id)
+    return { code, thing, floor: finding.floor, also, waitsFor: [...waitsFor] }
+  })
+  // One phrase per code, its rooms (or floors) by name, in the order held.
+  const byCode = new Map<string, string[]>()
+  for (const [i, note] of held.entries()) {
+    const finding = notice.held![i]!.finding
+    const name = note.code === 'floor/no-exit' ? names.floorName(finding.floor) : names.roomName(finding.rooms[0] ?? note.thing.id)
+    byCode.set(note.code, [...(byCode.get(note.code) ?? []), name])
+  }
+  const said = [...byCode]
+    .map(([code, list]) => {
+      const named = [...new Set(list)].map(quoted).join(', ')
+      return HELD_WORDS[code]?.(named, list.length > 1) ?? `the notes on ${named}`
+    })
+    .join('; ')
+  return { held, said }
+}
+
+function noticeLine(notice: NotChecked, names: Names, country: string, wayOutNotDrawn: ReadonlySet<string> = new Set()): ResultLine {
   const thing: Thing = notice.floor === '' ? { kind: 'plan', id: '' } : { kind: 'floor', id: notice.floor }
+  const { held, said: heldSaid } = heldNotes(notice, names, wayOutNotDrawn)
   const subject: Subject = {
     ...blank(names.thingOf(thing.kind, thing.id).label),
     name: notice.floor === '' ? '' : names.floorName(notice.floor),
@@ -450,9 +568,10 @@ function noticeLine(notice: NotChecked, names: Names, country: string): ResultLi
     floors: names.floors,
     country,
     notice,
-    said: notice.message
+    said: notice.message,
+    heldSaid
   }
-  return line(noticeCode(notice), 'not-checked', thing, notice.floor === '' ? null : notice.floor, subject)
+  return line(noticeCode(notice), 'not-checked', thing, notice.floor === '' ? null : notice.floor, subject, held.length > 0 ? { held } : {})
 }
 
 function checkFailed(stage: string, error: unknown): ResultLine {
@@ -462,10 +581,55 @@ function checkFailed(stage: string, error: unknown): ResultLine {
   })
 }
 
-function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null): GridResult {
+/**
+ * MSG-5 (lab W-7): each line that follows from another, filed under it. A drawing line names the
+ * part it follows from by id (`validatePlan`'s `causedBy`); its cause is the first line about that
+ * part, a part left out before one worth a look: the reader's line for a part it left out, the
+ * drawing's for one it cannot draw, `plan/duplicate-id` for an id two walls share, the plan's own
+ * line for `plan`. A line whose cause has no line of its own stays a problem of its own.
+ */
+function filed(lines: readonly ResultLine[]): ResultLine[] {
   const order = new Map(LINE_KINDS.map((kind, i) => [kind, i] as const))
   // Stable: lines of one kind keep the order their check gave them.
   const sorted = [...lines].sort((a, b) => order.get(a.kind)! - order.get(b.kind)!)
+  const about = new Map<string, ResultLine>()
+  for (const l of sorted) {
+    if (l.kind !== 'left-out' && l.kind !== 'worth-a-look' && l.kind !== 'refused') continue
+    const key = l.thing.kind === 'plan' ? (l.code === 'plan/duplicate-id' ? l.also[0] ?? null : 'plan') : l.thing.kind === 'floor' ? null : l.thing.id
+    if (key !== null && !about.has(key)) about.set(key, l)
+  }
+  const causeOf = new Map<ResultLine, ResultLine>()
+  for (const l of sorted) {
+    const id = CAUSE_IDS.get(l)
+    const cause = CAUSE_LINES.get(l) ?? (id === undefined ? undefined : about.get(id))
+    if (cause !== undefined && cause !== l) causeOf.set(l, cause)
+  }
+  const under = new Map<ResultLine, ResultLine[]>()
+  for (const l of sorted) {
+    const cause = causeOf.get(l)
+    if (cause !== undefined) under.set(cause, [...(under.get(cause) ?? []), l])
+  }
+  const out: ResultLine[] = []
+  const placed = new Set<ResultLine>()
+  const place = (l: ResultLine, cause: ResultLine | null): void => {
+    if (placed.has(l)) return
+    placed.add(l)
+    out.push(cause === null ? l : { ...l, causedBy: causeId(cause) })
+    for (const next of under.get(l) ?? []) place(next, l)
+  }
+  for (const l of sorted) if (!causeOf.has(l)) place(l, null)
+  // A ring of causes has no first line: its lines stand as problems of their own.
+  for (const l of sorted) place(l, null)
+  return out
+}
+
+/** A line as a cause names it: its code, and the id of the part it is about. */
+function causeId(l: ResultLine): Cause {
+  return { code: l.code, id: l.thing.kind === 'plan' && l.code === 'plan/duplicate-id' ? l.also[0] ?? '' : l.thing.id }
+}
+
+function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null): GridResult {
+  const sorted = filed(lines)
   const counts = Object.fromEntries(LINE_KINDS.map((kind) => [kind, sorted.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
   return {
     resultVersion: RESULT_VERSION,
@@ -473,6 +637,7 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
     read,
     count: sorted.length,
     counts,
+    problems: problemsIn(sorted),
     lines: sorted,
     basis: report?.basis ?? 'general-baseline',
     ...(report?.lookupNotice ? { lookupNotice: report.lookupNotice } : {}),
@@ -481,6 +646,11 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
     figures: report?.figures ?? [],
     limits: report?.limits ?? [...PLAN_LIMITS, ...FIGURE_LIMITS]
   }
+}
+
+/** MSG-5: the lines that follow from no other and are not `not-checked`: the problems to act on. */
+export function problemsIn(lines: readonly ResultLine[]): number {
+  return lines.filter((l) => l.causedBy === undefined && l.kind !== 'not-checked').length
 }
 
 /** Every line about a plan that was read. */
@@ -500,7 +670,7 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     lines.push(...readingLines(read.raw, readingNotes(read.raw), names))
   })
   stage('drawing check', () => {
-    lines.push(...validatePlan(plan, undefined, { leftOutWalls: read.leftOutWalls }).issues.map((issue) => issueLine(issue, names)))
+    lines.push(...validatePlan(plan, undefined, { leftOutWalls: read.leftOutWalls, leftOutParts: read.leftOut }).issues.map((issue) => issueLine(issue, names)))
   })
   stage('door check', () => {
     const seen = new Set<string>()
@@ -513,11 +683,12 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
   })
   let report: RulesReport | null = null
   stage('plan checks', () => {
-    report = checkLocalRules(plan, options)
+    // MSG-5: with what the reader left out, so a note that rests on it is held back.
+    report = checkLocalRules(plan, { ...options, leftOut: read.leftOut })
     const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
     const country = (options.country ?? '').trim().toUpperCase()
-    lines.push(...report.findings.map((finding) => findingLine(finding, names, wayOutNotDrawn)))
-    lines.push(...report.notChecked.map((notice) => noticeLine(notice, names, country)))
+    lines.push(...groupedFindings(report.findings, names, wayOutNotDrawn))
+    lines.push(...report.notChecked.map((notice) => noticeLine(notice, names, country, wayOutNotDrawn)))
   })
   // SHT-7: what is written on the drawing. The sketch is drawn and never measured or checked,
   // and the record says so, floor by floor. A note in a room the plan lacks is not drawn.
@@ -545,6 +716,14 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(quoted(note.id)), also: [note.id, note.room], floors: names.floors, said: `room ${note.room}` }))
     }
   })
+  // MSG-5: a plan that may not be in metres (`plan/units-question`): what is measured against a
+  // size follows from it, and it follows from the unit the plan states, which is read as metres.
+  const units = lines.find((l) => l.code === 'plan/units-question')
+  if (units !== undefined) {
+    const stated = lines.find((l) => UNITS_READ.has(l))
+    if (stated !== undefined) CAUSE_LINES.set(units, stated)
+    for (const l of lines) if (SIZED.has(l.code)) CAUSE_LINES.set(l, units)
+  }
   return record(lines, true, report)
 }
 

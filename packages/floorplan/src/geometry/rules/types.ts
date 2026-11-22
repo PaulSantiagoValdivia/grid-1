@@ -122,6 +122,18 @@ export interface NotChecked {
   readonly rooms: readonly string[]
   readonly openings: readonly string[]
   readonly message: string
+  /**
+   * MSG-5, only on `cannot_be_drawn`: the findings a check did not give because they rest on a
+   * part that could not be drawn (`rules/held.ts`), each with the parts it waits for. Each comes
+   * back once those parts are drawn, if it still holds. Optional, like `through`.
+   */
+  readonly held?: readonly HeldFinding[]
+}
+
+/** MSG-5: a finding held back, and the rooms and openings that could not be drawn that it waits for, by id. */
+export interface HeldFinding<Finding = RuleFinding> {
+  readonly finding: Finding
+  readonly waitsFor: readonly string[]
 }
 
 export interface RulesReport {

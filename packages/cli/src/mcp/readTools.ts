@@ -9,7 +9,7 @@
  */
 import { floorOf, itemFootprint, limit, tolerance, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { checkPlan, countsText, KIND_WORDS, partsText, thingText, usedFigures } from '../command/check'
+import { causeText, checkPlan, countsText, KIND_WORDS, partsText, problemsText, thingText, usedFigures } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
 import { UsageError } from '../command/options'
@@ -879,6 +879,8 @@ const checkTool: GridTool = {
     label: STRING,
     // MSG-1: the one list and the one count, as docs/result-contract.md sets them out.
     count: { type: 'number' },
+    // MSG-5: the lines that follow from no other: the problems to act on.
+    problems: { type: 'number' },
     lines: listSchema(objectSchema({
       code: STRING,
       kind: STRING,
@@ -894,6 +896,16 @@ const checkTool: GridTool = {
       // MSG-7: the change that would clear the line, as data, and the same as a call to retry.
       fixes: { type: 'array' },
       calls: listSchema(objectSchema({ tool: STRING, arguments: { type: 'object' } }, ['tool', 'arguments'])),
+      // MSG-5: the line this one follows from; the parts a line for several stands for; the notes held back.
+      causedBy: objectSchema({ code: STRING, id: STRING }),
+      each: listSchema(objectSchema({ kind: STRING, id: STRING })),
+      held: listSchema(objectSchema({
+        code: STRING,
+        thing: objectSchema({ kind: STRING, id: STRING }),
+        floor: STRING,
+        also: listSchema(STRING),
+        waitsFor: listSchema(STRING),
+      })),
     }, ['code', 'kind', 'thing', 'floor', 'also', 'message', 'found', 'needed', 'fix'])),
     // The rooms a finding is about, by id and name, apart from the message: text from the plan file.
     findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
@@ -932,9 +944,11 @@ const checkTool: GridTool = {
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
     const record = result.result
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]
-    lines.push(`To look at: ${record.count === 0 ? 'nothing' : `${record.count} (${countsText(record)})`}. Checks run: ${result.report.rules.length}.`)
+    lines.push(`To look at: ${record.count === 0 ? 'nothing' : `${record.count} (${countsText(record)})`}.${problemsText(record)} Checks run: ${result.report.rules.length}.`)
     // COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for.
-    record.lines.slice(0, 12).forEach((line, index) => lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''} Fix: ${line.fix} [${line.code}]`))
+    // MSG-5: a line that follows from another is set under it, and says so.
+    record.lines.slice(0, 12).forEach((line, index) =>
+      lines.push(`  ${line.causedBy ? '  ' : ''}${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''}${line.causedBy ? ` Follows from ${causeText(line.causedBy)}.` : ` Fix: ${line.fix}`} [${line.code}]`))
     if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
     // MSG-7: each line one call would clear carries that call, ready to send.
     const withCalls = record.lines.map((line) => withFixCalls(line, args['plan']))
@@ -953,7 +967,7 @@ const checkTool: GridTool = {
     lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
     return {
       text: lines.join('\n'),
-      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: withCalls, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
+      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, problems: record.problems, lines: withCalls, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
     }
   },
 }

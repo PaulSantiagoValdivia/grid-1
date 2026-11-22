@@ -179,7 +179,10 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
     rules: report.rules,
     findings: report.findings.filter(isPlanFinding),
     // The core's notes read its notices to word a room cut off from a way out not drawn.
-    notChecked: report.notChecked.filter((n): n is typeof n & { reason: PlanNotCheckedReason } => PLAN_REASONS.has(n.reason)),
+    // MSG-5: without the findings they hold back, which the core's notes do not read.
+    notChecked: report.notChecked
+      .filter((n): n is typeof n & { reason: PlanNotCheckedReason } => PLAN_REASONS.has(n.reason))
+      .map((n) => ({ reason: n.reason, floor: n.floor, rooms: n.rooms, openings: n.openings, message: n.message })),
     limits: []
   }).notes
   let next = 0

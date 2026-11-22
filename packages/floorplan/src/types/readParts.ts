@@ -33,6 +33,7 @@
  */
 import { z } from 'zod'
 import {
+  DEFAULT_FLOOR_ID,
   FloorPlanSchema,
   FloorSchema,
   ItemSchema,
@@ -78,6 +79,19 @@ export type ReadFault =
   /** A part with the id of a part of another kind, or of the same kind but not two walls. It is left out; `kept` is read. */
   | { readonly kind: 'id-clash'; readonly part: PartRef & { readonly id: string }; readonly kept: PartRef & { readonly id: string } }
 
+/**
+ * MSG-5: a wall, room or opening the reader left out, as the checks need it to hold back what
+ * rests on it: a door it held, a room beside it. Each value only when it can be read.
+ */
+export interface LeftOutPart {
+  readonly kind: 'wall' | 'room' | 'opening'
+  readonly id: string | null
+  /** The floor of a wall or a room as written, the default floor when it states none; null for an opening. */
+  readonly floor: string | null
+  /** The walls it names: a room's boundary, an opening's wall. Empty for a wall. */
+  readonly walls: readonly string[]
+}
+
 export type PlanRead =
   | {
       readonly plan: FloorPlan
@@ -85,6 +99,8 @@ export type PlanRead =
       readonly faults: readonly ReadFault[]
       /** The ids of the walls left out, for `validatePlan` to name them on the rooms and openings that rest on them. */
       readonly leftOutWalls: ReadonlySet<string>
+      /** MSG-5: every wall, room and opening left out (`part-left-out`, `id-clash`), in file order. */
+      readonly leftOut: readonly LeftOutPart[]
     }
   | {
       readonly plan: null
@@ -430,5 +446,24 @@ export function readPlanParts(raw: unknown, marks: readonly TextMark[] = []): Pl
     if (fault.part === null || fault.part.list !== 'walls' || fault.part.id === null) continue
     if (fault.kind === 'part-left-out' || fault.kind === 'id-clash') leftOutWalls.add(fault.part.id)
   }
-  return { plan, faults, leftOutWalls }
+  return { plan, faults, leftOutWalls, leftOut: leftOutParts(raw, faults) }
+}
+
+const LEFT_OUT_KINDS: Partial<Record<PartList, LeftOutPart['kind']>> = { walls: 'wall', rooms: 'room', openings: 'opening' }
+
+/** MSG-5: the walls, rooms and openings the reader left out, each with what can be read of it. */
+function leftOutParts(raw: Record<string, unknown>, faults: readonly ReadFault[]): LeftOutPart[] {
+  const parts: LeftOutPart[] = []
+  for (const fault of faults) {
+    if (fault.kind !== 'part-left-out' && fault.kind !== 'id-clash') continue
+    const kind = LEFT_OUT_KINDS[fault.part.list]
+    if (kind === undefined) continue
+    const list = raw[fault.part.list]
+    const item = Array.isArray(list) && isObject(list[fault.part.index]) ? (list[fault.part.index] as Record<string, unknown>) : {}
+    const floor = kind === 'opening' ? null : item['floor'] === undefined ? DEFAULT_FLOOR_ID : readableId(item['floor'])
+    const named = kind === 'room' ? (Array.isArray(item['boundary']) ? (item['boundary'] as unknown[]) : []) : kind === 'opening' ? [item['wall']] : []
+    const walls = named.flatMap((id) => readableId(id) ?? [])
+    parts.push({ kind, id: fault.part.id, floor, walls })
+  }
+  return parts
 }

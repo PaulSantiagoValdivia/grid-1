@@ -12,7 +12,7 @@
 import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, quoted, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type UnfinishedMerge } from '@ongrid/floorplan/types/jsonText'
-import { readPlanParts, type ReadFault } from '@ongrid/floorplan/types/readParts'
+import { readPlanParts, type LeftOutPart, type ReadFault } from '@ongrid/floorplan/types/readParts'
 import { PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
@@ -32,6 +32,8 @@ export interface LoadedPlan {
   readonly broken: ReadonlySet<string>
   /** What the reader did with each part or value it could not read as written (MSG-6). */
   readonly faults?: readonly ReadFault[]
+  /** MSG-5: the walls, rooms and openings the reader left out, for the checks to hold back what rests on them. */
+  readonly leftOut?: readonly LeftOutPart[]
   /**
    * The file's text, which `grid check` reads again for the record, so the record names what
    * the reader did (MSG-6). Absent for a plan made in memory.
@@ -198,8 +200,8 @@ export function loadPlan(project: Project, file: string, options: LoadOptions = 
   }
   const plan = parts.plan
   traceImageCheck(project, file, plan)
-  const { issues, broken } = validatePlan(plan, undefined, { leftOutWalls: parts.leftOutWalls })
-  return { file: real, plan, issues, broken, faults: parts.faults, text }
+  const { issues, broken } = validatePlan(plan, undefined, { leftOutWalls: parts.leftOutWalls, leftOutParts: parts.leftOut })
+  return { file: real, plan, issues, broken, faults: parts.faults, leftOut: parts.leftOut, text }
 }
 
 /**

@@ -43,7 +43,8 @@ record. It never throws: a check that fails inside Grid becomes a line
 | `read` | `false` when the plan was refused. Then the lines are its refusals and nothing else ran. |
 | `count` | How many lines there are: the one number for how much there is to look at. |
 | `counts` | The same lines by kind. They add up to `count`. |
-| `lines` | Every line, in the order of the kinds below. Lines of one kind keep the order their check gave them. |
+| `problems` | How many lines follow from no other line and are not `not-checked`: the problems to act on (MSG-5). See "Causes and follow-ons". |
+| `lines` | Every line, in the order of the kinds below. Lines of one kind keep the order their check gave them. A line that follows from another comes right under it, whatever its kind (MSG-5). |
 | `basis` | `general-baseline`, or `local-lookup` once a looked-up figure was applied. |
 | `lookupNotice` | Only with `local-lookup`: the figures were found by an AI and not checked by a person. |
 | `checks` | Every check that ran and looked at something, with where its figures come from. A check that looked at no room, floor or door is not listed (MSG-2). Empty when the plan was refused. |
@@ -65,6 +66,9 @@ record. It never throws: a check that fails inside Grid becomes a line
 | `needed` | What would be right. |
 | `fix` | What to change. A suggestion: the plan is the author's. |
 | `figures` | Only on a finding that compared the plan with a figure: those figures, as in `figures` above. |
+| `causedBy` | Only on a line that follows from another (MSG-5): that line, as `{ code, id }`, the id of the part it is about (`""` for the plan; for `plan/duplicate-id`, the id it names). The line is listed under it and goes away when it is fixed. |
+| `each` | Only on a line that stands for the same note on several parts (MSG-5): each of them, `{ kind, id }`, `thing` first. Its message lists their names. |
+| `held` | Only on `floor/not-checked-rooms-not-drawn` and `floor/not-checked-doors-not-drawn` (MSG-5): the notes held back because they rest on what the line names, each `{ code, thing, floor, also, waitsFor }`. `waitsFor` holds the ids of the rooms and openings that could not be drawn. |
 | `fixes` | Only where a change to one part would clear the line (MSG-7): each such change as data, `{ part: "opening", id, width \| offset \| height \| sill \| wall }`. Several when more than one would do. `width` keeps the opening's start; `wall` is the id most likely meant. In `grid_check`, each line with fixes also carries `calls`: the same changes as calls to `grid_change_opening`, with the plan argument, ready to send. A `wall` fix has no call: no tool sets an opening's wall. |
 
 ### The kinds, in list order
@@ -75,6 +79,43 @@ record. It never throws: a check that fails inside Grid becomes a line
    and first, what the file says that Grid does not read (below).
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
+
+### Causes and follow-ons
+
+One broken part used to give a pile of lines with no root marked, and false notes about sound
+rooms beside it (lab MS-4, MS-5, W-6, W-7). Since MSG-5:
+
+- **A line that follows from another carries `causedBy` and comes right under it.** A door on a
+  wall that cannot be drawn (`opening/broken-wall`) and a room that rests on one
+  (`room/broken-wall`) follow from the wall's line, or from the reader's line for a wall it left
+  out (`plan/part-left-out`), or from `plan/duplicate-id` for an id two walls share. Enclosed
+  floor no room claims (`floor/unclaimed`) follows from the room that could not be drawn there.
+  A room measured as if closed by a wall that stops short or leaves a gap: its
+  `room/space-mismatch`, `room/not-enclosed` and `room/overlap` lines, and the walls found
+  standing in it, follow from that wall's line. A plan with no walls gives `plan/no-walls`, and
+  every room and opening line follows from it. A plan that may not be in metres
+  (`plan/units-question`) files under it what is measured against a size (`plan/far-from-origin`,
+  the size questions, `room/too-small` and the escape-window findings), and it follows from the
+  reader's `plan/value-left-out` for a stated unit Grid reads as metres.
+- **A note that rests on a part that could not be drawn is held back.** The rule: a way out or
+  a route, when any room or opening on its floors could not be drawn; "no door", when the room
+  shares a wall with a room or an opening that could not be drawn, or an opening could be placed
+  on no wall; a door into a space not drawn, when a room that could not be drawn rests on its
+  wall; an escape note, when an opening on one of the room's walls could not be drawn, or could
+  be placed on no wall. The floor's `floor/not-checked-rooms-not-drawn` or
+  `floor/not-checked-doors-not-drawn` line names the parts and carries each note held back
+  under `held`. "Could not be drawn" covers what the drawing check leaves out and what the reader
+  left out. A held note comes back once the part is drawn, if it still holds; a note that
+  happens to be true is held too.
+- **Identical notes are one line.** Findings of one code on one floor that say the same in every
+  word but the room's name (`found`, `needed`, `fix` and `figures`) are one line that lists the
+  rooms where the one name goes, the verb agreeing ("The windows of "Room 301", "Room 302" are
+  too high to escape through"). `each` and `also` keep every id. The notes a person reads on the
+  plan stay one per room.
+
+`problems` counts the lines with no `causedBy`, `not-checked` lines aside. `grid check` sets each
+follow-on under its cause and prints "N problems; M lines follow from them", and the notes held
+back under their line.
 
 ### A line's number
 
@@ -117,6 +158,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/id-clash` | {thing} is left out: another part has the same id | every id on one part only, across the whole plan |
 | `plan/similar-id` | {thing} is left out: its id differs from another part's only in capitals or spaces | ids that differ in more than capitals or spaces |
 | `plan/check-failed` | A check could not run on this plan: something went wrong inside Grid | the check to run to the end |
+| `plan/no-walls` | The plan has no walls, but its rooms and openings name walls | the walls the rooms and openings name |
 | `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin (0, 0) |
 | `plan/duplicate-id` | Id {thing} names more than one wall, room or opening | every id on one wall, room or opening only |
 | `plan/similar-floor-id` | {thing} has an id that differs from another floor's only in capitals or spaces | floor ids that differ in more than capitals or spaces |
@@ -205,8 +247,8 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/escape-window-too-high` | The window of "{name}" is too high to escape through | a lower sill |
 | `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
-| `floor/not-checked-rooms-not-drawn` | On "{floor}", rooms that could not be drawn were not checked: "{room}", … | rooms that can be drawn |
-| `floor/not-checked-doors-not-drawn` | On "{floor}", some doors could not be drawn and were not checked | doors that can be drawn |
+| `floor/not-checked-rooms-not-drawn` | On "{floor}", these rooms could not be drawn, so they and what rests on them were not checked: "{room}", … | rooms that can be drawn |
+| `floor/not-checked-doors-not-drawn` | On "{floor}", these doors or windows could not be drawn, so they and what rests on them were not checked: "{id}", … | doors and windows that can be drawn |
 | `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
@@ -254,6 +296,7 @@ found in them. A `reason` is one of:
 | `no_figures_for_place` | no figures for the place the plan is for: the ones here are from US model codes |
 | `no_rooms` | no rooms on the floor |
 | `cannot_be_drawn` | could not be drawn |
+| `waits_for_part` | beside a part that could not be drawn: held until it can be (MSG-5). Its finding is under the floor's `held` |
 | `no_stairs` | on a floor Grid cannot follow down to the ground floor |
 | `way_out_not_drawn` | the floor's only door out leads to a space that is not drawn |
 | `alone_off_ground` | the only room on a floor off the ground, reached by a stair the plan does not draw |
@@ -359,6 +402,30 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: notes traced to their cause (MSG-5)
+
+- A line that follows from another carries `causedBy` (`{ code, id }`) and comes right under it,
+  whatever its kind; the record adds `problems`, the lines that follow from no other, `not-checked`
+  aside. See "Causes and follow-ons". The kinds keep their order for the lines that follow from
+  nothing; `count` and `counts` are as before. On the lab's 26 fault plans (group E), 95 lines are
+  30 problems with 48 lines beneath them.
+- A note that rests on a part that could not be drawn is no longer given: a way out, a route, "no
+  door", a door into a space not drawn and the escape notes, by the lab's rule (W-6). The floor's
+  "could not be drawn" line names the part and keeps each note under `held`. The plan with one
+  undrawable corridor gives 0 notes and that one line, where it gave 16 notes. `coverage` lists
+  those parts as skipped, `waits_for_part`. A door the reader left out, or on a wall the plan does
+  not have, now gives that line too (lab M-9: before, nothing was listed as not checked).
+- Identical notes are one line listing the rooms, with `each` (lab MS-14: twelve hotel rooms,
+  one line). Its message lists the names where the one name goes, the verb agreeing.
+- New code `plan/no-walls` (`left-out`): the plan has no walls, but its rooms and openings name
+  walls. Every room and opening line follows from it.
+- Wordings changed: `floor/not-checked-rooms-not-drawn` now reads "these rooms could not be
+  drawn, so they and what rests on them were not checked: …"; `floor/not-checked-doors-not-drawn`
+  "these doors or windows could not be drawn, so they and what rests on them were not checked: …",
+  naming them. Their `found` lists the notes held back, their `fix` says those come back.
+- `grid check` sets a follow-on under its cause with "follows from", and the notes held back
+  under their line; `grid_check` returns `problems`, and its text says how many lines follow.
 
 ### 2026-11-22: what would be right (MSG-7)
 
