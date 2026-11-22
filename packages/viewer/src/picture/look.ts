@@ -132,11 +132,29 @@ export const USE_FILLS: Readonly<Record<RoomUse, string>> = {
   dining: '#f2e1d3',
   kitchen: '#e3efd9',
   bathroom: '#d8eeee',
+  // CNT-5: the uses past homes, each near its group's colour and as pale.
+  toilet: '#d5e9ec',
+  utility: '#e6eadc',
+  study: '#efe6d6',
+  office: '#e8e6f2',
+  meeting: '#e2e2f0',
+  reception: '#eee7ef',
+  retail: '#f3e4e4',
+  classroom: '#e4eddf',
+  treatment: '#dcecf0',
+  waiting: '#e8eff1',
+  sport: '#e1ecdf',
+  changing: '#dde9e5',
+  staff: '#efe9dd',
+  worship: '#f1e6da',
+  assembly: '#ebe2ea',
   corridor: '#ecebe6',
   stair: '#e5e0ee',
   // LVL-3: a lift shaft, beside the stair's colour.
   lift: '#e0e3ec',
   storage: '#e9e4dc',
+  plant: '#e4e2de',
+  parking: '#e7e7e3',
   other: '#f0f0ee'
 }
 

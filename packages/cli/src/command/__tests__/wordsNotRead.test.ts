@@ -26,7 +26,8 @@ const PLAN = {
     wall('n', [4, 4], [0, 4]),
     wall('w', [0, 0], [0, 4]),
   ],
-  rooms: [{ id: 'r', name: 'Office', use: 'office', boundary: ['s', 'e', 'n', 'w'] }],
+  // CNT-5: `office` is a use now; `balcony` is not.
+  rooms: [{ id: 'r', name: 'Balcony', use: 'balcony', boundary: ['s', 'e', 'n', 'w'] }],
   openings: [{ id: 'd', wall: 's', type: 'door', offset: 1, width: 0.9, height: 2.1 }],
 }
 writeFileSync(join(dir, 'plan.json'), JSON.stringify(PLAN))
@@ -40,7 +41,7 @@ describe('grid check', () => {
     const text = checkText(result, 1)
     expect(text).toMatch(/^ {2}\d+\. worth a look, wall "s": Wall "s" has a field Grid does not know, "thick"\. \[plan\/unknown-field\]$/m)
     expect(text).toMatch(/^ {6}fix: Did you mean "thickness"\? Rename "thick" to "thickness"\./m)
-    expect(text).toMatch(/^ {2}\d+\. worth a look, room "r": Room "Office" has a use Grid does not know, "office"\. \[plan\/unknown-use\]$/m)
+    expect(text).toMatch(/^ {2}\d+\. worth a look, room "r": Room "Balcony" has a use Grid does not know, "balcony"\. \[plan\/unknown-use\]$/m)
   })
 
   it('says an empty plan is empty', () => {
