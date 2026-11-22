@@ -29,7 +29,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)). With a brief beside the plan, it says each line met or missed ([the brief](brief.md)) |
 | `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below). With `firm-standards.json` beside the plan, the firm's own standards are set against it too, under their own heading ([a firm's own standards](firm-standards.md)) |
-| `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
+| `grid describe [<plan>] [--length line\|rooms\|walls\|walk] [--for person\|agent] [--as rooms] [--floor <id>] [--pictures <folder>]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, with `--length walls` its walls, and with `--length walk` the plan walked room by room, with `--pictures` a picture from each doorway (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation and section marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
@@ -341,13 +341,14 @@ kept only in the marks file, which no export, sheet or drawing reads.
 
 `grid describe` is a short account of the plan, for an agent to check its own work without
 reading the file: a front door that opens into a bedroom, or a bathroom reached only through
-the study, shows on the first read. It answers in three lengths:
+the study, shows on the first read. It answers in four lengths:
 
 | `--length` | What it holds |
 |---|---|
 | `line` | One line: floors, rooms, bedrooms and bathrooms (by the `use` a room states, never its name), the area inside, and which rooms the doors from outside lead into |
 | `rooms` (the default) | The line, then each room's inside size, position and the rooms next to it, and every opening in it with the room on its other side and its distance to the two inside corners of that side |
 | `walls` | The rooms, then every wall with its openings, each with the rooms on its two sides |
+| `walk` | The plan walked room by room from its way in: in each room, standing in the doorway you came in by, what is ahead, on your left, on your right and in the wall you stand in, and how far |
 
 `--for person` (the default) names rooms and floors by their names and never prints an id.
 `--for agent` is terse and carries every id, the offsets along each wall and a key line, so an
@@ -366,6 +367,19 @@ boundary the building comes nearest, with the set-back asked for it
 says so; its first line is the label "General guidance, not your local rules", as for every
 report (MSG-3). `--as rooms` starts with the label as a comment, which `grid write` ignores, and
 `grid draw` puts it in the drawing's top-left corner.
+
+`--length walk` (VEW-9) is the long form. Each floor starts at its way in: the front door the plan
+names, else the widest door from outside into a corridor, else the widest door from outside; a
+floor with no door from outside starts in its stair room. The walk takes the ways on from each
+room from left to right as you stand in its doorway and goes as deep as it can, so a room off a
+room comes straight after it. In each room you stand at the middle of the doorway you came in by,
+facing in, and the room is said wall by wall: ahead, left, right and the wall you stand in, with
+how far each wall and each door, window, open side and fixture is. `--floor <id>` walks one floor;
+without it a floor laid out like an earlier one is said once. `--pictures <folder>` writes a
+picture from each doorway into the folder, which must be there: at eye height (1.6 m), a step
+into the room, looking ahead, as `walk-01.png`, `walk-02.png` and on, each named under its room.
+`--floor` and `--pictures` go with `--length walk` only. How a route's length is walked is in
+[tool-server.md](tool-server.md#a-routes-length-and-a-walk-through).
 
 ## What a change did: `grid mark` and `grid diff`
 

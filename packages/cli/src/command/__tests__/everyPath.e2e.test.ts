@@ -132,7 +132,11 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
     // MSG-10: marking a note writes the marks file beside the plan, named after it.
     { label: 'the plan, marking a note seen', args: (p) => ['check', p, '--seen', '1', '--reason', 'Seen', '--by', 'Owner'], given: asIs },
   ],
-  describe: [{ label: 'the plan', args: (p) => ['describe', p], given: asIs }],
+  describe: [
+    { label: 'the plan', args: (p) => ['describe', p], given: asIs },
+    // VEW-9: the walk's pictures go into a folder, each named in it.
+    { label: '--pictures', args: (p) => ['describe', PLAN, '--length', 'walk', '--pictures', p], given: (p) => `${p}/walk-01.png` },
+  ],
   // WRT-8: the markers file is the plan's name beside the plan, never a path of its own.
   mark: [{ label: '--plan', args: (p) => ['mark', 'start', '--plan', p], given: asIs }],
   diff: [

@@ -107,6 +107,8 @@ export interface Answer {
   readonly text: string
   readonly data: Record<string, unknown>
   readonly image?: AnswerImage
+  /** VEW-9: more pictures, after `image`, in order: the walk-through's, one per doorway. */
+  readonly images?: readonly AnswerImage[]
 }
 
 export type Hint = 'read' | 'write-file' | 'change-plan'

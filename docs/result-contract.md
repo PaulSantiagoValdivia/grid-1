@@ -666,6 +666,18 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: a route's length, and the walk-through (VEW-9)
+
+- `grid_measure what=route`'s `answer` adds `length` (metres walked, null when a room on the way
+  has no outline) and `legs` (`room`, `length`: each room's share, in order; the holes through
+  the walls are the rest). The text adds "Walked, …: each room's share, and … through the walls."
+  and the rule it is walked by. With `width`, `way` and `shortest` each add `length`.
+- `grid_describe` takes `length=walk`, `floor` (with `walk` only; an unknown floor is refused
+  naming the plan's floors, whatever the length) and `pictures` (with `walk` only). Its data adds
+  `pictures`: `picture`, `room`, `floor`, `eyeHeight`, `heading`, one per picture, which come
+  after the text as image content, at most 12. Every other length answers as before.
+- An answer may now carry several pictures (`images`), after the one `image` some tools give.
+
 ### 2026-11-22: existing, demolished and new, and a fit-out on a fixed shell (CNT-10)
 
 - A wall, an opening and a room may state `phase`: `existing`, `demolished` or `new`, and a plan

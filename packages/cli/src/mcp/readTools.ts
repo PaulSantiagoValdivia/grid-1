@@ -14,7 +14,9 @@ import { FIRM_HEADING, GENERAL_GUIDANCE_LABEL, buildingKindsText, confirmedFigur
 import { causeText, checkPlan, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmStandardsText, KIND_WORDS, placeText, type PlaceWords, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { readSeen, type SeenState } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
-import { describePlan, describeRooms } from '../command/describe'
+import { describePlan, describeRooms, describeWalk, walkOf } from '../command/describe'
+import { walkPictures } from '../describe/walkPictures'
+import { WALK_EYE_HEIGHT, WALK_PICTURES_MAX } from '../describe/walk'
 import { drawShowOf } from '../command/drawShow'
 import { UsageError } from '../command/options'
 import type { LoadedPlan } from '../command/plan'
@@ -44,6 +46,7 @@ import {
   type RoomHeight,
   type Thing,
 } from '../quantities/measure'
+import { WALKED_RULE } from '../quantities/walked'
 import { factsText, openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, shownNumber } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
@@ -1214,6 +1217,10 @@ const measureTool: GridTool = {
         `From ${name(route.from)} to ${name(route.to)}: ${steps}.`,
         route.narrowestPassage ? `Narrowest door or opening on the way: ${q(route.narrowestPassage.via)}, ${L(route.narrowestPassage.width)}.` : 'No door or opening on the way, only open sides.',
         `Widest circle in each room on the way: ${widths}.`,
+        // VEW-9: the length, and each room's share of it.
+        ...(route.length === null
+          ? ['The walked length is not given: a room on the way has no outline Grid can measure; grid_check says why.']
+          : [`Walked, ${L(route.length)}: ${route.legs.map((leg) => `${name(leg.room)} ${L(leg.length)}`).join(', ')}, and ${L(route.length - route.legs.reduce((sum, leg) => sum + leg.length, 0))} through the walls.`, WALKED_RULE]),
         EMPTY_ROOM_RULE,
       ]
       return { text: lines.join('\n'), data: { what, answer: { found: true, ...route, ...zones }, rule: EMPTY_ROOM_RULE } }
@@ -1741,16 +1748,19 @@ const describeTool: GridTool = {
     'Use this when the person asks what is in the plan, what the rooms are and how they connect, which side a door or window is on, or when you need to read the plan before changing it. '
     + 'It gives the plan in rooms: each room with its inside size and area, the rooms next to it, and each door and window with the side it is on, its distance from the corners and the two rooms it joins. '
     + 'length=line is one line, rooms (the default) each room, walls also every wall. for=person never shows an id; for=agent is terse and gives the ids to edit with. '
+    + 'length=walk is the long form, for "walk me through it" or "what do I see when I come in": the plan walked room by room from its way in, standing in the doorway of each room, with what is ahead, on the left, on the right and in the wall you stand in, and how far; floor walks one floor, and pictures=true adds a picture at eye height from each doorway, looking ahead (at most ' + String(WALK_PICTURES_MAX) + '). '
     + 'as=rooms reads the plan back as rooms text instead, the way plans are written: change it and pass it to grid_write_rooms, which writes it back losing nothing. Do not use for an area table (grid_areas) or a picture (grid_view). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    length: { type: 'string', enum: DESCRIBE_LENGTHS, description: 'line, rooms or walls. rooms when left out.', examples: ['rooms', 'line'] },
+    length: { type: 'string', enum: DESCRIBE_LENGTHS, description: 'line, rooms, walls or walk. rooms when left out.', examples: ['rooms', 'line', 'walk'] },
     for: { type: 'string', enum: DESCRIBE_AUDIENCES, description: 'person (names only, no ids) or agent (terse, with ids). agent when left out.', examples: ['agent', 'person'] },
     as: { type: 'string', enum: ['rooms'], description: 'rooms: the plan as rooms text, to change and write again with grid_write_rooms. Takes no length or for.', examples: ['rooms'] },
+    floor: { ...FLOOR_ARG, description: 'For length=walk: the floor to walk. Every floor when left out, a floor laid out like an earlier one said once.' },
+    pictures: { type: 'boolean', description: 'For length=walk: true to add a picture at eye height from each doorway, looking ahead, in the order of the walk. false when left out.', examples: [true, false] },
   },
-  outputSchema: objectSchema({ length: { type: ['string', 'null'] }, for: { type: ['string', 'null'] }, as: { type: ['string', 'null'] }, text: STRING }),
-  run(args, context) {
-    if (args['as'] !== undefined && (args['length'] !== undefined || args['for'] !== undefined)) {
+  outputSchema: objectSchema({ length: { type: ['string', 'null'] }, for: { type: ['string', 'null'] }, as: { type: ['string', 'null'] }, text: STRING, pictures: { type: 'array' } }, ['length', 'for', 'as', 'text']),
+  async run(args, context) {
+    if (args['as'] !== undefined && (args['length'] !== undefined || args['for'] !== undefined || args['floor'] !== undefined || args['pictures'] !== undefined)) {
       throw new ToolRefusal('as=rooms reads the plan back as rooms text, which has no length or for: leave them out.')
     }
     const { loaded } = readPlan(context, args['plan'])
@@ -1760,6 +1770,26 @@ const describeTool: GridTool = {
     }
     const length = (args['length'] as (typeof DESCRIBE_LENGTHS)[number] | undefined) ?? 'rooms'
     const audience = (args['for'] as (typeof DESCRIBE_AUDIENCES)[number] | undefined) ?? 'agent'
+    // A floor that is not there is refused first, naming the plan's floors (MS-19).
+    const floor = floorArg(loaded.plan, args['floor'])
+    if (length !== 'walk' && (args['floor'] !== undefined || args['pictures'] !== undefined)) {
+      throw new ToolRefusal(`${args['floor'] !== undefined ? 'floor' : 'pictures'} goes with length=walk only: length=${length} describes every floor and draws nothing.`)
+    }
+    if (length === 'walk') {
+      // VEW-9: the walk, and a picture from each doorway when asked, at most WALK_PICTURES_MAX.
+      const { survey, walk } = walkOf(loaded, floor)
+      const shots = args['pictures'] === true ? await walkPictures(survey, walk, WALK_PICTURES_MAX) : []
+      const names = new Map(shots.map((shot, i) => [shot.stop, `picture ${i + 1}`]))
+      const stops = walk.floors.reduce((sum, floor) => sum + floor.stops.length, 0)
+      const more = args['pictures'] === true && stops > shots.length ? `\nPictures of the first ${shots.length} doorways of ${stops}: pass floor to walk one floor at a time.` : ''
+      const text = `${describeWalk(survey, walk, audience, names).trimEnd()}${more}`
+      const pictures = shots.map((shot, i) => ({ picture: i + 1, room: shot.stop.room, floor: shot.stop.floor, eyeHeight: WALK_EYE_HEIGHT, heading: shot.stop.heading }))
+      return {
+        text,
+        data: { length, for: audience, as: null, text, pictures },
+        ...(shots.length === 0 ? {} : { images: shots.map((shot) => ({ data: shot.png, mimeType: 'image/png' as const })) }),
+      }
+    }
     const text = describePlan(loaded, length, audience)
     return { text, data: { length, for: audience, as: null, text } }
   },
