@@ -9,7 +9,7 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { cross, dot, signedArea, sub, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { cross, dot, signedArea, sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import type { Survey, SurveyRoom } from '../quantities/survey'
 import { type OpeningChange, type Patch, type RoomChange } from './edits'
@@ -91,7 +91,7 @@ export function cutAt(plan: Survey['plan'], wall: Wall, s: number): number {
     if (other.id === wall.id || (other.floor ?? 'ground') !== (wall.floor ?? 'ground')) continue
     const x = wallAxis(other)
     const denom = cross(axis.dir, x.dir)
-    if (Math.abs(denom) < 1e-6) continue
+    if (Math.abs(denom) < tolerance('parallel')) continue
     const t = cross(sub(x.start, axis.start), x.dir) / denom
     const u = cross(sub(x.start, axis.start), axis.dir) / denom
     if (Math.abs(t - s) <= other.thickness / 2 + TOL && u >= -TOL && u <= x.length + TOL) {
@@ -199,7 +199,7 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
   for (const o of plan.openings) {
     if (o.anchor?.room === bId) openings.set(o.id, { anchor: { ...o.anchor, room: aId } })
     if (o.wall !== wall.id) continue
-    const home = pieces.find((p) => p.lo - 1e-6 <= o.offset && o.offset + o.width <= p.hi + 1e-6)
+    const home = pieces.find((p) => p.lo - tolerance('joint') <= o.offset && o.offset + o.width <= p.hi + tolerance('joint'))
     if (!home) {
       removeOpenings.add(o.id)
       said.push(`Removed ${o.type} ${quoted(o.id)}: it was in the wall taken out.`)

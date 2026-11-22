@@ -73,6 +73,12 @@ fixtures, and the decisions to check.
    path). Rename, a north side moved and an east side moved, on bedroom 2 of the flat and on
    bedroom 2 of flat C in the 588-part block, answer within 10% of the same size.
 
+## Fixtures (CNT-12, merged from main)
+
+The patch carries CNT-12's `items` beside the room changes. A stretch moves every fixture
+beyond its line with the walls (it keeps its turn); merge, split and add-room move none, and
+a fixture in a room that a merge takes in stays where it is, now in the merged room.
+
 ## A bug found and fixed on the way
 
 `comparePlans` (`quantities/compare.ts`) paired openings by position without looking at the

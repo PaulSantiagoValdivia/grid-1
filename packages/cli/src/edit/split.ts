@@ -10,7 +10,7 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { sub, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { applyPatch, type Direction, type Patch, type RoomChange } from './edits'
@@ -88,7 +88,7 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
     for (const wall of sides[on]) {
       const axis = wallAxis(wall)
       const k = across ? axis.dir.x : axis.dir.y
-      if (Math.abs(k) < 1e-9) continue
+      if (Math.abs(k) < tolerance('parallel')) continue
       const s = ((across ? c - axis.start.x : c - axis.start.y) / k)
       if (s < -0.02 || s > axis.length + 0.02) continue
       const p = { x: axis.start.x + axis.dir.x * s, y: axis.start.y + axis.dir.y * s }
@@ -161,7 +161,7 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
       guessed.push(`The door is centred in the new wall: pass door_from and door_distance to place it.`)
     }
     const offset = r3(near - start)
-    if (offset < 0 || offset + doorWidth > length + 1e-6) throw new EditRefused(`A ${doorWidth.toFixed(2)} m door there would run past the ends of the new ${length.toFixed(2)} m wall.`)
+    if (offset < 0 || offset + doorWidth > length + tolerance('joint')) throw new EditRefused(`A ${doorWidth.toFixed(2)} m door there would run past the ends of the new ${length.toFixed(2)} m wall.`)
     const doorId = freshId(used, `door-${request.newRoom.id}`)
     used.add(doorId)
     // Swing "left" opens toward the face the new wall's normal points at: west or north.

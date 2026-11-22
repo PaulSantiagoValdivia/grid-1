@@ -10,7 +10,7 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { add, dot, scale, signedArea, sub, wallAxis, type Vec2 } from '@ongrid/floorplan/geometry'
+import { add, dot, scale, signedArea, sub, tolerance, wallAxis, type Vec2 } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import type { Survey } from '../quantities/survey'
 import { type Direction, type OpeningChange, type Patch, type RoomChange } from './edits'
@@ -122,10 +122,8 @@ export function addRoom(survey: Survey, request: AddRoomRequest): Patch {
     boundary.push(id)
   }
   boundary.push(covered.id)
-  const farWall = newWalls.find((w) => {
-    const s = w['start'] as [number, number]
-    return Math.abs(dot(sub({ x: s[0], y: s[1] }, axis.start), out) - far) < 1e-6 && Math.abs(dot(sub({ x: (w['end'] as number[])[0]!, y: (w['end'] as number[])[1]! }, axis.start), out) - far) < 1e-6
-  })!
+  // The middle of the three runs between the two far corners, whichever way round they go.
+  const farWall = newWalls[1]!
 
   // Every room that named the wall names the pieces beside it.
   const rooms = new Map<string, RoomChange>()
@@ -142,14 +140,14 @@ export function addRoom(survey: Survey, request: AddRoomRequest): Patch {
   const notKept: string[] = []
   const openings = new Map<string, OpeningChange>()
   const removeOpenings = new Set<string>()
-  const inWay = plan.openings.filter((o) => o.wall === wall.id && o.offset + o.width > sLow - t / 2 + 1e-6 && o.offset < sHigh + t / 2 - 1e-6)
+  const inWay = plan.openings.filter((o) => o.wall === wall.id && o.offset + o.width > sLow - t / 2 + tolerance('joint') && o.offset < sHigh + t / 2 - tolerance('joint'))
   if (inWay.length > 0 && request.inTheWay === undefined) {
     throw new EditRefused(`${inWay.map((o) => `${o.type} ${quoted(o.id)}`).join(', ')} ${inWay.length === 1 ? 'is' : 'are'} in the stretch of wall the new room covers: pass in_the_way remove to take ${inWay.length === 1 ? 'it' : 'them'} out, or keep to keep ${inWay.length === 1 ? 'it' : 'them'} between the two rooms.`)
   }
   for (const o of plan.openings) {
     if (o.wall !== wall.id) continue
     if (inWay.includes(o)) {
-      const within = o.offset >= low - 1e-6 && o.offset + o.width <= high + 1e-6
+      const within = o.offset >= low - tolerance('joint') && o.offset + o.width <= high + tolerance('joint')
       if (request.inTheWay === 'keep' && !within) throw new EditRefused(`${o.type} ${quoted(o.id)} would meet a wall of the new room, so it can't be kept: pass in_the_way remove, or move it first.`)
       if (request.inTheWay === 'keep') {
         openings.set(o.id, { wall: covered.id, offset: r3(o.offset - covered.lo) })
@@ -160,14 +158,14 @@ export function addRoom(survey: Survey, request: AddRoomRequest): Patch {
       }
       continue
     }
-    const home = pieces.find((p) => p.lo - 1e-6 <= o.offset && o.offset + o.width <= p.hi + 1e-6)!
+    const home = pieces.find((p) => p.lo - tolerance('joint') <= o.offset && o.offset + o.width <= p.hi + tolerance('joint'))!
     if (home.id !== wall.id || home.lo > 0) openings.set(o.id, { wall: home.id, offset: r3(o.offset - home.lo) })
   }
 
   const addOpenings: Record<string, unknown>[] = []
   const openingWidth = request.openingWidth ?? 0
   if (openingWidth > 0) {
-    if (openingWidth > wIn + 1e-6) throw new EditRefused(`An opening ${openingWidth.toFixed(2)} m wide does not fit the new room's ${wIn.toFixed(2)} m inside.`)
+    if (openingWidth > wIn + tolerance('joint')) throw new EditRefused(`An opening ${openingWidth.toFixed(2)} m wide does not fit the new room's ${wIn.toFixed(2)} m inside.`)
     const offset = r3((low + high) / 2 - openingWidth / 2 - covered.lo)
     const clash = request.inTheWay === 'keep' && inWay.some((o) => o.offset - covered.lo < offset + openingWidth && offset < o.offset - covered.lo + o.width)
     if (clash) throw new EditRefused(`The opening between the rooms would overlap what is kept there: pass in_the_way remove, or a narrower opening_width.`)
@@ -178,7 +176,7 @@ export function addRoom(survey: Survey, request: AddRoomRequest): Patch {
   }
   const doorWidth = request.doorWidth ?? 0
   if (doorWidth > 0) {
-    if (doorWidth > wIn + 1e-6) throw new EditRefused(`A door ${doorWidth.toFixed(2)} m wide does not fit the new room's ${wIn.toFixed(2)} m inside.`)
+    if (doorWidth > wIn + tolerance('joint')) throw new EditRefused(`A door ${doorWidth.toFixed(2)} m wide does not fit the new room's ${wIn.toFixed(2)} m inside.`)
     const id = freshId(used, `door-${request.id}`)
     used.add(id)
     const s = farWall['start'] as [number, number]
