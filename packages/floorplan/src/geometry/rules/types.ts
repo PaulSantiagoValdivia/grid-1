@@ -86,6 +86,17 @@ export type FindingCode =
    */
   | 'opening_too_small_to_pass'
   /**
+   * MSG-17 (lab CH-6): a door or doorless opening through a wall stated exterior onto outside floor
+   * the walls close in on every side, with no door on from it to the open air. Never a way out.
+   */
+  | 'door_into_closed_court'
+  /**
+   * MSG-17 (lab AB-1): a let, a flat (CNT-4) or a room marked `private` in no flat in a plan with
+   * common parts, whose every route to a way out goes through a room another let holds. Its rooms
+   * are the let's, then those of the other lets on the way out.
+   */
+  | 'let_through_another_let'
+  /**
    * LVL-4: a door, window or doorless opening in an outside wall that lies below the ground level
    * the site states (lab VE-7), wholly or in part. Only when the plan states the ground.
    */
@@ -123,8 +134,16 @@ export interface RuleFinding {
    * Optional, so the report stays at schema version 1.
    */
   readonly through?: readonly RouteStep[]
-  /** CNT-6: only on `flat_without_front_door`, the flat's id (CNT-4). */
+  /** CNT-6: only on `flat_without_front_door`, the flat's id (CNT-4); MSG-17: on `let_through_another_let` when the let is a flat. */
   readonly flat?: string
+  /**
+   * MSG-17, only on `let_through_another_let`: the let's rooms, and the rooms of other lets on its
+   * nearest way out, in the order the way passes them, by id. Optional, like `through`.
+   */
+  readonly lets?: {
+    readonly own: readonly string[]
+    readonly through: readonly string[]
+  }
   /**
    * Only on `door_to_outside_above_ground`: how far the floor stands above the ground, in m, as
    * the message says it. Optional, like `through` (MSG-1: the notes word it from this).

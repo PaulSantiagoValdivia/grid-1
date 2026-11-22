@@ -333,7 +333,7 @@ display chooses a point. Names from the plan are never translated.
 | `room/no-route-out` | "{name}" has no route to a door to the outside | a route through doors and openings to a door to the outside |
 | `room/no-route-to-door-out` | "{name}" has no route to a door to the outside, nor to a door into a space that is not drawn | a route to a door to the outside, or to the door into the space not drawn |
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
-| `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
+| `opening/door-out-above-ground` | Where a door from "{name}" leads, {height} m above the ground, was not checked: it is not taken as a way out | a way out at ground level, or a stair down to one |
 | `opening/below-ground` | The {window} in "{name}" lies wholly below the ground: its top is {depth} m under the ground level the site states (partly: its sill, threshold or foot) | a door or window above the ground outside, or a light well or an outside stair in front of it |
 | `plan/setback-short` | The building is {distance} m from the {east} boundary; you asked for {set-back} m ({set-back} m is assumed for you, to confirm, for one the site marks assumed) | {set-back} m from it, the set-back the person asked for from that edge, the street edges or every edge: their own figure, not a code's |
 | `plan/over-boundary` | The building reaches {distance} m over the {east} boundary, out of the plot | the building inside the plot's boundary |

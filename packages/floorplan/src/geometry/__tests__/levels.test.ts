@@ -347,10 +347,10 @@ describe('LVL-1 a door to the outside above the ground (VE-8)', () => {
     expect(report.findings.map((f) => [f.code, f.ruleId, f.rooms, f.openings, f.elevation])).toEqual([
       ['door_to_outside_above_ground', 'door-leads-somewhere', ['flat-room'], ['door'], 9.85]
     ])
-    expect(report.findings[0]!.message).toBe('A door from "flat" leads outside 9.85 m above the ground, so it is not a way out')
+    expect(report.findings[0]!.message).toBe('Where a door from "flat" leads, 9.85 m above the ground, was not checked: it is not taken as a way out')
     expect(report.notChecked.map((n) => n.reason)).toEqual(['no_stairs'])
     const note = planNotes(flat({ elevation: 9.85 }), report).notes[0]!
-    expect(note.title.map((p) => p.text).join('')).toBe('A door from flat leads outside 9.85 m above the ground, so it is not a way out')
+    expect(note.title.map((p) => p.text).join('')).toBe('Where a door from flat leads, 9.85 m above the ground, was not checked: it is not taken as a way out')
   })
 
   it('counts the same door as a way out on the ground, and a few steps up', () => {
@@ -375,6 +375,6 @@ describe('LVL-1 a door to the outside above the ground (VE-8)', () => {
     })
     const report = checkPlanSanity(plan)
     expect(report.findings.map((f) => [f.code, f.floor, f.openings])).toEqual([['door_to_outside_above_ground', 'first', ['balcony']]])
-    expect(report.findings[0]!.message).toBe('A door from "b" leads outside 2.95 m above the ground, so it is not a way out')
+    expect(report.findings[0]!.message).toBe('Where a door from "b" leads, 2.95 m above the ground, was not checked: it is not taken as a way out')
   })
 })

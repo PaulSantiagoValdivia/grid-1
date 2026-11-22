@@ -176,6 +176,21 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
             )
           ]
         }
+      case 'door_into_closed_court':
+        return {
+          ...base,
+          title: wordings.doorIntoClosedCourt(roomName(room!)),
+          detail: [words(english(said('check.detail.doorIntoClosedCourt')))]
+        }
+      case 'let_through_another_let': {
+        const lets = finding.lets
+        const who = finding.flat !== undefined ? flatName(finding.flat) : roomName(room!)
+        return {
+          ...base,
+          title: wordings.letThroughAnotherLet(who, (lets?.through ?? []).map(roomName), finding.flat !== undefined),
+          detail: [words(english(said('check.detail.letThroughAnotherLet')))]
+        }
+      }
       case 'opening_too_small_to_pass': {
         const p = finding.passage
         return {

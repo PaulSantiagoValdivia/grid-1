@@ -92,6 +92,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | MS-9 (ids that differ only by a trailing space) | MSG-6 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-6" |
 | MS-15 | MSG-12 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-12"; the plans behind MS-2, MS-15, MS-17, W-10 and L-6 in `geometry/__tests__/wallFaults.test.ts` |
 | MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
+| CH-6 (what lies beyond), AB-1 | MSG-17 | `geometry/__tests__/wayOut.test.ts` (the lab's infill houses G/s08 and the lets); `packages/rules/src/result/__tests__/wayOut.test.ts` (the record, with the country set or not) |
 | CH-6 (the size half) | MSG-18 | `packages/rules/src/checks/__tests__/rules-check.test.ts`, "lab failures fixed by MSG-18"; the lab's three cases in `geometry/__tests__/passable.test.ts` |
 | MS-8 | MSG-16 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-16"; the corner, junction and dividing-line cases in `geometry/__tests__/openingPlaces.test.ts`, the lab's own MS-8 and CP4-11 plans in `scoreboard/__tests__/openingPlaces.test.ts` |
 | CH-3 | COD-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts`, "the place, read through Grid's list" |
@@ -186,6 +187,15 @@ named "lab failures fixed by MSG-18", asserting every finding (`no_exit`, `room_
 and the new `opening_too_small_to_pass` on the hole) instead of only that `no_exit` is there. The other
 half of CH-6, what lies beyond an opening (a window into the next room, a door into a walled
 courtyard), is MSG-17's and has no `it.fails`. No other expected figure changed (`reviews/MSG-18.md`).
+
+MSG-17 fixed no expected failure: CH-6's courtyard half and AB-1 had no `it.fails`. It changed
+four tests on purpose (`reviews/MSG-17.md`). `reads a door into the courtyard as one with the
+gallery on one side only` (holes.test.ts) now expects the courtyard door, closed in by the core on
+every side, among `closedCourts` and not `exits`. Three tests in levels.test.ts and
+largerBuilding.test.ts expect the new wording of a door to the outside above the ground ("Where
+a door from … leads, … was not checked: it is not taken as a way out"). In result.test.ts, `says a
+finding and a notice in the report's words` counts that line, now `not-checked` in the record,
+with the report's findings, where it still is.
 
 HND-2 fixed no expected failure: the lab's EX-2 (IFC rooms carry a name and nothing else) had no
 `it.fails`. It wrote the four IFC golden files again on purpose: each room's space is named by its

@@ -1,7 +1,8 @@
 /**
  * Checks that a plan can be left: a way out, a door on every room, a route from every
- * room to the way out, and doors that lead somewhere. Checks on the drawing, not on any
- * building code.
+ * room to the way out, and doors that lead somewhere: to open air, never into a courtyard closed
+ * in on every side, and for a let, through the common parts, never another let (MSG-17). Checks
+ * on the drawing, not on any building code.
  *
  * Pure: a plan in, plain data out. No AI, no file, no network.
  */
@@ -47,6 +48,9 @@ const RULE_OF: Record<FindingCode, string> = {
   stair_shifted: 'stairs-line-up',
   lift_shifted: 'stairs-line-up',
   opening_too_small_to_pass: 'room-has-door',
+  // MSG-17: a way out leads to open air, and a let is left through common parts.
+  door_into_closed_court: 'door-leads-somewhere',
+  let_through_another_let: 'room-reaches-exit',
   opening_below_ground: 'openings-above-ground',
   setback_short: 'site-boundary',
   over_boundary: 'site-boundary'
@@ -130,6 +134,7 @@ function floorFindings(
     ...graph.intoNeighbour.map((u) => u.room),
     ...graph.openEdges.map((e) => e.room),
     ...graph.betweenHomes.flatMap((l) => l.rooms),
+    ...graph.closedCourts.map((u) => u.room),
     ...graph.rooms.filter((room) => joined.has(at(floor.id, room)))
   ])
   // A floor that is one open room and that no stair joins is reached by a stair the plan does
@@ -276,6 +281,121 @@ function frontDoorFindings(
     const sentence = saids.flatWithoutFrontDoor(flat.name)
     return [withSentence({ ...finding('flat_without_front_door', floor, flat.rooms.map((room) => room.id), english(sentence)), flat: flat.id }, sentence)]
   })
+}
+
+/**
+ * MSG-17: the plan's lets, each a group of rooms someone holds as their own, by `at`. A flat
+ * (CNT-4) is a let; so is each room marked `private` (CNT-5) in no flat, when the plan marks some
+ * room `common` or `shared` (a house of rooms to let, student rooms, a hotel): without common
+ * parts, the private rooms are one household's. A private bathroom, toilet, store or utility in no
+ * flat is no let of its own (an en-suite), and no other let passes through it either (`closed`).
+ */
+interface Lets {
+  readonly of: ReadonlyMap<string, string>
+  readonly lets: ReadonlyMap<string, { readonly name: string; readonly flat: string | null; readonly rooms: readonly Place[] }>
+  readonly closed: ReadonlySet<string>
+}
+
+const SERVICE_USES: ReadonlySet<string> = new Set(['bathroom', 'toilet', 'storage', 'utility'])
+
+function planLets(plan: FloorPlan): Lets {
+  const of = new Map<string, string>()
+  const lets = new Map<string, { name: string; flat: string | null; rooms: Place[] }>()
+  const closed = new Set<string>()
+  for (const flat of planFlats(plan)) {
+    const key = `flat\u0000${flat.id}`
+    const rooms = flat.rooms.map((room) => ({ floor: room.floor, room: room.id }))
+    lets.set(key, { name: flat.name, flat: flat.id, rooms })
+    for (const room of rooms) of.set(at(room.floor, room.room), key)
+  }
+  const shared = plan.rooms.some((room) => room.tenure === 'common' || room.tenure === 'shared')
+  if (shared) {
+    for (const room of plan.rooms) {
+      const key = at(floorOf(room), room.id)
+      if (room.tenure !== 'private' || of.has(key) || room.void === true || isOutdoor(room)) continue
+      if (room.use !== undefined && SERVICE_USES.has(room.use)) {
+        closed.add(key)
+        continue
+      }
+      const id = `room\u0000${key}`
+      lets.set(id, { name: room.name || room.id, flat: null, rooms: [{ floor: floorOf(room), room: room.id }] })
+      of.set(key, id)
+    }
+  }
+  return { of, lets, closed }
+}
+
+/**
+ * MSG-17 (lab AB-1): each let of these floors that a route reaches, but only through a room
+ * another let holds (or a private room no let may pass, `closed`). A let a route cannot reach at
+ * all is already said (`no_route_to_exit`, `flat_without_front_door`). The way out is followed up
+ * and down the stairs (LVL-3), from the same doors as the routes.
+ */
+function letFindings(
+  floors: readonly FloorRoutes[],
+  stairs: readonly StairLink[],
+  lets: Lets,
+  roomName: (id: string) => string
+): RuleFinding[] {
+  if (lets.lets.size === 0) return []
+  const starts = (pick: (f: FloorRoutes) => readonly { readonly room: string }[]): string[] =>
+    floors.flatMap((f) => pick(f).map((e) => at(f.id, e.room)))
+  const exits = starts((f) => (f.exitsCount ? f.graph.exits : []))
+  const goals = new Set(exits.length > 0 ? exits : starts(onward))
+  if (goals.size === 0) return []
+  const neighbours = new Map<string, string[]>()
+  const join = (a: string, b: string): void => {
+    neighbours.set(a, [...(neighbours.get(a) ?? []), b])
+    neighbours.set(b, [...(neighbours.get(b) ?? []), a])
+  }
+  for (const f of floors) for (const l of f.graph.links) join(at(f.id, l.rooms[0]), at(f.id, l.rooms[1]))
+  for (const { ends: [a, b] } of stairs) join(at(a.floor, a.room), at(b.floor, b.room))
+  const onFloors = new Set(floors.map((f) => f.id))
+  // Breadth-first from a let's rooms, through the rooms `may` allows, to the nearest goal.
+  const nearest = (from: readonly string[], may: (key: string) => boolean): string[] | null => {
+    const back = new Map<string, string | null>(from.map((key) => [key, null] as const))
+    const queue = [...from]
+    while (queue.length > 0) {
+      const here = queue.shift()!
+      if (goals.has(here)) {
+        const path: string[] = []
+        for (let step: string | null = here; step !== null; step = back.get(step) ?? null) path.unshift(step)
+        return path
+      }
+      for (const next of neighbours.get(here) ?? []) {
+        if (back.has(next) || !may(next)) continue
+        back.set(next, here)
+        queue.push(next)
+      }
+    }
+    return null
+  }
+  const findings: RuleFinding[] = []
+  for (const [id, lot] of lets.lets) {
+    const own = lot.rooms.filter((r) => onFloors.has(r.floor)).map((r) => at(r.floor, r.room))
+    // A let on floors of another group is checked with that group; one split across groups is not asked.
+    if (own.length === 0 || own.length < lot.rooms.length) continue
+    const free = (key: string): boolean => lets.of.get(key) === id || (!lets.of.has(key) && !lets.closed.has(key))
+    if (nearest(own, free) !== null) continue
+    const any = nearest(own, () => true)
+    if (any === null) continue
+    const through = any.filter((key) => lets.of.get(key) !== id && (lets.of.has(key) || lets.closed.has(key)))
+    const roomOf = (key: string): string => key.slice(key.indexOf('\u0000') + 1)
+    const throughRooms = [...new Set(through.map(roomOf))]
+    const ownRooms = lot.rooms.map((r) => r.room)
+    const sentence = saids.letThroughAnotherLet(lot.name, throughRooms.map(roomName), lot.flat !== null)
+    findings.push(
+      withSentence(
+        {
+          ...finding('let_through_another_let', lot.rooms[0]!.floor, [...ownRooms, ...throughRooms.filter((r) => !ownRooms.includes(r))], english(sentence)),
+          ...(lot.flat === null ? {} : { flat: lot.flat }),
+          lets: { own: ownRooms, through: throughRooms }
+        },
+        sentence
+      )
+    )
+  }
+  return findings
 }
 
 /** The finding for a door or doorless opening no person fits through (MSG-18). */
@@ -455,6 +575,7 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
     for (const room of own.doorless) doorless.add(at(floor.id, room))
   }
   findings.push(...frontDoorFindings(plan, floors, routes, stairLinks, leftOutOn, aboveGround))
+  const lets = planLets(plan)
   for (const root of checkedGroups) {
     const members = floors.filter((f) => find(f.id) === root).map((f) => routes.get(f.id)!)
     const memberIds = new Set(members.map((m) => m.id))
@@ -466,6 +587,16 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
       roomName
     )
     findings.push(...found.findings)
+    // MSG-17 (lab CH-6): a door onto a courtyard closed in on every side leads to no open air. It
+    // is said where it is why there is no way out; beside a front door it is a courtyard door.
+    if (!members.some((m) => m.exitsCount && m.graph.exits.length > 0)) {
+      for (const member of members) {
+        for (const { room, opening } of member.graph.closedCourts) {
+          findings.push(finding('door_into_closed_court', member.id, [room], messages.doorIntoClosedCourt(roomName(room)), [opening]))
+        }
+      }
+    }
+    findings.push(...letFindings(members, stairLinks.filter((l) => memberIds.has(l.ends[0].floor)), lets, roomName))
     if (found.wayOutNotDrawn) {
       for (const member of members) {
         const ways = onward(member)
@@ -645,6 +776,16 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
       case 'door_to_undrawn_space':
         waitsFor = leadsWaitsFor(openingWall.get(found.openings[0] ?? ''), damage.get(found.floor))
         break
+      // MSG-17: a gate out of the courtyard, or a room beside it, may be what could not be drawn.
+      case 'door_into_closed_court':
+        waitsFor = routeWaitsFor([damage.get(found.floor)])
+        break
+      case 'let_through_another_let': {
+        const group = groupOf(found.floor)
+        waitsFor = routeWaitsFor(group.map((id) => damage.get(id)))
+        on = damaged(damage.get(found.floor)) ? found.floor : group.find((id) => damaged(damage.get(id))) ?? found.floor
+        break
+      }
       default:
         break
     }
