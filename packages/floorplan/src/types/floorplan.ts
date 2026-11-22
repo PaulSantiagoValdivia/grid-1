@@ -179,17 +179,27 @@ export const ROOM_USES = [
 
 export const RoomUseSchema = z.enum(ROOM_USES)
 
-export const RoomSchema = z.object({
-  id: text('id'),
-  name: text('name'),
-  // C3: ordered wall IDs in counter-clockwise order (top view), inner-face contour
-  boundary: z.array(text('id')).superRefine((list, ctx) => {
+/** A list of wall ids round a room or one of its holes, at most `BOUNDARY_MAX` long (MSG-9). */
+const wallList = () =>
+  z.array(text('id')).superRefine((list, ctx) => {
     if (list.length <= BOUNDARY_MAX) return
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       message: `lists ${list.length.toLocaleString('en-US')} walls; a room may list at most ${BOUNDARY_MAX.toLocaleString('en-US')}`,
     })
-  }),
+  })
+
+export const RoomSchema = z.object({
+  id: text('id'),
+  name: text('name'),
+  // C3: ordered wall IDs in counter-clockwise order (top view), inner-face contour
+  boundary: wallList(),
+  // ARE-6: the holes in the room, one list of walls each, in the order they are met going
+  // round the hole: a courtyard in a ring gallery, a core in a car park. The room's floor is
+  // its outline less each hole, measured to the faces of the hole's walls that look into the
+  // room, so the hole's walls are not floor either. Optional and never defaulted, so a plan
+  // written before ARE-6 reads with no key added (version 1).
+  holes: parts(wallList(), 'holes in one room').optional(),
   // C5: unstated means the ground floor. Every wall in `boundary` must be on this
   // same floor — a cross-floor boundary is a validation error.
   floor: text('id').pipe(z.string().min(1)).optional(),
@@ -347,6 +357,18 @@ export const FloorPlanFieldsSchema = z.object({
   // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
   stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
+  // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
+  // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
+  // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
+  // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  written: z
+    .object({
+      from: z.literal('rooms'),
+      revision: z.string().regex(/^[0-9a-f]{16}$/),
+      boundaries: z.record(text('id'), z.string().regex(/^[0-9a-f]{8}$/)),
+    })
+    .optional()
+    .catch(undefined),
 })
 
 export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSchema)

@@ -16,7 +16,7 @@ import { buildFloorPlan } from '../floorplan'
 import { toDxf } from '../export/dxf'
 import { toIfc } from '../export/ifc'
 import { validatePlan } from '../validate'
-import { checkLocalRules } from '../rules'
+import { checkPlanSanity } from '../rules'
 import { floorGraph } from '../rules/graph'
 
 type P = [number, number]
@@ -87,7 +87,7 @@ describe('MS-11 a plan that states no wall kind', () => {
     const graph = floorGraph(plan)
     expect(graph.exits).toEqual([{ room: 'room', opening: 'door' }])
     expect(graph.undrawn).toEqual([])
-    const report = checkLocalRules(plan)
+    const report = checkPlanSanity(plan)
     expect(report.findings).toEqual([])
     expect(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn')).toEqual([])
     expect(validatePlan(plan).issues).toEqual([])

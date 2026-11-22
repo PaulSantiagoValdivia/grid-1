@@ -127,6 +127,8 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
     const parts: string[] = []
     if (name) parts.push(`renamed to ${quoted(text(name.after))}`)
     if (prop(change, 'boundary')) parts.push('walls changed')
+    // ARE-6: the walls round its holes.
+    if (prop(change, 'holes')) parts.push('holes changed')
     const floor = prop(change, 'floor')
     if (floor) parts.push(`moved to ${quoted(floorName(text(floor.after)))}`)
     // ARE-10: a room's own height, which it may leave unstated.

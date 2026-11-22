@@ -20,7 +20,7 @@ import type { WallEnds } from './wall'
 import { SQUARE_ENDS, openingSpan, wallAxis } from './wall'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
-import { tryRoomPolygon } from './room'
+import { tryRoomShape } from './room'
 import { roomFloorOffset } from './steps'
 import { wallExposure } from './exposure'
 import { wallRevision } from './revision'
@@ -127,6 +127,8 @@ export interface SceneSlab {
   readonly name: string
   /** Polygon on the model's XY plane, at z = 0. */
   readonly polygon: readonly Vec2[]
+  /** The room's holes (ARE-6), clockwise: the floor is open there. Empty for a room with none. */
+  readonly holes: readonly (readonly Vec2[])[]
   /**
    * How far the room's floor stands above its storey's floor level, in metres (LVL-7), when it
    * states an offset other than 0; absent, it stands on the storey's floor. The slab's top is at
@@ -260,12 +262,12 @@ export function wallBasis(wall: Wall): WallBasis {
   }
 }
 
-/** A room's slab polygon. The same one the plan view draws. */
+/** A room's slab polygon, with its holes. The same ones the plan view draws. */
 export function roomSlab(room: Room, index: PlanIndex): SceneSlab | null {
-  const polygon = tryRoomPolygon(room, index)
-  if (!polygon) return null
+  const shape = tryRoomShape(room, index)
+  if (!shape) return null
   const offset = roomFloorOffset(room)
-  return { roomId: room.id, name: room.name, polygon, ...(offset !== 0 && { offset }) }
+  return { roomId: room.id, name: room.name, polygon: shape.polygon, holes: shape.holes, ...(offset !== 0 && { offset }) }
 }
 
 /**

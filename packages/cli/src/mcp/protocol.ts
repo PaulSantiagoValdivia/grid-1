@@ -46,7 +46,15 @@ function listOf(items: readonly string[]): string {
 export const VERSIONS_SPOKEN = `Grid's tool server speaks MCP ${listOf(PER_REQUEST_VERSIONS)}, with the version in each request's _meta and server/discover first, and ${listOf(PROTOCOL_VERSIONS)} after initialize.`
 
 /** What `server/discover` says about the tools, for an agent's host to show. */
-const INSTRUCTIONS = 'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. Every report carries the label General guidance, not your local rules.'
+/**
+ * What the server tells an agent's host before any tool (WRT-1, WRT-2): rooms-first is the main
+ * way to write a plan, and the plan file, not the rooms text, is the source of truth.
+ */
+export const INSTRUCTIONS =
+  'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. '
+  + 'Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls. '
+  + 'The plan file is the source of truth; rooms text is a way of writing and reading it. To change a plan, read it back with grid_describe as=rooms, change the text and write it with grid_write_rooms. Each room\'s boundary is derived: never edit it by hand. '
+  + 'Every report carries the label General guidance, not your local rules.'
 
 type Id = string | number | null
 

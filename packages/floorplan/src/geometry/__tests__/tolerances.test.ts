@@ -49,8 +49,8 @@ const codeOf = (text: string): string =>
 const TOLERANCE_LITERAL = /(?<![\w.])(?:\d+(?:\.\d+)?e-\d+|0\.0\d*)(?![\w.])/g
 
 describe('the tolerance table', () => {
-  it('is the only place a numeric tolerance is written, in the geometry, validation and schema', () => {
-    const files = [...sources(join(SOURCE, 'geometry')), ...sources(join(SOURCE, 'types'))].filter(
+  it('is the only place a numeric tolerance is written, in the geometry, validation, schema and rooms-first writing', () => {
+    const files = [...sources(join(SOURCE, 'geometry')), ...sources(join(SOURCE, 'types')), ...sources(join(SOURCE, 'rooms'))].filter(
       (file) => !file.endsWith(join('geometry', 'tolerances.ts'))
     )
     expect(files.length).toBeGreaterThan(30)

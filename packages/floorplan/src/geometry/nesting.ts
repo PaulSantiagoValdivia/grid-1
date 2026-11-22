@@ -33,10 +33,11 @@ import { TOLERANCES, tolerance } from './tolerances'
 import type { Box, WallRun } from './polygons'
 import { boxOfRings, cornerFills, intersectionArea, multiArea, overlaps, polygonArea, strip, union } from './polygons'
 
-/** A room whose outline closes, with that outline (`roomPolygon`). */
+/** A room whose outline closes, with that outline (`roomPolygon`) and its holes (ARE-6). */
 export interface TracedRoom {
   readonly room: Room
   readonly outline: readonly Vec2[]
+  readonly holes?: readonly (readonly Vec2[])[]
 }
 
 /** A room the plan marks `inside`, and the room it was found to sit in. */
@@ -55,11 +56,13 @@ export interface InnerRoom {
   readonly reason?: string
 }
 
-/** A room that has rooms inside it: its floor less theirs. */
+/**
+ * A room whose floor is less than its outline: it has rooms inside it, holes (ARE-6), or both.
+ */
 export interface HostFloor {
-  /** The rooms that sit right inside it, in plan order. */
+  /** The rooms that sit right inside it, in plan order. Empty for a room with holes only. */
   readonly rooms: readonly string[]
-  /** Its outline less the footprints of those rooms, as `polygon-clipping` gives it. */
+  /** Its outline less its holes and the footprints of those rooms, as `polygon-clipping` gives it. */
   readonly region: MultiPolygon
   /** The area of that region, in square metres: the room's area as Grid gives it. */
   readonly area: number
@@ -68,7 +71,7 @@ export interface HostFloor {
 export interface RoomNesting {
   /** Every room marked `inside` whose outline closes, by id. */
   readonly inner: ReadonlyMap<string, InnerRoom>
-  /** Every room with a room inside it, by id. */
+  /** Every room with a room inside it, or a hole in it, by id. */
   readonly hosts: ReadonlyMap<string, HostFloor>
 }
 
@@ -185,13 +188,20 @@ function nest(traced: readonly Traced[], marked: readonly Traced[], wallsById: R
  */
 export function nestRooms(rooms: readonly TracedRoom[], wallsById: ReadonlyMap<string, Wall>): RoomNesting {
   const traced: Traced[] = []
-  rooms.forEach(({ room, outline }, order) => {
+  rooms.forEach(({ room, outline, holes = [] }, order) => {
     if (outline.length < 3 || !finite(outline)) return
-    const polygon: Polygon = [outline.map((p): Pair => [p.x, p.y])]
+    // A hole is one more ring of the polygon (ARE-6): its area comes off the outline's.
+    const rings = [outline, ...holes.filter((hole) => hole.length >= 3 && finite(hole))]
+    const polygon: Polygon = rings.map((ring) => ring.map((p): Pair => [p.x, p.y]))
     const area = polygonArea(polygon)
     if (!(area > 0)) return
     traced.push({ room, floor: floorOf(room), polygon, area, box: boxOfRings(polygon), order })
   })
+  return withHoles(nestMarked(traced, wallsById), traced)
+}
+
+/** The rooms marked `inside`, each with the room it sits in, and what each of those keeps. */
+function nestMarked(traced: readonly Traced[], wallsById: ReadonlyMap<string, Wall>): RoomNesting {
   const marked = traced.filter((t) => t.room.inside === true)
   if (marked.length === 0) return NO_NESTING
 
@@ -208,6 +218,19 @@ export function nestRooms(rooms: readonly TracedRoom[], wallsById: ReadonlyMap<s
     inner: new Map(marked.map((t) => [t.room.id, { room: t.room.id, host: null, nearest: null, taken: 0, reason }])),
     hosts: new Map()
   }
+}
+
+/**
+ * A room with holes and no room inside it keeps its outline less its holes (ARE-6). No cut is
+ * needed for that: the holes are rings of its polygon, checked to lie inside the outline and
+ * clear of each other (`room.ts`).
+ */
+function withHoles(nesting: RoomNesting, traced: readonly Traced[]): RoomNesting {
+  const holed = traced.filter((t) => t.polygon.length > 1 && !nesting.hosts.has(t.room.id))
+  if (holed.length === 0) return nesting
+  const hosts = new Map(nesting.hosts)
+  for (const t of holed) hosts.set(t.room.id, { rooms: [], region: [t.polygon], area: t.area })
+  return { inner: nesting.inner, hosts }
 }
 
 /** Whether `ancestor` holds `room`, right around it or further out. */

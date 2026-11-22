@@ -11,7 +11,7 @@
 import type { FloorPlan, Opening, PlanIndex, Wall } from '../plan'
 import { indexPlan } from '../plan'
 import { floorOf } from '../floors'
-import { roomNesting, tryRoomPolygon } from '../room'
+import { roomNesting, tryRoomShape } from '../room'
 import type { FloorSpaces } from '../spaces'
 import { floorSpaces, spacesKnown } from '../spaces'
 import { planWallSides } from '../exposure'
@@ -26,6 +26,8 @@ export const STEP_PAST_FACE_M = TOLERANCES.stepPastFace.value
 export interface RoomOutline {
   readonly id: string
   readonly polygon: readonly Vec2[]
+  /** Its holes, clockwise (ARE-6). A point in a hole is not in the room. */
+  readonly holes: readonly (readonly Vec2[])[]
 }
 
 /** The outline of every room that closes, by id, except those left out. */
@@ -37,8 +39,8 @@ export function roomOutlines(
   const outlines = new Map<string, RoomOutline>()
   for (const room of plan.rooms) {
     if (leftOut.has(room.id)) continue
-    const polygon = tryRoomPolygon(room, index)
-    if (polygon !== null) outlines.set(room.id, { id: room.id, polygon })
+    const shape = tryRoomShape(room, index)
+    if (shape !== null) outlines.set(room.id, { id: room.id, polygon: shape.polygon, holes: shape.holes })
   }
   return outlines
 }
@@ -56,6 +58,15 @@ function contains(polygon: readonly Vec2[], point: Vec2): boolean {
   }
   return inside
 }
+
+/** Whether a room's floor holds the point: inside its outline and in none of its holes (ARE-6). */
+function holds(outline: RoomOutline, point: Vec2): boolean {
+  return contains(outline.polygon, point) && !outline.holes.some((hole) => contains(hole, point))
+}
+
+/** A room's floor area as the graph compares rooms: its outline less its holes. */
+const floorArea = (outline: RoomOutline): number =>
+  outline.holes.reduce((sum, hole) => sum - area([...hole]), area([...outline.polygon]))
 
 /**
  * The rooms on the two sides of a point on a wall's axis, `[left, right]`:
@@ -86,8 +97,8 @@ export function sidesAt(
     let found: RoomOutline | null = null
     let foundArea = Infinity
     for (const outline of candidates) {
-      if (!contains(outline.polygon, point)) continue
-      const size = area([...outline.polygon])
+      if (!holds(outline, point)) continue
+      const size = floorArea(outline)
       if (size < foundArea) {
         found = outline
         foundArea = size
@@ -97,7 +108,7 @@ export function sidesAt(
     for (const outline of candidates) {
       const host = nesting.inner.get(outline.id)?.host ?? null
       const around = host === null ? undefined : outlines.get(host)
-      if (around !== undefined && contains(around.polygon, point)) return around.id
+      if (around !== undefined && holds(around, point)) return around.id
     }
     return null
   }

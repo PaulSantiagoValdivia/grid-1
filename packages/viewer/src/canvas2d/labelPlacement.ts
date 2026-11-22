@@ -188,6 +188,8 @@ const grow = (box: Rect, by: number): Box => ({
 export interface LabelRoom {
   readonly id: string
   readonly polygon: readonly Vec2[]
+  /** The room's holes (ARE-6): a label never sits in one. */
+  readonly holes?: readonly (readonly Vec2[])[]
   readonly name: string
   readonly areaText: string
 }
@@ -277,7 +279,7 @@ export function placeRoomLabels(
 
   rooms.forEach((room, i) => {
     const size = sizes[i]!
-    const spots = spotsInside(room.polygon, size.halfWidth, size.halfHeight)
+    const spots = spotsInside(room.polygon, size.halfWidth, size.halfHeight, room.holes)
     for (const ok of [(box: Box) => free(box) && offWalls(box) && offDimensions(box), (box: Box) => free(box) && offWalls(box)]) {
       const centre = spots.find((spot) => ok(size.boxAt(spot)))
       if (!centre) continue
@@ -292,7 +294,7 @@ export function placeRoomLabels(
   for (const i of late) {
     const room = rooms[i]!
     const size = sizes[i]!
-    const anchor = poleOfInaccessibility(room.polygon).point
+    const anchor = poleOfInaccessibility(room.polygon, undefined, room.holes).point
     const spots = spotsAround(rectOf(room.polygon), extent, anchor, size, LEADER_GAP_PX * mpp, 2 * air).filter(
       (spot) => !within || contains(within, size.boxAt(spot))
     )

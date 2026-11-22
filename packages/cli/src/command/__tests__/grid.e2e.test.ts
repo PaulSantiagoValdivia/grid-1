@@ -198,7 +198,7 @@ describe('grid check', () => {
     expect(lines[0]).toBe(GENERAL_GUIDANCE_LABEL)
     // LVL-3 added the plan check that stairs and lift shafts line up.
     expect(run.out).toContain('Checks run (7):')
-    expect(run.out).toContain('Findings: none. That only means these checks found nothing')
+    expect(run.out).toContain('No findings. That only means these checks found nothing')
     expect(run.out).toContain('What these checks never look at')
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)
   })
@@ -238,7 +238,7 @@ describe('grid check', () => {
     const run = grid('check', 'shut.json')
     expect(run.status).toBe(0)
     expect(run.out.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
-    expect(run.out).toContain('Findings (1):')
+    expect(run.out).toMatch(/^To look at \(\d+\): 1 finding\b/m)
     expect(run.out).toContain('Bedroom 2')
   })
 })

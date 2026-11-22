@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "units": "m",
+  "walls": [
+    {"id": "ext-south", "start": [0, 0], "end": [14, 0], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "ext-east", "start": [14, 0], "end": [14, 9], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "ext-north", "start": [14, 9], "end": [0, 9], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "ext-west", "start": [0, 9], "end": [0, 0], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
+    {"id": "w-y3", "start": [0, 3], "end": [9, 3], "thickness": 0.12, "height": 3.0, "kind": "partition"},
+    {"id": "w-x5", "start": [5, 0], "end": [5, 3], "thickness": 0.12, "height": 3.0, "kind": "partition"},
+    {"id": "w-x9", "start": [9, 0], "end": [9, 9], "thickness": 0.15, "height": 3.0, "kind": "interior"},
+    {"id": "w-y55", "start": [9, 5.5], "end": [14, 5.5], "thickness": 0.12, "height": 3.0, "kind": "partition"},
+    {"id": "w-y25", "start": [9, 2.5], "end": [14, 2.5], "thickness": 0.12, "height": 3.0, "kind": "partition"},
+    {"id": "w-x115", "start": [11.5, 0], "end": [11.5, 2.5], "thickness": 0.12, "height": 3.0, "kind": "partition"}
+  ],
+  "rooms": [
+    {"id": "reception", "name": "Reception", "use": "reception", "boundary": ["ext-south", "w-x5", "w-y3", "ext-west"]},
+    {"id": "store", "name": "Store", "use": "storage", "boundary": ["ext-south", "w-x9", "w-y3", "w-x5"]},
+    {"id": "open-office", "name": "Open office (12 desks)", "use": "office", "boundary": ["w-y3", "w-x9", "ext-north", "ext-west"]},
+    {"id": "meeting", "name": "Meeting room (8)", "use": "meeting", "boundary": ["w-y55", "ext-east", "ext-north", "w-x9"]},
+    {"id": "kitchenette", "name": "Kitchenette", "use": "kitchen", "boundary": ["w-y25", "ext-east", "w-y55", "w-x9"]},
+    {"id": "wc1", "name": "WC (accessible)", "use": "toilet", "boundary": ["ext-south", "w-x115", "w-y25", "w-x9"]},
+    {"id": "wc2", "name": "WC", "use": "toilet", "boundary": ["ext-south", "ext-east", "w-y25", "w-x115"]}
+  ],
+  "openings": [
+    {"id": "entrance", "wall": "ext-south", "type": "door", "offset": 1.5, "width": 1.0, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "win-rec", "wall": "ext-south", "type": "window", "offset": 3.0, "width": 1.5, "sill": 0.9, "height": 1.5},
+    {"id": "win-wc2", "wall": "ext-south", "type": "window", "offset": 12.4, "width": 0.8, "sill": 1.6, "height": 0.6},
+    {"id": "win-meet", "wall": "ext-north", "type": "window", "offset": 2.0, "width": 2.0, "sill": 0.9, "height": 1.5},
+    {"id": "win-off1", "wall": "ext-north", "type": "window", "offset": 6.0, "width": 2.0, "sill": 0.9, "height": 1.5},
+    {"id": "win-off2", "wall": "ext-north", "type": "window", "offset": 9.5, "width": 2.0, "sill": 0.9, "height": 1.5},
+    {"id": "win-off3", "wall": "ext-west", "type": "window", "offset": 1.5, "width": 2.0, "sill": 0.9, "height": 1.5},
+    {"id": "win-kit", "wall": "ext-east", "type": "window", "offset": 3.2, "width": 1.2, "sill": 1.1, "height": 1.2},
+    {"id": "d-office", "wall": "w-y3", "type": "door", "offset": 2.0, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "d-store", "wall": "w-x5", "type": "door", "offset": 1.0, "width": 0.8, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "d-meeting", "wall": "w-x9", "type": "door", "offset": 6.2, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left"},
+    {"id": "o-kitchen", "wall": "w-x9", "type": "opening", "offset": 3.5, "width": 1.2, "height": 2.1},
+    {"id": "d-wc1", "wall": "w-y25", "type": "door", "offset": 0.8, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "right"},
+    {"id": "d-wc2", "wall": "w-y25", "type": "door", "offset": 3.5, "width": 0.8, "height": 2.1, "hinge": "start", "swing": "right"}
+  ]
+}

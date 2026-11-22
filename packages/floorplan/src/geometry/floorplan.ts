@@ -13,7 +13,8 @@ import { add, centroid, fromTuple, scale } from './vec2'
 import { openingSpan, pointAlong, wallAxis, wallCenterline, wallPlanSlices } from './wall'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
-import { roomFloorArea, tryRoomPolygon } from './room'
+import { roomFloorArea, tryRoomShape } from './room'
+import { poleOfInaccessibility } from './innerPoint'
 import { wallExposure } from './exposure'
 import type { Issue } from './validate'
 import { brokenOnFloor, validatePlan } from './validate'
@@ -46,11 +47,17 @@ export interface PlanRoom {
   readonly name: string
   readonly polygon: readonly Vec2[]
   /**
-   * Square meters, computed from the polygon, less the floor of any room marked `inside` that
-   * sits in it (`roomArea`). The polygon stays the whole outline: the inner room is drawn over it.
+   * The room's holes (ARE-6), clockwise where the outline is counter-clockwise, so a path of
+   * the outline and its holes leaves them open. Empty for a room with none.
+   */
+  readonly holes: readonly (readonly Vec2[])[]
+  /**
+   * Square meters, computed from the polygon, less its holes and the floor of any room marked
+   * `inside` that sits in it (`roomArea`). The polygon stays the whole outline: the inner room is
+   * drawn over it.
    */
   readonly area: number
-  /** Where to place the name label. */
+  /** Where to place the name label. In a room with holes, a point on its floor, never in a hole. */
   readonly labelAt: Vec2
 }
 
@@ -239,15 +246,19 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const rooms: PlanRoom[] = []
   for (const room of plan.rooms) {
     if (broken.has(room.id)) continue
-    const polygon = tryRoomPolygon(room, index)
-    if (!polygon) continue
+    const shape = tryRoomShape(room, index)
+    if (!shape) continue
+    const { polygon, holes } = shape
     rooms.push({
       id: room.id,
       name: room.name,
       polygon,
-      // Less the floor of any room marked `inside` that sits in it (ARE-5).
+      holes,
+      // Less its holes (ARE-6) and the floor of any room marked `inside` that sits in it (ARE-5).
       area: roomFloorArea(room, index, polygon),
-      labelAt: centroid(polygon)
+      // The middle of the corners of a ring lies in its hole: there, the point of its floor
+      // farthest from every edge.
+      labelAt: holes.length === 0 ? centroid(polygon) : poleOfInaccessibility(polygon, undefined, holes).point
     })
     extent.push(...polygon)
   }

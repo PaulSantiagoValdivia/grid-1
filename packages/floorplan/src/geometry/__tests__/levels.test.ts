@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { floorElevations, stackFloors, stackLevels, SLAB_THICKNESS } from '../elevations'
 import { validatePlan } from '../validate'
-import { checkLocalRules } from '../rules'
+import { checkPlanSanity } from '../rules'
 import { planNotes } from '../../notes/notes'
 import { parseFloorPlan, safeParseFloorPlan, type FloorPlan } from '../../types/floorplan'
 import { outline, type Point } from '../../test-support/outline'
@@ -343,19 +343,19 @@ describe('LVL-1 a door to the outside above the ground (VE-8)', () => {
   }
 
   it('names a door at 9.85 m, and does not count it as a way out', () => {
-    const report = checkLocalRules(flat({ elevation: 9.85 }))
-    expect(report.findings.map((f) => [f.code, f.ruleId, f.rooms, f.openings])).toEqual([
-      ['door_to_outside_above_ground', 'door-leads-somewhere', ['flat-room'], ['door']]
+    const report = checkPlanSanity(flat({ elevation: 9.85 }))
+    expect(report.findings.map((f) => [f.code, f.ruleId, f.rooms, f.openings, f.elevation])).toEqual([
+      ['door_to_outside_above_ground', 'door-leads-somewhere', ['flat-room'], ['door'], 9.85]
     ])
     expect(report.findings[0]!.message).toBe('A door from "flat" leads outside 9.85 m above the ground, so it is not a way out')
     expect(report.notChecked.map((n) => n.reason)).toEqual(['no_stairs'])
     const note = planNotes(flat({ elevation: 9.85 }), report).notes[0]!
-    expect(note.title.map((p) => p.text).join('')).toBe('A door from flat opens outside above the ground')
+    expect(note.title.map((p) => p.text).join('')).toBe('A door from flat leads outside 9.85 m above the ground, so it is not a way out')
   })
 
   it('counts the same door as a way out on the ground, and a few steps up', () => {
     for (const floor of [{}, { elevation: 1.2 }]) {
-      const report = checkLocalRules(flat(floor))
+      const report = checkPlanSanity(flat(floor))
       expect(report.findings).toEqual([])
       expect(report.notChecked).toEqual([])
     }
@@ -373,7 +373,7 @@ describe('LVL-1 a door to the outside above the ground (VE-8)', () => {
         { id: 'balcony', wall: 'b-w1', type: 'door', offset: 1, width: 0.9, height: 2.1 }
       ]
     })
-    const report = checkLocalRules(plan)
+    const report = checkPlanSanity(plan)
     expect(report.findings.map((f) => [f.code, f.floor, f.openings])).toEqual([['door_to_outside_above_ground', 'first', ['balcony']]])
     expect(report.findings[0]!.message).toBe('A door from "b" leads outside 2.95 m above the ground, so it is not a way out')
   })

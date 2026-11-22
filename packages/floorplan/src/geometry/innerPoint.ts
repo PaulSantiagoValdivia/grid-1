@@ -10,6 +10,9 @@
  * The rest answers the questions a label placer asks: does a box fit in the room, does it
  * touch a shape, and where could a box of a given size sit, best spots first.
  *
+ * A room with holes in it (ARE-6) passes them as `holes`: a point in a hole is not in the room,
+ * and a hole's edges are edges like the outline's. With no holes every answer is as before.
+ *
  * Pure: plan metres in, plan metres out.
  */
 
@@ -39,8 +42,20 @@ export function rectOf(points: readonly Vec2[]): Rect {
   return { minX, minY, maxX, maxY }
 }
 
-/** Whether `p` lies inside the outline, by the even-odd rule. A point on an edge may go either way. */
-export function pointInPolygon(p: Vec2, polygon: readonly Vec2[]): boolean {
+/** Rings a room's floor has besides its outline: its holes (ARE-6). */
+export type Holes = readonly (readonly Vec2[])[]
+
+const NO_HOLES: Holes = []
+
+/**
+ * Whether `p` lies inside the outline and in none of the holes, by the even-odd rule. A point
+ * on an edge may go either way.
+ */
+export function pointInPolygon(p: Vec2, polygon: readonly Vec2[], holes: Holes = NO_HOLES): boolean {
+  return inRing(p, polygon) && !holes.some((hole) => inRing(p, hole))
+}
+
+function inRing(p: Vec2, polygon: readonly Vec2[]): boolean {
   let inside = false
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const a = polygon[i]!
@@ -68,14 +83,16 @@ function segmentDistanceSquared(p: Vec2, a: Vec2, b: Vec2): number {
   return (p.x - x) ** 2 + (p.y - y) ** 2
 }
 
-/** How far `p` is from the nearest edge: positive inside the outline, negative outside. */
-export function signedDistanceToOutline(p: Vec2, polygon: readonly Vec2[]): number {
+/** How far `p` is from the nearest edge: positive inside the floor, negative outside or in a hole. */
+export function signedDistanceToOutline(p: Vec2, polygon: readonly Vec2[], holes: Holes = NO_HOLES): number {
   let best = Infinity
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    best = Math.min(best, segmentDistanceSquared(p, polygon[i]!, polygon[j]!))
+  for (const ring of holes.length === 0 ? [polygon] : [polygon, ...holes]) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      best = Math.min(best, segmentDistanceSquared(p, ring[i]!, ring[j]!))
+    }
   }
   const d = Math.sqrt(best)
-  return pointInPolygon(p, polygon) ? d : -d
+  return pointInPolygon(p, polygon, holes) ? d : -d
 }
 
 /** Where a room's label goes: a point inside, and how far it is from the nearest edge. */
@@ -94,8 +111,8 @@ interface Cell {
   readonly max: number
 }
 
-const cell = (x: number, y: number, half: number, polygon: readonly Vec2[]): Cell => {
-  const d = signedDistanceToOutline({ x, y }, polygon)
+const cell = (x: number, y: number, half: number, polygon: readonly Vec2[], holes: Holes): Cell => {
+  const d = signedDistanceToOutline({ x, y }, polygon, holes)
   return { x, y, half, d, max: d + half * Math.SQRT2 }
 }
 
@@ -154,9 +171,10 @@ const MAX_CELLS = 20_000
  * within `precision` metres (by default a thousandth of the outline's longer side).
  *
  * In a rectangle it is the middle; in an L it is the middle of the wider leg; in a U, of the
- * widest part. An outline with no area gives its first corner at distance 0.
+ * widest part; in a ring round a hole, the middle of its widest stretch. An outline with no area
+ * gives its first corner at distance 0.
  */
-export function poleOfInaccessibility(polygon: readonly Vec2[], precision?: number): InnerPoint {
+export function poleOfInaccessibility(polygon: readonly Vec2[], precision?: number, holes: Holes = NO_HOLES): InnerPoint {
   if (polygon.length === 0) return { point: { x: 0, y: 0 }, distance: 0 }
   const box = rectOf(polygon)
   const width = box.maxX - box.minX
@@ -171,12 +189,12 @@ export function poleOfInaccessibility(polygon: readonly Vec2[], precision?: numb
   const half = size / 2
   const queue = new CellQueue()
   for (let x = box.minX; x < box.maxX; x += size) {
-    for (let y = box.minY; y < box.maxY; y += size) queue.push(cell(x + half, y + half, half, polygon))
+    for (let y = box.minY; y < box.maxY; y += size) queue.push(cell(x + half, y + half, half, polygon, holes))
   }
-  let best = cell(box.minX + width / 2, box.minY + height / 2, 0, polygon)
+  let best = cell(box.minX + width / 2, box.minY + height / 2, 0, polygon, holes)
   const middle = areaCentre(polygon)
   if (middle) {
-    const c = cell(middle.x, middle.y, 0, polygon)
+    const c = cell(middle.x, middle.y, 0, polygon, holes)
     if (c.d > best.d) best = c
   }
 
@@ -187,10 +205,10 @@ export function poleOfInaccessibility(polygon: readonly Vec2[], precision?: numb
     // Nothing in this cell can beat the best by more than the tolerance: skip it.
     if (c.max - best.d <= tolerance) continue
     const h = c.half / 2
-    queue.push(cell(c.x - h, c.y - h, h, polygon))
-    queue.push(cell(c.x + h, c.y - h, h, polygon))
-    queue.push(cell(c.x - h, c.y + h, h, polygon))
-    queue.push(cell(c.x + h, c.y + h, h, polygon))
+    queue.push(cell(c.x - h, c.y - h, h, polygon, holes))
+    queue.push(cell(c.x + h, c.y - h, h, polygon, holes))
+    queue.push(cell(c.x - h, c.y + h, h, polygon, holes))
+    queue.push(cell(c.x + h, c.y + h, h, polygon, holes))
     split++
   }
   return { point: { x: best.x, y: best.y }, distance: Math.max(0, best.d) }
@@ -261,11 +279,18 @@ function edgeCrossesRect(polygon: readonly Vec2[], rect: Rect): boolean {
 
 const centreOf = (rect: Rect): Vec2 => ({ x: (rect.minX + rect.maxX) / 2, y: (rect.minY + rect.maxY) / 2 })
 
-/** Whether the whole box lies inside the outline. Its border may touch an edge. */
-export function rectInsidePolygon(rect: Rect, polygon: readonly Vec2[]): boolean {
+/** Whether the whole box lies inside the outline, clear of the holes. Its border may touch an edge. */
+export function rectInsidePolygon(rect: Rect, polygon: readonly Vec2[], holes: Holes = NO_HOLES): boolean {
   if (polygon.length < 3) return false
-  return pointInPolygon(centreOf(rect), polygon) && !edgeCrossesRect(polygon, rect)
+  return (
+    pointInPolygon(centreOf(rect), polygon, holes) &&
+    !edgeCrossesRect(polygon, rect) &&
+    // A hole wholly inside the box has an edge through it, or a corner in it.
+    !holes.some((hole) => edgeCrossesRect(hole, rect) || (hole.length > 0 && strictlyIn(hole[0]!, rect)))
+  )
 }
+
+const strictlyIn = (p: Vec2, rect: Rect): boolean => p.x > rect.minX && p.x < rect.maxX && p.y > rect.minY && p.y < rect.maxY
 
 /** Whether the box and the shape share any area: an edge through the box, or one inside the other. */
 export function rectTouchesPolygon(rect: Rect, polygon: readonly Vec2[]): boolean {
@@ -284,17 +309,17 @@ const SPOTS_ACROSS = 24
 
 /**
  * Where the centre of a box `halfWidth` × `halfHeight` (half sizes, metres) could sit with the
- * whole box inside the outline. The pole of inaccessibility comes first when the box fits
- * there; the rest follow on a grid, the spots farthest from the edges first. Empty when the
- * box fits nowhere.
+ * whole box inside the outline and clear of the holes. The pole of inaccessibility comes first
+ * when the box fits there; the rest follow on a grid, the spots farthest from the edges first.
+ * Empty when the box fits nowhere.
  */
-export function spotsInside(polygon: readonly Vec2[], halfWidth: number, halfHeight: number): Vec2[] {
+export function spotsInside(polygon: readonly Vec2[], halfWidth: number, halfHeight: number, holes: Holes = NO_HOLES): Vec2[] {
   if (polygon.length < 3 || !(halfWidth >= 0) || !(halfHeight >= 0)) return []
   const fits = (p: Vec2): boolean =>
-    rectInsidePolygon({ minX: p.x - halfWidth, minY: p.y - halfHeight, maxX: p.x + halfWidth, maxY: p.y + halfHeight }, polygon)
+    rectInsidePolygon({ minX: p.x - halfWidth, minY: p.y - halfHeight, maxX: p.x + halfWidth, maxY: p.y + halfHeight }, polygon, holes)
 
   const out: Vec2[] = []
-  const pole = poleOfInaccessibility(polygon).point
+  const pole = poleOfInaccessibility(polygon, undefined, holes).point
   if (fits(pole)) out.push(pole)
 
   const box = rectOf(polygon)
@@ -316,7 +341,7 @@ export function spotsInside(polygon: readonly Vec2[], halfWidth: number, halfHei
       const y = up === 0 ? (y0 + y1) / 2 : y0 + ((y1 - y0) * j) / up
       const at = { x, y }
       if (!fits(at)) continue
-      grid.push({ at, depth: signedDistanceToOutline(at, polygon) })
+      grid.push({ at, depth: signedDistanceToOutline(at, polygon, holes) })
     }
   }
   // The sort is stable, so equal spots keep their grid order: the same plan, the same spots.

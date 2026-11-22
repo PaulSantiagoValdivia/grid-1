@@ -97,7 +97,8 @@ describe('the spaces the walls enclose, on every sound plan', () => {
 })
 
 // ARE-5. The lab's own plans for AR-3 (a room inside a room) and AR-4 (rooms that overlap), as
-// stored in data/lab-plans.ndjson.gz, and the referee's figures for them.
+// stored in data/lab-plans.ndjson.gz, and the referee's figures for them. ARE-6 adds AR-5 (a
+// room with a hole).
 describe("the lab's rooms inside rooms and rooms that overlap", () => {
   const plans = new Map(data.labPlans().map((p) => [p.name, p.text]))
   const referee = data.referee().lab
@@ -147,6 +148,24 @@ describe("the lab's rooms inside rooms and rooms that overlap", () => {
     expect(area('hall')).toBeCloseTo(17.85, 6)
     expect(Math.abs(total(plan) - refereeTotal(name))).toBeLessThan(0.01)
     expect(validatePlan(plan).issues).toEqual([])
+  })
+
+  it('AR-5: the ring gallery, its courtyard listed as a hole, is one room of 75.60 m², as the referee measured', () => {
+    const name = 'AU1/scenarios/AR-5/s03b-ring-room.json'
+    const asWritten = read(name)
+    const refused = validatePlan(asWritten).issues.filter((i) => i.severity === 'error')
+    // As the lab wrote it, one list round the outside and then round the courtyard: still
+    // refused (ARE-6 changes no plan that states no holes), and the refusal says how to write it.
+    expect(refused.map((i) => i.code)).toEqual(['room/unclosed'])
+    expect(refused[0]!.message).toContain('"holes": [["cw", "cn", "ce", "cs"]]')
+    const ring = asWritten.rooms[0]!
+    const plan = {
+      ...asWritten,
+      rooms: [{ ...ring, boundary: ring.boundary.slice(0, 4), holes: [ring.boundary.slice(4)] }]
+    }
+    expect(roomArea(plan.rooms[0]!, indexPlan(plan))).toBeCloseTo(refereeArea(name, 'ground|ring'), 9)
+    expect(refereeArea(name, 'ground|ring')).toBe(75.6)
+    expect(validatePlan(plan).issues.filter((i) => i.severity === 'error')).toEqual([])
   })
 
   it('AR-4: the flat with a den over three rooms (+21.12 m²) names the den, each room and the floor they share', () => {

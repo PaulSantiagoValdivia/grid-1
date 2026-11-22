@@ -11,7 +11,7 @@ import type { FloorPlan, Stair } from '../plan'
 import { planStairs } from '../stairs'
 import { brokenOnFloor, validatePlan } from '../validate'
 import { floorJoins } from '../floorJoins'
-import { checkLocalRules } from '../rules'
+import { checkPlanSanity } from '../rules'
 import { buildFloorPlan } from '../floorplan'
 import { buildScene } from '../scene3d'
 import { planForFloor } from '../floors'
@@ -158,7 +158,7 @@ describe('a stair that cannot be laid out, or joins nothing', () => {
     expect(issues).toMatchObject([{ code: 'stair/end-in-no-room', id: 's1', severity: 'warning' }])
     expect(issues[0]!.message).toContain('starts on "Ground floor" in no room')
     expect(floorJoins(outside).joins).toEqual([])
-    expect(checkLocalRules(outside).notChecked).toMatchObject([{ reason: 'no_stairs', floor: 'first' }])
+    expect(checkPlanSanity(outside).notChecked).toMatchObject([{ reason: 'no_stairs', floor: 'first' }])
   })
 
   it('is said on the slice of each floor it joins, and on no other', () => {
@@ -170,15 +170,15 @@ describe('a stair that cannot be laid out, or joins nothing', () => {
 
 describe('the way out, down the stair (lab VE-1)', () => {
   it('checks the first floor of the two-floor house through its stair', () => {
-    expect(checkLocalRules(twoFloorHouse()).notChecked.map((n) => n.reason)).toEqual(['no_stairs'])
-    const report = checkLocalRules(stairHouse())
+    expect(checkPlanSanity(twoFloorHouse()).notChecked.map((n) => n.reason)).toEqual(['no_stairs'])
+    const report = checkPlanSanity(stairHouse())
     expect(report.notChecked).toEqual([])
     // The balcony door is still no way out; nothing else is said.
     expect(report.findings.map((f) => f.code)).toEqual(['door_to_outside_above_ground'])
   })
 
   it('names a room upstairs that the stair does not reach, with its ways through', () => {
-    const report = checkLocalRules(withoutOpening(stairHouse(), 'd_up'))
+    const report = checkPlanSanity(withoutOpening(stairHouse(), 'd_up'))
     // Its balcony door leads outside in mid-air: a way through, but no way out.
     expect(report.findings.filter((f) => f.floor === 'first').map((f) => [f.code, f.rooms, f.through])).toEqual([
       ['door_to_outside_above_ground', ['study'], undefined],
@@ -189,7 +189,7 @@ describe('the way out, down the stair (lab VE-1)', () => {
       copy.openings = copy.openings.filter((o) => !['front', 'd_hb', 'd_hk'].includes(o.id))
       copy.openings.push({ id: 'back', wall: 's2', type: 'door', offset: 4, width: 0.9, sill: 0, height: 2.1 })
     })
-    const cut = checkLocalRules(shut)
+    const cut = checkPlanSanity(shut)
     // The bedroom and bathroom were reached through the hall, and are cut off with it.
     expect(cut.findings.filter((f) => f.code === 'no_route_to_exit').map((f) => [f.floor, f.rooms[0]])).toEqual([
       ['ground', 'bathroom'],
@@ -206,7 +206,7 @@ describe('the way out, down the stair (lab VE-1)', () => {
   })
 
   it('joins stair rooms that lie one over the other, floor to floor, to the front door', () => {
-    const report = checkLocalRules(stairRoomHouse())
+    const report = checkPlanSanity(stairRoomHouse())
     expect(report.findings).toEqual([])
     expect(report.notChecked).toEqual([])
     expect(floorJoins(stairRoomHouse()).joins.map((j) => [j.kind, j.lower.room, j.upper.room])).toEqual([
@@ -216,7 +216,7 @@ describe('the way out, down the stair (lab VE-1)', () => {
   })
 
   it('follows a room cut off upstairs down nothing, and says so', () => {
-    const report = checkLocalRules(withoutOpening(stairRoomHouse(), 'second-d'))
+    const report = checkPlanSanity(withoutOpening(stairRoomHouse(), 'second-d'))
     expect(report.findings.map((f) => [f.code, f.floor, f.rooms])).toEqual([['room_without_door', 'second', ['second-main']]])
   })
 
@@ -225,11 +225,11 @@ describe('the way out, down the stair (lab VE-1)', () => {
       for (const room of copy.rooms) if (room.floor !== 'ground') room.id = room.id.replace(/^(first|second)-/, '')
       copy.openings = copy.openings.filter((o) => o.id !== 'second-d')
     })
-    expect(checkLocalRules(repeated).findings.map((f) => [f.code, f.floor, f.rooms])).toEqual([['room_without_door', 'second', ['main']]])
+    expect(checkPlanSanity(repeated).findings.map((f) => [f.code, f.floor, f.rooms])).toEqual([['room_without_door', 'second', ['main']]])
   })
 
   it('names a stair room out of line, and checks nothing above it (lab AU2)', () => {
-    const report = checkLocalRules(stairRoomHouse({ shifted: true }))
+    const report = checkPlanSanity(stairRoomHouse({ shifted: true }))
     expect(report.findings.map((f) => [f.code, f.floor, f.rooms])).toEqual([
       ['stair_out_of_line', 'first', ['first-stair', 'ground-stair']],
       ['stair_out_of_line', 'second', ['second-stair', 'first-stair']]
@@ -245,10 +245,10 @@ describe('the way out, down the stair (lab VE-1)', () => {
   })
 
   it('names a lift shaft out of line, and never takes a lift as a way out', () => {
-    const lifts = checkLocalRules(stairRoomHouse({ use: 'lift' }))
+    const lifts = checkPlanSanity(stairRoomHouse({ use: 'lift' }))
     expect(lifts.notChecked.map((n) => n.floor)).toEqual(['first', 'second'])
     expect(lifts.findings).toEqual([])
-    const shifted = checkLocalRules(stairRoomHouse({ use: 'lift', shifted: true }))
+    const shifted = checkPlanSanity(stairRoomHouse({ use: 'lift', shifted: true }))
     expect(shifted.findings.map((f) => f.code)).toEqual(['lift_out_of_line', 'lift_out_of_line'])
     expect(shifted.findings[0]!.message).toBe(
       'The lift shaft "Stair" on "First floor" does not lie over "Stair" on "Ground floor", so the shaft is out of line'
@@ -257,7 +257,7 @@ describe('the way out, down the stair (lab VE-1)', () => {
 
   it('gives each out-of-line finding a note', () => {
     const plan = stairRoomHouse({ shifted: true })
-    const notes = planNotes(plan, checkLocalRules(plan)).notes
+    const notes = planNotes(plan, checkPlanSanity(plan)).notes
     expect(notes[0]!.title.map((t) => t.text).join('')).toBe('The stair Stair does not line up with the floor below')
   })
 })

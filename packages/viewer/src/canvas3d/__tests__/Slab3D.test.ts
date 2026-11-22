@@ -17,7 +17,8 @@ const slab: SceneSlab = {
     { x: 6, y: 2 },
     { x: 6, y: 5 },
     { x: 1, y: 5 }
-  ]
+  ],
+  holes: []
 }
 
 /** Geometry buffers are float32, so heights compare to about 5 decimals. */

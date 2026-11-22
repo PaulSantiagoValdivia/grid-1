@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../plan'
-import { GENERAL_GUIDANCE_LABEL, LIMITS, RULES, checkLocalRules } from '../rules'
+import { GENERAL_GUIDANCE_LABEL, LIMITS, RULES, checkPlanSanity } from '../rules'
 
 const empty = (): FloorPlan => ({ version: '1', units: 'm', walls: [], rooms: [], openings: [] })
 
@@ -27,7 +27,7 @@ describe('the rules', () => {
   })
 
   it('leave the report at schema version 1', () => {
-    expect(checkLocalRules(empty()).schemaVersion).toBe(1)
+    expect(checkPlanSanity(empty()).schemaVersion).toBe(1)
   })
 })
 
@@ -46,7 +46,7 @@ describe('sources', () => {
 
 describe('the report', () => {
   it('is plain data, labelled as general guidance, with every rule it applied', () => {
-    const report = checkLocalRules(empty())
+    const report = checkPlanSanity(empty())
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)
     expect(report.basis).toBe('general-baseline')
     expect(report.label).toBe('General guidance, not your local rules')
@@ -57,13 +57,13 @@ describe('the report', () => {
   })
 
   it('always says what the checks never look at, even with nothing found', () => {
-    const report = checkLocalRules(empty())
+    const report = checkPlanSanity(empty())
     expect(report.limits).toEqual(LIMITS)
     expect(report.limits.length).toBeGreaterThan(0)
     for (const line of report.limits) expect(line).not.toMatch(/\b(comply|complies|approved|passes)\b/i)
   })
 
   it('says it does not know which walls carry load', () => {
-    expect(checkLocalRules(empty()).limits).toContainEqual(expect.stringMatching(/^Which walls carry load is not known\b/))
+    expect(checkPlanSanity(empty()).limits).toContainEqual(expect.stringMatching(/^Which walls carry load is not known\b/))
   })
 })

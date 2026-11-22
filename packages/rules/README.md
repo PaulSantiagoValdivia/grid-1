@@ -26,7 +26,16 @@ This package adds two checks that apply figures:
 | Room area | Bedrooms, living rooms and dining rooms under a minimum floor area | US model codes: IBC 2024 and IRC 2024 |
 | Escape opening | A bedroom's window or door to the outside: its size and the height of its sill | US model codes: IBC 2024 and IRC 2024 |
 
-`checkLocalRules(plan)` runs all six and returns one report.
+`checkLocalRules(plan)` runs all six and returns one report. Only this package exports a
+`checkLocalRules`; the plan-only check in `@ongrid/floorplan` is called `checkPlanSanity`.
+
+## The front door
+
+`inspectPlan(raw, options)` reads a plan (parsed JSON or its text), runs every check and
+returns one result record: the refusals, the drawing's problems, the door sweeps, the findings
+and what was not checked, in one list with one count, each line with its code, thing, floor,
+what was found and needed, and the fix. It never throws. `docs/result-contract.md` is its
+contract; `src/result/catalogue.ts` holds the one wording of every code.
 
 ## What they are not
 

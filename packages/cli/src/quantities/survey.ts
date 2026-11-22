@@ -11,6 +11,7 @@ import {
   dot,
   indexPlan,
   planForFloor,
+  roomWallIds,
   sub,
   tolerance,
   wallAxis,
@@ -38,6 +39,9 @@ export interface SurveyRoom {
   readonly facts: RoomFacts
   /** The inside outline, counter-clockwise. Empty when the room has none. */
   readonly polygon: readonly Vec2[]
+  /** Its holes (ARE-6), clockwise. Empty for a room with none. */
+  readonly holes: readonly (readonly Vec2[])[]
+  /** The sides of its outline, then of each hole: the floor is on the left of every one. */
   readonly edges: readonly RoomEdge[]
   /** Openings with this room on one side. */
   readonly openings: readonly OpeningFacts[]
@@ -81,14 +85,17 @@ export function surveyPlan(plan: FloorPlan): Survey {
     const outlines = roomOutlines(storey, index, leftOut.rooms)
     for (const room of floor.rooms) {
       const polygon = outlines.get(room.id)?.polygon ?? []
+      const holes = outlines.get(room.id)?.holes ?? []
       const own = storey.rooms.find((r) => r.id === room.id)
-      const walls = (own?.boundary ?? []).map((id) => index.wallsById.get(id)).filter((w): w is Wall => w !== undefined)
-      const edges: RoomEdge[] = polygon.map((from, i) => {
-        const to = polygon[(i + 1) % polygon.length]!
-        return { from, to, length: Math.hypot(to.x - from.x, to.y - from.y), wall: wallOfEdge(from, to, walls) }
-      })
+      const walls = (own ? roomWallIds(own) : []).map((id) => index.wallsById.get(id)).filter((w): w is Wall => w !== undefined)
+      const edges: RoomEdge[] = [polygon, ...holes].flatMap((ring) =>
+        ring.map((from, i) => {
+          const to = ring[(i + 1) % ring.length]!
+          return { from, to, length: Math.hypot(to.x - from.x, to.y - from.y), wall: wallOfEdge(from, to, walls) }
+        })
+      )
       const openings = floor.openings.filter((o) => o.sides.some((side) => typeof side === 'object' && side.room === room.id))
-      rooms.push({ facts: room, polygon, edges, openings })
+      rooms.push({ facts: room, polygon, holes, edges, openings })
     }
   }
   return { plan, facts, rooms, byId: new Map(rooms.map((room) => [room.facts.id, room])) }

@@ -28,6 +28,7 @@
  */
 
 import type { FloorPlan, PlanIndex, Room, Wall, WallKind } from './plan'
+import { roomWallIds } from './plan'
 import { floorOf } from './floors'
 import { roomOutline } from './room'
 import { floorSpaces, spacesKnown } from './spaces'
@@ -73,6 +74,10 @@ export interface WallSides {
 interface Traced {
   readonly room: Room
   readonly polygon: readonly Vec2[]
+  /** Its holes, clockwise (ARE-6): the floor lies on the left of their edges too. */
+  readonly holes: readonly (readonly Vec2[])[]
+  /** Every wall it lists, round its outline and its holes. */
+  readonly walls: ReadonlySet<string>
   readonly box: { x0: number; y0: number; x1: number; y1: number }
   readonly area: number
 }
@@ -102,10 +107,12 @@ function traceRooms(index: PlanIndex): Map<string, Traced[]> {
   const byFloor = new Map<string, Traced[]>()
   for (const room of index.plan.rooms) {
     let polygon: readonly Vec2[]
+    let holes: readonly (readonly Vec2[])[]
     try {
       const outline = roomOutline(room, index)
       if (outline.fault !== null) continue
       polygon = outline.polygon
+      holes = outline.holes.map((hole) => hole.polygon)
     } catch {
       continue
     }
@@ -116,7 +123,8 @@ function traceRooms(index: PlanIndex): Map<string, Traced[]> {
     )
     const floor = floorOf(room)
     const list = byFloor.get(floor) ?? []
-    list.push({ room, polygon, box, area: areaOf(polygon) })
+    const area = holes.reduce((sum, hole) => sum - areaOf(hole), areaOf(polygon))
+    list.push({ room, polygon, holes, walls: new Set(roomWallIds(room)), box, area })
     byFloor.set(floor, list)
   }
   return byFloor
@@ -166,23 +174,24 @@ function listedCover(wall: Wall, rooms: readonly Traced[]): { from: number; to: 
   const near = tolerance('wallContact')
   const cover: { from: number; to: number; room: string; left: boolean }[] = []
   for (const traced of rooms) {
-    if (!traced.room.boundary.includes(wall.id)) continue
-    const polygon = traced.polygon
-    for (let i = 0; i < polygon.length; i++) {
-      const a = polygon[i]!
-      const b = polygon[(i + 1) % polygon.length]!
-      const e = sub(b, a)
-      const length = Math.hypot(e.x, e.y)
-      if (length < tolerance('noLength')) continue
-      const offA = dot(sub(a, axis.start), axis.normal)
-      const offB = dot(sub(b, axis.start), axis.normal)
-      if (Math.abs(Math.abs(offA) - half) > near || Math.abs(Math.abs(offB) - half) > near) continue
-      // The room lies to the left of its counter-clockwise outline, so on the face the edge's
-      // left points to.
-      const left = dot({ x: -e.y, y: e.x }, axis.normal) > 0
-      const s0 = Math.max(0, Math.min(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
-      const s1 = Math.min(axis.length, Math.max(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
-      if (s1 - s0 > tolerance('noLength')) cover.push({ from: s0, to: s1, room: traced.room.id, left })
+    if (!traced.walls.has(wall.id)) continue
+    for (const polygon of [traced.polygon, ...traced.holes]) {
+      for (let i = 0; i < polygon.length; i++) {
+        const a = polygon[i]!
+        const b = polygon[(i + 1) % polygon.length]!
+        const e = sub(b, a)
+        const length = Math.hypot(e.x, e.y)
+        if (length < tolerance('noLength')) continue
+        const offA = dot(sub(a, axis.start), axis.normal)
+        const offB = dot(sub(b, axis.start), axis.normal)
+        if (Math.abs(Math.abs(offA) - half) > near || Math.abs(Math.abs(offB) - half) > near) continue
+        // The room lies to the left of its counter-clockwise outline, and of its clockwise holes,
+        // so on the face the edge's left points to.
+        const left = dot({ x: -e.y, y: e.x }, axis.normal) > 0
+        const s0 = Math.max(0, Math.min(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
+        const s1 = Math.min(axis.length, Math.max(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
+        if (s1 - s0 > tolerance('noLength')) cover.push({ from: s0, to: s1, room: traced.room.id, left })
+      }
     }
   }
   return cover
@@ -193,7 +202,7 @@ function roomHolding(p: Vec2, rooms: readonly Traced[]): string | null {
   let best: Traced | null = null
   for (const t of rooms) {
     if (p.x < t.box.x0 || p.x > t.box.x1 || p.y < t.box.y0 || p.y > t.box.y1) continue
-    if (!pointInPolygon(p, t.polygon)) continue
+    if (!pointInPolygon(p, t.polygon) || t.holes.some((hole) => pointInPolygon(p, hole))) continue
     if (best === null || t.area < best.area) best = t
   }
   return best?.room.id ?? null

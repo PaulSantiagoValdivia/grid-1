@@ -2,7 +2,11 @@
  * `grid describe <plan>`: a short account of the plan in a person's terms, so an agent can
  * check its own work without reading the file. See `describe/card.ts` for what each length
  * holds and how the person's form differs from the agent's.
+ *
+ * `--as rooms` (WRT-2) reads the plan back as rooms text instead: the way an agent writes a
+ * plan, to change and write again with `grid write`, losing nothing.
  */
+import { readRoomsText } from '@ongrid/floorplan/rooms'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import type { LoadedPlan } from './plan'
@@ -17,12 +21,17 @@ export const DESCRIBE_OPTIONS: OptionSpecs = {
     takesValue: true,
     help: 'person (names only, never an id) or agent (terse, with every id, to edit the plan from). person when left out.',
   },
+  '--as': {
+    takesValue: true,
+    help: 'rooms: the plan as rooms text, to change and write again with grid write. It takes no --length or --for.',
+  },
   ...PROJECT_OPTION,
 }
 
 export interface DescribeRequest {
-  readonly length?: string
-  readonly for?: string
+  readonly length?: string | undefined
+  readonly for?: string | undefined
+  readonly as?: string | undefined
 }
 
 function oneOf<T extends string>(option: string, value: string | undefined, allowed: readonly T[], fallback: T): T {
@@ -33,11 +42,21 @@ function oneOf<T extends string>(option: string, value: string | undefined, allo
 }
 
 /** The length and audience asked for, checked before the plan is read. */
-export function checkDescribeRequest(request: DescribeRequest): { length: DescribeLength; audience: DescribeAudience } {
+export function checkDescribeRequest(request: DescribeRequest): { length: DescribeLength; audience: DescribeAudience; as: 'words' | 'rooms' } {
+  const as = oneOf('--as', request.as, ['rooms'] as const, 'rooms')
+  if (request.as !== undefined && (request.length !== undefined || request.for !== undefined)) {
+    throw new UsageError(`--as ${as} reads the plan back as rooms text, which has no ${request.length !== undefined ? '--length' : '--for'}: leave it out.`)
+  }
   return {
     length: oneOf('--length', request.length, DESCRIBE_LENGTHS, 'rooms'),
     audience: oneOf('--for', request.for, DESCRIBE_AUDIENCES, 'person'),
+    as: request.as === undefined ? 'words' : as,
   }
+}
+
+/** The plan as rooms text, losing nothing: what `grid write` writes back as it is. */
+export function describeRooms(loaded: LoadedPlan): string {
+  return readRoomsText(loaded.plan).text
 }
 
 export function describePlan(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience): string {

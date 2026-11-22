@@ -1,0 +1,254 @@
+# The result contract
+
+This is what Grid tells an agent about a plan, written down before more is built on it
+(MSG-1). It covers the result record, refusals, the receipts of the tools that change or
+write something, the promise about what may change, and a changelog for agents.
+
+Every record, every rendering of it and every report starts with the label "General
+guidance, not your local rules". No line says a plan complies, passes or is approved: a
+record with no lines only means these checks found nothing.
+
+The code is `packages/rules/src/result/` (`types.ts` for the record, `catalogue.ts` for the
+codes, `inspect.ts` for the front door). Tests hold the code to this file:
+`packages/rules/src/result/__tests__/contract.test.ts` fails when a code is in one and not
+the other.
+
+## The front door
+
+```ts
+import { inspectPlan } from '@ongrid/rules'
+
+const result = inspectPlan(raw, { country: 'ES' })
+```
+
+`inspectPlan(raw, options?)` takes the plan as parsed JSON, or as its text, and the options of
+the full check (`country`, `figures`). It reads the plan, runs every check, and returns one
+record. It never throws: a check that fails inside Grid becomes a line
+(`plan/check-failed`), and the other checks still run. Run over the 3,000 damaged plans and
+442 sound plans of the scoreboard, it gives 0 exceptions and 0 failed checks
+(`scoreboard/__tests__/frontDoor.test.ts`).
+
+`grid check` prints the record (`--json` gives it as `result`), and `grid_check` returns its
+`count` and `lines` beside the older lists, which it keeps for now.
+
+## The record
+
+| Field | What it holds |
+|---|---|
+| `resultVersion` | `1`. Raised only when a field changes meaning or is taken away. |
+| `label` | "General guidance, not your local rules". |
+| `read` | `false` when the plan was refused. Then the lines are its refusals and nothing else ran. |
+| `count` | How many lines there are: the one number for how much there is to look at. |
+| `counts` | The same lines by kind. They add up to `count`. |
+| `lines` | Every line, in the order of the kinds below. Lines of one kind keep the order their check gave them. |
+| `basis` | `general-baseline`, or `local-lookup` once a looked-up figure was applied. |
+| `lookupNotice` | Only with `local-lookup`: the figures were found by an AI and not checked by a person. |
+| `checks` | Every check that ran, with where its figures come from. Empty when the plan was refused. |
+| `figures` | Every figure a check applied, with its document, edition, clause, place, day read and status. |
+| `limits` | What these checks never look at, whatever the plan. The same lines every time. |
+
+### A line
+
+| Field | What it holds |
+|---|---|
+| `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
+| `kind` | `refused`, `left-out`, `worth-a-look`, `finding` or `not-checked`. |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening or a stair (LVL-3). |
+| `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
+| `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
+| `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
+| `found` | What was found, in words and figures. For a problem in the drawing it is the check's own sentence. |
+| `needed` | What would be right. |
+| `fix` | What to change. A suggestion: the plan is the author's. |
+| `figures` | Only on a finding that compared the plan with a figure: those figures, as in `figures` above. |
+
+### The kinds, in list order
+
+1. `refused`: the plan could not be read. Nothing else was checked.
+2. `left-out`: a part that cannot be drawn. Every view, measure and export skips it.
+3. `worth-a-look`: a part that is drawn and is very likely a mistake, door sweeps among them.
+4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
+5. `not-checked`: what a check could not look at in this plan, and why.
+
+### One wording per code
+
+A line's `message` is made by its code's wording in `catalogue.ts`, and nowhere else. A
+finding's wording is its check's own (`checks/messages.ts`, and `planCheckWordings` in
+`@ongrid/floorplan`), so the report's `message`, the notes a person reads and the record say
+the same words. A test fails when one code is worded two ways (AU4-1).
+
+## The codes
+
+`{thing}` is the part as a line names it: `Wall "w1"`, `Door "d1"`, `Room "Kitchen"`, `Floor
+"Ground floor"` or `The plan`. Names in quotes are the plan's own text.
+
+| Code | Wording | Needed |
+|---|---|---|
+| `plan/not-json` | The plan is not JSON | a plan file in JSON |
+| `plan/not-an-object` | The plan is not a JSON object | one JSON object with walls, rooms and openings |
+| `plan/missing-field` | {thing} is missing a field the format needs | {wanted} at {place} |
+| `plan/wrong-type` | {thing} has a field of the wrong type | {wanted} at {place} |
+| `plan/unknown-word` | {thing} has a word the format does not know | {wanted} at {place} |
+| `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
+| `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
+| `plan/check-failed` | A check could not run on this plan: something went wrong inside Grid | the check to run to the end |
+| `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin (0, 0) |
+| `plan/duplicate-id` | Id {thing} names more than one wall, room or opening | every id on one wall, room or opening only |
+| `plan/similar-floor-id` | {thing} has an id that differs from another floor's only in capitals or spaces | floor ids that differ in more than capitals or spaces |
+| `plan/duplicate-floor` | {thing} is listed more than once | each floor listed once |
+| `plan/units-question` | The plan may not be in metres | every length in metres |
+| `plan/level-gap` | The plan skips a floor level | floor levels with no gap, or an elevation in metres on each floor |
+| `plan/same-level` | {thing} is at the same level as another floor | each floor at its own level, or an elevation in metres on each |
+| `wall/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
+| `wall/zero-length` | {thing} has no length | a start and an end at different points |
+| `wall/no-thickness` | {thing} has no thickness | a thickness above 0, or a virtual wall for a line with no substance |
+| `wall/no-height` | {thing} has no height | a height above 0, or a virtual wall for a line with no substance |
+| `wall/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
+| `wall/kind-differs` | {thing} is stated as one kind, but the rooms on its sides show another | a kind that matches the rooms on its sides |
+| `wall/size-question` | {thing} has a size that may not be meant | the size of a wall in a building |
+| `wall/short` | {thing} stops short of a corner | wall ends that meet at the corner |
+| `wall/gap` | {thing} leaves a gap in a straight side of a room | the walls of a side meeting end to end |
+| `wall/overrun` | {thing} runs past its corner | a wall that ends at its corner |
+| `wall/duplicate` | {thing} lies over another wall | each wall drawn once |
+| `wall/line-on-wall` | {thing} is a dividing line drawn over a wall | a wall or a dividing line, not both |
+| `wall/crosses-room` | {thing} runs across a room that does not list it | every wall across a room listed by the rooms on its sides |
+| `wall/stands-in-room` | {thing} stands inside a room that does not list it | a wall inside a room drawn as part of a room |
+| `wall/above-storey` | {thing} is higher than the storey its floor states | walls no higher than their floor's stated height |
+| `opening/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
+| `opening/broken-wall` | {thing} is on a wall that cannot be drawn | a wall that can be drawn |
+| `opening/missing-wall` | {thing} is on a wall that is not in the plan | the id of a wall in the plan |
+| `opening/degenerate` | {thing} has no size | a width and a height above 0 |
+| `opening/out-of-wall` | {thing} runs off its wall | its offset and width within the wall's length |
+| `opening/too-tall` | {thing} reaches above the top of its wall | its sill and height together no higher than the wall |
+| `opening/negative-sill` | {thing} has its sill below the floor | a sill at 0 or above |
+| `opening/overlap` | {thing} overlaps another opening on its wall | openings on one wall that share no part of it |
+| `opening/size-question` | {thing} has a size that may not be meant | the size of a door or window in a building |
+| `opening/swing-without-hinge` | {thing} says which way it opens but not which side it hangs on | both its hinge ("start" or "end") and its swing ("left" or "right") |
+| `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
+| `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
+| `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
+| `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
+| `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
+| `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
+| `room/empty` | {thing} encloses no floor | walls that enclose some floor |
+| `room/unclosed` | {thing} cannot be closed from the walls it lists | at least three walls in the plan, each meeting the next, round the room |
+| `room/out-of-order` | {thing} lists its walls out of order | its walls in order round the room, each meeting the next |
+| `room/inside-out` | {thing} has walls thicker than the gap between them | inner wall faces that do not cross |
+| `room/hole-outside` | {thing} has a hole that does not lie inside it | a hole inside the room, with floor all round it |
+| `room/holes-overlap` | {thing} has two holes that overlap or touch | floor between any two holes |
+| `room/derived-edited` | {thing}'s boundary was changed by hand in a plan written rooms first | walls worked out from the rooms text |
+| `room/not-enclosed` | {thing} is not enclosed by its walls | walls that reach each other round the room |
+| `room/space-mismatch` | {thing} does not match the space its walls enclose | a room that covers the space its walls close off, and no more |
+| `room/inside-no-host` | {thing} is marked as inside another room, but no room holds it | a room on its floor that holds it |
+| `room/overlap` | {thing} overlaps another room | rooms that share no floor, or one marked inside the other |
+| `room/overlap-unknown` | {thing} could not be compared with another room to see whether they overlap | room outlines Grid can compare |
+| `room/wall-listed-twice` | {thing} lists a wall more than once | each wall once in its list |
+| `room/size-question` | {thing} has a size that may not be meant | the size of a room in a building |
+| `room/offset-question` | {thing} stands far above or below its storey's floor | a room's step within what a storey holds, or a floor of its own |
+| `stair/unknown-floor` | {thing} joins a floor the plan does not know | the ids of two floors the plan has |
+| `stair/same-floor` | {thing} starts and ends on one floor | two different floors |
+| `stair/no-rise` | {thing} joins floors that stand at one height | two floors at different heights |
+| `stair/run-too-short` | {thing} has a stretch of its walking line too short for a flight | stretches long enough for a tread, once the landings are taken off |
+| `stair/too-few-risers` | {thing} states fewer risers than its flights need | at least two risers on each flight |
+| `stair/end-in-no-room` | {thing} starts or ends in no room, so it joins nothing there | each end of its walking line in a room |
+| `stair/duplicate-id` | {thing} shares its id with another stair | an id of its own for each stair |
+| `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
+| `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
+| `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
+| `floor/spaces-unknown` | The spaces the walls enclose on {thing} could not be worked out | walls Grid can join into spaces |
+| `floor/overlaps-unknown` | The rooms on {thing} were not all compared to see whether they overlap | fewer pairs of rooms lying over each other |
+| `floor/no-exit` | "{floor}" has no door to the outside | at least one door to the outside |
+| `room/no-door` | "{name}" has no door or opening to another space | a door, an opening or an open side to another space |
+| `room/no-route-out` | "{name}" has no route to a door to the outside | a route through doors and openings to a door to the outside |
+| `room/no-route-to-door-out` | "{name}" has no route to a door to the outside, nor to a door into a space that is not drawn | a route to a door to the outside, or to the door into the space not drawn |
+| `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
+| `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
+| `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
+| `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
+| `room/too-small` | "{name}" is under {minimum} m² | at least {minimum} m² |
+| `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
+| `room/escape-window-too-small` | The window of "{name}" is too small to escape through | a window someone can climb through |
+| `room/escape-window-too-high` | The window of "{name}" is too high to escape through | a lower sill |
+| `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
+| `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
+| `floor/not-checked-rooms-not-drawn` | On "{floor}", rooms that could not be drawn were not checked: "{room}", … | rooms that can be drawn |
+| `floor/not-checked-doors-not-drawn` | On "{floor}", some doors could not be drawn and were not checked | doors that can be drawn |
+| `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
+| `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
+| `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
+
+A code is never reused for another meaning. Until the drawing's checks give their figures as
+data, `found` for a problem in the drawing is the check's own sentence, and figures are in it.
+
+## Refusals
+
+A plan is refused when it is not JSON, not a JSON object, or does not fit the plan format.
+
+- In the record: `read: false`, and one `refused` line for each place the format refuses,
+  with the part it is in when its id can be read, the place (`walls[2].thickness`) and what
+  the format wants there. A refusal never repeats the text it found: that text is someone
+  else's.
+- `grid` commands: exit code 1 and one line on standard error that starts `grid: `. A wrong
+  command line is exit code 2.
+- The tool server: a refusal is a tool result marked as an error (`isError: true`) with one
+  line of text. That holds for every tool and every reason: arguments that are not an object,
+  an argument the tool does not take, a value out of range, a plan that is not there, a plan
+  the format refuses, a change that would break the drawing. JSON-RPC errors are kept for a
+  request that is malformed: text that is not JSON (-32700), JSON that is not a request
+  (-32600), a method the server does not have (-32601), a tool the server does not have and
+  bad parameters to the protocol itself (-32602), and a protocol version Grid does not speak
+  (-32022). `packages/cli/src/mcp/__tests__/contract.test.ts` holds the server to this.
+
+## Receipts
+
+What a tool that writes or changes something returns when it has done it. Each also returns
+its text, which says the same.
+
+| Tool | Receipt (`structuredContent`) |
+|---|---|
+| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (parts that could not be drawn), `note`. |
+| `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
+| `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror` | `written`, `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, and `doors` (each door that now joins other rooms). |
+
+A change that would add a problem that leaves a part out is refused, and nothing is written.
+
+## What may change
+
+- Codes, field names and kinds stay as they are within `resultVersion` 1. A new code, a new
+  field or a new kind of thing may be added: read a line by its `code`, and treat a code you
+  do not know as worth a look.
+- A wording may be improved. It changes in one place and is listed below. Match on `code`,
+  never on `message`.
+- `found`, `needed` and `fix` may say more as the checks give their figures as data.
+- The order of lines within a kind follows the checks and may change.
+- A code that changes meaning, or a field taken away, raises `resultVersion`.
+
+## Changelog for agents
+
+### 2026-11-22: stairs (LVL-3)
+
+- New codes: `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
+  `stair/too-few-risers`, `stair/duplicate-id` (left out) and `stair/end-in-no-room` (worth a
+  look), on a new thing kind `stair`; findings `room/stair-out-of-line` and `room/lift-out-of-line`.
+- `floor/not-checked-no-stairs` now reads "no stair joins it to the ground floor": a floor a stair
+  joins to the ground floor is checked down the stair.
+
+### 2026-11-21: version 1 (MSG-1)
+
+- `inspectPlan` and the record are new. `grid check` prints the record as one list, "To look
+  at (N)", in place of the separate "Findings", "Not checked" and "Problems in the drawing"
+  sections; door sweeps are in it for the first time. `grid check --json` adds `result`.
+- `grid_check` returns `count` and `lines`; its text leads with "To look at". It keeps
+  `findings`, `notChecked` and `drawing`, which a later version may remove.
+- The edit tools' receipts add `toLookAt`.
+- The plan-only check in `@ongrid/floorplan` is now `checkPlanSanity`. Only `@ongrid/rules`
+  exports `checkLocalRules`, so importing the wrong one no longer compiles.
+- Notes a person reads now carry the report's wording as their title ("has no route to a
+  door to the outside", no longer "has no way out").
+- Codes from LVL-1 and LVL-7 have their entries: `plan/level-gap`, `plan/same-level`,
+  `wall/above-storey`, `room/offset-question`, `floor/empty-top`, `floor/size-question` and
+  the finding `opening/door-out-above-ground`. `plan/same-level` is about the floor it names.
+- Two notices have one wording for one room or many: "On "Ground floor", rooms that could not
+  be drawn were not checked: …" and "On "Ground floor", room sizes were not checked in rooms
+  with no use stated: N".

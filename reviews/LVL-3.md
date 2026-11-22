@@ -164,3 +164,23 @@ door to the outside (the lift lobbies above, the planted fault on floor 4 of `d2
 whose flat C is shut off, and a spiral stair drawn as an overlapping room in `h04-stair-spiral`),
 31 stair rooms no longer have "no door" (the stair is their way through), and 4 stair rooms are
 named out of line (the planted faults above, and their copy in AU2).
+
+## Merging main (MSG-1, ARE-6, WRT-2)
+
+- MSG-1 renamed the core's `checkLocalRules` to `checkPlanSanity`; the new stair test uses it.
+  Its wordings live once in `rules/messages.ts` as parts: `noStairs` now reads "no stair joins it to
+  the ground floor", and the out-of-line wording is a new part, `outOfLine`. `grid check` keeps
+  MSG-1's "No findings." wording, with 7 checks run.
+- MSG-1's catalogue and `docs/result-contract.md` gain the nine new codes: `stair/unknown-floor`,
+  `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`,
+  `stair/end-in-no-room`, `stair/duplicate-id`, `room/stair-out-of-line`, `room/lift-out-of-line`,
+  and a changelog entry. The record's thing kinds gain `stair` (on the floor its walking line
+  starts from). `floor/not-checked-no-stairs` and `opening/door-out-above-ground` no longer say
+  stairs "cannot be held yet". The contract tests' code patterns now include `stair/`.
+- ARE-6 made an IFC footprint an outline with holes; a stair block is an outline with none.
+
+After the merge every check passed except the timing test "answers grid check on the sample flat in
+under half a second": it took 6.8 s and 8.7 s while the machine's load average was about 220 (other
+sessions running). `diff-size`'s timing guard failed once under the same load and passed alone.
+For a plan with no stairs the check adds one pass over the room outlines it already traced; it
+should be rerun on a quiet machine.

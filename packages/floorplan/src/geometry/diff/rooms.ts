@@ -10,6 +10,7 @@
  */
 
 import type { FloorPlan, PlanIndex, Room } from '../plan'
+import { roomWallIds } from '../plan'
 import { floorOf } from '../floors'
 import { roomFloorArea, roomNesting, tryRoomPolygon } from '../room'
 import { matchById } from './match'
@@ -52,7 +53,8 @@ export function roomAreas(
     const after = netArea(later, headIndex)
     if (before === null && after === null) return
 
-    const boundary = new Set([...(earlier?.boundary ?? []), ...(later?.boundary ?? [])])
+    // Its walls, round its outline and its holes (ARE-6).
+    const boundary = new Set([...(earlier ? roomWallIds(earlier) : []), ...(later ? roomWallIds(later) : [])])
     // A room with rooms inside it also follows from them: their own changes, and their walls'.
     const inner = innerRooms(room.id, baseIndex, headIndex)
     for (const id of inner) {

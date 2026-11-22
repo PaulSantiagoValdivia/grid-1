@@ -15,6 +15,7 @@ import {
   planForFloor,
   pointAlong,
   poleOfInaccessibility,
+  roomWallIds,
   spotsInside,
   sub,
   tolerance,
@@ -64,7 +65,7 @@ function sidesOf(room: SurveyRoom): RoomSide[] {
 }
 
 export function measureRoom(room: SurveyRoom): RoomMeasure {
-  const pole = poleOfInaccessibility(room.polygon)
+  const pole = poleOfInaccessibility(room.polygon, undefined, room.holes)
   const shape = room.facts.shape
   return {
     id: room.facts.id,
@@ -92,15 +93,15 @@ export interface FitAnswer {
 }
 
 export function fitInRoom(room: SurveyRoom, shape: { width: number; depth: number } | { diameter: number }): FitAnswer {
-  const pole = poleOfInaccessibility(room.polygon)
+  const pole = poleOfInaccessibility(room.polygon, undefined, room.holes)
   if ('diameter' in shape) {
     const fits = 2 * pole.distance >= shape.diameter - tolerance('joint')
     return { fits, what: `a circle ${shape.diameter.toFixed(2)} m across`, at: fits ? pole.point : null, turned: false, widestCircle: 2 * pole.distance }
   }
   const what = `a ${shape.width.toFixed(2)} × ${shape.depth.toFixed(2)} m rectangle`
-  const along = spotsInside(room.polygon, shape.width / 2, shape.depth / 2)
+  const along = spotsInside(room.polygon, shape.width / 2, shape.depth / 2, room.holes)
   if (along.length > 0) return { fits: true, what, at: along[0]!, turned: false, widestCircle: 2 * pole.distance }
-  const turned = spotsInside(room.polygon, shape.depth / 2, shape.width / 2)
+  const turned = spotsInside(room.polygon, shape.depth / 2, shape.width / 2, room.holes)
   if (turned.length > 0) return { fits: true, what, at: turned[0]!, turned: true, widestCircle: 2 * pole.distance }
   return { fits: false, what, at: null, turned: false, widestCircle: 2 * pole.distance }
 }
@@ -182,7 +183,7 @@ export function routeBetween(survey: Survey, from: string, to: string): Route | 
   for (const id of rooms) {
     const room = survey.byId.get(id)
     if (room === undefined || room.polygon.length < 3) continue
-    const circle = 2 * poleOfInaccessibility(room.polygon).distance
+    const circle = 2 * poleOfInaccessibility(room.polygon, undefined, room.holes).distance
     if (narrowestRoom === null || circle < narrowestRoom.widestCircle) narrowestRoom = { room: id, widestCircle: circle }
   }
   return { from, to, rooms, steps, narrowestPassage, narrowestRoom }
@@ -209,14 +210,14 @@ export interface RoomHeight {
 
 /**
  * The rule for a room's height (ARE-10): a height the room states wins; else the lowest solid
- * wall its boundary lists, because a level ceiling rests on every one of them. A wall that
- * states no height takes its floor's stated height (LVL-1), else the schema's 2.7 m, which
- * cannot be told from a stated 2.7 m (AU3).
+ * wall its boundary or its holes list (ARE-6), because a level ceiling rests on every one of
+ * them. A wall that states no height takes its floor's stated height (LVL-1), else the schema's
+ * 2.7 m, which cannot be told from a stated 2.7 m (AU3).
  */
 export function roomHeight(plan: FloorPlan, roomId: string): RoomHeight {
   const room = plan.rooms.find((r) => r.id === roomId)
   const byId = new Map(plan.walls.map((w) => [w.id, w]))
-  const solid = [...new Set(room?.boundary ?? [])]
+  const solid = [...new Set(room ? roomWallIds(room) : [])]
     .map((id) => byId.get(id))
     .filter((w): w is Wall => w !== undefined && w.virtual !== true && w.height > 0)
   let walls: RoomHeight['walls'] = null

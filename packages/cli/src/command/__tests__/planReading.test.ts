@@ -88,7 +88,7 @@ describe('T-1: text in a name or id that talks to the agent', () => {
   it('quotes the ids of the drawing\'s problems in grid check', () => {
     const loaded = read(JSON.stringify(box('Bedroom', { openings: [{ id: 'd', wall: 'no such wall', type: 'door', offset: 0, width: 1, height: 2 }] })))
     const text = checkText(checkPlan(loaded, {}), 1)
-    const line = text.split('\n').find((l) => l.includes('left out'))
+    const line = text.split('\n').find((l) => l.startsWith('  - left out'))
     expect(line).toMatch(/^ {2}- left out, opening "d": /)
   })
 })

@@ -287,9 +287,13 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
   w.pair(0, 'SECTION')
   w.pair(2, 'ENTITIES')
 
-  // Rooms first so their outlines sit under the walls, matching the 2D view.
+  // Rooms first so their outlines sit under the walls, matching the 2D view. A room's holes
+  // (ARE-6) follow its outline on the same layer, each a closed outline of its own: R12 has no
+  // hatch entity, and a hatch a reader builds from these boundaries leaves each hole open as an
+  // island inside the outline.
   for (const room of drawing.rooms) {
     writePolygon(w, DXF_LAYERS.rooms, room.polygon)
+    for (const hole of room.holes) writePolygon(w, DXF_LAYERS.rooms, hole)
     writeText(w, DXF_LAYERS.labels, room.labelAt, room.name)
     if (writable(room.area)) {
       writeText(

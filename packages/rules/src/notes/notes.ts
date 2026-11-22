@@ -2,9 +2,10 @@
  * The full check as notes a person reads on the plan.
  *
  * The notes of the core's plan checks come from the core, unchanged. The notes of the
- * figure checks are built here, from each finding's code and ids, never by rewording its
- * `message`. Names come back as their own segments, so a list can set them apart without
- * parsing text. Pure.
+ * figure checks are built here: each title is the finding's one wording (`checks/messages.ts`,
+ * MSG-1), the same words as its `message`, and the detail says more from its code and ids.
+ * Names come back as their own segments, so a list can set them apart without parsing text.
+ * Pure.
  */
 
 import {
@@ -15,10 +16,12 @@ import {
   planFloors,
   rounded,
   type FindingCode as PlanFindingCode,
+  type NotCheckedReason as PlanNotCheckedReason,
   type FloorPlan
 } from '@ongrid/floorplan/geometry'
 import { planNotes as planCheckNotes, type NoteText, type PlanNote as PlanCheckNote } from '@ongrid/floorplan/notes'
 import type { VerificationStatus } from '../checks/figures'
+import { wordings } from '../checks/messages'
 import type { AppliedFigure, FigureFindingCode, RuleFinding, RulesReport } from '../checks/types'
 
 export type { NoteText } from '@ongrid/floorplan/notes'
@@ -50,10 +53,11 @@ const FIGURE_CODES: readonly string[] = [
   'escape_window_too_high'
 ] satisfies readonly FigureFindingCode[]
 
+const PLAN_REASONS: ReadonlySet<string> = new Set(['no_stairs', 'cannot_be_drawn', 'way_out_not_drawn'] satisfies PlanNotCheckedReason[])
+
 const isFigureFinding = (finding: RuleFinding): finding is FigureFinding => FIGURE_CODES.includes(finding.code)
 const isPlanFinding = (finding: RuleFinding): finding is PlanFinding => !isFigureFinding(finding)
 
-const name = (text: string): NoteText => ({ text, name: true })
 const words = (text: string): NoteText => ({ text })
 const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`)
 
@@ -122,7 +126,8 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
         return {
           ...base,
           tag: 'Size',
-          title: [name(shown), words(finding.minimum === undefined ? ' is too small' : ` is under ${finding.minimum} m²`)],
+          // Every room_too_small carries its minimum; the wording has nothing to say without it.
+          title: wordings.roomTooSmall(shown, finding.minimum ?? 0),
           detail: [words(`${measured}${need}${basis}`)]
         }
       }
@@ -130,7 +135,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
         return {
           ...base,
           tag: 'Escape',
-          title: [name(shown), words(' has no way to escape')],
+          title: wordings.noEscapeOpening(shown),
           detail: [words('It needs a window or a door to the outside that someone can climb through.')]
         }
       case 'escape_window_too_small': {
@@ -145,7 +150,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
         return {
           ...base,
           tag: 'Escape',
-          title: [name(shown), words("'s window is too small to escape through")],
+          title: wordings.escapeWindowTooSmall(shown),
           detail: [words(`It opens ${areaText(finding.area ?? 0, 2, finding.minimum)} m² as drawn.${need}${basis}`)]
         }
       }
@@ -154,7 +159,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
         return {
           ...base,
           tag: 'Escape',
-          title: [name(shown), words("'s window is too high to escape through")],
+          title: wordings.escapeWindowTooHigh(shown),
           detail: [words(`Its sill is ${metres(finding.sill ?? 0, finding.maximum)} m above the floor as drawn.${need}${basis}`)]
         }
       }
@@ -168,7 +173,8 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
     label: GENERAL_GUIDANCE_LABEL,
     rules: report.rules,
     findings: report.findings.filter(isPlanFinding),
-    notChecked: [],
+    // The core's notes read its notices to word a room cut off from a way out not drawn.
+    notChecked: report.notChecked.filter((n): n is typeof n & { reason: PlanNotCheckedReason } => PLAN_REASONS.has(n.reason)),
     limits: []
   }).notes
   let next = 0

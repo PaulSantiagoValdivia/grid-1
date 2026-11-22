@@ -13,8 +13,9 @@
  * skipped and reported, and the rest of the plan still gets drawn.
  */
 
+import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
-import { indexPlan, openingsOf } from './plan'
+import { indexPlan, openingsOf, roomWallIds } from './plan'
 import { floorOf, isFloorSlice, planFloors } from './floors'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
@@ -457,7 +458,7 @@ function validateFloors(
   // Runs whether or not there is a registry: a room and its walls must agree.
   for (const room of plan.rooms) {
     const floor = floorOf(room)
-    const strays = room.boundary.filter((wallId) => {
+    const strays = roomWallIds(room).filter((wallId) => {
       // An ambiguous id resolves to whichever wall happened to come last, so the
       // floor read off it is a coin flip. `plan/duplicate-id` already reports
       // the real fault and has marked the id broken.
@@ -779,6 +780,27 @@ export interface ValidateOptions {
 }
 
 /**
+ * WRT-2: in a plan written rooms first, each room's boundary is derived: Grid worked it out from
+ * where the rooms are, and `written` keeps its fingerprint. A boundary that no longer matches
+ * was edited by hand, and is refused with its own code; the room is left out until the rooms
+ * text is written again, or `written` is taken out to keep the plan as a hand-written one.
+ */
+function validateDerived(plan: FloorPlan, issues: Issue[], broken: Set<string>): void {
+  for (const room of boundariesEdited(plan)) {
+    if (broken.has(room.id)) continue
+    issues.push(
+      issue(
+        'room',
+        room.id,
+        'room/derived-edited',
+        `Room ${quoted(room.id)}'s boundary was changed by hand, but this plan was written rooms first and Grid works out each room's walls from where the rooms are. Change the rooms text and write it again (grid write), or take "written" out of the plan to keep it as a hand-written one`
+      )
+    )
+    broken.add(room.id)
+  }
+}
+
+/**
  * Checks the whole plan. Never throws, except for a `tolerances` change that is not one
  * (`withTolerances`).
  */
@@ -815,7 +837,7 @@ export function validatePlan(
     // Already faulted (e.g. it reaches across floors) — one fault, one issue.
     if (broken.has(room.id)) continue
 
-    if (room.boundary.some((wallId) => broken.has(wallId))) {
+    if (roomWallIds(room).some((wallId) => broken.has(wallId))) {
       issues.push(
         issue('room', room.id, 'room/broken-wall', `Room ${quoted(room.id)} rests on an invalid wall`)
       )
@@ -834,7 +856,8 @@ export function validatePlan(
         issue(
           'room',
           room.id,
-          // The outline says why it failed: not closable, out of order or inside out.
+          // The outline says why it failed: not closable, out of order, inside out, or a hole
+          // that does not lie inside it (ARE-6).
           error instanceof RoomOutlineError ? error.code : 'room/unclosed',
           error instanceof Error ? error.message : String(error)
         )
@@ -843,6 +866,7 @@ export function validatePlan(
     }
   }
 
+  validateDerived(plan, issues, broken)
   validatePlausibility(plan, index, broken, issues)
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))

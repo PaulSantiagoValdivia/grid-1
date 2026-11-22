@@ -29,7 +29,7 @@ import {
   stackFloors,
   type StoreyLevel
 } from '../elevations'
-import { tryRoomPolygon } from '../room'
+import { tryRoomShape } from '../room'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
 import { brokenOnFloor, validatePlan } from '../validate'
@@ -618,12 +618,15 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
   const profile =
     ends === undefined
       ? rectangleProfile(c, axis.length, wall.thickness, axis.length / 2)
-      : footprintProfile(c, [
-          { x: -ends.start.right, y: -half },
-          { x: axis.length + ends.end.right, y: -half },
-          { x: axis.length + ends.end.left, y: half },
-          { x: -ends.start.left, y: half }
-        ])
+      : footprintProfile(c, {
+          outline: [
+            { x: -ends.start.right, y: -half },
+            { x: axis.length + ends.end.right, y: -half },
+            { x: axis.length + ends.end.left, y: half },
+            { x: -ends.start.left, y: half }
+          ],
+          holes: []
+        })
   const body = bodyRepresentation(c, extrusion(c, profile, wall.height))
   const shape = productShape(c, [axisRepresentation, body])
 
@@ -868,24 +871,24 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
 
 /**
  * A room as an IfcSpace: its footprint is the polygon from the inner faces of
- * its walls (C3), counter-clockwise, extruded to the storey height. Virtual
- * walls still close the outline through their faces, so an open-plan room keeps
- * its area although no wall element stands there. Returns null for a room whose
- * boundary does not close.
+ * its walls (C3), counter-clockwise, less its holes (ARE-6), extruded to the
+ * storey height. Virtual walls still close the outline through their faces, so
+ * an open-plan room keeps its area although no wall element stands there.
+ * Returns null for a room whose boundary does not close.
  *
  * A room set off its storey (LVL-7) stands at its `floorOffset` and still reaches the storey's
  * ceiling, so a genkan or a stage is a space at its own level, not at the storey's.
  */
 function writeSpace(c: Context, storey: Storey, room: Room): number | null {
-  const polygon = roomFootprint(storey, room)
-  if (!polygon) return null
+  const footprint = roomFootprint(storey, room)
+  if (!footprint) return null
   const { w } = c
 
   const offset = roomFloorOffset(room)
   // A room raised to the ceiling or past it (asked about by the checks) keeps the storey's height.
   const height = storey.height - offset > 0 ? storey.height - offset : storey.height
   const spacePlacement = placement(w, storey.placement, [0, 0, offset])
-  const profile = footprintProfile(c, polygon)
+  const profile = footprintProfile(c, footprint)
   const shape = productShape(c, [
     bodyRepresentation(c, extrusion(c, profile, height))
   ])
@@ -906,26 +909,38 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
   )
 }
 
-type Footprint = readonly { readonly x: number; readonly y: number }[]
+type Ring = readonly { readonly x: number; readonly y: number }[]
+
+/** A room's outline, counter-clockwise, and its holes (ARE-6), clockwise. */
+interface Footprint {
+  readonly outline: Ring
+  readonly holes: readonly Ring[]
+}
 
 /**
  * A room's footprint: the polygon from the inner faces of its walls (C3),
- * counter-clockwise, the one the 3D view's slab is too. Null when the boundary
- * does not close or a corner is not a number.
+ * counter-clockwise, with its holes, the ones the 3D view's slab has too. Null
+ * when the boundary does not close or a corner is not a number.
  */
 function roomFootprint(storey: Storey, room: Room): Footprint | null {
-  const polygon = tryRoomPolygon(room, storey.model.index)
-  if (!polygon || !polygon.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))) return null
-  return polygon
+  const shape = tryRoomShape(room, storey.model.index)
+  if (!shape) return null
+  const finite = (ring: Ring): boolean => ring.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))
+  if (!finite(shape.polygon) || !shape.holes.every(finite)) return null
+  return { outline: shape.polygon, holes: shape.holes }
 }
 
-/** A footprint as a closed profile. A closed polyline repeats its first point. */
-function footprintProfile(c: Context, polygon: Footprint): number {
-  const outline = [...polygon, polygon[0]!].map((p) =>
-    c.w.add('IFCCARTESIANPOINT', reals([p.x, p.y]))
-  )
-  const curve = c.w.add('IFCPOLYLINE', refs(outline))
-  return c.w.add('IFCARBITRARYCLOSEDPROFILEDEF', en('AREA'), NULL, ref(curve))
+/**
+ * A footprint as a closed profile: with its holes as voids when it has any. A closed polyline
+ * repeats its first point.
+ */
+function footprintProfile(c: Context, footprint: Footprint): number {
+  const curve = (ring: Ring): number =>
+    c.w.add('IFCPOLYLINE', refs([...ring, ring[0]!].map((p) => c.w.add('IFCCARTESIANPOINT', reals([p.x, p.y])))))
+  const outer = curve(footprint.outline)
+  if (footprint.holes.length === 0) return c.w.add('IFCARBITRARYCLOSEDPROFILEDEF', en('AREA'), NULL, ref(outer))
+  const inner = footprint.holes.map(curve)
+  return c.w.add('IFCARBITRARYPROFILEDEFWITHVOIDS', en('AREA'), NULL, ref(outer), refs(inner))
 }
 
 type SlabKind = 'FLOOR' | 'BASESLAB' | 'ROOF'
@@ -939,13 +954,13 @@ function writeSlab(
   c: Context,
   storey: Storey,
   room: Room,
-  polygon: Footprint,
+  footprint: Footprint,
   kind: SlabKind,
   bottom: number,
   thickness: number
 ): number {
   const slabPlacement = placement(c.w, storey.placement, [0, 0, bottom])
-  const profile = footprintProfile(c, polygon)
+  const profile = footprintProfile(c, footprint)
   const shape = productShape(c, [
     bodyRepresentation(c, extrusion(c, profile, thickness))
   ])
@@ -988,17 +1003,17 @@ function writeSlabs(building: Context, storeys: readonly Storey[]): void {
     for (const room of index.plan.rooms) {
       if (broken.has(room.id)) continue
       try {
-        const polygon = roomFootprint(storey, room)
-        if (!polygon) continue
+        const footprint = roomFootprint(storey, room)
+        if (!footprint) continue
         const base = floor.level === lowest ? 'BASESLAB' : 'FLOOR'
         const under = slabUnder(floor)
         // LVL-7: the slab's top is the room's floor. A raised room's slab is solid down to the
         // storey's slab; a sunken one's is the storey's slab, lower down.
         const top = roomFloorOffset(room)
         const bottom = Math.min(top, 0) - under
-        slabs.push(writeSlab(c, storey, room, polygon, base, bottom, top - bottom))
+        slabs.push(writeSlab(c, storey, room, footprint, base, bottom, top - bottom))
         if (floor.level === highest) {
-          slabs.push(writeSlab(c, storey, room, polygon, 'ROOF', storey.height, SLAB_THICKNESS))
+          slabs.push(writeSlab(c, storey, room, footprint, 'ROOF', storey.height, SLAB_THICKNESS))
         }
       } catch {
         // A room that cannot be built is left out.
@@ -1043,14 +1058,14 @@ function writeStair(c: Context, storey: Storey, stair: StairLayout): number {
   const blocks = stairBlocks(stair, storey.elevation).blocks
   const base = blocks[0]?.bottom ?? 0
   const at = placement(c.w, storey.placement, [0, 0, base])
-  const body = (outlines: readonly { readonly outline: Footprint; readonly height: number }[]): number =>
+  const body = (outlines: readonly { readonly outline: Footprint['outline']; readonly height: number }[]): number =>
     productShape(c, [
       c.w.add(
         'IFCSHAPEREPRESENTATION',
         ref(c.shared.bodyContext),
         str('Body'),
         str('SweptSolid'),
-        refs(outlines.map(({ outline, height }) => extrusion(c, footprintProfile(c, outline), height)))
+        refs(outlines.map(({ outline, height }) => extrusion(c, footprintProfile(c, { outline, holes: [] }), height)))
       )
     ])
   const element = c.w.add(

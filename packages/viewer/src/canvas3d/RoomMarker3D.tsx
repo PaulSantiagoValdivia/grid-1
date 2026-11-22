@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
 import type { SceneSlab } from '@ongrid/floorplan/geometry'
 import { MODEL_TO_THREE } from './convert'
+import { slabShape } from './Slab3D'
 
 /** How far above the tallest wall the marker floats, so it never fights the wall tops. */
 const ABOVE_WALLS_M = 0.02
@@ -12,8 +13,7 @@ const ABOVE_WALLS_M = 0.02
  * wall height always does.
  */
 export function markerGeometry(slab: SceneSlab, wallHeight: number): THREE.ShapeGeometry {
-  const shape = new THREE.Shape(slab.polygon.map((p) => new THREE.Vector2(p.x, p.y)))
-  const geometry = new THREE.ShapeGeometry(shape)
+  const geometry = new THREE.ShapeGeometry(slabShape(slab))
   geometry.applyMatrix4(MODEL_TO_THREE)
   geometry.translate(0, wallHeight + ABOVE_WALLS_M, 0)
   return geometry

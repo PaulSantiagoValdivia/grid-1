@@ -1,6 +1,6 @@
 /**
- * The `grid` command, which `ongrid` runs too: `init`, `check`, `describe`, `draw`, `export`,
- * `tidy`, `serve` and `mcp`, the same server under the name an agent's host types
+ * The `grid` command, which `ongrid` runs too: `init`, `write`, `check`, `describe`, `draw`,
+ * `export`, `tidy`, `serve` and `mcp`, the same server under the name an agent's host types
  * (`npx -y ongrid mcp`, CMD-9).
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
@@ -28,7 +28,7 @@ import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
-import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan } from './describe'
+import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
@@ -36,6 +36,7 @@ import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError
 import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
 import { SHEET_OPTIONS } from './sheet'
 import { checkTidyRequest, TIDY_OPTIONS, tidyAppliedText, tidyFile, tidyList, tidyListText } from './tidy'
+import { readRoomsFile, RoomsRefused, WRITE_OPTIONS, writeRoomsIntoProject } from './write'
 
 export const EXIT_OK = 0
 export const EXIT_REFUSED = 1
@@ -60,14 +61,19 @@ const COMMANDS = {
     summary: `Starts a project folder: ${PROJECT_FILE}, a starter ${PROJECT_PLAN} and exports/. Makes the folder when it isn't there.`,
     options: INIT_OPTIONS,
   },
+  write: {
+    usage: 'grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json] [--project <folder>]',
+    summary: 'Writes a plan from rooms text: name the rooms with their sizes and neighbours, and Grid works out the walls. The main way to write a plan.',
+    options: WRITE_OPTIONS,
+  },
   check: {
     usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--json] [--project <folder>]',
     summary: 'Checks a plan and prints the report: general guidance, not your local rules.',
     options: CHECK_OPTIONS,
   },
   describe: {
-    usage: 'grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--project <folder>]',
-    summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls. --for agent adds the ids.',
+    usage: 'grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--project <folder>]',
+    summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls. --for agent adds the ids. --as rooms reads it back as rooms text to change and write again.',
     options: DESCRIBE_OPTIONS,
   },
   draw: {
@@ -124,7 +130,7 @@ const OVERVIEW = [
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
   '',
   `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
-  `check, describe, draw, export, sheet and tidy read ${PROJECT_PLAN} when no plan file is named, and export`,
+  `write writes ${PROJECT_PLAN}, and check, describe, draw, export, sheet and tidy read it when no plan file is named, and export`,
   'writes into exports/. grid init never replaces a file: it refuses a folder that already holds',
   `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
@@ -201,6 +207,22 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     return EXIT_OK
   }
 
+  if (name === 'write') {
+    if (parsed.positionals.length !== 1) throw new UsageError(`write takes one rooms text file: grid write <plan.rooms>${parsed.positionals.length > 1 ? `, but was given ${parsed.positionals.length}` : ''}.`)
+    const roomsFile = parsed.positionals[0]!
+    if (roomsFile === '-') throw new UsageError('write reads rooms text from a file, not from standard input: name the file.')
+    if (roomsFile.toLowerCase().endsWith('.json')) throw new UsageError(`write reads rooms text, not a plan: ${JSON.stringify(roomsFile)} ends in .json. Name the plan to write with --plan.`)
+    const project = openProject(projectOption, io.cwd)
+    const target = textOf(parsed, '--plan') ?? projectPlanFile(project)
+    if (target === null) throw new UsageError(`write needs a plan to write: --plan <plan.json>, or run it in a project folder grid init made, which holds ${PROJECT_FILE}.`)
+    const done = writeRoomsIntoProject(project, readRoomsFile(project, roomsFile), target, { replace: parsed.values.has('--replace') })
+    if (parsed.values.has('--json')) {
+      const r = done.result
+      io.stdout(`${JSON.stringify({ label: GENERAL_GUIDANCE_LABEL, written: done.written, rooms: r.rooms, walls: r.walls.map((w) => ({ id: w.id, kind: w.kind, virtual: w.virtual, thickness: w.thickness, length: w.length, rooms: w.rooms })), openings: r.openings, guesses: r.guesses, warnings: r.warnings, sizes: r.sizes, verdict: done.verdict, drawingProblems: done.drawingProblems }, null, 2)}\n`)
+    } else io.stdout(`${done.lines.join('\n')}\n`)
+    return EXIT_OK
+  }
+
   // A plan file named on the command line, or else the plan of the Grid project it runs in.
   let planFile: string
   if (parsed.positionals.length > 0) {
@@ -222,8 +244,10 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   }
 
   if (name === 'describe') {
-    const { length, audience } = checkDescribeRequest({ length: textOf(parsed, '--length'), for: textOf(parsed, '--for') })
-    io.stdout(describePlan(loadPlan(openProject(projectOption, io.cwd), planFile), length, audience))
+    const request = { length: textOf(parsed, '--length'), for: textOf(parsed, '--for'), as: textOf(parsed, '--as') }
+    const { length, audience, as } = checkDescribeRequest(request)
+    const loaded = loadPlan(openProject(projectOption, io.cwd), planFile)
+    io.stdout(as === 'rooms' ? describeRooms(loaded) : describePlan(loaded, length, audience))
     return EXIT_OK
   }
 
@@ -339,7 +363,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

@@ -15,7 +15,7 @@
  */
 
 import type { FloorPlan, Opening, Room, Wall } from './plan'
-import { indexPlan } from './plan'
+import { indexPlan, roomWallIds } from './plan'
 import type { PlanWall } from './floorplan'
 import type { Vec2 } from './vec2'
 import { TOLERANCES } from './tolerances'
@@ -79,12 +79,17 @@ function sameOpening(a: Opening, b: Opening): boolean {
   )
 }
 
+const sameList = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((id, i) => id === b[i])
+
 function sameRoom(a: Room, b: Room): boolean {
+  const [holesA, holesB] = [a.holes ?? [], b.holes ?? []]
   return (
     a.name === b.name &&
     a.floor === b.floor &&
-    a.boundary.length === b.boundary.length &&
-    a.boundary.every((id, i) => id === b.boundary[i])
+    sameList(a.boundary, b.boundary) &&
+    // ARE-6: the walls round each hole.
+    holesA.length === holesB.length &&
+    holesA.every((hole, i) => sameList(hole, holesB[i]!))
   )
 }
 
@@ -159,7 +164,7 @@ export function buildSteps(prev: FloorPlan, next: FloorPlan): BuildStep[] {
   const redrawRoom = (room: Room): boolean => {
     const before = prevRooms.get(room.id)
     if (!before || !sameRoom(before, room)) return true
-    return room.boundary.some(wallMoves)
+    return roomWallIds(room).some(wallMoves)
   }
   const goneRooms = new Set(
     [...prevRooms.values()]

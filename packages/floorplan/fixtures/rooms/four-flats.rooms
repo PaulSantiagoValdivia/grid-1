@@ -1,0 +1,59 @@
+plan "One floor, four flats round a stair and lift core"
+walls outside 0.35 inside 0.12 partition height 2.8
+walltype 0.2 interior
+walltype 0.25 interior
+walltype 0.3 interior
+windows sill 0.9 height 1.4
+
+unit flat1 fh=west
+  room living  "Flat {n} Living room" living   5.265 x 4.365
+  room bed1    "Flat {n} Bedroom"     bedroom  4.29 x 4.365  east of living
+  room kitchen "Flat {n} Kitchen"     kitchen  3.765 x 2.815 north of living
+  room hall    "Flat {n} Hall"        corridor 3.38 x 2.815  east of kitchen
+  room bath    "Flat {n} Bathroom"    bathroom * x 2.815     east of hall until bed1
+  door front    between hall and corridor, 0.64 from west, 1.0 wide, opens into hall, hinged $fh
+  door d-living between hall and living, 0.29 from west, 0.8 wide, opens into living, hinged west
+  door d-bed1   between hall and bed1, 2.04 from west, 0.8 wide, opens into bed1, hinged west
+  door d-bath   between hall and bath, 1.04 from south, 0.8 wide, opens into bath, hinged south
+  opening k-open between kitchen and living, 1.025 from west, 1.6 wide
+  window w-living  in living south, 1.675 from west, 1.8 wide
+  window w-bed1    in bed1 south, 1.29 from west, 1.8 wide
+  window w-kitchen in kitchen west, 0.775 from north, 1.2 wide, sill 1.0, height 1.1
+end
+
+unit flat2 fh=east
+  room kitchen "Flat {n} Kitchen"     kitchen  3.265 x 3.615
+  room hall    "Flat {n} Hall"        corridor 6.08 x 3.615  east of kitchen
+  room bath    "Flat {n} Bathroom"    bathroom 3.09 x 3.615  east of hall
+  room living  "Flat {n} Living room" living   4.765 x 4.365 north of kitchen
+  room bed1    "Flat {n} Bedroom 1"   bedroom  3.38 x 4.365  east of living
+  room bed2    "Flat {n} Bedroom 2"   bedroom  * x 4.365     east of bed1 until bath
+  door front    between hall and corridor, 0.64 from west, 1.0 wide, opens into hall, hinged $fh
+  door d-living between hall and living, 0.29 from west, 0.8 wide, opens into living, hinged west
+  door d-bed1   between hall and bed1, 2.79 from west, 0.8 wide, opens into bed1, hinged west
+  door d-bed2   between hall and bed2, 5.14 from west, 0.8 wide, opens into bed2, hinged west
+  door d-bath   between hall and bath, 1.44 from north, 0.8 wide, opens into bath, hinged north
+  opening k-open between kitchen and living, 0.775 from west, 1.6 wide
+  window w-living  in living north, 1.54 from east, 1.8 wide
+  window w-bed1    in bed1 north, centred, 1.8 wide
+  window w-bed2    in bed2 north, 1.2 from east, 1.8 wide
+  window w-kitchen in kitchen west, 1.24 from north, 1.2 wide, sill 1.0, height 1.1
+end
+
+wall between stair and riser 0.2
+wall between riser and lift 0.2
+place flat1 as A at 0.175,0.175
+room stair "Stair" stair 2.75 x 7.3 east of A walls 0.3
+room riser "Riser and cleaner store" storage 2.75 x 4.725 east of stair
+room lift  "Lift" other 2.75 x * north of riser until stair
+place flat1 as B east of riser gap 0.3 mirror east-west fh=east
+room corridor "Corridor" corridor * x 1.75 north of A until B walls 0.25
+place flat2 as C north of corridor
+place flat2 as D east of C gap 0.3 mirror east-west fh=west
+
+door d-stair between corridor and stair, 0.85 from west of stair, 1.0 wide, opens into stair, hinged west
+door d-lift  between corridor and lift, 0.9 from west of lift, 1.0 wide, opens into lift, hinged west
+door d-riser between stair and riser, 1.925 from south, 0.8 wide, opens into riser, hinged south
+window w-stair  in stair south, 0.55 from west, 1.6 wide, sill 0.9, height 1.6
+window w-corr-w in corridor west, centred, 1.2 wide
+window w-corr-e in corridor east, centred, 1.2 wide

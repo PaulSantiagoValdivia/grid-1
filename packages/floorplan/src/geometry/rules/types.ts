@@ -78,6 +78,11 @@ export interface RuleFinding {
    * Optional, so the report stays at schema version 1.
    */
   readonly through?: readonly RouteStep[]
+  /**
+   * Only on `door_to_outside_above_ground`: how far the floor stands above the ground, in m, as
+   * the message says it. Optional, like `through` (MSG-1: the notes word it from this).
+   */
+  readonly elevation?: number
 }
 
 export type NotCheckedReason =

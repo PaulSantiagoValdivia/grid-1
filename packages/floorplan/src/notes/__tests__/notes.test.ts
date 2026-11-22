@@ -47,7 +47,7 @@ const one = (p: FloorPlan, f: RuleFinding) => planNotes(p, report([f])).notes[0]
 describe('planNotes', () => {
   it('says a trapped room has no way out, and where its only door leads', () => {
     const note = one(plan(), finding('no_route_to_exit', ['bedroom'], { through: [{ room: 'bathroom', via: 'd1' }] }))
-    expect(plain(note.title)).toBe('Back bedroom has no way out')
+    expect(plain(note.title)).toBe('Back bedroom has no route to a door to the outside')
     expect(names(note.title)).toEqual(['Back bedroom'])
     expect(plain(note.detail)).toBe('Its only door opens into Bathroom.')
     expect(names(note.detail)).toEqual(['Bathroom'])
@@ -93,7 +93,7 @@ describe('planNotes', () => {
 
   it('says a room with no door has none', () => {
     const note = one(plan(), finding('room_without_door', ['store']))
-    expect(plain(note.title)).toBe('Storage has no door')
+    expect(plain(note.title)).toBe('Storage has no door or opening to another space')
     expect(plain(note.detail)).toBe('Nothing joins it to another room.')
     expect(note.room).toBe('store')
   })
@@ -101,7 +101,7 @@ describe('planNotes', () => {
   it('says a floor with no exit has no way out, about the floor and no room', () => {
     const p = plan({ floors: [{ id: 'ground', name: 'Ground floor', level: 0 }] })
     const note = one(p, finding('no_exit', []))
-    expect(plain(note.title)).toBe('Ground floor has no way out')
+    expect(plain(note.title)).toBe('Ground floor has no door to the outside')
     expect(names(note.title)).toEqual(['Ground floor'])
     expect(plain(note.detail)).toBe('No door leads outside.')
     expect(note.room).toBeNull()
@@ -109,16 +109,16 @@ describe('planNotes', () => {
 
   it('says a door to an undrawn space leads to a space that is not drawn', () => {
     const note = one(plan(), finding('door_to_undrawn_space', ['kitchen'], { openings: ['d1'] }))
-    expect(plain(note.title)).toBe('A door from Kitchen leads to a space that is not drawn')
+    expect(plain(note.title)).toBe('A door from Kitchen leads to a space that is not drawn as a room')
     expect(names(note.title)).toEqual(['Kitchen'])
     expect(plain(note.detail)).toBe('If that space is a shared landing or a stair, draw it as a room, or mark the wall as exterior if the door leads outside.')
     expect(note.room).toBe('kitchen')
   })
 
   it('uses the id of a room that has no name, and of a floor the plan does not list', () => {
-    expect(plain(one(plan(), finding('room_without_door', ['r9'])).title)).toBe('r9 has no door')
-    expect(plain(one(plan(), finding('no_exit', [])).title)).toBe('Ground floor has no way out')
-    expect(plain(one(plan(), finding('no_exit', [], { floor: 'attic' })).title)).toBe('attic has no way out')
+    expect(plain(one(plan(), finding('room_without_door', ['r9'])).title)).toBe('r9 has no door or opening to another space')
+    expect(plain(one(plan(), finding('no_exit', [])).title)).toBe('Ground floor has no door to the outside')
+    expect(plain(one(plan(), finding('no_exit', [], { floor: 'attic' })).title)).toBe('attic has no door to the outside')
   })
 
   it('names the floor of a room note only when the plan has several floors', () => {
@@ -151,7 +151,7 @@ describe('planNotes', () => {
         [{ reason: 'no_stairs', floor: 'first', rooms: [], openings: [], message: 'The way out of First floor was not checked: the plan has no stairs' }]
       )
     )
-    expect(view.notes.map((n) => plain(n.title))).toEqual(['Storage has no door', 'Ground floor has no way out'])
+    expect(view.notes.map((n) => plain(n.title))).toEqual(['Storage has no door or opening to another space', 'Ground floor has no door to the outside'])
     expect(view.notChecked).toEqual(['The way out of First floor was not checked: the plan has no stairs.'])
     expect(view.label).toBe('General guidance, not your local rules.')
   })
