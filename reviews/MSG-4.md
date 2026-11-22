@@ -139,3 +139,24 @@ touched packages (floorplan types, rules result, cli command, mcp and `src/__tes
 `npm run scoreboard`: "Same as the stored figures". One full run,
 `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,375 of 4,375 pass, the
 timing tests among them.
+
+### Again after merging main 89f1f15 (MSG-6)
+
+MSG-6 reads the plan part by part and gives `grid check` the file's text (`LoadedPlan.text`). I
+kept its reader, its `LoadedPlan` and its `readPlan`. MSG-4's reading lines now run on the same
+raw value that reader read. `check.ts` passes `loaded.text ?? plan`, as MSG-6's review proposed:
+the text carries MSG-6's marks and MSG-4's unknown fields, so `LoadedPlan.raw` is gone. The
+catalogue, the contract's code table and the changelog keep both sides, every section included.
+
+One expectation changed: the MSG-4 test "gives nothing new for a plan the format refuses" used
+`units: "ft"` as the refusal. MSG-6 reads that now (every length in metres, with a line), so
+the test uses `version: "2"`, which still refuses the whole plan.
+
+MSG-6's `plan/read-as-meant` folds capitals for the words in the format's lists (`"Exterior"`),
+and MSG-4 folds them for a room use. They do not overlap: a room use was never refused, so it
+never reaches MSG-6's reader as a fault.
+
+After the merge: `npm run build`, `npm run typecheck` and `npm run lint` pass. The tests for the
+touched packages, the W-5 test and the front door over the damage set: 676 of 676.
+`npm run scoreboard`: "Same as the stored figures", which are MSG-6's as stored on main. I did not start a
+full run this time: the coordinator asked only for the affected tests.
