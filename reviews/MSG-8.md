@@ -10,8 +10,8 @@ the same number appears in front of the line in `grid check`.
    `buildFloorPlan` now returns each room it skips, with the box round the walls the room lists.
    The box is bounded by the corners where those walls meet: two axes cross within both walls,
    give or take half the other wall's thickness and `wallContact`. A long outside wall that the
-   room shares with its neighbours does not stretch the box. The floor-4 bedroom's box is 4.4 m
-   wide, where the box round its whole walls would be 26 m. Below three corners, the box goes
+   room shares with its neighbours does not stretch the box. The floor-4 bedroom's box is 3.85 m
+   by 4.95 m, where the box round its whole walls would be 26.35 m wide. Below three corners, the box goes
    round the whole walls. A room none of whose listed walls exist gets no box. The 2D scene
    draws the box tinted and dashed in the warning colour, with the room's name and the reason in
    the middle. The app draws the box too, with "Not drawn" in place of the reason, because the
@@ -86,5 +86,7 @@ the same number appears in front of the line in `grid check`.
   would be a follow-up.
 - **`--country`.** It can add findings, and with them shift the numbers after them. `grid draw`
   takes no country, so its numbers match `grid check` without `--country`. The contract says so.
+- **Fixtures (CNT-12).** A line about a fixture (`thing.kind` `item`) gets its mark on the
+  middle of the fixture's outline.
 - **Parallel work.** MSG-2 and MSG-4 may touch `command/check.ts`. The numbering change there
   is a few lines in `checkText` and `checkPlan`/`checkOnFloor`.
