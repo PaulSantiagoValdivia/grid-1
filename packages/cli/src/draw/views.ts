@@ -5,6 +5,7 @@
  * Every picture is the viewer's own drawing (`planPicture`, `stillScene`): only the camera and
  * the frame are chosen here. "North" is the top of the drawing, +y: a plan holds no north.
  */
+import type { Display } from '@ongrid/floorplan/types/units'
 import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
 import { LOOKS as PICTURE_LOOKS, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
@@ -35,12 +36,12 @@ export interface PlanView {
 
 export async function planView(
   plan: FloorPlan,
-  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow },
+  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; display?: Display; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow },
 ): Promise<PlanView> {
   // VEW-2's check view: every room, door and window carries its id. VEW-6: a frame crops.
   // MSG-8: the result record's lines, marked on the drawing and listed under it.
   const extra = {
-    ...(options.ids ? { labels: { ids: true } } : {}),
+    ...(options.ids || options.display ? { labels: { ...(options.ids ? { ids: true } : {}), ...(options.display ? { display: options.display } : {}) } } : {}),
     ...(options.frame ? { frame: options.frame } : {}),
     ...(options.faults ? { faults: options.faults } : {}),
     // SHT-7: what the picture shows.

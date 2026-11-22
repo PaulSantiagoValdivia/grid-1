@@ -190,7 +190,7 @@ const TURNS: Turn[] = [
   {
     who: 'estate agent', n: 5, asked: 'Sizes in feet and inches; no m² under the names.', mark: 'S', why: 'grid_areas lists every room in feet and inches; the drawing\'s labels stay in metres',
     run: async (b) => {
-      expect((await ok(b, 'grid_areas', { plan: 'flipped.json', units: 'ft' })).text).toContain('15\' 1" × 11\' 10"')
+      expect((await ok(b, 'grid_areas', { plan: 'flipped.json', units: 'ft' })).text).toContain('15\'-1" × 11\'-10"')
     },
   },
   {

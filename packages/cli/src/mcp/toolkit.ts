@@ -8,12 +8,24 @@
  * be anything (MS-19, T-3).
  */
 import { GENERAL_GUIDANCE_LABEL, planFloors, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { LengthRefused, readLength } from '@ongrid/floorplan/types/units'
 import { likelyId } from '@ongrid/floorplan/types/nearest'
 import { PATH_MAX, PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { PROJECT_FILE, projectPlanFile } from '../command/init'
 import { UsageError } from '../command/options'
 import { loadPlan, PlanRefused, type LoadedPlan, type LoadOptions } from '../command/plan'
 import { ID_MAX as PLAN_ID_MAX, UNSAFE_TEXT } from '../command/planText'
+
+/** WRT-7: the decimal mark the call's lengths are typed with. */
+export const DECIMAL_IN_ARG: ArgSpec = {
+  type: 'string',
+  enum: ['point', 'comma'],
+  description: 'The decimal mark of the lengths typed as text in this call: point (3.81) or comma (3,81). point when left out.',
+  examples: ['comma'],
+}
+
+/** The longest text a length argument may be, such as 12' 6 1/2" (WRT-7). */
+export const LENGTH_TEXT_MAX = 40
 
 /** The longest id an argument may hold: a floor, room, opening or wall id, as long as a plan file may hold. */
 export const ID_MAX = PLAN_ID_MAX
@@ -46,6 +58,11 @@ export type ArgSpec =
       readonly examples: readonly number[]
       readonly minimum: number
       readonly maximum: number
+      /**
+       * WRT-7: a length. It also takes text with its unit (`"12'6\""`, `"900 mm"`), and a decimal
+       * comma when the call's `decimal`, read before it, is `comma`. It is checked in metres.
+       */
+      readonly length?: boolean
       readonly required?: boolean
     }
   | {
@@ -134,6 +151,11 @@ function argSchema(spec: ArgSpec): Record<string, unknown> {
     return { ...array, items: item }
   }
   if (rest.type === 'object') return { ...rest.schema, description: rest.description, examples: rest.examples }
+  if (rest.type === 'number' && rest.length === true) {
+    const { length: _length, ...number } = rest
+    void _length
+    return { ...number, type: ['number', 'string'], maxLength: LENGTH_TEXT_MAX, description: `${rest.description} A number is metres; text may give its unit, as 12'6", 900 mm or 381 cm.` }
+  }
   return rest
 }
 
@@ -205,7 +227,17 @@ function checkOne(name: string, spec: ArgSpec, value: unknown, earlier: Readonly
       return value
     }
     case 'number': {
+      if (spec.length === true && typeof value === 'string') {
+        if (value.length > LENGTH_TEXT_MAX) throw new ToolRefusal(`${name} is longer than ${LENGTH_TEXT_MAX} characters.`)
+        try {
+          value = readLength(value, earlier['decimal'] === 'comma' ? 'comma' : 'point')
+        } catch (error) {
+          if (error instanceof LengthRefused) throw new ToolRefusal(`${name} ${error.message}.`)
+          throw error
+        }
+      }
       if (typeof value !== 'number' || !Number.isFinite(value) || value < spec.minimum || value > spec.maximum) {
+        if (spec.length === true && typeof value === 'number' && Number.isFinite(value)) throw new ToolRefusal(`${name} is ${value.toFixed(3)} m: it takes a length from ${spec.minimum} to ${spec.maximum} m.`)
         throw new ToolRefusal(`${name} takes a number from ${spec.minimum} to ${spec.maximum}.`)
       }
       return value
@@ -242,7 +274,9 @@ export function readArgs(tool: GridTool, raw: unknown): Record<string, unknown> 
     throw new ToolRefusal(`${tool.name} takes ${names.length > 0 ? listOf(names) : 'no arguments'}, not ${shown}.`)
   }
   const args: Record<string, unknown> = {}
-  for (const [name, spec] of Object.entries(tool.args)) {
+  // The decimal mark first: a length typed with a comma is read by it (WRT-7).
+  const order = Object.entries(tool.args).sort(([a], [b]) => (a === 'decimal' ? -1 : b === 'decimal' ? 1 : 0))
+  for (const [name, spec] of order) {
     const value = given[name]
     if (value === undefined || value === null) {
       if (spec.required) throw new ToolRefusal(`Pass ${name}: ${spec.description.split('. ')[0]!.replace(/\.$/, '')}.`)
