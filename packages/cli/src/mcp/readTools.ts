@@ -11,6 +11,8 @@ import { floorOf, itemFootprint, limit, tolerance, type FloorPlan } from '@ongri
 import { GENERAL_GUIDANCE_LABEL, inspectPlan } from '@ongrid/rules'
 import { checkPlan, countsText, KIND_WORDS, partsText, thingText } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
+import { drawShowOf } from '../command/drawShow'
+import { UsageError } from '../command/options'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
@@ -692,6 +694,9 @@ const viewTool: GridTool = {
     dimensions: { type: 'boolean', description: 'For plan: false to leave the sizes off, for a clean drawing. true when left out.', examples: [true, false] },
     crop: { type: 'string', maxLength: 120, description: 'For plan: frame just this part: a room, door, window or wall id, or a room\'s name. The whole floor when left out.', examples: ['kitchen', 'front-door'] },
     ids: { type: 'boolean', description: 'For plan: true to draw the id of every room, door and window on the picture, as the plan file holds them, and to list them in the text with the areas, what each door joins, the counts and the drawing\'s problems. false when left out.', examples: [true] },
+    hide: { type: 'string', maxLength: 120, description: 'For plan: parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings. Everything is drawn when left out.', examples: ['areas,swings', 'sketch'] },
+    colour: { type: 'string', enum: ['use'], description: 'For plan: use fills each room by its use and lists the uses in the key. One fill for every room when left out.', examples: ['use'] },
+    key: { type: 'boolean', description: 'For plan: true to add a key under the drawing, even where the plan asks for none.', examples: [true] },
   },
   outputSchema: objectSchema({ kind: STRING, floor: { type: ['string', 'null'] }, camera: { type: ['object', 'null'] }, pxPerMetre: NULLABLE_NUMBER, sills: { type: 'array' }, ids: listSchema(STRING), boxes: { type: 'array' } }),
   async run(args, context) {
@@ -699,8 +704,8 @@ const viewTool: GridTool = {
     const survey = surveyPlan(loaded.plan)
     const floor = floorArg(loaded.plan, args['floor'])
     const kind = args['kind'] as 'plan' | '3d' | 'eye'
-    const allowed: Record<string, readonly string[]> = { plan: ['floor', 'look', 'dimensions', 'ids', 'crop'], '3d': ['floor', 'from'], eye: ['room', 'toward', 'eye_height'] }
-    const stray = ['floor', 'from', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids', 'crop'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
+    const allowed: Record<string, readonly string[]> = { plan: ['floor', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key'], '3d': ['floor', 'from'], eye: ['room', 'toward', 'eye_height'] }
+    const stray = ['floor', 'from', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`kind=${kind} takes ${allowed[kind]!.join(', ')}, not ${stray.join(', ')}.`)
     const plan = survey.plan
     if (kind === 'plan') {
@@ -712,7 +717,16 @@ const viewTool: GridTool = {
       const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
       // What went wrong, numbered as grid_check numbers it, marked on the drawing (MSG-8).
       const faults = inspectPlan(plan).lines
-      const view = await planView(plan, { floor: shown, look: asked, dimensions: args['dimensions'] !== false, ids: withIds, faults, ...(crop ? { frame: cropFrame(crop) } : {}) })
+      // SHT-7: what the picture shows, read as grid draw reads --hide, --colour and --key.
+      let shownParts
+      try {
+        shownParts = drawShowOf({ hide: args['hide'] as string | undefined, colour: args['colour'] as string | undefined, key: args['key'] === true })
+      } catch (error) {
+        if (error instanceof UsageError) throw new ToolRefusal(error.message.replace(/--(hide|colour|key)\b/g, '$1'))
+        throw error
+      }
+      const dimensions = args['dimensions'] !== false && shownParts.showDimensions
+      const view = await planView(plan, { floor: shown, look: asked, dimensions, ids: withIds, faults, show: shownParts.show, ...(crop ? { frame: cropFrame(crop) } : {}) })
       const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
       const undecided = view.undecidedDoors ?? []
