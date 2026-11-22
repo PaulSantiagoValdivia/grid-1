@@ -562,7 +562,7 @@ its text, which says the same.
 
 | Tool | Receipt (`structuredContent`) |
 |---|---|
-| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
+| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`, `dxfProfile` (HND-1: for a DXF, the project's profile file its layers and pens came from, `dxf-layers.json`; null for Grid's own layers and for the other formats). An export that would hold no wall, room or fixture is refused, and so is a DXF whose project profile is wrong. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
@@ -608,8 +608,9 @@ A change that would add a problem that leaves a part out is refused, and nothing
   line in its text that says so. The DXF writes a curved wall's faces as true arcs and names only
   the rooms; the IFC writes its axis as a true arc and names the walls and the rooms; the OBJ and
   the GLB name both. The file says it too, beside what it leaves out: `Grid_Approximated` in an
-  IFC, the `GRID-LEFT-OUT` layer in a DXF, comment lines in an OBJ, `asset.extras.gridApproximated`
-  in a GLB. A plan with no curved wall gets none of it, and its files are as they were.
+  IFC, the left-out layer in a DXF (`GRID-LEFT-OUT`, or the profile's), comment lines in an OBJ,
+  `asset.extras.gridApproximated` in a GLB. In the DXF a curved wall's outline and its fill (HND-1's
+  hatch) have their faces as true arcs, on HND-1's wall layers and pens. A plan with no curved wall gets none of it, and its files are as they were.
 - `grid_describe` gives a curved wall's centre and sweep (`arc(5,5 360°)` for an agent, "curving
   360° anticlockwise round 5, 5 (radius 3, 18.85 along the curve)" for a person). Read back as
   rooms text, a floor with a curved wall is given in Grid's own terms (`raw` lines), which keep
@@ -622,6 +623,21 @@ A change that would add a problem that leaves a part out is refused, and nothing
   square a wall whose end meets one.
 - The IFC's base quantities (HND-2) measure a curved wall along its curve: `Length` is its length
   along the arc, `GrossFootprintArea` and the volumes its body by the straight pieces.
+
+### 2026-11-22: a DXF a drafter can keep working in (HND-1)
+
+- `grid_export` adds `dxfProfile`: for a DXF, the profile file in the project folder its layers
+  and pens came from (`dxf-layers.json`), else null; the text adds `Layers and pens from
+  dxf-layers.json.` when one was used. A profile that is there and wrong is refused, naming each
+  part that is wrong (`layers.doors.colour must be a whole number from 1 to 255`); no file is
+  written. No new code in the record: it is a refusal of the tool, as an empty export is.
+- The DXF itself changed: AutoCAD 2013's version (`AC1027`) in UTF-8, in metres
+  (`$INSUNITS` 6), with doors, windows and openings as blocks, filled wall outlines, dimension
+  entities, a tag block per room and an A3 layout. The old layer names stay, with new ones beside
+  them (`GRID-WALLS-FILL`, `GRID-DOORS`, `GRID-WINDOWS`, `GRID-ROOM-TAGS`, `GRID-DIMENSIONS`,
+  `GRID-SHEET`, `GRID-VIEWPORT`); a room's name and area are attributes of its tag, no longer
+  texts on `GRID-LABELS`, which now holds the label only. A layer is listed only when something is
+  drawn on it. See [what the DXF holds](commands.md#what-the-dxf-holds-hnd-1).
 
 ### 2026-11-22: facades, and opening patterns (LVL-8)
 

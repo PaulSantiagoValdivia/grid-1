@@ -36,7 +36,8 @@ import { DIFF_OPTIONS, MARK_OPTIONS, runDiff, runMark } from './diff'
 import { MARKERS_MAX, MarkerRefused } from '../versions/markers'
 import { GitUnread } from '../versions/git'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
-import { approximatedText, checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
+import { approximatedText, checkExportRequest, dxfProfileLine, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
+import { DxfProfileRefused } from '../export/dxfProfile'
 import type { LeftOutPart } from '@ongrid/floorplan/export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
@@ -451,14 +452,16 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const curves = approximatedText(done.approximated)
     if (curves !== null) io.stderr(`${curves}\n`)
     if (done.note) io.stderr(`${done.note}\n`)
+    if (done.dxfProfile !== null) io.stderr(`${dxfProfileLine(done.dxfProfile)}\n`)
     io.stdout(`Wrote ${project.shown(done.written)}\n`)
     return EXIT_OK
   }
   const loaded = loadPlan(project, planFile)
-  const made = exportFile(loaded, planFile, format, request)
+  const made = exportFile(project, loaded, planFile, format, request)
   warnLeftOut(io, loaded, made.leftOut)
   const curves = approximatedText(made.approximated)
   if (curves !== null) io.stderr(`${curves}\n`)
+  if (made.dxfProfile !== null) io.stderr(`${dxfProfileLine(made.dxfProfile)}\n`)
   io.stdout(`Wrote ${project.shown(write(project, request.out, made.data))}\n`)
   return EXIT_OK
 }
@@ -494,7 +497,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof SeenRefused || error instanceof MarkerRefused || error instanceof GitUnread || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof DxfProfileRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof SeenRefused || error instanceof MarkerRefused || error instanceof GitUnread || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

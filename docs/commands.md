@@ -166,6 +166,81 @@ the floor asked for) is refused with exit code 1, and no file is written: `Nothi
 plan.json has no wall, room or fixture that can be drawn.` It names what is left out, when
 anything is.
 
+### What the DXF holds (HND-1)
+
+The DXF is written for a drafter to go on working in: one floor, in metres, in layers an office
+can name and pen its own way.
+
+- **Version and units.** AutoCAD 2013's DXF (`AC1027`), whose text is UTF-8, so a room called
+  "Baño" or "寝室" is stored as it is written and every reader shows it so. `$INSUNITS` is 6
+  (metres) and `$MEASUREMENT` metric; the plan's own axes, 1:1, +Y up. A backslash, a caret and
+  `%%` in a name are written so that a CAD program does not read them as codes.
+- **Walls** are closed outlines, one per solid piece between openings, with their corners joined
+  as the drawing joins them, on `GRID-WALLS-EXTERIOR` or `GRID-WALLS-INTERIOR`. Each wall is
+  filled by a solid hatch on `GRID-WALLS-FILL`. A dividing line is one dashed line on
+  `GRID-WALLS-VIRTUAL`.
+- **Doors, windows and doorless openings are blocks**, one per kind and size, named by width and
+  wall thickness in millimetres (`GRID-WINDOW-1200x200`), inserted on `GRID-DOORS`,
+  `GRID-WINDOWS` or `GRID-OPENINGS` and turned along their wall, so they can be counted and
+  swapped. A block is drawn along +X from its insertion point. A door that states its hinge and
+  swing has a block per hand: `-L` opens towards +Y of the block and `-R` towards −Y, each hung at
+  the insertion point; a door hung from its other jamb is the same block turned half round. Its
+  leaf and swing are on `GRID-DOOR-SWINGS` inside the block. A door that states neither has a
+  block of its own with no swing (`GRID-DOOR-900x200`).
+- **Dimensions** are dimension entities on `GRID-DIMENSIONS`, in the style `GRID` (ticks, metres
+  to two places): the chains outside the plan and the room sizes inside it that the drawing
+  shows ([the sizes on a drawing](#the-sizes-on-a-drawing)).
+- **Room tags.** Each room gets the block `GRID-ROOM-TAG` on `GRID-ROOM-TAGS`, with the attributes
+  `NUMBER` (the number the room states, else Grid's count, as in the schedule), `NAME` and `AREA`
+  (the net area, `12.40 m²`).
+- **A sheet.** Besides the model, the layout `Sheet` is an A3 sheet across, in millimetres, with
+  a border, one viewport (on `GRID-VIEWPORT`, which does not plot) showing the plan at the
+  profile's scale, 1:100 unless it says otherwise, and the scale and the label under it. Text
+  and dimensions are sized for that scale: names 2.5 mm, other text 2 mm on paper.
+- **Also on their own layers**, as before: the fixtures (`GRID-FIXTURES`), the sketch
+  (`GRID-SKETCH-` and the category), the notes (`GRID-NOTES`), the facts (`GRID-FACTS`), what the
+  file leaves out (`GRID-LEFT-OUT`, under the dimensions) and the label, "General guidance, not
+  your local rules", above the dimensions (`GRID-LABELS`). A layer is listed only when something
+  is drawn on it. Stairs, lifts, steps and the floor above are not in the DXF yet.
+
+#### An office's own layers and pens: `dxf-layers.json`
+
+With no profile the DXF uses Grid's own: the `GRID-` layers above, every line in the drawing's
+foreground colour (7, the fill in 8), line weights from 0.13 mm to 0.5 mm, and the scale 1:100.
+An office that wants its own writes them once in `dxf-layers.json` in the project folder, beside
+`grid.json`; `grid export` and `grid_export` read it for every DXF and say so (`Layers and pens
+from dxf-layers.json.`). A category the file leaves out keeps Grid's pen:
+
+```json
+{
+  "scale": 50,
+  "layers": {
+    "walls-outside": { "layer": "WALLS-OUT", "colour": 7, "lineweight": 0.5 },
+    "doors": { "layer": "DOORS", "colour": 3, "lineweight": 0.25, "linetype": "continuous" },
+    "dividing-lines": { "linetype": "dash-dot" }
+  }
+}
+```
+
+- `scale`: a whole number from 1 to 1000; 50 is 1:50. It sets the sheet's viewport and every text
+  and dimension size, and the length of the dashes.
+- The categories: `walls-outside`, `walls-inside`, `dividing-lines`, `wall-fill`, `rooms`,
+  `room-tags`, `doors`, `door-swings`, `windows`, `openings`, `fixtures`, `dimensions`, `notes`,
+  `sketch` (a prefix: each category goes on it, a dash and its name), `facts`, `left-out`,
+  `label`, `sheet` and `viewport`.
+- Each takes `layer` (1 to 255 characters, none of `< > / \ " : ; ? * | = ,` or a backtick),
+  `colour` (a drawing colour number, 1 to 255), `lineweight` (in millimetres, one of those the
+  format holds: 0, 0.05, 0.09, 0.13, 0.15, 0.18, 0.2, 0.25, 0.3, 0.35, 0.4, 0.5, 0.53, 0.6, 0.7,
+  0.8, 0.9, 1, 1.06, 1.2, 1.4, 1.58, 2 or 2.11) and `linetype` (`continuous`, `dashed`, `dotted`
+  or `dash-dot`).
+- Two categories may share a layer only with the same pen.
+
+A profile that is there and wrong refuses the export with exit code 1, naming every part that is
+wrong and never repeating what it holds, and no file is written: `dxf-layers.json in the project
+folder is not a profile Grid can use: layers.doors.colour must be a whole number from 1 to 255
+…`. It is read as every file is, inside the project: one reached through a link out of it is
+refused.
+
 ### What the IFC holds (HND-2)
 
 The IFC is written so that a BIM program can schedule and take off from it. Everything in it is

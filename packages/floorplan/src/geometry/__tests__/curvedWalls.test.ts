@@ -306,16 +306,20 @@ describe('exporting a curved wall', () => {
     const made = exportPlan(roundRoom(), 'dxf', options)
     expect(made.approximated).toEqual([{ kind: 'room', id: 'drum', floor: 'ground' }])
     const dxf = made.data as string
-    // A bulge on a vertex: the stretch to the next one is an arc.
-    const bulges = dxf.split('\n').filter((line, i, lines) => lines[i - 1]?.trim() === '42')
-    expect(bulges.length).toBeGreaterThanOrEqual(2)
+    // A bulge on a vertex: the stretch to the next one is an arc, on the wall's outline and fill.
+    const outline = entitiesOf(dxf).filter((e) => e.type === 'LWPOLYLINE' && e.layer === 'GRID-WALLS-EXTERIOR')
+    expect(outline).toHaveLength(1)
+    expect(outline[0]!.values(42).filter((b) => b !== 0).length).toBeGreaterThanOrEqual(2)
+    const fill = entitiesOf(dxf).filter((e) => e.type === 'HATCH' && e.layer === 'GRID-WALLS-FILL')
+    expect(fill[0]!.values(42).filter((b) => b !== 0).length).toBeGreaterThanOrEqual(2)
     expect(dxf).toContain('Rooms along a curved wall, their outlines written as straight pieces (1): "drum"')
     expect(dxf).toContain('GRID-LEFT-OUT')
   })
 
   it('writes a whole circle with no opening as two half arcs on each face', () => {
     const dxf = exportPlan(roundRoom([]), 'dxf', options).data as string
-    const bulges = dxf.split(/\r?\n/).filter((line, i, lines) => lines[i - 1]?.trim() === '42').map(Number)
+    const [outline] = entitiesOf(dxf).filter((e) => e.type === 'LWPOLYLINE' && e.layer === 'GRID-WALLS-EXTERIOR')
+    const bulges = outline!.values(42)
     expect(bulges).toHaveLength(4)
     for (const bulge of bulges) expect(Math.abs(bulge)).toBeCloseTo(1, 9)
   })
@@ -323,7 +327,9 @@ describe('exporting a curved wall', () => {
   it('writes a curved dividing line as an arc in the DXF', () => {
     const line: FloorPlan = { ...bayRoom(), walls: bayRoom().walls.map((w) => (w.id === 'bay' ? { ...w, virtual: true, thickness: 0, height: 0 } : w)), openings: [] }
     const dxf = exportPlan(line, 'dxf', options).data as string
-    expect(dxf).toMatch(/\r?\n\s*0\r?\n\s*ARC\r?\n\s*8\r?\n\s*GRID-WALLS-VIRTUAL/)
+    const arcs = entitiesOf(dxf).filter((e) => e.type === 'ARC' && e.layer === 'GRID-WALLS-VIRTUAL')
+    expect(arcs).toHaveLength(1)
+    expect(arcs[0]!.values(40)).toEqual([2])
   })
 
   it('writes the IFC axis as a trimmed circle, and names the wall and the room it writes as pieces', () => {
@@ -417,3 +423,24 @@ describe('a curved wall in the parts merged from main (LVL-8)', () => {
     expect(validatePlan(expanded).issues.filter((i) => i.severity === 'error')).toEqual([])
   })
 })
+
+/** The entities of a DXF, each its type, its layer and the values of a group code in it. */
+function entitiesOf(dxf: string): { type: string; layer: string; values: (code: number) => number[] }[] {
+  const lines = dxf.split(/\r?\n/)
+  const pairs: [number, string][] = []
+  for (let i = 0; i + 1 < lines.length; i += 2) pairs.push([Number(lines[i]!.trim()), lines[i + 1]!])
+  const start = pairs.findIndex(([code, value], i) => code === 2 && value === 'ENTITIES' && pairs[i - 1]?.[1] === 'SECTION')
+  const out: { type: string; layer: string; values: (code: number) => number[] }[] = []
+  let current: [number, string][] | null = null
+  for (const [code, value] of pairs.slice(start + 1)) {
+    if (code === 0) {
+      if (current !== null) {
+        const own = current
+        out.push({ type: own[0]![1], layer: own.find(([c]) => c === 8)?.[1] ?? '', values: (wanted) => own.filter(([c]) => c === wanted).map(([, v]) => Number(v)) })
+      }
+      if (value === 'ENDSEC') break
+      current = [[0, value]]
+    } else current?.push([code, value])
+  }
+  return out
+}

@@ -21,6 +21,7 @@ import {
   type PlanExport
 } from '@ongrid/floorplan/export'
 import { writeProjectExport } from '../export/projectExports'
+import { projectDxfProfile } from '../export/dxfProfile'
 import { PathRefused, type Project } from '../fs/projectFiles'
 import { floorOption, loadPlan, PlanRefused, type LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
@@ -145,6 +146,8 @@ function floorNumberOf(loaded: LoadedPlan, format: ExportFormat, floorId: string
 
 export interface MadeExport extends PlanExport {
   readonly name: ExportName
+  /** HND-1: the project's DXF profile file the export used, or null for Grid's own layers. */
+  readonly dxfProfile: string | null
 }
 
 /** The most names a line on the left-out parts gives; the rest are counted. */
@@ -203,15 +206,23 @@ function nothingToExport(loaded: LoadedPlan, planFile: string, format: ExportFor
 
 /**
  * `planFile` is the path as given: a plan reached through a link is named after the link. An
- * export that would hold nothing of the plan is refused (`PlanRefused`, HND-6).
+ * export that would hold nothing of the plan is refused (`PlanRefused`, HND-6). A DXF takes its
+ * layers and pens from the project's profile when it has one (HND-1, `DxfProfileRefused` when
+ * that file is wrong).
  */
-export function exportFile(loaded: LoadedPlan, planFile: string, format: ExportFormat, request: ExportRequest): MadeExport {
+export function exportFile(project: Project, loaded: LoadedPlan, planFile: string, format: ExportFormat, request: ExportRequest): MadeExport {
   const floorId = floorOption(loaded.plan, request.floor)
-  const project = projectNameOf(planFile)
-  const options = { projectId: project, projectName: project, floorId, now: new Date() }
+  const name = projectNameOf(planFile)
+  const dxf = format === 'dxf' ? projectDxfProfile(project) : null
+  const options = { projectId: name, projectName: name, floorId, now: new Date(), ...(dxf === null ? {} : { dxfProfile: dxf.profile }) }
   const made = exportPlan(loaded.plan, format, loaded.faults === undefined ? options : { ...options, faults: loaded.faults })
   if (made.empty) throw new PlanRefused(nothingToExport(loaded, planFile, format, made, floorId))
-  return { ...made, name: exportNameOf(planFile, format, floorNumberOf(loaded, format, floorId)) }
+  return { ...made, name: exportNameOf(planFile, format, floorNumberOf(loaded, format, floorId)), dxfProfile: dxf?.file ?? null }
+}
+
+/** HND-1: the line that says which profile a DXF's layers and pens came from. */
+export function dxfProfileLine(file: string): string {
+  return `Layers and pens from ${file}.`
 }
 
 /** Why an export could not be written. The message is one line. */
@@ -227,6 +238,8 @@ export interface ExportDone {
   readonly leftOut: readonly LeftOutPart[]
   /** CNT-18: the curves the file writes as straight pieces, which it names too. */
   readonly approximated: readonly ApproximatedPart[]
+  /** HND-1: the project's DXF profile file the export used, or null for Grid's own layers. */
+  readonly dxfProfile: string | null
   readonly note?: string
 }
 
@@ -240,9 +253,9 @@ function oneLine(text: string): string {
  */
 export function exportIntoProject(project: Project, planFile: string, format: ExportFormat, request: Omit<ExportRequest, 'out'>): ExportDone {
   const loaded = loadPlan(project, planFile)
-  const made = exportFile(loaded, planFile, format, request)
+  const made = exportFile(project, loaded, planFile, format, request)
   const written = writeBesidePlan(project, planFile, made.name.fileName, made.data)
-  const done = { loaded, written, leftOut: made.leftOut, approximated: made.approximated }
+  const done = { loaded, written, leftOut: made.leftOut, approximated: made.approximated, dxfProfile: made.dxfProfile }
   return made.name.note === undefined ? done : { ...done, note: made.name.note }
 }
 

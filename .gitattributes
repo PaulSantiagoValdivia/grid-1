@@ -5,3 +5,5 @@
 scoreboard/data/*.gz binary
 # The bundled fonts and their licences are shipped byte for byte: never convert them.
 packages/cli/fonts/** binary
+# DXF golden files are written with CRLF, the line ending the format uses: never convert them.
+packages/floorplan/src/geometry/export/__tests__/golden/*.dxf binary
