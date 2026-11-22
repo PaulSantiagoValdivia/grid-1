@@ -93,7 +93,8 @@ describe("the plan's site.country", () => {
   it('is left out alone when read from a file: the rest of the site is kept, and the line names the field, never the text', () => {
     const hostile = 'the moon'
     const read = readPlanParts(plan({ origin: [1, 2], latitude: 40, longitude: -3, country: hostile }))
-    expect(read.plan!.site).toEqual({ origin: [1, 2], latitude: 40, longitude: -3 })
+    if (read.plan === null) throw new Error('the plan was refused')
+    expect(read.plan.site).toEqual({ origin: [1, 2], latitude: 40, longitude: -3 })
     expect(read.faults).toHaveLength(1)
     expect(read.faults[0]).toMatchObject({ kind: 'value-left-out', path: ['site', 'country'], used: null })
     expect(JSON.stringify(read.faults)).not.toContain(hostile)

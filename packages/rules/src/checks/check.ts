@@ -7,12 +7,13 @@
  * network.
  */
 
-import { checkPlanSanity, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity, floorBuilding, floorStatesBuilding, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
-import { FIGURE_LIMITS, FIGURE_RULES, RULE_FIGURES, type FigureRuleId } from './catalogue'
+import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
+import { FIGURE_LIMITS, FIGURE_RULES, RULE_BUILDINGS, RULE_FIGURES, RULE_READ_FOR, RULE_USES, ruleReadsBuilding, type FigureRuleId } from './catalogue'
 import { allSkipped, coverageOf, LOOKS_AT, planCheckScopes, type FloorScope } from './coverage'
 import { escapeCheck, hasEscapeFigures, type EscapeFigures } from './escape'
-import { resolveFigure, type FigureKey } from './figures'
+import { buildingKindsText, resolveFigure, type FigureKey } from './figures'
 import { messages, type FigureSubject } from './messages'
 import { countryInText } from '@ongrid/floorplan/types/places'
 import { placeFor, type WithoutPlace } from './place'
@@ -95,6 +96,8 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   // MSG-2: what each figure check looked at, floor by floor.
   const scopes: Record<FigureRuleId, [string, FloorScope][]> = { 'habitable-room-area': [], 'escape-opening': [] }
   const read = new Map<string, ReturnType<typeof drawable>>()
+  // CNT-5: the floors, by rule, that the plan says are a kind of building the rule does not read.
+  const notFor: Record<FigureRuleId, { floor: string; rooms: string[]; building: BuildingType }[]> = { 'habitable-room-area': [], 'escape-opening': [] }
   for (const floor of floors) {
     const floorName = floor.name || floor.id
     const drawn = drawable(planForFloor(plan, floor.id))
@@ -102,10 +105,21 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     const { storey, leftOut } = drawn
     // The plan checks' notices for this floor first, then this floor's own.
     notChecked.push(...base.notChecked.filter((notice) => notice.floor === floor.id))
+    // CNT-5: a figure check runs on a floor only where the plan says it is a kind of building
+    // the check's figures were read for, or does not say. Elsewhere every room is skipped.
+    const building = floorBuilding(plan, floor.id)
+    const reads = (rule: FigureRuleId): boolean => ruleReadsBuilding(rule, building)
+    for (const rule of FIGURE_RULES) {
+      if (reads(rule.id) || building === undefined) continue
+      scopes[rule.id].push([floor.id, allSkipped(storey, 'not_for_building', building)])
+      notFor[rule.id].push({ floor: floor.id, rooms: storey.rooms.map((room) => room.id), building })
+    }
     // Escape openings don't need stairs: every floor up to the third storey is checked.
-    const escapes = escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape)
-    findings.push(...escapes.findings)
-    if (ran['escape-opening']) {
+    const escapes = reads('escape-opening') ? escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape) : null
+    if (escapes === null) {
+      // Skipped above, with the reason.
+    } else if (ran['escape-opening']) {
+      findings.push(...escapes.findings)
       scopes['escape-opening'].push([floor.id, escapes.scope])
       // Above the third storey the figures here stop: said, never passed in silence (CH-4).
       const above = escapes.scope.skipped.above_escape_storeys ?? []
@@ -119,7 +133,9 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
         })
       }
     } else scopes['escape-opening'].push([floor.id, allSkipped(storey, skippedFor)])
-    if (minRoomArea !== null) {
+    if (!reads('habitable-room-area')) {
+      // Skipped above, with the reason.
+    } else if (minRoomArea !== null) {
       // Sizes don't need stairs either: every floor is checked.
       const sizes = sizeCheck(storey, leftOut.rooms, floor.id, floorName, roomName, minRoomArea)
       findings.push(...sizes.findings)
@@ -131,10 +147,44 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   if (plan.rooms.length === 0) {
     notChecked.push({ reason: 'no_rooms', floor: '', rooms: [], openings: [], message: messages.noRooms() })
   }
-  // A check with no figure for the place did not run: said once, about the whole plan. With no
-  // place, the report says so at its top instead (`withoutPlace`), and the coverage gives why.
+  // CNT-5: a check the plan's kind of building leaves out is said once, about the whole plan, when
+  // the plan's own kind is the reason on every floor; otherwise once on each floor it left out.
+  for (const rule of FIGURE_RULES) {
+    const left = notFor[rule.id]
+    if (left.length === 0) continue
+    const readFor = buildingKindsText(RULE_READ_FOR[rule.id])
+    const whole = left.length === floors.length && floors.every((f) => !floorStatesBuilding(plan, f.id))
+    if (whole) {
+      notChecked.push({
+        reason: 'not_for_building',
+        ruleId: rule.id,
+        floor: '',
+        rooms: [],
+        openings: [],
+        building: left[0]!.building,
+        message: messages.notForBuilding(SUBJECT[rule.id], readFor, BUILDING_TYPE_TEXT[left[0]!.building])
+      })
+      continue
+    }
+    for (const { floor, rooms, building } of left) {
+      const named = floors.find((f) => f.id === floor)
+      notChecked.push({
+        reason: 'not_for_building',
+        ruleId: rule.id,
+        floor,
+        rooms: [...rooms].sort(byText),
+        openings: [],
+        building,
+        message: messages.floorNotForBuilding(named?.name || floor, SUBJECT[rule.id], readFor, BUILDING_TYPE_TEXT[building])
+      })
+    }
+  }
+  // A check with no figure for the place did not run: said once, about the whole plan, unless the
+  // plan's kind of building left it out on every floor already. With no place, the report says so
+  // at its top instead (`withoutPlace`, COD-3), and the coverage gives why.
   for (const rule of FIGURE_RULES) {
     if (ran[rule.id] || place === null) continue
+    if (notFor[rule.id].length === floors.length) continue
     notChecked.push({
       reason: 'no_figures_for_place',
       ruleId: rule.id,
@@ -154,10 +204,12 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     ...base.rules.filter((rule) => Object.hasOwn(LOOKS_AT, rule.id)).map((rule) => coverageOf(rule, planScopes.get(rule.id) ?? [], findingsOf(rule.id))),
     // COD-2: a figure check that looked at something says which kind of building its figures were
     // read for, so a pass with no finding says it too. One that looked at nothing used no figure.
+    // CNT-5: and which uses it looks at and which kinds of building it runs in.
     ...FIGURE_RULES.map((rule) => {
-      const covered = coverageOf(rule, scopes[rule.id], findingsOf(rule.id))
+      const covered = coverageOf(rule, scopes[rule.id], findingsOf(rule.id), RULE_READ_FOR[rule.id])
       const kinds = ran[rule.id] && covered.lookedAtCount > 0 ? [...new Set(RULE_FIGURES[rule.id].flatMap((key) => resolve(key)?.readFor ?? []))] : []
-      return kinds.length > 0 ? { ...covered, readFor: kinds } : covered
+      const reads = { uses: [...RULE_USES[rule.id]], buildings: [...RULE_BUILDINGS[rule.id]] }
+      return kinds.length > 0 ? { ...covered, readFor: kinds, ...reads } : { ...covered, ...reads }
     })
   ]
   const looked = new Set([

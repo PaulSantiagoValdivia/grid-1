@@ -193,3 +193,57 @@ Changed, each file named:
   prompt is built from the same report as before (the retell tests pass unchanged).
 
 Nothing was removed but the expected-failure wrapper of CH-3.
+
+## Scoreboard
+
+`npm run scoreboard` gives the same five counts and guards as stored ("Same as the stored
+figures"), so `scoreboard/current.json` is unchanged. Its report runs now state their place,
+`US` and `ES` (they were no country and `ES`): the "no country" run measured the US figures, and
+with no place now meaning no figure it would have stopped measuring them. With the US stated,
+every count is as before.
+
+## For the owner
+
+1. **With no place, no figure (lab W-12), and the switch back.** COD-1 (who the figure checks are
+   for) is still yours. Until then a plan that states no place gets no figure: no room size or
+   escape note. The switch back is one constant, `WITHOUT_PLACE` in
+   `packages/rules/src/checks/place.ts`: `'us-figures'` applies the US figures to such a plan,
+   as before COD-3, and its report says "Place: United States, assumed, as none is stated; …".
+   The library also takes it per call (`withoutPlace`). I added no command option or tool
+   argument for it: for one check, `--country US` (or `country: "US"`) does the same thing and
+   says where the place came from, so a second option would be a second name for it. With the
+   switch back, the flat's short report is 987 bytes, still under MSG-10's 1,000 (pinned).
+2. **The place lives in `site.country`**, not a new top-level field: CNT-3's `site` is where the
+   building is, every field optional, and a problem report (CMD-13) already drops `site`. It is
+   kept as written ("usa" stays "usa"); every report names it from the list. If you would rather
+   the file held the two-letter code only, that is a transform in the schema.
+3. **No line for "no place"**. The brief suggested a new not-checked code. I tried it: one line
+   with what was found, needed and the fix is about 300 bytes, and the flat's short report went
+   to about 1,150, past MSG-10's pin. So "no place" is said on the report's first line after
+   the label (the done-when), in the record (`place: null`, `withoutPlace.usLines`) and in each
+   figure check's coverage (`no_place`), and the record's `count` does not include it. A line
+   is easy to add (a code in `catalogue.ts`, a notice in `check.ts`) if you would rather have it
+   in the count and give up the pin, or make the pin larger.
+4. **The list**: the 249 places with an ISO 3166-1 code, territories included (Antarctica,
+   Bouvet Island), as the standard assigns them; written by me as data, in short English names
+   (Czechia, Türkiye, Côte d'Ivoire, Eswatini, North Macedonia), with other names as aliases. I
+   left out names that could mean two places (Congo, Korea, Virgin Islands), `America`, and the
+   parts of the UK (England, Scotland, Wales, Northern Ireland): their building rules differ,
+   and reading "England" as the UK would hide that. Kosovo (XK) is not an assigned code and is
+   not on the list. Names in other languages (España, Deutschland) are not on it either.
+5. **Precedence**: the caller's place over the plan's; the report says which ("from --country",
+   "from the country argument", "from the plan").
+6. **The place line names the kind of building by its word** ("read for homes"), without COD-2's
+   "(houses and flats people live in)", and the short report no longer prints "Both checks that
+   use figures read them for homes (…)": with the gloss, the flat's report with the US stated was
+   1,071 bytes, over MSG-10's budget. The notes that used a figure and the full report still
+   say it in full.
+7. **`grid_areas`'s `country`** (ARE-8's usual gross measure) is not a check and still takes a
+   two-letter code of its own; it does not read `site.country`. Making it read the plan's place
+   is a small change if you want one place for everything.
+8. **Rooms text has no `place` statement.** `grid write` keeps `site` as the file has it, so
+   nothing is lost; a plan written from rooms text from nothing has no place until one is
+   written in the file. A `place` line in rooms text would be a WRT-2 change.
+9. **A library caller's unknown `country`** throws `PlaceRefused`; `inspectPlan` still never
+   throws (the plan checks' stage becomes a `plan/check-failed` line naming `country` and the
+   rule). The command and the tool refuse it before that, by name.

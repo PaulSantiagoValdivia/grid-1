@@ -134,6 +134,44 @@ describe('reading a plan back as rooms text', () => {
     }
   })
 
+  it('writes and reads what kind of building it is, a floor\'s own kind, a room\'s tenure and the firm\'s room type (CNT-5)', () => {
+    const text = [
+      'building home',
+      'walls outside 0.3 inside 0.1 height 2.7',
+      'floor ground "Ground floor" level 0 building shop',
+      'room shop "Shop 1" shop 6 x 5 tenure commercial type "Unit A"',
+      'room bins "Bin store" store 2 x 5 east of shop tenure common',
+      'floor first "First floor" level 1',
+      'room pooja "Pooja room" "pooja room" 2 x 2',
+      'room wc "WC" WC 2 x 1.5 north of pooja tenure private',
+    ].join('\n')
+    const plan = written(text)
+    expect(plan.building).toBe('home')
+    expect(plan.floors!.map((f) => [f.id, f.building])).toEqual([['ground', 'shop'], ['first', undefined]])
+    // The person's own word is the room's name; the use is the one it plainly means.
+    expect(plan.rooms.map((r) => [r.id, r.name, r.use, r.tenure, r.roomType])).toEqual([
+      ['shop', 'Shop 1', 'retail', 'commercial', 'Unit A'],
+      ['bins', 'Bin store', 'storage', 'common', undefined],
+      ['pooja', 'Pooja room', 'worship', undefined, undefined],
+      ['wc', 'WC', 'toilet', 'private', undefined],
+    ])
+    const reading = readRoomsText(plan)
+    expect(reading.rawFloors).toEqual([])
+    expect(reading.text).toMatch(/^building home$/m)
+    expect(reading.text).toMatch(/^floor ground "Ground floor" level 0 building shop$/m)
+    expect(reading.text).toMatch(/^room shop "Shop 1" retail .* tenure commercial type "Unit A"$/m)
+    const again = written(reading.text)
+    expect(again.building).toBe('home')
+    expect(again.floors).toEqual(plan.floors)
+    expect(again.rooms.map((r) => [r.id, r.use, r.tenure, r.roomType])).toEqual(plan.rooms.map((r) => [r.id, r.use, r.tenure, r.roomType]))
+  })
+
+  it('refuses a kind of building or a tenure it does not know, naming the ones it does', () => {
+    expect(compileRoomsText('building mall\nroom a "A" - 3 x 3').problems[0]!.message).toMatch(/write 'building <kind>': one of home, office, shop/)
+    expect(compileRoomsText('room a "A" - 3 x 3 tenure mine').problems[0]!.message).toMatch(/'mine' is not a tenure Grid knows\. Use one of: private, shared, common, commercial/)
+    expect(compileRoomsText('room a "A" lounge 3 x 3').problems[0]!.code).toBe('rooms/unknown-use')
+  })
+
   it('writes and reads a room\'s floor above or below its storey (LVL-7), and keeps a key it cannot say', () => {
     const plan = written('walls outside 0.3 inside 0.1 height 2.7\nroom genkan "Genkan" corridor 2 x 1.5 floor -0.15\nroom hall "Hall" corridor 2 x 3 north of genkan\n')
     expect(plan.rooms.find((r) => r.id === 'genkan')).toMatchObject({ floorOffset: -0.15 })

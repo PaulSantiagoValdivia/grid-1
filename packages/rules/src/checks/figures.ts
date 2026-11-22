@@ -14,6 +14,7 @@
  */
 
 import type { RuleCitation } from '@ongrid/floorplan/geometry'
+import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
 import { countryOf } from '@ongrid/floorplan/types/places'
 import type { AppliedFigure, RuleFigures } from './types'
 
@@ -58,8 +59,8 @@ export interface Verification {
 
 /**
  * The kind of building a figure was read for (COD-2). Every figure here was read for homes.
- * Until a plan can say what kind of building it is (CNT-5), a figure is applied to any plan,
- * so every note and every pass that used one says which kind of building it was meant for.
+ * CNT-5: a figure check runs only where the plan says the building (or that floor of it) is one
+ * of the kinds its figures were read for (`READ_FOR_BUILDINGS`), or where the plan does not say.
  */
 export const BUILDING_KINDS = ['homes'] as const
 export type BuildingKind = (typeof BUILDING_KINDS)[number]
@@ -69,6 +70,20 @@ const BUILDING_KIND_TEXT: Record<BuildingKind, string> = {
   homes: 'homes (houses and flats people live in)'
 }
 
+/**
+ * CNT-5: the kinds of building a plan may state (`BuildingType` in the plan format) that each
+ * kind a figure was read for covers. A hotel is not a home here: its rooms are for guests, and
+ * the figures were read for homes.
+ */
+export const READ_FOR_BUILDINGS: Readonly<Record<BuildingKind, readonly BuildingType[]>> = {
+  homes: ['home']
+}
+
+/** Whether figures read for these kinds apply to a building of this kind: always when it is not stated. */
+export function readForCovers(kinds: readonly BuildingKind[], building: BuildingType | undefined): boolean {
+  return building === undefined || kinds.some((kind) => READ_FOR_BUILDINGS[kind].includes(building))
+}
+
 /** "homes (houses and flats people live in)", or several kinds joined. */
 export function buildingKindsText(kinds: readonly BuildingKind[]): string {
   return [...new Set(kinds)].map((kind) => BUILDING_KIND_TEXT[kind]).join(' and ')
@@ -76,10 +91,14 @@ export function buildingKindsText(kinds: readonly BuildingKind[]): string {
 
 /**
  * The sentence every note that used a figure carries (COD-2): which kind of building its figures
- * were read for, and that Grid cannot yet tell whether the plan is one. No full stop at the end.
+ * were read for, and that Grid cannot tell whether the plan is one, when the plan does not say
+ * (`stated` undefined). CNT-5: where the plan says what the building is, the figures ran because
+ * it is that kind, and the sentence says so. No full stop at the end.
  */
-export function readForSentence(kinds: readonly BuildingKind[]): string {
-  return `This check's figures were read for ${buildingKindsText(kinds)}; the plan does not say what kind of building it is, so Grid applied them as they are`
+export function readForSentence(kinds: readonly BuildingKind[], stated?: BuildingType): string {
+  return stated === undefined
+    ? `This check's figures were read for ${buildingKindsText(kinds)}; the plan does not say what kind of building it is, so Grid applied them as they are`
+    : `This check's figures were read for ${buildingKindsText(kinds)}, and the plan says this is ${BUILDING_TYPE_TEXT[stated]}`
 }
 
 export interface Provenance {
