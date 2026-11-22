@@ -36,6 +36,7 @@ import { levelIssues, unknownFloorIssues } from './levels'
 import { buildingKind } from './plausible'
 import { planStairs } from './stairs'
 import { itemIssues } from './items'
+import { pointInPolygon } from './innerPoint'
 import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
@@ -66,7 +67,8 @@ export interface Issue {
   readonly fixes?: readonly PlanFix[]
   /**
    * MSG-5: the id of the issue this one follows from, set where it is raised: the wall a door
-   * hangs off or a room rests on, the room a piece of unclaimed floor most likely belongs to, or
+   * hangs off or a room rests on, the room a piece of unclaimed floor most likely belongs to (and
+   * a fixture said to stand in no room, whose middle is on that floor), or
    * `plan` (the id of the plan's own issues) for a plan with no walls. The cause may be a part the
    * reader left out (`leftOutWalls`, `leftOutParts`), whose line is the reader's. Fixing the cause
    * clears this issue too.
@@ -642,13 +644,19 @@ function unclaimedMessage(floor: string, piece: FloorPiece): string {
  * of order, or with a wall too many).
  */
 function refusedRoomFor(floor: string, piece: FloorPiece, plan: FloorPlan, broken: ReadonlySet<string>): boolean {
+  return refusedRoomOf(floor, piece, plan, broken) !== null
+}
+
+/** The refused room `refusedRoomFor` finds, by id, or null. */
+function refusedRoomOf(floor: string, piece: FloorPiece, plan: FloorPlan, broken: ReadonlySet<string>): string | null {
   const around = new Set(piece.walls)
-  if (around.size === 0) return false
-  return plan.rooms.some((room) => {
+  if (around.size === 0) return null
+  const room = plan.rooms.find((room) => {
     if (!broken.has(room.id) || floorOf(room) !== floor || room.boundary.length === 0) return false
     const listed = new Set(room.boundary)
     return [...listed].every((id) => around.has(id)) || [...around].every((id) => listed.has(id))
   })
+  return room?.id ?? null
 }
 
 /**
@@ -706,12 +714,12 @@ function mismatchMessage(m: RoomMismatch): string {
  * The spaces the walls enclose, floor by floor (`spaces.ts`): floor no room claims, and rooms
  * whose outline is not the space their walls enclose. Warnings only: nothing is skipped.
  */
-function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): void {
+function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): FloorSpaces[] {
   let floors: ReturnType<typeof planSpaces>
   try {
     floors = planSpaces(plan, { index, broken })
   } catch {
-    return
+    return []
   }
   for (const result of floors) {
     if (!spacesKnown(result)) {
@@ -728,6 +736,31 @@ function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<s
       continue
     }
     reportSpaces(plan, result, broken, issues, leftOut)
+  }
+  return floors.filter(spacesKnown)
+}
+
+/**
+ * MSG-5: a fixture said to stand in no room (`item/outside-rooms`, CNT-12) whose middle is on
+ * enclosed floor no room claims, when the room meant to claim that floor could not be drawn or
+ * was left out when the plan was read: the room `floor/unclaimed` would follow from. Its line
+ * says why the room is not there, and the fixture's line goes with it. The fixture's other lines
+ * (`item/blocks-doorway`, `item/blocks-window`, CNT-13) are measured from the wall, the opening
+ * and the fixture alone, never the room, so they follow from nothing here; and they are not
+ * given at all for an opening or a wall that cannot be drawn (`itemUseIssues` skips them).
+ */
+function traceItemRooms(plan: FloorPlan, spaces: readonly FloorSpaces[], broken: ReadonlySet<string>, leftOut: readonly LeftOutPart[], issues: Issue[]): void {
+  for (const [i, found] of issues.entries()) {
+    if (found.code !== 'item/outside-rooms' || found.causedBy !== undefined) continue
+    const item = (plan.items ?? []).find((it) => it.id === found.id)
+    if (item === undefined) continue
+    const floor = floorOf(item)
+    const at = { x: item.at[0], y: item.at[1] }
+    const piece = spaces
+      .find((result) => result.floor === floor)
+      ?.unclaimed.find((p) => p.rings[0] !== undefined && pointInPolygon(at, p.rings[0], p.rings.slice(1)))
+    if (piece === undefined) continue
+    issues[i] = followOn(found, refusedRoomOf(floor, piece, plan, broken) ?? unclaimedCause(piece, plan, broken, leftOut))
   }
 }
 
@@ -1078,7 +1111,8 @@ export function validatePlan(
   if (options.spaces !== false) validateStairs(plan, broken, issues)
 
   if (options.spaces !== false) {
-    validateSpaces(plan, index, broken, issues, options.leftOutParts ?? [])
+    const spaces = validateSpaces(plan, index, broken, issues, options.leftOutParts ?? [])
+    traceItemRooms(plan, spaces, broken, options.leftOutParts ?? [], issues)
     validateNesting(plan, index, broken, issues)
     validateRoomOverlaps(plan, index, broken, issues)
     validateWallFaults(plan, index, broken, issues)

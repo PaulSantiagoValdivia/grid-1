@@ -90,8 +90,12 @@ rooms beside it (lab MS-4, MS-5, W-6, W-7). Since MSG-5:
   wall that cannot be drawn (`opening/broken-wall`) and a room that rests on one
   (`room/broken-wall`) follow from the wall's line, or from the reader's line for a wall it left
   out (`plan/part-left-out`), or from `plan/duplicate-id` for an id two walls share. Enclosed
-  floor no room claims (`floor/unclaimed`) follows from the room that could not be drawn there.
-  A room measured as if closed by a wall that stops short or leaves a gap: its
+  floor no room claims (`floor/unclaimed`) follows from the room that could not be drawn there,
+  and so does a fixture said to stand in no room (`item/outside-rooms`) whose middle is on that
+  floor. A fixture in front of a doorway or a window (`item/blocks-doorway`,
+  `item/blocks-window`) is measured from the wall, the opening and the fixture alone, so it
+  follows from nothing; for an opening or a wall that cannot be drawn it is not given, and the
+  floor's "could not be drawn" line names the opening. A room measured as if closed by a wall that stops short or leaves a gap: its
   `room/space-mismatch`, `room/not-enclosed` and `room/overlap` lines, and the walls found
   standing in it, follow from that wall's line. A plan with no walls gives `plan/no-walls`, and
   every room and opening line follows from it. A plan that may not be in metres
@@ -513,6 +517,10 @@ A change that would add a problem that leaves a part out is refused, and nothing
   undrawable corridor gives 0 notes and that one line, where it gave 16 notes. `coverage` lists
   those parts as skipped, `waits_for_part`. A door the reader left out, or on a wall the plan does
   not have, now gives that line too (lab M-9: before, nothing was listed as not checked).
+- A fixture said to stand in no room (`item/outside-rooms`) because the room it stands in could
+  not be drawn, or was left out by the reader, follows from that room's line. `item/blocks-doorway`
+  and `item/blocks-window` follow from nothing, and are not given for an opening or a wall that
+  cannot be drawn: the floor's "could not be drawn" line names the opening.
 - Identical notes are one line listing the rooms, with `each` (lab MS-14: twelve hotel rooms,
   one line). Its message lists the names where the one name goes, the verb agreeing.
 - New code `plan/no-walls` (`left-out`): the plan has no walls, but its rooms and openings name

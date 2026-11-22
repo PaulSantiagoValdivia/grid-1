@@ -5,6 +5,7 @@
  * that question.
  */
 import { describe, expect, it } from 'vitest'
+import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { edit, flat, window_ } from '@ongrid/floorplan/test-support/plans'
 import { checkLocalRules, inspectPlan } from '../..'
 
@@ -84,5 +85,50 @@ describe('a plan that may not be in metres', () => {
     expect(filed.slice(0, 3)).toEqual(['plan/value-left-out', 'plan/units-question <- plan/value-left-out', 'plan/far-from-origin <- plan/units-question'])
     expect(filed).toContain('room/escape-window-too-high <- plan/units-question')
     expect(result.problems).toBe(1)
+  })
+})
+
+describe('a fixture beside a part that could not be drawn (CNT-13)', () => {
+  // A kitchen and a bathroom side by side; a toilet stands in front of the bathroom's outside door.
+  const w = (id: string, start: [number, number], end: [number, number]) => ({ id, start, end, thickness: 0.2, height: 2.7, kind: 'exterior' as const })
+  const rooms = (bath: string[]): FloorPlan => ({
+    version: '1',
+    units: 'm',
+    walls: [w('w1', [0, 0], [4, 0]), w('w2', [4, 0], [4, 3]), w('w3', [4, 3], [0, 3]), w('w4', [0, 3], [0, 0]), w('w5', [4, 0], [7, 0]), w('w6', [7, 0], [7, 3]), w('w7', [7, 3], [4, 3])],
+    rooms: [
+      { id: 'r1', name: 'Kitchen', use: 'kitchen', boundary: ['w1', 'w2', 'w3', 'w4'] },
+      { id: 'r2', name: 'Bathroom', use: 'bathroom', boundary: bath }
+    ],
+    openings: [{ id: 'd1', wall: 'w5', type: 'door', offset: 1, width: 0.9, sill: 0, height: 2.1 }],
+    items: [{ id: 'wc', kind: 'toilet', at: [5.8, 0.4], size: [0.4, 0.6], height: 0.8 }]
+  })
+  const codes = (plan: FloorPlan) => inspectPlan(plan).lines.map((l) => [l.code, l.thing.id, l.causedBy ?? null])
+
+  it('files "stands in no room" under the room that could not be drawn, and keeps what it measured on its own', () => {
+    // The bathroom's walls listed out of order: it cannot be drawn, so the toilet is in no room drawn.
+    const result = inspectPlan(rooms(['w5', 'w7', 'w6', 'w2']))
+    const unclosed = result.lines.findIndex((l) => l.code === 'room/unclosed')
+    expect(result.lines[unclosed]!.thing).toEqual({ kind: 'room', id: 'r2' })
+    expect(result.lines[unclosed + 1]).toMatchObject({ code: 'item/outside-rooms', thing: { kind: 'item', id: 'wc' }, causedBy: { code: 'room/unclosed', id: 'r2' } })
+    // Measured from the wall, the door and the toilet alone: true whatever the room, so no cause.
+    const blocks = result.lines.find((l) => l.code === 'item/blocks-doorway')!
+    expect(blocks.causedBy).toBeUndefined()
+    expect(result.problems).toBe(2)
+    // Once the room is drawn, the toilet is in it and only the doorway line is left.
+    expect(codes(rooms(['w2', 'w5', 'w6', 'w7'])).filter(([code]) => String(code).startsWith('item/'))).toEqual([['item/blocks-doorway', 'wc', null]])
+  })
+
+  it('says nothing of a doorway that runs off its wall, and names the door as not drawn, until it fits', () => {
+    const offWall = (offset: number): FloorPlan => {
+      const plan = rooms(['w2', 'w5', 'w6', 'w7'])
+      return { ...plan, openings: [{ ...plan.openings[0]!, offset }], items: [{ ...plan.items![0]!, at: [6.4, 0.4] }] }
+    }
+    // The door runs from 2.40 to 3.30 m on a wall 3 m long.
+    const result = inspectPlan(offWall(2.4))
+    expect(result.lines.map((l) => l.code).filter((c) => c.startsWith('item/'))).toEqual([])
+    expect(result.lines.find((l) => l.code === 'opening/out-of-wall')!.thing.id).toBe('d1')
+    expect(result.lines.find((l) => l.code === 'floor/not-checked-doors-not-drawn')!.also).toEqual(['d1'])
+    // Moved to fit, the door is drawn and the toilet in front of it is named, a problem of its own.
+    expect(codes(offWall(2)).filter(([code]) => String(code).startsWith('item/'))).toEqual([['item/blocks-doorway', 'wc', null]])
   })
 })
