@@ -519,6 +519,28 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: facts of the person's own, and asking across them (CNT-9)
+
+- Three new reading tools, after `grid_schedule`: `grid_fields` (what can be asked: `kinds`,
+  `fields` with their `unit`, and `facts` with `count`, `kinds`, `type` and `values`),
+  `grid_find` (`count`, `ids`, `rows` holding `id` and only the fields named, `more`, `floors`,
+  `view`, `rule`) and `grid_count` (`by`, `groups` each with `value`, `count`, `sums`, `missing`
+  and `ids`, `total`, `units`, `view`, `rule`). `view` holds the arguments of `grid_view` that
+  show the answer. A field or fact the plan does not have is refused with the nearest name.
+  The tools are 26.
+- `grid_view` takes `highlight` (ids to pick out) and a field or fact in `colour` (any name
+  besides `use`), and then answers `painted`: each colour with what it stands for and its ids.
+  `colour` is now text of at most 120 characters, no longer only `use`.
+- `grid_schedule` with `of=rooms`: each row has `roomNumber` (the plan's, or null) and
+  `properties`; a room that states its number is listed first on its floor and shown by it, in
+  the text and the CSV's `number` column. `number` is still Grid's count. With `of=openings`,
+  each row has `properties`. The CSVs add a column per fact, after the others.
+- Edits keep the facts: `grid_split_room` gives the new room the room's facts (not its number),
+  and `grid_merge_rooms` says in `notKept` what the second room said otherwise and the number
+  that is gone. `grid_write_rooms` keeps each part's facts and number by id, and says so.
+- No new message code: a fact the format cannot read is `plan/value-left-out`, at its own place
+  (`walls[0].properties.<name>`), and the part keeps its other facts.
+
 ### 2026-11-22: notes traced to their cause (MSG-5)
 
 - A line that follows from another carries `causedBy` (`{ code, id }`) and comes right under it,

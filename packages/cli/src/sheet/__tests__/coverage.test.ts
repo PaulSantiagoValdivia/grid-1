@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { FloorPlanFieldsSchema } from '@ongrid/floorplan/types/floorplan'
-import { SHEET_COVERAGE } from '../coverage'
+import { FACT_FIELDS, FloorPlanFieldsSchema, FloorSchema, OpeningSchema, RoomSchema, WallSchema } from '@ongrid/floorplan/types/floorplan'
+import { FACT_COVERAGE, SHEET_COVERAGE } from '../coverage'
 
 describe('the sheet covers every part of a plan (VEW-7)', () => {
   it('has one entry for each top-level part of the schema, and no other', () => {
@@ -8,6 +8,22 @@ describe('the sheet covers every part of a plan (VEW-7)', () => {
   })
   it('says why a part is not shown', () => {
     for (const [part, coverage] of Object.entries(SHEET_COVERAGE)) {
+      if (coverage.shown === 'not shown') expect(coverage.why.length, part).toBeGreaterThan(10)
+    }
+  })
+  it('says what it does with each field CNT-9 adds to the parts, and each is in the schema', () => {
+    expect(Object.keys(FACT_COVERAGE).sort()).toEqual([...FACT_FIELDS].sort())
+    const shapes: Record<string, Record<string, unknown>> = {
+      walls: (WallSchema as unknown as { _def: { schema: { _def: { schema: { shape: Record<string, unknown> } } } } })._def.schema._def.schema.shape,
+      openings: OpeningSchema.shape,
+      rooms: RoomSchema.shape,
+      floors: FloorSchema.shape,
+    }
+    for (const field of FACT_FIELDS) {
+      const [list, key] = field.split('.') as [string, string]
+      expect(Object.hasOwn(shapes[list]!, key), field).toBe(true)
+    }
+    for (const [part, coverage] of Object.entries(FACT_COVERAGE)) {
       if (coverage.shown === 'not shown') expect(coverage.why.length, part).toBeGreaterThan(10)
     }
   })
