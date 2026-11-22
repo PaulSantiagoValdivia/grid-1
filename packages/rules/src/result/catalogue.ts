@@ -15,6 +15,7 @@ import { figureText, metresText, passageText, planCheckWordings, tolerance, word
 import { quoted } from '@ongrid/floorplan/types/floorplan'
 import { buildingKindsText, findingReadFor } from '../checks/figures'
 import { wordings as figureWordings } from '../checks/messages'
+import { figureNeededText } from '../checks/figureWords'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
 
 /** What a line's code is told about the thing, to word it. */
@@ -97,6 +98,11 @@ function readFor(s: Subject): string {
 function figure(finding: RuleFinding | undefined, key: AppliedFigure['key']): string | null {
   const found = finding?.figures?.find((f) => f.key === key)
   return found === undefined ? null : `${figureText(found.value)} ${found.unit}`
+}
+
+/** The figures a finding applied, by key, in the order given: what its `needed` names (MSG-3). */
+function figuresOf(finding: RuleFinding | undefined, keys: readonly AppliedFigure['key'][]): AppliedFigure[] {
+  return keys.flatMap((key) => finding?.figures?.filter((f) => f.key === key) ?? [])
 }
 
 const area = (value: number | undefined): string => (value === undefined ? 'its area as drawn' : `${figureText(value)} m²`)
@@ -298,6 +304,11 @@ export const CODES = {
     needed: fixed('a kind that matches the rooms on its sides'),
     fix: fixed('Leave out its kind, or state the kind the rooms beside it show.')
   },
+  'wall/ends-in-opening': {
+    says: (s) => `${s.label} ends on another wall inside one of its openings`,
+    needed: fixed('a wall that meets another clear of its doors and windows'),
+    fix: fixed('Move the wall along, or move the opening clear of where the wall meets it.')
+  },
   'wall/size-question': {
     says: (s) => `${s.label} has a size that may not be meant`,
     needed: fixed('the size of a wall in a building'),
@@ -430,6 +441,27 @@ export const CODES = {
     found: (s) => `its leaf and the leaf of door ${s.also.map(quoted).join(', ')} sweep the same floor`,
     needed: fixed('door sweeps that do not overlap'),
     fix: fixed('Turn one of them to open the other way or hang it from its other end, or move them apart.')
+  },
+
+  'opening/crosses-wall': {
+    says: (s) => `${s.label} runs into a wall that meets its wall`,
+    needed: fixed('an opening within the clear run of its wall, between the walls that meet it'),
+    fix: fixed('Move it along its wall to the offset given, or make it narrower. It is cut through its own wall only.')
+  },
+  'opening/fills-wall': {
+    says: (s) => `${s.label} is as long as its wall`,
+    needed: fixed('some wall left beside an opening'),
+    fix: fixed('Make it narrower, or leave the wall out and let the rooms meet along a dividing line.')
+  },
+  'opening/on-dividing-line': {
+    says: (s) => `${s.label} is on a dividing line`,
+    needed: fixed('a door or window in a wall'),
+    fix: fixed('Make it a doorless opening if the rooms are open to each other there, or put it on a wall.')
+  },
+  'opening/window-between-rooms': {
+    says: (s) => `${s.label} has rooms on both sides`,
+    needed: fixed('a window in a wall with the outside on one side, unless it is a borrowed light'),
+    fix: fixed('Leave it if it is a borrowed light between two rooms. Otherwise move it to an outside wall.')
   },
 
   // --- Rooms ----------------------------------------------------------------------------------
@@ -699,14 +731,14 @@ export const CODES = {
       const p = s.finding?.passage
       const size = metresText(p?.passable ?? 0)
       const what = p?.short === 'sill' ? `a sill no more than ${size} m above the floor` : `at least ${size} m ${p?.short === 'height' ? 'high' : 'wide'}`
-      return `${what}: Grid's own size for a person to pass, not a code figure`
+      return `${what}: Grid's own size for a person to get through, not a code figure`
     },
-    fix: fixed('If people pass through it, draw it at its real size. If it is a vent, a hatch or a pass-through, it is not a way through: give the room a door.')
+    fix: fixed('If people go through it, draw it at its real size. If it is a vent or a serving hatch, it is not a way through: give the room a door.')
   },
   'room/too-small': {
     says: (s) => wordingText(figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
     found: (s) => `${area(s.finding?.area)} net`,
-    needed: (s) => `at least ${area(s.finding?.minimum)}${readFor(s)}`,
+    needed: (s) => `${figureNeededText(`at least ${area(s.finding?.minimum)}`, figuresOf(s.finding, ['habitableRoomMinArea']))}${readFor(s)}`,
     fix: fixed('Make the room larger, or check the use it is given.')
   },
   'room/no-escape-opening': {
@@ -739,14 +771,16 @@ export const CODES = {
         figure(s.finding, 'escapeOpeningMinWidth') === null ? null : `${figure(s.finding, 'escapeOpeningMinWidth')} wide`,
         figure(s.finding, 'escapeOpeningMinHeight') === null ? null : `${figure(s.finding, 'escapeOpeningMinHeight')} high`
       ].filter((part): part is string => part !== null)
-      return `${parts.length === 0 ? 'a window someone can climb through' : `at least ${parts.join(', ')}`}${readFor(s)}`
+      if (parts.length === 0) return `a window someone can climb through${readFor(s)}`
+      const used = figuresOf(s.finding, ['escapeOpeningMinArea', 'escapeOpeningMinAreaGrade', 'escapeOpeningMinWidth', 'escapeOpeningMinHeight'])
+      return `${figureNeededText(`at least ${parts.join(', ')}`, used)}${readFor(s)}`
     },
     fix: fixed('Make the window larger, or add one that is.')
   },
   'room/escape-window-too-high': {
     says: (s) => wordingText(figureWordings.escapeWindowTooHigh(s.name)),
     found: (s) => `a sill ${metres(s.finding?.sill)} above the floor`,
-    needed: (s) => `${s.finding?.maximum === undefined ? 'a lower sill' : `a sill at most ${metres(s.finding.maximum)} above the floor`}${readFor(s)}`,
+    needed: (s) => `${s.finding?.maximum === undefined ? 'a lower sill' : figureNeededText(`a sill at most ${metres(s.finding.maximum)} above the floor`, figuresOf(s.finding, ['escapeOpeningMaxSill']))}${readFor(s)}`,
     fix: fixed("Lower the window's sill.")
   },
 

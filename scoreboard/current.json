@@ -2,9 +2,9 @@
  "what": "The counts the build must not fall below. Update them in the commit that moves them, and say why.",
  "counts": {
   "roomsMeasuredWrong": 197,
-  "damageSilent": 386,
+  "damageSilent": 278,
   "turnsAnswered": 16,
-  "mistakesNamed": 2,
+  "mistakesNamed": 5,
   "checksFed": 12,
   "roomsNotMeasured": 735,
   "soundPlansWithAlarm": 95
@@ -33,8 +33,8 @@
   },
   "damage": {
    "plans": 3000,
-   "caught: names the damaged part": 2386,
-   "silent: result changed, nothing said": 386,
+   "caught: names the damaged part": 2494,
+   "silent: result changed, nothing said": 278,
    "caught vaguely: names something else": 139,
    "no effect at all": 89
   },
@@ -44,7 +44,7 @@
    "refused: schema names the place": 506,
    "no effect at all": 117,
    "caught vaguely: names something else": 305,
-   "plansWhoseOutcomeDiffersNow": 927
+   "plansWhoseOutcomeDiffersNow": 1035
   },
   "sound": {
    "plans": 442,
@@ -125,16 +125,16 @@
   },
   "mistakes": {
    "mistakes": 9,
-   "named": 2,
+   "named": 5,
    "mistake 1": "not named",
-   "mistake 2": "not named",
+   "mistake 2": "named",
    "mistake 3": "not named",
-   "mistake 4": "not named",
+   "mistake 4": "named",
    "mistake 5": "not named",
    "mistake 6": "named",
    "mistake 7": "named",
    "mistake 8": "not named",
-   "mistake 9": "not named"
+   "mistake 9": "named"
   }
  }
 }

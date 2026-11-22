@@ -75,7 +75,8 @@ describe('determinism', () => {
     const glb = parseGlb(toGlb(buildScene(samplePlan())))
     const text = JSON.stringify(glb.json)
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/)
-    expect(Object.keys(glb.json.asset).sort()).toEqual(['generator', 'version'])
+    // MSG-3: `extras` holds the label, and nothing that changes from run to run.
+    expect(Object.keys(glb.json.asset).sort()).toEqual(['extras', 'generator', 'version'])
     expect(glb.json.asset.generator).toBe('Grid')
   })
 })

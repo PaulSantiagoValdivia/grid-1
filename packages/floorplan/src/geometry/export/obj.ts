@@ -18,6 +18,7 @@
 import type { Scene3D } from '../scene3d'
 import { floorMesh, makeNamer, shellMesh, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
+import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { leftOutLines, leftOutSummary, type LeftOutPart } from './leftOut'
 
 /** Avoids `-0.000000`, which readers parse and nobody wants to read. */
@@ -48,7 +49,7 @@ function objComment(text: string): string {
  * part that is sound — the same graceful degradation the canvases apply.
  */
 export function toObj(scene: Scene3D, options: ObjOptions = {}): string {
-  const lines = ['# Grid floor plan', '# Units: metres. X and Y are the plan, Z is up.']
+  const lines = [`# ${GENERAL_GUIDANCE_LABEL}`, '# Grid floor plan', '# Units: metres. X and Y are the plan, Z is up.']
   // HND-6: what the file leaves out, as comments after the header. Only when something is.
   const leftOut = options.leftOut ?? []
   if (leftOut.length > 0) lines.push(...[leftOutSummary(leftOut), ...leftOutLines(leftOut)].map(objComment))

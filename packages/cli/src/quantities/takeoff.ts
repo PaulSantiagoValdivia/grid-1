@@ -106,7 +106,8 @@ export interface Takeoff {
 
 const KINDS: readonly Wall['kind'][] = ['exterior', 'interior', 'partition']
 
-function roomTakeoff(room: SurveyRoom, ceiling: (room: SurveyRoom) => Pick<RoomTakeoff, 'lowered'> & { readonly stated: number | null }): RoomTakeoff {
+/** One room's take-off; `ceiling` gives its stated ceiling height and lowered zones (none stated when left out). */
+export function roomTakeoff(room: SurveyRoom, ceiling: (room: SurveyRoom) => Pick<RoomTakeoff, 'lowered'> & { readonly stated: number | null } = () => ({ stated: null, lowered: [] })): RoomTakeoff {
   const perimeter = room.edges.reduce((sum, edge) => sum + edge.length, 0)
   let face = 0
   const heights: number[] = []

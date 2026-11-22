@@ -18,6 +18,7 @@ export type Coverage =
 export const SHEET_COVERAGE = {
   version: { shown: 'not shown', why: 'It describes the file format, not the building.' },
   units: { shown: 'not shown', why: 'It describes the file format; the sheet prints metres.' },
+  display: { shown: 'not shown', why: 'It says how a person reads lengths; the sheet prints metres (WRT-7).' },
   projectId: { shown: 'not shown', why: 'It names the project to other programs (QAR-5), not the building.' },
   walls: { shown: 'drawn' },
   openings: { shown: 'drawn' },

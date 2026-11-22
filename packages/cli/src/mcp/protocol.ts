@@ -16,6 +16,7 @@
  * lines. A version Grid does not speak is refused with the ones it does (-32022), and so is a
  * method it does not know: a client of neither era learns what to send.
  */
+import { RETELLING_RULE } from './retelling'
 
 export const SERVER_NAME = 'grid'
 /** The longest request line the server reads: 1 MiB. */
@@ -64,7 +65,8 @@ export const INSTRUCTIONS =
   + 'Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls. '
   + 'The plan file is the source of truth; rooms text is a way of writing and reading it. To change a plan, read it back with grid_describe as=rooms, change the text and write it with grid_write_rooms. Each room\'s boundary is derived: never edit it by hand. '
   + `${ROOM_NAMES_TRAVEL} `
-  + 'Every report carries the label General guidance, not your local rules.'
+  + 'Every report carries the label General guidance, not your local rules. '
+  + RETELLING_RULE
 
 type Id = string | number | null
 

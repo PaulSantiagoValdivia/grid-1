@@ -506,7 +506,8 @@ describe('document skeleton', () => {
     expect(text.endsWith('ENDSEC;\nEND-ISO-10303-21;\n')).toBe(true)
 
     const description = doc.header.get('FILE_DESCRIPTION')!
-    expect(items(description[0]).map(str)).toEqual(['ViewDefinition [CoordinationView_V2.0]'])
+    // MSG-3: the label follows the view definition.
+    expect(items(description[0]).map(str)).toEqual(['ViewDefinition [CoordinationView_V2.0]', 'General guidance, not your local rules'])
     expect(str(description[1])).toBe('2;1')
 
     const schema = doc.header.get('FILE_SCHEMA')!

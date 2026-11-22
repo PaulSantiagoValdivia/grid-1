@@ -168,7 +168,9 @@ sill heights are one line: the usual height and the exceptions. What the plan ca
 such as where north is, the kind of building, how floors connect when no stair joins them and
 which rooms make each flat, is said as such. The stairs that join the floors are one line, with
 the risers and going Grid worked out. Directions are on the drawing, with north at the
-top. The card checks nothing; it ends with the label "General guidance, not your local rules".
+top. The card checks nothing and says so; its first line is the label "General guidance, not
+your local rules", as for every report (MSG-3). `--as rooms` starts with the label as a comment,
+which `grid write` ignores, and `grid draw` puts it in the drawing's top-left corner.
 
 ## Walls that do not meet: `grid tidy`
 
@@ -182,6 +184,15 @@ again before each fix, and one an earlier fix took care of is skipped and said s
 is changed as read, keys Grid does not know included; `--out <file.json>` writes the tidied plan
 there instead. `--json` prints the list or what was applied as JSON.
 
+## Units on the drawing: `grid draw --units`
+
+`grid draw --units m|cm|mm|ft-in` writes the drawing's room areas and dimensions in those
+units, and `--decimal point|comma` with that decimal mark: `--units ft-in` draws `12'-6"`,
+`--units mm` draws `2860`. Left out, the plan's own `display` is used, or metres. A length typed
+on `grid edit` may carry its unit (`--by "12'6\""`, `--width "900 mm"`) and, with
+`--decimal comma`, a decimal comma (`--by 0,3`). The plan file stays in metres either way; see
+[Units](plan-file.md#units).
+
 ## What a drawing shows: `--hide`, `--colour` and `--key`
 
 A floor plan picture shows the plan's title and key in a band under the drawing, its notes, tags
@@ -192,6 +203,29 @@ plan file's writing is in [plan-file.md](plan-file.md#writing-on-the-drawing-and
 the uses in the key. `--key` adds a key where the plan asks for none. A word Grid does not know
 is refused by name, and none of the three is taken with `--3d`. `grid_view` takes the same as
 `hide`, `colour` and `key`.
+
+## The sizes on a drawing
+
+A floor plan picture's sizes run along the walls, in the plan's own two main directions (the
+way most of its outside walls run), so a house drawn turned is dimensioned along its walls, not
+by the box it makes on the page.
+
+- Inside each room: a room with four square corners gets its width and depth, between its
+  walls' faces. Any other room (an L, a room with a bay, a skewed one) gets one size per side,
+  a little in from that side, and every line stays inside its room.
+- Outside the plan, on each side that has them, three chains, nearest first: the openings
+  (from the corner to each edge of a door or window in the walls facing that side), the walls
+  (each wall's faces where it meets that side, and the corners) and the overall size. Each
+  chain runs between the same two outer faces, so it adds up to the overall size. The overall
+  width is always below the plan and the overall depth to its left; above and to the right
+  there is one only where a chain is.
+- Every size measures to a wall's face, or to the line of a dividing line, which has no
+  faces. A plan records no finishes, so none measures to a finish yet. In an SVG each
+  dimension's `data-measured-to` says it, for its two ends: `face`, `centre-line` or `finish`.
+
+In the technical look each dimension line ends in a 45-degree tick and its number runs along
+it; the working look keeps plain ends and upright numbers. `--hide dimensions` leaves them all
+off.
 
 ## What went wrong, on the drawing: `grid draw`
 

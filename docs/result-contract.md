@@ -91,6 +91,24 @@ finding's wording is its check's own (`checks/messages.ts`, and `planCheckWordin
 `@ongrid/floorplan`), so the report's `message`, the notes a person reads and the record say
 the same words. A test fails when one code is worded two ways (AU4-1).
 
+### The label, and words no line uses
+
+The label "General guidance, not your local rules" is the first line of every report and every
+list Grid prints or a tool answers, and every tool answer carries it as `label` in its data
+(MSG-3). Drawings carry it in their top-left corner, and every export file in a place its
+format keeps: a text over the plan in DXF, the header and the project's description in IFC,
+`asset.extras.label` in GLB, the first comment in OBJ, the first cell of a CSV, a comment on
+the first line of rooms text, and the footer of every sheet page.
+
+No line Grid writes holds pass, complies, compliant, approved, meets code or their kin, outside
+the user's own quoted text (`approvalWords` in `@ongrid/rules`; message codes in brackets are
+identifiers and are left out). A figure is given as the figure used here, with its basis (the
+document, edition and clause, or where it was looked up) and its status, never as what the
+plan or the reader needs. A check that looked at nothing says "Nothing was checked for …".
+`scoreboard/__tests__/approvalWords.test.ts` holds the reports and the exports of the lab's
+plans to this, and `src/__tests__/label.test.ts` in `packages/cli` holds every output to the
+label.
+
 ## The codes
 
 `{thing}` is the part as a line names it: `Wall "w1"`, `Door "d1"`, `Room "Kitchen"`, `Floor
@@ -130,6 +148,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `wall/no-height` | {thing} has no height | a height above 0, or a virtual wall for a line with no substance |
 | `wall/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `wall/kind-differs` | {thing} is stated as one kind, but the rooms on its sides show another | a kind that matches the rooms on its sides |
+| `wall/ends-in-opening` | {thing} ends on another wall inside one of its openings | a wall that meets another clear of its doors and windows |
 | `wall/size-question` | {thing} has a size that may not be meant | the size of a wall in a building |
 | `wall/short` | {thing} stops short of a corner | wall ends that meet at the corner |
 | `wall/gap` | {thing} leaves a gap in a straight side of a room | the walls of a side meeting end to end |
@@ -152,6 +171,10 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
 | `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
+| `opening/crosses-wall` | {thing} runs into a wall that meets its wall | an opening within the clear run of its wall, between the walls that meet it |
+| `opening/fills-wall` | {thing} is as long as its wall | some wall left beside an opening |
+| `opening/on-dividing-line` | {thing} is on a dividing line | a door or window in a wall |
+| `opening/window-between-rooms` | {thing} has rooms on both sides | a window in a wall with the outside on one side, unless it is a borrowed light |
 | `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
 | `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
@@ -199,11 +222,11 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `opening/below-ground` | The {window} in "{name}" lies wholly below the ground: its top is {depth} m under the ground level the site states (partly: its sill, threshold or foot) | a door or window above the ground outside, or a light well or an outside stair in front of it |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
-| `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to pass through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to pass, not a code figure |
-| `room/too-small` | "{name}" is under {minimum} m² | at least {minimum} m² |
+| `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
+| `room/too-small` | "{name}" is under {minimum} m² | the figure used here, at least {minimum} m² ({basis}, status {status}); this check's figures were read for {kinds} |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
-| `room/escape-window-too-small` | The window of "{name}" is too small to escape through | a window someone can climb through |
-| `room/escape-window-too-high` | The window of "{name}" is too high to escape through | a lower sill |
+| `room/escape-window-too-small` | The window of "{name}" is too small to escape through | the figures used here, at least {area} m², {width} m wide, {height} m high ({basis}, status {status}); a window someone can climb through when no figure applied; this check's figures were read for {kinds} |
+| `room/escape-window-too-high` | The window of "{name}" is too high to escape through | the figure used here, a sill at most {maximum} m above the floor ({basis}, status {status}); a lower sill when no figure applied; this check's figures were read for {kinds} |
 | `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", rooms that could not be drawn were not checked: "{room}", … | rooms that can be drawn |
@@ -379,6 +402,76 @@ A change that would add a problem that leaves a part out is refused, and nothing
   what Grid took that the plan does not state. Room lines gain `ceilingHeight` and `lowered`.
 - The 3D still (`grid_view`) and the exports draw a slab under every floor and a roof over every
   part with nothing above; a still of one floor alone still has no roof.
+
+### 2026-11-22: sizes along the walls, in chains (SHT-4)
+
+- No line, code or wording of the record changes.
+- The floor plan picture (`grid draw`, `grid_view` kind plan, the sheet) dimensions each room
+  along its walls' faces: width and depth for a room with four square corners, one size per
+  side for any other, each line inside its room. Outside the plan, each side has a chain of
+  openings, a chain of walls and the overall size, along the plan's own main directions, and
+  each chain adds up to the overall size. In the technical look the lines end in 45-degree
+  ticks with the numbers along them.
+- In an SVG, each dimension's group carries `data-measured-to`, what its two ends measure to
+  (`face`, `centre-line` or `finish`), and `data-kind` is `overall`, `wall`, `opening` or
+  `room`.
+
+### 2026-11-22: quantities for a first estimate (ARE-13)
+
+- `grid_takeoff` takes `for` and `rates`. With `for=estimate` its data holds `label`, `lines`
+  (each with `key`, `what`, `quantity`, `unit` of `m2`, `m` or `nr`, `rule`, `assumed`, and
+  `floors` for the slab, upper floors and roof), `notes` and `rules`; then either `rateCard`
+  (no rates file: `{label, currency, rates: {key: {rate: null, unit}}}`, ready to fill) or `cost`
+  (`file`, `label`, `currency`, `total`, `complete`, `missing`, `wrongUnit`, `unused`,
+  `wholeBuilding`) with `orders` and `orderProblems`, and each line adds `state` (`priced`,
+  `no rate`, `wrong unit`, `alternative`), `rateKey`, `given`, `rate`, `priced` and `amount`.
+  `format=csv` gives the bill as one table. Without `for` the answer is as before, with one more
+  line saying `for=estimate` exists.
+- The rates file is `rates` (a path inside the project) or `rates.json` beside the plan. One
+  that names no currency, holds a negative rate, a unit Grid does not take, a key that is not a
+  key or a field Grid does not read is refused (`isError: true`, one line naming the file and the
+  part). `rates` without `for=estimate`, and `rooms` with it, are refused.
+
+### 2026-11-22: the label first, and no line reads as approval (MSG-3)
+
+- Every tool answer leads with the label, and its data carries `label`; every output schema
+  lists it as required. A CSV's first row is the label in one cell; rooms text from
+  `grid_describe` as=rooms starts with it as a comment, which writing it back ignores.
+- `needed` on `room/too-small`, `room/escape-window-too-small` and `room/escape-window-too-high`
+  gives the figure as "the figure used here", with its basis and status.
+- `opening/too-small-to-pass` keeps its code; its wording, `needed` and `fix` say "get through".
+- `grid check` gives each figure as "The figure used here for … is …", with its basis and
+  status, and a check that looked at nothing as "Nothing was checked for …". `grid_check` says
+  the same in its text.
+- The tool server's instructions tell an agent how to retell a report: the label first, none of
+  the forbidden words, and each figure with its basis and status.
+
+### 2026-11-22: where each opening stands (MSG-16)
+
+- Five new warnings, `worth-a-look`, in `grid check` and `grid_check`. None of them leaves
+  anything out: the opening is still drawn, cut through its own wall only.
+  - `opening/crosses-wall`: the opening runs into the body of a wall that meets its wall (a
+    corner, a junction, a wall passing through). `also` names that wall and the opening's wall;
+    the line gives the offsets that keep it clear.
+  - `wall/ends-in-opening`: a wall ends on another inside one of its openings. The line is about
+    the wall that ends; `also` names the opening and the wall it lands on.
+  - `opening/fills-wall`: the opening is as long as its wall.
+  - `opening/on-dividing-line`: a door or a window on a dividing line. `also` names the line.
+  - `opening/window-between-rooms`: a window in a wall with rooms on both sides, which may be a
+    borrowed light. `also` names the wall and the two rooms.
+- `grid_split_room` refuses a new wall whose end would land inside a door or window of the wall
+  it meets, and names the nearest place along the room where it would not.
+
+### 2026-11-22: units at the edge (WRT-7)
+
+- Every length argument takes a number in metres, or text with its unit (`"12'6\""`, `"900 mm"`,
+  `"381 cm"`); with `decimal: "comma"`, a decimal comma (`"3,81"`). Its schema is
+  `["number", "string"]`. A length Grid cannot read is refused by the argument's name.
+- `grid_areas`, `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view` take `units`
+  `m`, `cm`, `mm` or `ft-in` (`ft` is the same as `ft-in`) and `decimal`; left out, the plan's
+  `display`. Feet and inches are written `12'-6"` (they were `12' 6"`), a window's sill in inches.
+- A plan file with `"units": "mm"`, `"cm"`, `"ft"` or `"in"` is read in that unit, with a
+  `plan/read-as-meant` line, and a change writes it in metres. No new code.
 
 ### 2026-11-22: what would be right (MSG-7)
 
