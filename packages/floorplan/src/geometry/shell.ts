@@ -28,7 +28,8 @@ import { validatePlan } from './validate'
 import { tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 import { dot, sub } from './vec2'
-import { wallAxis } from './wall'
+import { wallSegments } from './wall'
+import { curveFault } from './arc'
 
 /** A stretch of the outline's edge along one wall. */
 export interface OuterFace {
@@ -169,9 +170,13 @@ function facesOf(outline: FloorShell['outline'], runs: readonly Run[]): { faces:
       })
     }
   }
-  const faces = [...byWall.entries()]
-    .sort(([x], [y]) => x - y)
-    .map(([r, length]) => ({ wall: runs[r]!.wall.id, length, height: runs[r]!.wall.height }))
+  const faces: OuterFace[] = []
+  for (const [r, length] of [...byWall.entries()].sort(([x], [y]) => x - y)) {
+    // The pieces of a curved wall are one wall's face.
+    const same = faces.findIndex((face) => face.wall === runs[r]!.wall.id)
+    if (same >= 0) faces[same] = { ...faces[same]!, length: faces[same]!.length + length }
+    else faces.push({ wall: runs[r]!.wall.id, length, height: runs[r]!.wall.height })
+  }
   return { faces, perimeter }
 }
 
@@ -191,11 +196,9 @@ export function planShell(plan: FloorPlan, options: ShellOptions = {}): ShellFlo
     if (!spacesKnown(spaces)) return { floor: floor.id, level: floor.level, reason: spaces.reason }
     const runs: Run[] = plan.walls
       .filter((wall) => floorOf(wall) === floor.id && !broken.has(wall.id) && wall.virtual !== true && wall.thickness > 0)
-      .filter((wall) => Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) >= tolerance('noLength'))
-      .map((wall) => {
-        const axis = wallAxis(wall)
-        return { wall, start: axis.start, dir: axis.dir, normal: axis.normal, length: axis.length, half: wall.thickness / 2 }
-      })
+      .filter((wall) => (wall.arc !== undefined ? curveFault(wall) === null : Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) >= tolerance('noLength')))
+      // A curved wall runs along the outline piece by piece (CNT-18).
+      .flatMap((wall) => wallSegments(wall).map((axis) => ({ wall, start: axis.start, dir: axis.dir, normal: axis.normal, length: axis.length, half: wall.thickness / 2 })))
     return { floor: floor.id, level: floor.level, area: spaces.outlineArea, outline: spaces.outline, ...facesOf(spaces.outline, runs) }
   })
   return drawn.map((floor): ShellFloor => {

@@ -64,7 +64,33 @@ export function useWallGeometries(scene: Scene3D): Map<string, THREE.BufferGeome
  * core decided, so the corners close as in the plan.
  */
 export function buildWallGeometry(wall: SceneWall): THREE.BufferGeometry {
-  const { elevation, basis } = wall
+  // CNT-18: a curved wall is raised piece by piece, the pieces one geometry.
+  if (wall.pieces !== undefined) return joinGeometries(wall.pieces.map((piece) => raise(piece.elevation, piece.basis)))
+  return raise(wall.elevation, wall.basis)
+}
+
+/** Geometries one after the other as one, each made non-indexed so their faces stay as they are. */
+function joinGeometries(parts: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const flat = parts.map((part) => (part.index === null ? part : part.toNonIndexed()))
+  const join = (name: string): Float32Array => {
+    const arrays = flat.map((part) => part.getAttribute(name).array as ArrayLike<number>)
+    const out = new Float32Array(arrays.reduce((sum, array) => sum + array.length, 0))
+    let at = 0
+    for (const array of arrays) {
+      out.set(array, at)
+      at += array.length
+    }
+    return out
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(join('position'), 3))
+  geometry.setAttribute('normal', new THREE.BufferAttribute(join('normal'), 3))
+  for (const part of parts) part.dispose()
+  for (const part of flat) part.dispose()
+  return geometry
+}
+
+function raise(elevation: SceneWall['elevation'], basis: SceneWall['basis']): THREE.BufferGeometry {
 
   const shape = new THREE.Shape(elevation.outline.map((p) => new THREE.Vector2(p.x, p.y)))
   shape.holes = elevation.holes.map(

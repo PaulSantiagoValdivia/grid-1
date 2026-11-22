@@ -615,6 +615,14 @@ export function readRoomsText(plan: FloorPlan, options: ReadOptions = {}): Rooms
   if (plan.walls.length + plan.rooms.length + plan.openings.length === 0) {
     return { text: textOf(plan, rule, options.name, drafts, raw), rawFloors: [], rawOpenings: [], changes: [] }
   }
+  // CNT-18: rooms text writes straight walls. A floor with a curved wall is given in Grid's own
+  // terms, which keep the curve, whatever was asked for, so writing it again loses nothing.
+  for (const wall of plan.walls) {
+    const floor = floorOf(wall)
+    if (wall.arc === undefined || raw.has(floor) || !floors.includes(floor)) continue
+    raw.add(floor)
+    why.set(floor, `wall ${quote(wall.id)} is curved, and rooms text writes straight walls only`)
+  }
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
     const text = textOf(plan, rule, options.name, drafts, raw)
     const written = compileRoomsText(text)

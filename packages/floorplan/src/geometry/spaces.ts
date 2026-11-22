@@ -31,6 +31,8 @@ import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import { floorOf, planFloors } from './floors'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, roomWallIds } from './plan'
+import { straightPieces } from './wall'
+import { curveFault } from './arc'
 import { quoted } from '../types/planText'
 import { roomNesting, tryRoomPolygon } from './room'
 import type { Vec2 } from './vec2'
@@ -217,15 +219,17 @@ function contact(a: Pair, b: Pair, shape: WallShape): number {
 
 function pieceOf(polygon: Polygon, shapes: readonly WallShape[]): FloorPiece {
   const box = boxOfRings(polygon)
-  const walls: string[] = []
+  // How far the piece runs along each wall: a curved wall's pieces add up to it (CNT-18).
+  const alongWall = new Map<string, number>()
   for (const shape of shapes) {
     if (!overlaps(box, shape.box)) continue
     let along = 0
     for (const ring of polygon) {
       for (let i = 0; i + 1 < ring.length; i++) along += contact(ring[i]!, ring[i + 1]!, shape)
     }
-    if (along >= TOUCH_LENGTH()) walls.push(shape.wall.id)
+    alongWall.set(shape.wall.id, (alongWall.get(shape.wall.id) ?? 0) + along)
   }
+  const walls = [...alongWall].filter(([, along]) => along >= TOUCH_LENGTH()).map(([id]) => id)
   return {
     rings: polygon.map((ring) => ring.slice(0, -1).map(([x, y]) => ({ x, y }))),
     area: polygonArea(polygon),
@@ -427,7 +431,11 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
       const listed = new Set(roomWallIds(r.room))
       for (const shape of near) {
         const area = intersectionArea(r.polygon, shape.body)
-        if (area >= WALL_SHARE()) onWalls.push({ wall: shape.wall.id, area, listed: listed.has(shape.wall.id) })
+        if (area < WALL_SHARE()) continue
+        // The pieces of a curved wall are one wall (CNT-18).
+        const same = onWalls.find((on) => on.wall === shape.wall.id)
+        if (same) same.area += area
+        else onWalls.push({ wall: shape.wall.id, area, listed: listed.has(shape.wall.id) })
       }
       const body = union([...near.map((s) => s.body), ...nearFills])
       outside = Math.max(0, r.area - enclosedOf[ri]! - multiArea(polygonClipping.intersection(r.polygon, body)))
@@ -441,6 +449,7 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
               return lengthInside(s.start, end, r.outline) >= LINE_INSIDE()
             })
             .map((s) => s.wall.id)
+            .filter((id, i, all) => all.indexOf(id) === i)
         : []
     mismatches.push({ room: r.room.id, area: r.area, enclosed: enclosedOf[ri]!, onWalls, outside, spaces: spans, lines, sharedWith: beside })
   })
@@ -462,13 +471,16 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
 
 /** The walls of one floor that the spaces are worked out from, in plan order. */
 function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): Wall[] {
-  return plan.walls.filter(
-    (wall) =>
-      floorOf(wall) === floor &&
-      !broken.has(wall.id) &&
-      (wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
-      (wall.virtual === true || wall.thickness > 0)
-  )
+  return plan.walls
+    .filter(
+      (wall) =>
+        floorOf(wall) === floor &&
+        !broken.has(wall.id) &&
+        (wall.arc !== undefined ? curveFault(wall) === null : wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
+        (wall.virtual === true || wall.thickness > 0)
+    )
+    // A curved wall is joined as its straight pieces, each a strip under its id (CNT-18).
+    .flatMap(straightPieces)
 }
 
 const reachOf = (walls: readonly Wall[]): number => {

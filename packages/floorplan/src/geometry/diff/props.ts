@@ -55,8 +55,22 @@ export function wallProps(before: Wall, after: Wall, epsilon: number): PropChang
     exact('kind', before.kind, after.kind),
     // Unstated and `false` are the same wall.
     exact('virtual', before.virtual === true, after.virtual === true),
-    exact('floor', floorOf(before), floorOf(after))
+    exact('floor', floorOf(before), floorOf(after)),
+    arcProp(before, after, epsilon)
   ])
+}
+
+/**
+ * CNT-18: a wall's curve as a property, its `arc` written as JSON, null on the side that is
+ * straight. The sweep is compared in degrees within the same tolerance as a length.
+ */
+function arcProp(before: Wall, after: Wall, epsilon: number): PropChange | null {
+  const value = (wall: Wall): [number, number, number] | null => (wall.arc === undefined ? null : [wall.arc.centre[0], wall.arc.centre[1], wall.arc.sweep])
+  const [a, b] = [value(before), value(after)]
+  if (a === null && b === null) return null
+  if (a !== null && b !== null && a.every((v, i) => near(v, b[i]!, epsilon))) return null
+  const text = (v: readonly number[] | null): string | null => (v === null ? null : JSON.stringify({ centre: [v[0], v[1]], sweep: v[2] }))
+  return { key: 'arc', before: text(a), after: text(b) }
 }
 
 /** A number a part may leave unstated: stated or taken out is a change, null on the unstated side. */

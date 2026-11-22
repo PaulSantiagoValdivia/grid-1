@@ -306,6 +306,28 @@ type Paints = ReturnType<typeof paints>
 
 const virtualPath = (points: readonly Vec2[]): string => `M${points.map((p) => `${p.x},${-p.y}`).join('L')}`
 
+/** A dividing line's points: its two ends, or a curved one's stations (CNT-18). */
+const linePoints = (wall: PlanWall): readonly Vec2[] => wall.curve?.path ?? wall.centerline
+
+/** The first share `t` of a line, along it, for a line being traced. */
+function lineShare(points: readonly Vec2[], t: number): Vec2[] {
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i]!.x, p.y - points[i]!.y))
+  let left = t * lengths.reduce((sum, length) => sum + length, 0)
+  const out = [points[0]!]
+  for (let i = 0; i < lengths.length; i++) {
+    const [a, b, length] = [points[i]!, points[i + 1]!, lengths[i]!]
+    if (left >= length) {
+      out.push(b)
+      left -= length
+      continue
+    }
+    const k = length === 0 ? 0 : left / length
+    out.push({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k })
+    break
+  }
+  return out
+}
+
 /** SHT-11: the part each kind of a stair symbol's line is drawn as. */
 const STAIR_PARTS = { outline: 'stair-outline', riser: 'stair-riser', walk: 'stair-line' } as const
 
@@ -342,7 +364,7 @@ function roomShape(room: PlanRoom, attrs: Attrs, key?: string): SvgNode {
 /** A solid wall is one path per run between its openings; a virtual wall is a line. */
 function wallShape(wall: PlanWall, attrs: Attrs, key?: string): SvgNode {
   if (wall.virtual) {
-    return el('path', { d: virtualPath(wall.centerline), 'data-part': 'virtual', ...attrs }, [], key)
+    return el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'virtual', ...attrs }, [], key)
   }
   return el(
     'g',
@@ -529,7 +551,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
       if (!ids.has(wall.id)) continue
       if (wall.virtual) {
         children.push(
-          el('path', { d: virtualPath(wall.centerline), 'data-part': 'virtual', 'data-id': wall.id, ...paint.virtual }, [], wall.id)
+          el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'virtual', 'data-id': wall.id, ...paint.virtual }, [], wall.id)
         )
         continue
       }
@@ -675,16 +697,12 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     const transform = offset ? `translate(${offset.x} ${-offset.y})` : undefined
 
     if (wall.virtual) {
-      const [start, end] = wall.centerline
-      const reach =
-        tracing === null
-          ? end
-          : { x: start.x + (end.x - start.x) * tracing, y: start.y + (end.y - start.y) * tracing }
+      const points = linePoints(wall)
       out.push(
         el(
           'path',
           {
-            d: virtualPath([start, reach]),
+            d: virtualPath(tracing === null ? points : lineShare(points, tracing)),
             'data-part': 'virtual',
             'data-id': wall.id,
             'data-moving': offset ? wall.id : undefined,

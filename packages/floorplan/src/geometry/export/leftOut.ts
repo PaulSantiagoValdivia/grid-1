@@ -94,3 +94,46 @@ export function kindLabel(kind: LeftOutKind, count: number): string {
 export function leftOutLines(parts: readonly LeftOutPart[]): string[] {
   return leftOutByKind(parts).map(({ kind, parts: group }) => `${kindLabel(kind, group.length)}${partNames(group).join(', ')}`)
 }
+
+/**
+ * CNT-18: a part of the plan a file writes with its curve as straight pieces: a curved wall, or
+ * a room whose outline runs along one. It is in the file, so it is not left out; the note names
+ * it beside what is.
+ */
+export interface ApproximatedPart {
+  readonly kind: 'wall' | 'room'
+  readonly id: string
+  /** The floor it is on, when the file holds several. */
+  readonly floor: string | null
+}
+
+/** What a file writes as straight pieces, and how far off its curve they are at most. */
+export interface Approximations {
+  readonly parts: readonly ApproximatedPart[]
+  /** Metres: the most any piece stands off its curve. */
+  readonly off: number
+}
+
+export const NO_APPROXIMATIONS: Approximations = { parts: [], off: 0 }
+
+const APPROXIMATED: Readonly<Record<ApproximatedPart['kind'], string>> = {
+  wall: 'Curved walls written as straight pieces',
+  room: 'Rooms along a curved wall, their outlines written as straight pieces'
+}
+
+/** The note's lines for the curves a file writes as straight pieces; none when it writes none. */
+export function approximationLines(approximations: Approximations): string[] {
+  const { parts, off } = approximations
+  if (parts.length === 0) return []
+  const lines = [
+    `Grid wrote the curve of ${parts.length} part${parts.length === 1 ? '' : 's'} of the plan as straight pieces in this file, ` +
+      `at most ${off.toFixed(4)} m off the curve: this file writes no arc there. grid check measures the true curve.`
+  ]
+  for (const kind of ['wall', 'room'] as const) {
+    const group = parts.filter((part) => part.kind === kind)
+    if (group.length === 0) continue
+    const names = partNames(group.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))
+    lines.push(`${APPROXIMATED[kind]} (${group.length}): ${names.join(', ')}`)
+  }
+  return lines
+}

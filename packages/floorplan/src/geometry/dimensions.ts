@@ -151,7 +151,9 @@ export function planAxes(walls: readonly PlanWall[]): PlanAxes {
   const solid = walls.filter((wall) => !wall.virtual)
   const outside = solid.filter((wall) => wall.exposure === 'exterior')
   const noLength = tolerance('noLength')
+  // A curved wall runs no one way (CNT-18).
   const runs = (outside.length > 0 ? outside : solid).flatMap((wall) => {
+    if (wall.curve !== undefined) return []
     const d = sub(wall.centerline[1], wall.centerline[0])
     const len = length(d)
     return len <= noLength ? [] : [{ dir: folded(scale(d, 1 / len)), len }]
@@ -231,7 +233,7 @@ export function outsideDimensions(drawing: PlanDrawing, options: OutsideOptions 
     }
   }
   for (const wall of drawing.walls) if (!wall.virtual) take(wall.slices.flat(), 'face')
-  for (const wall of drawing.walls) if (wall.virtual) take(wall.centerline, 'centre-line')
+  for (const wall of drawing.walls) if (wall.virtual) take(wall.curve?.path ?? wall.centerline, 'centre-line')
   const tMin = extent.get('tMin')
   const tMax = extent.get('tMax')
   const wMin = extent.get('wMin')
@@ -293,7 +295,9 @@ function chainMarks(lo: Mark, hi: Mark, marks: readonly Mark[], near: number): M
 /** Where along an outside wall it is tried for a room behind it and none in front, as shares of its length. */
 const PROBES = [0.5, 0.3, 0.7, 0.1, 0.9]
 
+/** A straight wall's way and length; null for a curved wall (CNT-18), which is not chained along a side. */
 const directionOf = (wall: PlanWall): { dir: Vec2; len: number } | null => {
+  if (wall.curve !== undefined) return null
   const d = sub(wall.centerline[1], wall.centerline[0])
   const len = length(d)
   return len <= tolerance('noLength') ? null : { dir: scale(d, 1 / len), len }

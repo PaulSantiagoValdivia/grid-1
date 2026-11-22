@@ -65,6 +65,17 @@
  *   `origin`. All four are optional and
  *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
  *   north, and its y runs up (C4).
+ *
+ * C8 · A curved wall (CNT-18)
+ *   A wall MAY be an arc of a circle: `arc.centre` is the circle's middle and `arc.sweep` the
+ *   angle the wall turns through from `start` to `end` round it, in degrees, counter-clockwise
+ *   positive as `turn` and `north` are; 360 (or -360) is a whole circle, whose `start` and `end`
+ *   are one point. The radius is the distance from the centre to `start`, and `end` must lie on
+ *   the circle where the sweep takes `start` (`wall/arc-ends-apart`). C1 holds about the curve:
+ *   the wall grows thickness/2 on each side of it, `left` is the side on the left going from
+ *   `start` to `end`. C2 holds along the curve: an opening's `offset` and `width` are measured
+ *   along it, and its hole is straight between its two edges, as a door's leaf is. Optional and
+ *   never defaulted, so a plan with no curved wall reads exactly as before (version 1).
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
@@ -202,6 +213,17 @@ function withWallDefaults(raw: unknown): unknown {
   }
 }
 
+/**
+ * CNT-18 (C8): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
+ * and never more than a whole turn.
+ */
+export const WallArcSchema = z.object({
+  centre: Vec2,
+  sweep: finite().refine((value) => value !== 0 && Math.abs(value) <= 360, {
+    message: 'A sweep is the angle the wall turns through round its centre, in degrees: more than 0 and at most 360 either way',
+  }),
+})
+
 export const WallSchema = z.preprocess(
   withWallDefaults,
   z
@@ -220,6 +242,9 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-18 (C8): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
+      // Optional and never defaulted: unstated, the wall is straight (version 1).
+      arc: WallArcSchema.optional(),
     })
     .superRefine((wall, ctx) => {
       // A solid wall needs some thickness and height; a dividing line may have none.
@@ -802,6 +827,7 @@ export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
 export type Wall = z.infer<typeof WallSchema>
+export type WallArc = z.infer<typeof WallArcSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
 export type RoomTenure = z.infer<typeof RoomTenureSchema>
 export type Room = z.infer<typeof RoomSchema>

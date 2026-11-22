@@ -27,8 +27,9 @@ import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { openingsOf } from './plan'
 import { floorOf } from './floors'
 import { cross, sub } from './vec2'
-import type { WallAxis } from './wall'
-import { openingSpan, wallAxis } from './wall'
+import type { WallSegment } from './wall'
+import { openingSpan, wallAxis, wallSegments } from './wall'
+import { curveFault, wallCurve } from './arc'
 import { tolerance } from './tolerances'
 import { metresText } from './rounding'
 import { wallSides } from './exposure'
@@ -54,19 +55,46 @@ interface Cover {
 
 const half = (wall: Wall): number => (wall.virtual ? 0 : wall.thickness / 2)
 
+/**
+ * A wall as this check measures it: its straight pieces along its axis (one for a straight wall,
+ * the chords of a curve, CNT-18), how long it is, and whether it is a whole circle with no ends.
+ */
+interface Course {
+  readonly segments: readonly WallSegment[]
+  readonly length: number
+  readonly closed: boolean
+}
+
 /** Walls that cannot be measured are validation's to report, and are left out here. */
-function axisOf(wall: Wall): WallAxis | null {
+function courseOf(wall: Wall): Course | null {
   if (![...wall.start, ...wall.end].every(Number.isFinite)) return null
+  if (wall.arc !== undefined) {
+    if (curveFault(wall) !== null) return null
+    const curve = wallCurve(wall)!
+    return { segments: wallSegments(wall), length: curve.length, closed: curve.closed }
+  }
   if (wall.start[0] === wall.end[0] && wall.start[1] === wall.end[1]) return null
-  return wallAxis(wall)
+  const axis = wallAxis(wall)
+  return { segments: [{ ...axis, from: 0, to: axis.length }], length: axis.length, closed: false }
 }
 
 /**
  * Where `other`'s body stands across `wall`, or null when they do not meet. The two axes' lines
  * cross at `s` along `wall` and `u` along `other`; they meet when that point lies on both walls,
- * each reaching half the other's thickness plus `gap` past its ends.
+ * each reaching half the other's thickness plus `gap` past its ends. A curved wall is tried
+ * piece by piece, and the first piece that meets is taken.
  */
-function coverOf(wall: Wall, a: WallAxis, other: Wall, b: WallAxis): Cover | null {
+function coverOf(wall: Wall, course: Course, other: Wall, otherCourse: Course): Cover | null {
+  for (const a of course.segments) {
+    for (const b of otherCourse.segments) {
+      const cover = coverOfPieces(wall, course, a, other, otherCourse, b)
+      if (cover !== null) return cover
+    }
+  }
+  return null
+}
+
+function coverOfPieces(wall: Wall, course: Course, a: WallSegment, other: Wall, otherCourse: Course, b: WallSegment): Cover | null {
   const sine = cross(a.dir, b.dir)
   if (Math.abs(sine) < tolerance('parallel')) return null
   const gap = tolerance('gap')
@@ -79,16 +107,26 @@ function coverOf(wall: Wall, a: WallAxis, other: Wall, b: WallAxis): Cover | nul
   const d = sub(b.start, a.start)
   const s = cross(d, b.dir) / sine
   const u = cross(d, a.dir) / sine
-  if (s < -reachOnWall || s > a.length + reachOnWall) return null
-  if (u < -reachOnOther || u > b.length + reachOnOther) return null
+  // Only at an end of the wall itself does the meeting reach past a piece.
+  const lowA = !course.closed && a.from <= 0 ? -reachOnWall : 0
+  const highA = !course.closed && a.to >= course.length ? a.length + reachOnWall : a.length
+  const lowB = !otherCourse.closed && b.from <= 0 ? -reachOnOther : 0
+  const highB = !otherCourse.closed && b.to >= otherCourse.length ? b.length + reachOnOther : b.length
+  if (s < lowA || s > highA) return null
+  if (u < lowB || u > highB) return null
 
-  const body = half(other) / Math.abs(sine)
-  const otherEnds = u <= reachOnOther || u >= b.length - reachOnOther
-  const wallEnds = s <= reachOnWall || s >= a.length - reachOnWall
+  // Along each wall's own axis: a chord is a little shorter than the curve it stands for.
+  const scaleA = a.length === 0 ? 1 : (a.to - a.from) / a.length
+  const scaleB = b.length === 0 ? 1 : (b.to - b.from) / b.length
+  const at = a.from + s * scaleA
+  const atOther = b.from + u * scaleB
+  const body = (half(other) / Math.abs(sine)) * scaleA
+  const otherEnds = !otherCourse.closed && (atOther <= reachOnOther || atOther >= otherCourse.length - reachOnOther)
+  const wallEnds = !course.closed && (at <= reachOnWall || at >= course.length - reachOnWall)
   return {
     wall: other.id,
-    from: Math.max(0, s - body),
-    to: Math.min(a.length, s + body),
+    from: Math.max(0, at - body),
+    to: Math.min(course.length, at + body),
     how: otherEnds && !wallEnds ? 'end' : 'across',
     height: other.height
   }
@@ -96,22 +134,22 @@ function coverOf(wall: Wall, a: WallAxis, other: Wall, b: WallAxis): Cover | nul
 
 /** The covers on every wall, by wall id, for the walls given (one floor's, not broken). */
 function coversOf(walls: readonly Wall[]): Map<string, Cover[]> {
-  const axes = walls.map(axisOf)
+  const courses = walls.map(courseOf)
   const boxes = walls.map((wall, i) => {
-    const axis = axes[i]
-    if (!axis) return boxOfPoints([])
+    const course = courses[i]
+    if (!course) return boxOfPoints([])
     const reach = tolerance('mitreReach') * (half(wall) + tolerance('gap'))
-    return widenBox(boxOfPoints([axis.start, axis.end]), reach)
+    return widenBox(boxOfPoints(course.segments.flatMap((segment) => [segment.start, segment.end])), reach)
   })
   const near = boxIndex(boxes)
   const covers = new Map<string, Cover[]>()
   walls.forEach((wall, i) => {
-    const a = axes[i]
+    const a = courses[i]
     if (!a) return
     const list: Cover[] = []
     for (const j of near.near(boxes[i]!)) {
       const other = walls[j]!
-      const b = axes[j]
+      const b = courses[j]
       if (j === i || !b || other.virtual || other.id === wall.id) continue
       const cover = coverOf(wall, a, other, b)
       if (cover && cover.to > cover.from) list.push(cover)
@@ -172,7 +210,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
   for (const walls of byFloor.values()) {
     const covers = coversOf(walls)
     for (const wall of walls) {
-      const axis = axisOf(wall)
+      const axis = courseOf(wall)
       if (!axis) continue
       const here = covers.get(wall.id) ?? []
       for (const opening of openingsOf(index, wall.id)) {
@@ -282,7 +320,7 @@ export function wallEndInOpening(
 ): { readonly opening: Opening; readonly nearest: number | null } | null {
   const wall = index.wallsById.get(wallId)
   if (!wall) return null
-  const axis = axisOf(wall)
+  const axis = courseOf(wall)
   if (!axis) return null
   const halfWidth = thickness / 2
   const overrun = tolerance('openingOverrun')

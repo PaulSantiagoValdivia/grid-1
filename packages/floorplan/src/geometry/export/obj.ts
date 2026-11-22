@@ -19,7 +19,7 @@ import type { Scene3D } from '../scene3d'
 import { floorMesh, makeNamer, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
-import { leftOutLines, leftOutSummary, type LeftOutPart } from './leftOut'
+import { approximationLines, leftOutLines, leftOutSummary, type Approximations, type LeftOutPart } from './leftOut'
 
 /** Avoids `-0.000000`, which readers parse and nobody wants to read. */
 function num(value: number): string {
@@ -30,6 +30,8 @@ function num(value: number): string {
 export interface ObjOptions {
   /** HND-6: the parts of the plan this file leaves out, named in comments after the header. */
   readonly leftOut?: readonly LeftOutPart[]
+  /** CNT-18: the curves it writes as flat facets and straight pieces, named after them. */
+  readonly approximations?: Approximations
 }
 
 /**
@@ -52,6 +54,7 @@ export function toObj(scene: Scene3D, options: ObjOptions = {}): string {
   // HND-6: what the file leaves out, as comments after the header. Only when something is.
   const leftOut = options.leftOut ?? []
   if (leftOut.length > 0) lines.push(...[leftOutSummary(leftOut), ...leftOutLines(leftOut)].map(objComment))
+  if (options.approximations !== undefined) lines.push(...approximationLines(options.approximations).map(objComment))
   const nameOf = makeNamer()
   let offset = 0
 

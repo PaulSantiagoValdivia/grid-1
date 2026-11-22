@@ -21,7 +21,8 @@ import { doorSwing, type SwingArc } from '../door'
 import { TOLERANCES } from '../tolerances'
 import { areaText } from '../rounding'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
-import { kindLabel, leftOutByKind, leftOutSummary, partNames, type LeftOutPart } from './leftOut'
+import { approximationLines, kindLabel, leftOutByKind, leftOutSummary, NO_APPROXIMATIONS, partNames, type Approximations, type LeftOutPart } from './leftOut'
+import type { PlanCurve } from '../floorplan'
 
 /**
  * Layer names are the only organisation a DXF carries, so they are part of the
@@ -203,10 +204,10 @@ function writeLineTypeTable(w: DxfWriter): void {
   w.pair(0, 'ENDTAB')
 }
 
-function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
+function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[], approximations: Approximations): void {
   const shown = (name: string): boolean =>
     (name !== DXF_LAYERS.fixtures || drawing.items.length > 0) &&
-    (name !== DXF_LAYERS.leftOut || leftOut.length > 0) &&
+    (name !== DXF_LAYERS.leftOut || leftOut.length > 0 || approximations.parts.length > 0) &&
     (name !== DXF_LAYERS.notes || drawing.notes.some((note) => noteText(note) !== null))
   // SHT-7: each sketch category on a layer of its own, after the fixed layers.
   const sketch = [...new Set(drawing.sketch.map((item) => sketchLayer(item.category)))]
@@ -261,6 +262,49 @@ function writePolygon(w: DxfWriter, layer: string, points: readonly Vec2[]): voi
 
   w.pair(0, 'SEQEND')
   w.pair(8, layer)
+}
+
+/**
+ * CNT-18: a closed outline whose stretches may be arcs: R12's POLYLINE takes a bulge on a vertex
+ * (group 42), the tangent of a quarter of the turn the stretch to the next vertex makes, so a
+ * curved wall's faces are written as true arcs.
+ */
+function writeBulgedPolygon(w: DxfWriter, layer: string, points: readonly Vec2[], turns: readonly number[]): void {
+  if (points.length < 2 || !writablePoints(points) || !turns.every(Number.isFinite)) return
+  w.pair(0, 'POLYLINE')
+  w.pair(8, layer)
+  w.pair(66, 1)
+  w.pair(70, 1)
+  w.point(0, 0)
+  points.forEach((point, i) => {
+    w.pair(0, 'VERTEX')
+    w.pair(8, layer)
+    w.point(point.x, point.y)
+    const turn = turns[i] ?? 0
+    if (turn !== 0) w.pair(42, num(Math.tan(turn / 4)))
+  })
+  w.pair(0, 'SEQEND')
+  w.pair(8, layer)
+}
+
+/** CNT-18: one solid run of a curved wall: its left face, then its right face back, each arc exact. */
+function writeCurvedRun(w: DxfWriter, layer: string, run: PlanCurve['runs'][number]): void {
+  // The stretch from the end of one face to the start of the other is straight: a jamb or an end.
+  writeBulgedPolygon(w, layer, [...run.left.points, ...run.right.points], [...run.left.turns, 0, ...run.right.turns, 0])
+}
+
+/** CNT-18: a curved dividing line, as an ARC, or a CIRCLE when it goes all the way round. */
+function writeCurveLine(w: DxfWriter, layer: string, curve: PlanCurve): void {
+  if (!writable(curve.centre.x, curve.centre.y, curve.radius, curve.startAngle, curve.sweep)) return
+  if (Math.abs(Math.abs(curve.sweep) - 2 * Math.PI) <= TOLERANCES.sameAngle.value) {
+    w.pair(0, 'CIRCLE')
+    w.pair(8, layer)
+    w.point(curve.centre.x, curve.centre.y)
+    w.pair(40, num(curve.radius))
+    return
+  }
+  const [from, to] = curve.sweep > 0 ? [curve.startAngle, curve.startAngle + curve.sweep] : [curve.startAngle + curve.sweep, curve.startAngle]
+  writeArc(w, layer, { center: curve.centre, radius: curve.radius, from, to, counterClockwise: true })
 }
 
 function writeLine(w: DxfWriter, layer: string, from: Vec2, to: Vec2): void {
@@ -345,16 +389,31 @@ function noteLines(leftOut: readonly LeftOutPart[]): string[] {
   return lines
 }
 
+/** A line of the note as R12 TEXT holds it: cut after a comma before `MAX_TEXT`, and carried on. */
+function wrapped(line: string): string[] {
+  const out: string[] = []
+  let rest = line
+  while (sanitizeText(rest).length >= MAX_TEXT) {
+    const cut = rest.lastIndexOf(', ', MAX_TEXT - 2)
+    if (cut <= 0) break
+    out.push(rest.slice(0, cut + 1))
+    rest = `  ${rest.slice(cut + 2)}`
+  }
+  return [...out, rest]
+}
+
 /**
  * HND-6: the note, on its own layer, one TEXT per line, starting a line below the drawing's lower
  * left corner and running to the right. R12 TEXT holds one line; the summary may be cut at
  * `MAX_TEXT`, which keeps its count and the kinds.
  */
-function writeLeftOut(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
-  if (leftOut.length === 0) return
+function writeLeftOut(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[], approximations: Approximations): void {
+  if (leftOut.length === 0 && approximations.parts.length === 0) return
   const { min } = drawing.bounds
   const at = writablePoints([min]) ? min : { x: 0, y: 0 }
-  for (const [n, line] of noteLines(leftOut).entries()) {
+  // CNT-18: the curves written as straight pieces follow what is left out, on the same layer.
+  const lines = [...(leftOut.length === 0 ? [] : noteLines(leftOut)), ...approximationLines(approximations).flatMap(wrapped)]
+  for (const [n, line] of lines.entries()) {
     const value = sanitizeText(line)
     if (value.length === 0) continue
     w.pair(0, 'TEXT')
@@ -365,7 +424,7 @@ function writeLeftOut(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Left
   }
 }
 
-function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
+function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[], approximations: Approximations): void {
   w.pair(0, 'SECTION')
   w.pair(2, 'ENTITIES')
 
@@ -389,8 +448,9 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Lef
 
   for (const wall of drawing.walls) {
     if (wall.virtual) {
-      // No substance to outline: an open-plan divider is a single line (C3).
-      writeLine(w, DXF_LAYERS.wallVirtual, wall.centerline[0], wall.centerline[1])
+      // No substance to outline: an open-plan divider is a single line (C3), a curved one an arc.
+      if (wall.curve !== undefined) writeCurveLine(w, DXF_LAYERS.wallVirtual, wall.curve)
+      else writeLine(w, DXF_LAYERS.wallVirtual, wall.centerline[0], wall.centerline[1])
       continue
     }
 
@@ -399,7 +459,9 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Lef
     const layer =
       wall.exposure === 'exterior' ? DXF_LAYERS.wallExterior : DXF_LAYERS.wallInterior
 
-    for (const slice of wall.slices) writePolygon(w, layer, slice)
+    // CNT-18: a curved wall's runs with their faces as true arcs.
+    if (wall.curve !== undefined) for (const run of wall.curve.runs) writeCurvedRun(w, layer, run)
+    else for (const slice of wall.slices) writePolygon(w, layer, slice)
   }
 
   // The gap is already cut out of the wall above; this line marks where it is,
@@ -442,7 +504,7 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Lef
     const text = noteText(note)
     if (text !== null && note.at) writeText(w, DXF_LAYERS.notes, note.at, text)
   }
-  writeLeftOut(w, drawing, leftOut)
+  writeLeftOut(w, drawing, leftOut, approximations)
 
   writeLabel(w, drawing)
   w.pair(0, 'ENDSEC')
@@ -458,6 +520,8 @@ function noteText(note: PlanDrawing['notes'][number]): string | null {
 export interface DxfOptions {
   /** HND-6: the parts of the plan this file leaves out, named on the `GRID-LEFT-OUT` layer. */
   readonly leftOut?: readonly LeftOutPart[]
+  /** CNT-18: the curves it writes as straight pieces, named on the same layer. */
+  readonly approximations?: Approximations
 }
 
 /**
@@ -470,10 +534,11 @@ export interface DxfOptions {
 export function toDxf(drawing: PlanDrawing, options: DxfOptions = {}): string {
   const w = new DxfWriter()
   const leftOut = options.leftOut ?? []
+  const approximations = options.approximations ?? NO_APPROXIMATIONS
 
   writeHeader(w, drawing)
-  writeTables(w, drawing, leftOut)
-  writeEntities(w, drawing, leftOut)
+  writeTables(w, drawing, leftOut, approximations)
+  writeEntities(w, drawing, leftOut, approximations)
 
   w.pair(0, 'EOF')
   return w.toString()

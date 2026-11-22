@@ -12,6 +12,8 @@ import type { Line, Vec2 } from './vec2'
 import { tolerance } from './tolerances'
 import { quoted } from '../types/planText'
 import { add, fromTuple, length, normalize, perp, scale, sub } from './vec2'
+import type { WallCurve } from './arc'
+import { curvePointAt, curveStations, curveStationsBetween, curveTangentAt, wallCurve } from './arc'
 
 export interface WallAxis {
   readonly start: Vec2
@@ -23,7 +25,19 @@ export interface WallAxis {
   readonly length: number
 }
 
+/**
+ * The straight axis of a straight wall. A curved wall (CNT-18) has none: it is followed piece by
+ * piece (`wallSegments`), or point by point (`wallFrameAt`), and this throws for it, so no code
+ * takes its chord for the wall.
+ */
 export function wallAxis(wall: Wall): WallAxis {
+  if (wall.arc !== undefined) {
+    throw new Error(`Wall ${quoted(wall.id)} is curved: it has no straight axis`)
+  }
+  return straightAxis(wall)
+}
+
+function straightAxis(wall: Wall): WallAxis {
   const start = fromTuple(wall.start)
   const end = fromTuple(wall.end)
   const delta = sub(end, start)
@@ -38,6 +52,102 @@ export function wallAxis(wall: Wall): WallAxis {
 /** Point on the wall axis, `s` meters away from `start`. */
 export function pointAlong(axis: WallAxis, s: number): Vec2 {
   return add(axis.start, scale(axis.dir, s))
+}
+
+/** Whether the wall is a curve (CNT-18, C8). */
+export function isCurved(wall: Wall): boolean {
+  return wall.arc !== undefined
+}
+
+/** The wall's length along its axis, straight or curved. Throws for a straight wall of no length. */
+export function wallLength(wall: Wall): number {
+  const curve = wallCurve(wall)
+  return curve === null ? wallAxis(wall).length : curve.length
+}
+
+/** A place on the wall's axis, the way the axis runs there, and the normal: the left face's side. */
+export interface WallFrame {
+  readonly point: Vec2
+  readonly dir: Vec2
+  readonly normal: Vec2
+}
+
+/** The wall's frame `s` metres along its axis from `start`, straight or curved. */
+export function wallFrameAt(wall: Wall, s: number): WallFrame {
+  const curve = wallCurve(wall)
+  if (curve === null) {
+    const axis = wallAxis(wall)
+    return { point: pointAlong(axis, s), dir: axis.dir, normal: axis.normal }
+  }
+  const dir = curveTangentAt(curve, s)
+  return { point: curvePointAt(curve, s), dir, normal: perp(dir) }
+}
+
+/** The point `s` metres along the wall's axis, straight or curved. */
+export function wallPointAt(wall: Wall, s: number): Vec2 {
+  return wallFrameAt(wall, s).point
+}
+
+/** One straight piece of a wall's axis: the whole axis of a straight wall, a chord of a curve. */
+export interface WallSegment extends WallAxis {
+  /** Where it starts and ends along the wall's axis, in metres from `start`. */
+  readonly from: number
+  readonly to: number
+}
+
+function segmentOf(start: Vec2, end: Vec2, from: number, to: number): WallSegment {
+  const delta = sub(end, start)
+  const len = length(delta)
+  const dir = len === 0 ? { x: 1, y: 0 } : normalize(delta)
+  return { start, end, dir, normal: perp(dir), length: len, from, to }
+}
+
+/**
+ * The wall's axis as straight pieces, in order from `start`: one for a straight wall, the chain
+ * of chords a curved one is followed by (`curveStations`). What measures, checks and traces a
+ * wall as lines reads these.
+ */
+export function wallSegments(wall: Wall): WallSegment[] {
+  const curve = wallCurve(wall)
+  if (curve === null) {
+    const axis = wallAxis(wall)
+    return [{ ...axis, from: 0, to: axis.length }]
+  }
+  return chords(curve, curveStations(curve))
+}
+
+function chords(curve: WallCurve, stations: readonly number[]): WallSegment[] {
+  const points = stations.map((s) => curvePointAt(curve, s))
+  return stations.slice(1).map((to, i) => segmentOf(points[i]!, points[i + 1]!, stations[i]!, to))
+}
+
+/** The wall's axis as points: its two ends, or the stations along a curve (a whole circle closes on its start). */
+export function wallPath(wall: Wall): Vec2[] {
+  const curve = wallCurve(wall)
+  if (curve === null) {
+    const axis = wallAxis(wall)
+    return [axis.start, axis.end]
+  }
+  return curveStations(curve).map((s) => curvePointAt(curve, s))
+}
+
+/**
+ * The straight hole an opening makes in its wall: between its two edges on the axis. On a
+ * straight wall it lies along the axis; on a curved one it is the chord between them, and its
+ * `dir` and `normal` are the chord's, so a door's leaf closes along it (C8).
+ */
+export function openingChord(wall: Wall, from: number, to: number): WallSegment {
+  return segmentOf(wallPointAt(wall, from), wallPointAt(wall, to), from, to)
+}
+
+/**
+ * Straight copies of a wall for code that works on straight walls: the wall itself, or one per
+ * chord of a curve, each with the wall's id and every other field. They are never written back.
+ */
+export function straightPieces(wall: Wall): Wall[] {
+  if (wall.arc === undefined) return [wall]
+  const { arc: _arc, ...rest } = wall
+  return wallSegments(wall).map((segment) => ({ ...rest, start: [segment.start.x, segment.start.y], end: [segment.end.x, segment.end.y] }))
 }
 
 /**
@@ -58,10 +168,9 @@ export function wallFaces(wall: Wall): { left: Line; right: Line } {
   }
 }
 
-/** The wall axis as a pair of points. This is what a virtual wall draws as. */
+/** The wall axis as a pair of points: its two ends, curved or not. This is what a straight virtual wall draws as. */
 export function wallCenterline(wall: Wall): [Vec2, Vec2] {
-  const axis = wallAxis(wall)
-  return [axis.start, axis.end]
+  return [fromTuple(wall.start), fromTuple(wall.end)]
 }
 
 /**
@@ -92,28 +201,109 @@ export const SQUARE_ENDS: WallEnds = { start: { left: 0, right: 0 }, end: { left
  * the face no shorter than the run's other end.
  */
 export function wallSlicePolygon(wall: Wall, from: number, to: number, ends: WallEnds = SQUARE_ENDS): Vec2[] {
-  const axis = wallAxis(wall)
+  return sliceShape(wall, from, to, ends).flatMap((side) => side.points)
+}
+
+/**
+ * One face of a run of wall, as `wallSliceShape` gives it: its points in order, and where a
+ * stretch between two of them follows a curve, how much it turns (signed radians).
+ */
+export interface SliceSide {
+  readonly points: readonly Vec2[]
+  /** One per stretch between consecutive points: 0 for straight, the turn for an arc. */
+  readonly turns: readonly number[]
+}
+
+/**
+ * A run of wall as exactly as its shape is: the left face from `from` to `to`, then the right
+ * face back. On a curved wall each face is an arc (with a straight reach past an end, where a
+ * joint puts one); `wallSlicePolygon` is the same with the arcs followed by their stations. An
+ * export that can write an arc writes this (CNT-18).
+ */
+export function wallSliceShape(wall: Wall, from: number, to: number, ends: WallEnds = SQUARE_ENDS): { readonly left: SliceSide; readonly right: SliceSide } {
+  const curve = wallCurve(wall)
+  const [left, right] = sliceShape(wall, from, to, ends)
+  if (curve === null) return { left: { points: left!.points, turns: [0] }, right: { points: right!.points, turns: [0] } }
+  return { left: left!.exact, right: right!.exact }
+}
+
+interface FaceRun {
+  readonly points: Vec2[]
+  readonly exact: SliceSide
+}
+
+function sliceShape(wall: Wall, from: number, to: number, ends: WallEnds): [FaceRun, FaceRun] {
+  const curve = wallCurve(wall)
+  const total = curve === null ? wallAxis(wall).length : curve.length
   const half = wall.thickness / 2
-  const offsetLeft = scale(axis.normal, half)
-  const offsetRight = scale(axis.normal, -half)
   const none = tolerance('noLength')
-  const atStart = from <= none
-  const atEnd = to >= axis.length - none
+  const open = curve === null || !curve.closed
+  const atStart = open && from <= none
+  const atEnd = open && to >= total - none
   const leftFrom = atStart ? from - ends.start.left : from
   const rightFrom = atStart ? from - ends.start.right : from
   const leftTo = Math.max(atEnd ? to + ends.end.left : to, leftFrom)
   const rightTo = Math.max(atEnd ? to + ends.end.right : to, rightFrom)
-  return [
-    add(pointAlong(axis, leftFrom), offsetLeft),
-    add(pointAlong(axis, leftTo), offsetLeft),
-    add(pointAlong(axis, rightTo), offsetRight),
-    add(pointAlong(axis, rightFrom), offsetRight)
-  ]
+  if (curve === null) {
+    const axis = wallAxis(wall)
+    const offsetLeft = scale(axis.normal, half)
+    const offsetRight = scale(axis.normal, -half)
+    const l = [add(pointAlong(axis, leftFrom), offsetLeft), add(pointAlong(axis, leftTo), offsetLeft)]
+    const r = [add(pointAlong(axis, rightTo), offsetRight), add(pointAlong(axis, rightFrom), offsetRight)]
+    return [
+      { points: l, exact: { points: l, turns: [0] } },
+      { points: r, exact: { points: r, turns: [0] } }
+    ]
+  }
+  const leftSide = curveFace(curve, leftFrom, leftTo, half, total)
+  const rightSide = curveFace(curve, rightFrom, rightTo, -half, total)
+  return [leftSide, reverseFace(rightSide)]
+}
+
+/**
+ * One face of a curved run, `offset` from the axis on the normal's side, from `faceFrom` to
+ * `faceTo` along the axis. The curve is followed from `from` to `to`; past an end of the wall
+ * the face runs straight on along the end's tangent, as far as its joint takes it.
+ */
+function curveFace(curve: WallCurve, faceFrom: number, faceTo: number, offset: number, total: number): FaceRun {
+  const at = (s: number): Vec2 => {
+    const on = curve.closed ? s : Math.min(Math.max(s, 0), total)
+    const dir = curveTangentAt(curve, on)
+    return add(add(curvePointAt(curve, on), scale(perp(dir), offset)), scale(dir, s - on))
+  }
+  // The face follows the curve where it lies on the wall, and runs straight on past an end.
+  const a = curve.closed ? faceFrom : Math.max(faceFrom, 0)
+  const b = curve.closed ? faceTo : Math.min(faceTo, total)
+  if (b <= a) {
+    const points = [at(faceFrom), at(faceTo)]
+    return { points, exact: { points, turns: [0] } }
+  }
+  const points = curveStationsBetween(curve, a, b).map(at)
+  const exactPoints = [at(a), at(b)]
+  const turns = [(Math.sign(curve.sweep) * (b - a)) / curve.radius]
+  if (faceFrom < a) {
+    points.unshift(at(faceFrom))
+    exactPoints.unshift(at(faceFrom))
+    turns.unshift(0)
+  }
+  if (faceTo > b) {
+    points.push(at(faceTo))
+    exactPoints.push(at(faceTo))
+    turns.push(0)
+  }
+  return { points, exact: { points: exactPoints, turns } }
+}
+
+function reverseFace(face: FaceRun): FaceRun {
+  return {
+    points: [...face.points].reverse(),
+    exact: { points: [...face.exact.points].reverse(), turns: [...face.exact.turns].reverse().map((t) => -t) }
+  }
 }
 
 /** Polygon of the whole wall, with no openings taken out, its corners as `ends` puts them. */
 export function wallPolygon(wall: Wall, ends: WallEnds = SQUARE_ENDS): Vec2[] {
-  return wallSlicePolygon(wall, 0, wallAxis(wall).length, ends)
+  return wallSlicePolygon(wall, 0, wallLength(wall), ends)
 }
 
 /** How far an opening reaches along the wall, measured from `start`. */
@@ -162,7 +352,7 @@ export interface WallPart {
 export function wallParts(wall: Wall, openings: readonly Opening[] = []): WallPart[] {
   if (wall.virtual) return []
 
-  const total = wallAxis(wall).length
+  const total = wallLength(wall)
   // An opening may run `openingOverrun` past an end of its wall (validate.ts); it is drawn
   // within the wall, so nothing pokes out of it.
   const spans = openings
@@ -207,7 +397,15 @@ export function wallParts(wall: Wall, openings: readonly Opening[] = []): WallPa
   }
 
   if (total - cursor > none) {
-    parts.push({ kind: 'solid', from: cursor, to: total, zFrom: 0, zTo: wall.height })
+    // A whole circle has no ends (CNT-18): the run after its last opening carries on round
+    // into the run before its first, as one.
+    const first = parts[0]
+    if (wallCurve(wall)?.closed === true && spans.length > 0 && first?.kind === 'solid' && first.from <= none) {
+      parts.shift()
+      parts.push({ ...first, from: cursor, to: total + first.to })
+    } else {
+      parts.push({ kind: 'solid', from: cursor, to: total, zFrom: 0, zTo: wall.height })
+    }
   }
 
   return parts

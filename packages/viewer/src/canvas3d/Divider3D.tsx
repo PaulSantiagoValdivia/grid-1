@@ -21,8 +21,26 @@ export const DIVIDER_DASH = { dashSize: 0.2, gapSize: 0.1 } as const
 export function dividerGeometry(divider: SceneDivider): THREE.BufferGeometry {
   const from = toThree({ x: divider.from.x, y: divider.from.y, z: DIVIDER_LIFT })
   const to = toThree({ x: divider.to.x, y: divider.to.y, z: DIVIDER_LIFT })
+  if (divider.path !== undefined && divider.path.length > 2) return pathGeometry(divider.path)
   const geometry = new THREE.BufferGeometry().setFromPoints([from, to])
   geometry.setAttribute('lineDistance', new THREE.Float32BufferAttribute([0, from.distanceTo(to)], 1))
+  return geometry
+}
+
+/** CNT-18: a curved line, piece by piece, each piece a segment, its dashes running on round the curve. */
+function pathGeometry(path: NonNullable<SceneDivider['path']>): THREE.BufferGeometry {
+  const points = path.map((p) => toThree({ x: p.x, y: p.y, z: DIVIDER_LIFT }))
+  const pairs: THREE.Vector3[] = []
+  const distances: number[] = []
+  let along = 0
+  for (let i = 1; i < points.length; i++) {
+    const [a, b] = [points[i - 1]!, points[i]!]
+    pairs.push(a, b)
+    distances.push(along, along + a.distanceTo(b))
+    along += a.distanceTo(b)
+  }
+  const geometry = new THREE.BufferGeometry().setFromPoints(pairs)
+  geometry.setAttribute('lineDistance', new THREE.Float32BufferAttribute(distances, 1))
   return geometry
 }
 

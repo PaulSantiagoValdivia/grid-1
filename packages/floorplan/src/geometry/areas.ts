@@ -37,6 +37,8 @@ import { floorJoins } from './floorJoins'
 import { cornerFills, polygonArea, strip, union } from './polygons'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
+import { wallLength, wallSegments } from './wall'
+import { curveFault } from './arc'
 
 /** The three measures. */
 export type Measure = 'net' | 'grossInternal' | 'grossExternal'
@@ -214,7 +216,7 @@ function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>)
     (wall) =>
       floorOf(wall) === floor &&
       !broken.has(wall.id) &&
-      (wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
+      (wall.arc !== undefined ? curveFault(wall) === null : wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
       (wall.virtual === true || wall.thickness > 0)
   )
 }
@@ -263,15 +265,23 @@ function insideFace(walls: readonly Wall[], spaces: FloorSpaces, sides: Readonly
   if (spaces.spaces.length === 0) return 0
   const join = tolerance('gap')
   let reach = 0
-  for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
-  const runs = walls.map((wall) => {
-    const start = { x: wall.start[0], y: wall.start[1] }
-    const dx = wall.end[0] - start.x
-    const dy = wall.end[1] - start.y
-    const length = Math.hypot(dx, dy)
-    return { wall, start, dir: { x: dx / length, y: dy / length }, length }
-  })
-  const outer = runs.filter((r) => r.wall.virtual !== true).flatMap((r) => outerStretches(sides.get(r.wall.id), r.length).map((s) => ({ run: r, s })))
+  // A curved wall is its straight pieces (CNT-18), each holding the stretch of the wall it follows.
+  const runs = walls.flatMap((wall) =>
+    wallSegments(wall).map((segment) => ({ wall, start: segment.start, dir: segment.dir, length: segment.length, from: segment.from, to: segment.to }))
+  )
+  for (const run of runs) reach = Math.max(reach, Math.abs(run.start.x), Math.abs(run.start.y), Math.abs(run.start.x + run.dir.x * run.length), Math.abs(run.start.y + run.dir.y * run.length))
+  const outer = runs
+    .filter((r) => r.wall.virtual !== true)
+    .flatMap((r) => {
+      const whole = r.wall.arc === undefined ? r.length : wallLength(r.wall)
+      const scale = r.to - r.from === 0 ? 1 : r.length / (r.to - r.from)
+      return outerStretches(sides.get(r.wall.id), whole).flatMap(([from, to]): { run: typeof r; s: readonly [number, number] }[] => {
+        // The part of the stretch along this piece, along the piece.
+        const a = Math.max(from, r.from)
+        const b = Math.min(to, r.to)
+        return b - a > tolerance('noLength') ? [{ run: r, s: [(a - r.from) * scale, (b - r.from) * scale] as const }] : []
+      })
+    })
   if (outer.length === 0) return 'no wall on this floor faces outside, so the inside face of the outer walls is not known'
   let failure: unknown = null
   for (const grid of TOLERANCES.joinGrids.values) {
