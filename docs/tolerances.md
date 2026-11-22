@@ -34,6 +34,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `wallContact` | tolerance | 0.01 m | Slack past the walls' bodies when a room outline is traced: walls that touch, carry on in a row or reach a corner |
 | `strayCorner` | tolerance | 1 m | A room corner further than this from both its walls is not a corner, and the wall list is out of order |
 | `nearlyParallel` | tolerance | 0.2588 sine | Neighbouring walls closer to parallel than 15 degrees may be one straight side |
+| `squareWithin` | tolerance | 0.0523 sine | When a scan is squared, a wall within about 3 degrees of a main direction of the plan is turned onto it; one further off is left and named |
 | `sameFace` | tolerance | 0.000001 m | Two faces in a row this close are one face; further apart they are joined by a step |
 | `mitreReach` | tolerance | 4 ratio | How far a joined corner may reach along a wall, in half thicknesses of the thicker wall; sharper corners are left cut square, and are not tested against openings |
 | `swingContact` | tolerance | 0.01 m | How far a wall must reach into a door's swing, or two swings overlap, to be in the way |
