@@ -7,7 +7,7 @@
  * decides what the sheet does with it. `coverage.test.ts` checks the same against the schema
  * itself, so `npm test` fails too.
  */
-import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import type { FactField, FloorPlan } from '@ongrid/floorplan/types/floorplan'
 
 export type Coverage =
   | { readonly shown: 'drawn' }
@@ -50,3 +50,16 @@ export const SHEET_COVERAGE = {
   marks: { shown: 'drawn' },
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
+
+/**
+ * CNT-9: what the sheet does with each field CNT-9 adds to the parts of a plan: the facts of the
+ * person's own and a room's stated number. `FACT_FIELDS` names them; a field added there fails
+ * the type check here until it is placed, and `coverage.test.ts` holds the list to the schema.
+ */
+export const FACT_COVERAGE = {
+  'rooms.number': { shown: 'drawn and tabled' },
+  'rooms.properties': { shown: 'drawn and tabled' },
+  'openings.properties': { shown: 'drawn and tabled' },
+  'walls.properties': { shown: 'not shown', why: 'The sheet has no wall schedule; grid_find and the IFC and DXF files give a wall\'s facts.' },
+  'floors.properties': { shown: 'not shown', why: 'Each floor page shows its plan and areas; grid_find and the IFC and DXF files give a floor\'s facts.' },
+} as const satisfies Record<FactField, Coverage>

@@ -87,8 +87,8 @@ Each page answers one kind of question, so read only the one you need.
 |---|---|
 | Write a plan: name the rooms, doors and windows, and let Grid work out the walls | [docs/rooms-first.md](docs/rooms-first.md) |
 | Run a command: `init`, `write`, `edit`, `check`, `describe`, `draw`, `export`, `sheet`, `tidy`, `occupancy`; options, exit codes, the project folder | [docs/commands.md](docs/commands.md) |
-| Call Grid as an agent: the `grid_…` tools, measuring from faces, protocol versions | [docs/tool-server.md](docs/tool-server.md) |
-| Know what a plan file may hold and what each drawing check's code means: floors, steps, overlapping rooms, holes, fixtures, wall faults, inside and outside walls, and where people's names go instead | [docs/plan-file.md](docs/plan-file.md) |
+| Call Grid as an agent: the `grid_…` tools, asking across the parts by their facts, measuring from faces, protocol versions | [docs/tool-server.md](docs/tool-server.md) |
+| Know what a plan file may hold and what each drawing check's code means: floors, steps, overlapping rooms, holes, fixtures, facts of your own and room numbers, wall faults, inside and outside walls, and where people's names go instead | [docs/plan-file.md](docs/plan-file.md) |
 | Keep what the person asked for beside the plan, and read each line met or missed after a change | [docs/brief.md](docs/brief.md) |
 | Know what an area figure means: net, gross internal and gross external, and which comes first where; the room schedule and the door and window schedule | [docs/areas.md](docs/areas.md) |
 | Know the figure behind a check, and when Grid asks whether a size is meant | [docs/tolerances.md](docs/tolerances.md) |

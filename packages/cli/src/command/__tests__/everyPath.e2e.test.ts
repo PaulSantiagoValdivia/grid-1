@@ -202,6 +202,10 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'rates', call: tool('grid_takeoff', { plan: PLAN, for: 'estimate', rates: '@' }), given: asIs },
   ],
   grid_schedule: [{ arg: 'plan', call: tool('grid_schedule', { plan: '@' }), given: asIs }],
+  // CNT-9: the three tools that ask across the parts read the plan only.
+  grid_fields: [{ arg: 'plan', call: tool('grid_fields', { plan: '@' }), given: asIs }],
+  grid_find: [{ arg: 'plan', call: tool('grid_find', { plan: '@', kind: ['door'] }), given: asIs }],
+  grid_count: [{ arg: 'plan', call: tool('grid_count', { plan: '@', kind: ['room'], by: 'use' }), given: asIs }],
   grid_measure: [{ arg: 'plan', call: tool('grid_measure', { plan: '@', what: 'room', room: 'lounge' }), given: asIs }],
   grid_view: [{ arg: 'plan', call: tool('grid_view', { plan: '@', kind: 'plan' }), given: asIs }],
   grid_describe: [{ arg: 'plan', call: tool('grid_describe', { plan: '@' }), given: asIs }],

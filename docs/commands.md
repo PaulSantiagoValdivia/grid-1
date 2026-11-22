@@ -32,7 +32,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror`, `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 24 tools in [the tool server](tool-server.md) |
+| `grid serve` | Starts the tool server on standard input and output, with the 27 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes
@@ -158,10 +158,13 @@ something the plan already says, put in the field IFC has for it; where the plan
 the file says that too.
 
 - **Rooms.** Each room is a space whose name is its number and whose long name is the room's
-  name. Numbers are the room schedule's (`grid_schedule`): floors by level, then by id, rooms by
-  id, 1, 2, 3… across the floors. The use, when the plan states one, is the space's object type
-  and `Category` in `Pset_SpaceCommon`, whose `Reference` is the number. Grid's own set
-  `Grid_Space` holds `Id`, `Number`, `Use` (`not said` when the plan states none), `Area`, and
+  name. Numbers are the room schedule's (`grid_schedule`): the number a room states in the plan
+  (`number`, CNT-9), else Grid's count: floors by level, then by id, on each floor the rooms that
+  state a number first, by it, then the others by id, 1, 2, 3… across the floors. The use, when
+  the plan states one, is the space's object type and `Category` in `Pset_SpaceCommon`, whose
+  `Reference` is the number. Grid's own set
+  `Grid_Space` holds `Id`, `Number` (text when the room states it, else Grid's count), `Use`
+  (`not said` when the plan states none), `Area`, and
   `AreaMeasure` and `AreaRule`, which name the measure and its rule: the net area as
   `grid_areas` measures it.
 - **Base quantities**, as `Qto_…BaseQuantities` sets:

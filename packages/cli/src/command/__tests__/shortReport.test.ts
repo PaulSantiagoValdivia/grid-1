@@ -11,6 +11,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { edit, flat } from '@ongrid/floorplan/test-support/plans'
 import { approvalWords, figureUsedText, GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
@@ -243,6 +244,66 @@ describe('a note set aside as seen', () => {
     const state = again.seen!.states[index]!
     expect(state.state).toBe('back')
     expect(checkText(again, 1)).toContain(`but ${part} changed since, so it is new again.`)
+  })
+
+  // MSG-5: identical notes are one line that lists the rooms (`each`). Its thing is the first
+  // room and `also` the others, so the mark is keyed to the line and holds every room's parts.
+  describe('a line for several rooms (MSG-5)', () => {
+    // The flat's bathroom loses its only door; then the bedroom loses its own: the same note.
+    const bathroomOnly = () =>
+      edit(flat(), (copy) => {
+        copy.openings = copy.openings.filter((o) => o.id !== 'd_bb')
+        copy.walls.find((w) => w.id === 'bb')!.kind = 'exterior'
+      })
+    const both = () => edit(bathroomOnly(), (copy) => { copy.openings = copy.openings.filter((o) => o.id !== 'd_hb') })
+    const write = (plan: unknown): void => writeFileSync(join(dir, 'pair.json'), JSON.stringify(plan))
+    const doorless = (result: CheckResult): number => result.result.lines.findIndex((l) => l.code === 'room/no-door')
+
+    it('is seen as one note on the next check, and back when one of its rooms changes', async () => {
+      write(both())
+      const first = check('pair.json')
+      const index = doorless(first)
+      expect(first.result.lines[index]!.each).toEqual([{ kind: 'room', id: 'bathroom' }, { kind: 'room', id: 'bedroom' }])
+      const run = await grid(['check', 'pair.json', '--seen', String(index + 1), '--reason', 'Doors come later', '--by', 'Owner'])
+      expect(run.code, run.err).toBe(0)
+      const [mark] = readSeen(project, 'pair.json').marks
+      expect(mark!.parts.filter((p) => p.kind === 'room').map((p) => p.id)).toEqual(['bathroom', 'bedroom'])
+
+      const again = check('pair.json')
+      expect(again.seen!.states[doorless(again)]!.state).toBe('seen')
+      expect(checkText(again, 1)).toMatch(/Seen \(1\): .*\n {2}\d+\. finding, rooms? .*"Bathroom", "Bedroom" have no door/)
+
+      // A wall of the bedroom only: the line is back, naming it.
+      const taller = edit(both(), (copy) => { copy.walls.find((w) => w.id === 'w2')!.height = 2.9 })
+      write(taller)
+      const changed = check('pair.json')
+      const state = changed.seen!.states[doorless(changed)]!
+      expect(state.state).toBe('back')
+      expect(checkText(changed, 1)).toContain('but wall "w2" changed since, so it is new again.')
+    })
+
+    it('a mark made on one room\'s note finds the line it joins, but never holds: the line is new again', async () => {
+      write(bathroomOnly())
+      const single = check('pair.json')
+      expect(single.result.lines[doorless(single)]!.each).toBeUndefined()
+      await grid(['check', 'pair.json', '--seen', String(doorless(single) + 1), '--reason', 'Doors come later', '--by', 'Owner'])
+      expect(check('pair.json').seen!.states[doorless(single)]!.state).toBe('seen')
+
+      write(both())
+      const grouped = check('pair.json')
+      const index = doorless(grouped)
+      const state = grouped.seen!.states[index]!
+      expect(state.state).toBe('back')
+      expect(checkText(grouped, 1)).toMatch(/seen before, by "Owner" on \d{4}-\d{2}-\d{2}: "Doors come later"; but room "bedroom".* changed since, so it is new again\./)
+
+      // Marking the line replaces the room's mark; taking it off leaves none behind.
+      await grid(['check', 'pair.json', '--seen', String(index + 1), '--reason', 'Both, later', '--by', 'Owner'])
+      expect(readSeen(project, 'pair.json').marks.map((m) => m.reason)).toEqual(['Both, later'])
+      expect(check('pair.json').seen!.states[index]!.state).toBe('seen')
+      await grid(['check', 'pair.json', '--unseen', String(index + 1)])
+      expect(readSeen(project, 'pair.json').marks).toEqual([])
+      expect(check('pair.json').seen!.states[index]!.state).toBe('new')
+    })
   })
 
   it('unmarking takes the mark off; marking again replaces it', async () => {

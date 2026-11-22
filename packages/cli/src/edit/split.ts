@@ -2,7 +2,8 @@
  * One room split in two by a new wall (WRT-3, lab WR-2): "bedroom 2 into a study and a second
  * bathroom". The new room takes the named side of the room, the size asked for measured inside
  * from that side's face; the room keeps its id and the rest. A door goes in the new wall unless
- * the call says none.
+ * the call says none. The new room keeps the room's facts of the person's own (CNT-9); the room
+ * keeps its stated number, and the new room has none.
  *
  * The way of doing it comes from the lab's edit prototype (`split-room`): rectangles square to
  * the drawing only; the new wall runs between the centre lines of the two walls it meets, and
@@ -157,7 +158,13 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
     ...(request.newRoom.use !== undefined ? { use: request.newRoom.use } : {}),
     boundary: taken,
     ...(room.floor !== undefined ? { floor: room.floor } : {}),
+    // CNT-9: both parts keep the room's facts of the person's own; its number stays with the room.
+    ...(room.properties !== undefined && Object.keys(room.properties).length > 0 ? { properties: { ...room.properties } } : {}),
   }]
+  if (room.properties !== undefined && Object.keys(room.properties).length > 0) {
+    guessed.push(`${quoted(request.newRoom.name)} keeps the facts of ${name} (${Object.keys(room.properties).map(quoted).join(', ')}): change them in the plan file where they differ.`)
+  }
+  if (room.number !== undefined) guessed.push(`${name} keeps its room number ${quoted(room.number)}; ${quoted(request.newRoom.name)} has none.`)
   const length = Math.hypot(to.at[0] - from.at[0], to.at[1] - from.at[1])
   said.push(`New wall ${quoted(wallId)}, ${t.toFixed(2)} m thick and ${length.toFixed(2)} m long, ${size.toFixed(2)} m inside from the ${side} side of ${name}, from wall ${quoted(from.wall.id)} to wall ${quoted(to.wall.id)}.`)
 

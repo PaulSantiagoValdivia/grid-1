@@ -17,6 +17,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
+- [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
@@ -36,6 +37,8 @@ file never reaches the exports with its letters turned into question marks. A fi
 | a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
 | an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
+| a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
+| the facts one wall, opening, room or floor carries | 100 | |
 | walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
 | the lowered zones of one ceiling | 50,000 | |
@@ -469,6 +472,56 @@ of it changes an area, a check or a wall count.
 
 A field the format does not have, on a note or a sketch item, is named like any other
 (`plan/unknown-field`). The 3D views do not show the sketch yet.
+
+## Facts of your own, and room numbers
+
+A wall, a door, a window, a doorless opening, a room and a floor may carry facts of the
+person's own, in `properties` (CNT-9): a name and a value each, the value text, a number, or
+true or false. A room may state its number in `number`, as text.
+
+```json
+{ "id": "d-entry", "wall": "gs", "type": "door", "offset": 1.5, "width": 1, "height": 2.1,
+  "properties": { "fire rating": "EI 30", "door set": "DS-01", "self-closing": true } }
+{ "id": "g-office", "name": "Open office", "number": "G.02", "boundary": ["gs", "gx2", "gn", "gx1"],
+  "properties": { "department": "Sales", "head count": 8 } }
+```
+
+The facts sit in their own object, never as loose fields of the part, so a misspelt field of the
+format is still named (`plan/unknown-field`). A name is one line and not blank; one part may not
+carry two names that differ only in capitals, spaces, dashes or underscores, which Grid matches
+as one fact. A fact that cannot be read (an empty text, a list, a second name for the same fact)
+is left out on its own, with a `plan/value-left-out` line, and the part keeps its other facts.
+
+Grid checks nothing against a fact. A fire rating is the person's statement: no line says a door
+or a wall meets one, and no check reads one. What Grid does with them:
+
+- **Edits keep them.** Every change keeps the facts of the parts it changes. A wall cut in two
+  (merging rooms, building a room against it) gives both pieces the wall's facts. A room split in
+  two gives the new room the room's facts, and the room keeps its number; the new one has none.
+  Two rooms merged keep the first room's facts and number, take the second's facts the first
+  does not carry, and say what the second said otherwise and which number is gone. `grid tidy`
+  does the same: a copy of a wall taken out gives its facts to the wall kept, where it has none
+  of that name, and a room split along a wall across it gives both parts its facts. A plan read
+  back as rooms text and written again keeps each part's facts and number by its id, and names
+  the parts that carried some and are no longer there.
+- **Schedules list them.** In `grid_schedule`'s room schedule a room that states its number is
+  listed first on its floor, by that number, and given it; the other rooms follow, by id, with
+  Grid's number. Every row of the room and opening schedules carries its part's facts, and the
+  CSV has one column per fact. The check sheet's schedules show them too.
+- **Exports carry them.** The IFC gives each part that carries facts one property set,
+  `Grid_Properties`, of one `IfcPropertySingleValue` per fact (`IfcLabel`, `IfcInteger`,
+  `IfcReal` or `IfcBoolean`), related to its wall, door, window, opening, space or storey by an
+  `IfcRelDefinesByProperties`; a room's stated number is the space's name, its name the long name,
+  and the number is in its set as `room number` too, and in `Pset_SpaceCommon` and `Grid_Space`
+  where a room that states none has Grid's count
+  ([what the IFC holds](commands.md#what-the-ifc-holds-hnd-2)). The DXF writes each fact as one
+  line of text on the layer `GRID-FACTS`, `[id] name: value`, beside its part (a floor's over the
+  drawing's upper left corner). A plan with no facts exports exactly as before.
+- **The tool server asks across them**: `grid_fields`, `grid_find` and `grid_count`
+  ([tool-server.md](tool-server.md#asking-across-the-parts-fields-find-and-count)).
+
+A fact travels with the plan into every export, like a room's name: keep people's names out of
+facts too ([People are kept out of the plan](#people-are-kept-out-of-the-plan)).
 
 ## Wall faults, each with its fix
 

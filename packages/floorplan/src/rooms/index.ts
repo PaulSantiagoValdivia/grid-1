@@ -6,3 +6,4 @@ export { compileRoomsText, SIZE_BASES, type DerivedWallFacts, type RoomFacts, ty
 export { readRoomsText, type ReadOptions, type RoomsReading } from './read'
 export { problemLines, roomsAnswer } from './answer'
 export { boundariesEdited, boundaryPrint, keptDerived, planRevision, stampFor, type WrittenStamp } from './stamp'
+export { carryFacts, type FactsCarried } from './facts'
