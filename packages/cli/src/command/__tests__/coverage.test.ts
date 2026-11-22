@@ -211,10 +211,12 @@ describe('a figure says which kind of building it was read for (COD-2)', () => {
     for (const check of result.result.coverage) expect(check.readFor, check.ruleId).toBeUndefined()
   })
 
-  it('the hotel: each of its twelve sill notes says the figure was read for homes', () => {
+  it('the hotel: its twelve sill notes, one line since MSG-5, say the figure was read for homes', () => {
     const result = checkPlan(plan(HOTEL), { country: 'US' })
     const sills = result.result.lines.filter((line) => line.code === 'room/escape-window-too-high')
-    expect(sills).toHaveLength(12)
+    // MSG-5 (lab MS-14): the twelve identical notes are one line, which lists the twelve rooms.
+    expect(sills).toHaveLength(1)
+    expect(sills[0]!.each).toHaveLength(12)
     for (const line of sills) expect(line.needed).toBe(`a sill at most 1.118 m above the floor; this check's figures were read for ${HOMES}`)
     // Every line that used a figure says it; no other line does.
     for (const line of result.result.lines) {
