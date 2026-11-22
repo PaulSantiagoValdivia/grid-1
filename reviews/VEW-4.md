@@ -137,8 +137,9 @@ an unchanged plan answers "Nothing changed." without drawing anything.
   way, and every answer still carries its picture.
 - The standard's own text does not settle the `protocolVersion` a page sends in `ui/initialize`;
   the page sends `2026-01-26`. A host that refuses it would show the page with an error line.
-- The bundle: `dist/grid.mjs` is 547,189 bytes here, under the 600 kB cap (the coordinator's note
-  says 550 kB; the test holds 600 kB since CNT-17). The page is its own chunk.
+- The bundle: `dist/grid.mjs` is 559,890 bytes after merging HND-11, under the test's 600 kB cap
+  but over the 550 kB the brief named (the test holds 600 kB since CNT-17). VEW-4 adds about
+  17 kB; the page is its own chunk.
 
 ## Checks run
 
@@ -151,3 +152,9 @@ After merging `main` at 4fe29edc (COD-8), on a machine at a load average near 30
   failed, `diff-size.test.ts` "diffs 1,000 entities … well inside a second" (15.9 s under load).
   Run alone it passed (4 of 4). No other failure.
 - `npm run scoreboard`: the same as the stored figures, in 360 s.
+
+After merging `main` again at 90a933b1 (HND-11): build, type check and lint clean, `grid.mjs`
+559,890 bytes; the affected tests (the preview's, the tool list, the server, the contract, the
+command's end-to-end and every-path tests, the bundle cap, the 3D pick and `src/__tests__`): 13
+files, 259 tests, all passed.
+
