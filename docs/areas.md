@@ -52,6 +52,16 @@ In the library: `planAreaFigures(plan, options)`, `MEASURES` and `usualGross(cou
 `grid_areas` tool ([tool-server.md](tool-server.md)) prints each figure with its rule, takes
 `country` and `gross`, and marks each figure's state ([result-contract.md](result-contract.md)).
 
+A flat's area (CNT-4, lab EL-1) is read from the plan's own list of flats
+([plan-file.md](plan-file.md#flats-and-flat-types)), never from the rooms' names: the net area of
+the rooms the plan lists for it, each counted as the net counts it, so a zone is in its room, a
+room named outside is in no flat's figure, and a stair counts once, on the floor it rises from. A
+duplex has its area floor by floor and in all. The rooms in no flat, the common parts, are given
+apart, so the flats and the common parts add up to the net. `grid_areas` gives both on a plan
+that lists flats; on the lab's four-flat floor that is 68.27 m² for each one-bedroom flat, 99.23 m²
+for each two-bedroom flat and 84.49 m² in no flat. No figure to the middle of a party wall is
+given. In the library: `planAreaFigures(plan).flats` and `notInFlats`.
+
 A floor may state its outline before any wall (BRF-4,
 [plan-file.md](plan-file.md#a-floor-outline-before-the-walls)). On a floor with walls the outline is
 joined with what they enclose, and floor inside it that no wall encloses is floor no room claims,
@@ -83,6 +93,13 @@ another's printed text.
   The height follows the rule in [tool-server.md](tool-server.md) (a height the room states, or
   the lowest solid wall round it). A room Grid could not draw is listed with no area, and the
   totals say they leave it out.
+- **The flat schedule** (`grid_schedule` with `of=flats`, CNT-4): one row per flat the plan lists,
+  numbered in id order, with its type, whether it is mirrored, its floors, its rooms, its
+  bedrooms and its area as above, then all flats and the rooms in no flat, and the mix by type:
+  for each flat type the plan states, how many flats of it, how many of those mirrored, their
+  share of the flats, their area and the area of one on average. On such a plan the room schedule
+  gives each room's flat, and its CSV a `flat` column. `grid sheet --layout check` ends with the
+  flat schedule and the mix.
 - **The opening schedule** (`grid_schedule` with `of=openings`): every door, window and doorless
   opening once, numbered by floor, then doors, doorless openings and windows, each by id, with
   its size (the hole in the wall) and what lies on its two sides: a room's name, `outside`,

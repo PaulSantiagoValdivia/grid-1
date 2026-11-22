@@ -40,7 +40,7 @@ export const NUMBER_STATES = ['proven', 'not-proven', 'not-looked-at'] as const
 export type NumberState = (typeof NUMBER_STATES)[number]
 
 /** What a line is about. The plan as a whole has the id `''`. An `item` is a fixture (CNT-12); a `stair` a stated stair (LVL-3). */
-export type ThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item' | 'stair' | 'pattern'
+export type ThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item' | 'stair' | 'pattern' | 'flat'
 
 export interface Thing {
   readonly kind: ThingKind

@@ -803,6 +803,40 @@ export const CODES = {
     fix: fixed('Rename the pattern, or the part that has the id.')
   },
 
+  // --- Flats (CNT-4) --------------------------------------------------------------------------
+  // The flats list's own faults. Each is worth a look: the flat is read without what it names
+  // wrongly, and nothing else changes. The found is the check's own sentence, with the ids.
+  'flat/unknown-room': {
+    says: (s) => `${s.label} names a room the plan does not have`,
+    needed: fixed('rooms of the plan, by id'),
+    fix: fixed('Name the room by its id, as grid describe gives it, or take it out of the flat\'s rooms.')
+  },
+  'flat/room-in-two': {
+    says: (s) => `${s.label} names a room another flat names too`,
+    needed: fixed('each room in one flat at most'),
+    fix: fixed('Take the room out of one of the two flats; until then it is counted in the flat whose id comes first.')
+  },
+  'flat/unknown-type': {
+    says: (s) => `${s.label} is of a type the plan's flat types do not state`,
+    needed: fixed('a type stated in the plan\'s flat types, by id'),
+    fix: fixed('Add the type to the flat types with its name, name one of them, or leave out the flat\'s type.')
+  },
+  'flat/duplicate-id': {
+    says: (s) => `${s.label} is listed more than once`,
+    needed: fixed('an id of its own on every flat'),
+    fix: fixed('Give each flat its own id, or join the two lists of rooms into one flat.')
+  },
+  'flat/duplicate-type': {
+    says: (s) => `The plan states flat type ${s.also[0] === undefined ? 'one' : quoted(s.also[0])} more than once`,
+    needed: fixed('each flat type stated once'),
+    fix: fixed('Keep one entry for the type; the first is read until then.')
+  },
+  'flat/zone-without-room': {
+    says: (s) => `${s.label} names a zone but not the room it is part of`,
+    needed: fixed('the room a zone is part of, in the flat with it'),
+    fix: fixed('Name the room in the flat: a zone\'s floor is counted in its room, so the zone alone adds nothing.')
+  },
+
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {
     says: (s) => `${s.label} has a number Grid does not accept`,

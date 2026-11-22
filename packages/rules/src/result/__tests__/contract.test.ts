@@ -7,7 +7,7 @@ const CONTRACT = readFileSync(fileURLToPath(new URL('../../../../../docs/result-
 
 describe('docs/result-contract.md', () => {
   it('lists every code the catalogue words, and no other', () => {
-    const listed = [...CONTRACT.matchAll(/^\| `((?:plan|floor|wall|room|opening|item|stair|pattern|firm)\/[a-z0-9-]+)` \|/gm)].map((m) => m[1])
+    const listed = [...CONTRACT.matchAll(/^\| `((?:plan|floor|wall|room|opening|item|stair|pattern|firm|flat)\/[a-z0-9-]+)` \|/gm)].map((m) => m[1])
     expect([...listed].sort()).toEqual(Object.keys(CODES).sort())
     expect(new Set(listed).size).toBe(listed.length)
   })

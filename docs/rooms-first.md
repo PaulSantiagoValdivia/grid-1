@@ -99,6 +99,27 @@ The plan file holds every room, wall and opening written out, floor by floor, wi
 text gave them: a repeat, a copy or a room through several floors leaves nothing in the file for
 another program to work out.
 
+A unit can be a flat type (CNT-4): `unit one flat "One bedroom" "Flat {n}"`, the type's name and,
+if given, the flat's name with `{n}` for the label. Every placement of it, by `place` or `repeat`,
+is a flat of that type in the plan's [flats](plan-file.md#flats-and-flat-types), with the label as
+its id, the rooms placed as its rooms, and `mirrored` when it is placed mirrored one way. The
+lab's four-flat floor places two flat types twice each, one of each mirrored
+(`packages/floorplan/fixtures/rooms/four-flats.rooms`):
+
+```
+unit flat1 flat "One bedroom" "Flat {n}" fh=west
+  room living  "Flat {n} Living room" living   5.265 x 4.365
+  ...
+end
+place flat1 as A at 0.175,0.175
+place flat1 as B east of riser gap 0.3 mirror east-west fh=east
+```
+
+A floor copied from one with flats has them too, each with its floor's id in front when the label
+is on more than one floor (`f1-A`). `grid write` writes the flat types and the flats a text places
+over the file's; a text that places none keeps the file's, and says so. A duplex, a flat on two
+floors, is written in the plan file's `flats`: rooms text places a unit on one floor.
+
 An [opening pattern](plan-file.md#opening-patterns) is not rooms text, in a unit or out of one: a
 `pattern` line is refused with where it goes. It lives in the plan file's `patterns`, naming its
 wall by id, and `grid write` keeps it, so a row's outside wall can carry a pattern on its own floor

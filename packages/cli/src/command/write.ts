@@ -198,6 +198,12 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   next['walls'] = plan.walls.map(statedWall)
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings
+  // CNT-4: the flats a text places (a unit that is a flat type) replace the file's; a text that
+  // places none keeps the file's, as it keeps its opening patterns.
+  if (plan.flats !== undefined) {
+    next['flatTypes'] = plan.flatTypes ?? []
+    next['flats'] = plan.flats
+  }
   next['written'] = stampFor(plan)
   // BRF-1: whether this is the plan's first write, before it is written.
   const first = before === null || nothingToLose(before)
@@ -220,6 +226,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     ...(carried === null || carried.kept === 0 ? [] : [`Facts of your own and room numbers kept by id on ${carried.kept} part${carried.kept === 1 ? '' : 's'}.`]),
     ...(carried === null || carried.lost.length === 0 ? [] : [`Not in the text, so their facts and numbers are gone with them: ${carried.lost.slice(0, 10).join(', ')}${carried.lost.length > 10 ? ` and ${carried.lost.length - 10} more` : ''}.`]),
     ...(before === null || patterns.length === 0 ? [] : [patternsKept(before, kept)]),
+    ...(plan.flats !== undefined || (before?.flats ?? []).length === 0 ? [] : [`Kept the plan's ${before!.flats!.length === 1 ? 'flat' : `${before!.flats!.length} flats`} as the file has ${before!.flats!.length === 1 ? 'it' : 'them'}: this rooms text places no flat type. grid check names a room a flat lists that the text no longer has.`]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
     ...brief.text,
     ...(reminder === null ? [] : [reminder]),
