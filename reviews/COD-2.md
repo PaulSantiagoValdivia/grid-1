@@ -77,5 +77,8 @@ Choices that were yours, each taken the reversible way:
 
 ## Checks run
 
-See the session's report: build, typecheck, lint, the touched tests, one full suite and the
-scoreboard.
+- Before merging `main`: `npm run build`, `npm run typecheck`, `npm run lint` clean; full suite
+  (two workers) 4,380 of 4,380 passed; `npm run scoreboard` the same as the stored figures.
+- After merging `main` at 89f1f15 (MSG-6, HND-9; the contract's changelog kept every section
+  from both sides): build, typecheck and lint clean; the affected tests (rules, coverage, the
+  `grid` end-to-end tests, the tool server, the sheet) 712 of 712 passed.
