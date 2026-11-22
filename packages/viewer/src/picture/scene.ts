@@ -22,7 +22,7 @@
  *
  * Pure: no DOM, no React.
  */
-import type { Dimension, Ghosts, OpeningSymbol, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, SymbolPart, Vec2 } from '@ongrid/floorplan/geometry'
+import type { Dimension, Ghosts, OpeningSymbol, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, ScheduleMark, SymbolPart, Vec2 } from '@ongrid/floorplan/geometry'
 import { boundsWithDimensions, openingSymbol, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
@@ -52,6 +52,7 @@ import { el } from './svgNode'
 import type { NumberedFault } from './faults'
 import { faultMarks, undrawnRoomText } from './faults'
 import { noteNodes, sketchNodes } from './writing'
+import { scheduleMarkNodes } from './drawingMarks'
 import { drawingText } from './words'
 import { siteNodes, sitePaints } from './site'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
@@ -173,6 +174,8 @@ export interface SceneInput {
   readonly above?: PlanAbove
   /** SHT-7: each room's use by id, for `show.colourBy: 'use'`. */
   readonly uses?: ReadonlyMap<string, RoomUse>
+  /** ARE-15: the schedules' marks (`DrawingMarks.schedule`), drawn by the room labels where they are placed. None by default. */
+  readonly scheduleMarks?: readonly ScheduleMark[]
   readonly live?: Partial<SceneLive>
 }
 
@@ -1197,10 +1200,10 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   }
 
   // SHT-7: the notes, tags and symbols. A note in a room goes under that room's label.
-  if (show.notes) {
-    const labelAt = new Map(labels.flatMap((label) => (label ? [[label.id, label.at] as const] : [])))
-    out.push(...noteNodes(drawing.notes, labelAt, mpp, look.colors))
-  }
+  const labelAt = new Map(labels.flatMap((label) => (label ? [[label.id, label.at] as const] : [])))
+  if (show.notes) out.push(...noteNodes(drawing.notes, labelAt, mpp, look.colors))
+  // ARE-15: the schedules' marks, a room's over its label where it was placed.
+  if (input.scheduleMarks !== undefined && input.scheduleMarks.length > 0) out.push(...scheduleMarkNodes(input.scheduleMarks, labelAt, look, mpp))
 
   // The check view: each opening's id just off the middle of its wall, on the side its normal
   // points to, upright and sized in screen pixels like the labels.

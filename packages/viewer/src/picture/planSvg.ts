@@ -334,6 +334,8 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     faults,
     uses,
     ...(above === undefined ? {} : { above }),
+    // ARE-15: the schedules' marks go by the room labels, which the scene places.
+    ...(marks === null || marks.schedule.length === 0 ? {} : { scheduleMarks: marks.schedule }),
     show: {
       notes: on('notes'),
       sketch: on('sketch'),

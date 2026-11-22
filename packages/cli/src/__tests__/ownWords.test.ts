@@ -83,7 +83,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/editTools.ts': [69, 'tools'],
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [306, 'tools'],
+  'packages/cli/src/mcp/readTools.ts': [309, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -106,7 +106,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/measure.ts': [3, 'notYet'],
   'packages/cli/src/quantities/query.ts': [26, 'tools'],
   'packages/cli/src/quantities/rates.ts': [36, 'notYet'],
-  'packages/cli/src/quantities/schedule.ts': [12, 'notYet'],
+  'packages/cli/src/quantities/schedule.ts': [15, 'notYet'],
   'packages/cli/src/quantities/site.ts': [19, 'notYet'],
   'packages/cli/src/quantities/state.ts': [3, 'notYet'],
   'packages/cli/src/quantities/sun.ts': [13, 'notYet'],
@@ -252,8 +252,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // (reviews/MSG-11.md, "After merging main"); and CNT-14 33: a door's handing refused in rooms
     // (handing.ts 6), kinds and handing in rooms text (compile.ts 7, read.ts 2), the opening edits'
     // receipts (edits.ts 7), the IFC's kinds (5), the diff's change lines (building.ts 3, compare.ts
-    // 1) and the opening schedule's new CSV columns (2) (reviews/CNT-14.md).
-    expect(left).toBeLessThanOrEqual(1507)
+    // 1) and the opening schedule's new CSV columns (2) (reviews/CNT-14.md); and ARE-15 3: the
+    // door and window types' rule and their CSV's columns (schedule.ts) (reviews/ARE-15.md).
+    expect(left).toBeLessThanOrEqual(1510)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

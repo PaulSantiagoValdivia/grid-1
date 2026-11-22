@@ -95,9 +95,10 @@ another's printed text.
   totals say they leave it out.
 - **The flat schedule** (`grid_schedule` with `of=flats`, CNT-4): one row per flat the plan lists,
   numbered in id order, with its type, whether it is mirrored, its floors, its rooms, its
-  bedrooms and its area as above, then all flats and the rooms in no flat, and the mix by type:
-  for each flat type the plan states, how many flats of it, how many of those mirrored, their
-  share of the flats, their area and the area of one on average. On such a plan the room schedule
+  bedrooms and its area as above, then all flats and the rooms in no flat, and the unit mix by
+  type: for each flat type the plan states, how many flats of it, how many of those mirrored, the
+  bedrooms of each when they all have as many (ARE-15), their share of the flats, their area and
+  the area of one on average. On such a plan the room schedule
   gives each room's flat, and its CSV a `flat` column. `grid sheet --layout check` ends with the
   flat schedule and the mix.
 - **The opening schedule** (`grid_schedule` with `of=openings`): every door, window and doorless
@@ -107,12 +108,37 @@ another's printed text.
   room. Each row carries the opening's facts of the person's own, a fire rating say, and the CSV
   has a column for each. Without `of`, `grid_schedule` groups the openings by type and size, as
   before.
+- **The door schedule and the window schedule** (`grid_schedule` with `of=doors` or `of=windows`,
+  ARE-15): the doors, or the windows, grouped into types, one row per type with its count and
+  the marks of its openings, as a supplier orders them. A type is, for now, the kind the plan
+  states (CNT-14) and the size of the hole in the wall, and the part that opens when the plan
+  states one; its key is the one the estimate and the IFC use, `door:0.9x2.1`,
+  `door:sliding:2.2x2.1` (with `:opens:0.9x2.1` for a stated part). A window type lists its
+  sills. Each row says `basis: kind-and-size`: when the plan can name its own door and window
+  types (CNT-15), a named type will be a row of its own.
+
+### Marks
+
+Every row of the room and opening schedules has a mark, and `grid_view` with `marks schedule`
+(`grid draw --marks schedule`, and every floor page of `grid sheet --layout check`) draws it
+beside its part, so the drawing and the schedules point at each other (ARE-15):
+
+- a room's mark is its number in the room schedule of every floor: the number it states, else
+  Grid's;
+- an opening's mark is its type's letter, `D` for a door, `W` for a window and `O` for a doorless
+  opening, and its place among the openings of that type in the opening schedule of every floor:
+  `D1`, `D2`… `W1`…. Marks are codes, the same in every language.
+
+A mark belongs to its part's id, and is the same when one floor is asked for. An edit that keeps
+the parts' ids keeps their marks: a room grown or shrunk, a door's kind or handing changed. A
+part added by an edit, a room split say, takes its place in id order, so the marks after it in
+that order move up by one. A room's stated number (CNT-9) holds whatever is added.
 
 With `format=csv`, numbers are bare (a dot for decimals, no units in the cell, never a negative
 zero), so a spreadsheet reads them as numbers; the units are in the column names. A row that
 cannot be written, a missing name or an area that is not a number, stops the schedule with an
 error naming the row; it is never left out in silence. `grid sheet --layout check` ends with
-both schedules as tables.
+both schedules as tables, the opening schedule by mark, and the door and window types.
 
 
 ## Quantities for a first estimate
