@@ -57,8 +57,8 @@ Tests: `packages/cli/src/mcp/__tests__/schedules.test.ts` (10).
 
 1. **How it is asked for: the tool and the sheet, no new command.** `grid_schedule` takes
    `of=rooms` or `of=openings` (with `format=csv` for the CSV); left out, it is the grouped
-   schedule it was. The check sheet carries both tables. The tools keep their fixed order and
-   count (15), and no path argument was added, so the every-path test is unchanged. A
+   schedule it was. The check sheet carries both tables. No tool was added, so the tools keep
+   their fixed order, and no path argument was added, so the every-path test is unchanged. A
    `grid schedule` command that prints the CSV is easy to add later if people outside an agent
    want it; it would need its slot in the every-path test.
 2. **Numbers by floor, then id**, counting across all floors (1 to 4 in the tiny house), not
@@ -80,7 +80,7 @@ marks on the drawing. The schedule numbers are not drawn on the plan.
 
 ## Checks run
 
-On `main` at 89f1f15 (it had not moved when the branch was finished):
+Full run on `main` at 89f1f15:
 
 - `npm run build`, `npm run typecheck`, `npm run lint`: clean. `npm run check:licenses`: 363
   licences, none GPL, LGPL, AGPL, MPL or EPL.
@@ -89,3 +89,8 @@ On `main` at 89f1f15 (it had not moved when the branch was finished):
   `sheet.e2e.test.ts` (above). Updated; that file then passed, 22 of 22.
 - `npm run scoreboard`: 197, 386, 16, 2, 5, 735, 95. Same as stored. The scoreboard probes only
   the library, and the schedules are in the command's package, so no capability moved.
+
+After merging `main` at c4f773f (WRT-3, MSG-4): the one conflict was the agents' changelog in
+`docs/result-contract.md`, where both sections are kept. Typecheck and lint clean; the affected
+tests (`packages/cli/src/mcp`, `sheet`, `quantities`, `sheet.e2e`, `everyPath.e2e`,
+`packages/rules/src/result`, the areas tests) passed, 374 of 374 in 27 files. `npm run scoreboard`: same as stored.
