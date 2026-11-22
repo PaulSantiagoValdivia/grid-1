@@ -117,6 +117,11 @@ Run the type check, the tests and the scoreboard before calling a change done.
 - Node 22, npm, TypeScript in strict mode.
 - English in code, comments and docs.
 - Conventional commits.
+- A change people will notice adds a line under "Unreleased" in `CHANGELOG.md`; a change to
+  what a tool answers adds an entry at the top of the changelog for agents in
+  `docs/result-contract.md`. Versions are cut only by the release step in `RELEASING.md`
+  (QAR-10, `scripts/release.mjs`), which writes both changelogs and every version, runs the
+  gates and stops before publishing.
 - Grid is licensed under Apache-2.0. See `LICENSE` and `NOTICE`.
 - Every `package.json` has `"license": "Apache-2.0"` and keeps `"private": true` until
   publishing is approved. A test checks both.
