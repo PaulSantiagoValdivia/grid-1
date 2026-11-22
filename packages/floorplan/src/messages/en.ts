@@ -2296,7 +2296,16 @@ export const en = {
   'areas.columns.one': '{area} m² of floor under {count} column is taken off the net area of the room it stands in; the gross figures still hold it.',
   'areas.columns.many': '{area} m² of floor under {count} columns is taken off the net area of the rooms they stand in; the gross figures still hold it.',
   'drawing.key.column': 'Column',
-  'drawing.key.grid': 'Structural grid'
+  'drawing.key.grid': 'Structural grid',
+  'takeoff.rule.columns': 'A column is counted once, on its own floor, by shape and size; its length runs from its foot to its top, through every floor it rises through, and its volume is its cross-section times that length.',
+  'takeoff.columns': 'Columns: {runs}.',
+  'takeoff.columns.square': '{count} square {width} × {depth}, {length} in all, {volume} m³',
+  'takeoff.columns.round': '{count} round {width} across, {length} in all, {volume} m³',
+  'describe.columns': 'Columns ({count}): {columns}.',
+  'describe.column.square': '{label}{width} × {depth} m at {at}{room}',
+  'describe.column.round': '{label}{width} m round at {at}{room}',
+  'describe.column.label': '{label}, ',
+  'describe.column.in': ', in {room}'
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof en

@@ -2310,5 +2310,14 @@ export const es: Messages = {
   'areas.columns.one': '{area} m² de suelo bajo {count} pilar se descuentan de la superficie útil del local en el que está; las superficies construidas lo siguen contando.',
   'areas.columns.many': '{area} m² de suelo bajo {count} pilares se descuentan de la superficie útil de los locales en los que están; las superficies construidas lo siguen contando.',
   'drawing.key.column': 'Pilar',
-  'drawing.key.grid': 'Retícula estructural'
+  'drawing.key.grid': 'Retícula estructural',
+  'takeoff.rule.columns': 'Un pilar se cuenta una vez, en su propia planta, por forma y tamaño; su longitud va de su pie a su cabeza, a través de todas las plantas que atraviesa, y su volumen es su sección por esa longitud.',
+  'takeoff.columns': 'Pilares: {runs}.',
+  'takeoff.columns.square': '{count} cuadrados de {width} × {depth}, {length} en total, {volume} m³',
+  'takeoff.columns.round': '{count} redondos de {width} de diámetro, {length} en total, {volume} m³',
+  'describe.columns': 'Pilares ({count}): {columns}.',
+  'describe.column.square': '{label}{width} × {depth} m en {at}{room}',
+  'describe.column.round': '{label}redondo de {width} m en {at}{room}',
+  'describe.column.label': '{label}, ',
+  'describe.column.in': ', en {room}'
 }

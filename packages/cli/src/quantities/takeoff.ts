@@ -25,6 +25,10 @@ import {
   wallLength,
   faceUnderTop,
   wallTopProfile,
+  columnArea,
+  columnDepth,
+  columnRise,
+  soundColumns,
   type FloorEnvelope,
   type FloorPlan,
   type RoofShape,
@@ -113,8 +117,24 @@ export interface EnvelopeTakeoff {
   readonly state: 'assumed'
 }
 
+/** CNT-16: the columns of one shape and size, each counted once, on its own floor. */
+export interface ColumnRun {
+  readonly shape: 'square' | 'round'
+  /** A square column's side along its own x, a round one's diameter. */
+  readonly width: number
+  /** A square column's other side; null for a round one. */
+  readonly depth: number | null
+  readonly count: number
+  /** Metres of column, foot to top, each whole however many floors it rises through. */
+  readonly length: number
+  /** Cubic metres. */
+  readonly volume: number
+}
+
 export interface Takeoff {
   readonly walls: readonly WallRun[]
+  /** CNT-16: the columns, by shape and size. Left out on a plan with none. */
+  readonly columns?: readonly ColumnRun[]
   readonly rooms: readonly RoomTakeoff[]
   readonly totals: { readonly floorArea: number; readonly ceiling: number; readonly skirting: number; readonly wallFace: number }
   /** LVL-4: the slabs and the roof, floor by floor. */
@@ -259,11 +279,33 @@ export function planTakeoff(survey: Survey, floors?: readonly string[], rooms?: 
     .filter((room) => onFloor(room.facts.floor) && (rooms === undefined ? room.facts.zoneOf === undefined : rooms.includes(room.facts.id)))
     .map((room) => roomTakeoff(room, ceilingOf, survey.plan))
   const total = (key: 'floorArea' | 'ceiling' | 'skirting' | 'wallFace'): number => list.reduce((sum, room) => sum + room[key], 0)
+  const columns = columnRuns(survey.plan, onFloor)
   return {
     walls: runs,
+    ...(columns.length === 0 ? {} : { columns }),
     rooms: list,
     totals: { floorArea: total('floorArea'), ceiling: total('ceiling'), skirting: total('skirting'), wallFace: total('wallFace') },
     envelope: envelopeTakeoff(survey, floors),
-    rules: Object.values(TAKEOFF_RULES),
+    rules: [...Object.values(TAKEOFF_RULES), ...(columns.length === 0 ? [] : [columnRule()])],
   }
+}
+
+/** CNT-16: how the columns are taken off, in Grid's words. */
+export const columnRule = (): string => english(said('takeoff.rule.columns'))
+
+/** CNT-16: the plan's columns on the floors asked for, by shape and size, each counted on its own floor. */
+function columnRuns(plan: FloorPlan, onFloor: (floor: string) => boolean): ColumnRun[] {
+  const runs = new Map<string, { shape: 'square' | 'round'; width: number; depth: number | null; count: number; length: number; volume: number }>()
+  for (const column of soundColumns(plan)) {
+    if (!onFloor(floorOf(column))) continue
+    const depth = column.shape === 'round' ? null : columnDepth(column)
+    const key = `${column.shape}|${column.width}|${depth}`
+    const rise = columnRise(plan, column)
+    const run = runs.get(key) ?? { shape: column.shape, width: column.width, depth, count: 0, length: 0, volume: 0 }
+    run.count++
+    run.length += rise
+    run.volume += columnArea(column) * rise
+    runs.set(key, run)
+  }
+  return [...runs.values()]
 }
