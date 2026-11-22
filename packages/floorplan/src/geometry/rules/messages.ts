@@ -76,17 +76,22 @@ export const wordings = {
     name(floor),
     words(' was not checked: its only door out leads to a space that is not drawn')
   ],
-  /** `rooms` holds at least one name. One wording for one room or many (MSG-1). */
+  /**
+   * `rooms` holds at least one name. One wording for one room or many (MSG-1). MSG-5: what rests
+   * on them (a door beside them, the floor's way out) was not checked either.
+   */
   roomsNotDrawn: (floor: string, rooms: readonly string[]): WordingPart[] => [
     words('On '),
     name(floor),
-    words(', rooms that could not be drawn were not checked: '),
+    words(', these rooms could not be drawn, so they and what rests on them were not checked: '),
     ...listed(rooms)
   ],
-  doorsNotDrawn: (floor: string): WordingPart[] => [
+  /** MSG-5: `openings` holds at least one id, and names them. */
+  doorsNotDrawn: (floor: string, openings: readonly string[]): WordingPart[] => [
     words('On '),
     name(floor),
-    words(', some doors could not be drawn and were not checked')
+    words(', these doors or windows could not be drawn, so they and what rests on them were not checked: '),
+    ...listed(openings)
   ],
   doorToUndrawnSpace: (room: string): WordingPart[] => [
     words('A door from '),
@@ -139,8 +144,8 @@ export const messages = {
   noStairs: (floor: string): string => wordingText(wordings.noStairs(floor)),
   outOfLine: (...args: Parameters<typeof wordings.outOfLine>): string => wordingText(wordings.outOfLine(...args)),
   wayOutNotDrawn: (floor: string): string => wordingText(wordings.wayOutNotDrawn(floor)),
-  cannotBeDrawn: (floor: string, rooms: readonly string[]): string =>
-    wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor)),
+  cannotBeDrawn: (floor: string, rooms: readonly string[], openings: readonly string[]): string =>
+    wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor, openings)),
   doorToUndrawnSpace: (room: string): string => wordingText(wordings.doorToUndrawnSpace(room)),
   doorOutAboveGround: (room: string, height: string): string => wordingText(wordings.doorOutAboveGround(room, height)),
   belowGround: (kind: 'door' | 'window' | 'opening', room: string | null, wall: string, wholly: boolean, depth: string): string =>

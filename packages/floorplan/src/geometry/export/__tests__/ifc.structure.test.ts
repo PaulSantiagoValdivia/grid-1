@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../../plan'
 import { parseFloorPlan } from '../../../types/floorplan'
 import { planAreaFigures, MEASURES } from '../../areas'
-import { roomNumbers } from '../../roomNumbers'
+import { roomNumbers, shownRoomNumber } from '../../roomNumbers'
 import { limit } from '../../tolerances'
 import { toIfc } from '../ifc'
 import { ballroomWithStage, edit, flat, genkanFlat, stairHouse } from '../../../test-support/plans'
@@ -283,8 +283,9 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
     }
   }
 
-  // 6. Each space: its number, use and area with the rule, and its base quantities.
-  const numbers = new Map(roomNumbers(plan).map((n) => [`${n.floor}\u0000${n.id}`, n.number] as const))
+  // 6. Each space: its number, use and area with the rule, and its base quantities. The number
+  //    is the one the room states (CNT-9), as text, else Grid's count.
+  const numbers = new Map(roomNumbers(plan).map((n) => [`${n.floor}\u0000${n.id}`, shownRoomNumber(n)] as const))
   const figures = new Map(
     planAreaFigures(measured).floors.flatMap((f) => f.rooms.map((room) => [`${f.floor}\u0000${room.id}`, room] as const))
   )
@@ -299,9 +300,10 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
     expect(qto, str(space.args[7])).toBeDefined()
     expect(common, str(space.args[7])).toBeDefined()
     const id = typedText(grid!.get('Id'))
-    const number = typedNumber(grid!.get('Number'))
-    expect(str(space.args[2])).toBe(String(number))
-    expect(typedText(common!.get('Reference'))).toBe(String(number))
+    const stated = grid!.get('Number')
+    const number = stated?.t === 'typed' && stated.v.t === 'str' ? typedText(stated) : String(typedNumber(stated))
+    expect(str(space.args[2])).toBe(number)
+    expect(typedText(common!.get('Reference'))).toBe(number)
     expect(typedText(grid!.get('Use')).length).toBeGreaterThan(0)
     expect(typedText(grid!.get('AreaMeasure'))).toBe(MEASURES.net.name)
     expect(typedText(grid!.get('AreaRule'))).toBe(MEASURES.net.measures)

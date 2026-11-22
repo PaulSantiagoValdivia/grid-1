@@ -9,7 +9,7 @@ report says so.
 
 ### The place in the plan
 
-- **`site.country`** (`packages/floorplan/src/types/floorplan.ts`, convention C9 in its header).
+- **`site.country`** (`packages/floorplan/src/types/floorplan.ts`, convention C10 in its header).
   CNT-3's `site` already says where the building sits, every field optional, so the place goes
   there rather than in a new top-level field. It is a country's name or its two- or three-letter
   code on Grid's list, held to a name's limit (120 characters, MSG-9's character rule) and then
@@ -389,3 +389,50 @@ scoreboard/__tests__/approvalWords.test.ts scoreboard/__tests__/retell.test.ts -
 --minWorkers=1`: 254 files passed, 4,933 tests passed, 2 skipped, none failed. The scoreboard was
 not run: the merge brought no change to `scoreboard/` or the rules' checks (main changed only
 `packages/rules/src/result/`).
+
+## Merging main at ca2db98 (MSG-5, CNT-9)
+
+MSG-5 traces lines to their cause and holds back what rests on a part the reader left out (the
+check takes `leftOut`); CNT-9 adds facts of the person's own (`properties`) and `what=query`.
+Conflicts, each kept both sides:
+
+- `packages/rules/src/checks/check.ts`, `CheckOptions`: COD-3's `withoutPlace` and MSG-5's
+  `leftOut` side by side. `usLinesOf` now passes the same `leftOut` to its US run, so the count
+  the no-place line gives is of the lines the record would really show.
+- `packages/rules/src/checks/types.ts`, the comment listing the skip reasons: both `no_place` and
+  MSG-5's `waits_for_part`.
+- `packages/rules/src/result/inspect.ts`: COD-3's `countryInText` import with MSG-5's
+  `LeftOutPart`; MSG-5's `groupedFindings` and its `noticeLine(…, wayOutNotDrawn)`, with the place
+  still named from the list (main still upper-cased the caller's text there; that is gone).
+- `packages/cli/src/command/check.ts`, `checkPlan`: COD-3's resolved code (main upper-cased the
+  raw `--country`), with MSG-5's `leftOut`.
+- `packages/cli/src/mcp/readTools.ts`, imports: COD-3's `placeText`/`PlaceWords` and
+  `PLACE_TEXT_MAX` with MSG-5's `causeText`, `problemsText`, the look's colours and `likelyId`.
+- `packages/floorplan/src/types/floorplan.ts`, header: CNT-9's "C9 · Facts of the person's own",
+  then COD-3's place, renumbered "C10 · The place"; both imports kept.
+- `docs/plan-file.md` (the text limits table: COD-3's `site.country` row, then CNT-9's two),
+  `docs/result-contract.md` (agents changelog: COD-3 first, then CNT-9, MSG-5 and the rest) and
+  `CHANGELOG.md` (COD-3's line first).
+
+What I checked beyond the conflicts: the place line is still the second line of `grid check`,
+`grid_check` and the sheet's check summary; CNT-9's query (`packages/cli/src/quantities/query.ts`)
+runs no check and reads no country, so it needs no place; MSG-5's cause and grouping texts
+(`causeText`, `problemsText`, `heldText`) are made of ids and codes, never the place, and the
+place tests (hostile places never in any output, no approval word) pass with them.
+
+One of MSG-5's own tests needed the place: `packages/rules/src/result/__tests__/causes.test.ts`.
+Its `bedroomFlat()` holds a bedroom to the escape figures with no place stated, so with COD-3 no
+escape note was there to hold back or file under its question; three cases failed ("is held back
+on the floor's line …", "is given once the window is drawn …", "files under its question what is
+measured against a size …"). `bedroomFlat()` now states `site: { country: 'US' }`, and all seven
+cases pass as they were meant. No other test changed in this merge. The flat's short report did not move: 1,196 bytes from `grid check`,
+1,200 with `--country US` (984 and 988 without LVL-4's ground line).
+
+Checks run after merging `main` at ca2db98:
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean.
+- `npx vitest run packages/cli packages/rules packages/floorplan packages/viewer
+  scoreboard/__tests__/approvalWords.test.ts scoreboard/__tests__/retell.test.ts --maxWorkers=2
+  --minWorkers=1`: 261 files, 4,999 passed, 2 skipped, 3 failed, the three `causes.test.ts` cases
+  above. After the fix, `packages/rules` alone: 25 files, 390 passed.
+- `npm run scoreboard`: "Same as the stored figures" (checks fed 15 of 42, as stored).

@@ -221,10 +221,12 @@ describe('a figure says which kind of building it was read for (COD-2)', () => {
     for (const check of result.result.coverage) expect(check.readFor, check.ruleId).toBeUndefined()
   })
 
-  it('the hotel: each of its twelve sill notes says the figure was read for homes', () => {
+  it('the hotel: its twelve sill notes, one line since MSG-5, say the figure was read for homes', () => {
     const result = checkPlan(plan(HOTEL), { country: 'US' })
     const sills = result.result.lines.filter((line) => line.code === 'room/escape-window-too-high')
-    expect(sills).toHaveLength(12)
+    // MSG-5 (lab MS-14): the twelve identical notes are one line, which lists the twelve rooms.
+    expect(sills).toHaveLength(1)
+    expect(sills[0]!.each).toHaveLength(12)
     for (const line of sills) expect(line.needed).toBe(`the figure used here, a sill at most 1.118 m above the floor (US model codes, IBC 2024 1031.3.3; IRC 2024 R319.2.3, status ai-found); this check's figures were read for ${HOMES}`)
     // Every line that used a figure says it; no other line does.
     for (const line of result.result.lines) {
@@ -302,7 +304,10 @@ describe('what kind of building it is (CNT-5)', () => {
 
   it('a plan that says it is a home runs the home figures, and says the plan says so', () => {
     const result = checkPlan(withBuilding(plan(HOTEL), 'home'), { country: 'US' })
-    expect(result.result.lines.filter((l) => l.code === 'room/escape-window-too-high')).toHaveLength(12)
+    // MSG-5 (lab MS-14): the twelve identical sill notes are one line that lists the twelve rooms.
+    const sills = result.result.lines.filter((l) => l.code === 'room/escape-window-too-high')
+    expect(sills).toHaveLength(1)
+    expect(sills[0]!.each).toHaveLength(12)
     expect(result.result.lines.filter((l) => l.code.endsWith('-for-building'))).toEqual([])
   })
 })

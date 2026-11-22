@@ -17,7 +17,7 @@ import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
 import { buildingKindsText, type BuildingKind } from './figures'
-import type { CheckCoverage, CoverageGroup, CoverageSkip, Rule, SkipReason } from './types'
+import type { CheckCoverage, CoverageGroup, CoverageSkip, Rule, RuleFinding, SkipReason } from './types'
 
 /** What one check looked at and skipped on one floor, by id. */
 export interface FloorScope {
@@ -34,6 +34,7 @@ const SKIP_ORDER: readonly SkipReason[] = [
   'no_figures_for_place',
   'no_rooms',
   'cannot_be_drawn',
+  'waits_for_part',
   'no_stairs',
   'way_out_not_drawn',
   'alone_off_ground',
@@ -72,6 +73,8 @@ export function skipWhy(reason: SkipReason, ruleId: string, building?: { readonl
       return 'no rooms on the floor'
     case 'cannot_be_drawn':
       return 'could not be drawn'
+    case 'waits_for_part':
+      return 'beside a part that could not be drawn: held until it can be'
     case 'no_stairs':
       return 'on a floor Grid cannot follow down to the ground floor'
     case 'way_out_not_drawn':
@@ -201,6 +204,39 @@ export function planCheckScopes(
     })
   }
   return scopes
+}
+
+/**
+ * MSG-5: the parts whose finding was held back, moved from `lookedAt` to `skipped`
+ * (`waits_for_part`): a check that cannot say either way has not looked at them. A finding is
+ * about a floor (`floor-has-exit`), a door (`door-leads-somewhere`) or its first room.
+ */
+export function heldCoverage(coverage: readonly CheckCoverage[], held: readonly RuleFinding[]): CheckCoverage[] {
+  const count = (groups: readonly CoverageGroup[]): number => groups.reduce((sum, group) => sum + group.ids.length, 0)
+  return coverage.map((check) => {
+    const mine = held.filter((finding) => finding.ruleId === check.ruleId)
+    if (mine.length === 0) return check
+    const part = (finding: RuleFinding): string | undefined =>
+      check.looksAt === 'floor' ? finding.floor : check.looksAt === 'door' ? finding.openings[0] : finding.rooms[0]
+    const moved = new Map<string, Set<string>>()
+    for (const finding of mine) {
+      const id = part(finding)
+      if (id === undefined) continue
+      if (!check.lookedAt.some((group) => group.floor === finding.floor && group.ids.includes(id))) continue
+      moved.set(finding.floor, (moved.get(finding.floor) ?? new Set()).add(id))
+    }
+    if (moved.size === 0) return check
+    const lookedAt = check.lookedAt
+      .map((group) => ({ floor: group.floor, ids: group.ids.filter((id) => !moved.get(group.floor)?.has(id)) }))
+      .filter((group) => group.ids.length > 0)
+    const skipped: CoverageSkip[] = [...check.skipped]
+    for (const [floor, ids] of moved) skipped.push({ floor, ids: sorted([...ids]), reason: 'waits_for_part', why: skipWhy('waits_for_part', check.ruleId) })
+    // In floor order as `coverageOf` gives them, then by reason.
+    const floorOrder = new Map<string, number>()
+    for (const group of [...check.lookedAt, ...check.skipped]) if (!floorOrder.has(group.floor)) floorOrder.set(group.floor, floorOrder.size)
+    skipped.sort((a, b) => (floorOrder.get(a.floor) ?? 0) - (floorOrder.get(b.floor) ?? 0) || SKIP_ORDER.indexOf(a.reason) - SKIP_ORDER.indexOf(b.reason))
+    return { ...check, lookedAt, lookedAtCount: count(lookedAt), skipped, skippedCount: count(skipped) }
+  })
 }
 
 /** The coverage of one floor's parts, and the plan's, counted again: what `--floor` shows. */

@@ -160,6 +160,14 @@ export const USE_FILLS: Readonly<Record<RoomUse, string>> = {
   other: '#f0f0ee'
 }
 
+/**
+ * CNT-9: the colours a drawing picks parts out in, from the tool server's `highlight` and
+ * `colour` by a field: one per value, in turn, strong enough to read on a wall or a door and
+ * laid over a room's fill at half strength. `HIGHLIGHT` is the one colour of parts picked out.
+ */
+export const GROUP_COLOURS: readonly string[] = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#7f7f7f']
+export const HIGHLIGHT_COLOUR = '#e4572e'
+
 /** Font sizes in screen pixels, from `plan.css`. */
 export const TEXT_PX = {
   roomName: 13,
