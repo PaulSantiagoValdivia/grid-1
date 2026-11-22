@@ -23,7 +23,7 @@
  * Pure: no DOM, no React.
  */
 import type { Dimension, Ghosts, PlanDrawing, PlanOpening, PlanRoom, PlanWall, Vec2 } from '@ongrid/floorplan/geometry'
-import { areaText as areaFigure, boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
+import { boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import { openingAt, stripAcross } from '../canvas2d/strip'
@@ -31,6 +31,8 @@ import type { Box, LabelStyle } from '../canvas2d/labelPlacement'
 import {
   DIMENSION_DY,
   ROOM_AREA_DY,
+  areaNumber,
+  areaUnit,
   dimensionText,
   dimensionTextBox,
   doorSwingBox,
@@ -38,7 +40,8 @@ import {
   labelName,
   lineBox,
   placeDimensionLabel,
-  placeRoomLabels
+  placeRoomLabels,
+  withDisplay,
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { Look, PlanLook } from './look'
@@ -466,6 +469,10 @@ function undecidedSymbol(opening: PlanOpening, mpp: number, paint: Paints): SvgN
 
 /** The plan's elements, back to front: what goes inside the `<svg>`. */
 export function planScene(input: SceneInput): SvgNode[] {
+  return withDisplay(input.labels?.display, () => planSceneIn(input))
+}
+
+function planSceneIn(input: SceneInput): SvgNode[] {
   const { drawing, handings, doorWarnings, dimensions, metersPerPixel: mpp } = input
   const look = toLook(input.look)
   const style = input.labels ?? {}
@@ -824,7 +831,7 @@ export function planScene(input: SceneInput): SvgNode[] {
     if (!show.areas) return ''
     const change = live.areaChange(room.id)
     return change
-      ? `${areaFigure(change.before, decimals)} → ${areaFigure(change.after, decimals)} m²`
+      ? `${areaNumber(change.before, decimals)} → ${areaNumber(change.after, decimals)} ${areaUnit()}`
       : formatArea(room.area, decimals)
   }
   // The same text in the pieces the app has always drawn it in, one text node each.
@@ -832,8 +839,8 @@ export function planScene(input: SceneInput): SvgNode[] {
     if (!show.areas) return []
     const change = live.areaChange(room.id)
     return change
-      ? [areaFigure(change.before, decimals), ' → ', areaFigure(change.after, decimals), ' m²']
-      : [areaFigure(room.area, decimals), ' m²']
+      ? [areaNumber(change.before, decimals), ' → ', areaNumber(change.after, decimals), ` ${areaUnit()}`]
+      : [areaNumber(room.area, decimals), ` ${areaUnit()}`]
   }
   const names = drawing.rooms.map((room, index) => {
     const name = labelName(room.name, index, style)
