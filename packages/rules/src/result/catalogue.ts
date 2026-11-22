@@ -474,6 +474,7 @@ export const CODES = {
 
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {},
+  'floor/past-outline': {},
   'floor/empty-top': {},
   'floor/rooflight-misplaced': {},
   'floor/dormers-not-drawn': {},

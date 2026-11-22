@@ -51,6 +51,7 @@ import { floorOption, loadPlan, PlanRefused, type LoadedPlan } from './plan'
 import { SHEET_OPTIONS } from './sheet'
 import { checkTidyRequest, TIDY_OPTIONS, tidyAppliedText, tidyFile, tidyList, tidyListText } from './tidy'
 import { readRoomsFile, RoomsRefused, WRITE_OPTIONS, writeRoomsIntoProject } from './write'
+import { writeScanIntoProject } from './scan'
 
 export const EXIT_OK = 0
 export const EXIT_REFUSED = 1
@@ -82,8 +83,8 @@ const COMMANDS = {
     options: INIT_OPTIONS,
   },
   write: {
-    usage: 'grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json] [--project <folder>]',
-    summary: 'Writes a plan from rooms text: name the rooms with their sizes and neighbours, and Grid works out the walls. The main way to write a plan.',
+    usage: 'grid write <plan.rooms> | --scan <scan.json> [--plan <plan.json>] [--replace] [--json] [--project <folder>]',
+    summary: 'Writes a plan from rooms text: name the rooms with their sizes and neighbours, and Grid works out the walls. The main way to write a plan. --scan writes it from a phone room scan instead.',
     options: WRITE_OPTIONS,
   },
   edit: {
@@ -292,6 +293,20 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   if (name === 'init') {
     const folder = initFolder(parsed.positionals)
     io.stdout(initText(initProject(folder, io.cwd), folder))
+    return EXIT_OK
+  }
+
+  if (name === 'write' && parsed.values.has('--scan')) {
+    // HND-12: a phone room scan in place of rooms text.
+    if (parsed.positionals.length > 0) throw new UsageError(`write --scan reads the scan in place of rooms text: name one or the other, not both.`)
+    const project = openProject(projectOption, io.cwd)
+    const target = textOf(parsed, '--plan') ?? projectPlanFile(project)
+    if (target === null) throw new UsageError(`write needs a plan to write: --plan <plan.json>, or run it in a project folder grid init made, which holds ${PROJECT_FILE}.`)
+    const done = writeScanIntoProject(project, textOf(parsed, '--scan')!, target, { replace: parsed.values.has('--replace') })
+    if (parsed.values.has('--json')) {
+      const c = done.conversion
+      io.stdout(`${JSON.stringify({ label: GENERAL_GUIDANCE_LABEL, written: done.written, evidence: done.evidence, rooms: c.rooms, paired: c.paired, oneSided: c.oneSided, openings: c.plan.openings.length, items: c.plan.items?.length ?? 0, assumed: c.assumed, leftOut: c.leftOut, match: c.match, frame: c.frame, verdict: done.verdict, drawingProblems: done.drawingProblems }, null, 2)}\n`)
+    } else io.stdout(`${[GENERAL_GUIDANCE_LABEL, ...done.lines].join('\n')}\n`)
     return EXIT_OK
   }
 

@@ -273,3 +273,27 @@ describe('existing, demolished and new, in Spanish (CNT-10, after merging main a
     }
   })
 })
+
+describe("walls past a floor's outline, in Spanish (BRF-4, after merging main at 65e37ca1)", () => {
+  const wall = (id: string, start: number[], end: number[]) => ({ id, start, end, thickness: 0.2, height: 2.6, kind: 'exterior', floor: 'g' })
+  const plan = {
+    version: '1',
+    units: 'm',
+    floors: [{ id: 'g', name: 'Ground', level: 0, height: 2.6, outline: [[0, 0], [3, 0], [3, 3], [0, 3]] }],
+    walls: [wall('s', [0, 0], [4, 0]), wall('e', [4, 0], [4, 3]), wall('n', [4, 3], [0, 3]), wall('w', [0, 3], [0, 0])],
+    rooms: [{ id: 'hall', name: 'Hall', use: 'corridor', floor: 'g', boundary: ['s', 'e', 'n', 'w'] }],
+    openings: [],
+  }
+
+  it('says the line in Spanish, with the same code, thing and values', () => {
+    const english = inspectPlan(plan).lines.find((l) => l.code === 'floor/past-outline')!
+    const spanish = inspectPlan(plan, { language: 'es' }).lines.find((l) => l.code === 'floor/past-outline')!
+    expect(english.found).toMatch(/^Floor "g"'s walls reach \d+\.\d\d m² past the outline it states\. The slab, the roof and the gross area take in both, so the floor is larger than its outline\.$/)
+    expect(spanish.found).toMatch(/^Los muros de la planta "g" sobresalen \d+,\d\d m² del contorno que indica\./)
+    expect([spanish.code, spanish.kind, spanish.thing, spanish.values]).toEqual([english.code, english.kind, english.thing, english.values])
+    for (const text of [spanish.message, spanish.found, spanish.needed, spanish.fix]) {
+      expect(approvalWords(text)).toEqual([])
+      expect(text).not.toMatch(/\{[A-Za-z]/)
+    }
+  })
+})

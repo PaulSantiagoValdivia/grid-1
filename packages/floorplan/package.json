@@ -19,10 +19,12 @@
     "./notes": "./src/notes/notes.ts",
     "./messages": "./src/messages/index.ts",
     "./rooms": "./src/rooms/index.ts",
+    "./scan": "./src/scan/index.ts",
     "./test-support/plans": "./src/test-support/plans.ts",
     "./test-support/facts": "./src/test-support/facts.ts",
     "./test-support/phases": "./src/test-support/phases.ts",
-    "./test-support/lab": "./src/test-support/lab.ts"
+    "./test-support/lab": "./src/test-support/lab.ts",
+    "./test-support/roomScan": "./src/test-support/roomScan.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

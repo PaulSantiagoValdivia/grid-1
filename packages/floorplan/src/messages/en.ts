@@ -2003,7 +2003,13 @@ export const en = {
   'describe.walk.notReached': 'Not reached through any door, opening or open side: {rooms}.',
   'describe.walk.close': 'This describes the plan as it is walked and checks nothing: grid check runs the checks.',
   'sheet.unit.sqft': 'sq ft',
-  'sheet.total.rooms.metric': '{count} rooms, {area} m²'
+  'sheet.total.rooms.metric': '{count} rooms, {area} m²',
+  // ── After merging main at 65e37ca1: BRF-4's floor outline ──
+  'issue.floor/past-outline': 'Floor {floor}\'s walls reach {area} m² past the outline it states. The slab, the roof and the gross area take in both, so the floor is larger than its outline.',
+  'issue.part.far.outline': 'the outline of floor {floor} lies more than {km} km from the origin',
+  'line.floor/past-outline.says': '{label}\'s walls reach past the outline it states',
+  'line.floor/past-outline.needed': 'walls inside the outline the floor states, the outside face of the floor',
+  'line.floor/past-outline.fix': 'If the walls are where the building is, widen the floor\'s outline to their outside face; if the outline is, move the walls inside it. Until then the slab, the roof and the gross area take in both.'
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof en

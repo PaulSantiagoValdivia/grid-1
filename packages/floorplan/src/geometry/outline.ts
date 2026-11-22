@@ -8,8 +8,9 @@
  * hairline, and what their outer edges enclose. Only the pieces that hold enclosed floor are kept:
  * a garden wall standing apart, which encloses nothing, carries no slab and no roof.
  *
- * The outline only exists where walls meet and close a floor; a floor whose walls enclose nothing
- * has none, and says so. Pure, and never throws. The join is done by `polygon-clipping` (MIT).
+ * The outline only exists where walls meet and close a floor, or where the floor states one
+ * (BRF-4, C17: `massing.ts`), joined with what its walls enclose; a floor whose walls enclose
+ * nothing and that states no outline has none, and says so. Pure, and never throws. The join is done by `polygon-clipping` (MIT).
  */
 
 import polygonClipping from 'polygon-clipping'
@@ -17,7 +18,8 @@ import type { MultiPolygon, Polygon } from 'polygon-clipping'
 import { floorWalls } from './areas'
 import type { FloorPlan } from './plan'
 import { boxOfRings, cornerFills, inPolygon, multiArea, pointInside, strip, union } from './polygons'
-import { farReason } from './spaces'
+import { farReason, outlineFarReason } from './spaces'
+import { statedOutline } from './massing'
 import { TOLERANCES, tolerance } from './tolerances'
 
 export interface FloorOutline {
@@ -49,12 +51,15 @@ export function outlineKnown(result: FloorOutline | FloorOutlineUnknown): result
  */
 export function slabOutline(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): FloorOutline | FloorOutlineUnknown {
   const walls = floorWalls(plan, floor, broken)
-  const far = farReason(walls)
+  // BRF-4 (C17): the outline the floor states, joined with what its walls enclose.
+  const outline = statedOutline(plan, floor)
+  const far = farReason(walls) ?? outlineFarReason(floor, outline)
   if (far) return { floor, reason: far }
-  if (walls.length === 0) return { floor, pieces: [], area: 0, spaces: [] }
+  if (walls.length === 0 && outline === null) return { floor, pieces: [], area: 0, spaces: [] }
 
   let reach = 0
   for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
+  for (const [x, y] of outline?.[0] ?? []) reach = Math.max(reach, Math.abs(x), Math.abs(y))
   const join = tolerance('gap')
   let failure: unknown = null
   for (const grid of TOLERANCES.joinGrids.values) {
@@ -75,8 +80,9 @@ export function slabOutline(plan: FloorPlan, floor: string, broken: ReadonlySet<
       const solid = union([...bodies(false), ...cornerFills(solidRuns, lineHalf, snap)])
       const lines = bodies(true)
       const frame = lines.length === 0 ? solid : union([...solid, ...lines])
-      const filled = union(frame.map((polygon) => [polygon[0]!]))
-      const faces = filled.length === 0 ? [] : polygonClipping.difference(filled, frame)
+      const stated: Polygon[] = outline === null ? [] : [[outline[0]!.map(([x, y]): [number, number] => [snap(x), snap(y)])]]
+      const filled = union([...frame.map((polygon) => [polygon[0]!]), ...stated])
+      const faces = filled.length === 0 ? [] : frame.length === 0 ? filled : polygonClipping.difference(filled, frame)
       const inside = faces.map((face) => pointInside(face, boxOfRings(face)))
       const pieces = filled.filter((piece) => inside.some((p) => inPolygon(p, piece)))
       return { floor, pieces, area: multiArea(pieces), spaces: faces.map((face, i) => ({ pieces: face, at: inside[i]! })) }

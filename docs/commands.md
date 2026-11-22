@@ -11,6 +11,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [The project folder](#the-project-folder)
 - [The report, short or full, and notes seen: `grid check`](#the-report-short-or-full-and-notes-seen-grid-check)
 - [Describing a plan: `grid describe`](#describing-a-plan-grid-describe)
+- [A plan from a phone room scan: `grid write --scan`](#a-plan-from-a-phone-room-scan-grid-write---scan)
 - [What a change did: `grid mark` and `grid diff`](#what-a-change-did-grid-mark-and-grid-diff)
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
 - [What went wrong, on the drawing: `grid draw`](#what-went-wrong-on-the-drawing-grid-draw)
@@ -29,6 +30,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)). With a brief beside the plan, it says each line met or missed ([the brief](brief.md)) |
+| `grid write --scan <scan.json> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from a phone room scan, and keeps the scan beside it as `<plan>.scan.json` (see below) |
 | `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below). With `firm-standards.json` beside the plan, the firm's own standards are set against it too, under their own heading ([a firm's own standards](firm-standards.md)) |
 | `grid describe [<plan>] [--length line\|rooms\|walls\|walk] [--for person\|agent] [--as rooms] [--floor <id>] [--pictures <folder>]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, with `--length walls` its walls, and with `--length walk` the plan walked room by room, with `--pictures` a picture from each doorway (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation and section marks to a plan (see below) |
@@ -382,6 +384,61 @@ picture from each doorway into the folder, which must be there: at eye height (1
 into the room, looking ahead, as `walk-01.png`, `walk-02.png` and on, each named under its room.
 `--floor` and `--pictures` go with `--length walk` only. How a route's length is walked is in
 [tool-server.md](tool-server.md#a-routes-length-and-a-walk-through).
+
+## A plan from a phone room scan: `grid write --scan`
+
+`grid write --scan room.json` writes the plan from a room scanned with a phone (HND-12), and
+`grid_write_rooms` does the same with `scan` in place of `rooms`. Grid reads Apple's room model
+first: the JSON an iPhone or iPad with a depth sensor saves a captured room as, with its walls,
+doors, windows, openings and objects as surfaces, each with its own id, its size, where it
+stands (a 4 by 4 transform), what it is and how sure the capture is; newer captures add floor
+outlines, storeys and room types. The file is read as a plan file is: inside the project, at
+most 64 MB, its text decoded one way, its ids held to the plan's limits; a refusal names the
+part and the limit (`walls[0].identifier is 65 characters long; an id may have at most 64`),
+never the scan's text.
+
+How the scan becomes a plan:
+
+- **A scan sees each wall from a room.** Each wall surface is one face. A wall between two
+  scanned rooms is seen from both: its two faces, facing each other across a gap no wider than
+  0.6 m (`roomsWallWidest`), are paired into one wall as thick as the gap. Two faces a little out
+  of parallel (within about 5 degrees, `scanFaceTurn`) are turned onto one direction about their
+  middles, and the answer says by how much.
+- **A wall seen from one side** has no thickness in the scan. It is taken as an outside wall of
+  Grid's usual 0.2 m, grown away from the room from its scanned face, so the room keeps its
+  size, and its thickness is marked assumed.
+- **The rooms** are the scan's floor outlines, each side on the wall face along it (within
+  0.05 m, `scanFaceReach`); in a scan with no floor outline, the wall faces joined end to end
+  (corners within 0.15 m, `scanCornerGap`) as one room. Each room's corners are where its faces'
+  lines cross, as every room in Grid is measured, and its name and use come from the scan's room
+  type where it gives one. The walls are held to a micrometre, so each room keeps the scan's
+  area: the answer gives both, and how far apart they are.
+- **Doors, windows and openings** go on the wall the scan names, at their place along it; a
+  door within 0.05 m of the floor (`scanOnFloor`) stands on it. A scan does not say how a door is
+  hinged, so each is left undecided. A door the scan gives twice, once from each room, is drawn
+  once. A toilet and a bath become fixtures; other objects are kept with the scan, not drawn.
+- **A scan has no north.** The plan is the scan turned by the least turn that sets its longest
+  wall across the drawing, and moved so its walls start at 0,0.
+
+Every part is marked `scanned`, and each value assumed is marked `assumed`
+([where a value came from](plan-file.md#where-a-value-came-from)), so `grid check` lists them
+under "To confirm" and the drawing shows them dashed. The answer lists everything assumed, one
+line each, for the agent to confirm with the person. `grid edit square` squares the scanned walls,
+as its own step.
+
+**The scan kept beside the plan.** `plan.scan.json` beside `plan.json` keeps every surface the
+scan gave, by its own id, as Grid read it (its list, category, confidence, size, transform,
+parent wall, storey and corners), with the plan part it was drawn as, or `null`; and the room
+types, how the scan was turned and moved onto the plan, what was assumed, and the plan's
+revision as written. Fields of the scan Grid does not read are not kept. It is the person's: a
+scan can hold a home's layout, and Grid sends it nowhere.
+
+**A re-scan** is matched to it by the scan's ids: a part whose scan id reappears keeps its plan
+id, and the facts of the person's own on it stay; a part with a new scan id gets a new plan id,
+never one a part had before; a part whose scan id is gone is gone from the plan, and the answer
+names it. A plan changed since Grid wrote it from the scan, or not written from a scan, is
+refused with the difference unless `--replace` is given (`replace` for the tool), as rooms text
+is; the scan kept beside the plan is replaced by the new one.
 
 ## What a change did: `grid mark` and `grid diff`
 

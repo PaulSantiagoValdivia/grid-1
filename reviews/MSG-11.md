@@ -863,3 +863,92 @@ note that areas are after the work), `quantities/walked.ts` 1 (the walked rule),
 `versions/diff.ts` 8 → 10 and `markers.ts` 18 → 19 (diff by phase), `rooms/compile.ts` 115 → 116
 (a size that looks like millimetres or feet) and `viewer/src/page/previewPage.ts` 5 (the preview
 page).
+
+### Results after fbe5160e
+
+Committed as the merge alone (1e0cc086), before main moved again; the checks were run on it:
+`npm run build` 582,849 bytes for `dist/grid.mjs` (the Spanish chunk 167,183), under the cap;
+typecheck and lint clean; rules `src`, floorplan `messages/`, `geometry/`, `types/`, `export/`,
+`rooms/` and viewer `picture/`: 173 files, 3,768 tests pass (1 skipped); the CLI's guard,
+`describe/`, `draw/`, `sheet/`, `mcp/`, `command/`, `quantities/`, `edit/`, `preview/`,
+`versions/`, `firm/`, `taped/` and viewer `page/`: 92 files, 1,192 tests pass (1 skipped).
+`grid.e2e`'s 500 ms speed test failed once at a load average near 240 from other sessions'
+suites, and passed when run alone. Main's tests pass unchanged.
+
+## After merging main at 65e37ca1
+
+Main moved while the merge above was checked: HND-12 (a plan from a phone room scan, `grid write
+--scan`, `scan` on `grid_write_rooms`, the scan kept beside the plan) and BRF-4 (massing before
+walls: a floor's `outline`, `homes` and `parking`, the site's limits, `floor/past-outline`). Six
+files conflicted: `CHANGELOG.md`, `docs/result-contract.md`, floorplan `geometry/plot.ts`,
+`geometry/spaces.ts`, `types/floorplan.ts` and rules `result/catalogue.ts`. Main adds no tool.
+
+### How the conflicts were resolved
+
+- **A ring of corners** (`geometry/plot.ts`, main's new `geometry/ring.ts`): main moved the ring
+  check into `ring.ts`, so the schema can read it for a floor's outline. MSG-11's `ringFault`
+  (by key, `issue.part.boundary.*`) moved there with it, and `ringProblem` is its English, as
+  before; `plot.ts` re-exports both.
+- **A floor too far out** (`geometry/spaces.ts`): MSG-11's `farSaid` and `unknown`, with main's
+  outline: `outlineFarSaid` (`issue.part.far.outline`), and `outlineFarReason` its English.
+- **`floor/past-outline`** (`geometry/validate.ts`, auto-merged, `result/catalogue.ts`): the issue
+  says `issue.floor/past-outline`, so `validate.ts` stays at none; the line's words are
+  `line.floor/past-outline.*`, and its catalogue entry is logic only.
+- **The schema** (`types/floorplan.ts`): both sides' imports. **Docs**: `CHANGELOG.md` keeps every
+  Unreleased line; the contract keeps MSG-11's section first of the day, with a paragraph on
+  BRF-4 and HND-12, then main's two new sections.
+
+New keys (5), in `en.ts` with main's English and in `es.ts` as a draft: `issue.floor/past-outline`,
+`issue.part.far.outline`, `line.floor/past-outline.says`, `.needed`, `.fix`. A test in rules
+`result/__tests__/language.test.ts` says the line in main's English and in Spanish, with the same
+code, thing and values.
+
+### The ownWords guard
+
+`geometry/validate.ts` and the other moved files stay at none. Not counted by the ratchet:
+`brief/brief.ts` 40 → 50 (`agent`), `mcp/briefTool.ts` 36 → 44, `readTools.ts` 294 → 296,
+`writeTools.ts` 90 → 93 (`tools`), `geometry/tolerances.ts` 205 → 213 and `sheet/coverage.ts`
+23 → 26 (`developer`). The ratchet moves from 1329 to 1442, by 113 of the kinds MSG-11 left for
+later: the phone scan's refusals and notes, as rooms text's are (`scan/roomModel.ts` 22,
+`scan/toPlan.ts` 30, `scan/evidence.ts` 2, `command/scan.ts` 22), the site limits' measures
+(`quantities/limits.ts` 29), the area rules for an outline (`geometry/areas.ts` 32 → 36), the
+outline's schema refusal (`types/floorplan.ts` 53 → 54) and the commands' new options
+(`command/main.ts` 58 → 60, `write.ts` 28 → 29).
+
+### Results after 65e37ca1
+
+- `npm run build`: `dist/grid.mjs` 628,121 bytes, under main's cap, which HND-12 raised to
+  650,000 in `grid.e2e` (not touched here); the Spanish chunk 167,997 bytes.
+- `npm run typecheck`, `npm run lint`: clean.
+- Rules `src`, floorplan `messages/`, `geometry/`, `types/`, `export/`, `rooms/`, `scan/` and
+  viewer `picture/` and `page/`: 176 files, 3,800 tests pass (1 skipped).
+- The CLI's guard, `describe/`, `draw/`, `sheet/`, `mcp/` (tools, server, replay, phases,
+  preview, massing), `command/` (everyPath, grid.e2e, language.e2e, preview.e2e), `quantities/`,
+  `edit/`, `preview/`, `versions/`, `firm/`, `taped/` and `brief/`: 95 files, 1,219 tests pass (1
+  skipped). `drawStill`'s timing test failed once under the load of other sessions' suites and
+  passed when run alone. Main's tests pass unchanged.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (fbe5160e and 65e37ca1)
+
+33. **The ratchet was raised twice, 1274 → 1329 → 1442**, by main's new text of the kinds MSG-11
+    left for later (the lists are above). The largest parts are HND-12's scan notes and
+    refusals (76) and BRF-4's site limits (29), CNT-10's change takeoff (18): each would move as
+    rooms text, the measures and the takeoffs move, not before.
+34. **The sheet in the person's units follows the language's decimal mark only on figures**, and
+    a display's own `decimal` wins: a Spanish sheet with `"decimal": "point"` writes points. In
+    English the sheet is WRT-7's to the byte, including its one figure that keeps a point in a
+    comma display (the square metres beside a square-feet total, `areaText` unmarked); in
+    Spanish that figure takes the comma.
+35. **"Square feet" is `pies²` in the Spanish draft** (`sheet.unit.sqft`, and `sheet.total.rooms`,
+    which said `sq ft` before); a reviewer may prefer `ft²`.
+36. **The schedules' notes on a sheet stay English**, as before: the opening schedule's rule says
+    "in metres" even on a sheet in feet and inches; that is main's sentence (`quantities/schedule.ts`).
+37. **The walk's fixtures** are named by their label as the schedule gives it (`el aparato
+    toilet`): the labels are not translated yet. The walk's agent form stays as main wrote it.
+38. **The phases in Spanish**: a part's phase is "existente", "de demolición" or "de obra nueva"
+    in a drawing issue ("es de la fase de demolición"), and "a demoler" on the drawing's key and
+    in the description; "the work" is "la obra" and a fit-out "acondicionamiento". To review.
+39. **The preview page** (`viewer/src/page/previewPage.ts`) and the preview's server and record
+    stay English; the page takes no language yet. `grid_preview` answers in English, as the other
+    tools do, and its picture is `grid_view`'s, which takes no language from it.

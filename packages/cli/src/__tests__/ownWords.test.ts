@@ -33,7 +33,7 @@ const WHY = {
 const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/apps/cadApps.ts': [1, 'developer'],
   'packages/cli/src/brief/answer.ts': [2, 'notYet'],
-  'packages/cli/src/brief/brief.ts': [40, 'agent'],
+  'packages/cli/src/brief/brief.ts': [50, 'agent'],
   'packages/cli/src/brief/lines.ts': [20, 'notYet'],
   'packages/cli/src/command/check.ts': [10, 'command'],
   'packages/cli/src/command/describe.ts': [9, 'command'],
@@ -44,14 +44,15 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/export.ts': [17, 'command'],
   'packages/cli/src/command/init.ts': [15, 'command'],
   'packages/cli/src/command/language.ts': [2, 'command'],
-  'packages/cli/src/command/main.ts': [58, 'command'],
+  'packages/cli/src/command/main.ts': [60, 'command'],
   'packages/cli/src/command/options.ts': [9, 'command'],
   'packages/cli/src/command/plan.ts': [29, 'command'],
   'packages/cli/src/command/planText.ts': [18, 'command'],
+  'packages/cli/src/command/scan.ts': [22, 'command'],
   'packages/cli/src/command/section.ts': [6, 'command'],
   'packages/cli/src/command/sheet.ts': [3, 'command'],
   'packages/cli/src/command/tidy.ts': [12, 'command'],
-  'packages/cli/src/command/write.ts': [28, 'command'],
+  'packages/cli/src/command/write.ts': [29, 'command'],
   'packages/cli/src/describe/card.ts': [13, 'agentForm'],
   'packages/cli/src/describe/facts.ts': [2, 'notYet'],
   'packages/cli/src/describe/walk.ts': [4, 'agentForm'],
@@ -76,12 +77,12 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/firm/standards.ts': [18, 'command'],
   'packages/cli/src/fs/projectFiles.ts': [49, 'command'],
   'packages/cli/src/fs/textEncoding.ts': [5, 'command'],
-  'packages/cli/src/mcp/briefTool.ts': [36, 'tools'],
+  'packages/cli/src/mcp/briefTool.ts': [44, 'tools'],
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
   'packages/cli/src/mcp/editTools.ts': [69, 'tools'],
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [294, 'tools'],
+  'packages/cli/src/mcp/readTools.ts': [296, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -89,7 +90,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/serveTools.ts': [1, 'tools'],
   'packages/cli/src/mcp/toolkit.ts': [27, 'agent'],
   'packages/cli/src/mcp/viewTool.ts': [15, 'tools'],
-  'packages/cli/src/mcp/writeTools.ts': [90, 'tools'],
+  'packages/cli/src/mcp/writeTools.ts': [93, 'tools'],
   'packages/cli/src/occupancy/occupancy.ts': [16, 'notYet'],
   'packages/cli/src/preview/localServer.ts': [6, 'agent'],
   'packages/cli/src/preview/record.ts': [4, 'command'],
@@ -100,6 +101,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/estimate.ts': [27, 'notYet'],
   'packages/cli/src/quantities/facing.ts': [25, 'notYet'],
   'packages/cli/src/quantities/fixtures.ts': [2, 'notYet'],
+  'packages/cli/src/quantities/limits.ts': [29, 'notYet'],
   'packages/cli/src/quantities/measure.ts': [3, 'notYet'],
   'packages/cli/src/quantities/query.ts': [26, 'tools'],
   'packages/cli/src/quantities/rates.ts': [36, 'notYet'],
@@ -112,13 +114,13 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/walked.ts': [1, 'notYet'],
   'packages/cli/src/report/draft.ts': [16, 'notYet'],
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
-  'packages/cli/src/sheet/coverage.ts': [23, 'developer'],
+  'packages/cli/src/sheet/coverage.ts': [26, 'developer'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
   'packages/cli/src/sheet/sheetFile.ts': [7, 'command'],
   'packages/cli/src/versions/diff.ts': [10, 'notYet'],
   'packages/cli/src/versions/git.ts': [19, 'notYet'],
   'packages/cli/src/versions/markers.ts': [19, 'notYet'],
-  'packages/floorplan/src/geometry/areas.ts': [32, 'notYet'],
+  'packages/floorplan/src/geometry/areas.ts': [36, 'notYet'],
   'packages/floorplan/src/geometry/camera.ts': [1, 'agent'],
   'packages/floorplan/src/geometry/diff/building.ts': [25, 'notYet'],
   'packages/floorplan/src/geometry/diff/churn.ts': [2, 'notYet'],
@@ -136,7 +138,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/rounding.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/rules/doors.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
-  'packages/floorplan/src/geometry/tolerances.ts': [205, 'developer'],
+  'packages/floorplan/src/geometry/tolerances.ts': [213, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [1, 'developer'],
@@ -146,7 +148,10 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/rooms/compile.ts': [116, 'notYet'],
   'packages/floorplan/src/rooms/read.ts': [21, 'notYet'],
   'packages/floorplan/src/rooms/words.ts': [4, 'notYet'],
-  'packages/floorplan/src/types/floorplan.ts': [53, 'notYet'],
+  'packages/floorplan/src/scan/evidence.ts': [2, 'notYet'],
+  'packages/floorplan/src/scan/roomModel.ts': [22, 'notYet'],
+  'packages/floorplan/src/scan/toPlan.ts': [30, 'notYet'],
+  'packages/floorplan/src/types/floorplan.ts': [54, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
@@ -233,9 +238,11 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // CNT-10, VEW-9, VEW-4 and WRT-7 55: the commands' new options, usage and refusals (describe 3,
     // main 6, plan 5, tidy 1, write 2, the preview record's 4), the change takeoff (18), the edits'
     // phase receipts (4), the areas' note after the work (2), the walked rule (1), diff by phase
-    // (3), a rooms text size refusal (1) and the preview page (5) (reviews/MSG-11.md, "After
-    // merging main").
-    expect(left).toBeLessThanOrEqual(1329)
+    // (3), a rooms text size refusal (1) and the preview page (5); and HND-12 and BRF-4 113: the
+    // phone scan's refusals and notes (floorplan scan/ 54, command/scan.ts 22), the site limits'
+    // measures (29), the area rules for an outline (4), the outline's schema refusal (1) and the
+    // commands' new options (main 2, write 1) (reviews/MSG-11.md, "After merging main").
+    expect(left).toBeLessThanOrEqual(1442)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

@@ -2017,5 +2017,11 @@ export const es: Messages = {
   'describe.walk.notReached': 'No se llega por ninguna puerta, hueco ni lado abierto: {rooms}.',
   'describe.walk.close': 'Esto describe el plano tal como se recorre y no comprueba nada: grid check hace las comprobaciones.',
   'sheet.unit.sqft': 'pies²',
-  'sheet.total.rooms.metric': '{count} estancias, {area} m²'
+  'sheet.total.rooms.metric': '{count} estancias, {area} m²',
+  // ── After merging main at 65e37ca1: BRF-4's floor outline ──
+  'issue.floor/past-outline': 'Los muros de la planta {floor} sobresalen {area} m² del contorno que indica. El forjado, la cubierta y la superficie bruta incluyen ambos, así que la planta es mayor que su contorno.',
+  'issue.part.far.outline': 'el contorno de la planta {floor} está a más de {km} km del origen',
+  'line.floor/past-outline.says': 'Los muros de {label} sobresalen del contorno que indica',
+  'line.floor/past-outline.needed': 'muros dentro del contorno que indica la planta, la cara exterior de la planta',
+  'line.floor/past-outline.fix': 'Si los muros están donde está el edificio, amplíe el contorno de la planta hasta su cara exterior; si es el contorno el que está donde debe, mueva los muros dentro de él. Hasta entonces el forjado, la cubierta y la superficie bruta incluyen ambos.'
 }
