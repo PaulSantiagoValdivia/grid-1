@@ -170,3 +170,13 @@ figures".
   of its own in the IFC or DXF.
 - Rooms text words for an outline (kept on a `raw floor` line).
 - `grid describe` does not yet say a floor is massing.
+
+## After merging main at fbe5160e
+
+Merged WRT-7, CNT-10, VEW-9 and VEW-4 in 42be4d78. Conflicts, each kept on both sides: both
+changelogs, the sheet's `coverage.ts` (CNT-10's `PHASE_COVERAGE`, then BRF-4's
+`OUTLINE_COVERAGE`) and its test (both tests, both imports), and `types/floorplan.ts`'s
+conventions: CNT-10 took C16 for phases, so the floor outline is **C17**, renamed in every
+BRF-4 comment and doc. After the merge: typecheck and lint clean, the built file 583,207 bytes
+(cap 600 kB); the affected tests (main's 24 changed test files and the same BRF-4 and nearby
+files as before), 58 files, 824 passed and 1 skipped; scoreboard "Same as the stored figures".
