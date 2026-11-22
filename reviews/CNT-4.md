@@ -158,4 +158,37 @@ with its name, `Grid_Flat` area equal to the areas' figure, and as many storeys 
 
 ## Checks run
 
-To be filled in after the full suite.
+On this branch at 0a3b32f (main at e486ccb plus CNT-4), on a laptop shared with other sessions
+(load average about 300):
+
+- `npm run build` (bundle 537,813 bytes, under the 600 kB cap), `npm run typecheck`,
+  `npm run lint`: clean.
+- The full suite, `timeout 1500 ./node_modules/.bin/vitest run --exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`, after the build. Under that load the 1500 s cap was reached
+  before every file had run, twice, so the files not yet run were run again with the same flags,
+  in turn: 155 files in the first run, 162 in the second and the last two (`fixtures-parse` and
+  `scoreboard.test.ts`, 1,213 s on its own) in a third. In all, 319 of 319 files, 5,545 tests:
+  5,540 passed, 4 skipped, 1 failed. The one failure was a timing test,
+  `diff-size.test.ts` "diffs 1,000 entities … well inside a second" (1,088 ms under the load);
+  rerun alone it passed (no flat is in that plan).
+- `npm run scoreboard`: "Better than the stored figures": turns answered 19 to 21 (the `flats`
+  capability, the developer's "the mix and net to gross" and "a schedule of accommodation"); the
+  other counts the same (197, 278, 5, 20, 735, 95). Stored in `scoreboard/current.json` by hand
+  (the two turn figures and the capability), the reason in `scoreboard/README.md`; the full
+  suite's `scoreboard.test.ts` then passed on the stored figures.
+- While building, only the touched files: the new tests, `rooms`, `tolerances.test.ts`, the
+  exports, `rules/src/result`, the tool server's `tools` and `schedules`, `src/sheet`, and the
+  viewer's picture and canvas tests.
+
+After merging `main` at 90a933b (HND-11, COD-8): HND-11 took contract letter C15 (taped lengths),
+so flats are **C16**. Conflicts, both sides kept: the contract header and the plan's fields in
+`floorplan.ts` (`taped`, then `flatTypes` and `flats`), `CHANGELOG.md` and the agents' changelog
+(CNT-4's entries on top), the text-limits table in `docs/plan-file.md`, the code-table scan in
+`contract.test.ts` (now `firm` and `flat`) and MSG-4's list of the plan's fields in
+`result.test.ts` (now `… accessible, taped, flatTypes, flats, display, written`). Build (550,601
+bytes, under the cap), typecheck and lint clean. The affected tests rerun (the flats tests,
+`tolerances`, `survey`, the exports, `packages/floorplan/src/types`, `rooms`, `rules/src/result`,
+the tool server's `flats`, `tools`, `schedules`, `writeRooms` and `contract`, `src/sheet`,
+`src/taped`, `src/firm`, `grid.e2e`, `everyPath.e2e`, `cli/src/__tests__`, and the viewer's
+`flats` and `faults`): 60 files, 1,121 passed.
+The scoreboard on the merged tree: "Same as the stored figures" (197, 278, 21, 5, 20, 735, 95).
