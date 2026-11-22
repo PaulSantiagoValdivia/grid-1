@@ -37,7 +37,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |
-| `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share |
+| `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share. Two rooms of different uses need `use`, or `zones` to keep both as zones of one open-plan room ([Zones inside one room](plan-file.md#zones-inside-one-room)); left out, the call is refused and asks. The verdict names any use the plan no longer has |
 | `grid_split_room` | Splits a room with a new wall, the new room taking one side, with a door in it |
 | `grid_add_room` | Builds a room against the outside of a side of a room, saying what happens to openings in the wall it covers |
 | `grid_stretch` | Makes the whole building wider or longer, at its outside wall or through a room |

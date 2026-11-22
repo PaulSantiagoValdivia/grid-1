@@ -386,6 +386,26 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: zones inside one room (CNT-8)
+
+- A room may state `partOf`, the id of the room it is a zone of. A zone is drawn and measured, and
+  counted in no total. New code, worth a look: `room/zone-not-in-room`, a room marked as a zone
+  of a room that is not on its floor, is a zone itself, or does not hold it. It also makes a
+  room's area `not-proven`.
+- The size and escape checks look at a room with zones as a whole. New skip reason in
+  `coverage`: `part_of_room`, a zone; the route checks skip zones the same way. A figure check
+  that looked at a room with zones adds `wholeRooms`, each with the use applied and the zone it
+  was read from. A `room/too-small` line about such a room names its zone in `also`, and its
+  `found` ends ", the whole room with its zones, checked as a bedroom, the use of its zone
+  "Sleeping corner"". The report's finding adds `use` and `zone`. Nothing changes on a plan
+  with no zones.
+- `grid_merge_rooms` takes `zones` and `new_room`. Two rooms of different uses with neither
+  `use` nor `zones` are refused, asking for one (lab AB-9). Every edit's `verdict`, and
+  `grid_compare`'s, ends with any use no room or zone has any more: "The plan now has no room or
+  zone used as kitchen, which the plan before had."
+- `grid_areas` adds `zoneOf` on a zone, and its CSV says `zone` in the `counted` column; the room
+  schedule adds `zones` on a room with zones, and a zone is no row of its own.
+
 ### 2026-11-22: sizes along the walls, in chains (SHT-4)
 
 - No line, code or wording of the record changes.
