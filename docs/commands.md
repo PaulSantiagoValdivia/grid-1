@@ -145,6 +145,15 @@ again before each fix, and one an earlier fix took care of is skipped and said s
 is changed as read, keys Grid does not know included; `--out <file.json>` writes the tidied plan
 there instead. `--json` prints the list or what was applied as JSON.
 
+## Units on the drawing: `grid draw --units`
+
+`grid draw --units m|cm|mm|ft-in` writes the drawing's room areas and dimensions in those
+units, and `--decimal point|comma` with that decimal mark: `--units ft-in` draws `12'-6"`,
+`--units mm` draws `2860`. Left out, the plan's own `display` is used, or metres. A length typed
+on `grid edit` may carry its unit (`--by "12'6\""`, `--width "900 mm"`) and, with
+`--decimal comma`, a decimal comma (`--by 0,3`). The plan file stays in metres either way; see
+[Units](plan-file.md#units).
+
 ## What went wrong, on the drawing: `grid draw`
 
 `grid draw` and `grid_view` show what went wrong on the drawing. Every line `grid check` prints

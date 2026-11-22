@@ -15,7 +15,7 @@ Its tools are listed in a fixed order: first those that read the plan, in the or
 requests people make most, then the preview, the export and the sheet, and last the nine that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
-the same facts as data; a view also returns its picture. Units are metres.
+the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
 
 | Tool | Answers |
 |---|---|
