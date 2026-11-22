@@ -93,6 +93,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
    - DXF (`export/dxf.ts`): a door or window that states a kind or a part is written by its
      symbol (leaves and swings on `GRID-DOOR-SWINGS`, faces and glass on `GRID-OPENINGS`), and
      what lies above the cut on a new dashed layer `GRID-OPENINGS-ABOVE`, listed only when used.
+     Since HND-1, each symbol is a block (see "Again after merging `main` 8a433801 (HND-1)").
 10. **The checks** (`packages/rules`): `inspectPlan` gives `floor/not-checked-door-swings`, one
     not-checked line per floor naming the doors (in `also`) whose swing is not stated. On a plan
     that may not be in metres, `opening/wide-single-leaf` follows from `plan/units-question`
@@ -260,6 +261,19 @@ Smaller tests: the escape check on a window's part and a fixed window
     opening and takes no kind, so it gets no frame, sash or glass style. Giving rooflights CNT-14's
     parts would be a small follow-up. CNT-14's plan-format convention is now C12, since COD-3 and
     VEW-3 took C10 and C11 on `main`.
+14. **After merging `main` 8a43380 (HND-1), the DXF's symbols by kind.** Choices made overnight:
+    - A door or window of a kind is a block per symbol (`GRID-DOOR-SLIDING-2400x200`,
+      `-P800` for the part that opens, `-H2100` for a garage door's height), placed by the jamb it
+      hangs from as HND-1's doors are. A door stated `single` with no part keeps HND-1's door
+      block (`GRID-DOOR-900x200-L`), since it draws the same.
+    - Inside the block, a door's leaves and swings are on `GRID-DOOR-SWINGS` (as one leaf's are);
+      its fixed panel and a window's faces and glass on layer 0, so they take `GRID-DOORS` or
+      `GRID-WINDOWS`; a door keeps HND-1's line across the gap. The symbol's jambs are not written
+      (the wall outlines end there, as for HND-1's blocks).
+    - The dashed layer is `GRID-OPENINGS-ABOVE`, a new profile category `openings-above`, listed
+      after `openings`, pen 0.18 mm dashed, colour 7 (the technical look's `above` pen, `fine`,
+      at 1:100). An office can rename or repen it in `dxf-layers.json`. A high-level window has
+      every line on it, so its block draws nothing on `GRID-WINDOWS` itself; say if it should.
 
 ## Checks run
 
@@ -386,3 +400,66 @@ stored figures."
   packages/rules packages/cli packages/viewer scoreboard/__tests__`: 297 of 297 files passed,
   5,298 tests passed, 4 skipped (5,302), in 1,214 s.
 - `npm run scoreboard`: same as the stored figures.
+
+### Again after merging `main` 8a433801 (HND-1)
+
+`main` brought a DXF a drafter can keep working in (HND-1): AutoCAD 2013's version in UTF-8 and
+metres, layers named and penned by an export profile (`neutral(...)`, `dxfProfile.ts`), doors,
+windows and openings as blocks, filled walls, dimensions, room tags and an A3 layout, and a new
+writer.
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: both Unreleased entries, CNT-14's first.
+- `docs/result-contract.md`: both agents' changelog entries, CNT-14's at the top, with one more
+  line for the DXF (below).
+- `packages/floorplan/src/geometry/export/dxf.ts`, four hunks (imports, `DXF_LAYERS`, the old R12
+  writer and tables, the old entities): HND-1's side taken whole as the base, then CNT-14's
+  drawing by kind carried into its blocks.
+
+**How the DXF was combined.** `openingBlocks` asks, for each door or window, whether it states a
+kind other than `single` or a part that opens (`kindBlock`). If so, `openingSymbol` (CNT-14's,
+unchanged) draws it on the block's own opening: along +X, normal +Y, hung from the origin. A door
+or window hung from its end jamb is HND-1's way round: inserted at that jamb and turned 180°, its
+face swapped, as HND-1 does a door's hand. The block's key is the symbol itself (every line and
+arc to the file's precision), so the same symbol is one block however many inserts use it. Its
+name adds the kind, the part and a garage door's height to HND-1's (`GRID-DOOR-SLIDING-2400x200`,
+`GRID-DOOR-POCKET-2400x300-R`). Inside the block, arcs and a door's leaves go on the door-swing
+layer, a fixed panel and a window's faces and glass on layer 0 (the insert's `GRID-DOORS` or
+`GRID-WINDOWS`), and lines marked `above` on the new dashed layer. A door keeps HND-1's line
+across the gap, and the symbol's jambs are left to the wall outlines. The kinds that draw no arc
+(sliding, pocket, roller, garage doors, and fixed, sliding or high-level windows) get none. A
+door whose kind needs a swing the plan does not state, or a kind its type does not take, keeps
+HND-1's block of before. `PlanOpening` already carried `kind`, `opens` and `height`.
+
+**The new layer.** `GRID-OPENINGS-ABOVE` is `neutral('openings-above')`, a new profile category
+in `DXF_CATEGORIES` right after `openings` (so the layer table lists it there), pen 0.18 mm,
+colour 7, `dashed`, the technical look's `above` pen at 1:100. Like every HND-1 layer, it is
+listed only when something is drawn on it, and `DASHED` with it. An office can rename or repen it
+in `dxf-layers.json`. `docs/commands.md` ("What the DXF holds") says so and lists the category.
+The choices are under For the owner 14.
+
+**Tests.** HND-1's DXF tests (`dxf.test.ts` 64, `dxf.structure.test.ts` 13, `dxf.golden.test.ts`
+2, the CLI's `dxfProfile.test.ts` 7, and the export, holes, exposure and joined-corner tests)
+pass as written. Their plans state no kind, so neither the golden `one-room.dxf` nor the ARE-2
+snapshot moved. Nothing was regenerated. CNT-14's DXF test (`geometry/export/__tests__/
+openingKinds.test.ts`) passes as written. It gains three tests for where the two meet: every
+door kind at both jambs and both faces, and every window kind at both jambs, on walls at four
+angles (one drawn backwards), has each line and arc of the core's symbol where the core puts it,
+on its layer, through the insert, and the file has no structural problem (`dxfProblems`); one
+block per symbol, counted by its inserts; the dashed layer listed only when used, with `DASHED`
+and weight 18; a `single` door with no part on HND-1's block. Making the end-jamb face swap
+wrong fails two of them.
+
+**Expectations changed.** None.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- While merging: the DXF and export tests (22 files, 527 tests passed), then `openingKinds.test.ts`
+  (10 passed).
+- `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1 packages/floorplan
+  packages/cli packages/viewer scoreboard/__tests__`: 274 of 274 files passed, 4,926 tests passed,
+  3 skipped (4,929), in 549 s. `packages/rules` was not in this run: the merge does not touch it.
+- `npm run scoreboard`: 197, 278, 19, 5, 18, 735, 95, "Same as the stored figures." Nothing
+  stored.

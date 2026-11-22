@@ -41,7 +41,8 @@ describe('exportPlan', () => {
     expect(pairs[0]).toEqual(['0', 'SECTION'])
     expect(pairs.at(-1)).toEqual(['0', 'EOF'])
     const usedLayers = new Set(pairs.filter(([code]) => code === '8').map(([, value]) => value))
-    for (const layer of [DXF_LAYERS.wallExterior, DXF_LAYERS.rooms, DXF_LAYERS.openings]) expect(usedLayers).toContain(layer)
+    // HND-1: the sample's one opening is a door, a block on the doors layer.
+    for (const layer of [DXF_LAYERS.wallExterior, DXF_LAYERS.rooms, DXF_LAYERS.doors]) expect(usedLayers).toContain(layer)
   })
 
   it('writes an OBJ with one object per wall and room, and the floor\'s slab and roof (LVL-4)', () => {

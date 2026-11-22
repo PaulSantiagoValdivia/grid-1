@@ -16,12 +16,16 @@ entry whose fix may change it.
 | reads %s as not stated and keeps the rest of the room (a room's `use`) | `packages/floorplan/src/types/__tests__/floorplan.test.ts` | MS-1 |
 | catches a collision between two different kinds of entity | `packages/floorplan/src/geometry/__tests__/validation.test.ts` | MS-9 |
 | agrees with the area: width × depth is the room area | `packages/floorplan/src/geometry/__tests__/dimensions.test.ts` | DR-2 (true only for rectangles) |
-| escapes an accented letter as \U+XXXX, which CAD tools decode | `packages/floorplan/src/geometry/export/__tests__/dxf.test.ts` | EX-1 |
 | exports one floor for the 2D and 3D formats, the one the user is looking at | `packages/floorplan/src/export/__tests__/planExport.test.ts` | EX-4 |
 | is false for any other country | `packages/rules/src/checks/__tests__/rules-figures.test.ts` | CH-3 |
 
 Z-6 also named `rejects a non-integer level` (floorplan.test.ts, VE-3). LVL-1 changed it on
 purpose to `accepts a half level`, so it left this list (see below).
+
+Z-6 also named `escapes an accented letter as \U+XXXX, which CAD tools decode` (dxf.test.ts,
+EX-1). HND-1 changed it on purpose to `writes an accented letter as itself, which every reader
+shows`: the DXF is now AutoCAD 2013's version, whose text is UTF-8, so "Baño" is stored as those
+four letters. It left this list.
 
 The IFC export pins the same level rule as elevations: `ignores gaps in the level numbering:
 levels are an order, not positions` in `packages/floorplan/src/geometry/export/__tests__/ifc.test.ts`
