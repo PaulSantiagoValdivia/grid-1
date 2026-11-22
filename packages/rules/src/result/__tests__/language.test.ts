@@ -9,6 +9,9 @@ import { resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { loadLanguage, say } from '@ongrid/floorplan/messages'
+import { labPlan } from '@ongrid/floorplan/test-support/lab'
+import { stairWindowAsWritten, stairWindowThrough } from '@ongrid/floorplan/test-support/through'
+import { parseFloorPlan, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { approvalWords, GENERAL_GUIDANCE_LABEL, inspectPlan, type GridResult } from '../..'
 
 const fixtures = resolve(__dirname, '../../../../floorplan/fixtures')
@@ -332,5 +335,93 @@ describe('the flats list, in Spanish (CNT-4, after merging main at ed8b9f75)', (
         expect(text).not.toMatch(/\{[A-Za-z]/)
       }
     }
+  })
+})
+
+describe('walls through floors and floors that line up, in Spanish (LVL-5, after merging main at cf8b8084)', () => {
+  /** A line of a code in English and in Spanish, with the same code, kind, thing, ids and values. */
+  function both(plan: unknown, code: string, id?: string): { en: GridResult['lines'][number]; es: GridResult['lines'][number] } {
+    const pick = (r: GridResult) => r.lines.find((l) => l.code === code && (id === undefined || l.thing.id === id))!
+    const en = pick(inspectPlan(plan))
+    const es = pick(inspectPlan(plan, { language: 'es' }))
+    expect([es.code, es.kind, es.thing, es.also, es.values]).toEqual([en.code, en.kind, en.thing, en.also, en.values])
+    for (const text of [es.message, es.found, es.needed, es.fix]) {
+      expect(approvalWords(text)).toEqual([])
+      expect(text).not.toMatch(/\{[A-Za-z]/)
+    }
+    return { en, es }
+  }
+
+  it('says a stair moved on one floor in main\'s English and in Spanish, with the same values', () => {
+    const { en, es } = both(labPlan('D/scenarios/d2-stair-shifted-floor3.json'), 'room/stair-shifted', 'L3-stair')
+    expect(en.message).toMatch(/^The stair "[^"]+" on "Floor 3" is 1\.20 m east of "[^"]+" on "Floor 2" below it: it stands from \(\d+\.\d\d, \d+\.\d\d\) to \(\d+\.\d\d, \d+\.\d\d\), the one below from \(/)
+    expect(en.found).toBe('moved 1.20 m east of the one below, on the drawing (north is its top)')
+    expect(en.fix).toBe('Move it back over the stair room below, or, if it is meant, mark the room with overhang "meant".')
+    expect(es.message).toMatch(/^La escalera "[^"]+" de "Floor 3" está 1,20 m al este de "[^"]+" de "Floor 2", debajo: ocupa de \(\d+,\d\d; \d+,\d\d\) a \(\d+,\d\d; \d+,\d\d\), y la de abajo de \(/)
+    expect(es.found).toBe('desplazada 1,20 m al este respecto a la de abajo, en el dibujo (el norte está arriba)')
+  })
+
+  it('says a lift shaft with one side moved by that side, in main\'s English and in Spanish', () => {
+    const raw = JSON.parse(JSON.stringify(labPlan('H/scenarios/h06b-lift-shaft-shifted.json'))) as FloorPlan
+    const plan = parseFloorPlan({ ...raw, rooms: raw.rooms.map((r) => (r.name === 'Lift shaft' ? { ...r, use: 'lift' } : r)) })
+    const line = inspectPlan(plan).lines.find((l) => l.code === 'room/lift-shifted')!
+    const { en, es } = both(plan, 'room/lift-shifted', line.thing.id)
+    expect(en.message).toBe(
+      'The lift shaft "Lift shaft" on "Second floor" has its west side 0.60 m east of that of "Lift shaft" on "First floor" below it: it stands from (6.70, 3.70) to (7.85, 5.85), the one below from (6.10, 3.70) to (7.85, 5.85)'
+    )
+    expect(en.found).toBe("its west side 0.60 m east of the one below's, on the drawing (north is its top)")
+    expect(es.message).toBe(
+      'La caja del ascensor "Lift shaft" de "Second floor" tiene su lado oeste 0,60 m al este respecto al de "Lift shaft" de "First floor", debajo: ocupa de (6,70; 3,70) a (7,85; 5,85), y la de abajo de (6,10; 3,70) a (7,85; 5,85)'
+    )
+  })
+
+  it('says a floor that sits back from the one below in main\'s English and in Spanish', () => {
+    const box = (floor: string, east: number) => [
+      { id: `${floor}-s`, start: [0, 0], end: [east, 0], thickness: 0.3, kind: 'exterior', height: 2.7, floor },
+      { id: `${floor}-e`, start: [east, 0], end: [east, 6], thickness: 0.3, kind: 'exterior', height: 2.7, floor },
+      { id: `${floor}-n`, start: [east, 6], end: [0, 6], thickness: 0.3, kind: 'exterior', height: 2.7, floor },
+      { id: `${floor}-w`, start: [0, 6], end: [0, 0], thickness: 0.3, kind: 'exterior', height: 2.7, floor }
+    ]
+    const plan = {
+      version: '1',
+      units: 'm',
+      floors: [
+        { id: 'g', name: 'Ground floor', level: 0 },
+        { id: 'f', name: 'First floor', level: 1 }
+      ],
+      walls: [...box('g', 8.3), ...box('f', 8)],
+      rooms: [
+        { id: 'g-r', name: 'Living', floor: 'g', boundary: ['g-s', 'g-e', 'g-n', 'g-w'], use: 'living' },
+        { id: 'f-r', name: 'Bedroom', floor: 'f', boundary: ['f-s', 'f-e', 'f-n', 'f-w'], use: 'bedroom' }
+      ],
+      openings: [{ id: 'door', wall: 'g-s', type: 'door', offset: 1, width: 0.9, height: 2.1 }]
+    }
+    const { en, es } = both(plan, 'floor/out-of-line', 'f')
+    expect(en.message).toBe('Floor "First floor" does not line up with the floor below it')
+    expect(en.found).toBe(
+      'Floor "First floor" does not line up with "Ground floor" below it: it sits back from it by 0.30 m on the east, from (8.15, -0.15) to (8.45, 6.15). ' +
+        'If that is meant, mark the floor with overhang "meant"; if not, move its outside walls over the floor below, or make a wall that both floors share rise through them (through).'
+    )
+    expect(es.message).toBe('Planta "First floor" no está alineada con la planta de abajo')
+    expect(es.found).toMatch(/^La planta "First floor" no está alineada con "Ground floor", debajo de ella: queda retranqueada respecto a ella 0,30 m por el este, de \(8,15; -0,15\) a \(8,45; 6,15\)\. /)
+  })
+
+  it('says a wall that rises through a floor the plan does not have in main\'s English and in Spanish', () => {
+    const raw = JSON.parse(JSON.stringify(stairWindowThrough())) as FloorPlan
+    const plan = parseFloorPlan({ ...raw, walls: raw.walls.map((w) => (w.id === 'g-n' ? { ...w, through: 'roof' } : w)) })
+    const { en, es } = both(plan, 'wall/through-floor', 'g-n')
+    expect(en.message).toBe('Wall "g-n" rises through a floor that is not above its own, so it stands on its own floor only')
+    expect(en.found).toBe('Wall "g-n" rises through floor "roof", which the plan does not have, so it stands on its own floor only. The floors above it are "first".')
+    expect(es.found).toBe('El muro "g-n" sube hasta la planta "roof", que el plano no tiene, así que solo está en su propia planta. Las plantas sobre ella son "first".')
+  })
+
+  it('calls a window that cannot be drawn a window, in main\'s English and in Spanish', () => {
+    const { en, es } = both(stairWindowAsWritten(), 'floor/not-checked-doors-not-drawn')
+    expect(en.message).toBe('On "Ground floor", this window could not be drawn, so it and what rests on it were not checked: "g-w-stair-tall"')
+    expect(en.found).toBe('a window that cannot be drawn')
+    expect(en.needed).toBe('a window that can be drawn')
+    expect(en.fix).toBe('Correct the lines that leave that window out. It is checked once it can be drawn, and so is what rests on it: a note held back comes back if it still holds.')
+    expect(es.message).toBe('En "Ground floor" no se pudo dibujar esta ventana, así que no se comprobó ni el hueco ni lo que se apoya en él: "g-w-stair-tall"')
+    expect(es.found).toBe('una ventana que no se consiguió dibujar')
   })
 })

@@ -39,6 +39,7 @@ import { heightByDefault } from '../types/floorplan'
 import type { Floor, FloorPlan, RoofShape, Wall } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import { floorOf, planFloors, planForFloor } from './floors'
+import { wholeWall } from './through'
 import { floorElevations, isFiniteWall } from './elevations'
 import { planEnvelope } from './envelope'
 import { groundLevel } from './ground'
@@ -348,6 +349,8 @@ export function planSection(stated: FloorPlan, line: SectionLine): PlanSection {
   }
 
   const levels: SectionLevel[] = []
+  // LVL-5: the openings of walls through floors, across the section, which no slab closes.
+  const throughHoles: Vec2[][] = []
   const lowestAbove = [...new Set(floors.map(levelOf))].filter((l) => l >= 0).sort((a, b) => a - b)[0]
   for (const floor of floors) {
     const storey = elevations.floors.get(floor.id) ?? { floorLevel: 0, clearHeight: 0 }
@@ -362,10 +365,20 @@ export function planSection(stated: FloorPlan, line: SectionLine): PlanSection {
     const usable = slice.walls.filter((wall) => !broken.has(wall.id) && isFiniteWall(wall))
     const joints = wallJoints(usable)
 
-    for (const wall of usable) {
-      if (wall.virtual) continue
-      const openings = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
+    for (const part of usable) {
+      if (part.virtual) continue
+      // LVL-5 (C19): a wall through floors is cut once, whole, from its own floor; its openings
+      // are open through every slab between, as the window through two storeys is.
+      const whole = wholeWall(part, openingsOf(index, part.id).filter((o) => !broken.has(o.id)))
+      if (whole === null) continue
+      const wall = whole.wall
+      const openings = whole.openings
       const ends = joints.get(wall.id) ?? SQUARE_ENDS
+      if (wall !== part) {
+        for (const o of openings) {
+          for (const [x0, x1] of inside(frame, [wallSlicePolygon(wall, Math.max(0, o.offset), o.offset + o.width, ends)])) throughHoles.push(rect(snap, x0, x1, base + o.sill, base + o.sill + o.height))
+        }
+      }
       const rings: Vec2[][] = []
       for (const part of wallParts(wall, openings)) {
         const polygon = wallSlicePolygon(wall, part.from, part.to, ends)
@@ -463,6 +476,20 @@ export function planSection(stated: FloorPlan, line: SectionLine): PlanSection {
         for (const piece of piecesAsRings(roof.parapet.pieces)) for (const ring of [piece.outline, ...piece.holes]) ringFaces('parapet', floor.id, floor.id, ring, roofTop, parapetTop)
       }
     }
+  }
+
+  // LVL-5: a slab stops at the opening of a wall that rises past it: the window through two
+  // storeys is open from its sill to its head.
+  if (throughHoles.length > 0) {
+    const cutters = throughHoles.map((ring) => [ringOf(ring)])
+    parts.forEach((part, i) => {
+      if (part.kind !== 'slab') return
+      const rings = part.rings.flatMap((ring) => {
+        const left = cutOutline('difference', [ringOf(ring)], cutters)
+        return left === null ? [ring] : piecesAsRings(left).map((piece) => piece.outline)
+      })
+      parts[i] = { ...part, rings }
+    })
   }
 
   // The stairs the plan states, tread by tread, solid from the foot (LVL-3).

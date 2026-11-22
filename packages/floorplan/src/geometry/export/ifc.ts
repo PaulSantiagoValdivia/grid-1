@@ -32,6 +32,7 @@
 
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
 import { planFloors, planForFloor } from '../floors'
+import { sharedPart, wholeWall } from '../through'
 import { inIdOrder } from '../order'
 import { indexPlan, openingsOf } from '../plan'
 import {
@@ -583,6 +584,10 @@ function deriveLevels(models: readonly FloorModel[]): Map<string, StoreyLevel> {
     models.map(({ floor, walls, index }) => {
       let tallest = 0
       for (const wall of walls) {
+        // LVL-5: a wall through floors counts toward the floor it rises through, with its own
+        // height (`floorElevations` stacks it so); its stretches below run through the slabs.
+        const part = sharedPart(wall)
+        if (part !== null && !part.top) continue
         // LVL-6: a wall the floor's roof cuts is as tall as the roof leaves it.
         if (Number.isFinite(wall.height)) tallest = Math.max(tallest, wallPeak(index.plan, wall))
       }
@@ -1900,7 +1905,12 @@ function writeStoreyContents(building: Context, storey: Storey): void {
   // CNT-10: each state's corners are joined among its own walls, so a demolished wall never bends a new one.
   const joints = phasedJoints(storey.model.walls, c.phaseOf)
 
-  for (const wall of storey.model.walls) {
+  for (const part of storey.model.walls) {
+    // LVL-5 (C19): a wall through floors is one wall element, on its own floor's storey, from its
+    // foot to its top, with its openings as stated: the window through two storeys is one window.
+    const whole = wholeWall(part, openingsOf(index, part.id).filter((o) => !broken.has(o.id)))
+    if (whole === null) continue
+    const wall = whole.wall
     let element: WallElement
     try {
       element = writeWall(c, storey, wall, joints.get(wall.id))
@@ -1911,7 +1921,7 @@ function writeStoreyContents(building: Context, storey: Storey): void {
     contained.push(element.id)
 
     const written: Opening[] = []
-    for (const opening of openingsOf(index, wall.id)) {
+    for (const opening of whole.openings) {
       if (broken.has(opening.id)) continue
       try {
         const filler = writeOpening(c, element, opening)

@@ -1011,3 +1011,90 @@ Spanish; sheet `language.test.ts`, "the flat schedule in Spanish (MSG-11, CNT-4)
     does; its found names it by id, as the drawing check does.
 41. **The flat schedule on the sheet stays in square metres** in every display, as CNT-4 writes
     it; in Spanish its figures take the comma.
+
+## After merging main at cf8b8084
+
+Main moved again: LVL-5 (walls and windows through floors, floors that line up: a wall's
+`through`, `overhang: "meant"` on a floor or a stair or lift room, and four codes,
+`wall/through-floor`, `floor/out-of-line`, `room/stair-shifted` and `room/lift-shifted`; a window
+that cannot be drawn is called a window). Eight files conflicted: `docs/result-contract.md`, cli
+`firm/measure.ts`, floorplan `geometry/levels.ts`, `geometry/rules/index.ts`,
+`geometry/rules/messages.ts`, `geometry/validate.ts`, rules `result/__tests__/result.test.ts` and
+`result/catalogue.ts`. Main adds no tool.
+
+### How the conflicts were resolved
+
+- **Heights through floors** (`geometry/levels.ts`, `geometry/validate.ts`): MSG-11's sentences by
+  key with main's figures: `issue.wall/above-storey` names the floor the wall rises through
+  (`storeyFloorOf`), `issue.opening/too-tall` the wall's whole rise. The overlap check for a wall
+  through floors, which auto-merged with main's English, says `issue.opening/overlap` by key, so
+  `validate.ts` stays at none.
+- **A wall through floors that names no floor above** (`geometry/through.ts`, new): its issue says
+  `issue.wall/through-floor.unknown` or `.below`, with the floors above it
+  (`issue.part.through.*`), and carries it as `said` (`withSaid`); `message` is main's English.
+- **Floors that do not line up** (`geometry/stacking.ts`, new): `issue.floor/out-of-line`, each
+  stretch by key (`issue.part.lineUp.*`), its parts joined by a new `join.semicolonAnd` (`; and `).
+- **A moved stair or shaft** (`geometry/rules/messages.ts`, `check.ts`): `saids.shifted` by key
+  (`check.shifted.stair`, `.lift`); how far and which way (`shiftWays`, `shiftedHowSaid`) and
+  where each stands (`shiftedBoxSaid`) by key too, the ways by `describe.way.*`. The finding
+  carries its sentence (`withSentence`).
+- **Openings by what they are** (`geometry/rules/messages.ts`): main's `openingWords` is kept,
+  English made from `openingsSaid`, which names openings by key (`check.openings.<kind>.<this,
+  that, a, these, those, plain>`, `.any.*` for openings of no known kind and `.mixed.*` for
+  several kinds); `saids.doorsNotDrawn` takes the kinds (`check.doorsNotDrawn.kinds.one`, `.many`).
+- **The record** (`result/catalogue.ts`): the four codes are logic only. The two shifted codes
+  share one entry: `wording` is the finding's sentence, `found` names the ways (`ways`) or, for a
+  shaft not moved as a whole, its sides (`sideWays`), with a `none` wording for a line with no
+  finding. `floor/not-checked-doors-not-drawn` takes the notice's `openingKinds` as `plain` and
+  `those`, with `.kinds` wordings of `found` and `needed` and `.kinds.one` and `.kinds.many` of
+  `fix`; with no kinds its words are as before. `room/cross-floor`'s `needed` and `fix` take
+  main's new English.
+- **The firm's doors** (`firm/measure.ts`): MSG-11's words by key, at main's floor (`facts.floor`).
+- **Tests**: `result.test.ts` keeps main's wall field list (`through` after `floor`) and MSG-11's
+  `values`. **Docs**: `CHANGELOG.md` merged cleanly with every Unreleased line; the contract keeps
+  MSG-11's section first of the day, with a paragraph on LVL-5, then main's new section.
+
+New keys (71), in `en.ts` with main's English and in `es.ts` as a draft: `join.semicolonAnd`,
+`issue.wall/through-floor.*` (2), `issue.part.through.*` (2), `issue.floor/out-of-line`,
+`issue.part.lineUp.*` (6), `check.shifted.*` (8), `check.doorsNotDrawn.kinds.*` (2),
+`check.openings.*` (24), `line.wall/through-floor.*` (3), `line.floor/out-of-line.*` (3),
+`line.room/stair-shifted.*` and `line.room/lift-shifted.*` (7 each) and
+`line.floor/not-checked-doors-not-drawn.*` (5). Changed: `line.room/cross-floor.needed` and `.fix`.
+A test in rules `result/__tests__/language.test.ts`, "walls through floors and floors that line
+up, in Spanish", says the four codes and the window that cannot be drawn in main's exact English
+and in Spanish, with the same codes, things, ids and values.
+
+### The ownWords guard
+
+`geometry/through.ts` and `geometry/stacking.ts` are at none and join the list held at none.
+`geometry/tolerances.ts` 213 → 219 (`developer`, LVL-5's `stackShift` and its line) is not counted.
+The ratchet moves from 1452 to 1453: `floorplan/src/notes/notes.ts` 17 → 18, the note on a moved
+stair or shaft, as the other notes are (`notYet`).
+
+### Results after cf8b8084
+
+- `npm run build`: `dist/grid.mjs` 636,265 bytes, under main's cap of 650,000 (not touched); the
+  Spanish chunk 178,611 bytes.
+- `npm run typecheck`, `npm run lint`: clean.
+- Rules `src`, floorplan `src` (LVL-5's `through`, `lineUp` and `held` tests among them) and viewer
+  `picture/`: 187 files, 3,881 tests pass (1 skipped).
+- The new Spanish test with rules `result/` and floorplan `messages/`: 3 files, 37 tests pass.
+- The CLI's guard, `firm/`, `describe/`, `sheet/`, `quantities/`, `preview/`, `mcp/` tools and
+  `command/` (grid.e2e, language.e2e, describe.e2e, sheet.e2e): 30 files, 476 tests pass. Main's
+  tests pass unchanged.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (cf8b8084)
+
+42. **A point on the plan in Spanish is written `(1,20; 0,00)`**, with a semicolon between the two
+    figures: with the decimal comma, `(1,20, 0,00)` would not read as two figures. English keeps
+    main's `(1.20, 0.00)`. To review with the language.
+43. **Openings of several kinds in Spanish are "estos huecos (puertas y ventanas)"**, so the
+    determiner needs no gender for a list of mixed kinds; one kind agrees as usual ("esta
+    ventana", "estos huecos sin puerta"). A reviewer may prefer another wording.
+44. **The "could not be drawn" line in Spanish says "que no se consiguió dibujar"**, an impersonal
+    form that holds for one opening and many, where main's English needs none.
+45. **The plan's own words stay as they are in every language**: `through` and `overhang "meant"`
+    are written as the file writes them in the Spanish lines, as the other field names are.
+46. **The note on a moved stair or shaft** (`notes/notes.ts`, the plan's notes) stays English, as
+    the other notes do; the ratchet counts it.

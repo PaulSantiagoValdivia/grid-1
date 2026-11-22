@@ -26,7 +26,7 @@
  * be: it is the state of a view, not part of the plan, and a new one is written on the next change.
  */
 import path from 'path'
-import { floorOf, type CameraRecord, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { floorOf, hasWallsThrough, planFloors, planForFloor, wallFloorIds, type CameraRecord, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 
@@ -173,24 +173,38 @@ export interface PlanPart {
   readonly id: string
   readonly kind: PickedKind
   readonly floor: string
+  /** The floors it is drawn on: its own, and (LVL-5) for a wall through floors each it rises through. */
+  readonly floors: readonly string[]
   /** A room's name, or a fixture's label or kind; null for a wall or an opening. */
   readonly name: string | null
 }
 
-/** Every part a picture can be clicked on, by id. Openings take their wall's floor. */
+/**
+ * Every part a picture can be clicked on, by id. Openings take their wall's floor. LVL-5: a wall
+ * through floors is drawn on each floor it rises through, and an opening in it on each floor its
+ * part lies on.
+ */
 export function planParts(plan: FloorPlan): Map<string, PlanPart> {
   const parts = new Map<string, PlanPart>()
   const wallFloor = new Map(plan.walls.map((w) => [w.id, floorOf(w)]))
-  for (const room of plan.rooms) parts.set(room.id, { id: room.id, kind: 'room', floor: floorOf(room), name: room.name })
-  for (const wall of plan.walls) if (!parts.has(wall.id)) parts.set(wall.id, { id: wall.id, kind: 'wall', floor: floorOf(wall), name: null })
+  const wallFloors = new Map(plan.walls.map((w) => [w.id, wallFloorIds(plan, w)]))
+  const openingFloors = new Map<string, string[]>()
+  if (hasWallsThrough(plan)) {
+    for (const floor of planFloors(plan)) {
+      for (const opening of planForFloor(plan, floor.id).openings) openingFloors.set(opening.id, [...(openingFloors.get(opening.id) ?? []), floor.id])
+    }
+  }
+  for (const room of plan.rooms) parts.set(room.id, { id: room.id, kind: 'room', floor: floorOf(room), floors: [floorOf(room)], name: room.name })
+  for (const wall of plan.walls) if (!parts.has(wall.id)) parts.set(wall.id, { id: wall.id, kind: 'wall', floor: floorOf(wall), floors: wallFloors.get(wall.id)!, name: null })
   for (const opening of plan.openings) {
     if (parts.has(opening.id)) continue
     const kind: PickedKind = opening.type === 'door' ? 'door' : opening.type === 'window' ? 'window' : 'opening'
-    parts.set(opening.id, { id: opening.id, kind, floor: wallFloor.get(opening.wall) ?? floorOf({}), name: null })
+    const floor = wallFloor.get(opening.wall) ?? floorOf({})
+    parts.set(opening.id, { id: opening.id, kind, floor, floors: openingFloors.get(opening.id) ?? wallFloors.get(opening.wall) ?? [floor], name: null })
   }
   for (const item of plan.items ?? []) {
     if (parts.has(item.id)) continue
-    parts.set(item.id, { id: item.id, kind: 'fixture', floor: floorOf(item), name: item.label ?? item.kind })
+    parts.set(item.id, { id: item.id, kind: 'fixture', floor: floorOf(item), floors: [floorOf(item)], name: item.label ?? item.kind })
   }
   return parts
 }

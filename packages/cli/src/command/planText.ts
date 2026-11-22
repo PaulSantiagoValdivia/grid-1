@@ -57,7 +57,8 @@ type Kind = 'name' | 'id' | 'path'
 
 /** The strings of each part the schema keeps, and what each is. */
 const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
-  walls: { id: 'id', floor: 'id' },
+  // LVL-5: a wall names the highest floor it rises through.
+  walls: { id: 'id', floor: 'id', through: 'id' },
   // CNT-8: the room a zone is part of is an id. CNT-9: a room's number is held to an id's limit.
   rooms: { id: 'id', name: 'name', floor: 'id', partOf: 'id', number: 'id' },
   openings: { id: 'id', wall: 'id' },

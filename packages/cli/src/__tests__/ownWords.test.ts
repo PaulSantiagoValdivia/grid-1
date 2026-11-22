@@ -138,12 +138,12 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/rounding.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/rules/doors.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
-  'packages/floorplan/src/geometry/tolerances.ts': [213, 'developer'],
+  'packages/floorplan/src/geometry/tolerances.ts': [219, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/wallFaults.ts': [3, 'notYet'],
-  'packages/floorplan/src/notes/notes.ts': [17, 'notYet'],
+  'packages/floorplan/src/notes/notes.ts': [18, 'notYet'],
   'packages/floorplan/src/rooms/answer.ts': [6, 'notYet'],
   'packages/floorplan/src/rooms/compile.ts': [117, 'notYet'],
   'packages/floorplan/src/rooms/read.ts': [21, 'notYet'],
@@ -243,8 +243,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // measures (29), the area rules for an outline (4), the outline's schema refusal (1) and the
     // commands' new options (main 2, write 1); and CNT-4 10: the flats in rooms text (1), the
     // schema (1), the area rules (1, and the CLI's 1), the flat schedule's rules (3) and the
-    // commands' refusals (planText 1, write 2) (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1452)
+    // commands' refusals (planText 1, write 2); and LVL-5 1: a moved stair's note (notes.ts)
+    // (reviews/MSG-11.md, "After merging main").
+    expect(left).toBeLessThanOrEqual(1453)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {
@@ -273,7 +274,10 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
       // After merging main at fbe5160e: CNT-10's phases, a part that stands when its wall does not.
       'packages/floorplan/src/geometry/phases.ts',
       // After merging main at ed8b9f75: CNT-4's flats list and its faults.
-      'packages/floorplan/src/geometry/flats.ts'
+      'packages/floorplan/src/geometry/flats.ts',
+      // After merging main at cf8b8084: LVL-5's walls through floors and floors that line up.
+      'packages/floorplan/src/geometry/through.ts',
+      'packages/floorplan/src/geometry/stacking.ts'
     ]) {
       expect(counts.get(file), file).toBe(0)
     }

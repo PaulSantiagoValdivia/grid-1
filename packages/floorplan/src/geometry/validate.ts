@@ -20,6 +20,8 @@ import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
 import { floorOf, isFloorSlice, planFloors } from './floors'
+import { throughIssues, wallRise, wallStandsOn } from './through'
+import { stackingIssues } from './stacking'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
 import { RoomOutlineError, roomNesting, roomPolygon } from './room'
@@ -408,9 +410,13 @@ function validateOpening(
   // A dividing line stands no height (0 unless it says otherwise), so a gap in it cannot be
   // too tall for it.
   const head = opening.sill + opening.height
-  if (!wall.virtual && head > wall.height + overrun) {
+  // LVL-5 (C19): in a wall through floors an opening may reach as high as the wall rises, from its
+  // own floor's level. The roof over its top floor is checked on that floor's slice.
+  const through = wall.through !== undefined && wall.through !== floorOf(wall)
+  const rise = through ? wallRise(index.plan, wall) : wall.height
+  if (!wall.virtual && head > rise + overrun) {
     // MSG-7: the tallest it can be at its sill, when it can be any height at all there.
-    const tallest = wall.height - Math.max(opening.sill, 0)
+    const tallest = rise - Math.max(opening.sill, 0)
     issues.push(
       issue(
         'opening',
@@ -420,17 +426,17 @@ function validateOpening(
           ? said('issue.opening/too-tall.fits', {
               opening: name(opening.id),
               head: num(exactMetres(head)),
-              height: num(exactMetres(wall.height)),
+              height: num(exactMetres(rise)),
               sill: num(exactMetres(opening.sill)),
               tallest: num(exactMetres(tallest))
             })
-          : said('issue.opening/too-tall', { opening: name(opening.id), head: num(exactMetres(head)), height: num(exactMetres(wall.height)) }),
+          : said('issue.opening/too-tall', { opening: name(opening.id), head: num(exactMetres(head)), height: num(exactMetres(rise)) }),
         'error',
         tallest > 0 ? [{ part: 'opening', id: opening.id, height: down(tallest) }] : []
       )
     )
     ok = false
-  } else if (!wall.virtual) {
+  } else if (!wall.virtual && !through) {
     // LVL-6: a wall the floor's roof cuts is no higher than the roof over its line.
     const profile = wallTopProfile(index.plan, wall)
     const under = profile === null ? null : topBetween(profile, Math.max(0, span.from), Math.min(wallLength, span.to))
@@ -493,6 +499,28 @@ function validateOverlaps(index: PlanIndex, broken: Set<string>, issues: Issue[]
     const spans = openingsOf(index, wall.id)
       .filter((opening) => !broken.has(opening.id))
       .map(openingSpan)
+    // LVL-5 (C19): a wall through floors holds a window on each floor, one over the other: two
+    // openings overlap there only where they share a stretch of the wall at the same height.
+    if (wall.through !== undefined && wall.through !== floorOf(wall)) {
+      const kept: typeof spans = []
+      for (const current of spans) {
+        const o = current.opening
+        const clash = kept.find(
+          (k) =>
+            current.from < k.to - tolerance('openingOverrun') &&
+            k.from < current.to - tolerance('openingOverrun') &&
+            o.sill < k.opening.sill + k.opening.height - tolerance('openingOverrun') &&
+            k.opening.sill < o.sill + o.height - tolerance('openingOverrun')
+        )
+        if (clash === undefined) {
+          kept.push(current)
+          continue
+        }
+        issues.push(issue('opening', o.id, 'opening/overlap', said('issue.opening/overlap', { first: name(clash.opening.id), second: name(o.id), wall: name(wall.id) })))
+        broken.add(o.id)
+      }
+      continue
+    }
     let kept = spans[0]
     for (const current of spans.slice(1)) {
       if (current.from < kept!.to - tolerance('openingOverrun')) {
@@ -695,7 +723,8 @@ function validateFloors(
       // the real fault and has marked the id broken.
       if (duplicated.has(wallId)) return false
       const wall = index.wallsById.get(wallId)
-      return wall !== undefined && floorOf(wall) !== floor
+      // LVL-5 (C19): a wall through floors stands on each floor it rises through.
+      return wall !== undefined && !wallStandsOn(plan, wall, floor)
     })
     if (strays.length === 0) continue
 
@@ -851,7 +880,8 @@ function traceItemRooms(plan: FloorPlan, spaces: readonly FloorSpaces[], broken:
 function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): void {
   // BRF-4 (C17): a floor with an outline and no walls is massing: all of it is floor no room
   // claims yet, and saying so would be the whole floor, every time. Its areas say it is massing.
-  const massing = !plan.walls.some((wall) => floorOf(wall) === result.floor && !broken.has(wall.id))
+  // LVL-5: a wall that rises through the floor from below stands on it, so it is not massing.
+  const massing = !plan.walls.some((wall) => wallStandsOn(plan, wall, result.floor) && !broken.has(wall.id))
   if (result.pastOutline !== null && result.pastOutline >= tolerance('areaReported')) {
     issues.push(
       issue(
@@ -1234,6 +1264,8 @@ export function validatePlan(
   validateIdSpelling(plan, issues, broken)
   validateFloorIdSpelling(plan, issues)
   validateFloors(plan, index, duplicated, issues, broken)
+  // LVL-5: a wall that names a floor to rise through that is not above its own.
+  if (!isFloorSlice(plan)) issues.push(...throughIssues(plan))
 
   for (const wall of plan.walls) {
     if (!validateWall(wall, issues)) broken.add(wall.id)
@@ -1302,6 +1334,8 @@ export function validatePlan(
 
   if (options.spaces !== false) {
     const spaces = validateSpaces(plan, index, broken, issues, options.leftOutParts ?? [])
+    // LVL-5 (lab WR-9): a floor whose outline does not lie over the floor below it.
+    if (!isFloorSlice(plan)) issues.push(...stackingIssues(plan, spaces))
     traceItemRooms(plan, spaces, broken, options.leftOutParts ?? [], issues)
     validateNesting(plan, index, broken, issues)
     validateZones(index, broken, issues)

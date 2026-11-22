@@ -144,6 +144,10 @@ Draft, not reviewed.
 | fit-out (on a base plan) | acondicionamiento |
 | the walk-through | el recorrido |
 | square feet | pies² |
+| line up (a floor over the one below) | estar alineada |
+| reach past, sit back from (the floor below) | sobresalir, quedar retranqueada |
+| moved (a stair room or a lift shaft) | desplazada |
+| doorless opening | hueco sin puerta |
 
 ## Later steps
 

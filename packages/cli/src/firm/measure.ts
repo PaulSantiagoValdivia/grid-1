@@ -10,7 +10,7 @@
  *
  * Pure but for `firmForCheck`, which reads the firm's file beside the plan through the project.
  */
-import { doorwayClearance, fixtureSpace, floorOf, itemNameSaid, turningSpace, type FloorPlan, type Item, type Vec2 } from '@ongrid/floorplan/geometry'
+import { doorwayClearance, fixtureSpace, itemNameSaid, turningSpace, type FloorPlan, type Item, type Vec2 } from '@ongrid/floorplan/geometry'
 import { english, joined, name, num, said, type Said, type Value } from '@ongrid/floorplan/messages'
 import type { FirmInput, FirmMeasured, FirmStandard } from '@ongrid/rules'
 import type { Project } from '../fs/projectFiles'
@@ -96,11 +96,12 @@ export function firmMeasures(plan: FloorPlan, standards: readonly FirmStandard[]
             const opening = plan.openings.find((o) => o.id === facts.id)
             const wall = plan.walls.find((w) => w.id === facts.wall)
             if (!opening || !wall || wall.virtual === true) continue
-            const d = doorwayClearance(wall, opening, obstacles(floorOf(wall)))
+            // LVL-5: the floor the door stands on, as CNT-17 reads it; a wall through floors stands on more than its own.
+            const d = doorwayClearance(wall, opening, obstacles(facts.floor))
             const leaf = d.leaf > 0 ? said('line.part.firm.at.leaf', { leaf: fig(d.leaf) }) : ''
             const count = items.filter((item) => d.narrowedBy.includes(item.id)).length
             const narrowed = count === 0 ? '' : said(count === 1 ? 'line.part.firm.at.narrowed.one' : 'line.part.firm.at.narrowed.many', { names: itemsNamed(items, d.narrowedBy), covered: fig(d.covered) })
-            out.push({ standard: i, thing: { kind: 'opening', id: opening.id }, floor: floorOf(wall), measured: d.clear, precision: 0, ...where(said('line.part.firm.at.door', { hole: fig(d.hole), leaf, narrowed })), also: [...d.narrowedBy] })
+            out.push({ standard: i, thing: { kind: 'opening', id: opening.id }, floor: facts.floor, measured: d.clear, precision: 0, ...where(said('line.part.firm.at.door', { hole: fig(d.hole), leaf, narrowed })), also: [...d.narrowedBy] })
           }
         }
         return

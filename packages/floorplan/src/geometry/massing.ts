@@ -14,7 +14,7 @@
  */
 import type { Pair, Polygon } from 'polygon-clipping'
 import type { FloorPlan } from './plan'
-import { floorOf, planFloors } from './floors'
+import { planFloors, wallStandsOn } from './floors'
 import { boundaryEdgeCount } from '../types/floorplan'
 import { signedArea } from './vec2'
 import { polygonArea } from './polygons'
@@ -39,9 +39,12 @@ export function statedOutlineArea(plan: Pick<FloorPlan, 'floors'>, floor: string
   return outline === null ? null : polygonArea(outline)
 }
 
-/** Whether a floor is massing: it states an outline, and no wall stands on it. */
+/**
+ * Whether a floor is massing: it states an outline, and no wall stands on it, its own or (LVL-5)
+ * one that rises through it from a floor below.
+ */
 export function isMassing(plan: FloorPlan, floor: string): boolean {
-  return statedOutline(plan, floor) !== null && !plan.walls.some((wall) => floorOf(wall) === floor)
+  return statedOutline(plan, floor) !== null && !plan.walls.some((wall) => wallStandsOn(plan, wall, floor))
 }
 
 /** The plan's floors that state an outline, by id, in plan order. */

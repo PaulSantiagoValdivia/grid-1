@@ -24,7 +24,8 @@
     "./test-support/facts": "./src/test-support/facts.ts",
     "./test-support/phases": "./src/test-support/phases.ts",
     "./test-support/lab": "./src/test-support/lab.ts",
-    "./test-support/roomScan": "./src/test-support/roomScan.ts"
+    "./test-support/roomScan": "./src/test-support/roomScan.ts",
+    "./test-support/through": "./src/test-support/through.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

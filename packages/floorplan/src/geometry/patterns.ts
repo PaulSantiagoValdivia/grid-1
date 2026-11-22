@@ -29,7 +29,7 @@
 
 import type { FloorPlan, Opening, Wall } from './plan'
 import type { Issue } from './validate'
-import { floorOf, planFloors } from './floors'
+import { floorOf, planFloors, wallsOnFloor } from './floors'
 import { tolerance } from './tolerances'
 import type { OpeningPattern } from '../types/floorplan'
 import { PARTS_MAX } from '../types/planText'
@@ -175,7 +175,7 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
       issues.push(problem(pattern, 'pattern/unknown-floor', sentence))
       continue
     }
-    const walls = plan.walls.filter((w) => floorOf(w) === floor)
+    const walls = wallsOnFloor(plan, floor)
     const missed: number[] = []
     offsets.forEach((offset, i) => {
       const p0: [number, number] = [axis.sx + axis.dx * offset, axis.sy + axis.dy * offset]

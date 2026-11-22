@@ -13,7 +13,21 @@
  * Plain words, never anything that reads as "this plan complies".
  */
 
-import { areaText, figureText, fixedText, metresText, planCheckSaids, tapedFiguresSaid, tapedWhatSaid, tolerance, type PlanFix, type TapedRow } from '@ongrid/floorplan/geometry'
+import {
+  areaText,
+  figureText,
+  fixedText,
+  metresText,
+  oneKnownOpening,
+  openingsSaid,
+  planCheckSaids,
+  shiftWays,
+  tapedFiguresSaid,
+  tapedWhatSaid,
+  tolerance,
+  type PlanFix,
+  type TapedRow
+} from '@ongrid/floorplan/geometry'
 import { en, isSaid, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type Said, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
@@ -294,6 +308,34 @@ const tapedValues = (s: Subject): Values => {
 }
 const tapedNone = (s: Subject): string => (s.taped === undefined ? 'none' : '')
 
+/**
+ * LVL-5 (lab WR-9): a moved stair room or shaft, by how far and which way it is moved from the one
+ * below (`line.room/stair-shifted.found`), or, for a shaft not moved as a whole, its sides.
+ */
+const shiftEntry: CodeEntry = {
+  values: (s): Values => {
+    const shift = s.finding?.shift
+    const ways = shift === undefined ? null : shiftWays(shift)
+    return {
+      ...(s.finding === undefined ? {} : { wording: s.finding.said ?? s.finding.message }),
+      ...(ways === null ? {} : ways.moved.length > 0 ? { ways: joined(ways.moved, 'join.and') } : { sideWays: joined(ways.sides, 'join.and') })
+    }
+  },
+  variant: {
+    says: (s) => (s.finding === undefined ? 'none' : ''),
+    found: (s) => {
+      const shift = s.finding?.shift
+      return shift === undefined ? 'none' : shiftWays(shift).moved.length > 0 ? '' : 'sides'
+    }
+  }
+}
+
+/** LVL-5 (lab A-16, VE-9): whether a "could not be drawn" notice knows what each opening is. */
+const openingKindsOf = (s: Subject) => {
+  const kinds = s.notice?.openingKinds
+  return kinds === undefined || kinds.length === 0 ? null : kinds
+}
+
 export const CODES = {
   // --- Reading: the plan could not be read, so nothing else ran ---------------------------------
   'plan/not-json': {},
@@ -349,6 +391,8 @@ export const CODES = {
   'wall/zero-length': {},
   'wall/no-thickness': {},
   'wall/no-height': {},
+  // LVL-5 (C19): a wall through floors that names no floor above its own.
+  'wall/through-floor': {},
   'wall/unknown-floor': {},
   'wall/kind-differs': {},
   'wall/ends-in-opening': {},
@@ -487,6 +531,8 @@ export const CODES = {
 
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {},
+  // LVL-5 (lab WR-9): a floor whose outline does not lie over the floor below it.
+  'floor/out-of-line': {},
   'floor/past-outline': {},
   'floor/empty-top': {},
   'floor/rooflight-misplaced': {},
@@ -559,6 +605,9 @@ export const CODES = {
   'room/lift-out-of-line': {
     values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
   },
+  // LVL-5 (lab WR-9): joined to the one below, but moved from it.
+  'room/stair-shifted': shiftEntry,
+  'room/lift-shifted': shiftEntry,
   'opening/too-small-to-pass': {
     values: (s): Values => {
       const p = s.finding?.passage
@@ -613,9 +662,24 @@ export const CODES = {
     values: (s): Values => ({ wording: planCheckSaids.roomsNotDrawn(s.floorName, s.names), ...(s.heldSaid ? { held: s.heldSaid } : {}) }),
     variant: { found: (s) => (s.heldSaid ? 'held' : '') }
   },
+  // LVL-5 (lab A-16, VE-9): each opening worded as what it is, never a window as a door.
   'floor/not-checked-doors-not-drawn': {
-    values: (s): Values => ({ wording: planCheckSaids.doorsNotDrawn(s.floorName, s.also), ...(s.heldSaid ? { held: s.heldSaid } : {}) }),
-    variant: { found: (s) => (s.heldSaid ? 'held' : '') }
+    values: (s): Values => {
+      const kinds = openingKindsOf(s) ?? undefined
+      return {
+        wording: planCheckSaids.doorsNotDrawn(s.floorName, s.also, kinds),
+        ...(s.heldSaid ? { held: s.heldSaid } : {}),
+        ...(kinds === undefined ? {} : { plain: openingsSaid(kinds, s.also.length, 'plain'), those: openingsSaid(kinds, s.also.length, 'those') })
+      }
+    },
+    variant: {
+      found: (s) => [openingKindsOf(s) === null ? '' : 'kinds', s.heldSaid ? 'held' : ''].filter((part) => part !== '').join('.'),
+      needed: (s) => (openingKindsOf(s) === null ? '' : 'kinds'),
+      fix: (s) => {
+        const kinds = openingKindsOf(s)
+        return kinds === null ? '' : oneKnownOpening(kinds, s.also.length) ? 'kinds.one' : 'kinds.many'
+      }
+    }
   },
   'floor/sketch-drawn-only': {
     values: (s): Values => ({ categories: s.names.join(', ') })

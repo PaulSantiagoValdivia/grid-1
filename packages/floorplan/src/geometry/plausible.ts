@@ -11,7 +11,7 @@
  */
 
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
-import { floorOf } from './floors'
+import { sharedPart, storeyFloorOf } from './through'
 import { area } from './vec2'
 import { tryRoomPolygon } from './room'
 import type { BuildingKind, ToleranceName } from './tolerances'
@@ -178,9 +178,11 @@ export function validatePlausibility(
     issues.push(withSaid({ entity, id, code, severity: 'warning', message: english(sentence) }, sentence))
   }
 
+  // LVL-5: a wall through floors stands as a wall of the floor it rises through.
+  const floorOfWall = (wall: Wall): string => storeyFloorOf(plan, wall)
   const byFloor = new Map<string, Wall[]>()
   for (const wall of solid) {
-    const floor = floorOf(wall)
+    const floor = floorOfWall(wall)
     const list = byFloor.get(floor)
     if (list) list.push(wall)
     else byFloor.set(floor, [wall])
@@ -192,8 +194,10 @@ export function validatePlausibility(
     storeys.set(floor.id, floor.height !== undefined && Number.isFinite(floor.height) ? floor.height : undefined)
   }
   for (const wall of solid) {
-    const others = byFloor.get(floorOf(wall))!.filter((w) => w !== wall)
-    const storey = storeys.get(floorOf(wall))
+    // A part of a wall through floors, in a floor's slice, runs through its slab by design.
+    if (sharedPart(wall) !== null) continue
+    const others = byFloor.get(floorOfWall(wall))!.filter((w) => w !== wall)
+    const storey = storeys.get(floorOfWall(wall))
     for (const message of wallQuestions(wall, others, building, storey)) ask('wall', wall.id, 'wall/size-question', message)
   }
 

@@ -6,5 +6,20 @@ export { damaged, doorWaitsFor, escapeWaitsFor, leadsWaitsFor, planDamage, route
 export type { DrawnFloor, FloorDamage } from './held'
 export { doorsThatChangedRooms, openingFaces } from './doors'
 export type { DoorRoomsChange, DoorFace } from './doors'
-export { askedText, overBoundaryText, passageSaid, passageText, saids as planCheckSaids, setbackShortText, wordings as planCheckWordings, wordingText } from './messages'
+export {
+  askedText,
+  oneKnownOpening,
+  openingsSaid,
+  openingWords,
+  overBoundaryText,
+  passageSaid,
+  passageText,
+  saids as planCheckSaids,
+  setbackShortText,
+  shiftWays,
+  wordings as planCheckWordings,
+  wordingText,
+  type OpeningKind,
+  type OpeningsDeterminer
+} from './messages'
 export type { WordingPart } from './messages'

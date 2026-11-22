@@ -21,7 +21,7 @@ import { floorJoins } from '../floorJoins'
 import { indexPlan } from '../plan'
 import type { Vec2 } from '../vec2'
 import { english, said, withSentence, type MessageKey } from '../../messages/say'
-import { messages, saids } from './messages'
+import { messages, saids, shiftedBoxSaid, shiftedHowSaid, shiftWays } from './messages'
 import { siteMeasures } from '../site'
 import { boundaryEdgeSaid } from '../plot'
 import type { FindingCode, HeldFinding, NotChecked, RuleFinding, RulesReport } from './types'
@@ -39,6 +39,8 @@ const RULE_OF: Record<FindingCode, string> = {
   door_to_outside_above_ground: 'door-leads-somewhere',
   stair_out_of_line: 'stairs-line-up',
   lift_out_of_line: 'stairs-line-up',
+  stair_shifted: 'stairs-line-up',
+  lift_shifted: 'stairs-line-up',
   opening_too_small_to_pass: 'room-has-door',
   opening_below_ground: 'openings-above-ground',
   setback_short: 'site-boundary',
@@ -260,20 +262,25 @@ export function cannotBeDrawnNotices(
   damage: ReadonlyMap<string, FloorDamage>,
   held: readonly (HeldFinding<RuleFinding> & { readonly on: string })[],
   floorName: (id: string) => string,
-  roomName: (id: string) => string
+  roomName: (id: string) => string,
+  openingKind: (id: string) => 'door' | 'window' | 'opening' | undefined = () => undefined
 ): NotChecked[] {
   return floors.flatMap((floor) => {
     const at = damage.get(floor.id)
     if (!damaged(at)) return []
     const mine = held.filter((h) => h.on === floor.id).map(({ finding, waitsFor }) => ({ finding, waitsFor }))
+    // LVL-5 (lab A-16): each opening by what it is, so a window is never called a door.
+    const kinds = at.openings.map(openingKind)
+    const known = kinds.every((k) => k !== undefined) ? (kinds as ('door' | 'window' | 'opening')[]) : undefined
     return [
       {
         reason: 'cannot_be_drawn' as const,
         floor: floor.id,
         rooms: at.rooms,
         openings: at.openings,
-        message: messages.cannotBeDrawn(floorName(floor.id), at.rooms.map(roomName), at.openings),
-        ...(mine.length > 0 ? { held: mine } : {})
+        message: messages.cannotBeDrawn(floorName(floor.id), at.rooms.map(roomName), at.openings, known),
+        ...(mine.length > 0 ? { held: mine } : {}),
+        ...(at.rooms.length === 0 && known !== undefined && known.length > 0 ? { openingKinds: known } : {})
       }
     ]
   })
@@ -487,6 +494,35 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
     findings.push(withSentence(finding(code, upperFloor, [...out.upper.map((r) => r.room), ...out.lower.map((r) => r.room)], english(sentence)), sentence))
   }
 
+  // LVL-5 (lab WR-9): stair rooms, or lift shafts, that join the one below but are moved from it.
+  for (const moved of joins.shifted) {
+    const code = moved.kind === 'stair' ? 'stair_shifted' : 'lift_shifted'
+    // MSG-11: how far and which way, and where each stands, by key (`check.shifted.*`). A shaft
+    // that is not moved as a whole: the sides that stand off the shaft's below.
+    const how = shiftedHowSaid(shiftWays({ east: moved.by.x, north: moved.by.y, sides: moved.sides }, 2))
+    const pair = (b: { readonly min: Vec2; readonly max: Vec2 }) => ({ min: [b.min.x, b.min.y] as const, max: [b.max.x, b.max.y] as const })
+    const sentence = saids.shifted(
+      moved.kind,
+      roomName(moved.upper.room),
+      floorName(moved.upper.floor),
+      roomName(moved.lower.room),
+      floorName(moved.lower.floor),
+      how,
+      shiftedBoxSaid(moved.upperBox),
+      shiftedBoxSaid(moved.lowerBox)
+    )
+    findings.push(withSentence({
+      ...finding(code, moved.upper.floor, [moved.upper.room, moved.lower.room], english(sentence)),
+      shift: {
+        east: Number(metresText(moved.by.x, 3)),
+        north: Number(metresText(moved.by.y, 3)),
+        sides: moved.sides.map((s) => ({ side: s.side, by: Number(metresText(s.by, 3)) })),
+        upper: pair(moved.upperBox),
+        lower: pair(moved.lowerBox)
+      }
+    }, sentence))
+  }
+
   // MSG-5 (lab MS-4, W-6): a note that rests on a part that could not be drawn is held back, and
   // the floor's notice names the part and keeps the note.
   const rooms = new Map(plan.rooms.map((room) => [at(floorOf(room), room.id), room] as const))
@@ -518,7 +554,8 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
     held.push({ finding: found, waitsFor, on })
     return false
   })
-  notChecked.unshift(...cannotBeDrawnNotices(floors, damage, held, floorName, roomName))
+  const openingTypes = new Map(plan.openings.map((o) => [o.id, o.type] as const))
+  notChecked.unshift(...cannotBeDrawnNotices(floors, damage, held, floorName, roomName, (id) => openingTypes.get(id)))
 
   return {
     schemaVersion: RULES_REPORT_SCHEMA_VERSION,

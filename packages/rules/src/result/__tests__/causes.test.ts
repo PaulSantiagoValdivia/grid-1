@@ -28,9 +28,12 @@ describe('an escape note on a window that could not be drawn', () => {
     const result = inspectPlan(offWall())
     expect(result.lines.filter((l) => l.kind === 'finding')).toEqual([])
     const line = result.lines.find((l) => l.code === 'floor/not-checked-doors-not-drawn')!
-    expect(line.message).toBe('On "Ground floor", these doors or windows could not be drawn, so they and what rests on them were not checked: "win_bed"')
+    // LVL-5 (lab A-16): the window is called a window, never a door.
+    expect(line.message).toBe('On "Ground floor", this window could not be drawn, so it and what rests on it were not checked: "win_bed"')
     expect(line.held).toEqual([{ code: 'room/no-escape-opening', thing: { kind: 'room', id: 'bedroom' }, floor: 'ground', also: [], waitsFor: ['win_bed'] }])
-    expect(line.found).toBe('doors or windows that cannot be drawn; held back until they can be: whether "Bedroom" has a window or door to escape through')
+    expect(line.found).toBe('a window that cannot be drawn; held back until they can be: whether "Bedroom" has a window or door to escape through')
+    expect(line.needed).toBe('a window that can be drawn')
+    expect(line.fix).toBe('Correct the lines that leave that window out. It is checked once it can be drawn, and so is what rests on it: a note held back comes back if it still holds.')
   })
 
   it('is given once the window is drawn, and the check says it did not look at the room until then', () => {

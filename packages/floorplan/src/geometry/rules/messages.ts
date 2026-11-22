@@ -29,6 +29,40 @@ export function wordingText(parts: readonly WordingPart[]): string {
 /** A sentence as its runs in English, names set apart: the notes a person reads. */
 const parts = (sentence: Said): WordingPart[] => sayParts('en', sentence.key, sentence.values)
 
+/** The kinds of opening a plan has (C2). */
+export type OpeningKind = 'door' | 'window' | 'opening'
+
+/** How a list of openings is named: `these doors`, `those doors`, or the plain `doors`. */
+export type OpeningsDeterminer = 'these' | 'those' | 'plain'
+
+/**
+ * LVL-5 (lab A-16, MS-13): openings named by what they are, never a window called a door: `this
+ * window`, `these doors`, `these doors and windows`. With no kinds given, the words of every kind
+ * (`these doors or windows`). MSG-11: by key (`check.openings.*`), in any language.
+ */
+export function openingsSaid(kinds: readonly OpeningKind[] | undefined, count: number, determiner: OpeningsDeterminer): Said {
+  const order: readonly OpeningKind[] = ['door', 'window', 'opening']
+  const present = kinds === undefined || kinds.length === 0 ? [] : order.filter((k) => kinds.includes(k))
+  if (present.length === 0) return said(`check.openings.any.${determiner}`)
+  if (present.length === 1) {
+    const one = { these: 'this', those: 'that', plain: 'a' } as const
+    return said(`check.openings.${present[0]!}.${count === 1 ? one[determiner] : determiner}` as MessageKey)
+  }
+  return said(`check.openings.mixed.${determiner}`, { kinds: joined(present.map((k) => said(`check.openings.${k}.plain` as MessageKey)), 'join.comma', 'join.and') })
+}
+
+/** Whether `openingsSaid` names one opening of a known kind, and so says `it` of it. */
+export const oneKnownOpening = (kinds: readonly OpeningKind[] | undefined, count: number): boolean => count === 1 && kinds !== undefined && kinds.length > 0
+
+/**
+ * LVL-5: the same names in English (`openingsSaid`), with the words for them that go with it:
+ * `it` for one opening of a known kind, `they` for the rest.
+ */
+export function openingWords(kinds: readonly OpeningKind[] | undefined, count: number): { these: string; plain: string; they: string; them: string } {
+  const one = oneKnownOpening(kinds, count)
+  return { these: english(openingsSaid(kinds, count, 'these')), plain: english(openingsSaid(kinds, count, 'plain')), they: one ? 'it' : 'they', them: one ? 'it' : 'them' }
+}
+
 /**
  * MSG-11: each wording by its key (`check.*` in the message files) and values, so the report,
  * the notes and the record say it in any language from one wording.
@@ -50,14 +84,28 @@ export const saids = {
       lower: joined(lower.map(name), 'join.or'),
       lowerFloors: joined(lowerFloors.map(name), 'join.and')
     }),
+  /**
+   * LVL-5 (lab WR-9): a stair room or a lift shaft moved from the one below it. `shift` says how
+   * far and which way, by `shiftedSaid`, and `upperAt` and `lowerAt` where each stands
+   * (`shiftedBoxSaid`).
+   */
+  shifted: (kind: 'stair' | 'lift', upper: string, upperFloor: string, lower: string, lowerFloor: string, how: Said, upperAt: Value, lowerAt: Value): Said =>
+    said(`check.shifted.${kind}`, { upper: name(upper), upperFloor: name(upperFloor), how, lower: name(lower), lowerFloor: name(lowerFloor), upperAt, lowerAt }),
   wayOutNotDrawn: (floor: string): Said => said('check.wayOutNotDrawn', { floor: name(floor) }),
   /**
    * `rooms` holds at least one name. One wording for one room or many (MSG-1). MSG-5: what rests
    * on them (a door beside them, the floor's way out) was not checked either.
    */
   roomsNotDrawn: (floor: string, rooms: readonly string[]): Said => said('check.roomsNotDrawn', { floor: name(floor), rooms: joined(rooms.map(name), 'join.comma') }),
-  /** MSG-5: `openings` holds at least one id, and names them. */
-  doorsNotDrawn: (floor: string, openings: readonly string[]): Said => said('check.doorsNotDrawn', { floor: name(floor), openings: joined(openings.map(name), 'join.comma') }),
+  /**
+   * MSG-5: `openings` holds at least one id, and names them. LVL-5: `kinds`, the type of each, words
+   * them as what they are (`openingsSaid`).
+   */
+  doorsNotDrawn: (floor: string, openings: readonly string[], kinds?: readonly OpeningKind[]): Said => {
+    const listed = { floor: name(floor), openings: joined(openings.map(name), 'join.comma') }
+    if (kinds === undefined || kinds.length === 0) return said('check.doorsNotDrawn', listed)
+    return said(`check.doorsNotDrawn.kinds.${oneKnownOpening(kinds, openings.length) ? 'one' : 'many'}`, { ...listed, these: openingsSaid(kinds, openings.length, 'these') })
+  },
   doorToUndrawnSpace: (room: string): Said => said('check.doorToUndrawnSpace', { room: name(room) }),
   /** `height` as the check prints it, in metres. */
   doorOutAboveGround: (room: string, height: string): Said => said('check.doorOutAboveGround', { room: name(room), height: num(height) }),
@@ -94,9 +142,10 @@ export const wordings = {
   noRouteToAnyDoorOut: (room: string): WordingPart[] => parts(saids.noRouteToAnyDoorOut(room)),
   noStairs: (floor: string): WordingPart[] => parts(saids.noStairs(floor)),
   outOfLine: (...args: Parameters<typeof saids.outOfLine>): WordingPart[] => parts(saids.outOfLine(...args)),
+  shifted: (...args: Parameters<typeof saids.shifted>): WordingPart[] => parts(saids.shifted(...args)),
   wayOutNotDrawn: (floor: string): WordingPart[] => parts(saids.wayOutNotDrawn(floor)),
   roomsNotDrawn: (floor: string, rooms: readonly string[]): WordingPart[] => parts(saids.roomsNotDrawn(floor, rooms)),
-  doorsNotDrawn: (floor: string, openings: readonly string[]): WordingPart[] => parts(saids.doorsNotDrawn(floor, openings)),
+  doorsNotDrawn: (floor: string, openings: readonly string[], kinds?: readonly OpeningKind[]): WordingPart[] => parts(saids.doorsNotDrawn(floor, openings, kinds)),
   doorToUndrawnSpace: (room: string): WordingPart[] => parts(saids.doorToUndrawnSpace(room)),
   doorOutAboveGround: (room: string, height: string): WordingPart[] => parts(saids.doorOutAboveGround(room, height)),
   belowGround: (...args: Parameters<typeof saids.belowGround>): WordingPart[] => parts(saids.belowGround(...args)),
@@ -114,6 +163,38 @@ export function passageSaid(passage: NonNullable<RuleFinding['passage']>): Said 
 
 export function passageText(passage: NonNullable<RuleFinding['passage']>): string {
   return english(passageSaid(passage))
+}
+
+/** A way on the drawing, east (+x) or west, north (+y) or south. */
+const wayOf = (axis: 'x' | 'y', by: number): Said => said(`describe.way.${axis === 'x' ? (by > 0 ? 'east' : 'west') : by > 0 ? 'north' : 'south'}`)
+
+/**
+ * LVL-5 (lab WR-9): how far a stair room or a shaft is moved from the one below, and which way:
+ * `moved` east and north ("1.20 m east"), or for a shaft not moved as a whole, each side that
+ * stands off the one below's ("its east side 0.60 m west"). `digits` as the figures are printed.
+ */
+export function shiftWays(shift: { readonly east: number; readonly north: number; readonly sides: readonly { readonly side: 'north' | 'east' | 'south' | 'west'; readonly by: number }[] }, digits?: number): { readonly moved: readonly Said[]; readonly sides: readonly Said[] } {
+  const by = (value: number): Value => num(metresText(Math.abs(value), digits))
+  const moved = [
+    shift.east === 0 ? null : said('check.shifted.way', { by: by(shift.east), way: wayOf('x', shift.east) }),
+    shift.north === 0 ? null : said('check.shifted.way', { by: by(shift.north), way: wayOf('y', shift.north) })
+  ].filter((w): w is Said => w !== null)
+  const sides = shift.sides.map((s) =>
+    said('check.shifted.side', { side: said(`describe.way.${s.side}`), by: by(s.by), way: wayOf(s.side === 'east' || s.side === 'west' ? 'x' : 'y', s.by) })
+  )
+  return { moved, sides }
+}
+
+/** LVL-5: the words between a moved stair room or shaft and the one below it (`check.shifted.how.*`). */
+export function shiftedHowSaid(ways: ReturnType<typeof shiftWays>): Said {
+  if (ways.moved.length > 0) return said('check.shifted.how.moved', { ways: joined(ways.moved, 'join.and') })
+  return said(`check.shifted.how.sides.${ways.sides.length === 1 ? 'one' : 'many'}`, { sides: joined(ways.sides, 'join.and') })
+}
+
+/** LVL-5: where a stair room or a shaft stands on the plan, as "(1.20, 0.00) to (2.40, 3.00)". */
+export function shiftedBoxSaid(box: { readonly min: { readonly x: number; readonly y: number }; readonly max: { readonly x: number; readonly y: number } }): Said {
+  const at = (value: number): Value => num(metresText(value, 2))
+  return said('check.shifted.box', { x0: at(box.min.x), y0: at(box.min.y), x1: at(box.max.x), y1: at(box.max.y) })
 }
 
 /**
@@ -142,9 +223,10 @@ export const messages = {
   noRouteToAnyDoorOut: (room: string): string => english(saids.noRouteToAnyDoorOut(room)),
   noStairs: (floor: string): string => english(saids.noStairs(floor)),
   outOfLine: (...args: Parameters<typeof saids.outOfLine>): string => english(saids.outOfLine(...args)),
+  shifted: (...args: Parameters<typeof saids.shifted>): string => english(saids.shifted(...args)),
   wayOutNotDrawn: (floor: string): string => english(saids.wayOutNotDrawn(floor)),
-  cannotBeDrawn: (floor: string, rooms: readonly string[], openings: readonly string[]): string =>
-    english(rooms.length > 0 ? saids.roomsNotDrawn(floor, rooms) : saids.doorsNotDrawn(floor, openings)),
+  cannotBeDrawn: (floor: string, rooms: readonly string[], openings: readonly string[], kinds?: readonly OpeningKind[]): string =>
+    english(rooms.length > 0 ? saids.roomsNotDrawn(floor, rooms) : saids.doorsNotDrawn(floor, openings, kinds)),
   doorToUndrawnSpace: (room: string): string => english(saids.doorToUndrawnSpace(room)),
   doorOutAboveGround: (room: string, height: string): string => english(saids.doorOutAboveGround(room, height)),
   belowGround: (...args: Parameters<typeof saids.belowGround>): string => english(saids.belowGround(...args)),
