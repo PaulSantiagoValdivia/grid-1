@@ -126,6 +126,8 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
   write: [
     { label: 'the rooms text', args: (p) => ['write', p, '--plan', 'new.json'], given: asIs },
     { label: '--plan', args: (p) => ['write', ROOMS, '--plan', `${p}.json`], given: (p) => `${p}.json` },
+    // HND-12: a phone room scan, read like a plan; its evidence file is the plan's name beside the plan.
+    { label: '--scan', args: (p) => ['write', '--scan', p, '--plan', 'new.json'], given: asIs },
   ],
   check: [
     { label: 'the plan', args: (p) => ['check', p], given: asIs },
@@ -232,7 +234,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_mark_seen: [{ arg: 'plan', call: tool('grid_mark_seen', { plan: '@', line: 1, code: 'room/too-small', reason: 'Seen', by: 'Owner' }), given: asIs }],
   // BRF-1: its brief is the plan's name beside the plan, never a path of its own.
   grid_write_brief: [{ arg: 'plan', call: tool('grid_write_brief', { plan: '@', brief: { rooms: [{ name: 'Lounge', area: 20, level: 'must', source: 'assumed' }] } }), given: asIs }],
-  grid_write_rooms: [{ arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` }],
+  grid_write_rooms: [
+    { arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` },
+    // HND-12: a phone room scan in place of rooms text.
+    { arg: 'scan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: 'new.json', scan: p } }), given: asIs },
+  ],
   grid_change_opening: [
     { arg: 'plan', call: tool('grid_change_opening', { plan: '@', opening: 'bed2-door', hinge: 'end' }), given: asIs },
     { arg: 'out', call: tool('grid_change_opening', { plan: PLAN, opening: 'bed2-door', hinge: 'end', out: '@.json' }), given: (p) => `${p}.json` },
@@ -347,7 +353,7 @@ describe('the slots this file lists', () => {
   })
 
   it('cover every tool argument that is a path, and no other', async () => {
-    const PATH_ARGS = ['plan', 'plans', 'out', 'rates']
+    const PATH_ARGS = ['plan', 'plans', 'out', 'rates', 'scan']
     const [reply] = await rpc([{ method: 'tools/list' }]) as Array<{ result: { tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown> } }> } }>
     const pathArgs = reply!.result.tools.flatMap((t) => Object.keys(t.inputSchema.properties)
       .filter((arg) => PATH_ARGS.includes(arg))

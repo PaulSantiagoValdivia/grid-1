@@ -21,6 +21,7 @@ import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIR
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
+import { writeScanIntoProject } from '../command/scan'
 import type { SheetLayout } from '../sheet/pages'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { ROOM_NAMES_TRAVEL } from './protocol'
@@ -473,18 +474,19 @@ const writeRoomsTool: GridTool = {
     + 'To change a plan, read it back with grid_describe as=rooms, change that text and pass it here: rooms text read from an older plan, or written over a plan changed some other way, is refused with the difference, and nothing is written (replace=true writes over it). Overlapping rooms and gaps that are neither wall nor room are refused, naming both rooms. '
     + 'A size may say centre or outside (8 x 10 outside: to the outside faces); inside is the default. What rooms cannot say (a free-standing wall, a room with a hole) is written raw, as one line of Grid\'s own JSON: raw wall {...}. '
     + `${ROOM_NAMES_TRAVEL} `
+    + 'From a phone room scan: pass scan, the scan file in the project (Apple\'s room model, as JSON), in place of rooms. Grid pairs each wall\'s two faces into one wall as thick as the gap between them, takes a wall seen from one side as an outside wall of its usual thickness, places the doors and windows on their walls, keeps the scan beside the plan as <plan>.scan.json keyed by its ids, and lists everything it assumed to confirm with the person. A re-scan keeps the plan\'s ids for the parts it finds again. '
     + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file. Units are metres.',
   args: {
     plan: { ...PLAN_ARG, description: 'The plan file to write, inside the project folder, ending in .json. The project\'s own plan.json when left out.' },
     rooms: {
       type: 'string',
       lines: true,
-      required: true,
       maxLength: ROOMS_TEXT_MAX,
-      description: 'The rooms text, one statement a line. A room: room <id> "<name>" <use or -> <width> x <depth> [inside|centre|outside] <at x,y | north|south|east|west of <room> [align ...] [until <room>]>. An opening: door|window|opening <id> between <room> and <room> | in <room> <side>, <m> from <side> | centred, <m> wide [, sill <m>, height <m>, opens into <room>|in|out, hinged <direction>]. The first line sets the walls: walls outside <t> inside <t> height <h>.',
+      description: 'The rooms text, one statement a line; pass it or scan. A room: room <id> "<name>" <use or -> <width> x <depth> [inside|centre|outside] <at x,y | north|south|east|west of <room> [align ...] [until <room>]>. An opening: door|window|opening <id> between <room> and <room> | in <room> <side>, <m> from <side> | centred, <m> wide [, sill <m>, height <m>, opens into <room>|in|out, hinged <direction>]. The first line sets the walls: walls outside <t> inside <t> height <h>.',
       examples: [ROOMS_EXAMPLE],
     },
-    replace: { type: 'boolean', description: 'true to write over a plan that was not written from this text, or was changed since. Refused with the difference when left out.', examples: [true] },
+    scan: { type: 'string', maxLength: PATH_MAX, description: 'In place of rooms: a phone room scan, as a path inside the project folder (Apple\'s room model saved as JSON). The plan is written from it, and the scan kept beside the plan.', examples: ['scans/flat.json'] },
+    replace: { type: 'boolean', description: 'true to write over a plan that was not written from this text or scan, or was changed since. Refused with the difference when left out.', examples: [true] },
   },
   outputSchema: objectSchema({
     written: STRING,
@@ -498,11 +500,54 @@ const writeRoomsTool: GridTool = {
     // BRF-1: the brief's lines, and the one reminder when a first plan has no brief beside it.
     brief: BRIEF_OUTPUT,
     reminder: NULLABLE_STRING,
+    // HND-12: what a scan gave, or null for rooms text.
+    scan: {
+      type: ['object', 'null'],
+      properties: {
+        evidence: STRING,
+        paired: listSchema(objectSchema({ wall: STRING, faces: listSchema(STRING), thickness: { type: 'number' } })),
+        oneSided: listSchema(STRING),
+        areas: listSchema(objectSchema({ id: STRING, name: STRING, area: { type: 'number' }, scanArea: { type: 'number' }, from: STRING, difference: { type: 'number' } })),
+        assumed: listSchema(objectSchema({ text: STRING, parts: listSchema(objectSchema({ part: STRING, id: STRING })), value: NULLABLE_STRING })),
+        leftOut: listSchema(STRING),
+        match: objectSchema({ kept: { type: 'number' }, fresh: { type: 'number' }, gone: listSchema(objectSchema({ scanId: STRING, part: STRING, id: STRING })) }),
+      },
+      required: ['evidence', 'paired', 'oneSided', 'areas', 'assumed', 'leftOut', 'match'],
+    },
   }),
   run(args, context) {
     const project = projectOf(context)
+    if ((args['rooms'] === undefined) === (args['scan'] === undefined)) throw new ToolRefusal('Pass rooms (the rooms text) or scan (a room scan file in the project), one of the two.')
     try {
       const file = planFileOf(project, args['plan'])
+      if (args['scan'] !== undefined) {
+        const done = writeScanIntoProject(project, args['scan'] as string, file, { replace: args['replace'] === true })
+        const c = done.conversion
+        return {
+          text: done.lines.join('\n').replace(/--replace/g, 'replace=true').replace(/grid check/g, 'grid_check'),
+          data: {
+            written: done.written,
+            rooms: c.roomFacts.map((x) => ({ id: x.id, name: x.name, floor: x.floor, width: x.width, depth: x.depth, area: x.area, basis: x.basis })),
+            walls: c.plan.walls.length,
+            openings: c.plan.openings.length,
+            guesses: [],
+            warnings: [...c.warnings],
+            verdict: done.verdict,
+            drawingProblems: done.drawingProblems,
+            brief: done.brief,
+            reminder: done.reminder,
+            scan: {
+              evidence: done.evidence,
+              paired: c.paired,
+              oneSided: c.oneSided,
+              areas: c.rooms.map((r) => ({ id: r.id, name: r.name, area: r.area, scanArea: r.scanArea, from: r.from, difference: r.difference })),
+              assumed: c.assumed,
+              leftOut: c.leftOut,
+              match: c.match,
+            },
+          },
+        }
+      }
       const done = writeRoomsIntoProject(project, args['rooms'] as string, file, { replace: args['replace'] === true, brief: true })
       const r = done.result
       return {
@@ -518,6 +563,7 @@ const writeRoomsTool: GridTool = {
           drawingProblems: done.drawingProblems,
           brief: done.brief,
           reminder: done.reminder,
+          scan: null,
         },
       }
     } catch (error) {
