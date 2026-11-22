@@ -91,6 +91,8 @@ export function sinceWords(since: EarlierVersion): string {
 export function diffText(run: PlanDiffRun, show: DiffShow): string {
   const c = run.comparison
   const lines: string[] = [`Compared with ${sinceWords(run.since)}.`]
+  // WRT-4: a plan mirrored or turned is said so first (lab Y-5).
+  if (c.turnLine !== null) lines.push(c.turnLine)
   const issues = (): void => {
     if (c.issues.length === 0) {
       lines.push('Issues: none.')
@@ -142,6 +144,7 @@ export function diffData(run: PlanDiffRun, show: DiffShow): Record<string, unkno
     since,
     verdict: c.verdict,
     sameBuilding: c.sameBuilding,
+    turn: c.turn === null ? null : { id: c.turn.id, mirrored: c.turn.mirrored, degrees: c.turn.degrees, text: c.turnLine },
     roomsFirst: c.roomsFirst,
     shift: [...c.shift],
     renamed: { count: c.renamed.count, walls: c.renamed.walls, openings: c.renamed.openings, rooms: c.renamed.rooms },

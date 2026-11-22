@@ -21,8 +21,8 @@ export interface PlanNote {
   readonly floorName: string | null
   readonly title: readonly NoteText[]
   readonly detail: readonly NoteText[]
-  /** What the note is about. Every check so far is about getting out. */
-  readonly tag: 'Exit'
+  /** What the note is about: getting out, or the building against its plot (BRF-3). */
+  readonly tag: 'Exit' | 'Site'
 }
 
 export interface PlanNotesView {
@@ -66,7 +66,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
       floor: finding.floor,
       room: finding.code === 'no_exit' ? null : room,
       floorName: finding.code !== 'no_exit' && floors.length > 1 ? floorName(finding.floor) : null,
-      tag: 'Exit' as const
+      tag: finding.code === 'setback_short' || finding.code === 'over_boundary' ? ('Site' as const) : ('Exit' as const)
     }
     switch (finding.code) {
       case 'no_route_to_exit': {
@@ -133,6 +133,21 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           detail: [words('The ground level is the one the site states. If the ground in front of it is dug away, for a light well or an outside stair, draw that space.')]
         }
       }
+      case 'setback_short':
+      case 'over_boundary':
+        // BRF-3: the distance and the set-back, as the finding words them; the figures are the person's.
+        return {
+          ...base,
+          room: null,
+          floorName: null,
+          title: [words(finding.message)],
+          detail: [
+            words(
+              (finding.boundary?.northStated === false ? 'The ways are read with north as the top of the drawing: the plan states no north. ' : '') +
+                "Measured from the building's outside face, every floor at or above the ground floor, to the edge of the plot's boundary. The set-back is your own figure, not a code's."
+            )
+          ]
+        }
       case 'opening_too_small_to_pass': {
         const p = finding.passage
         return {

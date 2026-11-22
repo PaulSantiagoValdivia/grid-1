@@ -44,7 +44,7 @@ Notes for agents and people changing this repository.
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
   sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
 - `packages/floorplan/src/geometry/phases.ts` (CNT-10): a plan's phases, `existing`, `demolished`
-  and `new` on walls, openings and rooms (C13 in `types/floorplan.ts`). `planInState` gives the
+  and `new` on walls, openings and rooms (C14 in `types/floorplan.ts`). `planInState` gives the
   building before or after the work; everything that measures or checks reads it after
   (`surveyPlan`, `planAreaFigures`, `checkLocalRules` and the like), `validatePlan` checks each
   state on its own, and the drawing and the exports read both, each part with its phase. A plan

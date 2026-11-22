@@ -25,7 +25,7 @@ export const diffTool: GridTool = {
   description:
     'Use this when you have changed the plan and need to check what the change did, after every save: "what did that change", "did anything else move", "is it the same building", "what changed since we started". '
     + 'It compares the plan with an earlier version of itself by what stands where, not by ids: the start marker set with grid_mark_start, or the version last committed in the project\'s git folder (since: git). For a plan with existing, demolished and new parts, since: phase compares it before its work with after it: what is removed is to be demolished, what is added is new. It reads both itself, so pass no plans. '
-    + 'It answers issues first (a door that now joins other rooms, a wall that now meets an opening, notes of grid_check that came and went), then a short verdict room by room with how many ids were only renamed, then the changes one line each. Pass rooms, the rooms you meant to edit, to have every change outside them named. With picture true (the default) it returns one picture: removed in red, added in green, changed rooms in amber with their old and new area, the rest pale. '
+    + 'It answers issues first (a door that now joins other rooms, a wall that now meets an opening, notes of grid_check that came and went), then a short verdict room by room with how many ids were only renamed, then the changes one line each. A plan that is the earlier one mirrored or turned a quarter or half round is said to be so first, with whether every room kept its size, and compared from there. Pass rooms, the rooms you meant to edit, to have every change outside them named. With picture true (the default) it returns one picture: removed in red, added in green, changed rooms in amber with their old and new area, the rest pale. '
     + 'Do not use to compare options or separate plans side by side (grid_compare), or to check the plan itself (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
@@ -46,6 +46,7 @@ export const diffTool: GridTool = {
     since: objectSchema({ kind: STRING, name: NULLABLE_STRING, at: NULLABLE_STRING, commit: NULLABLE_STRING }),
     verdict: STRING,
     sameBuilding: BOOLEAN,
+    turn: { type: ['object', 'null'] },
     roomsFirst: BOOLEAN,
     shift: { type: 'array' },
     renamed: { type: 'object' },
@@ -74,7 +75,8 @@ export const diffTool: GridTool = {
     const wanted = args['picture'] !== false
     let image
     let picture = null
-    if (wanted && !c.sameBuilding) {
+    // A plan only mirrored or turned has nothing to mark (WRT-4).
+    if (wanted && c.changes.length > 0) {
       const changedFloor = c.diff.changes[0]?.floor
       const floor = asked ?? changedFloor
       const { comparisonView } = await import('../draw/views')
