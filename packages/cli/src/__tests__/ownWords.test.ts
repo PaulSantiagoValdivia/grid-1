@@ -66,7 +66,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/draw/stamp.ts': [1, 'notWords'],
   'packages/cli/src/edit/addRoom.ts': [19, 'notYet'],
   'packages/cli/src/edit/edits.ts': [56, 'notYet'],
-  'packages/cli/src/edit/merge.ts': [23, 'notYet'],
+  'packages/cli/src/edit/merge.ts': [25, 'notYet'],
+  'packages/cli/src/edit/types.ts': [14, 'notYet'],
   'packages/cli/src/edit/phases.ts': [4, 'notYet'],
   'packages/cli/src/edit/rename.ts': [9, 'notYet'],
   'packages/cli/src/edit/seat.ts': [5, 'notYet'],
@@ -80,10 +81,10 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/fs/textEncoding.ts': [5, 'command'],
   'packages/cli/src/mcp/briefTool.ts': [44, 'tools'],
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
-  'packages/cli/src/mcp/editTools.ts': [69, 'tools'],
+  'packages/cli/src/mcp/editTools.ts': [73, 'tools'],
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [309, 'tools'],
+  'packages/cli/src/mcp/readTools.ts': [315, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -91,7 +92,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/serveTools.ts': [1, 'tools'],
   'packages/cli/src/mcp/toolkit.ts': [27, 'agent'],
   'packages/cli/src/mcp/viewTool.ts': [15, 'tools'],
-  'packages/cli/src/mcp/writeTools.ts': [103, 'tools'],
+  'packages/cli/src/mcp/writeTools.ts': [120, 'tools'],
   'packages/cli/src/occupancy/occupancy.ts': [16, 'notYet'],
   'packages/cli/src/preview/localServer.ts': [6, 'agent'],
   'packages/cli/src/preview/record.ts': [4, 'command'],
@@ -99,7 +100,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/areas.ts': [9, 'notYet'],
   'packages/cli/src/quantities/change.ts': [18, 'notYet'],
   'packages/cli/src/quantities/compare.ts': [20, 'notYet'],
-  'packages/cli/src/quantities/estimate.ts': [27, 'notYet'],
+  'packages/cli/src/quantities/estimate.ts': [33, 'notYet'],
+  'packages/cli/src/quantities/finishes.ts': [2, 'notYet'],
   'packages/cli/src/quantities/facing.ts': [25, 'notYet'],
   'packages/cli/src/quantities/fixtures.ts': [2, 'notYet'],
   'packages/cli/src/quantities/limits.ts': [29, 'notYet'],
@@ -133,7 +135,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/envelope.ts': [4, 'notYet'],
   'packages/floorplan/src/geometry/handing.ts': [6, 'notYet'],
   'packages/floorplan/src/geometry/export/dxfProfile.ts': [8, 'command'],
-  'packages/floorplan/src/geometry/export/ifc.ts': [36, 'notYet'],
+  'packages/floorplan/src/geometry/export/ifc.ts': [38, 'notYet'],
   'packages/floorplan/src/geometry/export/leftOut.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/export/obj.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/outline.ts': [1, 'notYet'],
@@ -154,7 +156,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/scan/evidence.ts': [2, 'notYet'],
   'packages/floorplan/src/scan/roomModel.ts': [22, 'notYet'],
   'packages/floorplan/src/scan/toPlan.ts': [30, 'notYet'],
-  'packages/floorplan/src/types/floorplan.ts': [55, 'notYet'],
+  'packages/floorplan/src/types/floorplan.ts': [58, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
@@ -253,8 +255,12 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // (handing.ts 6), kinds and handing in rooms text (compile.ts 7, read.ts 2), the opening edits'
     // receipts (edits.ts 7), the IFC's kinds (5), the diff's change lines (building.ts 3, compare.ts
     // 1) and the opening schedule's new CSV columns (2) (reviews/CNT-14.md); and ARE-15 3: the
-    // door and window types' rule and their CSV's two opens columns (schedule.ts) (reviews/ARE-15.md).
-    expect(left).toBeLessThanOrEqual(1510)
+    // door and window types' rule and their CSV's two opens columns (schedule.ts) (reviews/ARE-15.md);
+    // and CNT-15 29: the type change's receipts and refusals (edit/types.ts 14), a knock-through's
+    // finish refusal and receipts (merge.ts 2), the estimate's type and finish rules and lines
+    // (estimate.ts 6), the finish and wall type rules (finishes.ts 2), the IFC's two type notes
+    // (ifc.ts 2) and the schema's three blank-name refusals (floorplan.ts 3) (reviews/CNT-15.md).
+    expect(left).toBeLessThanOrEqual(1539)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

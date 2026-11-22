@@ -110,12 +110,20 @@ another's printed text.
   before.
 - **The door schedule and the window schedule** (`grid_schedule` with `of=doors` or `of=windows`,
   ARE-15): the doors, or the windows, grouped into types, one row per type with its count and
-  the marks of its openings, as a supplier orders them. A type is, for now, the kind the plan
-  states (CNT-14) and the size of the hole in the wall, and the part that opens when the plan
-  states one; its key is the one the estimate and the IFC use, `door:0.9x2.1`,
-  `door:sliding:2.2x2.1` (with `:opens:0.9x2.1` for a stated part). A window type lists its
-  sills. Each row says `basis: kind-and-size`: when the plan can name its own door and window
-  types (CNT-15), a named type will be a row of its own.
+  the marks of its openings, as a supplier orders them. A door or window of one of the plan's
+  named types (CNT-15, [named types](plan-file.md#named-wall-door-and-window-types-and-finishes))
+  is that type: a row of its own, first, in the order the plan lists its types, with
+  `basis: named`, its key `door-type:<id>`, its `name`, `material` and `glazed`; one that states
+  a size of its own is a type apart (`door-type:D90:1x2.1`). The others are grouped by the kind
+  the plan states (CNT-14) and the size of the hole in the wall, and the part that opens when the
+  plan states one, with `basis: kind-and-size`; their key is the one the estimate and the IFC
+  use, `door:0.9x2.1`, `door:sliding:2.2x2.1` (with `:opens:0.9x2.1` for a stated part). A
+  window type lists its sills. The CSV has `name` and `material` columns when a row is a named
+  type.
+- **The finishes schedule** (`grid_schedule` with `of=finishes`, CNT-15): the finishes plan, one
+  row per room with its floor, wall, ceiling and skirting finish and the quantity of each, then
+  each zone that names a finish of its own, after its room, and each finish's total. See
+  [finishes and wall types](#finishes-and-wall-types).
 
 ### Marks
 
@@ -141,6 +149,26 @@ error naming the row; it is never left out in silence. `grid sheet --layout chec
 both schedules as tables, the opening schedule by mark, and the door and window types.
 
 
+## Finishes and wall types
+
+A room or a zone may name its floor, wall, ceiling and skirting finishes, and a wall its named type
+(CNT-15, [the plan file](plan-file.md#named-wall-door-and-window-types-and-finishes)). The
+finishes plan, the take-off and the estimate measure them from the same rows
+(`packages/cli/src/quantities/finishes.ts`), so a finishes plan and a flooring order agree:
+
+- a room's finish covers the room, less each of its zones that names its own finish for that
+  surface: that part is the zone's. A kitchen kept as a zone of an open-plan room keeps its tiled
+  floor by its own area (lab AC-4);
+- the floor and the ceiling are the net area, the walls the inside wall face less openings, the
+  skirting the inside perimeter less doorways, as `grid_takeoff` measures each room;
+- a surface no room or zone names a finish for is listed as not stated, never given one, and
+  never read from the room's use.
+
+`grid_takeoff` gives, on a plan that names any, `wallTypes` (each named wall type's walls: how
+many, their gross and net length, their face on one side, the type's material and whether it is
+glazed) and `finishes` (each finish's total by surface, with the rooms and zones it covers).
+`grid_schedule of=finishes` gives them room by room.
+
 ## Quantities for a first estimate
 
 `grid_takeoff` with `for=estimate` (ARE-13) turns the plan into the lines a first estimate
@@ -150,14 +178,18 @@ area, each opening once as the schedule counts it, and each floor's outline.
 
 | Key | Line | Assumed |
 |---|---|---|
-| `floor:<use>` | Floor finish: the net area of the rooms of that use, so a stair is counted once, on the floor it rises from. The plan holds no finishes, so the person decides which finish a use gets, by the key they price | no |
+| `floor:finish:<name>` | CNT-15: the floor of the rooms and zones that name this finish (a zone's is its part of its room), each by its net area | no |
+| `floor:<use>` | Floor finish: the net area of the rooms of that use that name no floor finish, so a stair is counted once, on the floor it rises from. The person decides which finish a use gets, by the key they price | no |
+| `ceiling:finish:<name>`, `wall_finish:finish:<name>`, `skirting:finish:<name>` | CNT-15: the ceilings, inside wall faces and skirting of the rooms and zones that name this finish | no |
 | `ceiling` | Ceilings: a flat ceiling as big as the floor below it | yes |
 | `wall_finish:<use>` | Inside wall faces of the rooms of that use, at the height of each wall, less every door, window and opening at full size; both faces of an inside wall count | no |
 | `skirting` | Each room's inside perimeter less the width of its doors and doorless openings | no |
 | `reveals` | Round each door and window, its sides and head, and its sill when it has one, times its wall's thickness | no |
-| `wall:<kind>:<thickness>` | Walls by the kind the plan states and their thickness: centre-line length times height, less openings | no |
+| `wall-type:<id>:<thickness>` | CNT-15: the walls of one of the plan's named types at one thickness, by the type, so a party wall is never priced as a partition (lab AC-5) | no |
+| `wall:<kind>:<thickness>` | The other walls, by the kind the plan states and their thickness: centre-line length times height, less openings | no |
 | `external_finish` | The outer edge of each floor's outline, corners in, times the height of the wall it runs along, less openings | no |
-| `door:<w>x<h>`, `window:<w>x<h>` | Doors and windows by the size of their hole in the wall, each counted once | no |
+| `door-type:<id>`, `window-type:<id>` | CNT-15: the doors and windows of one of the plan's named types, each counted once | no |
+| `door:<w>x<h>`, `window:<w>x<h>` | The other doors and windows, by the size of their hole in the wall, each counted once | no |
 | `slab` | A slab under the lowest floor's outline | yes |
 | `upper_floor` | Each upper floor's gross internal area, less the footprint of every stair the plan states arriving on it | yes |
 | `roof` | A flat roof over every part of a floor's outline that no floor above covers, so a single-storey part has its roof | yes |

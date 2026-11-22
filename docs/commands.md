@@ -36,12 +36,12 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation, section and schedule marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
-| `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
+| `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `type` (one named wall, door or window type, which every part of it takes; a list option such as `--parts` takes its items split at commas), `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
 | `grid mark [<name>] [--plan <plan.json>] [--remove]` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside it, for `grid diff` to compare with: no git needed. At most 5 (see below) |
 | `grid diff [<plan>] [--since <name>\|git\|phase] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
 | `grid preview [<plan>] [--port <n>]` | Serves the preview as a page on this computer only: the plan in 2D and 3D, the part you click shared with the agent, the room it frames and the parts it picks out; it draws again within 2 s of the plan changing (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 31 tools in [the tool server](tool-server.md) |
+| `grid serve` | Starts the tool server on standard input and output, with the 32 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes
@@ -299,14 +299,20 @@ the file says that too.
   are the plan's.
 - **Walls** are typed by the kind the plan states and their thickness (`Exterior wall 0.3 m`),
   the same grouping the estimate prices (`wall:exterior:0.3` is the type's tag). Each type
-  carries a one-layer material set, with one material per kind; its walls carry the set's
-  usage. The plan holds no build-up, and the type's description says so.
+  carries a one-layer material set; its walls carry the set's usage. The plan holds no build-up,
+  and the type's description says so. A wall of one of the plan's named types (CNT-15,
+  [named types](plan-file.md#named-wall-door-and-window-types-and-finishes)) is typed by it: the
+  type's name, tagged `wall-type:<id>:<thickness>`, its element type `Interior wall, glazed` when
+  the type is glazed, and its layer's material the type's own. A layer whose material the plan
+  does not state is of one material named `Not stated` (lab AU3-4), never a word Grid made up.
 - **Doors and windows** are typed by size, and doors by handing too (`Door 0.9 x 2.1 m, single
   swing, left`), tagged as the estimate keys them (`door:0.9x2.1`). A door whose swing the plan
   does not state is typed by its size alone. A door or window that states its kind (CNT-14) is
   typed by it too, tagged `door:sliding:2.2x2.1`, with IFC's operation for it (`DOUBLE_DOOR_SLIDING`,
   `FOLDING_TO_LEFT`, `ROLLINGUP`; a garage door is user-defined and its name says it lifts
-  overhead). Each door and window holds its frame, its leaves (closed, hung from the face of the
+  overhead). A door or window of one of the plan's named types (CNT-15) is typed by it, named after
+  it (a door with its handing too) and tagged `door-type:<id>`, and carries the type's material,
+  `Not stated` when it states none. Each door and window holds its frame, its leaves (closed, hung from the face of the
   wall it opens toward) and its glass, styled as glass; the OBJ and GLB hold the same parts as
   `frame_`, `leaf_` and `glass_` objects.
 - **Flats** are not written as zones: the plan format holds no flats yet.
