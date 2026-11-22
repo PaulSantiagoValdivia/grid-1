@@ -24,7 +24,10 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Kinds of door and window, their handing and the part that opens](#kinds-of-door-and-window-their-handing-and-the-part-that-opens): `opening/wide-single-leaf`, `opening/kind-not-for-type`, `opening/part-too-large`, `floor/not-checked-door-swings`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
+- [A wall placed by its face](#a-wall-placed-by-its-face): a survey drawn from its own numbers, the thickness known or not
+- [Lengths taped on site](#lengths-taped-on-site): `room/taped-differs`, `plan/taped-not-measured`
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
+- [Survey coordinates at a stored origin](#survey-coordinates-at-a-stored-origin): `plan/far-from-origin`
 - [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
 - [Saved views, and the camera record](#saved-views-and-the-camera-record): a camera saved by name, as Grid sets it and as BCF writes it
 - [What needs to be accessible](#what-needs-to-be-accessible): `plan/not-checked-access`
@@ -47,7 +50,7 @@ file never reaches the exports with its letters turned into question marks. A fi
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
-| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views or things on the site | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site or taped lengths | 50,000 of each | |
 | the floors one opening pattern repeats on | 200 | |
 | the points of the site's boundary, or of one of its things | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
@@ -72,7 +75,7 @@ id (or its place, when it has no id that can be read) and its place in the file:
 | a value a field can do without that cannot be read (a hinge `"left"`, a `null` thickness, units `"furlong"`) | uses the field's default, or reads it as not stated; a unit Grid has no word for is read as metres | `plan/value-left-out` |
 | units `"mm"`, `"cm"`, `"ft"` or `"in"` | reads every length in that unit, and writes the plan back in metres when it changes it (see [Units](#units)) | `plan/read-as-meant` |
 | a value the part needs that cannot be read (a negative offset, a missing start, an opening type `"gate"`) | leaves the part out, and the rooms and openings on a wall left out with it | `plan/part-left-out` |
-| a wall's thickness or height, or an opening's sill, stated out of range or as a word | leaves the part out: a default would change what is drawn and measured | `plan/part-left-out` |
+| a wall's thickness or height, or an opening's sill, stated out of range or as a word; a wall's `face` that is not `left` or `right` | leaves the part out: a default would change what is drawn and measured | `plan/part-left-out` |
 | `NaN`, `Infinity`, or a number with a decimal comma in an object (`"offset": 3,45`) | reads it as a value that is not there, and names it for what it is | as above |
 | git's conflict markers | refuses the plan as an unfinished merge, with the line and what each side adds | `plan/unfinished-merge` |
 
@@ -788,6 +791,75 @@ states no kind reads as. Where they disagree, one warning says so:
 In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
 worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.
 
+## A wall placed by its face
+
+A wall's `start` and `end` are its centre line, and its thickness grows half each side of it. A
+survey is taped to the faces of the walls, though, and nobody can tape inside one: the outside
+walls' thickness is a guess, or unknown. So a wall may say that its line is one of its faces
+(HND-11, lab WR-14), with `face`: `left` or `right`, as you walk from `start` to `end`. The wall's
+body lies on the other side of the line, and its thickness, stated or not, grows away from it.
+
+```json
+{ "id": "ext-s", "start": [0, 0.16], "end": [7.35, 0.16], "face": "left", "kind": "exterior" }
+```
+
+Walls round a building listed counter-clockwise, as rooms list them, have the inside on their
+left: `face: "left"` on each places them by the inside faces the tape ran along. The wall above
+states no thickness, so it is drawn 0.2 m thick, and says so ([a value left out stays not
+stated](#a-value-left-out-stays-not-stated)); state `0.4` later, or guess it 8 cm thicker, and the
+building grows outward while every room keeps the inside sizes taped. Placed on its centre line,
+the same guess would take 4 cm off each room beside it.
+
+Grid reads the wall on its centre line, so every drawing, measure, check and export reads it as
+any other wall. Its edits keep the face: a wall moved, cut in two or stretched stays placed by
+the same face, on that face's line, and a mirrored plan turns each such wall to its other face,
+so the inside stays inside. `grid tidy` does the same. A `face` Grid cannot read leaves the wall
+out, rather than draw it half its thickness off. A dividing line has no thickness, so its face is
+its line. Rooms text writes rooms by their inside sizes already ([rooms-first.md](rooms-first.md)):
+there a thicker wall moves the rooms apart and leaves each room's size as written. A plan that
+places walls by their faces is read back as rooms text in Grid's own terms, so nothing is lost.
+
+## Lengths taped on site
+
+What was taped is kept beside the drawing, in `taped` (HND-11, lab WR-14): the checks a survey
+brings with it. Nothing is drawn or placed from a taped length; every run sets each one against
+the drawing.
+
+```json
+"taped": [
+  { "id": "t1", "room": "bedroom", "wall": "ext-s", "length": 3.47 },
+  { "room": "bedroom", "from": ["ext-w", "ext-s"], "to": ["bed-hall", "row"], "length": 4.69, "tolerance": 0.02 }
+]
+```
+
+| Field | What it states |
+|---|---|
+| `room` | The room it was taped in, by id |
+| `wall` | The room's side along this wall, corner to corner on its inside face: every edge of the room's outline on that face, end to end |
+| `from`, `to` | Instead of `wall`: two corners of the room, each named by the two walls that meet there, for a diagonal or any corner to corner |
+| `length` | The length taped, in metres |
+| `tolerance` | Optional: how far the drawing may be from it and still agree. Unstated, `tapedAgree` (0.01 m, [tolerances.md](tolerances.md)) |
+| `id` | Optional: the person's own reference for it |
+
+Both are measured on the room's outline along the inside faces of its walls, the outline its area
+is measured on. `grid check` and `grid_check` print the table after the notes, and every change
+to the plan (the edit tools, `grid edit`, `grid write`, `grid_write_rooms`) prints it in its
+answer, the ones that differ first ([the result contract](result-contract.md#taped-against-drawn)):
+
+```text
+Taped against drawn (4; 1 differs): each length taped on site, set against the drawing's inside faces.
+  What was taped                                                taped    drawn     off
+  Bedroom, the side along wall "ext-s"                        3.470 m  3.470 m   0.000  agrees (within 0.010 m)
+  Bedroom, the side along wall "ext-w"                        3.200 m  3.200 m   0.000  agrees (within 0.010 m)
+  Hall, the side along wall "ext-s"                           1.400 m  1.200 m  -0.200  differs (within 0.010 m)
+  Bedroom, corner "ext-w"/"ext-s" to corner "bed-hall"/"row"  4.690 m  4.684 m  -0.006  agrees (within 0.010 m)
+```
+
+| Code | What it says |
+|---|---|
+| `room/taped-differs` | A length taped and the same length drawn are further apart than its tolerance: both figures, and by how much the drawing is longer or shorter |
+| `plan/taped-not-measured` | A taped length that names a room or a wall the plan does not have, a wall that is not one of the room's, two walls that make no corner of it, or a room that cannot be drawn |
+
 ## North, front and where the building is
 
 The drawing's sides have names of their own: its top is called north, as rooms text, the
@@ -804,7 +876,7 @@ before, with no north and y up the page.
 | `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
 | `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
 | `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
-| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for, and `boundary`, `streets`, `setbacks` and `things` are [the plot](#the-plot-its-boundary-set-backs-and-what-is-on-it) |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold is named and read without. A plan kept at survey coordinates states a point near the building as `origin`, and is measured and exported from it ([survey coordinates at a stored origin](#survey-coordinates-at-a-stored-origin)). `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for, and `boundary`, `streets`, `setbacks` and `things` are [the plot](#the-plot-its-boundary-set-backs-and-what-is-on-it) |
 
 North is drawn and written where the plan states it:
 
@@ -869,6 +941,33 @@ looks clockwise, and the answer says so.
 |---|---|
 | `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
+
+## Survey coordinates at a stored origin
+
+A survey or a map gives coordinates in the millions of metres: 432000, 4580000. A plan may keep
+them as they are and state a point near the building as `site.origin` (HND-11, lab MS-12):
+
+```json
+{ "site": { "origin": [432000, 4580000] }, "walls": [{ "id": "s", "start": [432000, 4580000], "end": [432009.2, 4580000], … }] }
+```
+
+- **The check** measures how far the plan reaches from that point (`farFromOrigin`, 500 m), so a
+  building at survey coordinates with its origin stated raises no `plan/far-from-origin`, which
+  asks whether a unit slipped. Without an origin, or with one far from the building, it is asked.
+- **The exports** write the geometry near zero and keep the offset: a plan that reaches further
+  than 500 m from (0, 0) is written from `site.origin`, or, with none stated, from the middle of
+  its walls in whole steps of 500 m (HND-2). The IFC puts its site on that point and its elements
+  from it, so a BIM tool reads small numbers and places them where they are. A GLB holds its
+  points as 32-bit numbers, about seven digits, so the floor is built near zero and the file holds
+  the model in one node, `origin`, moved by the offset, with `asset.extras.gridOrigin`: every
+  point within 1 mm of the plan. The DXF and OBJ write their numbers as text, to the micrometre,
+  and keep the survey coordinates as they are. A plan near (0, 0) exports as before.
+
+Survey coordinates still cost the drawing digits: every check and measure runs on the plan's own
+numbers, and at 4,580 km from (0, 0) an area can come out a few tenths of a square centimetre off
+(HND-2's 4.8003 m² for 4.8). A plan drawn near (0, 0) avoids that, and says where it is on the
+earth with `site.origin`, `latitude` and `longitude` (above). LVL-4's `site.ground` and COD-3's
+`site.country` need no origin.
 
 ## The plot: its boundary, set-backs and what is on it
 

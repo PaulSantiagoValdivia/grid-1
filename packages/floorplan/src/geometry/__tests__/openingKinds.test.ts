@@ -292,4 +292,22 @@ describe('glass, frames and leaves in 3D (done when 3)', () => {
     expect(Math.max(...leaf.outline.map((p) => p.y))).toBeCloseTo(0.15, 12)
     expect(Math.min(...leaf.outline.map((p) => p.y))).toBeCloseTo(0.11, 12)
   })
+
+  it('places, checks and draws a door or window of a kind on a wall placed by its face (HND-11) as on the centre line it is read on', () => {
+    const openings = [
+      { id: 'd', wall: 'w0', type: 'door', offset: 1, width: 1.8, height: 2.1, kind: 'double', swing: 'left' },
+      { id: 's', wall: 'w0', type: 'door', offset: 3, width: 1.2, height: 2.1, kind: 'sliding', opens: { width: 0.6 } },
+      { id: 'w', wall: 'w0', type: 'window', offset: 4.6, width: 1.2, sill: 0.9, height: 1.2, kind: 'fixed' }
+    ]
+    // The same wall, 0.3 m thick: by its centre line, and by its left face, 0.15 m to the north.
+    const byCentre = parseFloorPlan({ version: '1', walls: [{ id: 'w0', start: [0, 0], end: [6, 0], thickness: 0.3 }], openings })
+    const byFace = parseFloorPlan({ version: '1', walls: [{ id: 'w0', start: [0, 0.15], end: [6, 0.15], face: 'left', thickness: 0.3 }], openings })
+    expect(byFace.walls[0]!.start).toEqual([0, 0])
+    expect(byFace.openings).toEqual(byCentre.openings)
+    expect(buildScene(byFace).openings).toEqual(buildScene(byCentre).openings)
+    const symbols = (plan: FloorPlan) => buildFloorPlan(plan).openings.map((o) => openingSymbol(o))
+    expect(symbols(byFace)).toEqual(symbols(byCentre))
+    const codes = (plan: FloorPlan): string[] => validatePlan(plan).issues.map((i) => `${i.code} ${i.id}`).sort()
+    expect(codes(byFace)).toEqual(codes(byCentre))
+  })
 })

@@ -9,7 +9,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C15), version 1,
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C16), version 1,
    nothing defaulted:
    - `kind` on an opening: `DOOR_KINDS` (`single`, `double`, `sliding`, `pocket`, `folding`,
      `roller`, `garage`) and `WINDOW_KINDS` (`single`, `double`, `sliding`, `fixed`,
@@ -568,3 +568,52 @@ have. Not changed here. Nothing else in COD-8 reads a door's kind.
   skipped), none failed. The 4 files it had not reached and `diff-size.test.ts` again: 5 of 5
   passed, 33 tests. Every file has passed once; none fails.
 - `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures."
+
+### Again after merging main 90a933b1 (HND-11)
+
+`main` moved again: a survey drawn from its own numbers (HND-11): walls placed by a face, lengths
+taped on site kept beside the drawing, and survey coordinates kept at a stored origin.
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: both Unreleased entries, CNT-14's first.
+- `docs/result-contract.md`: both agents' changelog entries, CNT-14's at the top. The code table
+  keeps CNT-14's four codes and HND-11's two (`room/taped-differs`, `plan/taped-not-measured`).
+- `packages/floorplan/src/types/floorplan.ts`: HND-11 took C15 for taped lengths, so CNT-14's
+  convention is now C16 (the header, its three comments, `openingKinds.ts` and point 1 above).
+- `packages/cli/src/edit/edits.ts`: the import lists, the union of both (CNT-14's kinds and
+  handing, HND-11's `wallWithEnds`). The bodies merged on their own: `applyPatch` moves every
+  changed wall end through `wallWithEnds` (and turns a face over on a mirror) and still drops a
+  kind its new type does not take and a part that opens on a doorless opening. Every wall-moving
+  path was checked: `stretch.ts`, `moveWall`, `mirrorPlan` and the turn go through `applyPatch`;
+  `merge.ts`'s `cutWall` (used by `addRoom.ts`) places each piece with `wallWithEnds`;
+  `split.ts` and `addRoom.ts` add only new walls, by their centre lines; `seat.ts` moves walls
+  only in the reading, which is on centre lines.
+- `packages/rules/src/result/inspect.ts`: the import list, CNT-14's `checkDoorSweeps` in place of
+  `validateDoorSweeps` and HND-11's `taped…` helpers. The stages are both sides' in order, the
+  door check (CNT-14's) and `taped` (HND-11's) each where its side put it.
+
+**Where the two features meet.** A wall placed by its face is read on its centre line before
+anything else sees it, and an opening's offset runs along the wall's axis, which a face does not
+change, so a door or window of a kind is placed, checked, drawn and built in 3D as on that centre
+line. A new test holds this (`geometry/__tests__/openingKinds.test.ts`, "places, checks and draws a
+door or window of a kind on a wall placed by its face"): a double door, a sliding door opening in
+part and a fixed window give the same openings, 3D parts, plan symbols and drawing notes on a wall
+given by its left face as on the same wall by its centre line. A plan in other units already scales
+`opens` with an opening's width (`LENGTH_FIELDS` in `types/units.ts`, tested in `patterns.test.ts`).
+The exports' move to the site's origin moves the walls, and the openings with them. Not changed
+here, and HND-11's own: `planInMetres` scales no `taped` length or `site.origin`, so a plan in
+millimetres would read its taped lengths as metres.
+
+**Expectations changed.** None.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- The affected tests in three parts with the same options (`--exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`): `packages/floorplan`, 123 of 123 files, 3,239 tests passed;
+  `packages/rules packages/viewer scoreboard/__tests__`, 103 of 103 files, 1,022 passed, 2
+  skipped (1,024); `packages/cli`, 92 of 92 files, 1,262 passed. The new test was added while the
+  first part ran, so its file was run again alone: 21 of 21 passed. No timing test failed, so none
+  was rerun.
+- `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures." Nothing stored.

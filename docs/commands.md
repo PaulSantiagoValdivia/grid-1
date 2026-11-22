@@ -304,7 +304,19 @@ with what was found, what was needed and the fix, the figures those lines used (
 figure used here, with its document, edition, clause and status), what each check looked at in
 counts, with the parts it could not look at and why, and one line on what `--full` adds.
 `--full` prints the whole report: the checks run, every figure, each part each check looked at
-or skipped, and what these checks never look at. `--json` always gives the whole check.
+or skipped, and what these checks never look at. `--json` always gives the whole check. A plan
+that keeps lengths taped on site gets, after its notes, the table of each one taped against drawn,
+and `grid write` and `grid edit` print it after every change too (HND-11,
+[lengths taped on site](plan-file.md#lengths-taped-on-site)):
+
+```text
+Taped against drawn (4; 1 differs): each length taped on site, set against the drawing's inside faces.
+  What was taped                                                taped    drawn     off
+  Bedroom, the side along wall "ext-s"                        3.470 m  3.470 m   0.000  agrees (within 0.010 m)
+  Bedroom, the side along wall "ext-w"                        3.200 m  3.200 m   0.000  agrees (within 0.010 m)
+  Hall, the side along wall "ext-s"                           1.400 m  1.200 m  -0.200  differs (within 0.010 m)
+  Bedroom, corner "ext-w"/"ext-s" to corner "bed-hall"/"row"  4.690 m  4.684 m  -0.006  agrees (within 0.010 m)
+```
 
 The line after the label says the place the figures were for and where it came from (COD-3).
 The plan states its place in `site.country` ([the place](plan-file.md#the-place)); `--country`
