@@ -583,6 +583,27 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: a camera an agent can set, saved as a named view (VEW-3)
+
+- `grid_view` `kind=3d` takes `bearing`, `tilt`, `distance`, `eye_height`, `lens`, `room`,
+  `camera`, `view`, `turn` and `tilt_by` beside `floor` and `from`; a refusal of an argument
+  another kind takes lists them all. `eye_height` is now 0 to 10,000 m in the schema, and
+  `kind=eye` still refuses one outside 0.3 to 3.
+- `camera` in `grid_view`'s data is the camera record for `kind=3d` and `kind=eye` (null for
+  `plan`), in place of `{ at, heading, tilt, fov }`: `target` (`room`, `point`), `bearing`,
+  `bearingFrom` (`north` or `plan up`), `north`, `tilt`, `distance`, `eyeHeight`, `floor`, `lens`
+  (`focalLength` in mm, `sensor` 36 × 24 mm), `cut`, `floors`, `standingIn` (`room`, `name`,
+  `floor`, `words`: `outside any room` when it stands in none), `position`, `direction`, `up`,
+  `fieldOfView` (vertical, degrees) and `aspectRatio`. The old `at` is `position`, the old
+  `heading` is `direction` on the drawing, the old `tilt` (negative looking down) is `tilt`
+  (positive looking down), the old `fov` is `fieldOfView`. Data adds `view`, the saved view's
+  name or null. The text adds the camera in two lines, how to move it, and the plan's saved
+  views. The 3D view's default `from` is read as before.
+- A new tool, `grid_save_view`, the last of the 30: saves a camera record by name in the plan's
+  `views` ([plan-file.md](plan-file.md#saved-views-and-the-camera-record)), with `replace` and
+  `remove`. Its receipt is the change receipt with `view`, `removed`, `camera` and `views`.
+- `grid_mirror` mirrors the plan's saved views and says so in `changed`.
+
 ### 2026-11-22: which rooms get the sun, as a table (BRF-5)
 
 - `grid_measure` takes `what=sun`, with `room` for one room: `answer` holds `measures`
