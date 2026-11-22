@@ -34,7 +34,10 @@ import type { StairSymbol } from './stairSymbol'
 import { stairSymbol } from './stairSymbol'
 import type { LiftSymbol } from './liftSymbol'
 import { liftSymbol } from './liftSymbol'
-import { planFloors, wholePlan } from './floors'
+import { floorOf, planFloors, wholePlan } from './floors'
+import { columnFootprint, columnRoom, columnStandsOn, soundColumns } from './columns'
+import { gridsOn, planGrid, type PlanGrid } from './structuralGrid'
+import type { ColumnShape } from '../types/floorplan'
 import { statedOutline } from './massing'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
@@ -156,6 +159,24 @@ export interface PlanItem {
   readonly lines: readonly (readonly Vec2[])[]
   /** WRT-6: the plan marks the fixture, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
+}
+
+/**
+ * A column, ready to draw (CNT-16): the floor it covers, cut through as a wall is. A round
+ * column also gives its middle and radius, so a drawing can draw its true circle.
+ */
+export interface PlanColumn {
+  readonly id: string
+  readonly shape: ColumnShape
+  /** What it is called: its label, else null. */
+  readonly label: string | null
+  /** The room it stands in, or null. */
+  readonly room: string | null
+  /** The floor it covers, counter-clockwise (`columnFootprint`). */
+  readonly outline: readonly Vec2[]
+  readonly centre: Vec2
+  /** A round column's radius; absent on a square one. */
+  readonly radius?: number
 }
 
 /**
@@ -287,6 +308,16 @@ export interface PlanDrawing {
    * check. Left out when the floor has none.
    */
   readonly context?: readonly { readonly id: string; readonly name: string | null; readonly points: readonly Vec2[] }[]
+  /**
+   * CNT-16 (C25): the columns standing on this floor, drawn cut through as the walls are. Left out
+   * when the plan states none.
+   */
+  readonly columns?: readonly PlanColumn[]
+  /**
+   * CNT-16 (C25): the structural grids drawn on this floor, each its named lines; the spacing is
+   * dimensioned by `buildDimensions`. Drawn only. Left out when none is drawn here.
+   */
+  readonly grids?: readonly PlanGrid[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -531,7 +562,39 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
     return { id: shape.id, name: shape.name ?? null, points: ring.map(([x, y]) => ({ x, y })) }
   })
   for (const shape of context) extent.push(...shape.points)
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds, ...(floorRing === null ? {} : { outline: floorRing }), ...(context.length === 0 ? {} : { context }), bounds: computeBounds(extent), issues }
+  // CNT-16 (C25): the columns standing here, and the structural grids drawn on this floor.
+  const columns = planColumns(plan, index)
+  for (const column of columns ?? []) extent.push(...column.outline)
+  const grids = gridsOn(plan, drawnFloor).map(planGrid)
+  for (const grid of grids) for (const line of grid.lines) extent.push(line.from, line.to)
+  return {
+    walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds,
+    ...(floorRing === null ? {} : { outline: floorRing }),
+    ...(context.length === 0 ? {} : { context }),
+    ...(columns === undefined ? {} : { columns }),
+    ...(grids.length === 0 ? {} : { grids }),
+    bounds: computeBounds(extent),
+    issues
+  }
+}
+
+/** CNT-16: the columns a drawing of this plan (or floor's slice) draws; undefined when the plan states none. */
+function planColumns(plan: FloorPlan, index: ReturnType<typeof indexPlan>): PlanColumn[] | undefined {
+  if (plan.columns === undefined) return undefined
+  const floors = planFloors(plan)
+  const rooms = roomShapes(index)
+  return soundColumns(plan).map((column) => {
+    const floor = floors.find((f) => columnStandsOn(plan, column, f.id))?.id ?? floorOf(column)
+    return {
+      id: column.id,
+      shape: column.shape,
+      label: column.label ?? null,
+      room: columnRoom(column, rooms, floor)?.id ?? null,
+      outline: columnFootprint(column),
+      centre: { x: column.at[0], y: column.at[1] },
+      ...(column.shape === 'round' ? { radius: column.width / 2 } : {})
+    }
+  })
 }
 
 /**

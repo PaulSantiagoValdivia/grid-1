@@ -13,6 +13,7 @@
 import { DEFAULT_FLOOR_ID, type BuildingType, type Floor } from '../types/floorplan'
 import type { FloorPlan, Opening, Wall } from './plan'
 import { hasWallsThrough, storeyWalls, throughFloorParts, wallStandsOn } from './through'
+import { sliceColumns } from './columns'
 
 /** The floor every entity belongs to until it says otherwise. */
 export const DEFAULT_FLOOR: Floor = { id: DEFAULT_FLOOR_ID, name: 'Ground floor', level: 0 }
@@ -197,6 +198,8 @@ function cutFloor(plan: FloorPlan, floorId: string, walls: readonly Wall[], cand
     ),
     // CNT-12: an item by its own floor. A plan with no items keeps no key.
     ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) }),
+    // CNT-16: a column on each floor it stands on, as a column of that floor (`sliceColumns`).
+    ...(plan.columns !== undefined && { columns: sliceColumns(plan, floorId) }),
     // SHT-7: a sketch item by its own floor; a note by its room's, or its own when at a point.
     ...(plan.sketch !== undefined && { sketch: plan.sketch.filter((item) => floorOf(item) === floorId) }),
     ...(plan.annotations !== undefined && {

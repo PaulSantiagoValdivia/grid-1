@@ -511,6 +511,14 @@ export const CODES = {
   'plan/building-duplicate-id': {},
   'plan/building-unknown-floor': {},
   'plan/building-floor-in-two': {},
+  // --- Columns and structural grids (CNT-16) ----------------------------------------------------
+  // A column's own faults leave it out of every view, measure and export; a grid naming a floor
+  // the plan does not have is drawn on the others. The found is the check's own sentence.
+  'plan/column-too-large': {},
+  'plan/column-duplicate-id': {},
+  'plan/column-unknown-floor': {},
+  'plan/column-through-floor': {},
+  'plan/grid-unknown-floor': {},
 
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},

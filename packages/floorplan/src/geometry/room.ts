@@ -35,6 +35,7 @@ import type { PlanIndex, Room, Wall } from './plan'
 import type { Line, Vec2 } from './vec2'
 import { add, area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
 import { tolerance, tolerancesAsStated } from './tolerances'
+import { roomColumnArea } from './columns'
 import { fixedText, metresText } from './rounding'
 import { likelyId } from '../types/nearest'
 import { quotedList } from '../types/planText'
@@ -896,17 +897,20 @@ export function roomNesting(index: PlanIndex): RoomNesting {
 
 /**
  * `roomArea` for a room whose outline is already traced: the outline's area, less its holes
- * (ARE-6) and the floor of the rooms that sit inside it, with their walls.
+ * (ARE-6), the floor of the rooms that sit inside it, with their walls, and (CNT-16) the floor the
+ * columns standing in it cover (`roomColumnArea`).
  */
 export function roomFloorArea(room: Room, index: PlanIndex, outline: readonly Vec2[]): number {
-  return roomNesting(index).hosts.get(room.id)?.area ?? area(outline)
+  const whole = roomNesting(index).hosts.get(room.id)?.area ?? area(outline)
+  return (index.plan.columns ?? []).length === 0 ? whole : Math.max(0, whole - roomColumnArea(room, index))
 }
 
 /**
  * Room area in square meters: the area of its outline, less its holes, each measured to the
  * faces of its walls that look into the room (ARE-6), and less the floor of any room marked
  * `inside` that sits in it, with that room's walls (ARE-5), so that each square metre is counted
- * once. `area(roomPolygon(room, index))` is the outline's area alone.
+ * once, and less the floor the columns standing in it cover (CNT-16). `area(roomPolygon(room,
+ * index))` is the outline's area alone.
  *
  * It is derived data and that is why it does not live in the plan file: it is
  * computed every time. Derived data that gets stored is data that drifts.
