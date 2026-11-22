@@ -64,6 +64,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `layoutRooms` | limit | 10 count | The most rooms a first layout places; every way of sharing them between its two rows is tried (BRF-6) |
 | `layoutRowOrders` | limit | 6 count | The most rooms in one row of a first layout whose every order is tried for the rooms the brief wants to touch (BRF-6) |
 | `diffPlace` | tolerance | 0.05 m | Two walls whose ends are this close, or two openings whose middles are, stand in the same place when two versions are compared by what stands where (WRT-8) |
+| `tapedAgree` | tolerance | 0.01 m | A length taped on site and the same length drawn agree when they are no further apart than this, unless the taped length states its own tolerance; further apart, `room/taped-differs` names both figures (HND-11) |
 | `setbackShort` | tolerance | 0.005 m | The building stands short of a set-back the person asked for when its outside face is more than this nearer the boundary than their figure; less rounds to the figure (`plan/setback-short`, BRF-3) |
 | `pastBoundary` | tolerance | 0.005 m | The building stands over an edge of the plot's boundary when its outside face reaches more than this past it (`plan/over-boundary`, BRF-3) |
 | `wallAboveStorey` | tolerance | 0.001 m | How far a wall may rise past the height its floor states; past it, `wall/above-storey` names both heights |
@@ -97,7 +98,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `facadeOnFace` | tolerance | 0.01 m | A wall whose outside face lies within this of a stretch of the floor's outline is the wall that stretch of a facade shows, with its height and openings (LVL-8) |
 | `facadeSameDepth` | tolerance | 0.05 m | Faces of a facade within this of each other, front to back, are one plane, drawn with one line weight; a face set back further is drawn lighter (LVL-8) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
-| `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning |
+| `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning: from `site.origin` where the plan states one, else from (0, 0) (HND-11) |
 | `cameraTilt` | limit | 89 degree | How far a camera may look down at, or up to, what it is pointed at, from level; straight down or up a picture has no up, so a camera turned further is refused (VEW-3) |
 | `cameraClosest` | limit | 0.1 m | The least distance from a camera to what it is pointed at (VEW-3) |
 | `lensShortest` | limit | 8 mm | The shortest focal length a camera may have, on a 36 × 24 mm sensor: about 132° across (VEW-3) |
