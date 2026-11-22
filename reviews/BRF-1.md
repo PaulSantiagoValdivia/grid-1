@@ -168,6 +168,33 @@ the stored figures" (197, 278, 16, 5, 15; guards 735 and 95). Between the two me
 `packages/cli` 1,061 passed, 1 skipped, in 71 files; the second group 3,399 passed, 3 skipped, in
 134 files; the scoreboard the same figures.
 
+### After merging `main` at 5039f12 (COD-3, WRT-8) and 7b90435
+
+Merge commit f606391 (main at 5039f12). Nine files conflicted; both sides were kept in each:
+
+- `AGENTS.md`: WRT-8's start marker and BRF-1's brief in the tool order, `briefTool.ts` in the list of files; 29 tools; both paragraphs, BRF-1's `src/brief/` and WRT-8's `src/versions/`.
+- `CHANGELOG.md`: BRF-1's Unreleased line, then WRT-8's and COD-3's.
+- `docs/commands.md`: BRF-1's `grid write` row with COD-3's `--country <place>` on `grid check`; the `grid edit` row with `square` and the brief; WRT-8's `grid mark` and `grid diff` rows; `grid serve` with 29 tools.
+- `docs/result-contract.md`: BRF-1's changelog section on top (the tools are 29), then WRT-8's and COD-3's.
+- `docs/tolerances.md`: BRF-1's `briefAbout` and `nameSize` rows, then WRT-8's `diffPlace`.
+- `docs/tool-server.md`: the order names the start marker, the seen mark and the brief.
+- `packages/cli/src/mcp/serveTools.ts`: both imports (`writeBriefTool`; `diffTool`, `markStartTool`) and both in the header; the list merged cleanly: `grid_diff` after `grid_compare`, `grid_mark_start` before `grid_mark_seen`, `grid_write_brief` after it.
+- `packages/cli/src/mcp/__tests__/server.test.ts`: 29 tools listed.
+- `packages/cli/src/mcp/__tests__/tools.test.ts`: WRT-8's reason for 28 and BRF-1's for 29, with a limit of 29. `ORDER` holds 29 names, `CALLS` and the every-path slots hold `grid_diff`, `grid_mark_start` and `grid_write_brief`.
+
+After it, `scoreboard/__tests__/causes.test.ts` failed twice, the same on `main`: COD-3 (no place, no
+figure) landed after MSG-5's lab counts, which were made with the US figures (the fault plans gave
+88 lines, not 90; the hotel's twelve escape windows no line). 73d0af3 named the US as the place in
+both cases; `main` then fixed it the same way (7b90435), and merge commit db0b76f takes `main`'s
+file, so the branch holds `main`'s test as it is.
+
+After the merges: `npm run build`, `npm run typecheck` and `npm run lint` exit 0.
+`npx vitest run packages/cli --maxWorkers=2 --minWorkers=1`: 1,104 passed, 1 skipped, in 75 of 75
+files. `npx vitest run packages/floorplan packages/rules packages/viewer scoreboard/__tests__
+scripts --maxWorkers=2 --minWorkers=1`: 4,085 passed, 2 failed (the two above), 3 skipped, in 207
+files; with the fix, `causes.test.ts` alone: 9 of 9, and again on `main`'s version after db0b76f.
+`npm run scoreboard`: "Same as the stored figures" (197, 278, 18, 5, 15; guards 735 and 95).
+
 ## For the owner
 
 The owner is away, so each choice took the reversible option; each is one line to change.
