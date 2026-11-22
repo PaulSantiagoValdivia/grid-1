@@ -18,7 +18,7 @@ import { roomNumbers } from '../../roomNumbers'
 import { limit } from '../../tolerances'
 import { toIfc } from '../ifc'
 import { ballroomWithStage, flat, genkanFlat, stairHouse } from '../../../test-support/plans'
-import { entity, ofType, parseDoc, ref, refs, str, walk, type Doc, type Entity, type Value } from './step-reader'
+import { entity, num, nums, ofType, parseDoc, ref, refs, str, walk, type Doc, type Entity, type Value } from './step-reader'
 
 const FLOORPLAN_FIXTURES = resolve(__dirname, '../../../../fixtures')
 const CLI_FIXTURES = resolve(__dirname, '../../../../../cli/fixtures')
@@ -368,6 +368,27 @@ describe('HND-2 a plan at survey coordinates is written near the origin', () => 
       if (id === siteAt) continue
       for (const v of coords) expect(Math.abs(v), `#${id}`).toBeLessThan(step)
     }
+  })
+
+  it('keeps a stated site on its point, with its data and the north, and the building holds the rest of the move (CNT-3)', () => {
+    const step = limit('farFromOrigin')
+    const stated: readonly [number, number] = [FAR[0] + 1, FAR[1] + 2]
+    const sited = parseDoc(toIfc({ ...farFlat(), north: -30, site: { origin: [...stated], latitude: 40.5, longitude: -3.25, elevation: 650 } }, OPTIONS))
+    const pointOf = (localPlacement: number): number[] => pointsOf(sited).get(ref(entity(sited, ref(entity(sited, localPlacement).args[1])).args[0]))!
+    const s = site(sited)
+    expect(pointOf(ref(s.args[5]))).toEqual([stated[0], stated[1], 0])
+    expect([nums(s.args[9]), nums(s.args[10]), num(s.args[11])]).toEqual([[40, 30, 0, 0], [-3, -15, 0, 0], 650])
+    const building = ofType(sited, 'IFCBUILDING')[0]!
+    expect(ref(entity(sited, ref(building.args[5])).args[0])).toBe(ref(s.args[5]))
+    // The site's point and the building's, against it, add up to the move near the origin.
+    const [bx, by] = pointOf(ref(building.args[5]))
+    const moved = [stated[0] + bx!, stated[1] + by!]
+    expect(moved.map((v) => Math.abs(v / step - Math.round(v / step)) < 1e-9)).toEqual([true, true])
+    expect(Math.hypot(moved[0]! - FAR[0], moved[1]! - FAR[1])).toBeLessThan(step)
+    const context = ofType(sited, 'IFCGEOMETRICREPRESENTATIONCONTEXT')[0]!
+    const [nx, ny] = nums(entity(sited, ref(context.args[5])).args[0])
+    expect(nx).toBeCloseTo(0.5, 9)
+    expect(ny).toBeCloseTo(Math.sqrt(3) / 2, 9)
   })
 
   it('leaves a plan near the origin where it is', () => {
