@@ -23,12 +23,21 @@ Grid has not been released yet. The first release will hold:
 - Every report, `grid_check` and the check sheet list what the checks never look at, ceiling
   height and which walls carry load among them.
 - `grid tidy` lists the walls that do not meet and makes the fixes you choose.
+- Every note and pass that used a figure says which kind of building the figure was read for:
+  today, homes. A plan cannot say yet what kind of building it is, so a café or a hotel is
+  measured with a home's figures, and the report now says so.
 - `grid describe`, `grid draw`, `grid export` and `grid sheet` describe a plan, draw it, export
   it and lay it out as an A3 sheet in PDF.
 - `grid init` makes a folder a Grid project, where the commands read its `plan.json`.
+- An agent that meets a problem in Grid can draft an issue about it with `grid_report_problem`:
+  the plan cut down and cleared of names and paths. Grid sends nothing; you decide whether to
+  file it.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 15 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 21 tools.
+- A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
+  all floors) and a door and window schedule that lists each opening once with the two rooms it
+  joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks

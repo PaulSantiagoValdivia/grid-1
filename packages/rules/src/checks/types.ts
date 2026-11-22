@@ -16,7 +16,7 @@ import type {
   RuleFinding as PlanRuleFinding,
   RulesReport as PlanRulesReport
 } from '@ongrid/floorplan/geometry'
-import type { FigureKey, FigureUnit, VerificationStatus } from './figures'
+import type { BuildingKind, FigureKey, FigureUnit, VerificationStatus } from './figures'
 
 export { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from '@ongrid/floorplan/geometry'
 export type { Rule, RuleCitation, RuleSource, RouteStep } from '@ongrid/floorplan/geometry'
@@ -47,6 +47,8 @@ export type AppliedFigure =
       /** One of the figures this package carries. */
       readonly origin: 'baseline'
       readonly status: VerificationStatus
+      /** The kind of building the figure was read for (COD-2). */
+      readonly readFor: BuildingKind
       /** Where the figure applies, such as "US model codes". */
       readonly jurisdiction: string
       readonly citations: readonly RuleCitation[]
@@ -61,6 +63,8 @@ export type AppliedFigure =
       readonly origin: 'lookup'
       /** A looked-up figure is never more than found: nobody has checked it. */
       readonly status: 'ai-found'
+      /** The kind of building the figure was read for: the one the lookup asked about (COD-2). */
+      readonly readFor: BuildingKind
       readonly source?: FigureCitation
     }
 
@@ -181,6 +185,11 @@ export interface CheckCoverage {
   readonly skippedCount: number
   /** How many findings it gave. */
   readonly findings: number
+  /**
+   * A check that applied figures: the kinds of building they were read for (COD-2), so a pass
+   * with no finding still says it. Left out for a check that uses no figure, or did not run.
+   */
+  readonly readFor?: readonly BuildingKind[]
 }
 
 export interface RulesReport extends Omit<PlanRulesReport, 'basis' | 'findings' | 'notChecked'> {
