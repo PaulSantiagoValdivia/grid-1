@@ -191,6 +191,8 @@ const LENGTH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   rooms: ['height', 'floorOffset'],
   floors: ['elevation', 'height', 'slab'],
   items: ['at', 'size', 'height'],
+  // LVL-8: an opening pattern's spacing, and the lengths of the opening and the margins in it.
+  patterns: ['spacing', 'opening.width', 'opening.sill', 'opening.height', 'margins.start', 'margins.end'],
 }
 
 /**
@@ -213,7 +215,15 @@ export function planInMetres<T>(raw: T): { raw: T; from: string | null } {
     out[list] = (plan[list] as unknown[]).map((part) => {
       if (typeof part !== 'object' || part === null || Array.isArray(part)) return part
       const next: Record<string, unknown> = { ...(part as Record<string, unknown>) }
-      for (const field of fields) if (field in next) next[field] = scaled(next[field])
+      for (const field of fields) {
+        const [outer, inner] = field.split('.') as [string, string | undefined]
+        if (inner === undefined) {
+          if (outer in next) next[outer] = scaled(next[outer])
+          continue
+        }
+        const nested = next[outer]
+        if (typeof nested === 'object' && nested !== null && !Array.isArray(nested) && inner in nested) next[outer] = { ...(nested as Record<string, unknown>), [inner]: scaled((nested as Record<string, unknown>)[inner]) }
+      }
       return next
     })
   }

@@ -35,6 +35,12 @@ Notes for agents and people changing this repository.
   plan records about how it was written (`written`). The plan file is the source of truth and
   rooms text a way of writing and reading it. `fixtures/rooms/` holds the lab's eight buildings
   as rooms text with their originals; `rooms/__tests__/buildings.test.ts` holds them to it.
+- `packages/floorplan/src/geometry/patterns.ts` (LVL-8): opening patterns (`patterns`, C12 in
+  `types/floorplan.ts`) expanded into plain openings (`expandPatterns`, `withPatterns`). Every
+  reader expands first (`loadPlan` unless read whole, `inspectPlan`, `exportPlan`, the pictures),
+  so exporters and checks see plain openings only; the commands that write the plan keep the
+  patterns. `facade.ts` works out a side of the building in elevation (`planFacade`) from the
+  floors' outlines, levels, slabs and roofs; the viewer's `picture/facade.ts` only draws it.
 - `packages/floorplan/src/geometry/items.ts` (CNT-12): the plan's fixtures (`items`, C6 in
   `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
   CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind

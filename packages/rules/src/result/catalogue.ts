@@ -350,6 +350,15 @@ export const CODES = {
   'stair/too-few-risers': {},
   'stair/end-in-no-room': {},
   'stair/duplicate-id': {},
+  // --- Opening patterns (LVL-8) ---------------------------------------------------------------
+  // What kept a pattern's openings from being placed. The found is the expansion's own sentence:
+  // which wall, how much room it needed and had, which opening it would have covered.
+  'pattern/unknown-wall': {},
+  'pattern/does-not-fit': {},
+  'pattern/unknown-floor': {},
+  'pattern/no-wall-above': {},
+  'pattern/overlaps-opening': {},
+  'pattern/id-clash': {},
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},
   'item/no-size': {},

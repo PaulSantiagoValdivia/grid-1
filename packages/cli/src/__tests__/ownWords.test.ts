@@ -38,7 +38,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/check.ts': [10, 'command'],
   'packages/cli/src/command/describe.ts': [6, 'command'],
   'packages/cli/src/command/diff.ts': [13, 'command'],
-  'packages/cli/src/command/draw.ts': [28, 'command'],
+  'packages/cli/src/command/draw.ts': [34, 'command'],
   'packages/cli/src/command/drawShow.ts': [4, 'command'],
   'packages/cli/src/command/edit.ts': [9, 'command'],
   'packages/cli/src/command/export.ts': [16, 'command'],
@@ -47,7 +47,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/main.ts': [52, 'command'],
   'packages/cli/src/command/options.ts': [9, 'command'],
   'packages/cli/src/command/plan.ts': [24, 'command'],
-  'packages/cli/src/command/planText.ts': [14, 'command'],
+  'packages/cli/src/command/planText.ts': [15, 'command'],
   'packages/cli/src/command/sheet.ts': [3, 'command'],
   'packages/cli/src/command/tidy.ts': [11, 'command'],
   'packages/cli/src/command/write.ts': [23, 'command'],
@@ -75,7 +75,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
   'packages/cli/src/mcp/editTools.ts': [69, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [16, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [261, 'tools'],
+  'packages/cli/src/mcp/readTools.ts': [271, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/seenTool.ts': [16, 'tools'],
@@ -120,7 +120,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/rounding.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/rules/doors.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
-  'packages/floorplan/src/geometry/tolerances.ts': [186, 'developer'],
+  'packages/floorplan/src/geometry/tolerances.ts': [192, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [1, 'developer'],
@@ -130,7 +130,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/rooms/compile.ts': [108, 'notYet'],
   'packages/floorplan/src/rooms/read.ts': [21, 'notYet'],
   'packages/floorplan/src/rooms/words.ts': [4, 'notYet'],
-  'packages/floorplan/src/types/floorplan.ts': [37, 'notYet'],
+  'packages/floorplan/src/types/floorplan.ts': [38, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
@@ -143,6 +143,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/rules/src/sheet/rulesSheet.ts': [9, 'notYet'],
   'packages/rules/src/store/store.ts': [1, 'developer'],
   'packages/viewer/src/canvas2d/Canvas2D.tsx': [1, 'notWords'],
+  'packages/viewer/src/picture/facade.ts': [2, 'developer'],
   'packages/viewer/src/picture/planSvg.ts': [3, 'developer'],
   'packages/viewer/src/still/index.ts': [2, 'developer'],
 }
@@ -209,8 +210,8 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     }
     // The ratchet: what is shown to the person and not moved yet only comes down. It was 913 when
     // MSG-11 landed; main's MSG-5, COD-3, CNT-8, CNT-9, BRF-1, BRF-5, LVL-6, WRT-8 and VEW-3 brought
-    // 190 more of the kinds MSG-11 left for later (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1103)
+    // 190 more of the kinds MSG-11 left for later, and LVL-8 8 more (reviews/MSG-11.md, "After merging main").
+    expect(left).toBeLessThanOrEqual(1111)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

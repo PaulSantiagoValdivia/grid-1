@@ -26,7 +26,7 @@ import { el } from './svgNode'
 import { ENGLISH_WORDS, drawingText, type DrawingWords } from './words'
 
 /** What a line is about, as the result record names it. */
-export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item' | 'stair'
+export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item' | 'stair' | 'pattern'
 
 /**
  * The part of a result line (MSG-1's `ResultLine`) a picture uses. A record's `lines` can be

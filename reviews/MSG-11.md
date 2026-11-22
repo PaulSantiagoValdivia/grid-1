@@ -292,3 +292,50 @@ in 114 files are listed in all.
     Names per language would be a row of Spanish names in `places.ts`.
 14. **Facts of your own** (CNT-9) print as the person wrote them, in every language; a yes or no
     fact keeps Grid's English word for it in the sheet's schedules.
+
+## After merging main at 8b599e9
+
+Main moved on to 8b599e9, which brings LVL-8 (facades drawn from the model, and opening patterns).
+Eight files conflicted.
+
+- **Opening patterns**: `geometry/patterns.ts`'s problems are worded by key with their sentence
+  (`issue.pattern/…`, `issue.part.Named.pattern`), so `validatePlan`'s first issues carry `said`
+  as every other drawing problem does. The six `pattern/…` codes have their catalogue entries and
+  `line.pattern/…` keys; the new kind of thing is `thing.pattern`, `thing.at.pattern`,
+  `report.thing.pattern` and `line.part.fieldsOf.patterns`. The record keeps LVL-8's split: the
+  drawing check reads the plan as stated, the other checks the openings the patterns place.
+- **Facades**: the viewer's `facade.ts` says its caption, its title and "nothing faces" by key
+  (`drawing.facade.*`, with `describe.way.*` for the way a side faces), in the language asked or
+  the plan's own. `grid draw --facade` takes `--lang`, `grid_view kind=facade` takes `language`,
+  and the picture's accessible name is its title when it has one. The facade answer's text in
+  `grid_view` stays the tool's English, as the other kinds' texts do.
+- **Rooms text**: `grid describe --as rooms`'s note about opening patterns is
+  `describe.rooms.patterns.one|many`, under the label, in the language asked.
+- `grid draw`'s usage lists `--facade` and `--lang`; the changelog and the contract keep both
+  sides, MSG-11's section first of the day, with the pattern codes and the facade's caption named
+  in its line on the new codes.
+- **ownWords**: `facade.ts` keeps two programming errors (`developer`); `draw.ts` 28 → 34 and
+  `planText.ts` 14 → 15 (command), `types/floorplan.ts` 37 → 38 (schema refusal),
+  `tolerances.ts` 186 → 192, `readTools.ts` 261 → 271. The ratchet moves from 1103 to 1111;
+  2,096 literals in 115 files are listed in all.
+
+### Results after 8b599e9
+
+- `npm run build`: `dist/grid.mjs` 532,095 bytes (under main's 550,000); the Spanish chunk
+  133,465 bytes.
+- `npm run typecheck`, `npm run lint`: clean.
+- Floorplan `messages/`, `geometry/`, `types/`, all of `rules/src` and viewer `picture/`: 148
+  files, 3,522 tests pass (1 skipped).
+- The CLI's guard, `describe/`, `draw/`, `sheet/`, `mcp/`, `command/`, `brief/`, `versions/`,
+  `quantities/`, `edit/` and `distribution/`: 82 files, 1,072 tests pass (1 skipped). No
+  expectation changed in this merge.
+- By hand: `grid draw --facade south --lang es` names the picture "Fachada sur del plano, 2
+  plantas en sus niveles" and writes its caption and label in Spanish.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (8b599e9)
+
+15. **Main has moved again**, to 8a43380 (HND-1, the DXF), after 8b599e9. It is not merged here;
+    that is the next merge.
+16. A facade's level marks (`+2.95`) keep their decimal point in every language, as main draws
+    them; the words around them follow the language.

@@ -78,7 +78,13 @@ export function checkDescribeRequest(request: DescribeRequest): { length: Descri
  * is the label as a comment (MSG-3), which writing it back ignores.
  */
 export function describeRooms(loaded: LoadedPlan, options: DescribeOptions = {}): string {
-  return `# ${say(options.language ?? DEFAULT_LANGUAGE, 'label')}\n${readRoomsText(loaded.plan).text}`
+  // LVL-8: the openings the file states, not the ones its patterns place: `grid write` keeps the
+  // patterns as the file has them, so their openings written here would be placed twice.
+  const plan = loaded.stated ?? loaded.plan
+  const patterns = plan.patterns?.length ?? 0
+  const language = options.language ?? DEFAULT_LANGUAGE
+  const kept = patterns === 0 ? '' : `# ${say(language, patterns === 1 ? 'describe.rooms.patterns.one' : 'describe.rooms.patterns.many', { count: patterns })}\n`
+  return `# ${say(language, 'label')}\n${kept}${readRoomsText(plan).text}`
 }
 
 /** The description, in the language of `options` (MSG-11; English when left out), ending in a new line. */

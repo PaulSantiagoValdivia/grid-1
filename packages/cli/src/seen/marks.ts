@@ -132,10 +132,10 @@ function hashOf(value: unknown): string {
   return createHash('sha256').update(canonical(value)).digest('hex').slice(0, 16)
 }
 
-type Lists = Readonly<Record<'wall' | 'room' | 'opening' | 'item' | 'stair' | 'floor', readonly { readonly id: string }[]>>
+type Lists = Readonly<Record<'wall' | 'room' | 'opening' | 'item' | 'stair' | 'floor' | 'pattern', readonly { readonly id: string }[]>>
 
 function listsOf(plan: FloorPlan): Lists {
-  return { wall: plan.walls, room: plan.rooms, opening: plan.openings, item: plan.items ?? [], stair: plan.stairs ?? [], floor: plan.floors ?? [] }
+  return { wall: plan.walls, room: plan.rooms, opening: plan.openings, item: plan.items ?? [], stair: plan.stairs ?? [], floor: plan.floors ?? [], pattern: plan.patterns ?? [] }
 }
 
 /** Everything on one floor, and its entry in `floors`: a note about a floor is about all of it. */
@@ -174,7 +174,9 @@ const FILE_LISTS: Readonly<Record<Exclude<MarkedPart['kind'], 'plan'>, readonly 
   item: ['items'],
   stair: ['stairs'],
   floor: ['floors'],
-  unknown: ['walls', 'rooms', 'openings', 'items', 'stairs', 'floors', 'annotations', 'sketch'],
+  // LVL-8: an opening pattern, as its file states it.
+  pattern: ['patterns'],
+  unknown: ['walls', 'rooms', 'openings', 'items', 'stairs', 'floors', 'annotations', 'sketch', 'patterns'],
 }
 
 /** The file as written, as JSON: null when there is no text or it can't be read as JSON. */
@@ -227,6 +229,7 @@ export function partsOf(source: SeenSource, line: Pick<ResultLine, 'thing' | 'al
     // A room is its outline too, and an opening the wall it is in.
     if (kind === 'room' && part !== undefined) for (const wall of (part as FloorPlan['rooms'][number]).boundary) addPart('wall', wall)
     if (kind === 'opening' && part !== undefined) addPart('wall', (part as FloorPlan['openings'][number]).wall)
+    if (kind === 'pattern' && part !== undefined) addPart('wall', (part as NonNullable<FloorPlan['patterns']>[number]).wall)
   }
   if (line.thing.kind === 'plan') {
     // A note about the plan that names no part is about the whole plan.

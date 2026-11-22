@@ -414,6 +414,29 @@ export const en = {
   'issue.wall/duplicate.movingFacts': ', moving its openings onto it, and giving {kept} the facts of its own it carries.',
   'issue.wall/duplicate.facts': ', and giving {kept} the facts of its own it carries.',
 
+  // ── After merging main at 8b599e9: LVL-8's opening patterns ─────────────────────────────────
+  'issue.part.Named.pattern': 'Opening pattern {id}',
+  'issue.pattern/unknown-wall': '{pattern} names wall {wall}, which the plan does not have, so none of its openings is placed',
+  'issue.pattern/unknown-wall.near': '{pattern} names wall {wall}, which the plan does not have, so none of its openings is placed; the nearest wall id is {near}',
+  'issue.pattern/unknown-wall.shared': '{pattern} names wall {wall}, an id {n} walls share, so its wall is not known and none of its openings is placed',
+  'issue.pattern/does-not-fit': '{pattern} on wall {wall} {why}, so none of its openings is placed',
+  'issue.pattern/does-not-fit.noLength': '{pattern} is on wall {wall}, which has no length to place openings along, so none of its openings is placed',
+  'issue.pattern/does-not-fit.between': "between its margins, {free} m of the wall's {length} m",
+  'issue.pattern/does-not-fit.noRoom': 'has no room for one opening {width} m wide {between}',
+  'issue.pattern/does-not-fit.count': 'needs {needs} m for {n} openings {width} m wide, and has {between}',
+  'issue.pattern/does-not-fit.spacing': "has a spacing of {spacing} m, less than its openings' width of {width} m: they would overlap",
+  'issue.pattern/does-not-fit.spaced': 'needs {needs} m for {n} openings {spacing} m apart, and has {between}',
+  'issue.pattern/does-not-fit.tooMany': '{pattern} would place {n} openings, past the {most} a plan may have, so none of its openings is placed',
+  'issue.pattern/unknown-floor': '{pattern} is to be repeated on floor {floor}, which the plan does not have, so nothing is placed there',
+  'issue.pattern/unknown-floor.near': '{pattern} is to be repeated on floor {floor}, which the plan does not have, so nothing is placed there; the nearest floor id is {near}',
+  'issue.pattern/no-wall-above.one': '{pattern} finds no wall on floor {floor} in the line of wall {wall} to hold {which}, so it is not placed there',
+  'issue.pattern/no-wall-above.many': '{pattern} finds no wall on floor {floor} in the line of wall {wall} to hold {which}, so they are not placed there',
+  'issue.pattern/no-wall-above.none': 'none of its openings',
+  'issue.pattern/no-wall-above.opening': 'opening {numbers} of {of}',
+  'issue.pattern/no-wall-above.openings': 'openings {numbers} of {of}',
+  'issue.pattern/id-clash': '{pattern} would give an opening the id {opening}, which another part of the plan has, so that opening is not placed',
+  'issue.pattern/overlaps-opening': '{pattern} would place {opening} over opening {other} on wall {wall}, so it is not placed',
+
   // --- The plan checks' findings and notices, titles, sources, limits and figure words (`check.*`)
   'check.noExit': '{floor} has no door to the outside',
   'check.roomWithoutDoor': '{room} has no door or opening to another space',
@@ -1203,6 +1226,29 @@ export const en = {
   'line.floor/dormers-not-drawn.fix':
     "Grid draws and measures the roof without its dormers. A window in a dormer's face can be drawn in an outside wall raised to it; a window in the slope is a rooflight.",
 
+  // ── After merging main at 8b599e9: LVL-8's opening patterns ─────────────────────────────────
+  'thing.pattern': 'Opening pattern {id}',
+  'thing.at.pattern': 'The opening pattern at {place}',
+  'line.part.fieldsOf.patterns': 'an opening pattern',
+  'line.pattern/unknown-wall.says': '{label} names a wall Grid cannot find',
+  'line.pattern/unknown-wall.needed': 'the id of one wall of the plan',
+  'line.pattern/unknown-wall.fix': 'Name the wall the openings go in by its id, as the plan file holds it; until then none of them is placed.',
+  'line.pattern/does-not-fit.says': '{label} does not fit its wall',
+  'line.pattern/does-not-fit.needed': 'room on the wall, between its margins, for every opening of the pattern',
+  'line.pattern/does-not-fit.fix': 'Make the margins smaller, the openings narrower, the count smaller or the spacing wider, or put the pattern on a longer wall.',
+  'line.pattern/unknown-floor.says': '{label} is to be repeated on a floor the plan does not have',
+  'line.pattern/unknown-floor.needed': "a floor of the plan in the pattern's floors",
+  'line.pattern/unknown-floor.fix': 'Name the floors above by their ids, as the floor list holds them.',
+  'line.pattern/no-wall-above.says': '{label} finds no wall above to repeat on',
+  'line.pattern/no-wall-above.needed': "on each floor it is repeated on, a wall in the same line as its own, holding the opening's whole width",
+  'line.pattern/no-wall-above.fix': "Draw the wall above in line with the pattern's wall, or take that floor out of the pattern's floors.",
+  'line.pattern/overlaps-opening.says': '{label} would place an opening over another',
+  'line.pattern/overlaps-opening.needed': 'each opening of the pattern clear of the other openings on its wall',
+  'line.pattern/overlaps-opening.fix': "Move the other opening, or change the pattern's margins, count or spacing so its openings stand clear of it.",
+  'line.pattern/id-clash.says': '{label} would give an opening an id another part has',
+  'line.pattern/id-clash.needed': "an id of its own for each opening a pattern places: the pattern's id, the floor and the number",
+  'line.pattern/id-clash.fix': 'Rename the pattern, or the part that has the id.',
+
   // --- The words of a report around its lines (`report.*`, `tool.check.*`)
   'report.seenBy': 'by {by} on {day}: {reason}',
   'report.seenBefore': 'seen before, {by}; but {parts} changed since, so it is new again',
@@ -1333,6 +1379,8 @@ export const en = {
   'report.heldBack': 'held back',
   'report.notRun': '  - {names}: not run: {why}.',
   'tool.check.line.follows': '{kind}, {thing}: {message}.{needed} Follows from {cause}. [{code}]',
+
+  'report.thing.pattern': 'opening pattern {id}',
 
   // --- `grid describe` (`describe.*`)
   'describe.line': 'A plan of {floors} with {rooms}{uses}, {area} m² inside; {entered}.',
@@ -1499,6 +1547,10 @@ export const en = {
   'describe.roomsAndZones': '{rooms} and {zones}',
   'describe.room.zoneOf': ' (a zone of {room})',
 
+  // ── After merging main at 8b599e9: LVL-8's opening patterns in rooms text ───────────────────
+  'describe.rooms.patterns.one': "The plan's opening pattern is not rooms text: grid write keeps it as the file has it, and its openings are not written here.",
+  'describe.rooms.patterns.many': "The plan's {count} opening patterns are not rooms text: grid write keeps them as the file has them, and their openings are not written here.",
+
   // --- The drawings and the sheet (`drawing.*`, `sheet.*`)
   'drawing.picture': 'Floor plan with {count} rooms',
   'drawing.picture.keyed': 'Floor plan with {count} rooms, and a key of what to look at',
@@ -1521,6 +1573,21 @@ export const en = {
   'drawing.undecidedDoor': 'Door with no stated swing',
   'drawing.assumed': 'Assumed, to confirm',
   'drawing.removed': 'removed',
+  // ── After merging main at 8b599e9: LVL-8's facades ──────────────────────────────────────────
+  'drawing.facade.name.north': 'North facade',
+  'drawing.facade.name.east': 'East facade',
+  'drawing.facade.name.south': 'South facade',
+  'drawing.facade.name.west': 'West facade',
+  'drawing.facade.side.north': 'north',
+  'drawing.facade.side.east': 'east',
+  'drawing.facade.side.south': 'south',
+  'drawing.facade.side.west': 'west',
+  'drawing.facade.caption': '{facade}, the {side} side of the drawing{compass}{ground}',
+  'drawing.facade.compass': ", facing {faces} by the plan's north",
+  'drawing.facade.noGround': '; ground level not stated, drawn at the ground floor',
+  'drawing.facade.empty': 'Nothing of the plan faces {side}.',
+  'drawing.facade.title.one': '{facade} of the plan, {count} floor at their levels',
+  'drawing.facade.title.many': '{facade} of the plan, {count} floors at their levels',
 
   /** The month names of the sheet's date, in order, between spaces. */
   'sheet.months': 'JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC',

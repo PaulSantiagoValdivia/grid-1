@@ -429,6 +429,29 @@ export const es: Messages = {
   'issue.wall/duplicate.movingFacts': ', pasando sus huecos al que queda, y dando a {kept} los datos propios que lleva.',
   'issue.wall/duplicate.facts': ', y dando a {kept} los datos propios que lleva.',
 
+  // ── Tras fusionar main en 8b599e9: los patrones de huecos (LVL-8) ───────────────────────────
+  'issue.part.Named.pattern': 'El patrón de huecos {id}',
+  'issue.pattern/unknown-wall': '{pattern} nombra el muro {wall}, que el plano no tiene, así que no se coloca ninguno de sus huecos',
+  'issue.pattern/unknown-wall.near': '{pattern} nombra el muro {wall}, que el plano no tiene, así que no se coloca ninguno de sus huecos; el id de muro más parecido es {near}',
+  'issue.pattern/unknown-wall.shared': '{pattern} nombra el muro {wall}, un id que comparten {n} muros, así que no se sabe cuál es su muro y no se coloca ninguno de sus huecos',
+  'issue.pattern/does-not-fit': '{pattern} en el muro {wall} {why}, así que no se coloca ninguno de sus huecos',
+  'issue.pattern/does-not-fit.noLength': '{pattern} está en el muro {wall}, que no tiene longitud a lo largo de la que colocar huecos, así que no se coloca ninguno de sus huecos',
+  'issue.pattern/does-not-fit.between': 'entre sus márgenes, {free} m de los {length} m del muro',
+  'issue.pattern/does-not-fit.noRoom': 'no tiene sitio para un hueco de {width} m de anchura {between}',
+  'issue.pattern/does-not-fit.count': 'necesita {needs} m para {n} huecos de {width} m de anchura, y tiene {between}',
+  'issue.pattern/does-not-fit.spacing': 'tiene una separación de {spacing} m, menor que la anchura de sus huecos, {width} m: se solaparían',
+  'issue.pattern/does-not-fit.spaced': 'necesita {needs} m para {n} huecos a {spacing} m entre sí, y tiene {between}',
+  'issue.pattern/does-not-fit.tooMany': '{pattern} colocaría {n} huecos, más de los {most} que puede tener un plano, así que no se coloca ninguno de sus huecos',
+  'issue.pattern/unknown-floor': '{pattern} se debe repetir en la planta {floor}, que el plano no tiene, así que no se coloca nada allí',
+  'issue.pattern/unknown-floor.near': '{pattern} se debe repetir en la planta {floor}, que el plano no tiene, así que no se coloca nada allí; el id de planta más parecido es {near}',
+  'issue.pattern/no-wall-above.one': '{pattern} no encuentra en la planta {floor} ningún muro en la línea del muro {wall} que sostenga {which}, así que no se coloca allí',
+  'issue.pattern/no-wall-above.many': '{pattern} no encuentra en la planta {floor} ningún muro en la línea del muro {wall} que sostenga {which}, así que no se colocan allí',
+  'issue.pattern/no-wall-above.none': 'ninguno de sus huecos',
+  'issue.pattern/no-wall-above.opening': 'el hueco {numbers} de {of}',
+  'issue.pattern/no-wall-above.openings': 'los huecos {numbers} de {of}',
+  'issue.pattern/id-clash': '{pattern} daría a un hueco el id {opening}, que tiene otra parte del plano, así que ese hueco no se coloca',
+  'issue.pattern/overlaps-opening': '{pattern} colocaría {opening} sobre el hueco {other} del muro {wall}, así que no se coloca',
+
   // --- The plan checks' findings and notices, titles, sources, limits and figure words (`check.*`)
   'check.noExit': '{floor} no tiene ninguna puerta al exterior',
   'check.roomWithoutDoor': '{room} no tiene ninguna puerta ni hueco a otro espacio',
@@ -1218,6 +1241,29 @@ export const es: Messages = {
   'line.floor/dormers-not-drawn.fix':
     'Grid dibuja y mide la cubierta sin sus buhardas. Una ventana en el frente de una buharda se puede dibujar en un muro exterior elevado hasta ella; una ventana en el faldón es un lucernario.',
 
+  // ── Tras fusionar main en 8b599e9: los patrones de huecos (LVL-8) ───────────────────────────
+  'thing.pattern': 'Patrón de huecos {id}',
+  'thing.at.pattern': 'El patrón de huecos de {place}',
+  'line.part.fieldsOf.patterns': 'un patrón de huecos',
+  'line.pattern/unknown-wall.says': '{label} nombra un muro que Grid no encuentra',
+  'line.pattern/unknown-wall.needed': 'el id de un muro del plano',
+  'line.pattern/unknown-wall.fix': 'Nombre el muro en el que van los huecos por su id, tal como lo tiene el archivo del plano; hasta entonces no se coloca ninguno.',
+  'line.pattern/does-not-fit.says': '{label} no cabe en su muro',
+  'line.pattern/does-not-fit.needed': 'sitio en el muro, entre sus márgenes, para cada hueco del patrón',
+  'line.pattern/does-not-fit.fix': 'Reduzca los márgenes, estreche los huecos, reduzca su número o aumente la separación, o ponga el patrón en un muro más largo.',
+  'line.pattern/unknown-floor.says': '{label} se debe repetir en una planta que el plano no tiene',
+  'line.pattern/unknown-floor.needed': 'una planta del plano en las plantas del patrón',
+  'line.pattern/unknown-floor.fix': 'Nombre las plantas de arriba por sus ids, tal como las tiene la lista de plantas.',
+  'line.pattern/no-wall-above.says': '{label} no encuentra arriba ningún muro en el que repetirse',
+  'line.pattern/no-wall-above.needed': 'en cada planta en la que se repite, un muro en la misma línea que el suyo, que sostenga toda la anchura del hueco',
+  'line.pattern/no-wall-above.fix': 'Dibuje el muro de arriba en línea con el muro del patrón, o quite esa planta de las plantas del patrón.',
+  'line.pattern/overlaps-opening.says': '{label} colocaría un hueco sobre otro',
+  'line.pattern/overlaps-opening.needed': 'cada hueco del patrón libre de los demás huecos de su muro',
+  'line.pattern/overlaps-opening.fix': 'Mueva el otro hueco, o cambie los márgenes, el número o la separación del patrón para que sus huecos queden libres de él.',
+  'line.pattern/id-clash.says': '{label} daría a un hueco un id que tiene otra parte',
+  'line.pattern/id-clash.needed': 'un id propio para cada hueco que coloca un patrón: el id del patrón, la planta y el número',
+  'line.pattern/id-clash.fix': 'Cambie el nombre del patrón, o el de la parte que tiene el id.',
+
   // --- The words of a report around its lines (`report.*`, `tool.check.*`)
   'report.seenBy': 'por {by} el {day}: {reason}',
   'report.seenBefore': 'vista antes, {by}; pero {parts} ha cambiado desde entonces, así que vuelve a ser nueva',
@@ -1348,6 +1394,8 @@ export const es: Messages = {
   'report.heldBack': 'en espera',
   'report.notRun': '  - {names}: sin ejecutar: {why}.',
   'tool.check.line.follows': '{kind}, {thing}: {message}.{needed} Deriva de {cause}. [{code}]',
+
+  'report.thing.pattern': 'patrón de huecos {id}',
 
   // --- `grid describe` (`describe.*`)
   'describe.line': 'Un plano de {floors} con {rooms}{uses}, {area} m² útiles; {entered}.',
@@ -1514,6 +1562,10 @@ export const es: Messages = {
   'describe.roomsAndZones': '{rooms} y {zones}',
   'describe.room.zoneOf': ' (una zona de {room})',
 
+  // ── Tras fusionar main en 8b599e9: los patrones de huecos en el texto de estancias (LVL-8) ──
+  'describe.rooms.patterns.one': 'El patrón de huecos del plano no es texto de estancias: grid write lo conserva como lo tiene el archivo, y sus huecos no se escriben aquí.',
+  'describe.rooms.patterns.many': 'Los {count} patrones de huecos del plano no son texto de estancias: grid write los conserva como los tiene el archivo, y sus huecos no se escriben aquí.',
+
   // --- The drawings and the sheet (`drawing.*`, `sheet.*`)
   'drawing.picture': 'Plano con {count} estancias',
   'drawing.picture.keyed': 'Plano con {count} estancias y una leyenda de lo que conviene revisar',
@@ -1536,6 +1588,21 @@ export const es: Messages = {
   'drawing.undecidedDoor': 'Puerta sin sentido de apertura indicado',
   'drawing.assumed': 'Supuesto, por confirmar',
   'drawing.removed': 'eliminada',
+  // ── Tras fusionar main en 8b599e9: las fachadas (LVL-8) ─────────────────────────────────────
+  'drawing.facade.name.north': 'Fachada norte',
+  'drawing.facade.name.east': 'Fachada este',
+  'drawing.facade.name.south': 'Fachada sur',
+  'drawing.facade.name.west': 'Fachada oeste',
+  'drawing.facade.side.north': 'norte',
+  'drawing.facade.side.east': 'este',
+  'drawing.facade.side.south': 'sur',
+  'drawing.facade.side.west': 'oeste',
+  'drawing.facade.caption': '{facade}, el lado {side} del dibujo{compass}{ground}',
+  'drawing.facade.compass': ', orientada al {faces} según el norte del plano',
+  'drawing.facade.noGround': '; no se indica la cota del terreno, se dibuja en la planta baja',
+  'drawing.facade.empty': 'Ninguna parte del plano da al {side}.',
+  'drawing.facade.title.one': '{facade} del plano, {count} planta en su nivel',
+  'drawing.facade.title.many': '{facade} del plano, {count} plantas en sus niveles',
 
   'sheet.months': 'ENE FEB MAR ABR MAY JUN JUL AGO SEP OCT NOV DIC',
   'sheet.continued': '{title} (continuación)',

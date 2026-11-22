@@ -19,7 +19,8 @@ import {
   floorAbove,
   planForFloor,
   resolveFloor,
-  validateFloorDoorSweeps
+  validateFloorDoorSweeps,
+  withPatterns
 } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import type { LabelStyle } from '../canvas2d/labelPlacement'
@@ -139,6 +140,8 @@ export interface Picture {
   readonly key: PictureKey | null
   /** MSG-11: the language of its own words, for the label and the description. English when left out. */
   readonly language?: Language
+  /** What the picture is, for its accessible name: a floor plan's when left out. LVL-8: a facade's. */
+  readonly title?: string
 }
 
 /** The picture's whole height in pixels: the plan and the key under it. */
@@ -198,7 +201,7 @@ function undecidedIn(drawing: PlanDrawing, handings: ReadonlyMap<string, DoorHan
  * have, means its lowest floor.
  */
 export function undecidedDoorsOf(plan: FloorPlan, floor?: string | null): string[] {
-  const slice = planForFloor(plan, resolveFloor(plan, floor))
+  const slice = planForFloor(withPatterns(plan), resolveFloor(plan, floor))
   return undecidedIn(buildFloorPlan(slice), handingsOf(slice))
 }
 
@@ -241,7 +244,8 @@ function sizeOf(framed: Bounds, options: PictureOptions): { width: number; heigh
 
 function framePicture(plan: FloorPlan, options: PictureOptions) {
   const floor = resolveFloor(plan, options.floor)
-  const slice = planForFloor(plan, floor)
+  // LVL-8: a plan's opening patterns are drawn as the plain openings they expand into.
+  const slice = planForFloor(withPatterns(plan), floor)
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
   const framed = options.frame ?? framingOf(drawing, dimensions)
@@ -263,7 +267,7 @@ export function pictureView(plan: FloorPlan, options: PictureOptions = {}): Pick
  * with the language asked for. A language asked for on a plan with no display gets that
  * language's own (a decimal comma for Spanish). Undefined for plain metres in English.
  */
-function displayOfPicture(plan: FloorPlan, options: PictureOptions): Display | undefined {
+export function displayOfPicture(plan: FloorPlan, options: PictureOptions): Display | undefined {
   const asked = options.language
   const own = options.labels?.display
   if (own !== undefined) return asked === undefined ? own : { ...own, language: asked }
@@ -376,7 +380,7 @@ export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOp
         height: Math.round(total * scale),
         viewBox: `0 0 ${picture.width} ${total}`,
         role: 'img',
-        'aria-label': drawingText(words, 'drawing.picture.keyed', { count: picture.rooms })
+        'aria-label': picture.title ?? drawingText(words, 'drawing.picture.keyed', { count: picture.rooms })
       },
       [
         el('rect', { 'data-part': 'paper', x: 0, y: 0, width: picture.width, height: total, fill: look.colors.paper }),
@@ -405,7 +409,7 @@ export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOp
       viewBox: viewBoxOf(view),
       preserveAspectRatio: 'xMidYMid meet',
       role: 'img',
-      'aria-label': drawingText(words, 'drawing.picture', { count: picture.rooms })
+      'aria-label': picture.title ?? drawingText(words, 'drawing.picture', { count: picture.rooms })
     },
     [paper, ...picture.nodes, ...(stamp ? [labelNode(look, view.x, view.y, view.width / picture.width, language)] : [])]
   )
