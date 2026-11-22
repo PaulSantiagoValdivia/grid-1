@@ -672,7 +672,7 @@ or a wall meets one, and no check reads one. What Grid does with them:
   where a room that states none has Grid's count
   ([what the IFC holds](commands.md#what-the-ifc-holds-hnd-2)). The DXF writes each fact as one
   line of text on the layer `GRID-FACTS`, `[id] name: value`, beside its part (a floor's over the
-  drawing's upper left corner). A plan with no facts exports exactly as before.
+  drawing's upper left corner, above its dimensions). A plan with no facts writes none.
 - **The tool server asks across them**: `grid_fields`, `grid_find` and `grid_count`
   ([tool-server.md](tool-server.md#asking-across-the-parts-fields-find-and-count)).
 
