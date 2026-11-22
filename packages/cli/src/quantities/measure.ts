@@ -132,9 +132,14 @@ export interface Route {
   readonly narrowestRoom: { readonly room: string; readonly widestCircle: number } | null
 }
 
-/** The way with the fewest rooms between two rooms of one floor, or to any way out ('outside'). */
-export function routeBetween(survey: Survey, from: string, to: string): Route | null {
-  const floor = survey.byId.get(from)!.facts.floor
+/** The way out of every room, as a step past the last room of a route to `outside`. */
+export const OUTSIDE = '\u0000outside'
+
+/**
+ * The ways from room to room on one floor: for each room, the rooms (or `OUTSIDE`) a door, a
+ * doorless opening or a dividing line (`via`) leads to, as the way-out check reads them.
+ */
+export function wayGraph(survey: Survey, floor: string): { next: Map<string, Array<{ room: string; via: string }>>; openings: Map<string, Opening> } {
   const { storey, leftOut } = drawable(planForFloor(survey.plan, floor))
   const graph = floorGraph(storey, leftOut.rooms)
   const openings = new Map(storey.openings.map((o) => [o.id, o]))
@@ -147,8 +152,15 @@ export function routeBetween(survey: Survey, from: string, to: string): Route | 
     join(l.rooms[0], l.rooms[1], l.via)
     join(l.rooms[1], l.rooms[0], l.via)
   }
-  const OUT = '\u0000outside'
-  for (const exit of graph.exits) join(exit.room, OUT, exit.opening)
+  for (const exit of graph.exits) join(exit.room, OUTSIDE, exit.opening)
+  return { next, openings }
+}
+
+/** The way with the fewest rooms between two rooms of one floor, or to any way out ('outside'). */
+export function routeBetween(survey: Survey, from: string, to: string): Route | null {
+  const floor = survey.byId.get(from)!.facts.floor
+  const { next, openings } = wayGraph(survey, floor)
+  const OUT = OUTSIDE
   const goal = to === 'outside' ? OUT : to
 
   const back = new Map<string, { room: string; via: string }>()

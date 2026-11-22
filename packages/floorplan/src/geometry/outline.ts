@@ -41,11 +41,13 @@ export function outlineKnown(result: FloorOutline | FloorOutlineUnknown): result
 }
 
 /**
- * The outline of one floor of `plan`, its walls in `broken` left out. A floor whose walls close no
+ * The outline of one floor of `plan` a slab covers, its walls in `broken` left out. Not SHT-11's
+ * `floorOutline` (`spaces.ts`), the outer rings alone for the floor above's dashed line: this one
+ * keeps the holes and the enclosed spaces, and drops a piece that encloses no floor. A floor whose walls close no
  * floor has an outline of no pieces. Unknown, with the reason, when the walls lie too far out to
  * join or the polygon library fails on every grid.
  */
-export function floorOutline(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): FloorOutline | FloorOutlineUnknown {
+export function slabOutline(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): FloorOutline | FloorOutlineUnknown {
   const walls = floorWalls(plan, floor, broken)
   const far = farReason(walls)
   if (far) return { floor, reason: far }

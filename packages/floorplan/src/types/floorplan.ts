@@ -51,6 +51,21 @@
  *   room an item is in is found from the outlines (the smallest room on its floor that holds its
  *   middle), never named. This version holds fixed fixtures only (`ITEM_KINDS`); loose furniture,
  *   points and seats are later, in the same shape.
+ *
+ * C7 · North, front and where the building is (CNT-3)
+ *   C4 names the sides of the drawing (+Y is called north, as rooms text and the edits do); the
+ *   plan MAY also state its real north. `north` is the way north lies on the drawing, in degrees
+ *   counter-clockwise from +Y, as a north symbol's `turn` is: 0 north is up the drawing, 90 it
+ *   points to -X, -90 to +X. `yAxis` says which way +Y runs on the drawing as the building is
+ *   seen from above, with +X to the right: `up` is C4, `down` says the coordinates are the
+ *   building's mirror image (as a screen or an image's pixels run). `front` names the part whose
+ *   outside face is the front: a wall, or an opening (the front door) by its wall. `site` says
+ *   where the building sits: `origin`, a point of the plan, and where that point is on the earth
+ *   (`latitude` and `longitude` in degrees, `elevation` in metres); it places nothing without
+ *   `origin`. LVL-4 adds `site.ground`, the ground's level from the ground floor's (no `origin`
+ *   needed). All four are optional and
+ *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
+ *   north, and its y runs up (C4).
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
@@ -100,6 +115,49 @@ const Vec2 = z.tuple([finite(), finite()])
 /** C5: the floor an entity belongs to when it does not name one. */
 export const DEFAULT_FLOOR_ID = 'ground'
 
+/**
+ * CNT-5: what kind of building the plan is, or a floor of it is (`Floor.building`). A figure
+ * check runs only in the kinds of building its figures were read for (`packages/rules`). One
+ * kind for each, in Grid's own words (`BUILDING_TYPE_TEXT`); a building of mixed use says so
+ * floor by floor.
+ */
+export const BUILDING_TYPES = [
+  'home',
+  'office',
+  'shop',
+  'food',
+  'hotel',
+  'school',
+  'health',
+  'sport',
+  'assembly',
+  'industry',
+  'warehouse',
+  'parking',
+  'other',
+] as const
+
+export const BuildingTypeSchema = z.enum(BUILDING_TYPES)
+
+export type BuildingType = z.infer<typeof BuildingTypeSchema>
+
+/** Each kind of building as a sentence names it, with its article: "this plan is an office". */
+export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = {
+  home: 'a home',
+  office: 'an office',
+  shop: 'a shop',
+  food: 'a café, restaurant or bar',
+  hotel: 'a hotel or hostel',
+  school: 'a school',
+  health: 'a health building, such as a clinic',
+  sport: 'a sports building',
+  assembly: 'a building people gather in, such as a hall',
+  industry: 'a workshop or factory',
+  warehouse: 'a warehouse',
+  parking: 'a car park',
+  other: 'another kind of building',
+}
+
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
   name: text('name').pipe(z.string().min(1)),
@@ -118,6 +176,10 @@ export const FloorSchema = z.object({
   // (every part of the floor with nothing above it). Optional and never defaulted: unstated, the
   // roof has no parapet (version 1).
   parapet: finite().positive().optional(),
+  // CNT-5: what kind of building this floor is, when it is not the plan's (`FloorPlan.building`):
+  // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
+  // floor is the plan's kind (version 1).
+  building: BuildingTypeSchema.optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -177,33 +239,148 @@ export const WallSchema = z.preprocess(
 )
 
 // What a room is for. Explicit, like `Wall.kind`: nothing infers it from the
-// room's name, shape or area.
+// room's name, shape or area. CNT-5: the list reaches past homes, in groups: rooms of a home,
+// rooms people work, buy, learn, are treated or train in, rooms for moving between floors and
+// rooms, and rooms for services. `assembly` is a room people gather in: a hall, an auditorium,
+// a function room. The person's own word for a room is its name ("Pooja room",
+// "Bryggers"); its use is the one of these it is.
 export const ROOM_USES = [
   'bedroom',
   'living',
   'dining',
   'kitchen',
   'bathroom',
+  'toilet',
+  'utility',
+  'study',
+  'office',
+  'meeting',
+  'reception',
+  'retail',
+  'classroom',
+  'treatment',
+  'waiting',
+  'sport',
+  'changing',
+  'staff',
+  'worship',
+  'assembly',
   'corridor',
   'stair',
   // LVL-3: a lift shaft, drawn as a room on every floor it serves. The drawing checks line the
   // shafts up from floor to floor; a lift is never taken as a way out.
   'lift',
   'storage',
+  'plant',
+  'parking',
   'other',
 ] as const
 
 export const RoomUseSchema = z.enum(ROOM_USES)
 
 /**
- * A use as Grid reads it (MSG-4): whatever its capitals, so `Bedroom` is `bedroom`. Anything
- * else is left as it is, for the schema to read as unstated and `readingNotes` to name.
+ * CNT-5: words people and agents write for a room's use that plainly mean one of `ROOM_USES`,
+ * local words among them (`bryggers`, Danish for a utility room; `pooja`, a prayer room), folded
+ * as `foldUseWord` folds them. A use written as one of these words is read as its use; the word
+ * stays the room's name, which is where the person's own word belongs.
+ *
+ * No word here is read as `bedroom`, `living` or `dining`: the figure checks look at rooms of
+ * those uses (`packages/rules`), so a room comes under them only by its author's own choice of
+ * use, never by a word Grid read for them. `bed` or `lounge` stays a suggestion (`nearestUse`).
+ * Nor does a word that means two things (`hall`, `studio`) read as either.
+ */
+export const USE_WORDS: Readonly<Record<string, RoomUse>> = {
+  wc: 'toilet',
+  loo: 'toilet',
+  lavatory: 'toilet',
+  restroom: 'toilet',
+  washroom: 'toilet',
+  shower: 'bathroom',
+  showers: 'bathroom',
+  ensuite: 'bathroom',
+  kitchenette: 'kitchen',
+  laundry: 'utility',
+  scullery: 'utility',
+  bryggers: 'utility',
+  offices: 'office',
+  workspace: 'office',
+  boardroom: 'meeting',
+  conference: 'meeting',
+  shop: 'retail',
+  sales: 'retail',
+  servery: 'retail',
+  teaching: 'classroom',
+  consulting: 'treatment',
+  consultation: 'treatment',
+  examination: 'treatment',
+  gym: 'sport',
+  fitness: 'sport',
+  locker: 'changing',
+  lockers: 'changing',
+  staffroom: 'staff',
+  prayer: 'worship',
+  pooja: 'worship',
+  puja: 'worship',
+  chapel: 'worship',
+  hallway: 'corridor',
+  passage: 'corridor',
+  landing: 'corridor',
+  lobby: 'corridor',
+  circulation: 'corridor',
+  stairs: 'stair',
+  staircase: 'stair',
+  stairwell: 'stair',
+  elevator: 'lift',
+  store: 'storage',
+  stockroom: 'storage',
+  warehouse: 'storage',
+  closet: 'storage',
+  cupboard: 'storage',
+  pantry: 'storage',
+  larder: 'storage',
+  wardrobe: 'storage',
+  plantroom: 'plant',
+  boiler: 'plant',
+  garage: 'parking',
+  carpark: 'parking',
+}
+
+/**
+ * A use word as `USE_WORDS` holds it: lower case, letters and digits only, and a last "room"
+ * taken off, so `Pooja room`, `staff_room` and `Plant-room` are `pooja`, `staff` and `plant`.
+ */
+export function foldUseWord(word: string): string {
+  const folded = word.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return folded.length > 4 && folded.endsWith('room') ? folded.slice(0, -4) : folded
+}
+
+/**
+ * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; and a
+ * word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is `staff`.
+ * Anything else is left as it is, for the schema to read as unstated and `readingNotes` to name.
  */
 export function readUse(value: unknown): unknown {
   if (typeof value !== 'string') return value
   const lower = value.toLowerCase()
-  return (ROOM_USES as readonly string[]).includes(lower) ? lower : value
+  if ((ROOM_USES as readonly string[]).includes(lower)) return lower
+  const folded = foldUseWord(value)
+  if ((ROOM_USES as readonly string[]).includes(folded) && !FIGURE_READ_USES.includes(folded)) return folded
+  return Object.hasOwn(USE_WORDS, folded) ? USE_WORDS[folded] : value
 }
+
+/** The uses no word is read as (`USE_WORDS`): written as they are, or not at all. */
+const FIGURE_READ_USES: readonly string[] = ['bedroom', 'living', 'dining']
+
+/**
+ * CNT-5: who a room is for. `private`: one household's or one tenant's own (a flat's bedroom, an
+ * office let to one firm). `shared`: shared by some households or tenants and not others (a
+ * kitchen shared by four student rooms). `common`: the building's, for everyone in it (the
+ * stair, the entrance lobby, the bin store). `commercial`: let or run as a business (a shop).
+ * Optional and never defaulted; no check reads it yet.
+ */
+export const ROOM_TENURES = ['private', 'shared', 'common', 'commercial'] as const
+
+export const RoomTenureSchema = z.enum(ROOM_TENURES)
 
 /** A list of wall ids round a room or one of its holes, at most `BOUNDARY_MAX` long (MSG-9). */
 const wallList = () =>
@@ -290,17 +467,12 @@ export const RoomSchema = z.object({
   // LVL-4: the room's ceiling (CeilingSchema): it stands at the room's `height`, with any zones
   // lowered under it. Optional and never defaulted (version 1).
   ceiling: CeilingSchema.optional(),
-})
-
-/**
- * LVL-4: the site. `ground` is the level of the ground outside, in metres from the ground floor's
- * floor level (0), the same datum as a floor's `elevation`: -0.15 for a floor 15 cm above the
- * ground. With it stated, a door or window in an outside wall that lies below the ground is
- * named, and the ground floor is the floor nearest it. One level for the whole site: a ground
- * level for each wall, for a slope, comes later.
- */
-export const SiteSchema = z.object({
-  ground: finite().optional(),
+  // CNT-5: who the room is for (`ROOM_TENURES`). Optional and never defaulted (version 1).
+  tenure: RoomTenureSchema.optional(),
+  // CNT-5: the firm's own type for the room, as its room data sheets name it ("B2 double
+  // bedroom", "Consult A"), beside the fixed `use`. Grid keeps it and reads nothing from it.
+  // Optional and never defaulted (version 1).
+  roomType: text('name').optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -537,6 +709,53 @@ export const SketchItemSchema = z
     }
   })
 
+/** CNT-3 (C7): which way +Y runs on the drawing, with +X to the right. `up` is C4. */
+export const Y_AXES = ['up', 'down'] as const
+export type YAxis = (typeof Y_AXES)[number]
+
+/**
+ * CNT-3 (C7): the front of the building: the outside face of a wall, or of the wall an opening
+ * (the front door) is in. Exactly one of the two.
+ */
+export const FrontSchema = z
+  .object({
+    wall: text('id').pipe(z.string().min(1)).optional(),
+    opening: text('id').pipe(z.string().min(1)).optional(),
+  })
+  .superRefine((front, ctx) => {
+    if ((front.wall === undefined) === (front.opening === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['wall'], message: 'names the front by one part: wall, a wall\'s id, or opening, an opening\'s id' })
+    }
+  })
+
+/**
+ * CNT-3 (C7): where the building sits. `origin` is a point of the plan, in metres; `latitude` and
+ * `longitude` (degrees, north and east positive, given together) and `elevation` (metres above
+ * sea level) say where that point is on the earth. Each is optional, so a site an agent wrote
+ * with fields Grid does not hold yet (a plot boundary, setbacks) still reads, with those fields
+ * named; nothing is placed on the earth until `origin` is stated.
+ *
+ * LVL-4: `ground` is the level of the ground outside, in metres from the ground floor's floor
+ * level (0), the same datum as a floor's `elevation` (not `site.elevation`, which is above sea
+ * level): -0.15 for a floor 15 cm above the ground. It needs no `origin`. With it stated, a door
+ * or window in an outside wall that lies below the ground is named, and the ground floor is the
+ * floor nearest it. One level for the whole site: a ground level for each wall, for a slope,
+ * comes later.
+ */
+export const SiteSchema = z
+  .object({
+    origin: Vec2.optional(),
+    latitude: finite().min(-90).max(90).optional(),
+    longitude: finite().min(-180).max(180).optional(),
+    elevation: finite().optional(),
+    ground: finite().optional(),
+  })
+  .superRefine((site, ctx) => {
+    if ((site.latitude === undefined) !== (site.longitude === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [site.latitude === undefined ? 'latitude' : 'longitude'], message: 'needs latitude and longitude together: one alone places nothing' })
+    }
+  })
+
 /**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap, because after that a wall that
@@ -571,6 +790,10 @@ function withFloorHeights(raw: unknown): unknown {
 export const FloorPlanFieldsSchema = z.object({
   version: z.literal('1').default('1'),
   units: z.literal('m').default('m'),
+  // CNT-5: what kind of building the plan is (`BUILDING_TYPES`). A floor may say otherwise for
+  // itself (`Floor.building`). Optional and never defaulted: unstated, the plan does not say,
+  // and the figure checks run as they did before CNT-5 (version 1).
+  building: BuildingTypeSchema.optional(),
   // QAR-5: the project's own id, which the IFC builds every element's identity from (with the
   // element's kind, floor and id), so a re-export of the project is recognised as the same
   // model whatever the file is called. `grid init` writes it. Keep it, and the parts' ids,
@@ -585,8 +808,6 @@ export const FloorPlanFieldsSchema = z.object({
   floors: parts(FloorSchema, 'floors').optional(),
   // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
   stairs: parts(StairSchema, 'stairs').optional(),
-  // LVL-4: the site, with its ground level (SiteSchema). Optional and never defaulted (version 1).
-  site: SiteSchema.optional(),
   referenceImage: ReferenceImageSchema.optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
@@ -596,6 +817,13 @@ export const FloorPlanFieldsSchema = z.object({
   title: text('name').optional(),
   annotations: parts(AnnotationSchema, 'annotations').optional(),
   sketch: parts(SketchItemSchema, 'sketch items').optional(),
+  // CNT-3 (C7): the plan's real north (degrees counter-clockwise from +Y), which way its y runs,
+  // its front and where it sits; LVL-4 adds the site's ground level (`site.ground`). Optional
+  // and never defaulted (version 1).
+  north: finite().optional(),
+  yAxis: z.enum(Y_AXES).optional(),
+  front: FrontSchema.optional(),
+  site: SiteSchema.optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -629,18 +857,20 @@ export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
 export type Wall = z.infer<typeof WallSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
+export type RoomTenure = z.infer<typeof RoomTenureSchema>
 export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
 export type Stair = z.infer<typeof StairSchema>
 export type Ceiling = z.infer<typeof CeilingSchema>
 export type LoweredZone = z.infer<typeof LoweredZoneSchema>
-export type Site = z.infer<typeof SiteSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type Annotation = z.infer<typeof AnnotationSchema>
 export type SketchItem = z.infer<typeof SketchItemSchema>
+export type Front = z.infer<typeof FrontSchema>
+export type Site = z.infer<typeof SiteSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

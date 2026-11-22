@@ -2,8 +2,8 @@
  * Door-sweep warnings.
  *
  * Whether each door's swing is fully stated, and whether the floor its leaf
- * sweeps is free: no wall in the way, no other door swinging into the same
- * spot. Every finding is a warning. The door still draws, and nothing here
+ * sweeps is free: no wall in the way, no fixture standing in it (CNT-13), no
+ * other door swinging into the same spot. Every finding is a warning. The door still draws, and nothing here
  * marks anything as broken.
  *
  * Like `doorSwing`, the values come from the caller. `OpeningSchema` carries
@@ -28,6 +28,7 @@ import { add, cross, distance, dot, length, lerp, perp, scale, signedArea, sub, 
 import type { WallEnds } from './wall'
 import { wallParts, wallSlicePolygon } from './wall'
 import { wallJoints } from './joints'
+import { itemName } from './items'
 
 /** One door's swing, as the caller knows it. Either half may be missing. */
 export interface DoorSwingValues {
@@ -37,7 +38,7 @@ export interface DoorSwingValues {
 
 /** An `Issue`, plus what the sweep runs into, so a marker can point at it. */
 export interface DoorSweepIssue extends Issue {
-  /** The walls a blocked door hits, or the other door. Empty when a value is missing. */
+  /** The walls a blocked door hits, the fixtures, or the other door. Empty when a value is missing. */
   readonly hits: readonly string[]
 }
 
@@ -47,6 +48,7 @@ const MESSAGES = {
   'opening/hinge-without-swing':
     "This door is missing which way it opens, so it's drawn without a swing.",
   'opening/door-blocked': 'This door hits a wall when it opens.',
+  'opening/door-hits-item': 'This door hits a fixture when it opens.',
   'opening/doors-collide': 'These two doors hit each other when they open.'
 } as const
 
@@ -217,8 +219,8 @@ function narrowestWidth(polygon: readonly Vec2[]): number {
   return narrowest === Infinity ? 0 : narrowest
 }
 
-function warning(code: SweepCode, id: string, hits: readonly string[] = []): DoorSweepIssue {
-  return { code, entity: 'opening', id, message: MESSAGES[code], severity: 'warning', hits }
+function warning(code: SweepCode, id: string, hits: readonly string[] = [], message: string = MESSAGES[code]): DoorSweepIssue {
+  return { code, entity: 'opening', id, message, severity: 'warning', hits }
 }
 
 /**
@@ -272,6 +274,12 @@ export function validateFloorDoorSweeps(
   }
   const nearBlockers = boxIndex(blockers.map((b) => boxOfPoints(b.parts.flat())))
 
+  // CNT-13: the fixtures this storey draws stand on the floor, so a leaf hits them as it hits a
+  // wall. Each is named by its kind and id, and its label when the plan states one.
+  const stated = new Map((slice.items ?? []).map((item) => [item.id, item] as const))
+  const fixtures = drawing.items.map((item) => ({ id: item.id, outline: item.outline, name: itemName(stated.get(item.id) ?? { id: item.id, kind: item.kind }) }))
+  const nearFixtures = boxIndex(fixtures.map((f) => boxOfPoints(f.outline)))
+
   // Plan order, not the drawing's (by wall, then offset): "the first door"
   // of a pair is the one the file lists first.
   const sweeps: {
@@ -312,6 +320,16 @@ export function validateFloorDoorSweeps(
       .filter((b) => b.parts.some((rectangle) => reachesInto(frame, rectangle)))
       .map((b) => b.id)
     if (hits.length > 0) issues.push(warning('opening/door-blocked', drawn.id, hits))
+
+    const struck = nearFixtures
+      .near(widenBox(boxOfPoints([frame.origin]), frame.radius))
+      .sort((a, b) => a - b)
+      .map((i) => fixtures[i]!)
+      .filter((f) => reachesInto(frame, f.outline))
+    if (struck.length > 0) {
+      const message = `This door hits ${struck.map((f) => f.name).join(', ')} when it opens.`
+      issues.push(warning('opening/door-hits-item', drawn.id, struck.map((f) => f.id), message))
+    }
 
     sweeps.push({
       id: drawn.id,

@@ -9,10 +9,12 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [Options and exit codes](#options-and-exit-codes)
 - [Starting a project: `grid init`](#starting-a-project-grid-init)
 - [The project folder](#the-project-folder)
+- [The report, short or full, and notes seen: `grid check`](#the-report-short-or-full-and-notes-seen-grid-check)
 - [Describing a plan: `grid describe`](#describing-a-plan-grid-describe)
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
 - [What went wrong, on the drawing: `grid draw`](#what-went-wrong-on-the-drawing-grid-draw)
 - [What a drawing shows: `--hide`, `--colour` and `--key`](#what-a-drawing-shows---hide---colour-and---key)
+- [Stairs, lifts and the floor above on the drawing](#stairs-lifts-and-the-floor-above-on-the-drawing)
 - [The 3D model as a picture: `grid draw --3d`](#the-3d-model-as-a-picture-grid-draw---3d)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
@@ -23,14 +25,14 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)) |
-| `grid check [<plan>] [--floor <id>] [--country <code>] [--json]` | Prints the report. Every report is labelled "General guidance, not your local rules" |
+| `grid check [<plan>] [--floor <id>] [--country <code>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--seen` sets a note aside as seen (see below) |
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d] [--look <name>] [--hide <parts>] [--colour use] [--key] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror`, each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 21 tools in [the tool server](tool-server.md) |
+| `grid serve` | Starts the tool server on standard input and output, with the 22 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes
@@ -149,6 +151,31 @@ the floor asked for) is refused with exit code 1, and no file is written: `Nothi
 plan.json has no wall, room or fixture that can be drawn.` It names what is left out, when
 anything is.
 
+## The report, short or full, and notes seen: `grid check`
+
+`grid check` prints a short report about this plan (MSG-10): the label, each line to look at
+with what was found, what was needed and the fix, the figures those lines used (each as the
+figure used here, with its document, edition, clause and status), what each check looked at in
+counts, with the parts it could not look at and why, and one line on what `--full` adds.
+`--full` prints the whole report: the checks run, every figure, each part each check looked at
+or skipped, and what these checks never look at. `--json` always gives the whole check.
+
+A note you have looked at can be set aside as seen, with why and who:
+
+```bash
+grid check --seen 3 --reason "A box room, kept small on purpose" --by "Owner"
+grid check --unseen 3
+```
+
+The number is the note's in the report of the whole plan (with `--country`, give the same
+country). The mark is written to the marks file beside the plan, `plan.seen.json` beside
+`plan.json`, and the report follows. A seen note is still listed, under "Seen", with its reason,
+who marked it and the day, and the count says how many are seen. When one of the parts it is
+about changes (the room or its walls, the door or its wall, the floor, or the plan for a note
+about the plan), the note is listed as new again, saying it was seen before and what changed.
+`--reason` and `--by` go with `--seen` only. Who marked it is the name or role you give: it is
+kept only in the marks file, which no export, sheet or drawing reads.
+
 ## Describing a plan: `grid describe`
 
 `grid describe` is a short account of the plan, for an agent to check its own work without
@@ -165,12 +192,16 @@ the study, shows on the first read. It answers in three lengths:
 `--for agent` is terse and carries every id, the offsets along each wall and a key line, so an
 agent can edit the plan from it. A floor laid out like an earlier one is said once. Wall and
 sill heights are one line: the usual height and the exceptions. What the plan cannot say,
-such as where north is, the kind of building, how floors connect when no stair joins them and
-which rooms make each flat, is said as such. The stairs that join the floors are one line, with
-the risers and going Grid worked out. Directions are on the drawing, with north at the
-top. The card checks nothing and says so; its first line is the label "General guidance, not
-your local rules", as for every report (MSG-3). `--as rooms` starts with the label as a comment,
-which `grid write` ignores, and `grid draw` puts it in the drawing's top-left corner.
+such as where north is, the kind of building when the plan does not say it, how floors connect
+when no stair joins them and which rooms make each flat, is said as such; a kind the plan states
+is said after the first line. The stairs that join the floors are one line, with the risers and
+going Grid worked out. Directions are on the drawing, with north at the top. A plan that states
+its real north or its front gets a few more lines: that north, which way each side of the drawing
+really faces, and which rooms face each way
+([plan-file.md](plan-file.md#north-front-and-where-the-building-is)). The card checks nothing and
+says so; its first line is the label "General guidance, not your local rules", as for every
+report (MSG-3). `--as rooms` starts with the label as a comment, which `grid write` ignores, and
+`grid draw` puts it in the drawing's top-left corner.
 
 ## Walls that do not meet: `grid tidy`
 
@@ -199,7 +230,7 @@ A floor plan picture shows the plan's title and key in a band under the drawing,
 and symbols, its sketch, the sizes, the room areas, the door swings and the warnings (the
 plan file's writing is in [plan-file.md](plan-file.md#writing-on-the-drawing-and-the-sketch-layer)).
 `--hide` leaves parts off, named and joined by commas: `title`, `key`, `notes`, `sketch`,
-`dimensions`, `areas`, `swings`, `warnings`. `--colour use` fills each room by its use and lists
+`dimensions`, `areas`, `swings`, `warnings`, `above`. `--colour use` fills each room by its use and lists
 the uses in the key. `--key` adds a key where the plan asks for none. A word Grid does not know
 is refused by name, and none of the three is taken with `--3d`. `grid_view` takes the same as
 `hide`, `colour` and `key`.
@@ -226,6 +257,30 @@ by the box it makes on the page.
 In the technical look each dimension line ends in a 45-degree tick and its number runs along
 it; the working look keeps plain ends and upright numbers. `--hide dimensions` leaves them all
 off.
+
+## Stairs, lifts and the floor above on the drawing
+
+A floor plan is drawn as an architect expects it (SHT-11), from shapes the core works out and the
+look only strokes:
+
+- **A stair the plan states** is drawn on both floors it joins, with a line at every riser and
+  its walking line ending in an arrow head pointing up. On the floor it rises from, the plan is
+  cut 1.2 m above the floor (`planCutHeight` in [tolerances.md](tolerances.md)): the stair is
+  solid up to the break line across the flight there, and dashed above it. On the floor it
+  arrives on, it lies wholly below the cut and is drawn solid. A stair drawn only as a room used
+  as a stair has no stair object, so it gets no treads: state it in `stairs`
+  ([plan-file.md](plan-file.md#stairs-that-join-two-floors)).
+- **A lift shaft**, a room used as a `lift`, gets a cross in it, corner to corner, on every floor.
+- **The floor above** shows as a dashed outline: the outline of the floors at the next level up,
+  the one whose area is the gross external area, less the stretches that lie on this floor's own
+  outline. What is left is an overhang past the walls, a loft or a floor that steps back inside
+  them. A stretch over an inner wall is hidden by the wall. `--hide above` leaves it off. The
+  plan cannot say where a floor has a void, so a void inside the walls above is not told apart.
+
+The working look draws all three in thin lines, dashed 4 on 3 pixels; the technical look with its
+finest pen (the floor above with the fine pen), dashed 1.5 on 1 mm on paper. The key, where the
+picture has one, names the floor above. The app's 2D view and `grid draw` draw the same shapes.
+The DXF does not draw them yet.
 
 ## What went wrong, on the drawing: `grid draw`
 
@@ -277,8 +332,8 @@ Every field but `version` is optional. `floors` is keyed by the plan's floor ids
 paragraphs. Each string follows the plan's text rule. Without the file, the sheet carries the
 plan's name and no words: Grid writes none in the author's place. A check sheet takes no words.
 
-Grid draws only what the plan holds: no furniture or landscape, and no stairs but the ones the
-plan states. Every figure comes from
+Grid draws only what the plan holds: no furniture or landscape, and no stair treads but for the
+stairs the plan states. Every figure comes from
 the same code as `grid check` and the area tools, and every page keeps the label "General
 guidance, not your local rules". The pages use Source Serif 4 and Source Sans 3, under the SIL
 Open Font Licence 1.1, which ship with Grid in `fonts/`. A sheet needs the canvas a PNG needs.

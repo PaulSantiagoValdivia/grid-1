@@ -7,6 +7,7 @@ section explains. Rooms text, the main way to write a plan, is in
 [tolerances.md](tolerances.md).
 
 - [What a plan file may hold](#what-a-plan-file-may-hold)
+- [What kind of building it is, and what each room is for](#what-kind-of-building-it-is-and-what-each-room-is-for): `plan/not-checked-sizes-for-building`, `plan/not-checked-escapes-for-building`, `floor/not-checked-sizes-for-building`, `floor/not-checked-escapes-for-building`, `plan/unknown-use`
 - [Floor levels and heights](#floor-levels-and-heights): `plan/level-gap`, `plan/same-level`, `floor/empty-top`, `wall/above-storey`, `floor/size-question`, `wall/unknown-floor`, `room/unknown-floor`
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
 - [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
@@ -14,10 +15,11 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
-- [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`
+- [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
+- [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -71,6 +73,73 @@ version Grid does not read, `walls` that is not a list) still refuses the plan.
 `grid write` and the tools that change the plan write it back, so they read it whole and refuse a
 plan with anything left out, naming the first. The record's codes are in
 [the result contract](result-contract.md).
+
+## What kind of building it is, and what each room is for
+
+A plan may say what kind of building it is with `building`, and a floor may say otherwise for
+itself with its own `building`: the shop on the ground floor of a block of flats (CNT-5). Both
+are optional; unstated, a floor is the plan's kind, and a plan that says nothing is read and
+checked as before.
+
+```json
+{ "version": "1", "building": "home", "floors": [{ "id": "ground", "name": "Ground floor", "level": 0, "building": "shop" }, …] }
+```
+
+| `building` | What it is |
+|---|---|
+| `home` | a house or a flat people live in |
+| `office` | an office |
+| `shop` | a shop |
+| `food` | a café, restaurant or bar |
+| `hotel` | a hotel or hostel |
+| `school` | a school |
+| `health` | a health building, such as a clinic |
+| `sport` | a sports building |
+| `assembly` | a building people gather in, such as a hall |
+| `industry` | a workshop or factory |
+| `warehouse` | a warehouse |
+| `parking` | a car park |
+| `other` | another kind of building |
+
+A check that applies a figure runs only in the kinds of building its figures were read for, or
+where the plan does not say. Every figure Grid carries today was read for homes, so the room-size
+and escape checks run on a floor that is a `home` or says nothing, and on no other: their rooms
+are skipped (`not_for_building`), and one line says so. It is about the whole plan when the
+plan's own kind is the reason on every floor (`plan/not-checked-sizes-for-building`,
+`plan/not-checked-escapes-for-building`), and about the floor otherwise
+(`floor/not-checked-sizes-for-building`, `floor/not-checked-escapes-for-building`). Each check in
+the record's `coverage` says the uses it looks at and the kinds of building it runs in. A floor
+the plan says is a home gets the figure checks, and their notes say the plan says it is a home.
+
+A room says what it is for with `use`, one of 27:
+
+| Group | Uses |
+|---|---|
+| A home | `bedroom`, `living`, `dining`, `kitchen`, `bathroom`, `toilet`, `utility`, `study` |
+| Work, trade, learning, care, sport | `office`, `meeting`, `reception`, `retail`, `classroom`, `treatment`, `waiting`, `sport`, `changing`, `staff`, `worship`, `assembly` |
+| Moving about | `corridor`, `stair`, `lift` |
+| Services | `storage`, `plant`, `parking` |
+| Anything else | `other` |
+
+The person's own word for a room is its `name`: "Pooja room", "Bryggers", "Open office (12
+desks)". A use is read whatever its capitals, and a word that plainly means a use is read as it
+(`USE_WORDS` in `packages/floorplan/src/types/floorplan.ts`): `WC` is `toilet`, `staff room` is
+`staff`, `warehouse` is `storage`, `bryggers` is `utility`, `pooja room` is `worship`. No word
+is read as `bedroom`, `living` or `dining`, the uses the figure checks look at, so a room comes
+under them only by its author's choice: `lounge` and `living room` give a `plan/unknown-use`
+line that suggests `living`. A word that means two things (`hall`, `studio`) is not read either.
+Any other word is read as no use stated, with a line that names it.
+
+A room may also say:
+
+| Field | What it states |
+|---|---|
+| `tenure` | Who it is for: `private` (one household's or one tenant's own), `shared` (some households' or tenants', not all), `common` (the building's, for everyone in it, such as the stair or the bin store) or `commercial` (let or run as a business) |
+| `roomType` | The firm's own type for the room, as its room data sheets name it ("B2 double bedroom"), beside the fixed use. At most 120 characters, one line. Grid keeps it and reads nothing from it |
+
+No check reads `tenure` or `roomType` yet. Rooms text writes all of these: `building office`,
+`floor ground "Ground floor" building shop`, and `tenure common` and `type "B2"` on a room line
+([rooms-first.md](rooms-first.md)).
 
 ## Units
 
@@ -177,17 +246,22 @@ Grid works out the rise, the number of risers and their height, the going and th
 which room the stair leaves from and arrives in (`planStairs`). For the stair above: a 2.95 m
 rise in 14 risers of 0.211 m, treads of 0.215 m. `grid describe` says them. The 2D drawing
 shows the stair on both floors, with a line at every riser and its walking line ending in an
-arrow pointing up; 3D, the OBJ and glTF files and the IFC file (an `IfcStair` of
-`IfcStairFlight`s and landing slabs) draw a block per tread. The stair adds no floor of its own:
-its area is counted once, in the rooms it stands in. Nothing here judges a riser, a going or a
-width.
+arrow pointing up. On the floor it rises from, the plan is cut 1.2 m above the floor
+(`planCutHeight`): the stair is solid up to where its flight reaches that height, a break line
+crosses it there, and the rest is dashed; on the floor it arrives on it is drawn whole (SHT-11).
+3D, the OBJ and glTF files and the IFC file (an `IfcStair` of `IfcStairFlight`s and landing
+slabs) draw a block per tread. The stair adds no floor of its own: its area is counted once, in
+the rooms it stands in. Rooms used as a stair on floor after floor, one over the other, are
+counted once too, on the floor the stair rises from ([areas.md](areas.md)). Nothing here judges a
+riser, a going or a width.
 
 The way-out check follows routes up and down the stair, so an upper floor or a basement is
 checked through it down to a door. Rooms used as a stair on neighbouring floors that lie one over
 the other (sharing at least half of the smaller one) are taken as a stair too, as agents already
 draw them; where both floors have stair rooms and none lies over another, they are named as out
 of line (`stair_out_of_line`), and so are lift shafts (rooms used as a `lift`,
-`lift_out_of_line`). A lift is never taken as a way out. A floor no stair joins to the ground floor
+`lift_out_of_line`). A lift shaft is drawn with a cross in it, corner to corner, on every floor
+(SHT-11). A lift is never taken as a way out. A floor no stair joins to the ground floor
 is said not to be checked. A stair that cannot be laid out is said and left out
 (`stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
 `stair/too-few-risers`, `stair/duplicate-id`), and one whose end stands in no room joins nothing
@@ -226,7 +300,7 @@ and no roof, and a garden wall standing apart carries neither.
 
 | Field | What it states |
 |---|---|
-| `site.ground` | The level of the ground outside, in metres from the ground floor's floor level, the datum of a floor's `elevation`: `-0.15` for a floor 15 cm above the ground. One level for the whole site |
+| `site.ground` | The level of the ground outside, in metres from the ground floor's floor level, the datum of a floor's `elevation`: `-0.15` for a floor 15 cm above the ground. One level for the whole site. It sits in the plan's one `site`, beside where the building is ([north, front and where the building is](#north-front-and-where-the-building-is)), and needs no `origin`; it is not `site.elevation`, which is metres above sea level |
 | floor `parapet` | Metres the floor's outside walls rise above its roof. Unstated, no parapet |
 | room `void` | The room is open to the floor below: no floor of its own |
 | room `ceiling` | The room has a ceiling, at its `height` (else its storey's). `lowered` lists the zones lower than the rest, each with `points` (its outline, three or more) and `height` (from the room's floor), and an optional `name`. A zone is clipped to its room |
@@ -335,7 +409,10 @@ it stands in is the one that holds its middle. The 2D drawing, the sheet and the
 `IfcFurnishingElement` on its storey. `grid_schedule` counts the fixtures by kind with their
 rooms, `grid_areas` gives each room with fixtures its free floor (its net area less the floor
 they stand on), `grid_measure` measures between fixtures and fits a box clear of them, and
-`grid check` names a fixture that runs into a wall or is taller than its room. This version holds
+`grid check` names a fixture that runs into a wall or is taller than its room. A fixture is an
+obstacle (CNT-13): a door whose leaf swings into it names it, and `grid_measure what=use` and
+`what=route` with a width measure the turning circle, the way through and the floor round each
+fixture clear of them ([use indicators](tool-server.md#use-indicators-will-it-fit-can-you-turn-is-the-window-blocked)). This version holds
 fixtures only: loose furniture, points (a hydrant, a camera) and seats come later, in the same
 shape. A kind it does not hold yet is left out with a note, and the rest of the plan is drawn.
 
@@ -347,6 +424,9 @@ shape. A kind it does not hold yet is left out with a note, and the rest of the 
 | `item/outside-rooms` | Its middle is in no room on its floor |
 | `item/into-wall` | It reaches more than 5 mm into a solid wall |
 | `item/too-tall` | It is higher than the room it stands in |
+| `opening/door-hits-item` | A door's leaf swings into the fixture: the line names it by its label, kind and id, `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens` |
+| `item/blocks-doorway` | It stands within 0.3 m (`useApproachDepth`) in front of a doorway's hole: the line says how much of the hole it covers and the clear width left, as an indicator |
+| `item/blocks-window` | It is higher than a window's sill and stands within 0.3 m in front of it: the line says how much of the window it covers, as an indicator |
 
 ## Writing on the drawing, and the sketch layer
 
@@ -440,6 +520,77 @@ states no kind reads as. Where they disagree, one warning says so:
 
 In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
 worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.
+
+## North, front and where the building is
+
+The drawing's sides have names of their own: its top is called north, as rooms text, the
+anchors, `grid describe` and the edits call it. A plan may also say how it sits on the earth
+(CNT-3). All four fields are optional; a plan that states none reads, draws and exports as
+before, with no north and y up the page.
+
+```json
+{ "north": 30, "yAxis": "up", "front": { "opening": "entry" }, "site": { "origin": [0, 0], "latitude": 40.4168, "longitude": -3.7038, "elevation": 650 } }
+```
+
+| Field | What it states |
+|---|---|
+| `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
+| `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
+| `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin` |
+
+North is drawn and written where the plan states it:
+
+- **The drawing.** Each floor's plan, in `grid draw`, `grid_view` and the sheet, shows a north
+  arrow in the top-right corner of its view, turned to the stated north: the north symbol of
+  [the writing on the drawing](#writing-on-the-drawing-and-the-sketch-layer), on a disc. A
+  floor that places a north symbol of its own gets no second arrow, and a north symbol that
+  states no `turn` points to the stated north. The 3D views name their sides by the drawing,
+  as before.
+- **The IFC file.** The model's `TrueNorth` is the stated north, as a direction in the plan's
+  x and y. A plan that states none gets none: `TrueNorth` is left empty, where Grid wrote +y
+  for every plan before. A program that reads IFC takes an empty `TrueNorth` as +y, so the
+  model lands the same; the file only stops claiming a north it was never told. A plan with a
+  `site` puts the IFC site's origin on that point, with its latitude, longitude and elevation
+  (`RefLatitude`, `RefLongitude`, `RefElevation`); the building keeps the plan's coordinates.
+- **Which way the rooms face.** `grid_measure` with `what=facing` says which way each outside
+  wall, each opening in one and each room behind them faces: the normal of the wall's outside
+  face, the one with no room on it ([inside and outside walls](#inside-and-outside-walls)),
+  turned into a compass point by the stated north. A room faces each way its outside walls do,
+  longest first, and lists the ways its windows face. So "which rooms face east" has an answer.
+  For a 6 × 4 m house of two rooms, the living room to the west and the kitchen to the east,
+  with `"north": 30` and the front door named as its front:
+
+  ```text
+  North, as the plan states it: 30° counter-clockwise from the top of the drawing (north 30).
+  Rooms by the way their outside walls face:
+    north-east: "Living" (living, window), "Kitchen" (kitchen)
+    south-east: "Kitchen" (kitchen, window)
+    south-west: "Living" (living), "Kitchen" (kitchen)
+    north-west: "Living" (living)
+  The front, opening "entry", faces south-west (bearing 210°).
+  ```
+
+  A plan that states no north is answered with north taken as the top of the drawing, and the
+  answer says first that this is not known to be north. `grid describe` adds the same in a few
+  lines, with which real way each side of the drawing faces, for a plan that states its north
+  or its front.
+
+A rotation cannot undo a mirror: a plan drawn with its y running down the page is the
+building's mirror image, and no north makes it right. So the plan says which way its y runs.
+Grid draws and exports the coordinates as the file holds them, with y up, and `grid check`
+says that the drawings are mirrored (`plan/y-down`); the ways the rooms face are read the right
+way round.
+
+`grid_mirror` makes a new design, the old one mirrored. The stated north is mirrored with it,
+to minus itself, so the swap it promises is the real one: left to right, what faced east faces
+west, whichever way the drawing is turned. The site's origin is mirrored with the walls, the
+front stays the part it names, and `yAxis` is kept.
+
+| Code | What it says |
+|---|---|
+| `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
+| `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
 
 ## People are kept out of the plan
 

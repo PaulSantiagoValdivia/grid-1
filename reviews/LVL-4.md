@@ -155,6 +155,28 @@ Each of these is the reversible choice, taken and recorded rather than stopped o
   from `planEnvelope`, which also opens the slab over stairs, lifts and voids. The merge keeps both
   as they were. Making the estimate read `planEnvelope` is a follow-up: it would move the
   estimate's slab figure by the openings, so it is the owner's call.
+- **One `site`, after merging CNT-3.** CNT-3 added a top-level `site` (`origin`, `latitude`,
+  `longitude`, `elevation`) on main. The merge keeps CNT-3's schema, its place in the plan's fields
+  (after `front`) and its latitude-with-longitude rule, and adds LVL-4's `ground` beside them,
+  optional and never defaulted. `ground` needs no `origin`, and is not `site.elevation`: that is
+  metres above sea level, `ground` metres from the ground floor's floor level. Folding the two into
+  one figure (the ground's height above sea level) would need a datum for the plan's 0 the plan
+  does not state, so they stay two fields.
+- **The problem report drops the whole `site`** (CMD-13, as CNT-3 wrote it), so a report about
+  `opening/below-ground` loses the ground level it needs to reproduce. `site.ground` is a level, not
+  a place on the earth; keeping it (and LVL-4's `parapet`, `void` and `ceiling`, which the report's
+  kept fields do not list either) is a small follow-up left to the owner.
+- **The short report is over MSG-10's 1,000 bytes for the lab flat.** LVL-4's ground check adds one
+  line to every plan that states no ground level ("Nothing was checked for … the plan states no
+  ground level for the site."), so the flat's `grid check` is 1,201 bytes and `grid_check` 1,184.
+  The pins in `shortReport.test.ts` hold the new counts and still hold the rest of the report to
+  under 1,000 (988 and 973, as before). The other reading, a check that looked at nothing for want
+  of one plan-wide field said in a shorter shared line, changes MSG-3's wording, so it is the
+  owner's call.
+- **`slabOutline`, after merging SHT-11.** SHT-11 added `floorOutline` in `spaces.ts` (the outer
+  rings, for the floor above's dashed line); LVL-4's of the same name in `outline.ts` (pieces with
+  holes and enclosed spaces, for the slab and roof) is renamed `slabOutline`. Two joins of the same
+  walls remain; making one read the other is a follow-up.
 - **Lab paths.** No lab path is committed: the tests read the lab's plans by name from
   `scoreboard/data/lab-plans.ndjson.gz` through `packages/floorplan/src/test-support/lab.ts`.
 
@@ -261,3 +283,55 @@ plan's field list in `result.test.ts` (now `…, stairs, site, …, sketch, disp
 `scoreboard/current.json` (main's 278 silent and 5 mistakes named, LVL-4's 12 checks fed). After
 the merge: build, typecheck, lint and licences clean; full suite 250 files, 4815 passed, 4
 skipped; scoreboard "Same as the stored figures".
+
+## After merging main at 25747b7
+
+Merged CNT-3, MSG-10, CNT-5, SHT-11 and CNT-13. Conflicts, and how each was resolved:
+
+- **`site` (`types/floorplan.ts`)**: CNT-3 and LVL-4 each added a top-level `SiteSchema`. One schema
+  now holds CNT-3's `origin`, `latitude`, `longitude` and `elevation` with its rule, and LVL-4's
+  `ground`; one `site` field, in CNT-3's place after `front`; one `Site` type. The C7 header and
+  the schema's comment say what `ground` is and that it needs no `origin`. Floor: LVL-4's `parapet`
+  beside CNT-5's `building`. Room: LVL-4's `void` and `ceiling` beside CNT-5's `tenure` and
+  `roomType`.
+- Every reader of `site` checked: `ground.ts` reads `site.ground`, the IFC's `siteOf` reads
+  `origin`/`latitude`/`longitude`/`elevation`, `grid_mirror` copies the site with its origin flipped
+  (keeping `ground`), MSG-4's field reading walks the one schema, so `site.area` is named on
+  `site`. The sheet's `coverage.ts` had two `site` entries after the auto-merge; they are one,
+  giving both reasons. `planText.ts` limits no text in `site` on either side. `docs/plan-file.md`:
+  CNT-3's `site` row names `ground`, LVL-4's `site.ground` row names CNT-3's fields.
+- `reading.test.ts`: both cases kept: `site.area` named on `site`, and main's `plot` on the plan.
+- `result.test.ts`: main's words-not-read plan (`plot`, `lounge`, `balcony`) and main's field list
+  (`…, sketch, north, yAxis, front, site, display, written`), which holds LVL-4's `ground` inside
+  `site`.
+- `geometry/index.ts`: both export lists. `rules/checks/types.ts`: both skip reasons,
+  `no_ground_level` and `not_for_building`. `rules/checks/check.ts`: CNT-5's guarded escape check,
+  passing LVL-4's at-ground flag; both imports.
+- `areas.ts`: both imports (`floorJoins`, `inPolygon`). `readTools.ts`: both imports; `grid_view`'s
+  description and its 3D text keep CNT-3's north wording and LVL-4's roof sentence.
+- `docs/result-contract.md`: every changelog entry kept, LVL-4's first, its finding said to sit in
+  CNT-3's `site`; the short report's byte counts updated (below). Catalogue and code table merged
+  with no conflict.
+- `scoreboard/current.json`: both moved checks fed from 11 (LVL-4 to 12, main to 14); the run gives
+  15, stored with `--write-current`.
+- IFC golden files: main's taken, then regenerated with `-u`. Checked structurally (every product
+  entity resolved through its references, ids and GUIDs set aside): each merged file is LVL-4's file
+  with main's one change, no `TrueNorth` for a plan that states none.
+- Found by the type check, not git: SHT-11's and LVL-4's `floorOutline` clashed in the geometry
+  index; LVL-4's is now `slabOutline` (see "For the owner").
+- Found by the tests: MSG-10's short-report pins counted 7 checks and 9 never-looked-at lines;
+  LVL-4 adds one of each. `shortReport.test.ts` and `grid.e2e.test.ts` now expect 8 and 10, the
+  ground line, and 1,201 / 1,184 bytes, with the rest under 1,000 (see "For the owner").
+
+After the merge, each once:
+
+| Check | Result |
+|---|---|
+| `npm run build` | passed |
+| `npm run typecheck` | passed, every workspace, `scripts` and `scoreboard` |
+| `npm run lint` | passed, no problems |
+| `npm run check:licenses` | "Checked 363 licences in package-lock.json: none is GPL, LGPL, AGPL, MPL, EPL." |
+| The tests either side changed (46 files) | 46 files, 857 tests passed |
+| `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1` | 261 files, 4,959 passed, 4 skipped, 1 failed: the scoreboard test, on checks fed 14 → 15 not yet stored |
+| `npm run scoreboard` | checks the plan can feed 14 → 15, better; every other count the same (197, 278, 16, 5, 735, 95); stored with `--write-current` |
+| scoreboard again, and its test alone | "Same as the stored figures."; `scoreboard.test.ts` 1 file, 19 tests passed |

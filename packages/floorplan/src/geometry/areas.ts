@@ -33,6 +33,7 @@ import { roomFloorArea, tryRoomPolygon } from './room'
 import { floorSpaces, spacesKnown, type FloorSpaces } from './spaces'
 import { planWallSides, type WallSides } from './exposure'
 import { validatePlan } from './validate'
+import { floorJoins } from './floorJoins'
 import { cornerFills, inPolygon, polygonArea, strip, union } from './polygons'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
@@ -62,7 +63,7 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
   net: {
     measure: 'net',
     name: 'Net area',
-    measures: 'Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it.',
+    measures: 'Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it; a stair drawn as a room on floor after floor counts once, on the floor it rises from.',
     notTakenOff: 'Nothing inside a room is taken off: fixed units, a column drawn without walls and floor under a low ceiling all count.',
     cannotSay: 'The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside.',
   },
@@ -112,6 +113,12 @@ export interface RoomAreaFigure {
   readonly area: number
   /** Named as outside by the caller: listed apart, in no net or gross internal figure. */
   readonly outside: boolean
+  /**
+   * SHT-11, lab DR-5: on a room used as a stair that lies over a stair room on the floor below
+   * (LVL-3's join), the stair room its floor is counted with: the lowest of the rooms the stair
+   * rises through. The room keeps its area, and is in no net figure. Absent on every other room.
+   */
+  readonly countedWith?: { readonly floor: string; readonly room: string }
 }
 
 /** A room Grid could not draw, so it is in no figure. */
@@ -127,12 +134,14 @@ export interface FloorAreaFigures {
   readonly rooms: readonly RoomAreaFigure[]
   /** Rooms on this floor that could not be drawn: in no figure here. */
   readonly leftOut: readonly RoomLeftOut[]
-  /** The rooms not named outside. */
+  /** The rooms not named outside, less the stair rooms counted with the one below (`overStairs`). */
   readonly net: number
   /** `net` by room use; a room with none is under `not said`. Adds up to `net`. */
   readonly byUse: Readonly<Record<string, number>>
   /** The rooms named outside. */
   readonly outsideRooms: number
+  /** SHT-11: the stair rooms over a stair room below, whose floor is counted there (`countedWith`). */
+  readonly overStairs: number
   /** The rest are null when the floor's spaces could not be worked out (`why`). */
   readonly grossExternal: number | null
   readonly grossInternal: number | null
@@ -329,7 +338,8 @@ function floorFigures(
   index: PlanIndex,
   broken: ReadonlySet<string>,
   outside: ReadonlySet<string>,
-  sides: () => ReadonlyMap<string, WallSides>
+  sides: () => ReadonlyMap<string, WallSides>,
+  countedWith: ReadonlyMap<string, { readonly floor: string; readonly room: string }>
 ): FloorAreaFigures {
   const rooms: RoomAreaFigure[] = []
   const leftOut: RoomLeftOut[] = []
@@ -341,14 +351,24 @@ function floorFigures(
       leftOut.push({ id: room.id, name: nameOf(room), floor })
       continue
     }
-    rooms.push({ id: room.id, name: nameOf(room), use: room.use ?? null, floor, area: roomFloorArea(room, index, outline), outside: outside.has(room.id) })
+    const below = outside.has(room.id) ? undefined : countedWith.get(`${floor}|${room.id}`)
+    rooms.push({
+      id: room.id,
+      name: nameOf(room),
+      use: room.use ?? null,
+      floor,
+      area: roomFloorArea(room, index, outline),
+      outside: outside.has(room.id),
+      ...(below === undefined ? {} : { countedWith: below }),
+    })
   }
-  const counted = rooms.filter((room) => !room.outside)
+  const counted = rooms.filter((room) => !room.outside && room.countedWith === undefined)
+  const overStairs = sum(rooms.filter((room) => room.countedWith !== undefined).map((room) => room.area))
   const byUse: Record<string, number> = {}
   for (const room of counted) byUse[room.use ?? NOT_SAID] = (byUse[room.use ?? NOT_SAID] ?? 0) + room.area
   const net = sum(counted.map((room) => room.area))
   const outsideRooms = sum(rooms.filter((room) => room.outside).map((room) => room.area))
-  const base = { floor, rooms, leftOut, net, byUse, outsideRooms }
+  const base = { floor, rooms, leftOut, net, byUse, outsideRooms, overStairs }
 
   const spaces = floorSpaces(plan, floor, { index, broken })
   if (!spacesKnown(spaces)) {
@@ -367,6 +387,47 @@ function floorFigures(
     offSpace,
     why: known ? null : inside,
   }
+}
+
+/**
+ * SHT-11, lab DR-5: the stair rooms whose floor is counted with a stair room below, by floor and
+ * id, each with the lowest room of its stair. Rooms used as a stair on neighbouring floors are one
+ * stair when LVL-3's way-out check joins them (`floorJoins`: they share at least
+ * `stairRoomOverlap` of the smaller); its floor is counted once, on the floor it rises from.
+ */
+function stairStacks(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>): Map<string, { floor: string; room: string }> {
+  const outlines = new Map<string, Map<string, Vec2[]>>()
+  for (const room of plan.rooms) {
+    if (room.use !== 'stair' || broken.has(room.id)) continue
+    const outline = tryRoomPolygon(room, index)
+    if (outline === null || outline.length < 3) continue
+    const floor = floorOf(room)
+    const rooms = outlines.get(floor) ?? new Map<string, Vec2[]>()
+    rooms.set(room.id, outline)
+    outlines.set(floor, rooms)
+  }
+  const stacks = new Map<string, { floor: string; room: string }>()
+  if ([...outlines.values()].filter((rooms) => rooms.size > 0).length < 2) return stacks
+  const below = new Map<string, { floor: string; room: string }>()
+  // Only what the outlines hold: no stated stair is laid out here.
+  for (const join of floorJoins({ ...plan, stairs: [] }, outlines, () => broken).joins) {
+    if (join.kind !== 'stair-room') continue
+    const key = `${join.upper.floor}|${join.upper.room}`
+    // A room over two stair rooms below goes with the first found: it is still counted once.
+    if (!below.has(key)) below.set(key, join.lower)
+  }
+  for (const key of below.keys()) {
+    let lowest = below.get(key)!
+    const seen = new Set([key])
+    for (let next = below.get(`${lowest.floor}|${lowest.room}`); next !== undefined; next = below.get(`${lowest.floor}|${lowest.room}`)) {
+      const at = `${next.floor}|${next.room}`
+      if (seen.has(at)) break
+      seen.add(at)
+      lowest = next
+    }
+    stacks.set(key, lowest)
+  }
+  return stacks
 }
 
 function readerMeasure(options: AreaOptions): ReaderMeasure {
@@ -408,9 +469,10 @@ export function planAreaFigures(plan: FloorPlan, options: AreaOptions = {}): Pla
   const outside = options.outside ?? new Set<string>()
   let sides: ReadonlyMap<string, WallSides> | undefined
   const sidesOnce = (): ReadonlyMap<string, WallSides> => (sides ??= planWallSides(index))
+  const stacks = stairStacks(plan, index, broken)
   const floors = planFloors(plan)
     .filter((floor) => options.floors === undefined || options.floors.includes(floor.id))
-    .map((floor) => floorFigures(plan, floor.id, index, broken, outside, sidesOnce))
+    .map((floor) => floorFigures(plan, floor.id, index, broken, outside, sidesOnce, stacks))
 
   const byUse: Record<string, number> = {}
   for (const f of floors) for (const [use, area] of Object.entries(f.byUse)) byUse[use] = (byUse[use] ?? 0) + area
@@ -425,6 +487,20 @@ export function planAreaFigures(plan: FloorPlan, options: AreaOptions = {}): Pla
   const off = sum(floors.map((f) => Math.abs(f.offSpace ?? 0)))
   if (off >= reported) notes.push(`${off.toFixed(2)} m² of the rooms' floor is counted twice, or lies on walls or outside them, so net plus walls plus unclaimed floor is not the gross; grid_check names the rooms.`)
   const outsideRooms = sum(floors.map((f) => f.outsideRooms))
+  const over = rooms(floors).filter((room) => room.countedWith !== undefined)
+  if (over.length > 0) {
+    const names = new Map(plan.rooms.map((room) => [`${floorOf(room)}|${room.id}`, nameOf(room)] as const))
+    const floorNames = new Map(planFloors(plan).map((f) => [f.id, f.name || f.id] as const))
+    const lowest = [...new Map(over.map((room) => [`${room.countedWith!.floor}|${room.countedWith!.room}`, room.countedWith!] as const)).values()]
+    for (const stair of lowest) {
+      const above = over.filter((room) => room.countedWith!.floor === stair.floor && room.countedWith!.room === stair.room)
+      notes.push(
+        `${JSON.stringify(names.get(`${stair.floor}|${stair.room}`) ?? stair.room)} on ${JSON.stringify(floorNames.get(stair.floor) ?? stair.floor)} is a stair that rises through ` +
+          `${above.length === 1 ? 'the stair room' : `${above.length} stair rooms`} over it (${above.map((room) => JSON.stringify(floorNames.get(room.floor) ?? room.floor)).join(', ')}): ` +
+          `its floor is counted once, there, so ${sum(above.map((room) => room.area)).toFixed(2)} m² over it is in no net figure; the gross figures still hold it.`
+      )
+    }
+  }
   if (rooms(floors).some((room) => room.outside)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure, and their floor is in the gross external one.')
 
   return {

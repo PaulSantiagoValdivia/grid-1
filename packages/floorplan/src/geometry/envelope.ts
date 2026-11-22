@@ -35,7 +35,7 @@ import { SLAB_THICKNESS, floorElevations } from './elevations'
 import type { Floor, FloorPlan, PlanIndex, Room } from './plan'
 import { indexPlan } from './plan'
 import { floorJoins, roomOutlinesByFloor, type OutlinesByFloor } from './floorJoins'
-import { floorOutline, outlineKnown, type FloorOutline, type FloorOutlineUnknown } from './outline'
+import { outlineKnown, slabOutline, type FloorOutline, type FloorOutlineUnknown } from './outline'
 import { boxOfRings, cutOutline, inRing, multiArea, pointInside, ringOf, union } from './polygons'
 import { outerWallBand, floorWalls } from './areas'
 import { planWallSides } from './exposure'
@@ -187,12 +187,12 @@ export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): Pl
     }
     return found
   }
-  const outlines = new Map<string, ReturnType<typeof floorOutline>>()
+  const outlines = new Map<string, ReturnType<typeof slabOutline>>()
   const outlineOf = (id: string) => {
     let found = outlines.get(id)
     if (found === undefined) {
       const { slice, index, broken } = sliceOf(id)
-      found = openToTheSky(floorOutline(slice, id, broken), slice, index, broken)
+      found = openToTheSky(slabOutline(slice, id, broken), slice, index, broken)
       outlines.set(id, found)
     }
     return found

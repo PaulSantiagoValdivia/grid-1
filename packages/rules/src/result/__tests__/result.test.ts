@@ -50,10 +50,10 @@ function wordsNotRead(): Raw {
   raw['walls'][0].thick = 0.3
   raw['walls'][1].status = 'new'
   raw['walls'][2].status = 'existing'
-  // LVL-4 made `site` a part of the plan: a field on no part is now this one.
-  raw['north'] = 12
-  raw['rooms'][0].use = 'toilet'
-  raw['rooms'][1].use = 'office'
+  raw['plot'] = { north: 12 }
+  // CNT-5: `toilet` and `office` are uses now; `lounge` and `balcony` are still not read.
+  raw['rooms'][0].use = 'lounge'
+  raw['rooms'][1].use = 'balcony'
   raw['rooms'][2].use = 'Bedroom'
   return raw
 }
@@ -194,16 +194,16 @@ describe('words Grid does not read (MSG-4)', () => {
     ])
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
-    // LVL-3 added `stairs` to the plan's fields, LVL-4 `site`, WRT-7 `display`.
-    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, projectId, walls, rooms, openings, floors, stairs, site, referenceImage, items, title, annotations, sketch, display, written')
+    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-7 `display`.
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, display, written')
   })
 
   it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {
-    const [toilet, office] = reading.slice(4)
-    expect(toilet!.message).toBe(`Room "${rooms[0]!.name}" has a use Grid does not know, "toilet"`)
-    expect(toilet!.fix).toMatch(/^Did you mean "bathroom"\?/)
-    expect(office!.found).toBe('the use "office" at rooms[1].use, read as no use stated')
-    expect(office!.fix).toMatch(/^If none of the uses Grid knows fits, write "other"\./)
+    const [lounge, balcony] = reading.slice(4)
+    expect(lounge!.message).toBe(`Room "${rooms[0]!.name}" has a use Grid does not know, "lounge"`)
+    expect(lounge!.fix).toMatch(/^Did you mean "living"\?/)
+    expect(balcony!.found).toBe('the use "balcony" at rooms[1].use, read as no use stated')
+    expect(balcony!.fix).toMatch(/^If none of the uses Grid knows fits, write "other"\./)
     expect(reading.some((l) => l.message.includes('Bedroom'))).toBe(false)
   })
 
