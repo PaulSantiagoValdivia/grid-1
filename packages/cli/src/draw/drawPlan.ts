@@ -15,7 +15,7 @@
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { PictureOptions } from '@ongrid/viewer/src/picture'
-import { pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
+import { fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
 import { loadCanvas } from './canvas'
 import { forSkia } from './skiaText'
 
@@ -42,7 +42,8 @@ export interface DrawOptions extends PictureOptions {
  * Every other option is `planToSvg`'s: `floor` (the lowest by default), `width` (1200 px by
  * default), `height` (follows the plan's shape by default), `look` (`working`, the default,
  * `technical` or `dark`, or your own colours), `paperScale` (the technical look's 1:N) and
- * `showDimensions` (on by default).
+ * `showDimensions` (on by default) and `faults` (the result record's lines, to mark what went
+ * wrong on the drawing and list it under it; none by default).
  *
  * The plan is not checked here: parse and validate it first. Whatever part of a broken plan
  * cannot be drawn is left out, as in the app.
@@ -63,7 +64,7 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   if (!(scale > 0) || !Number.isFinite(scale)) throw new RangeError(`The scale must be a number above 0: got ${scale}`)
 
   const width = Math.round(picture.width * scale)
-  const height = Math.round(picture.height * scale)
+  const height = Math.round(fullHeight(picture) * scale)
   if (width < 1 || height < 1) throw new RangeError(`A scale of ${scale} leaves no pixels to draw`)
 
   // Loaded only for a PNG: it is a native module, and an SVG needs none of it.
@@ -71,8 +72,10 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
 
   // The SVG is written at the PNG's own size, so Skia draws it at full resolution rather than
   // enlarging a smaller image. Its text is written the way Skia draws it right (`forSkia`).
-  const nodes = forSkia(picture.nodes, (family) => GlobalFonts.has(family))
-  const image = await loadImage(Buffer.from(pictureToSvg({ ...picture, nodes }, scale)))
+  const installed = (family: string): boolean => GlobalFonts.has(family)
+  const nodes = forSkia(picture.nodes, installed)
+  const key = picture.key && { ...picture.key, nodes: forSkia(picture.key.nodes, installed) }
+  const image = await loadImage(Buffer.from(pictureToSvg({ ...picture, nodes, key }, scale)))
 
   const canvas = createCanvas(width, height)
   const context = canvas.getContext('2d')

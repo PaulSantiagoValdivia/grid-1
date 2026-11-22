@@ -49,6 +49,11 @@ export interface CheckResult {
   /** Everything above, and the door sweeps, as one list with one count (MSG-1). On one floor, its lines and the plan's. */
   readonly result: GridResult
   /**
+   * Each of `result.lines`' number: its place from 1 in the whole plan's record, so a line keeps
+   * its number on one floor, and a drawing marks it with the same one (MSG-8).
+   */
+  readonly numbers: readonly number[]
+  /**
    * MSG-2 (lab W-8): how many of the rooms at least one check looked at, and those none did,
    * printed beside the count of lines. On one floor, that floor's rooms.
    */
@@ -83,8 +88,10 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const floor = floorOption(plan, request.floor)
   const options = country === undefined ? {} : { country: country.toUpperCase() }
   const full = checkLocalRules(plan, options)
+  // The file's text (MSG-6), so the record names what the reader did and the words the schema
+  // drops (MSG-4).
   const result = inspectPlan(loaded.text ?? plan, options)
-  const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage) }
+  const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage), numbers: result.lines.map((_, index) => index + 1) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }
 
@@ -99,7 +106,8 @@ export function checkOnFloor(loaded: LoadedPlan, whole: CheckResult, floor: stri
     coverage: coverageOnFloor(full.coverage, floor),
   }
   const result = resultOnFloor(whole.result, floor)
-  return { label: GENERAL_GUIDANCE_LABEL, floor, issues: floorIssues(loaded, floor), report, result, rooms: roomsLookedAt(loaded.plan, result.coverage, floor) }
+  const numbers = result.lines.map((line) => whole.numbers[whole.result.lines.indexOf(line)] ?? 0)
+  return { label: GENERAL_GUIDANCE_LABEL, floor, issues: floorIssues(loaded, floor), report, result, rooms: roomsLookedAt(loaded.plan, result.coverage, floor), numbers }
 }
 
 /** The record's lines on one floor, and those about the whole plan, counted again. */
@@ -159,15 +167,16 @@ export function checkText(result: CheckResult, floorCount: number): string {
     lines.push('', `To look at: nothing. ${NOTHING_FOUND}`)
   } else {
     lines.push('', `To look at (${record.count}): ${countsText(record)}.`)
-    for (const line of record.lines) {
+    // Numbered by place in the whole plan's record: `grid draw` marks each with its number (MSG-8).
+    record.lines.forEach((line, index) => {
       const where = floorCount > 1 && line.floor !== null && line.thing.kind !== 'floor' ? ` on ${JSON.stringify(line.floor)}` : ''
       lines.push(
-        `  - ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`,
+        `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`,
         `      found: ${line.found}`,
         `      needed: ${line.needed}`,
         `      fix: ${line.fix}`,
       )
-    }
+    })
     if (record.counts.finding === 0) lines.push('', `No findings. ${NOTHING_FOUND}`)
   }
   lines.push(...coverageText(result))
