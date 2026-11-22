@@ -1,7 +1,7 @@
 # BRF-4 review: massing before walls, and "how much fits on this plot"
 
 For the owner. A floor may now state its `outline`, its outside face, before any wall (convention
-C15). With its level, height and kind of building it is massing: Grid gives its gross area, its
+C16). With its level, height and kind of building it is massing: Grid gives its gross area, its
 storey, its slab and roof, the plot coverage and the distances to the boundary. With walls and
 rooms inside it, the outline is joined with what the walls enclose, so it gives the slab, the
 roof and the floor no room claims. The person's own site limits (coverage, floor area ratio,
@@ -67,7 +67,7 @@ them a site limit.
 
 ## What changed
 
-1. **The plan format** (`types/floorplan.ts`, convention C15). `FloorSchema` gains `outline`
+1. **The plan format** (`types/floorplan.ts`, convention C16). `FloorSchema` gains `outline`
    (3 to 2,000 points, either way round, closed by a last point on the first, refused when it
    crosses itself or encloses no ground: BRF-3's `ringProblem`, moved to `geometry/ring.ts` so
    the schema can read it), and `homes` and `parking` (whole numbers). Optional, never defaulted.

@@ -651,7 +651,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     )
   }
 
-  // BRF-4 (C15): the outline the floor states, a solid line round it: the massing before any
+  // BRF-4 (C16): the outline the floor states, a solid line round it: the massing before any
   // wall, under the walls once they are drawn. Drawing, not a target.
   const floorRing = drawing.outline
   if (floorRing !== undefined && floorRing.length >= 3) {

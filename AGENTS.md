@@ -43,6 +43,13 @@ Notes for agents and people changing this repository.
   walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
   sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
+- A survey drawn from its own numbers (HND-11): a wall may be placed by a face (`face` in
+  `types/floorplan.ts`); the reading moves it to its centre line and records `placedBy`, and
+  `statedWall` writes the face back. Every change that moves a wall end goes through
+  `wallWithEnds`, so no centre point lands in a file as a face. `geometry/taped.ts` sets the
+  plan's `taped` lengths against the drawing; the CLI's `src/taped/table.ts` prints them after
+  `grid check` and every change. `geometry/export/origin.ts` decides where an export writes a
+  plan from: `site.origin` for a plan far from (0, 0), and the GLB keeps that offset in one node.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,
@@ -51,6 +58,10 @@ Notes for agents and people changing this repository.
   test fails when it and `src/result/catalogue.ts` list different codes. A new message code
   gets its one wording, what is needed and the fix in that catalogue, and a line in the
   contract's code table and changelog.
+- A firm's own standards (COD-8): `firm-standards.json` beside the plan, read and checked in
+  `packages/cli/src/firm/` (`standards.ts` the file, `measure.ts` the plan measured by CNT-13's
+  indicators and ARE-9's net area) and worded in `packages/rules/src/result/firm.ts` as `firm/`
+  findings under their own heading, never with a code's figures. `docs/firm-standards.md`.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own. A look (SHT-1, `src/picture/look.ts`) is a named set of values
   the one drawing function, `planScene`, applies to the same geometry: `working` for the screen

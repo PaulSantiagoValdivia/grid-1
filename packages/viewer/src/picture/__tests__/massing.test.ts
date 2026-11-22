@@ -1,5 +1,5 @@
 /**
- * BRF-4 (C15): a floor's stated outline on its plan. Massing before any wall is a line round the
+ * BRF-4 (C16): a floor's stated outline on its plan. Massing before any wall is a line round the
  * floor, framed by the picture, not an empty drawing; a floor that states no outline draws none.
  */
 import { describe, expect, it } from 'vitest'

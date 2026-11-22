@@ -9,7 +9,7 @@
  * a garden wall standing apart, which encloses nothing, carries no slab and no roof.
  *
  * The outline only exists where walls meet and close a floor, or where the floor states one
- * (BRF-4, C15: `massing.ts`), joined with what its walls enclose; a floor whose walls enclose
+ * (BRF-4, C16: `massing.ts`), joined with what its walls enclose; a floor whose walls enclose
  * nothing and that states no outline has none, and says so. Pure, and never throws. The join is done by `polygon-clipping` (MIT).
  */
 
@@ -51,7 +51,7 @@ export function outlineKnown(result: FloorOutline | FloorOutlineUnknown): result
  */
 export function slabOutline(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): FloorOutline | FloorOutlineUnknown {
   const walls = floorWalls(plan, floor, broken)
-  // BRF-4 (C15): the outline the floor states, joined with what its walls enclose.
+  // BRF-4 (C16): the outline the floor states, joined with what its walls enclose.
   const outline = statedOutline(plan, floor)
   const far = farReason(walls) ?? outlineFarReason(floor, outline)
   if (far) return { floor, reason: far }

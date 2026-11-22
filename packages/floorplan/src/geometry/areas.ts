@@ -169,7 +169,7 @@ export interface FloorAreaFigures {
   readonly offSpace: number | null
   /** Why a gross figure is null, in a sentence; null when both are known. */
   readonly why: string | null
-  /** BRF-4 (C15): the floor is massing, an outline it states with no walls yet: gross external only. */
+  /** BRF-4 (C16): the floor is massing, an outline it states with no walls yet: gross external only. */
   readonly massing: boolean
 }
 
@@ -415,7 +415,7 @@ function floorFigures(
   const offSpace = spaces.roomArea - (spaces.floorArea - spaces.unclaimedArea)
   const walls = floorWalls(plan, floor, broken)
   if (walls.length === 0 && statedOutline(plan, floor) !== null) {
-    // BRF-4 (C15): massing, an outline with no walls yet. Its outline is its outside face; it has
+    // BRF-4 (C16): massing, an outline with no walls yet. Its outline is its outside face; it has
     // no inside face of walls to measure to until the walls are drawn.
     return { ...base, grossExternal: spaces.outlineArea, grossInternal: null, walls: 0, outerWalls: null, unclaimed: spaces.unclaimedArea, offSpace, why: MASSING_WHY, massing: true }
   }

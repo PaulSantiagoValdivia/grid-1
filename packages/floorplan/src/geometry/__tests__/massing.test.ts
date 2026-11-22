@@ -1,5 +1,5 @@
 /**
- * BRF-4 (C15, lab FD-1): a floor outline before any wall, and with rooms inside it.
+ * BRF-4 (C16, lab FD-1): a floor outline before any wall, and with rooms inside it.
  *
  * FD-1's plot is the lab's I series plot (`I/scenarios/s5-plot`): corners (0, 0), (18, 0),
  * (22, 25) and (0, 25), 500 m² by hand ((18 + 22) / 2 × 25). The massing outline is the outside
@@ -142,7 +142,7 @@ describe('a floor outline with rooms inside it', () => {
   })
 })
 
-describe('the outline in the plan file (C15)', () => {
+describe('the outline in the plan file (C16)', () => {
   it('is optional and never defaulted: a floor that states none reads as before', () => {
     const plan = parseFloorPlan({ version: '1', units: 'm', floors: [{ id: 'g', name: 'G', level: 0 }] })
     expect(plan.floors![0]).toEqual({ id: 'g', name: 'G', level: 0 })

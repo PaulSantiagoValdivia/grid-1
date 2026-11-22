@@ -94,7 +94,7 @@ export interface FloorAreas {
   readonly walls: number | null
   /** Enclosed floor that no room covers, on the whole floor. */
   readonly unclaimed: number
-  /** BRF-4 (C15): the floor is massing, an outline it states with no walls yet; left out otherwise. */
+  /** BRF-4 (C16): the floor is massing, an outline it states with no walls yet; left out otherwise. */
   readonly massing?: true
   /** WRT-6: the net area's sureness, from its rooms'; only when one of them has one. */
   readonly sureness?: AreaSureness
@@ -281,7 +281,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       overStairs: f.overStairs,
       walls: f.walls,
       unclaimed: f.unclaimed ?? 0,
-      // BRF-4 (C15): only on a massing floor, an outline with no walls yet.
+      // BRF-4 (C16): only on a massing floor, an outline with no walls yet.
       ...(f.massing ? { massing: true as const } : {}),
       ...(floorSure === undefined ? {} : { sureness: floorSure }),
       why: f.why,

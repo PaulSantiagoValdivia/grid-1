@@ -139,8 +139,8 @@ function partOf(path: readonly (string | number)[]): PartAt | null {
   return typeof list === 'string' && LISTS.has(list) && typeof index === 'number' ? { list: list as PartAt['list'], index } : null
 }
 
-/** WRT-6: fields the reading adds, which no file states: a file that writes one is told it is not read. */
-const READING_ONLY = new Set(['unstated'])
+/** WRT-6, HND-11: fields the reading adds, which no file states: a file that writes one is told it is not read. */
+const READING_ONLY = new Set(['unstated', 'placedBy'])
 
 /** Walks the file and its schema side by side, noting each key the schema does not have. */
 function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], notes: ReadingNote[]): void {
@@ -206,7 +206,7 @@ export function readingNotes(raw: unknown): ReadingNote[] {
     })
   }
   const none = (key: string): boolean => !Array.isArray(raw[key]) || (raw[key] as unknown[]).length === 0
-  // BRF-4 (C15): a floor that states its outline is massing, not nothing.
+  // BRF-4 (C16): a floor that states its outline is massing, not nothing.
   const outlined = Array.isArray(raw['floors']) && (raw['floors'] as unknown[]).some((floor) => isObject(floor) && floor['outline'] !== undefined && floor['outline'] !== null)
   if (none('walls') && none('rooms') && none('openings') && none('items') && !outlined) notes.push({ kind: 'empty' })
   return notes

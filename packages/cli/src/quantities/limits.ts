@@ -11,7 +11,7 @@
  * - building height, `building_height`: `buildingHeight` in the core, ground to the highest roof;
  * - set-backs, the plan's own `site.setbacks` (BRF-3): each edge's least distance;
  * - parking per home, `parking_per_home`: the parking spaces the floors state over the homes
- *   they state (C15).
+ *   they state (C16).
  *
  * The figures are the person's, never Grid's: an unstated limit is not reported, and no line says
  * a plan is allowed or complies (MSG-3). The agent proposes; Grid counts and optimises nothing.

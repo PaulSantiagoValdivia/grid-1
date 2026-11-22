@@ -1,5 +1,5 @@
 /**
- * BRF-4 (C15, lab FD-1): how many storeys the building has, and how high it stands over the
+ * BRF-4 (C16, lab FD-1): how many storeys the building has, and how high it stands over the
  * ground, from the floors that hold something: an outline they state (massing) or walls that
  * close one. Both are read before any wall exists.
  *

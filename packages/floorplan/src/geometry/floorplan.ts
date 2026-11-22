@@ -231,7 +231,7 @@ export interface PlanDrawing {
   /** BRF-3: the box round the site, so a view frames the plot too; null with no site drawn. */
   readonly siteBounds: Bounds | null
   /**
-   * BRF-4 (C15): the outline the floor states, its corners in order, drawn as a line round the
+   * BRF-4 (C16): the outline the floor states, its corners in order, drawn as a line round the
    * floor: massing before any wall, and the outside face the walls are drawn inside. Left out
    * when the floor states none.
    */
@@ -411,7 +411,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   // BRF-3: the site on the ground floor's plan, and on a plan that is no slice.
   const site = floor === null || siteFloors(wholePlan(plan).whole).includes(floor) ? planSite(plan) : null
   const siteBounds = site === null ? null : computeBounds(siteExtent(site))
-  // BRF-4 (C15): the floor's stated outline, on its own plan; on a plan that is no slice, its one floor's.
+  // BRF-4 (C16): the floor's stated outline, on its own plan; on a plan that is no slice, its one floor's.
   const floors = planFloors(plan)
   const drawnFloor = floor ?? (floors.length === 1 ? floors[0]!.id : null)
   const statedRing = drawnFloor === null ? null : statedOutline(plan, drawnFloor)

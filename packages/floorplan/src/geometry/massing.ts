@@ -1,5 +1,5 @@
 /**
- * BRF-4 (C15, lab FD-1): a floor's stated outline, and the building as massing.
+ * BRF-4 (C16, lab FD-1): a floor's stated outline, and the building as massing.
  *
  * A floor may state its `outline`, its outside face, before any wall is drawn. It is the one
  * shape the floor's slab covers, its roof is cut from and its gross external area is measured

@@ -11,13 +11,14 @@
  * Plain English, never anything that reads as "this plan complies".
  */
 
-import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix, type WordingPart } from '@ongrid/floorplan/geometry'
+import { areaText, figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix, type WordingPart } from '@ongrid/floorplan/geometry'
 import { BUILDING_TYPE_TEXT, quoted } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
 import { buildingKindsText, findingReadFor, type BuildingKind } from '../checks/figures'
 import { wordings as figureWordings } from '../checks/messages'
 import { figureNeededText } from '../checks/figureWords'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
+import { FIRM_MEASURES, type FirmMeasure } from './firm'
 
 /** What a line's code is told about the thing, to word it. */
 export interface Subject {
@@ -61,6 +62,11 @@ export interface Subject {
   readonly used?: string | null
   /** MSG-6, on a part left out for its id: the part that keeps the id, as a line names it. */
   readonly kept?: string
+  /**
+   * HND-11, on a taped length: what was taped (`the side along wall "ext-s"`), the two figures
+   * and how far apart they are, and how close they may be and agree, each in words.
+   */
+  readonly taped?: { readonly what: string; readonly figures: string; readonly within: string }
   /** MSG-6: an id no part has, to rename a part to. */
   readonly rename?: string
   /** MSG-6, on an unfinished merge: what each side adds or changes, in words. */
@@ -72,6 +78,22 @@ export interface Subject {
   readonly group?: readonly string[]
   /** MSG-5, on a "could not be drawn" line: the notes it holds back, in words; empty when none. */
   readonly heldSaid?: string
+  /** COD-8, on a `firm/` line: the firm's standard and what was measured for it. */
+  readonly firm?: FirmSubject
+}
+
+/** COD-8: what a `firm/` line is told: the firm's figure, from its file, and what the drawing measured. */
+export interface FirmSubject {
+  /** The firm's least size, in the measure's unit. */
+  readonly value: number
+  /** The firm's own name for the standard, or null. */
+  readonly name: string | null
+  /** The firm's file, as the report names it. */
+  readonly file: string
+  /** What the drawing measured; null when nothing could be. */
+  readonly measured: number | null
+  /** Where or between what, with the plan's names quoted; empty when there is nothing to add. */
+  readonly said: string
 }
 
 export interface CodeEntry {
@@ -104,6 +126,9 @@ const fixOf = (s: Subject, key: 'width' | 'offset' | 'height' | 'sill'): number 
 /** The wall most likely meant, from a line's fixes (MSG-7). */
 const meantWall = (s: Subject): string | null => s.fixes?.find((f) => f.wall !== undefined)?.wall ?? null
 const FAR = tolerance('farFromOrigin')
+
+/** A sentence's first letter in capitals. */
+const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
 const TIDY = 'grid tidy lists this fault and can make the fix it names. Otherwise correct the walls by hand.'
 const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every size is in metres.'
 
@@ -187,6 +212,44 @@ const metres = (value: number | undefined): string => (value === undefined ? 'as
 function through(finding: RuleFinding | undefined): string {
   const rooms = [...new Set((finding?.through ?? []).map((step) => step.room))]
   return rooms.length === 0 ? 'no door or opening that leads on' : `it opens only into ${rooms.map(quoted).join(', ')}`
+}
+
+/** COD-8: a figure of the firm's in its measure's unit: "1.5 m", "9 m²", as the file gives it. */
+function firmFigure(measure: FirmMeasure, value: number): string {
+  return `${figureText(value)} ${FIRM_MEASURES[measure].unit}`
+}
+
+/** COD-8: what was measured, to the digits that set it apart from the firm's figure. */
+function firmMeasured(measure: FirmMeasure, measured: number | null, value: number): string | null {
+  if (measured === null) return null
+  return FIRM_MEASURES[measure].unit === 'm²' ? `${areaText(measured, 2, value)} m²` : `${metresText(measured, 2, value)} m`
+}
+
+const FIRM_FIX_TAIL = "The figure is the firm's own: if it does not hold for this plan, change it in the firm's file."
+
+/**
+ * COD-8: the one wording of a `firm/` code. The message says what was measured and the firm's
+ * figure, as the firm's own; the needed is the firm's figure used here, from its file, and says
+ * it is not from any code or standard.
+ */
+function firmEntry(measure: FirmMeasure, phrase: (measured: string | null) => string, fix: string): CodeEntry {
+  const what = FIRM_MEASURES[measure].what
+  const named = (s: Subject): string => (s.firm?.name ? ` (${quoted(s.firm.name)})` : '')
+  return {
+    says: (s) => {
+      const f = s.firm
+      const measured = f === undefined ? null : firmMeasured(measure, f.measured, f.value)
+      const against = measured === null ? 'against' : 'under'
+      return `${s.label}: ${phrase(measured)}, ${against} the firm's own figure of ${firmFigure(measure, f?.value ?? 0)} for ${what}${named(s)}`
+    },
+    found: (s) => {
+      const f = s.firm
+      const measured = f === undefined ? null : firmMeasured(measure, f.measured, f.value)
+      return `${measured ?? 'no way through'}${f?.said ? `, ${f.said}` : ''}; measured as ${FIRM_MEASURES[measure].measures}`
+    },
+    needed: (s) => `at least ${firmFigure(measure, s.firm?.value ?? 0)}: the firm's figure used here${named(s)}, from ${quoted(s.firm?.file ?? '')}, the firm's own and not from any code or standard`,
+    fix: fixed(`${fix} ${FIRM_FIX_TAIL}`)
+  }
 }
 
 export const CODES = {
@@ -318,8 +381,8 @@ export const CODES = {
   },
   'plan/far-from-origin': {
     says: fixed(`The plan reaches more than ${FAR} m from the origin`),
-    needed: fixed(`every point within ${FAR} m of the origin (0, 0)`),
-    fix: fixed('Check the units and look for a slipped coordinate. If the plan is in map or survey coordinates, move it so it starts near the origin.')
+    needed: fixed(`every point within ${FAR} m of the origin: the site's origin where the plan states one, else (0, 0)`),
+    fix: fixed('Check the units and look for a slipped coordinate. If the plan is in map or survey coordinates, keep them and state a point near the building as site.origin: the check measures from it, and every export writes the geometry from it, with the offset kept.')
   },
   'plan/duplicate-id': {
     says: (s) => `Id ${s.label} names more than one wall, room or opening`,
@@ -782,6 +845,21 @@ export const CODES = {
     fix: fixed('Move the fixture along the wall clear of the window, lower it, or raise the sill.')
   },
 
+  // --- The firm's own standards (COD-8) -------------------------------------------------------
+  // Each is the firm's figure, from its file beside the plan, set against a CNT-13 measure or a
+  // room's net area. Never a code's: the needed says so, and names the file.
+  'firm/corridor-width': firmEntry('corridor_width', (m) => (m === null ? 'there is no way through clear of its fixtures' : `the way through is ${m} wide at its narrowest`), 'Widen the corridor, or move what narrows it: grid_measure what=use shows the way through.'),
+  'firm/door-clear-width': firmEntry('door_clear_width', (m) => `it leaves ${m ?? 'nothing'} clear`, 'Make the opening wider, or move what stands in front of it.'),
+  'firm/turning-circle': firmEntry('turning_circle', (m) => `the widest circle its free floor holds is ${m ?? 'nothing'} across`, 'Make the room larger, or move its fixtures to free a wider circle.'),
+  'firm/fixture-clearance': firmEntry('fixture_clearance', (m) => `the clear floor in front of it is ${m ?? 'nothing'}`, 'Move the fixture, or what stands in front of it, to leave more floor.'),
+  'firm/room-area': firmEntry('room_area', (m) => `its net area is ${m ?? 'nothing'}`, 'Make the room larger, or check the use it is given.'),
+  'firm/room-width': firmEntry('room_width', (m) => `the widest circle it holds is ${m ?? 'nothing'} across`, 'Make the room wider.'),
+  'firm/not-read': {
+    says: (s) => `The firm's standards in ${quoted(s.firm?.file ?? s.label)} were not read, so none of them was set against the plan`,
+    needed: fixed('a firm\'s standards file Grid reads: version "1" and a list of standards, as docs/firm-standards.md sets out'),
+    fix: fixed('Correct the file where the line says, or take it out of the plan\'s folder.')
+  },
+
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {
     says: (s) => `${s.label} has enclosed floor that no room claims`,
@@ -1102,6 +1180,19 @@ export const CODES = {
     found: (s) => `a mark on ${s.label}${s.word ? ` (its ${s.word})` : ''}`,
     needed: fixed('a mark on a part the plan has, by its id'),
     fix: fixed('Name the part by the id the plan gives it now, or take the mark out.')
+  },
+  // HND-11 (lab WR-14): a length taped on site against the same length drawn.
+  'room/taped-differs': {
+    says: (s) => `${s.taped ? `${capital(s.taped.what)} taped in` : 'A length taped in'} ${s.label} is not the length drawn`,
+    found: (s) => s.taped?.figures ?? s.said,
+    needed: (s) => `the drawing within ${s.taped?.within ?? 'the tolerance'} of the length taped`,
+    fix: fixed('Draw the walls where the tape puts their faces: a survey taped to the inside faces places each wall by that face (`face` on the wall), so a thickness guessed, or left out, grows away from the room. If the tape was read wrong, correct the taped length.')
+  },
+  'plan/taped-not-measured': {
+    says: (s) => `A length taped in ${s.label} cannot be set against the drawing: ${s.said}`,
+    found: (s) => (s.taped === undefined ? s.said : `${s.taped.what}, taped ${s.taped.figures}`),
+    needed: fixed('a taped length that names a room the plan has, and one of its walls or two of its corners, each corner by the two walls that meet there'),
+    fix: fixed('Name the room and its walls by the ids the plan gives them now; a corner is two walls of the room that meet there. Once the room is drawn, its taped lengths are measured.')
   },
   // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured, never checked.
   'plan/not-checked-access': {

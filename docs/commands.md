@@ -28,7 +28,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)). With a brief beside the plan, it says each line met or missed ([the brief](brief.md)) |
-| `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below) |
+| `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below). With `firm-standards.json` beside the plan, the firm's own standards are set against it too, under their own heading ([a firm's own standards](firm-standards.md)) |
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation and section marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
@@ -290,7 +290,19 @@ with what was found, what was needed and the fix, the figures those lines used (
 figure used here, with its document, edition, clause and status), what each check looked at in
 counts, with the parts it could not look at and why, and one line on what `--full` adds.
 `--full` prints the whole report: the checks run, every figure, each part each check looked at
-or skipped, and what these checks never look at. `--json` always gives the whole check.
+or skipped, and what these checks never look at. `--json` always gives the whole check. A plan
+that keeps lengths taped on site gets, after its notes, the table of each one taped against drawn,
+and `grid write` and `grid edit` print it after every change too (HND-11,
+[lengths taped on site](plan-file.md#lengths-taped-on-site)):
+
+```text
+Taped against drawn (4; 1 differs): each length taped on site, set against the drawing's inside faces.
+  What was taped                                                taped    drawn     off
+  Bedroom, the side along wall "ext-s"                        3.470 m  3.470 m   0.000  agrees (within 0.010 m)
+  Bedroom, the side along wall "ext-w"                        3.200 m  3.200 m   0.000  agrees (within 0.010 m)
+  Hall, the side along wall "ext-s"                           1.400 m  1.200 m  -0.200  differs (within 0.010 m)
+  Bedroom, corner "ext-w"/"ext-s" to corner "bed-hall"/"row"  4.690 m  4.684 m  -0.006  agrees (within 0.010 m)
+```
 
 The line after the label says the place the figures were for and where it came from (COD-3).
 The plan states its place in `site.country` ([the place](plan-file.md#the-place)); `--country`
