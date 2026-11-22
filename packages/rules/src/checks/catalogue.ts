@@ -66,6 +66,21 @@ export const RULES: readonly Rule[] = [...PLAN_RULES, ...FIGURE_RULES]
 /** The rooms the area rule sizes: where people live, sleep or eat. Kitchens are left out. */
 export const HABITABLE_USES: readonly RoomUse[] = ['bedroom', 'living', 'dining']
 
+/**
+ * The room uses each figure rule looks at (WRT-3, lab AB-8). The checks go by a room's stated
+ * use and never by its name, so a change of use can change which of them apply to it.
+ */
+export const RULE_USES: Readonly<Record<FigureRuleId, readonly RoomUse[]>> = {
+  'habitable-room-area': HABITABLE_USES,
+  'escape-opening': ['bedroom']
+}
+
+/** The figure rules that look at a room of this use; none for a room with no use stated. */
+export function rulesForUse(use: RoomUse | undefined): readonly (Rule & { readonly id: FigureRuleId })[] {
+  if (use === undefined) return []
+  return FIGURE_RULES.filter((rule) => RULE_USES[rule.id].includes(use))
+}
+
 /** What the figure checks never look at. Shown with every report, after the core's own. */
 export const FIGURE_LIMITS: readonly string[] = [
   'Windows are measured as drawn: the part that opens may be smaller',

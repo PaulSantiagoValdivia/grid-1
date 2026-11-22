@@ -211,13 +211,20 @@ function wallsMissing(a: FloorPlan, b: FloorPlan, map: Transform): Wall[] {
 
 interface OpeningPair { a: string; b: string }
 
+/** The floor an opening is on: its wall's (C5). */
+function openingFloor(plan: FloorPlan, wallId: string): string {
+  return plan.walls.find((w) => w.id === wallId)?.floor ?? 'ground'
+}
+
 function pairOpenings(a: FloorPlan, b: FloorPlan, map: Transform): { pairs: OpeningPair[]; onlyA: string[]; onlyB: string[] } {
   const pairs: OpeningPair[] = []
   const usedB = new Set<string>()
   for (const o of a.openings) {
     const at = openingAt(a, o.id)
+    const floor = openingFloor(a, o.wall)
     const match = b.openings.find((x) => {
-      if (usedB.has(x.id) || x.type !== o.type) return false
+      // The same place on another floor is another opening (WRT-3: a window moved on one floor of a block).
+      if (usedB.has(x.id) || x.type !== o.type || openingFloor(b, x.wall) !== floor) return false
       const there = openingAt(b, x.id)
       return at !== null && there !== null && close(map(at), there, Math.max(NEAR_M, Math.abs(x.width - o.width) / 2 + NEAR_M))
     }) ?? b.openings.find((x) => !usedB.has(x.id) && x.id === o.id && x.type === o.type)

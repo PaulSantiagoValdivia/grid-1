@@ -22,9 +22,10 @@ import {
   type FloorPlan,
   type Issue
 } from '@ongrid/floorplan/geometry'
-import { DEFAULT_FLOOR_ID, FloorPlanSchema, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_FLOOR_ID, FloorPlanSchema, ROOM_USES, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type TextMark, type TextRead } from '@ongrid/floorplan/types/jsonText'
 import { readPlanParts, type PartRef, type ReadFault } from '@ongrid/floorplan/types/readParts'
+import { readingNotes, type ReadingNote } from '@ongrid/floorplan/types/reading'
 import { FIGURE_LIMITS } from '../checks/catalogue'
 import { checkLocalRules, type CheckOptions } from '../checks/check'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from '../checks/types'
@@ -146,6 +147,53 @@ function refusalLines(raw: Record<string, unknown>, issues: readonly ZodIssue[])
   })
 }
 
+/** What each place may hold, for a field Grid does not know there. */
+const FIELDS_OF: Record<string, string> = {
+  walls: 'a wall',
+  rooms: 'a room',
+  openings: 'an opening',
+  floors: 'a floor',
+  items: 'a fixture',
+  '': 'the plan',
+  referenceImage: 'the trace image',
+  written: 'the record of how the plan was written'
+}
+
+/**
+ * The words Grid does not read (MSG-4), one line each, about the part they are on: a field Grid
+ * does not know, a room use it does not know, and an empty plan. They are worth a look: the
+ * plan is read without them, and that may be what explains the other lines.
+ */
+function readingLines(raw: Record<string, unknown>, notes: readonly ReadingNote[], names: Names): ResultLine[] {
+  return notes.map((note) => {
+    if (note.kind === 'empty') return line('plan/empty', 'worth-a-look', { kind: 'plan', id: '' }, null, blank(NOUN.plan))
+    // The part by where it is in the file; named as every other line names it.
+    const at = note.part === null ? null : partAt(raw, [note.part.list, note.part.index])
+    const part = at === null || at.thing.kind === 'plan' ? null : { thing: at.thing, ...names.thingOf(at.thing.kind, at.thing.id) }
+    const thing = part?.thing ?? { kind: 'plan' as const, id: '' }
+    const subject = { ...blank(part?.label ?? NOUN.plan), name: part?.name ?? '', nearest: note.nearest }
+    if (note.kind === 'unknown-field') {
+      const word = note.field === null ? 'with a name Grid does not repeat' : quoted(note.field)
+      const what = FIELDS_OF[note.part?.list ?? note.at] ?? quoted(note.at)
+      return line('plan/unknown-field', 'worth-a-look', thing, part?.floor ?? null, {
+        ...subject,
+        word,
+        nearestWritten: note.nearestWritten,
+        known: `the fields of ${what}: ${note.known.join(', ')}`,
+        place: note.at || 'the top of the plan'
+      })
+    }
+    const word = note.use !== null ? quoted(note.use) : note.notText !== null ? `that is ${note.notText}` : 'that Grid does not repeat'
+    return line('plan/unknown-use', 'worth-a-look', thing, part?.floor ?? null, {
+      ...subject,
+      word,
+      known: `the uses Grid knows: ${ROOM_USES.join(', ')}`,
+      place: `${note.part.list}[${note.part.index}].use`
+    })
+  })
+}
+
+
 /** A part a reading fault is about, as a line names it: `Door "d1"`, or `The wall at walls[3]` when its id cannot be read. */
 function faultPart(raw: Record<string, unknown>, ref: PartRef): { thing: Thing; floor: string | null; label: string; place: string } {
   const place = `${ref.list}[${ref.index}]`
@@ -229,7 +277,7 @@ function textFaultLine(fault: Extract<TextRead, { ok: false }>['fault']): Result
 }
 
 type Read =
-  | { plan: FloorPlan; lines: ResultLine[]; leftOutWalls: ReadonlySet<string> }
+  | { plan: FloorPlan; raw: Record<string, unknown>; lines: ResultLine[]; leftOutWalls: ReadonlySet<string> }
   | { plan: null; lines: ResultLine[] }
 
 function readPlan(raw: unknown): Read {
@@ -251,7 +299,7 @@ function readPlan(raw: unknown): Read {
     if (read.refusal.kind === 'not-an-object') return { plan: null, lines: [line('plan/not-an-object', 'refused', { kind: 'plan', id: '' }, null, blank(NOUN.plan))] }
     return { plan: null, lines: refusalLines(value as Record<string, unknown>, read.refusal.issues) }
   }
-  return { plan: read.plan, lines: faultLines(value as Record<string, unknown>, read.faults), leftOutWalls: read.leftOutWalls }
+  return { plan: read.plan, raw: value as Record<string, unknown>, lines: faultLines(value as Record<string, unknown>, read.faults), leftOutWalls: read.leftOutWalls }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -437,6 +485,10 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       lines.push(checkFailed(name, error))
     }
   }
+  // What the file says that Grid does not read leads the lines of its kind: it may explain them.
+  stage('reading', () => {
+    lines.push(...readingLines(read.raw, readingNotes(read.raw), names))
+  })
   stage('drawing check', () => {
     lines.push(...validatePlan(plan, undefined, { leftOutWalls: read.leftOutWalls }).issues.map((issue) => issueLine(issue, names)))
   })
