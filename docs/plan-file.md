@@ -12,6 +12,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
 - [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
 - [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
+- [Sloped roofs and ceilings](#sloped-roofs-and-ceilings): `opening/above-roof`, `floor/rooflight-misplaced`, `floor/dormers-not-drawn`, `opening/missing-wall`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
@@ -33,11 +34,11 @@ file never reaches the exports with its letters turned into question marks. A fi
 | Text | At most | Also refused |
 |---|---|---|
 | a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
+| an id: of a wall, room, opening, floor, stair or rooflight, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
 | walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
-| the lowered zones of one ceiling | 50,000 | |
+| the lowered zones of one ceiling, the rooflights of one roof | 50,000 | |
 | the walls a room lists | 2,000 | |
 
 A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
@@ -320,6 +321,58 @@ and a floor stands above the ground by its height over that level: a door to the
 foot lies under the ground is named, wholly or in part (`opening/below-ground`). Unstated, the
 ground floor is the floor at level 0, as before, and nothing is named: every report says the
 check needs the ground level. A ground level for each side of a house on a slope comes later.
+
+## Sloped roofs and ceilings
+
+A floor may state its roof (LVL-6), and its walls and rooms are cut to it. Unstated, the roof is
+flat on the floor's walls, as above.
+
+```json
+{ "floors": [{ "id": "attic", "name": "Attic", "level": 1,
+               "roof": { "shape": "gable", "eaves": 1.0, "ridge": 3.6, "ridgeRuns": "east-west",
+                         "rooflights": [{ "id": "rl-1", "at": [2, 1.5], "width": 0.78, "length": 1.18 }] } }] }
+```
+
+| Field | What it states |
+|---|---|
+| `roof.shape` | `flat`, `mono-pitch`, `gable` or `hip` |
+| `roof.eaves` | Metres above the floor's level to the roof's underside at its eaves, on the outside walls' lines. A flat roof's underside is level at this height |
+| `roof.pitch` | Degrees, above 0 and under 90. A sloped roof states its pitch or its ridge, never both |
+| `roof.ridge` | Metres above the floor's level to the underside at the top: the ridge of a gable or a hip, the high side of a mono-pitch roof. Higher than the eaves |
+| `roof.ridgeRuns` | A gable's only: `east-west` or `north-south`, along the drawing's sides. Unstated, along the longer sides |
+| `roof.highSide` | A mono-pitch roof's, and needed there: the side it rises to, `north`, `east`, `south` or `west` |
+| `roof.rooflights` | Windows in the slope: each an `id`, `at` (its middle on the plan), `width` along the slope's eaves and `length` up the slope, both measured on the slope |
+| `roof.dormers` | Not supported yet: a roof that lists any is drawn and measured without them (`floor/dormers-not-drawn`) |
+
+Where the roof stands: its eaves run round the smallest rectangle that holds the lines of the
+floor's outside walls (every solid wall when none is stated `exterior`), turned to the longest of
+them, so a plan drawn off the drawing's axes gets a roof square to its walls. A gable's two planes
+rise from the two sides along its ridge, a hip's four from all four sides at one pitch, a
+mono-pitch roof's one from the side opposite its high side. Over an L or a T the planes cover the
+whole rectangle: there are no valleys yet.
+
+What it cuts:
+
+- **Walls.** A wall standing inside the roof's rectangle is no higher, along its line, than the
+  roof's underside over it: a gable is a gable, and a partition under the slope follows it. A wall
+  that states no height, on a floor that states its roof, rises to the roof's top and is cut to it.
+  A door or window whose top lies above the roof over its stretch of wall is refused, with the
+  height that fits at its sill (`opening/above-roof`): the views, the exports and the checks read
+  the cut top, and a floor's height (when it states none) is its tallest wall as cut.
+- **Rooms.** A room's ceiling is the roof's underside, under its own `height` when it states one.
+  Its floor is reported by headroom band ([areas.md](areas.md)), and its height in `grid_measure`
+  is given from its lowest to its highest. A stated ceiling and its lowered zones lie only where
+  the roof stands higher than them.
+- **Rooflights.** Each lies on one slope of the roof, wholly inside it; one that leaves the roof or
+  crosses a ridge or a hip is left out (`floor/rooflight-misplaced`). An opening sits in a wall:
+  an opening whose `wall` names the roof, a room or a floor is told that a window in the roof is a
+  rooflight (`opening/missing-wall`).
+
+The roof is drawn in the 3D view and the OBJ and glTF files on its slopes, open at its rooflights;
+in the IFC it is an `IfcRoof` of its type (`FLAT_ROOF`, `SHED_ROOF`, `GABLE_ROOF`, `HIP_ROOF`) over
+one `IfcSlab` `ROOF`, each rooflight an `IfcOpeningElement` filled by an `IfcWindow`. A wall the
+roof cuts, and a space under it, are clipped solids, so the file holds the volume under the roof.
+A parapet stands on a flat roof only. Rooms text writes the roof as it is, on a `raw floor` line.
 
 ## Floor no room claims
 
