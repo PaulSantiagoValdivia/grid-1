@@ -41,9 +41,9 @@ takes the picture from it. `kind=eye` is built on the same record (`eyeCamera`),
 view's answer carries it too. The text gives the camera in two lines, where it stands, how to
 move it in one call, and the plan's saved views.
 
-**Saved views** (C10 in `types/floorplan.ts`: `views`, `ViewSchema`). Each holds its name, the
+**Saved views** (C11 in `types/floorplan.ts`: `views`, `ViewSchema`). Each holds its name, the
 setting, `floors` and the BCF camera. A new tool, `grid_save_view` (`packages/cli/src/mcp/viewTool.ts`,
-the 27th, last), saves a record by name through `writeChange`, with `replace` and `remove`.
+the 29th, last), saves a record by name through `writeChange`, with `replace` and `remove`.
 `grid_view view=<name>`, `grid draw --view <name>` and the app (handed the record) call it up.
 `grid_mirror` mirrors the saved views with the plan. `coverage.ts`: the sheet does not show them.
 `planText.ts` holds a view's name to a name's limit and its cut to an id's.
@@ -55,7 +55,7 @@ table, `degree` and `mm`.
 **Docs**: `docs/plan-file.md` "Saved views, and the camera record"; `docs/tool-server.md` "A
 camera you can set, and saved views" and the two tool rows; `docs/commands.md` `--view` and the
 tool count; `docs/tolerances.md`; `CHANGELOG.md` (Unreleased); the agents' changelog in
-`docs/result-contract.md`; `AGENTS.md` (27 tools, `viewTool.ts`, where the camera lives).
+`docs/result-contract.md`; `AGENTS.md` (29 tools, `viewTool.ts`, where the camera lives).
 
 ## The done-when items
 
@@ -92,8 +92,8 @@ for number, looking along the record's direction with its up.
 ## Expectations changed
 
 - `packages/cli/src/mcp/__tests__/tools.test.ts`: `grid_save_view` added last to `ORDER` and to
-  `CHANGES_PLAN`; the tool limit 26 → 27 (24 before merging CNT-9), with its reason; a call for it in `CALLS`.
-- `packages/cli/src/mcp/__tests__/server.test.ts`: 26 → 27 tools.
+  `CHANGES_PLAN`; the tool limit 28 → 29 (26 → 27 before merging WRT-8, 24 before merging CNT-9), with its reason; a call for it in `CALLS`.
+- `packages/cli/src/mcp/__tests__/server.test.ts`: 28 → 29 tools (26 → 27 before merging WRT-8).
 - `packages/cli/src/mcp/__tests__/checkView.test.ts`: the refusal of `ids` with `kind=3d` now
   lists the 3d arguments (`floor, from, bearing, tilt, distance, eye_height, lens, room, camera,
   view, turn, tilt_by`).
@@ -111,7 +111,7 @@ for number, looking along the record's direction with its up.
 
 1. **A new tool for saving, not an argument of `grid_view`.** Saving writes the plan file;
    `grid_view` is read-only, and hosts approve read-only tools without asking. Folding saving in
-   would have made every picture call a write. So `grid_save_view` is the 27th tool, last, marked
+   would have made every picture call a write. So `grid_save_view` is the 29th tool, last, marked
    as changing the plan. Reversible: it can move into `grid_view` (losing its read-only hint) or
    into `grid_preview` later.
 2. **`from` stays a side of the drawing; `bearing` is a compass bearing.** Every Grid argument
@@ -162,4 +162,15 @@ took C9 in the plan format, so saved views are C10. The tools are 27, `grid_save
 and lint clean; the affected tests (the CLI's MCP, `src/__tests__`, `grid.e2e`, `everyPath`, the
 coverage tests and edits, the floorplan camera, tolerance and types tests, the viewer's still and
 3D tests, the rules' result tests) passed, 867 with 1 skipped, of 868 in 67 files.
+`npm run scoreboard`: same as the stored figures.
+
+After merging `main` at 5039f12 (COD-3, WRT-8): conflicts in `AGENTS.md`, `CHANGELOG.md`,
+`docs/commands.md`, `docs/result-contract.md`, `docs/tool-server.md`, `draw/views.ts`,
+`serveTools.ts`, `floorplan.ts`, `tools.test.ts` and `server.test.ts`, all kept both sides, VEW-3's
+changelog entries at the top. COD-3 took C10 in the plan format for the place, so saved views are
+C11. `grid_diff` and `grid_mark_start` stay where WRT-8 put them; `grid_save_view` stays last, the
+29th; `draw/views.ts` keeps the camera record beside WRT-8's comparison picture. Build, typecheck
+and lint clean; the affected tests (the CLI's MCP with the replay, draw, sheet, edits, command
+tests and WRT-8's versions, the floorplan geometry and types tests, the rules' result tests and
+COD-3's place test, the viewer) passed, 3,930 with 2 skipped, of 3,932 in 211 files.
 `npm run scoreboard`: same as the stored figures.
