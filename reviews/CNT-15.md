@@ -158,5 +158,11 @@ In `packages/cli/src/mcp/__tests__/namedTypes.test.ts` (13 tests) and
 
 ## Checks run
 
-See the report at the end of the session: the full suite, `npm run typecheck`, `npm run lint`
-and `npm run scoreboard`, after merging `main`.
+After merging `main` at c7ae5613 (CNT-6):
+
+- Full suite (`vitest run --exclude '.claude/**' --maxWorkers=4 --minWorkers=1`): 6,075 passed,
+  4 skipped, 2 failed on time under load (`grid.e2e.test.ts` speed, `diff-size.test.ts` size
+  guard); both pass rerun on their own (100 of 100).
+- `npm run typecheck` and `npm run lint`: clean.
+- `npm run scoreboard`: same as the stored figures; no count moves, so `current.json` needs no
+  update.
