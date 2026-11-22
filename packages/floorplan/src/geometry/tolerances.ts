@@ -355,8 +355,19 @@ export const TOLERANCES = {
     value: 2,
     unit: 'm',
     decides:
-      'A door to the outside on a floor standing higher than this above the ground floor opens in ' +
-      'mid-air: it is named, and it is not a way out. Lower, a few steps outside can reach the ground.',
+      'A door to the outside on a floor standing higher than this above the ground (the level the ' +
+      'site states, else the ground floor\'s) opens in mid-air: it is named, and it is not a way out. ' +
+      'Lower, a few steps outside can reach the ground.',
+    basis: own
+  },
+
+  openingBelowGround: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'A door or window in an outside wall whose foot lies less than this under the ground level the ' +
+      'site states stands at the ground; further down, it is named as lying below the ground.',
     basis: own
   },
 
@@ -791,6 +802,15 @@ export const TOLERANCES = {
     value: 1e-15,
     unit: 'ratio',
     decides: 'A slope below this is none when a segment is clipped.',
+    basis: own
+  },
+  shellGrid: {
+    kind: 'arithmetic',
+    value: 1e-6,
+    unit: 'm',
+    decides:
+      'The corners of a slab, a roof and a parapet are drawn and exported rounded to this grid: the ' +
+      'join of the walls leaves each corner of an outline a hair off square, and this puts it square.',
     basis: own
   },
   joinGrids: {

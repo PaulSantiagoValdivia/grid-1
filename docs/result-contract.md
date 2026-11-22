@@ -227,6 +227,7 @@ label.
 | `room/no-route-to-door-out` | "{name}" has no route to a door to the outside, nor to a door into a space that is not drawn | a route to a door to the outside, or to the door into the space not drawn |
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
 | `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
+| `opening/below-ground` | The {window} in "{name}" lies wholly below the ground: its top is {depth} m under the ground level the site states (partly: its sill, threshold or foot) | a door or window above the ground outside, or a light well or an outside stair in front of it |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
 | `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
@@ -300,6 +301,7 @@ found in them. A `reason` is one of:
 | `way_out_not_drawn` | the floor's only door out leads to a space that is not drawn |
 | `alone_off_ground` | the only room on a floor off the ground, reached by a stair the plan does not draw |
 | `above_escape_storeys` | above the third storey, where the figures here stop |
+| `no_ground_level` | the plan states no ground level for the site (LVL-4: the check of doors and windows below the ground) |
 | `no_use` | no use stated |
 | `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
 
@@ -339,8 +341,9 @@ adds. A check that looked at nothing still says "Nothing was checked for …". `
 and `grid_check` with `full: true` add the checks run, every figure the checks applied, each
 check's parts one by one, and what these checks never look at (`limits`). The data is the same
 either way: `grid check --json` gives the whole check, and `grid_check`'s data keeps `coverage`
-and `limits`. For the lab's 62.65 m² flat the short text is 988 bytes from `grid check` and 973
-from `grid_check` (`packages/cli/src/command/__tests__/shortReport.test.ts`).
+and `limits`. For the lab's 62.65 m² flat the short text is 1,201 bytes from `grid check` and 1,184
+from `grid_check` (`packages/cli/src/command/__tests__/shortReport.test.ts`): 988 and 973 without
+the line saying the plan states no ground level (LVL-4).
 
 A person can set a note aside as seen, with a reason and the name or role they give, through
 `grid check --seen <n> --reason <text> --by <name>` or `grid_mark_seen`. A seen note is never left
@@ -482,6 +485,24 @@ A change that would add a problem that leaves a part out is refused, and nothing
   the others listed, and a change to the part's marks brings a seen one back.
 - A wall that states no height is described as "wall height not stated (drawn 2.7 m high)" by
   `grid_describe`, and its rooms text (`as=rooms`) states no height for it.
+
+### 2026-11-22: slabs, roofs, ceilings and the ground (LVL-4)
+
+- New finding `opening/below-ground`, under the new plan check `openings-above-ground`: a door,
+  window or doorless opening in an outside wall that lies below the ground level the site states
+  (`site.ground`, beside CNT-3's fields of `site`), wholly or in part. The finding carries `belowGround` (`foot`, `top`, in metres
+  under the ground, and `wholly`). With no ground stated the check skips every door and window with
+  the new reason `no_ground_level` and is not among the checks run; every report's limits gain one
+  line saying so.
+- With a ground level stated, the ground floor is the floor nearest it, and a floor stands above the
+  ground by its height over that level: `opening/door-out-above-ground` gives that height.
+  Unstated, both are as before.
+- A room marked `void` needs no door and has no route to check: it is no room to stand in.
+- `grid_takeoff` answers `envelope`: per floor the slab (as built, less its openings over stairs,
+  lifts and voids), the roof over every part with nothing above, and each figure's `assumed` list,
+  what Grid took that the plan does not state. Room lines gain `ceilingHeight` and `lowered`.
+- The 3D still (`grid_view`) and the exports draw a slab under every floor and a roof over every
+  part with nothing above; a still of one floor alone still has no roof.
 
 ### 2026-11-22: use indicators round the fixtures (CNT-13)
 

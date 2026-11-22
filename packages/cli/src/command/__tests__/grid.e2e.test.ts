@@ -256,8 +256,9 @@ describe('grid check', () => {
   })
 
   it('lists ceiling height and load-bearing walls among what the checks never look at', () => {
-    // MSG-10: in the full report; the short one says how many there are and where.
-    expect(grid('check', 'two-bed-flat.json').out).toContain('what is never looked at (9).')
+    // MSG-10: in the full report; the short one says how many there are and where. LVL-4 adds
+    // the line on the ground level, which the checks set no door or window against.
+    expect(grid('check', 'two-bed-flat.json').out).toContain('what is never looked at (10).')
     const run = grid('check', 'two-bed-flat.json', '--full')
     expect(run.status).toBe(0)
     const never = run.out.slice(run.out.indexOf('What these checks never look at'))
