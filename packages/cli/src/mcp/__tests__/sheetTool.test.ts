@@ -181,3 +181,32 @@ describe('grid_sheet (VEW-7)', () => {
     await expect(call({ plan: 'plan.json', layout: 'client', sheet: { version: '1', floors: { attic99: ['x'] } } })).rejects.toThrow(/floors/)
   })
 })
+
+describe('grid_sheet layout drawing (SHT-6)', () => {
+  it('writes the PDF, SVG and PNG into exports/ and answers with the PNG to look at', async () => {
+    const ctx = context()
+    const reply = (await tool.run(readArgs(tool, { plan: 'plan.json', layout: 'drawing', scale: 100, paper: 'A4' }), ctx.context)) as { text: string; data: Record<string, unknown>; image?: { data: Uint8Array; mimeType: string } }
+    expect(reply.data).toMatchObject({ written: 'exports/plan-drawing.pdf', svg: 'exports/plan-drawing.svg', png: 'exports/plan-drawing.png', layout: 'drawing', scale: 100, paper: 'A4', leftOut: 0 })
+    expect(reply.image?.mimeType).toBe('image/png')
+    expect(reply.text.split('\n')[0]).toMatch(/ plan at 1:100 on A4 (portrait|landscape)\.$/)
+    expect(readdirSync(join(ctx.dir, 'exports')).sort()).toEqual(['plan-drawing.pdf', 'plan-drawing.png', 'plan-drawing.svg'])
+  })
+
+  it('chooses the scale and paper when neither is given, and says so', async () => {
+    const reply = await call({ plan: 'plan.json', layout: 'drawing' })
+    expect(reply.data).toMatchObject({ scale: 100, paper: 'A4' })
+    expect(reply.text.split('\n')[0]).toContain('(the largest of 1:100, 1:200 and 1:500 the floor fits, on the smallest paper)')
+  })
+
+  it.each([
+    [{ layout: 'client', paper: 'A4' }, 'paper is for layout drawing, not client: leave it out.'],
+    [{ layout: 'check', scale: 100, roomSizes: false }, 'scale and roomSizes are for layout drawing, not check: leave them out.'],
+    [{ layout: 'drawing', scale: 12.5 }, 'scale is N in 1:N, a whole number, such as 100.'],
+  ])('refuses %j in one line', async (args, line) => {
+    await expect(call({ plan: 'plan.json', ...args })).rejects.toThrow(line)
+  })
+
+  it('refuses a floor too large for the paper, saying what fits', async () => {
+    await expect(call({ plan: 'plan.json', layout: 'drawing', scale: 20, paper: 'A4' })).rejects.toThrow(/^At 1:20 the floor's drawing is \d+ x \d+ mm, larger than A4 can hold: A\d fits it, or 1:\d+ fits A4\.$/)
+  })
+})

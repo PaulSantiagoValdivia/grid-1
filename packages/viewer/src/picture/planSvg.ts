@@ -69,6 +69,11 @@ export interface PictureOptions {
   readonly paperScale?: number
   /** The overall and room dimensions. On by default. */
   readonly showDimensions?: boolean
+  /**
+   * SHT-6: each room's own width and depth (its room dimensions), when the dimensions are shown.
+   * On by default; off leaves the dimensions outside the plan only.
+   */
+  readonly roomSizes?: boolean
   /** How the room tags read: capitals, room numbers, how the area is rounded. Plain by default. */
   readonly labels?: LabelStyle
   /**
@@ -273,7 +278,7 @@ function framePicture(plan: FloorPlan, options: PictureOptions) {
   // LVL-8: a plan's opening patterns are drawn as the plain openings they expand into.
   const slice = planForFloor(withPatterns(plan), floor)
   const drawing = buildFloorPlan(slice)
-  const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
+  const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing, { rooms: options.roomSizes !== false })
   const around = framingOf(drawing, dimensions)
   // LVL-9: the marks stand outside the drawing and its dimensions, and the view frames them too.
   const marks = marksOf(plan, floor, drawing, around, options.marks)
@@ -295,6 +300,17 @@ function withMarks(around: Bounds, marks: DrawingMarks): Bounds {
     { x: p.x + reach, y: p.y + reach }
   ])
   return computeBounds([around.min, around.max, ...points])
+}
+
+/**
+ * SHT-6: the part of the plan a picture with these options frames before its margin, in plan
+ * metres with y up: the drawing, its dimensions and its marks, or `frame` when it is given. A
+ * sheet at a true scale sizes its picture from it.
+ */
+export function pictureFrame(plan: FloorPlan, options: PictureOptions = {}): Bounds {
+  const { drawing, dimensions, marks } = framePicture(plan, options)
+  const around = framingOf(drawing, dimensions)
+  return options.frame ?? (marks === null ? around : withMarks(around, marks))
 }
 
 /**

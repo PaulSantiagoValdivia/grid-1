@@ -181,6 +181,11 @@ function dateText(date: Date, w: Words): string {
   return `${date.getUTCDate()} ${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`
 }
 
+/** SHT-6: a sheet's date as every sheet writes it, in the language's month names. */
+export function sheetDate(date: Date, language: Language = DEFAULT_LANGUAGE): string {
+  return dateText(date, wordsIn(language))
+}
+
 /**
  * Each floor's frame, in plan metres with Y up, as `planPicture` takes it in `frame` (before
  * its margin). Every frame is sized so that `fitTo` grows it to the largest default view of

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { extentOf, readPdf } from '../../sheet/__tests__/readPdf'
 
 /** VEW-7: `grid sheet`, run as a person runs it: the built file, in a temporary folder. */
 
@@ -169,5 +170,49 @@ describe('grid sheet (VEW-7)', () => {
     const run = grid(['sheet', 'shut.json', '--layout', 'check'])
     expect(run.status).toBe(0)
     expect(existsSync(join(dir, 'exports', 'shut-check.pdf'))).toBe(true)
+  })
+})
+
+describe('grid sheet --scale --paper (SHT-6)', () => {
+  /** A 10 m wall along x, 0.2 m thick, alone on its floor. */
+  const oneWall = { version: '1', units: 'm', walls: [{ id: 'w', start: [0, 0], end: [10, 0], thickness: 0.2, height: 2.7, kind: 'exterior' }], rooms: [], openings: [] }
+
+  it('writes a vector PDF, an SVG and a PNG, and a 10 m wall measures 100 mm on the PDF', () => {
+    writeFileSync(join(dir, 'wall.json'), JSON.stringify(oneWall))
+    const run = grid(['sheet', 'wall.json', '--scale', '1:100', '--paper', 'A4'])
+    expect(run.status).toBe(0)
+    expect(run.out).toBe('Ground floor plan at 1:100 on A4 landscape.\nWrote exports/wall-drawing.pdf, exports/wall-drawing.svg and exports/wall-drawing.png\n')
+    const page = readPdf(readFileSync(join(dir, 'exports', 'wall-drawing.pdf')))
+    expect(page.hasImage).toBe(false)
+    expect([Math.round(page.width), Math.round(page.height)]).toEqual([297, 210])
+    const wall = extentOf(page.paths.filter((p) => p.paint.startsWith('f') && p.fill === '0.349 0.349 0.349'))
+    expect(wall.width).toBeCloseTo(100, 2)
+    const texts = page.texts.map((t) => t.text)
+    for (const words of ['Floor plan of Ground floor, drawn at 1:100 on A4.', 'PROJECT', 'wall', 'Ground floor plan', '1:100 on A4', 'Draft', 'General guidance, not your local rules']) expect(texts).toContain(words)
+    expect(readFileSync(join(dir, 'exports', 'wall-drawing.svg'), 'utf8')).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="297mm" height="210mm"/)
+    expect(readFileSync(join(dir, 'exports', 'wall-drawing.png')).subarray(1, 4).toString('latin1')).toBe('PNG')
+  })
+
+  it('names each floor of a plan with several by its place, and writes beside --out', () => {
+    expect(grid(['sheet', 'two-floor-house.json', '--layout', 'drawing', '--floor', 'first']).status).toBe(0)
+    expect(existsSync(join(dir, 'exports', 'two-floor-house-floor-2-drawing.pdf'))).toBe(true)
+    mkdirSync(join(dir, 'print'))
+    const run = grid(['sheet', 'two-floor-house.json', '--scale', '50', '--out', 'print/ground.pdf'])
+    expect(run.status).toBe(0)
+    for (const ext of ['pdf', 'svg', 'png']) expect(existsSync(join(dir, 'print', `ground.${ext}`))).toBe(true)
+  })
+
+  it.each([
+    [['--scale', '1:20', '--paper', 'A4'], 1, /^grid: At 1:20 the floor's drawing is \d+ x \d+ mm, larger than A4 can hold: A\d fits it, or 1:\d+ fits A4\.\n$/],
+    [['--layout', 'check', '--paper', 'A4'], 2, /^grid: --paper is for a drawing at a scale \(--layout drawing\), not a check sheet: leave it out\.\n$/],
+    [['--scale', '1:0'], 2, /^grid: --scale takes 1:N, N a whole number from 1 to 1000/],
+    [['--paper', 'letter'], 2, /^grid: --paper takes A4, A3, A2, A1 or A0\.\n$/],
+    [['--room-sizes', 'yes'], 2, /^grid: --room-sizes takes on or off\.\n$/],
+    [['--scale', '100', '--out', 'x.svg'], 2, /^grid: --out must name a \.pdf file/],
+    [['--scale', '100', '--floor', 'attic'], 2, /^grid: --floor "attic" is not a floor of this plan/],
+  ])('refuses %j by name', (args, status, message) => {
+    const run = grid(['sheet', 'two-floor-house.json', ...args])
+    expect(run.status).toBe(status)
+    expect(run.err).toMatch(message)
   })
 })
