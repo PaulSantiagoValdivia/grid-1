@@ -3,7 +3,7 @@
   "units": "m",
   "floors": [
     {"id": "ground", "name": "Main floor", "level": 0},
-    {"id": "loft", "name": "Sleeping loft", "level": 1}
+    {"id": "loft", "name": "Sleeping loft", "level": 1, "overhang": "meant"}
   ],
   "walls": [
     {"id": "ground-ext-south", "start": [0.057, 0.057], "end": [7.26, 0.057], "thickness": 0.114, "height": 3.2, "kind": "exterior", "floor": "ground"},

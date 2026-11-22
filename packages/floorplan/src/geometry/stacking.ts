@@ -42,7 +42,7 @@ interface Stretch {
   readonly y0: number
   readonly x1: number
   readonly y1: number
-  /** Across the stretch: how far it reaches past (`widthOf`). */
+  /** How far it reaches past: its extent toward its side, or across it (`widthOf`) all round. */
   readonly depth: number
   /** The side of the floor below it lies on, or all round it when it goes round the floor. */
   readonly side: 'north' | 'east' | 'south' | 'west' | 'all round'
@@ -78,7 +78,8 @@ function widthOf(piece: Polygon, area: number): number {
   return (perimeter - Math.sqrt(Math.max(0, perimeter * perimeter - 16 * area))) / 4
 }
 
-function past(a: MultiPolygon, b: MultiPolygon, middle: { x: number; y: number }, walls: readonly Wall[]): Stretch[] | null {
+function past(a: MultiPolygon, b: MultiPolygon, frame: { x0: number; y0: number; x1: number; y1: number }, walls: readonly Wall[]): Stretch[] | null {
+  const middle = { x: (frame.x0 + frame.x1) / 2, y: (frame.y0 + frame.y1) / 2 }
   let pieces: MultiPolygon
   try {
     pieces = polygonClipping.difference(a, b)
@@ -93,15 +94,14 @@ function past(a: MultiPolygon, b: MultiPolygon, middle: { x: number; y: number }
     const ys = ring.map((p) => p[1])
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
     const area = multiArea([piece])
-    const depth = widthOf(piece, area)
-    if (!(depth > allowed({ x0, y0, x1, y1 }, walls))) continue
-    const dx = (x0 + x1) / 2 - middle.x
-    const dy = (y0 + y1) / 2 - middle.y
+    if (!(widthOf(piece, area) > allowed({ x0, y0, x1, y1 }, walls))) continue
     // The side of the floor below it lies on: the way its middle is from the middle of that floor,
-    // read across the stretch's own long side when it is a strip; all round when it holds the middle.
-    const strip = x1 - x0 < y1 - y0 ? 'ew' : 'ns'
+    // as a share of the floor's half-width and half-depth; all round when it holds the middle.
+    const dx = ((x0 + x1) / 2 - middle.x) / Math.max((frame.x1 - frame.x0) / 2, tolerance('noLength'))
+    const dy = ((y0 + y1) / 2 - middle.y) / Math.max((frame.y1 - frame.y0) / 2, tolerance('noLength'))
     const round = x0 < middle.x && middle.x < x1 && y0 < middle.y && middle.y < y1
-    const side = round ? 'all round' : strip === 'ew' ? (dx >= 0 ? 'east' : 'west') : dy >= 0 ? 'north' : 'south'
+    const side = round ? 'all round' : Math.abs(dx) >= Math.abs(dy) ? (dx >= 0 ? 'east' : 'west') : dy >= 0 ? 'north' : 'south'
+    const depth = side === 'all round' ? widthOf(piece, area) : side === 'east' || side === 'west' ? x1 - x0 : y1 - y0
     found.push({ x0, y0, x1, y1, depth, side, area })
   }
   return found.sort((p, q) => q.area - p.area)
@@ -139,14 +139,14 @@ export function stackingIssues(plan: FloorPlan, spaces: readonly FloorSpaces[]):
     }
     const xs = lowerUnion.flatMap((piece) => piece[0]!.map((p) => p[0]))
     const ys = lowerUnion.flatMap((piece) => piece[0]!.map((p) => p[1]))
-    const middle = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
+    const frame = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }
     for (const floor of floors.filter((f) => levelOf(f) === levels[i + 1])) {
       if (floor.overhang === 'meant') continue
       const upper = asMulti(outlines.get(floor.id) ?? [])
       if (upper.length === 0) continue
       const walls = [...below.flatMap((f) => wallsOnFloor(plan, f.id)), ...wallsOnFloor(plan, floor.id)]
-      const over = past(upper, lowerUnion, middle, walls)
-      const back = past(lowerUnion, upper, middle, walls)
+      const over = past(upper, lowerUnion, frame, walls)
+      const back = past(lowerUnion, upper, frame, walls)
       if (over === null || back === null || (over.length === 0 && back.length === 0)) continue
       const said = (list: readonly Stretch[], verb: string): string => {
         const named = list.slice(0, NAMED).map((s) => `${m(s.depth)} ${s.side === 'all round' ? 'all round' : `on the ${s.side}`}, from ${at(s.x0, s.y0)} to ${at(s.x1, s.y1)}`)
