@@ -47,7 +47,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
-| `grid_mirror` | Mirrors the plan left to right or top to bottom |
+| `grid_mirror` | Mirrors the plan left to right or top to bottom (`how`), or turns it a quarter or half round (`turn`: 90, 180, 270 or -90 degrees, counter-clockwise as Grid draws it) |
 | `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share. Two rooms of different uses need `use`, or `zones` to keep both as zones of one open-plan room ([Zones inside one room](plan-file.md#zones-inside-one-room)); left out, the call is refused and asks. The verdict names any use the plan no longer has |
 | `grid_split_room` | Splits a room with a new wall, the new room taking one side, with a door in it |
 | `grid_add_room` | Builds a room against the outside of a side of a room, saying what happens to openings in the wall it covers |
@@ -211,7 +211,10 @@ It pairs the two versions by what stands where before it trusts an id, as
 [`grid diff`](commands.md#what-a-change-did-grid-mark-and-grid-diff) says, and answers issues
 first, then a verdict room by room, then the changes one line each. `show` chooses how much:
 `summary`, `changes`, `issues` or `all` (the default). Pass `rooms`, the rooms you meant to edit,
-and every change outside them is named. Unless `picture: false`, and when something changed, it
+and every change outside them is named. A plan that is the earlier one mirrored or turned a
+quarter or half round is said to be so first, in `turn` and in the line after "Compared with"
+(`The plan is mirrored left to right (east and west swap), and every room keeps its size.`), and
+compared from there, so a flipped flat is not every wall moved. Unless `picture: false`, and when something changed, it
 returns one picture of a floor: removed in red, added in green, changed rooms in amber with their
 old and new area, the rest pale. A plan written rooms first in both versions is compared by its
 rooms and openings: widening the living room of the two-bedroom flat by 30 cm reads as two

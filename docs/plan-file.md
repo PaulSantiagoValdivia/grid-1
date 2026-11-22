@@ -803,6 +803,14 @@ west, whichever way the drawing is turned. The site's origin, its boundary and i
 mirrored with the walls (each edge keeps its number), the
 front stays the part it names, and `yAxis` is kept.
 
+`grid_mirror` with `turn` turns the plan a quarter or half round about the middle of its walls
+(WRT-4): 90 degrees is a quarter counter-clockwise on the drawing as Grid draws it, with y up,
+the way `north` is measured; 270 or -90 a quarter clockwise. Every room keeps its size and its
+walls, every door its swing, and the fixtures and the site's origin turn with the walls. The
+stated north is kept: the building turns on its site, so what faced south faces east after a
+quarter counter-clockwise. `yAxis` is kept too, so on a page whose y runs down the same turn
+looks clockwise, and the answer says so.
+
 | Code | What it says |
 |---|---|
 | `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |

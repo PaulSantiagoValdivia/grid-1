@@ -596,6 +596,29 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: repeat, mirror and turn, and a mirrored plan recognised (WRT-4)
+
+- `grid_diff` data gains `turn`: null, or `id` (`mirror-left-right`, `mirror-top-bottom`,
+  `turn-90`, `turn-180`, `turn-270`, `mirror-diagonal`, `mirror-other-diagonal`), `mirrored`,
+  `degrees` (counter-clockwise, after any mirror) and `text`, the line the text answer gives
+  right after "Compared with". The verdict then starts with that line. A mirrored or turned plan
+  has `sameBuilding` false, and gets no picture when nothing else changed. The core's
+  `compareBuildings` gives the same `turn` and `turnLine`.
+- `grid_mirror` takes `turn` (90, 180, 270 or -90) in place of `how`, which is no longer
+  required: one of the two, never both. Its title is "Mirror or turn the plan". The answer's
+  fields are as for every change.
+- `grid_write_rooms`: rooms text's `repeat` may say where its first placement goes and take
+  `first` and `last` settings; a `floor` line may end with `copy <floor> [with openings]`; a room
+  line may say `through <floor>`. A room that rises through a floor not written after its own is
+  refused with `rooms/unknown-floor`. No new message code and no new tool.
+- With LVL-8's opening patterns: `grid_mirror` swings a pattern's door the other way with every
+  plain door's, and its text, mirror or turn, adds `Its opening pattern stays a pattern, and the
+  openings it places follow its wall.` when the plan has patterns. `grid_write_rooms` adds one
+  line when the plan file has patterns, `Kept the plan's opening pattern as the file has it: …`,
+  ending with the first thing the walls just written keep a pattern from placing, if any; its
+  `drawingProblems.after` counts the plan with its kept patterns, as `before` does. A `pattern`
+  line in rooms text is refused (`rooms/syntax`), saying where a pattern goes.
+
 ### 2026-11-22: the plot, its set-backs and the distances to it (BRF-3)
 
 - The plan's `site` may hold `boundary`, `streets`, `setbacks` and `things`

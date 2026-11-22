@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
+import { compileRoomsText } from '@ongrid/floorplan/rooms'
 import { runGrid } from '../../command/main'
 import { openProject } from '../../fs/projectFiles'
 import { bench } from '../../mcp/__tests__/replay/harness'
@@ -96,6 +97,85 @@ describe('a start marker, an edit and grid diff, in a folder with no git (done-w
     } finally {
       b.close()
     }
+  })
+})
+
+/** The comparison's first line: the one after what it was compared with. */
+const firstLine = (text: string): string | undefined => {
+  const lines = text.split('\n')
+  return lines[lines.findIndex((line) => line.startsWith('Compared with')) + 1]
+}
+
+describe('a plan mirrored or turned (WRT-4, lab Y-5)', () => {
+  it('says first, after grid_mirror, that the plan is mirrored and every room keeps its size', async () => {
+    const b = bench({ 'plan.json': JSON.parse(flat) as unknown })
+    try {
+      expect((await b.call('grid_mark_start', {})).isError).toBe(false)
+      const edit = await b.call('grid_mirror', { how: 'left-right' })
+      expect(edit.isError, edit.text).toBe(false)
+      const reply = await b.call('grid_diff', {})
+      expect(reply.isError, reply.text).toBe(false)
+      const lines = reply.text.split('\n')
+      // The first line of the comparison, right after what it was compared with.
+      expect(lines[lines.findIndex((line) => line.startsWith('Compared with')) + 1]).toBe('The plan is mirrored left to right (east and west swap), and every room keeps its size.')
+      expect(reply.text).toContain('Verdict: The plan is mirrored left to right (east and west swap), and every room keeps its size. Nothing else changed.')
+      expect(reply.text).toContain('Changes: none.')
+      expect(reply.image).toBe(false)
+      expect(reply.data).toMatchObject({ sameBuilding: false, turn: { id: 'mirror-left-right', mirrored: true, degrees: 0 }, changes: [] })
+    } finally {
+      b.close()
+    }
+  })
+
+  it("mirrors and turns a plan with an opening pattern: its door swings the other way with the plain doors, and nothing else changed (LVL-8)", async () => {
+    const rows = compileRoomsText([
+      'walls outside 0.3 inside 0.1 height 2.6',
+      'unit cell',
+      '  room room "Cell {n}" office 3 x 4',
+      '  door door in room north, centred, 0.9 wide, opens into room, hinged west',
+      'end',
+      'repeat cell 3 east as 1 at 0,0',
+      'room store "Store" storage 2 x 4 east of 3',
+    ].join('\n')).plan!
+    const front = { id: 'front', wall: 'ext-south', opening: { type: 'door', width: 0.9, height: 2.1, hinge: 'start', swing: 'left' }, count: 3, margins: { start: 1, end: 1 } }
+    const b = bench({ 'plan.json': { ...rows, patterns: [front] } })
+    const stated = (): { opening: { swing?: string } } => (JSON.parse(readFileSync(join(b.folder, 'plan.json'), 'utf8')) as { patterns: Array<{ opening: { swing?: string } }> }).patterns[0]!
+    try {
+      expect((await b.call('grid_mark_start', {})).isError).toBe(false)
+      const mirrored = await b.call('grid_mirror', { how: 'left-right' })
+      expect(mirrored.isError, mirrored.text).toBe(false)
+      expect(mirrored.text).toContain('Its opening pattern stays a pattern, and the openings it places follow its wall.')
+      expect(stated()).toEqual({ ...front, opening: { ...front.opening, swing: 'right' } })
+      const once = await b.call('grid_diff', {})
+      expect(once.isError, once.text).toBe(false)
+      expect(firstLine(once.text)).toBe('The plan is mirrored left to right (east and west swap), and every room keeps its size.')
+      expect(once.text).toContain('Changes: none.')
+
+      expect((await b.call('grid_mark_start', {})).isError).toBe(false)
+      const turned = await b.call('grid_mirror', { turn: 90 })
+      expect(turned.isError, turned.text).toBe(false)
+      expect(stated().opening.swing).toBe('right')
+      const twice = await b.call('grid_diff', {})
+      expect(firstLine(twice.text)).toBe('The plan is turned a quarter counter-clockwise, and every room keeps its size.')
+      expect(twice.text).toContain('Changes: none.')
+    } finally {
+      b.close()
+    }
+  })
+
+  it('says a quarter turn is a quarter turn, from grid edit mirror --turn, either way', async () => {
+    const dir = project()
+    expect((await grid(dir, 'mark', 'start')).status).toBe(0)
+    const turned = await grid(dir, 'edit', 'mirror', '--turn', '90')
+    expect(turned.status, turned.err).toBe(0)
+    expect(turned.out).toContain('Turned the plan a quarter counter-clockwise (90°) about the middle of its walls')
+    const after = await grid(dir, 'diff')
+    expect(after.status, after.err).toBe(0)
+    expect(firstLine(after.out)).toBe('The plan is turned a quarter counter-clockwise, and every room keeps its size.')
+    expect(after.out).toContain('Changes: none.')
+    expect((await grid(dir, 'mark', 'start')).status).toBe(0)
+    expect((await grid(dir, 'edit', 'mirror', '--turn', '-90')).status).toBe(0)
+    expect(firstLine((await grid(dir, 'diff')).out)).toBe('The plan is turned a quarter clockwise, and every room keeps its size.')
   })
 })
 
