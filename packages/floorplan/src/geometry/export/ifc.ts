@@ -19,7 +19,8 @@
  * whose y runs down (CNT-3, C7) is written as it is, so its model is the
  * building's mirror image; `grid check` says so (`plan/y-down`). A plan at
  * survey coordinates is moved near the origin, the move kept in the site's and
- * the building's placements (`nearOrigin`, HND-2).
+ * the building's placements (`nearOrigin`, HND-2): moved to the site's origin when the
+ * plan states one (HND-11).
  *
  * HND-2: the file carries what the plan already says, in the fields IFC has for
  * it: each space its room's number, use and net area with the rule (ARE-9,
@@ -63,7 +64,7 @@ import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { roomFloorArea } from '../room'
 import { MEASURES } from '../areas'
 import { roomNumbers, shownRoomNumber, type RoomNumber } from '../roomNumbers'
-import { limit } from '../tolerances'
+import { nearOrigin } from './origin'
 import { area } from '../vec2'
 import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
 import { factOf, factText, ROOM_NUMBER_FACT, type Facts } from '../../types/facts'
@@ -2111,57 +2112,6 @@ function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
 }
 
 type Pair2 = readonly [number, number]
-
-/**
- * HND-2 (lab MS-12, CP2-1): the plan as the file writes it, near the origin, and where its origin
- * went. A plan that reaches no further than `farFromOrigin` is written as it is. One drawn at
- * survey coordinates is moved by whole steps of `farFromOrigin`, to bring the middle of its walls
- * within half a step of the origin, and the move is the site's placement: every element keeps
- * its place in the world, and its own coordinates are small, which BIM tools need to import it.
- * A plan holding a coordinate past `largest`, which validation refuses, is written as it is, so
- * the move cannot bring a refused part back.
- */
-function nearOrigin(plan: FloorPlan): { readonly plan: FloorPlan; readonly at: Pair2 } {
-  const unmoved = { plan, at: [0, 0] as const }
-  // A plan read without the schema may hold anything: only pairs of finite numbers count, and
-  // anything else is left as it is, for the floors' validation to leave out.
-  const pair = (value: unknown): Pair2 | null =>
-    Array.isArray(value) && value.length === 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])
-      ? [value[0] as number, value[1] as number]
-      : null
-  const pairs = (values: readonly unknown[]): Pair2[] => values.flatMap((value) => {
-    const p = pair(value)
-    return p === null ? [] : [p]
-  })
-  const wallPoints = pairs(plan.walls.flatMap((wall) => [wall.start, wall.end]))
-  const others = pairs([
-    ...(plan.items ?? []).map((item) => item.at),
-    ...(plan.stairs ?? []).flatMap((stair) => (Array.isArray(stair.run) ? stair.run : []))
-  ])
-  if ([...wallPoints, ...others].some(([x, y]) => Math.hypot(x, y) > limit('largest'))) return unmoved
-  if (!wallPoints.some(([x, y]) => Math.hypot(x, y) > limit('farFromOrigin'))) return unmoved
-  const step = limit('farFromOrigin')
-  const middle = (axis: 0 | 1): number => {
-    const values = wallPoints.map((p) => p[axis])
-    return Math.round((Math.min(...values) + Math.max(...values)) / 2 / step) * step
-  }
-  const at: Pair2 = [middle(0), middle(1)]
-  function move<T>(value: T): T {
-    const p = pair(value)
-    return p === null ? value : ([p[0] - at[0], p[1] - at[1]] as T)
-  }
-  return {
-    plan: {
-      ...plan,
-      walls: plan.walls.map((wall) => ({ ...wall, start: move(wall.start), end: move(wall.end) })),
-      ...(plan.items === undefined ? {} : { items: plan.items.map((item) => ({ ...item, at: move(item.at) })) }),
-      ...(plan.stairs === undefined
-        ? {}
-        : { stairs: plan.stairs.map((stair) => (Array.isArray(stair.run) ? { ...stair, run: stair.run.map(move) } : stair)) })
-    },
-    at
-  }
-}
 
 function buildDocument(given: FloorPlan, options: IfcOptions): string {
   const timestamp = usableTimestamp(options.timestamp)

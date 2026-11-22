@@ -58,6 +58,9 @@ export const SHEET_COVERAGE = {
   // WRT-6: what is assumed is drawn in its own style by `drawPlan`, and listed to confirm by
   // `grid check`; the sheet's checks page lists those lines with the others.
   marks: { shown: 'drawn' },
+  // HND-11: the lengths taped on site are checks, not parts of the building: `grid check` and
+  // every change's answer give the table, and the sheet's checks page lists one that differs.
+  taped: { shown: 'not shown', why: 'Lengths taped on site are checks, not parts of the building (HND-11): grid check and every change\'s answer give each one taped against drawn, and the checks page lists one that differs with the other lines.' },
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
   // VEW-3: a saved view is a camera for grid_view and grid draw --view; the sheet takes its own.
   views: { shown: 'not shown', why: 'A saved view is a camera for grid_view and grid draw --view (VEW-3); the sheet takes its own pictures.' },

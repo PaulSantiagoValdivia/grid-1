@@ -1,5 +1,5 @@
 /**
- * CNT-10 (C15, lab EL-10, CP4-4): existing, demolished and new, and a fit-out on a base plan.
+ * CNT-10 (C16, lab EL-10, CP4-4): existing, demolished and new, and a fit-out on a base plan.
  *
  * A plan that states a phase holds two states of the building: before the work (its existing and
  * demolished parts) and after it (its existing and new parts). Everything that measures or checks

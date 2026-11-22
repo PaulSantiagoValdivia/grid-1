@@ -18,7 +18,7 @@ tests (`cli/src/mcp/__tests__/phases.test.ts`, `floorplan/src/geometry/__tests__
 
 ## What changed
 
-1. **The format** (`types/floorplan.ts`, convention C15; BRF-3 and CNT-17 took C13 and C14 on main). `phase` on walls, openings and rooms
+1. **The format** (`types/floorplan.ts`, convention C16; BRF-3, CNT-17 and HND-11 took C13, C14 and C15 on main). `phase` on walls, openings and rooms
    (`PHASES`, `PhaseSchema`), and `base` on the plan (a path, held to a path's limit by
    `command/planText.ts`). Optional and never defaulted: the file stays version 1, and a plan that
    states neither reads exactly as before (`planInState` returns it as it is). A part that states

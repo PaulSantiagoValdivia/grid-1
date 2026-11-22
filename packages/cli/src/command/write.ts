@@ -13,11 +13,12 @@
  *
  * The tool server's `grid_write_rooms` does the same through `writeRoomsIntoProject`.
  */
-import { expandPatterns, planHasPhases, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { expandPatterns, planHasPhases, validatePlan, type FloorPlan, type TapedRow } from '@ongrid/floorplan/geometry'
 import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
-import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, safeParseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
 import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
+import { TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan } from '../quantities/survey'
@@ -62,6 +63,8 @@ export interface WriteDone {
   readonly brief: BriefData
   /** BRF-1: one line when this is the plan's first write and no brief is kept beside it; never a refusal. */
   readonly reminder: string | null
+  /** HND-11: each length taped on site the file keeps, against the plan written. */
+  readonly taped: readonly TapedRow[]
   readonly lines: readonly string[]
 }
 
@@ -190,6 +193,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   const written = project.relative(project.writeFile(planFile, `${JSON.stringify(next, null, 2)}\n`))
   const brief = briefAnswer(project, planFile, plan)
   const reminder = first ? briefReminder(project, planFile) : null
+  // HND-11 (lab WR-14): the taped lengths the file keeps, against the plan as written.
+  const taped = tapedRows(safeParseFloorPlan(next) ?? plan)
 
   const verdict = before === null || nothingToLose(before) ? null : comparePlans(surveyPlan(before), surveyPlan(plan), ['the plan before', 'the plan now']).verdict
   // WRT-4 with LVL-8: the file's opening patterns are kept and name their walls by id, so the plan
@@ -207,6 +212,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
     ...brief.text,
     ...(reminder === null ? [] : [reminder]),
+    ...tapedTable(taped, { max: TAPED_ROWS_IN_AN_EDIT }),
   ]
-  return { written, result, plan, verdict, drawingProblems, brief: brief.data, reminder, lines }
+  return { written, result, plan, verdict, drawingProblems, brief: brief.data, reminder, taped, lines }
 }

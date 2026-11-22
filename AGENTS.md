@@ -44,13 +44,20 @@ Notes for agents and people changing this repository.
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
   sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
 - `packages/floorplan/src/geometry/phases.ts` (CNT-10): a plan's phases, `existing`, `demolished`
-  and `new` on walls, openings and rooms (C15 in `types/floorplan.ts`). `planInState` gives the
+  and `new` on walls, openings and rooms (C16 in `types/floorplan.ts`). `planInState` gives the
   building before or after the work; everything that measures or checks reads it after
   (`surveyPlan`, `planAreaFigures`, `checkLocalRules` and the like), `validatePlan` checks each
   state on its own, and the drawing and the exports read both, each part with its phase. A plan
   with no phase is read as before. `mergeBase` reads a fit-out's `base` plan in as existing; the
   command reads the base file in `command/plan.ts`, and `cli/src/edit/phases.ts` refuses an edit
   that touches it and makes an edit of a plan with phases the work.
+- A survey drawn from its own numbers (HND-11): a wall may be placed by a face (`face` in
+  `types/floorplan.ts`); the reading moves it to its centre line and records `placedBy`, and
+  `statedWall` writes the face back. Every change that moves a wall end goes through
+  `wallWithEnds`, so no centre point lands in a file as a face. `geometry/taped.ts` sets the
+  plan's `taped` lengths against the drawing; the CLI's `src/taped/table.ts` prints them after
+  `grid check` and every change. `geometry/export/origin.ts` decides where an export writes a
+  plan from: `site.origin` for a plan far from (0, 0), and the GLB keeps that offset in one node.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,
