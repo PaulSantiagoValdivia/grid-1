@@ -226,6 +226,8 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
           },
     jamb: { stroke: ink, 'stroke-width': width('jamb') } as Attrs,
     step: { stroke: ink, 'stroke-width': width('step'), 'stroke-linecap': 'butt' } as Attrs,
+    stair: { fill: 'none', stroke: ink, 'stroke-width': width('stair') } as Attrs,
+    stairArrow: { fill: ink, stroke: 'none' } as Attrs,
     fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
     fixtureLine: { fill: 'none', stroke: ink, 'stroke-width': width('fixture'), 'stroke-linecap': 'butt' } as Attrs,
     doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
@@ -289,6 +291,27 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
 type Paints = ReturnType<typeof paints>
 
 const virtualPath = (points: readonly Vec2[]): string => `M${points.map((p) => `${p.x},${-p.y}`).join('L')}`
+
+/**
+ * The head of a stair's arrow: a triangle `size` long at the upper end of its walking line,
+ * pointing up the stair. Null when the last stretch has no length.
+ */
+function stairArrow(line: readonly Vec2[], size: number): string | null {
+  const tip = line[line.length - 1]
+  const back = line[line.length - 2]
+  if (tip === undefined || back === undefined) return null
+  const dx = tip.x - back.x
+  const dy = tip.y - back.y
+  const length = Math.hypot(dx, dy)
+  if (!(length > 0)) return null
+  const ux = dx / length
+  const uy = dy / length
+  const base = { x: tip.x - ux * size, y: tip.y - uy * size }
+  const half = size / 2.5
+  const left = { x: base.x - uy * half, y: base.y + ux * half }
+  const right = { x: base.x + uy * half, y: base.y - ux * half }
+  return `M${tip.x},${-tip.y}L${left.x},${-left.y}L${right.x},${-right.y}Z`
+}
 
 /** A label group: placed in metres, then scaled so its contents are in pixels. */
 /** How far an opening's id sits off its wall's face, in screen pixels. */
@@ -720,6 +743,32 @@ export function planScene(input: SceneInput): SvgNode[] {
     }
     if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
     if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
+  }
+
+  // A stair the plan states (LVL-3), on both floors it joins: its flights and landings in outline,
+  // a line across at every riser, and its walking line with an arrow pointing up. Drawing, not a
+  // target: clicks reach the room underneath.
+  for (const stair of drawing.stairs) {
+    const children: SvgNode[] = []
+    for (const outline of [...stair.flights.map((f) => f.outline), ...stair.landings]) {
+      children.push(el('path', { d: pathOf(outline), 'data-part': 'stair-outline', ...paint.stair }))
+    }
+    for (const flight of stair.flights) {
+      for (const [a, b] of flight.riserLines) {
+        children.push(el('line', { 'data-part': 'stair-riser', x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, ...paint.stair }))
+      }
+    }
+    children.push(el('path', { d: virtualPath(stair.line), 'data-part': 'stair-line', ...paint.stair }))
+    const head = stairArrow(stair.line, LINE_PX.stairArrow * mpp)
+    if (head !== null) children.push(el('path', { d: head, 'data-part': 'stair-arrow', ...paint.stairArrow }))
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'stair', 'data-id': stair.id, 'data-end': stair.end, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        children,
+        `stair:${stair.id}`
+      )
+    )
   }
 
   // A step between rooms at different levels (LVL-7): a solid line in the wall's ink across the

@@ -9,6 +9,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [What a plan file may hold](#what-a-plan-file-may-hold)
 - [Floor levels and heights](#floor-levels-and-heights): `plan/level-gap`, `plan/same-level`, `floor/empty-top`, `wall/above-storey`, `floor/size-question`, `wall/unknown-floor`, `room/unknown-floor`
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
+- [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
@@ -28,10 +29,10 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room or floor name, a fixture's label, the plan's title, a note's or a sketch's text | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening or floor, a wall a room or an opening names, a part's floor | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
-| walls, rooms, openings, floors, items, annotations or sketch items | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
 | the points of one sketch line or shape | 2,000 | |
 | the walls a room lists | 2,000 | |
 
@@ -117,6 +118,44 @@ dividing line between them. A window gets none. In 3D, in the OBJ and glTF files
 file, the room's floor and space stand at its own level, and a raised room is solid down to the
 storey's floor. A room set more than 1.5 m off its storey, or raised to the height its floor
 states, is asked about (`room/offset-question`): so far off, it is more likely a floor of its own.
+
+## Stairs that join two floors
+
+A stair is stated once, in the plan's `stairs` list, across the two floors it joins. The plan
+says what is meant and Grid works out the rest:
+
+```json
+{ "id": "s1", "name": "Main stair", "from": "ground", "to": "first", "width": 0.9, "run": [[0.6, 0.6], [0.6, 3.4]] }
+```
+
+| Field | What it states |
+|---|---|
+| `from`, `to` | The floor the walking line starts on and the floor it ends on. Either may be the higher |
+| `width` | The width of the flight, in metres |
+| `run` | The walking line, down the middle of the flight: from the stair's edge on `from` to its edge on `to`. Each point between is a turn, with a square landing as wide as the flight. A straight stair may give its two ends as `start` and `end` instead |
+| `risers` | Optional: how many risers, when the design has chosen. Unstated, Grid takes the number that brings twice the riser plus the going nearest 0.63 m |
+| `name` | Optional |
+
+From the two floors' levels (and the floor offset of the rooms the stair starts and ends in),
+Grid works out the rise, the number of risers and their height, the going and the pitch, and
+which room the stair leaves from and arrives in (`planStairs`). For the stair above: a 2.95 m
+rise in 14 risers of 0.211 m, treads of 0.215 m. `grid describe` says them. The 2D drawing
+shows the stair on both floors, with a line at every riser and its walking line ending in an
+arrow pointing up; 3D, the OBJ and glTF files and the IFC file (an `IfcStair` of
+`IfcStairFlight`s and landing slabs) draw a block per tread. The stair adds no floor of its own:
+its area is counted once, in the rooms it stands in. Nothing here judges a riser, a going or a
+width.
+
+The way-out check follows routes up and down the stair, so an upper floor or a basement is
+checked through it down to a door. Rooms used as a stair on neighbouring floors that lie one over
+the other (sharing at least half of the smaller one) are taken as a stair too, as agents already
+draw them; where both floors have stair rooms and none lies over another, they are named as out
+of line (`stair_out_of_line`), and so are lift shafts (rooms used as a `lift`,
+`lift_out_of_line`). A lift is never taken as a way out. A floor no stair joins to the ground floor
+is said not to be checked. A stair that cannot be laid out is said and left out
+(`stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
+`stair/too-few-risers`, `stair/duplicate-id`), and one whose end stands in no room joins nothing
+(`stair/end-in-no-room`, a warning).
 
 ## Floor no room claims
 

@@ -503,6 +503,43 @@ export const CODES = {
     fix: fixed('If it is meant, leave it. If the room is a level of its own, give it its own floor with its elevation.')
   },
 
+  // --- Stairs (LVL-3) --------------------------------------------------------------------------
+  'stair/unknown-floor': {
+    says: (s) => `${s.label} joins a floor the plan does not know`,
+    needed: fixed('the ids of two floors the plan has'),
+    fix: fixed("Correct its from or to to a floor id the plan's floors list.")
+  },
+  'stair/same-floor': {
+    says: (s) => `${s.label} starts and ends on one floor`,
+    needed: fixed('two different floors'),
+    fix: fixed("Make from and to the two floors it joins. A step inside a floor is a room's floorOffset.")
+  },
+  'stair/no-rise': {
+    says: (s) => `${s.label} joins floors that stand at one height`,
+    needed: fixed('two floors at different heights'),
+    fix: fixed("State the floors' elevations, or join two floors at different heights.")
+  },
+  'stair/run-too-short': {
+    says: (s) => `${s.label} has a stretch of its walking line too short for a flight`,
+    needed: fixed('stretches long enough for a tread, once the landings are taken off'),
+    fix: fixed('Lengthen the stretch, or leave out the turn.')
+  },
+  'stair/too-few-risers': {
+    says: (s) => `${s.label} states fewer risers than its flights need`,
+    needed: fixed('at least two risers on each flight'),
+    fix: fixed('State more risers, or leave the number out and Grid works it out.')
+  },
+  'stair/end-in-no-room': {
+    says: (s) => `${s.label} starts or ends in no room, so it joins nothing there`,
+    needed: fixed('each end of its walking line in a room'),
+    fix: fixed('Draw the room it starts from or arrives in, or move the end of its walking line into one.')
+  },
+  'stair/duplicate-id': {
+    says: (s) => `${s.label} shares its id with another stair`,
+    needed: fixed('an id of its own for each stair'),
+    fix: fixed('Give the second stair another id; until then it is left out.')
+  },
+
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {
     says: (s) => `${s.label} has a number Grid does not accept`,
@@ -606,8 +643,20 @@ export const CODES = {
   'opening/door-out-above-ground': {
     says: (s) => wordingText(planCheckWordings.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
     found: (s) => `a door in an outside wall of a floor ${metresText(s.finding?.elevation ?? 0)} m above the ground`,
-    needed: fixed('a way out at ground level, or stairs the plan cannot hold yet'),
+    needed: fixed('a way out at ground level, or a stair down to one'),
     fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
+  },
+  'room/stair-out-of-line': {
+    says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
+    found: fixed('no room used as a stair on the floor below lies under half of it'),
+    needed: fixed('the stair room over the one on the floor below'),
+    fix: fixed("Move it over the stair room below, or state the stair in the plan's stairs.")
+  },
+  'room/lift-out-of-line': {
+    says: (s) => s.finding?.message ?? `${s.label} does not line up with the lift shaft below`,
+    found: fixed('no room used as a lift on the floor below lies under half of it'),
+    needed: fixed('the shaft over the one on the floor below'),
+    fix: fixed('Move it over the lift shaft below.')
   },
   'opening/too-small-to-pass': {
     says: (s) => wordingText(planCheckWordings.openingTooSmall(s.name)),
@@ -655,9 +704,9 @@ export const CODES = {
   // --- What a check could not look at -----------------------------------------------------------
   'floor/not-checked-no-stairs': {
     says: (s) => wordingText(planCheckWordings.noStairs(s.floorName)),
-    found: fixed('a floor off the ground, and no stairs in the plan'),
-    needed: fixed('stairs, which the plan cannot hold yet'),
-    fix: fixed('Nothing to change in the plan: Grid does not yet check the way down from an upper floor.')
+    found: fixed('a floor off the ground, and no stair joining it to the ground floor'),
+    needed: fixed('a stair joining it, through the floors between, to the ground floor'),
+    fix: fixed("State the stair in the plan's stairs, or draw a room used as a stair on each floor, one over the other.")
   },
   'floor/not-checked-way-out-not-drawn': {
     says: (s) => wordingText(planCheckWordings.wayOutNotDrawn(s.floorName)),

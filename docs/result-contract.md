@@ -57,7 +57,7 @@ record. It never throws: a check that fails inside Grid becomes a line
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding` or `not-checked`. |
-| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room or an opening. |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
 | `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
@@ -169,6 +169,13 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/wall-listed-twice` | {thing} lists a wall more than once | each wall once in its list |
 | `room/size-question` | {thing} has a size that may not be meant | the size of a room in a building |
 | `room/offset-question` | {thing} stands far above or below its storey's floor | a room's step within what a storey holds, or a floor of its own |
+| `stair/unknown-floor` | {thing} joins a floor the plan does not know | the ids of two floors the plan has |
+| `stair/same-floor` | {thing} starts and ends on one floor | two different floors |
+| `stair/no-rise` | {thing} joins floors that stand at one height | two floors at different heights |
+| `stair/run-too-short` | {thing} has a stretch of its walking line too short for a flight | stretches long enough for a tread, once the landings are taken off |
+| `stair/too-few-risers` | {thing} states fewer risers than its flights need | at least two risers on each flight |
+| `stair/end-in-no-room` | {thing} starts or ends in no room, so it joins nothing there | each end of its walking line in a room |
+| `stair/duplicate-id` | {thing} shares its id with another stair | an id of its own for each stair |
 | `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
 | `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
@@ -187,13 +194,15 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/no-route-out` | "{name}" has no route to a door to the outside | a route through doors and openings to a door to the outside |
 | `room/no-route-to-door-out` | "{name}" has no route to a door to the outside, nor to a door into a space that is not drawn | a route to a door to the outside, or to the door into the space not drawn |
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
-| `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or stairs the plan cannot hold yet |
+| `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
+| `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
+| `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
 | `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to pass through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to pass, not a code figure |
 | `room/too-small` | "{name}" is under {minimum} m² | at least {minimum} m² |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
 | `room/escape-window-too-small` | The window of "{name}" is too small to escape through | a window someone can climb through |
 | `room/escape-window-too-high` | The window of "{name}" is too high to escape through | a lower sill |
-| `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: the plan has no stairs | stairs, which the plan cannot hold yet |
+| `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", rooms that could not be drawn were not checked: "{room}", … | rooms that can be drawn |
 | `floor/not-checked-doors-not-drawn` | On "{floor}", some doors could not be drawn and were not checked | doors that can be drawn |
@@ -507,6 +516,14 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - `grid draw` and `grid_view` (kind plan) mark every line of the floor drawn with its number on
   its part, print its words beside the mark, and list the floor's lines under the drawing. A
   room that cannot be drawn is the dashed box round its walls with its name and the reason.
+
+### 2026-11-22: stairs (LVL-3)
+
+- New codes: `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
+  `stair/too-few-risers`, `stair/duplicate-id` (left out) and `stair/end-in-no-room` (worth a
+  look), on a new thing kind `stair`; findings `room/stair-out-of-line` and `room/lift-out-of-line`.
+- `floor/not-checked-no-stairs` now reads "no stair joins it to the ground floor": a floor a stair
+  joins to the ground floor is checked down the stair.
 
 ### 2026-11-21: version 1 (MSG-1)
 

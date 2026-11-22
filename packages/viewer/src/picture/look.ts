@@ -94,6 +94,10 @@ export const LINE_PX = {
   jamb: 1,
   /** A step between rooms at different levels (LVL-7). */
   step: 1.5,
+  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  stair: 0.75,
+  /** How long the head of a stair's arrow is. */
+  stairArrow: 8,
   /** A fixture's symbol (CNT-12). */
   fixture: 0.75,
   doorLeaf: 1.5,
@@ -129,6 +133,8 @@ export const USE_FILLS: Readonly<Record<RoomUse, string>> = {
   bathroom: '#d8eeee',
   corridor: '#ecebe6',
   stair: '#e5e0ee',
+  // LVL-3: a lift shaft, beside the stair's colour.
+  lift: '#e0e3ec',
   storage: '#e9e4dc',
   other: '#f0f0ee'
 }
@@ -161,6 +167,8 @@ export type LinePart =
   | 'jamb'
   | 'step'
   | 'fixture'
+  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  | 'stair'
   | 'doorLeaf'
   | 'doorArc'
   | 'dimension'
@@ -230,6 +238,7 @@ const SCREEN_LINES: ScreenLines = {
     jamb: LINE_PX.jamb,
     step: LINE_PX.step,
     fixture: LINE_PX.fixture,
+    stair: LINE_PX.stair,
     doorLeaf: LINE_PX.doorLeaf,
     doorArc: LINE_PX.doorArc,
     dimension: LINE_PX.dimension,
@@ -262,6 +271,7 @@ const PAPER_LINES: PaperLines = {
     jamb: 'fine',
     step: 'medium',
     fixture: 'finest',
+    stair: 'finest',
     doorLeaf: 'medium',
     doorArc: 'finest',
     dimension: 'finest',

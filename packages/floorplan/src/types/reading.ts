@@ -18,13 +18,13 @@
  * name or a use is text from the file: one that breaks the text rule of MSG-9 is never repeated.
  */
 import { z } from 'zod'
-import { FloorPlanSchema, ROOM_USES, readUse, type RoomUse } from './floorplan'
+import { FloorPlanSchema, ROOM_USES, readUse, withRunFromEnds, type RoomUse } from './floorplan'
 import { textProblem } from './planText'
 
 /** A part of the plan a note is about, by where it is in the file. */
 export interface PartAt {
   /** The list it is in. */
-  readonly list: 'walls' | 'rooms' | 'openings' | 'floors' | 'items'
+  readonly list: 'walls' | 'rooms' | 'openings' | 'floors' | 'items' | 'stairs'
   readonly index: number
 }
 
@@ -161,11 +161,28 @@ function bare(schema: z.ZodTypeAny): z.ZodTypeAny {
   }
 }
 
+/**
+ * The value as the schema reads it where the schema reads a field in another form: a straight
+ * stair's `start` and `end` (LVL-3) are its walking line `run`, so they are known. Only that one
+ * reading: the others fill in defaults, which would hide a misspelt field's meaning.
+ */
+function preprocessed(schema: z.ZodTypeAny, value: unknown): unknown {
+  for (;;) {
+    if (schema instanceof z.ZodEffects) {
+      const effect = schema._def.effect
+      if (effect.type === 'preprocess' && effect.transform === withRunFromEnds) return withRunFromEnds(value)
+      schema = schema.innerType()
+    } else if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) schema = schema.unwrap()
+    else if (schema instanceof z.ZodDefault) schema = schema.removeDefault()
+    else return value
+  }
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-const LISTS = new Set(['walls', 'rooms', 'openings', 'floors', 'items'])
+const LISTS = new Set(['walls', 'rooms', 'openings', 'floors', 'items', 'stairs'])
 
 function where(path: readonly (string | number)[]): string {
   return path.reduce<string>((text, key) => (typeof key === 'number' ? `${text}[${key}]` : text ? `${text}.${key}` : key), '')
@@ -177,8 +194,9 @@ function partOf(path: readonly (string | number)[]): PartAt | null {
 }
 
 /** Walks the file and its schema side by side, noting each key the schema does not have. */
-function walk(schema: z.ZodTypeAny, value: unknown, path: (string | number)[], notes: ReadingNote[]): void {
+function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], notes: ReadingNote[]): void {
   const shape = bare(schema)
+  const value = preprocessed(schema, given)
   if (shape instanceof z.ZodArray) {
     if (!Array.isArray(value)) return
     value.forEach((item, i) => walk(shape.element as z.ZodTypeAny, item, [...path, i], notes))

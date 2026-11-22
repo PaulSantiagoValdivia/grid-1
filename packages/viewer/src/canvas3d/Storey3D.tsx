@@ -9,6 +9,7 @@ import { useBuildStep } from '../preview/useBuildFrame'
 import { pulseAt } from '../preview/pulse'
 import { useReducedMotion } from '../preview/useReducedMotion'
 import { Slab3D } from './Slab3D'
+import { Stair3D } from './Stair3D'
 import { Divider3D } from './Divider3D'
 import { RoomMarker3D } from './RoomMarker3D'
 import { buildWallGeometry, useWallGeometries } from './useWallGeometries'
@@ -179,6 +180,9 @@ export function Storey3D({
           castShadow={shadows}
           glow={glow}
         />
+      ))}
+      {scene.stairs.map((stair) => (
+        <Stair3D key={`stair:${stair.id}`} stair={stair} color={palette.floor} castShadow={shadows} glow={glow} />
       ))}
       {scene.dividers.map((divider) => (
         <Divider3D key={`divider:${divider.wallId}`} divider={divider} color={colors.gridSection} />

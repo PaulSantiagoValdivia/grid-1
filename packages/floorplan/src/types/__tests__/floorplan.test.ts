@@ -191,14 +191,15 @@ describe('a room’s use', () => {
     expect(JSON.stringify(parsed.rooms)).toBe(JSON.stringify(v1Plan.rooms))
   })
 
-  it('keeps each of the nine values', () => {
+  it('keeps each of the ten values', () => {
     for (const use of ROOM_USES) {
       const parsed = parseFloorPlan(withUse(use))
       expect(parsed.rooms[0]!.use).toBe(use)
       expect(JSON.parse(JSON.stringify(parsed)).rooms[0].use).toBe(use)
     }
     expect([...ROOM_USES]).toEqual([
-      'bedroom', 'living', 'dining', 'kitchen', 'bathroom', 'corridor', 'stair', 'storage', 'other'
+      // LVL-3 added `lift`.
+      'bedroom', 'living', 'dining', 'kitchen', 'bathroom', 'corridor', 'stair', 'lift', 'storage', 'other'
     ])
   })
 

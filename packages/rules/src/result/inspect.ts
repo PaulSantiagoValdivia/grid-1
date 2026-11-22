@@ -34,7 +34,7 @@ import { LINE_KINDS, RESULT_VERSION, type GridResult, type LineKind, type Result
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
 
-const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item' }
+const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item', stair: 'Stair' }
 const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as const
 /** An id from a file the format refused, when it is one Grid would read: else it is not repeated. */
 const safeId = (value: unknown): string | null =>
@@ -50,7 +50,9 @@ const FINDING_CODES: Record<FindingCode, string> = {
   room_too_small: 'room/too-small',
   no_escape_opening: 'room/no-escape-opening',
   escape_window_too_small: 'room/escape-window-too-small',
-  escape_window_too_high: 'room/escape-window-too-high'
+  escape_window_too_high: 'room/escape-window-too-high',
+  stair_out_of_line: 'room/stair-out-of-line',
+  lift_out_of_line: 'room/lift-out-of-line'
 }
 
 function oneLine(text: string): string {
@@ -94,7 +96,7 @@ function placeText(path: readonly (string | number)[]): string {
 function partAt(raw: Record<string, unknown>, path: readonly (string | number)[]): { thing: Thing; floor: string | null; label: string } {
   const whole = { thing: { kind: 'plan' as const, id: '' }, floor: null, label: NOUN.plan }
   const [list, at] = path
-  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item' }
+  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item', stairs: 'stair' }
   if (typeof list !== 'string' || typeof at !== 'number' || !Object.hasOwn(kinds, list)) return whole
   const items = raw[list]
   const item = Array.isArray(items) ? (items[at] as unknown) : undefined
@@ -321,6 +323,8 @@ function namesOf(plan: FloorPlan): Names {
   for (const wall of plan.walls) if (!walls.has(wall.id)) walls.set(wall.id, wall)
   const openings = new Map<string, FloorPlan['openings'][number]>()
   for (const opening of plan.openings) if (!openings.has(opening.id)) openings.set(opening.id, opening)
+  const stairs = new Map<string, NonNullable<FloorPlan['stairs']>[number]>()
+  for (const stair of plan.stairs ?? []) if (!stairs.has(stair.id)) stairs.set(stair.id, stair)
   const items = new Map<string, NonNullable<FloorPlan['items']>[number]>()
   for (const item of plan.items ?? []) if (!items.has(item.id)) items.set(item.id, item)
   const floorName = (id: string): string => floorNames.get(id) ?? id
@@ -335,6 +339,11 @@ function namesOf(plan: FloorPlan): Names {
           return { label: NOUN.plan, name: '', floor: null }
         case 'floor':
           return { label: `${NOUN.floor} ${quoted(floorName(id))}`, name: floorName(id), floor: id }
+        case 'stair': {
+          // LVL-3: a stair is on the floor its walking line starts from.
+          const stair = stairs.get(id)
+          return { label: `${NOUN.stair} ${quoted(stair?.name ?? id)}`, name: stair?.name ?? id, floor: stair ? stair.from : null }
+        }
         case 'room': {
           const room = rooms.get(id)
           return { label: `${NOUN.room} ${quoted(roomName(id))}`, name: roomName(id), floor: room ? floorOf(room) : null }

@@ -16,7 +16,7 @@
 import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
-import { floorOf, planFloors } from './floors'
+import { floorOf, isFloorSlice, planFloors } from './floors'
 import { area } from './vec2'
 import { openingSpan, wallAxis } from './wall'
 import { RoomOutlineError, roomNesting, roomPolygon } from './room'
@@ -33,10 +33,14 @@ import { wallFaults } from './wallFaults'
 import { kindDisagreements } from './exposure'
 import { levelIssues, unknownFloorIssues } from './levels'
 import { buildingKind } from './plausible'
+import { planStairs } from './stairs'
 import { itemIssues } from './items'
 
-/** `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture (CNT-12). */
-export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item'
+/**
+ * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
+ * (CNT-12); `stair` (LVL-3), a stated stair.
+ */
+export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair'
 
 /**
  * `error` is something that cannot be drawn, or sits on a floor the plan does not know, and gets
@@ -800,6 +804,24 @@ function validateKinds(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<st
   }
 }
 
+/**
+ * Stairs that cannot be laid out, and ends of a stair in no room (`planStairs`, LVL-3). An error
+ * leaves the stair out of every view and of the way-out check; it never makes a wall or a room
+ * broken. A floor's slice says the problems of the stairs that start or end on it.
+ */
+function validateStairs(plan: FloorPlan, broken: ReadonlySet<string>, issues: Issue[]): void {
+  // A slice keeps the plan's stairs (`planForFloor`), so this costs nothing in a plan with none.
+  if ((plan.stairs ?? []).length === 0) return
+  for (const problem of planStairs(plan, isFloorSlice(plan) ? brokenOnFloor : () => broken).problems) {
+    issues.push(issue('stair', problem.stair, problem.code, problem.message, problem.severity))
+  }
+}
+
+/** The rooms, walls and openings validation leaves out of one floor's slice, without the checks on the whole plan. */
+export function brokenOnFloor(slice: FloorPlan): ReadonlySet<string> {
+  return validatePlan(slice, undefined, { spaces: false }).broken
+}
+
 export interface ValidateOptions {
   /**
    * Whether to work out the spaces the walls enclose and report floor no room claims and rooms
@@ -927,6 +949,7 @@ export function validatePlan(
   issues.push(...itemIssues(plan, index, broken))
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
+  if (options.spaces !== false) validateStairs(plan, broken, issues)
 
   if (options.spaces !== false) {
     validateSpaces(plan, index, broken, issues)
