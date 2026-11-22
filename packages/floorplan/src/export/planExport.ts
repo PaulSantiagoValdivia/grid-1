@@ -14,7 +14,7 @@
  */
 import type { FloorPlan } from '../types/floorplan'
 import type { ReadFault } from '../types/readParts'
-import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj } from '../geometry'
+import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, nearOrigin, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj } from '../geometry'
 import type { LeftOutPart } from '../geometry/export/leftOut'
 import { exportContents } from './leftOut'
 
@@ -76,6 +76,17 @@ export function exportFileName(projectName: string, format: ExportFormat, floorN
   return `${floor ? `${base}-${floor}` : base}.${format}`
 }
 
+/**
+ * HND-11 (lab MS-12): the GLB of one floor. A 32-bit point holds about seven digits, so a floor at
+ * survey coordinates is built near zero, from the site's origin when the plan states one, and
+ * the file's one node is moved back by that offset (`nearOrigin`, `GlbOptions.origin`). DXF, IFC
+ * and OBJ write their numbers as text and keep them as they are.
+ */
+function glbOf(storey: FloorPlan, note: { readonly leftOut: readonly LeftOutPart[] }): Uint8Array {
+  const near = nearOrigin(storey)
+  return toGlb(buildScene(near.plan), { ...note, origin: near.at })
+}
+
 export function exportPlan(plan: FloorPlan, format: ExportFormat, options: PlanExportOptions): PlanExport {
   const filter = { name: FILTER_NAMES[format], extensions: [format] }
   const ordered = inIdOrder(plan)
@@ -93,7 +104,7 @@ export function exportPlan(plan: FloorPlan, format: ExportFormat, options: PlanE
   const facts = dxfFactsOf(storey, planFloors(ordered).find((f) => f.id === floorId) ?? null)
   const data = format === 'dxf' ? toDxf(buildFloorPlan(storey), { ...note, facts })
     : format === 'obj' ? toObj(buildScene(storey), note)
-    : toGlb(buildScene(storey), note)
+    : glbOf(storey, note)
   const floors = planFloors(plan)
   const floor = floors.find((f) => f.id === floorId)
   const floorName = floors.length > 1 ? (floor?.name || floorId) : null
