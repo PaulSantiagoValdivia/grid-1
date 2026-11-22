@@ -26,7 +26,7 @@ import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { RETELLING_RULE } from '../mcp/retelling'
 import { dependencies } from '../../package.json'
 import type { GridTool } from '../mcp/toolkit'
-import { ROOM_NAMES_TRAVEL } from '../mcp/protocol'
+import { ROOM_NAMES_TRAVEL, UNITS_RULE } from '../mcp/protocol'
 
 /** The npm package, and the command `npx` runs from it. */
 export const PACKAGE_NAME = 'ongrid'
@@ -149,10 +149,14 @@ function skill(): string {
     '   guessed and what it could not keep. Change the plan only when asked.',
     '   Before a change, `grid_mark_start` keeps the plan as it is; after every save, `grid_diff`',
     '   says what the change did, issues first, and names any change outside the rooms you meant.',
+    '   For a refurbishment, give walls, doors, windows and rooms a phase (existing, demolished or new):',
+    '   `grid_diff` with since: phase says what the work does, and `grid_takeoff` with for=change costs it.',
     '6. When a Grid tool\'s answer looks wrong, `grid_report_problem` drafts an issue about it.',
     '   Grid sends nothing: show the person the draft and let them decide whether to file it.',
     '',
     ROOM_NAMES_TRAVEL,
+    '',
+    UNITS_RULE,
     '',
     `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}".`,
     RETELLING_RULE,

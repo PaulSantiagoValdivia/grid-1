@@ -7,7 +7,7 @@
  * network.
  */
 
-import { checkPlanSanity, escapeWaitsFor, floorBuilding, floorStatesBuilding, groundLevel, planDamage, planFloors, planForFloor, statedGround, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity, escapeWaitsFor, floorBuilding, floorStatesBuilding, groundLevel, planDamage, planFloors, planForFloor, planInState, statedGround, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomWallIds } from '@ongrid/floorplan/geometry/plan'
 import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
@@ -58,6 +58,12 @@ export interface CheckOptions {
    * finding that rests on one is held back, as one on a part the drawing check leaves out is.
    */
   readonly leftOut?: readonly LeftOutPart[]
+  /**
+   * CNT-10: the base plan a fit-out names (`FloorPlan.base`), as read by the caller, which reads
+   * files: its walls and openings are read into the plan as existing (`mergeBase`) before any
+   * check. Left out, a fit-out is checked without its shell.
+   */
+  readonly base?: FloorPlan
 }
 
 /** The findings only the figure checks give, and the notices only they give, to count what the US figures would have given. */
@@ -75,7 +81,9 @@ export function basisOf(figures: readonly AppliedFigure[]): RulesReport['basis']
   return figures.some((figure) => figure.origin === 'lookup') ? 'local-lookup' : 'general-baseline'
 }
 
-export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): RulesReport {
+export function checkLocalRules(stated: FloorPlan, options: CheckOptions = {}): RulesReport {
+  // CNT-10: the checks are for the building as it will be after the work.
+  const plan = planInState(stated, 'after')
   // COD-3: the caller's place, else the plan's; with none, no figure is applied.
   const place = placeFor(plan, options)
   const skippedFor = place === null ? 'no_place' : 'no_figures_for_place'

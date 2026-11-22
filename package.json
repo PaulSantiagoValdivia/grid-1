@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "Grid (ongrid): floor plans and plan checks for architects",
+  "description": "Grid (ongrid): floor plans for AI agents",
   "type": "module",
   "engines": {
     "node": ">=22"

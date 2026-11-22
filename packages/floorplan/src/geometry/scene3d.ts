@@ -12,6 +12,7 @@
  * opening is a hole in the outline, and Three triangulates it on extrusion.
  */
 
+import { planInState } from './phases'
 import type { FloorPlan, Opening, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
@@ -388,7 +389,9 @@ export interface SceneOptions {
   readonly shell?: SceneShell | null
 }
 
-export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D {
+export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene3D {
+  // CNT-10: the model is the building as it will be after the work.
+  const plan = planInState(stated, 'after')
   const index = indexPlan(plan)
   const { issues, broken } = validatePlan(plan, index)
 
