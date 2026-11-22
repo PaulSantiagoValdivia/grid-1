@@ -429,9 +429,18 @@ class Compiler {
   /** What each side of a sized room turned out to have. */
   readonly found = new Map<string, number>()
 
-  constructor(text: string, assumed: Map<string, number>) {
+  /** How the walls' ends and thicknesses are written: to a tenth of a millimetre, unless asked finer. */
+  private readonly fix: (value: number) => number
+
+  constructor(text: string, assumed: Map<string, number>, options: CompileOptions = {}) {
     this.lines = text.split(/\r\n|\r|\n/)
     this.assumed = assumed
+    const places = options.places ?? 4
+    const scale = 10 ** places
+    this.fix = places === 4 ? r4 : (v: number): number => {
+      const r = Math.round(v * scale) / scale
+      return Object.is(r, -0) || r === 0 ? 0 : r
+    }
   }
 
   private stop(code: string, at: number | null, message: string): never {
@@ -1667,12 +1676,13 @@ class Compiler {
     }
     this.nameWalls(walls, edges, prefix)
     for (const w of walls) {
+      const fix = this.fix
       const json: WrittenWall = {
         id: w.id,
-        start: [r4(w.start[0]), r4(w.start[1])],
-        end: [r4(w.end[0]), r4(w.end[1])],
-        thickness: r4(w.t),
-        ...(w.height !== null ? { height: r4(w.height) } : {}),
+        start: [fix(w.start[0]), fix(w.start[1])],
+        end: [fix(w.end[0]), fix(w.end[1])],
+        thickness: fix(w.t),
+        ...(w.height !== null ? { height: fix(w.height) } : {}),
         kind: w.kind,
         ...(w.virtual ? { virtual: true } : {}),
         ...(this.explicitFloors ? { floor: fl.id } : {}),
@@ -2189,13 +2199,22 @@ const SETTLE_ROUNDS = 8
  * it; every warning and every guess the writing made; and the rooms, walls and openings as
  * Grid worked them out.
  */
-export function compileRoomsText(text: string): RoomsResult {
+export interface CompileOptions {
+  /**
+   * HND-12: the decimal places the walls' ends, thicknesses and heights are written to: 4 (a
+   * tenth of a millimetre) for rooms text a person or an agent writes, more for a plan read from
+   * a scan, whose rooms keep the scan's own areas.
+   */
+  readonly places?: number
+}
+
+export function compileRoomsText(text: string, options: CompileOptions = {}): RoomsResult {
   let assumed = new Map<string, number>()
   let compiler: Compiler | null = null
   let plan: WrittenPlan | null = null
   let stopped: RoomsProblem | null = null
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
-    compiler = new Compiler(text, assumed)
+    compiler = new Compiler(text, assumed, options)
     try {
       plan = compiler.run()
       stopped = null
