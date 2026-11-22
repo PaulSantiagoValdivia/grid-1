@@ -2,14 +2,14 @@
 import { useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import { floorElevations } from '@ongrid/floorplan/geometry'
+import { floorElevations, type CameraRecord } from '@ongrid/floorplan/geometry'
 import type { PlaybackClock } from '../preview/playback'
 import type { PlanBuild } from '../preview/useBuildFrame'
 import { isStillClick } from '../preview/click'
 import { useReducedMotion } from '../preview/useReducedMotion'
 import { usePlanColors } from './usePlanColors'
 import { buildingFrame, buildingLayout } from './building'
-import { openingCamera } from './camera'
+import { openingCamera, recordCamera } from './camera'
 import { moveRig } from './pivot'
 import { BuildingScene, GROUND_GRID } from './BuildingScene'
 import { OrbitControls } from './OrbitControls'
@@ -31,6 +31,12 @@ interface Canvas3DProps {
   highlightRoom?: string | null
   /** A still click on a storey other than the focused one. */
   onFocus?: (floorId: string) => void
+  /**
+   * VEW-3: a camera record (a named view, or one an agent's view returned) to open at, turning
+   * round its target. Initial-only, as the opening camera is: a new record needs a new canvas.
+   * The opening camera when left out.
+   */
+  camera?: CameraRecord | null
 }
 
 /** Where the hover label sits, from the pointer, in pixels. */
@@ -41,7 +47,8 @@ export function Canvas3D({
   focus,
   builds,
   highlightRoom = null,
-  onFocus
+  onFocus,
+  camera = null
 }: Canvas3DProps): JSX.Element {
   const colors = usePlanColors()
   const reducedMotion = useReducedMotion()
@@ -57,10 +64,11 @@ export function Canvas3D({
   // it always has, and only a change of focus eases its height (and the
   // camera's with it).
   const [initial] = useState(frame)
+  const [view] = useState(() => (camera === null ? null : recordCamera(camera)))
   const frameRef = useRef(frame)
   frameRef.current = frame
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the focus is the trigger, not the plan
-  const goalY = useMemo(() => frameRef.current.target[1], [focus])
+  const goalY = useMemo(() => (view === null ? frameRef.current.target[1] : view.target[1]), [focus, view])
 
   // Hover: which storey is under the pointer changes React state; the label
   // follows the pointer through its own DOM node, with no render per move.
@@ -97,10 +105,12 @@ export function Canvas3D({
   const hoveredName = layout.storeys.find((s) => s.floorId === shownHover)?.name ?? null
 
   const [cx, , cz] = frame.target
+  // A record's camera turns round its own target, which the pivot keeps.
+  const [px, , pz] = view === null ? frame.target : view.target
 
   return (
     <div ref={container} className="relative size-full overflow-hidden" style={{ cursor: shownHover ? 'pointer' : undefined }}>
-      <Canvas shadows camera={openingCamera(initial)}>
+      <Canvas shadows camera={view === null ? openingCamera(initial) : { position: view.position, fov: view.fov, near: view.near, far: view.far }}>
         <BuildingScene
           floorPlan={floorPlan}
           layout={layout}
@@ -116,8 +126,8 @@ export function Canvas3D({
         <GroundGrid x={cx} z={cz} cellColor={colors.grid} sectionColor={colors.gridSection} />
 
         {/* Orbiting lets the build keep rising, like scrolling while code is written. */}
-        <OrbitControls target={initial.target} />
-        <BuildingCamera x={cx} z={cz} goalY={goalY} reducedMotion={reducedMotion} />
+        <OrbitControls target={view === null ? initial.target : view.target} />
+        <BuildingCamera x={px} z={pz} goalY={goalY} reducedMotion={reducedMotion} />
       </Canvas>
 
       {!layout.single && (

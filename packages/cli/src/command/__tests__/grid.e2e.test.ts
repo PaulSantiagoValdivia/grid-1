@@ -4,6 +4,8 @@ import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { cameraRecord, storedView } from '@ongrid/floorplan/geometry'
+import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { twoBedFlat } from '../../draw/__tests__/twoBedFlat'
 import { GRID_TOOLS } from '../../mcp/serveTools'
 
@@ -208,6 +210,18 @@ describe('grid draw --out: writing a picture', () => {
     const [width, height] = size('one.png')
     expect(width).toBe(1200)
     expect(size('two.png')).toEqual([width * 2, height * 2])
+  })
+
+  it('draws a view saved with the plan with --view, by its name in any capitals (VEW-3)', () => {
+    const plan = parseFloorPlan(JSON.parse(readFileSync(sample, 'utf8')))
+    const view = storedView('Garden corner', cameraRecord(plan, { target: { room: 'lounge', point: [7, 5, 1.3] }, bearing: 200, tilt: 25, distance: 12, focalLength: 35, cut: null }))
+    writeFileSync(join(dir, 'viewed.json'), JSON.stringify({ ...JSON.parse(readFileSync(sample, 'utf8')), views: [view] }))
+    const run = grid('draw', 'viewed.json', '--view', 'garden CORNER', '--out', 'view.png')
+    expect([run.status, run.err, run.out]).toEqual([0, '', 'Wrote view.png\n'])
+    const bytes = readFileSync(join(dir, 'view.png'))
+    expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1200, 800])
+    expectRefusal(grid('draw', 'viewed.json', '--view', 'Street'), 2, '--view names no view saved with this plan. Its views: "Garden corner".')
+    expectRefusal(grid('draw', 'viewed.json', '--view', 'Garden corner', '--floor', 'ground', '--out', 'v.png'), 2, '--view draws the floors its camera was saved with')
   })
 
   it('writes a 3D still as a PNG with --3d, twice as large with --scale 2', () => {

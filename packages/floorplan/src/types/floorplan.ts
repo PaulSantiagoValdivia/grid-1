@@ -74,8 +74,19 @@
  *   A value a wall leaves out stays not stated: the reading fills its thickness, height and kind
  *   for the geometry (the derived layer: a height from the wall's floor, else `WALL_DEFAULTS`)
  *   and says which in `unstated`, which is never written back (`statedWall`). Version 1.
+ *
+ * C9 · Saved views (VEW-3, lab SE-4, SE-7, S-16)
+ *   A plan MAY keep named views in `views`: each a camera, by what it is pointed at (`target`: a
+ *   point, and the room it is in), the compass bearing to the camera from the north the plan
+ *   states (`bearingFrom: 'north'`, with that `north`) or from the top of the drawing (`'plan
+ *   up'`), its tilt, distance and lens (focal length in millimetres on a sensor), the floor shown
+ *   cut away and the floors drawn; and the same camera as the open BCF format writes one:
+ *   `position`, `direction`, `up`, `fieldOfView` (vertical, degrees) and `aspectRatio`, in plan
+ *   metres with z up from the ground floor's floor level. Grid writes both and reads the setting
+ *   (`geometry/camera.ts`). Optional and never defaulted (version 1).
  */
 import { z } from 'zod'
+import { limit } from '../geometry/tolerances'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
 
 export * from './planText'
@@ -872,6 +883,50 @@ export const MarkSchema = z
     }
   })
 
+/** C9: a point in plan metres, z up from the ground floor's floor level. */
+const Vec3 = z.tuple([finite(), finite(), finite()])
+
+/** VEW-3 (C9): what a saved view's bearing is read from. */
+export const VIEW_BEARING_FROM = ['north', 'plan up'] as const
+
+/**
+ * VEW-3 (C9): a named view, saved with the plan. The setting (`target` to `cut`) is what Grid
+ * reads; `floors` and the BCF camera (`position` to `aspectRatio`) are what it worked out, for
+ * other programs. Optional and never defaulted (version 1).
+ */
+export const ViewSchema = z
+  .object({
+    name: text('name').pipe(z.string().min(1)),
+    target: z.object({
+      room: text('id').pipe(z.string().min(1)).optional(),
+      point: Vec3,
+    }),
+    bearing: finite().min(0).lt(360),
+    bearingFrom: z.enum(VIEW_BEARING_FROM),
+    north: finite().optional(),
+    tilt: finite(),
+    distance: finite(),
+    lens: z.object({
+      focalLength: finite(),
+      sensor: z.object({ width: finite().positive(), height: finite().positive() }),
+    }),
+    cut: text('id').pipe(z.string().min(1)).optional(),
+    floors: parts(text('id'), 'floors').optional(),
+    position: Vec3,
+    direction: Vec3,
+    up: Vec3,
+    fieldOfView: finite().positive().lt(180),
+    aspectRatio: finite().positive(),
+  })
+  .superRefine((view, ctx) => {
+    const most = limit('cameraTilt')
+    if (Math.abs(view.tilt) > most) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tilt'], message: `is more than ${most} degrees from level: a camera looking straight down or up has no up` })
+    if (!(view.distance >= limit('cameraClosest'))) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['distance'], message: `is less than ${limit('cameraClosest')} m, the least distance a camera may stand from what it is pointed at` })
+    const [shortest, longest] = [limit('lensShortest'), limit('lensLongest')]
+    if (!(view.lens.focalLength >= shortest && view.lens.focalLength <= longest)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lens', 'focalLength'], message: `takes a focal length from ${shortest} to ${longest} mm` })
+    if (view.bearingFrom === 'north' && view.north === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['north'], message: 'is needed when the bearing is from north: the north it was read from' })
+  })
+
 /**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
@@ -944,6 +999,9 @@ export const FloorPlanFieldsSchema = z.object({
   // WRT-6 (C8): where values came from, given, measured, scanned or assumed, and how sure each is
   // (`MarkSchema`). Optional and never defaulted (version 1).
   marks: parts(MarkSchema, 'marks').optional(),
+  // VEW-3 (C9): named views, each a camera saved with the plan (`ViewSchema`). Optional and never
+  // defaulted (version 1).
+  views: parts(ViewSchema, 'views').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -992,6 +1050,7 @@ export type SketchItem = z.infer<typeof SketchItemSchema>
 export type Front = z.infer<typeof FrontSchema>
 export type Site = z.infer<typeof SiteSchema>
 export type Mark = z.infer<typeof MarkSchema>
+export type View = z.infer<typeof ViewSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

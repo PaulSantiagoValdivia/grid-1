@@ -10,7 +10,7 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { dot, sub, tolerance, wallAxis, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { cameraRecord, compassBearing, dot, drawingBearing, planOrientation, storedView, sub, tolerance, viewSetting, wallAxis, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
@@ -499,6 +499,9 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
   const top: Record<string, unknown> = {}
   if (plan.north !== undefined) top['north'] = wrapDegrees(r3(-plan.north))
   if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: flip(plan.site.origin) }
+  // VEW-3: each saved view is mirrored with the building, so it still frames what it framed.
+  const views = mirroredViews(plan, how, flip, top['north'] as number | undefined)
+  if (views !== null) top['views'] = views
   const north = plan.north === undefined ? '' : ` The plan's north is mirrored with it: ${wrapDegrees(r3(plan.north))}° → ${top['north'] as number}° counter-clockwise from the top of the drawing.`
   return {
     walls,
@@ -507,6 +510,26 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     rooms,
     ...(items.size === 0 ? {} : { items }),
     ...(Object.keys(top).length === 0 ? {} : { plan: top }),
-    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}`],
+    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${views === null ? '' : ` The ${views.length === 1 ? 'saved view is' : `${views.length} saved views are`} mirrored with it.`}`],
   }
+}
+
+/** VEW-3: the plan's saved views, mirrored: what each is pointed at, and the side it stands on. Null when it has none. */
+function mirroredViews(plan: FloorPlan, how: Mirror, flip: (p: readonly [number, number]) => Pair, north: number | undefined): StoredView[] | null {
+  const views = plan.views ?? []
+  if (views.length === 0) return null
+  const before = planOrientation(plan)
+  const after = { ...plan, ...(north !== undefined ? { north } : {}) } as FloorPlan
+  return views.map((view) => {
+    const setting = viewSetting(view)
+    const onDrawing = drawingBearing(setting.bearing, before, setting.north ?? null)
+    const [x, y] = flip([setting.target.point[0], setting.target.point[1]])
+    const record = cameraRecord(after, {
+      ...setting,
+      target: { ...setting.target, point: [x, y, setting.target.point[2]] },
+      bearing: compassBearing(how === 'left-right' ? -onDrawing : 180 - onDrawing, planOrientation(after)),
+      north: planOrientation(after).north,
+    })
+    return storedView(view.name, record)
+  })
 }

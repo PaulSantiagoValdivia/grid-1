@@ -2,22 +2,21 @@
  * The named views the tool server draws: a floor plan, a sheet of plans side by side at one
  * scale, the 3D model from a side of the drawing, and an eye-level view from inside a room.
  *
- * Every picture is the viewer's own drawing (`planPicture`, `stillScene`): only the camera and
- * the frame are chosen here. "North" is the top of the drawing, +y: a plan holds no north.
+ * Every picture is the viewer's own drawing (`planPicture`, `planStill`): only the camera and
+ * the frame are chosen here. A 3D picture is taken from one camera record (VEW-3, `cameraAsk.ts`).
  */
 import type { Display } from '@ongrid/floorplan/types/units'
-import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
+import { poleOfInaccessibility, type Bounds, type CameraRecord, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
 import { LOOKS as PICTURE_LOOKS, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
-import { GROUND_GRID } from '@ongrid/viewer/src/canvas3d/BuildingScene'
-import { LIGHT_COLORS_3D, rasterise, stillScene } from '@ongrid/viewer/src/still'
+import { planStill } from '@ongrid/viewer/src/still'
 import { loadCanvas } from './canvas'
 import { drawPlan } from './drawPlan'
 import { partBounds, pixelBoxes, type PartBox } from './partBoxes'
 import { forSkia } from './skiaText'
 import { stampLabel } from './stamp'
 
-import { namedLook, type LookName, type Side } from './viewNames'
+import { namedLook, type LookName } from './viewNames'
 
 function lookOf(look: LookName): 'working' | 'technical' | 'dark' {
   return namedLook(look)
@@ -95,10 +94,6 @@ export async function sheetView(plans: readonly { plan: FloorPlan; title: string
   return { png: await canvas.encode('png'), width, height, pxPerMetre }
 }
 
-const BEARING: Record<Exclude<Side, 'above'>, number> = {
-  north: 0, 'north-east': 45, east: 90, 'south-east': 135, south: 180, 'south-west': 225, west: 270, 'north-west': 315,
-}
-
 const STILL_W = 1200
 const STILL_H = 800
 const DEG = Math.PI / 180
@@ -114,72 +109,28 @@ async function png(image: { data: Uint8ClampedArray; width: number; height: numb
 
 export interface CameraView {
   readonly png: Uint8Array
-  /** Where the camera stands and looks, in plan metres (x, y) and height above the ground. */
-  readonly camera: { readonly at: readonly [number, number, number]; readonly heading: number; readonly tilt: number; readonly fov: number }
-}
-
-/** The 3D model seen from one side of the drawing, or from above, as a whole or one floor cut away. */
-export async function modelView(plan: FloorPlan, options: { from: Side; floor?: string }): Promise<CameraView> {
-  const still = stillScene(plan, { focus: options.floor ?? null, colors: LIGHT_COLORS_3D, width: STILL_W, height: STILL_H })
-  try {
-    const [tx, ty, tz] = still.frame.target
-    const bearing = options.from === 'above' ? 180 : BEARING[options.from]
-    const tilt = options.from === 'above' ? 80 : 30
-    const distance = still.frame.span * 2.2
-    const east = Math.sin(bearing * DEG) * Math.cos(tilt * DEG)
-    const north = Math.cos(bearing * DEG) * Math.cos(tilt * DEG)
-    const camera = still.camera
-    camera.position.set(tx + distance * east, ty + distance * Math.sin(tilt * DEG), tz - distance * north)
-    camera.lookAt(tx, ty, tz)
-    camera.updateProjectionMatrix()
-    camera.updateMatrixWorld()
-    const image = rasterise(still.scene, camera, {
-      width: STILL_W,
-      height: STILL_H,
-      supersample: 2,
-      ground: { ...GROUND_GRID, center: [tx, tz], cellColor: LIGHT_COLORS_3D.grid, sectionColor: LIGHT_COLORS_3D.gridSection },
-    })
-    const p = camera.position
-    return { png: await png(image), camera: { at: [p.x, -p.z, p.y], heading: (bearing + 180) % 360, tilt: -tilt, fov: camera.fov } }
-  } finally {
-    still.close()
-  }
-}
-
-/** A heading in degrees clockwise from north (the top of the drawing) toward a point. */
-function headingTo(from: Vec2, to: Vec2): number {
-  return ((Math.atan2(to.x - from.x, to.y - from.y) / DEG) % 360 + 360) % 360
+  /** VEW-3: the camera the picture was taken with, the one record the app's 3D view opens at too. */
+  readonly camera: CameraRecord
 }
 
 /**
- * Standing in a room, eye `height` metres above its floor, looking level toward `toward`. The
- * floor is shown cut away, so nothing above it is drawn. 90 degrees across.
+ * VEW-3: the 3D model as one camera record sees it, with its floor cut away (`cut`). The picture
+ * is the app's own scene, taken with `recordCamera`, the settings the app's 3D view opens at for
+ * the same record. A camera outside every room sees the ground grid; one in a room does not.
  */
-export async function eyeView(
-  plan: FloorPlan,
-  options: { floor: string; polygon: readonly Vec2[]; height: number; toward: Vec2 | number; stand?: Vec2 },
-): Promise<CameraView> {
-  const still = stillScene(plan, { focus: options.floor, colors: LIGHT_COLORS_3D, width: STILL_W, height: STILL_H })
-  try {
-    const base = floorElevations(plan).floors.get(options.floor)?.floorLevel ?? 0
-    const centre = poleOfInaccessibility(options.polygon).point
-    // Stand back from the middle, away from what is looked at, so more of the room is seen.
-    const heading = typeof options.toward === 'number' ? options.toward : headingTo(centre, options.toward)
-    const back = options.stand ?? standBack(options.polygon, centre, heading)
-    const camera = still.camera
-    const aspect = STILL_W / STILL_H
-    camera.fov = (2 * Math.atan(Math.tan(45 * DEG) / aspect)) / DEG
-    camera.near = 0.05
-    const eye = base + options.height
-    camera.position.set(back.x, eye, -back.y)
-    camera.lookAt(back.x + Math.sin(heading * DEG), eye, -(back.y + Math.cos(heading * DEG)))
-    camera.updateProjectionMatrix()
-    camera.updateMatrixWorld()
-    const image = rasterise(still.scene, camera, { width: STILL_W, height: STILL_H, supersample: 2 })
-    return { png: await png(image), camera: { at: [back.x, back.y, eye], heading, tilt: 0, fov: camera.fov } }
-  } finally {
-    still.close()
-  }
+export async function cameraView(plan: FloorPlan, camera: CameraRecord): Promise<CameraView> {
+  const image = planStill(plan, { camera, width: STILL_W, height: STILL_H, look: 'light', supersample: 2 })
+  return { png: await png(image), camera }
+}
+
+/**
+ * Where to stand in a room to look toward a point or a heading (degrees clockwise from the top
+ * of the drawing): back from its middle, away from what is looked at, so more of the room is seen.
+ */
+export function eyeStand(polygon: readonly Vec2[], toward: Vec2 | number): Vec2 {
+  const centre = poleOfInaccessibility(polygon).point
+  const heading = typeof toward === 'number' ? toward : ((Math.atan2(toward.x - centre.x, toward.y - centre.y) / DEG) % 360 + 360) % 360
+  return standBack(polygon, centre, heading)
 }
 
 /** A point behind the room's middle, opposite the heading, still well inside the room. */

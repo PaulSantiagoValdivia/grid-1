@@ -2,7 +2,7 @@
  * The tools of `grid serve`, in the order `tools/list` gives them: the tools that read the
  * plan first, ordered by the requests they answer most often (lab entry Y-2), with the problem
  * report last of them (CMD-13), then the preview, the export, the sheet, the seen mark (MSG-10),
- * and last the tools that change the plan.
+ * and last the tools that change the plan, the saved views last of them (VEW-3).
  *
  * Every path an agent passes goes through the project's resolver (`fs/projectFiles.ts`):
  * inside the project folder or refused, with a message naming the path and the folder. The
@@ -18,6 +18,7 @@ import { markSeenTool } from './seenTool'
 import { labelled, readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
 import { WRITE_TOOLS } from './writeTools'
 import { EDIT_TOOLS } from './editTools'
+import { saveViewTool } from './viewTool'
 
 export { EXPORT_TOOL_NAME, PREVIEW_TOOL_NAME } from './writeTools'
 
@@ -32,6 +33,8 @@ export const GRID_TOOLS: readonly GridTool[] = [
   markSeenTool,
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'change-plan'),
   ...EDIT_TOOLS,
+  // VEW-3: changes the plan's saved views only, never the building: the last of the changes.
+  saveViewTool,
 ]
 
 async function answer(tool: GridTool, raw: unknown, context: ToolContext): Promise<ToolAnswer> {

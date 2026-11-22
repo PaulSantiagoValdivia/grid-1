@@ -64,6 +64,8 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   // SHT-7: writing on the drawing and the sketch layer.
   annotations: { id: 'id', text: 'name', room: 'id', floor: 'id' },
   sketch: { id: 'id', category: 'id', text: 'name', floor: 'id' },
+  // VEW-3: a saved view's name, and the floor it shows cut away.
+  views: { name: 'name', cut: 'id' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
