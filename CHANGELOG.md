@@ -42,3 +42,7 @@ Grid has not been released yet. The first release will hold:
   rooms with holes, such as a courtyard.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
   only the floor it shows.
+- `grid check` says where an opening does not fit: a door or window that runs into a wall meeting
+  its wall, a wall that ends inside a window, an opening as long as its wall, a door on a dividing
+  line, and a window between two rooms (perhaps a borrowed light). `grid_split_room` will not end
+  a new wall inside a door or window, and says the nearest size that is clear.
