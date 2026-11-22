@@ -298,6 +298,11 @@ export const CODES = {
     needed: fixed('a kind that matches the rooms on its sides'),
     fix: fixed('Leave out its kind, or state the kind the rooms beside it show.')
   },
+  'wall/ends-in-opening': {
+    says: (s) => `${s.label} ends on another wall inside one of its openings`,
+    needed: fixed('a wall that meets another clear of its doors and windows'),
+    fix: fixed('Move the wall along, or move the opening clear of where the wall meets it.')
+  },
   'wall/size-question': {
     says: (s) => `${s.label} has a size that may not be meant`,
     needed: fixed('the size of a wall in a building'),
@@ -430,6 +435,27 @@ export const CODES = {
     found: (s) => `its leaf and the leaf of door ${s.also.map(quoted).join(', ')} sweep the same floor`,
     needed: fixed('door sweeps that do not overlap'),
     fix: fixed('Turn one of them to open the other way or hang it from its other end, or move them apart.')
+  },
+
+  'opening/crosses-wall': {
+    says: (s) => `${s.label} runs into a wall that meets its wall`,
+    needed: fixed('an opening within the clear run of its wall, between the walls that meet it'),
+    fix: fixed('Move it along its wall to the offset given, or make it narrower. It is cut through its own wall only.')
+  },
+  'opening/fills-wall': {
+    says: (s) => `${s.label} is as long as its wall`,
+    needed: fixed('some wall left beside an opening'),
+    fix: fixed('Make it narrower, or leave the wall out and let the rooms meet along a dividing line.')
+  },
+  'opening/on-dividing-line': {
+    says: (s) => `${s.label} is on a dividing line`,
+    needed: fixed('a door or window in a wall'),
+    fix: fixed('Make it a doorless opening if the rooms are open to each other there, or put it on a wall.')
+  },
+  'opening/window-between-rooms': {
+    says: (s) => `${s.label} has rooms on both sides`,
+    needed: fixed('a window in a wall with the outside on one side, unless it is a borrowed light'),
+    fix: fixed('Leave it if it is a borrowed light between two rooms. Otherwise move it to an outside wall.')
   },
 
   // --- Rooms ----------------------------------------------------------------------------------

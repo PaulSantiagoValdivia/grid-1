@@ -112,6 +112,12 @@ describe("E's six requests, one call each", () => {
     expect((reply.data as { couldNotKeep: string[] }).couldNotKeep).toEqual(['"Study" has no window now: its window is in "Bathroom 2".'])
   })
 
+  it('4b. a new wall that would end in a window is refused, with the nearest size clear of it (MSG-16)', async () => {
+    const reply = await b.call('grid_split_room', { plan: 'v03.json', room: 'bed2', side: 'north', size: 1, new_room: 'box', new_name: 'Box room', door_width: 0, out: 'r4b.json' })
+    expect(reply.isError).toBe(true)
+    expect(reply.text).toMatch(/^The new wall would end inside window "win-bed2" of wall "ext-east", on the east side of ".+"\. The nearest size clear of it is 0\.45 m across from the north side; or move the window first\. Nothing was written\.$/)
+  })
+
   it('5. a 3 x 4 m extension at the back with sliding doors: the same plan as by hand, the door with no swing', async () => {
     const reply = await b.call('grid_add_room', {
       plan: 'v04.json', room: 'extension', name: 'Garden room', use: 'living', against: 'living', side: 'south', width: 3, depth: 4, size: 'centre',

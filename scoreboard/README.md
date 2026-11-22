@@ -237,6 +237,17 @@ counted that the lab did not mark "answered fully": the lab's harness had no gro
 estate agent's and the developer's area turns still need feet and inches, and flats. Checks the
 plan can feed stays 5: the two checks that need gross areas also need the plot (`site`).
 
+MSG-16 (where each opening stands, against the walls that meet its wall) moved two counts.
+Damage that passes in silence, 386 to 278: 108 damaged plans are now named, all from "move an
+opening". The opening pushed to the very start or flush to the end of its wall runs into the wall
+that meets it there (`opening/crosses-wall`), and an opening moved onto a junction is named with
+the wall that ends in it (`wall/ends-in-opening`); every one of the 141 openings pushed to an end
+is named (`scoreboard/__tests__/openingPlaces.test.ts`). Design mistakes named, 2 to 5: mistake 2
+(a window crossed by a new partition), 4 (a door straddling an end wall) and 9 (openings cut by
+moved partitions). Sound plans with a warning stays 95: the generator keeps every opening 0.35 m
+clear of the junctions, further than any wall's half thickness, and puts windows only in outside
+walls.
+
 The same run stores two figures of the detail that had moved earlier without a count moving:
 since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435
 rooms are compared, not 16,451. SHT-2 changes neither: the schema reads the same 1,100 of the

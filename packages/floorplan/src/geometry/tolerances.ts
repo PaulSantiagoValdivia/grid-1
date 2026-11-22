@@ -64,7 +64,9 @@ export const TOLERANCES = {
     unit: 'm',
     decides:
       'How far an opening may run past either end of its wall, below the floor, above the top of ' +
-      'its wall or into the next opening on its wall, and still fit. A wall whose ends were ' +
+      'its wall or into the next opening on its wall, and still fit; also how far it may run into ' +
+      'the body of a wall that meets its wall, or a wall end into it, before that is named ' +
+      '(MSG-16). A wall whose ends were ' +
       'rounded to the millimetre is up to this much shorter than intended. A refusal states the ' +
       'overrun and the offset that fits.',
     basis: own
@@ -131,7 +133,8 @@ export const TOLERANCES = {
       'How far a joined corner may reach along a wall from the point where the walls meet, in ' +
       'half thicknesses of the thicker wall. Walls meeting at so sharp an angle that their faces ' +
       'cross further out than this are left cut square there, as a drawing would bevel them, ' +
-      'instead of ending in a long spike.',
+      'instead of ending in a long spike. Such a meeting is not tested against the openings of ' +
+      'either wall either (MSG-16).',
     basis: own
   },
   swingContact: {

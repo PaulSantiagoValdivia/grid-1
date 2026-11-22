@@ -36,6 +36,7 @@ import { levelIssues, unknownFloorIssues } from './levels'
 import { buildingKind } from './plausible'
 import { planStairs } from './stairs'
 import { itemIssues } from './items'
+import { openingPlaceIssues } from './openingPlaces'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
@@ -1003,6 +1004,8 @@ export function validatePlan(
     validateNesting(plan, index, broken, issues)
     validateRoomOverlaps(plan, index, broken, issues)
     validateWallFaults(plan, index, broken, issues)
+    // MSG-16: where each opening stands, against the walls that meet its wall.
+    issues.push(...openingPlaceIssues(plan, index, broken))
     validateKinds(plan, index, broken, issues)
   }
 

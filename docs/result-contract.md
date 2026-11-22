@@ -130,6 +130,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `wall/no-height` | {thing} has no height | a height above 0, or a virtual wall for a line with no substance |
 | `wall/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `wall/kind-differs` | {thing} is stated as one kind, but the rooms on its sides show another | a kind that matches the rooms on its sides |
+| `wall/ends-in-opening` | {thing} ends on another wall inside one of its openings | a wall that meets another clear of its doors and windows |
 | `wall/size-question` | {thing} has a size that may not be meant | the size of a wall in a building |
 | `wall/short` | {thing} stops short of a corner | wall ends that meet at the corner |
 | `wall/gap` | {thing} leaves a gap in a straight side of a room | the walls of a side meeting end to end |
@@ -152,6 +153,10 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
 | `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
+| `opening/crosses-wall` | {thing} runs into a wall that meets its wall | an opening within the clear run of its wall, between the walls that meet it |
+| `opening/fills-wall` | {thing} is as long as its wall | some wall left beside an opening |
+| `opening/on-dividing-line` | {thing} is on a dividing line | a door or window in a wall |
+| `opening/window-between-rooms` | {thing} has rooms on both sides | a window in a wall with the outside on one side, unless it is a borrowed light |
 | `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
 | `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
@@ -359,6 +364,22 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: where each opening stands (MSG-16)
+
+- Five new warnings, `worth-a-look`, in `grid check` and `grid_check`. None of them leaves
+  anything out: the opening is still drawn, cut through its own wall only.
+  - `opening/crosses-wall`: the opening runs into the body of a wall that meets its wall (a
+    corner, a junction, a wall passing through). `also` names that wall and the opening's wall;
+    the line gives the offsets that keep it clear.
+  - `wall/ends-in-opening`: a wall ends on another inside one of its openings. The line is about
+    the wall that ends; `also` names the opening and the wall it lands on.
+  - `opening/fills-wall`: the opening is as long as its wall.
+  - `opening/on-dividing-line`: a door or a window on a dividing line. `also` names the line.
+  - `opening/window-between-rooms`: a window in a wall with rooms on both sides, which may be a
+    borrowed light. `also` names the wall and the two rooms.
+- `grid_split_room` refuses a new wall whose end would land inside a door or window of the wall
+  it meets, and names the nearest place along the room where it would not.
 
 ### 2026-11-22: units at the edge (WRT-7)
 
