@@ -141,3 +141,11 @@ reader and every existing plan file unchanged.
 - **The server's instructions in `distribution/listing.ts` do not name `grid_square_scan`**: the
   tool's own description says when to use it, and changing the instructions moves the install
   tests' text. Worth adding with the next listing change.
+
+## After merging main at ef88ec9
+
+ARE-13, MSG-3 and MSG-16 merged in, with both sides kept: `split.ts` takes MSG-16's check that a
+new wall does not end inside an opening and WRT-6's `readingAfter`; the agents' changelog keeps
+every section, WRT-6 first. Build, typecheck and lint are clean. The full suite passes: 248 files,
+4,782 tests, 4 skipped. The scoreboard is the same as the stored figures. The built file is
+368,978 bytes.
