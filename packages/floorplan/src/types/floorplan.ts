@@ -1697,7 +1697,7 @@ export const FlatSchema = z.object({
 export const PlanBuildingSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
   name: text('name').optional(),
-  floors: parts(text('id').pipe(z.string().min(1)), 'floors').pipe(z.array(z.string()).min(1, { message: 'A building lists at least one floor' })),
+  floors: parts(text('id').pipe(z.string().min(1)), 'floors').pipe(z.array(z.string()).min(1, { message: english(said('read.building.floors')) })),
 })
 
 /**

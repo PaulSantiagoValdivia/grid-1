@@ -1844,6 +1844,8 @@ export const es: Messages = {
   'drawing.key.outsideWall': 'Muro exterior',
   'drawing.key.insideWall': 'Muro interior',
   'drawing.key.separatingWall': 'Muro separador',
+  'read.building.floors': 'Un edificio indica al menos una planta',
+  'areas.buildings.heading': 'Edificios, tal como los nombra el plano:',
   'takeoff.assumed.noRoofAbove': 'sin cubierta: el plano indica {above} sobre esta planta',
   'takeoff.assumed.above.common': 'una zona común del edificio',
   'takeoff.assumed.above.neighbour': 'un vecino',

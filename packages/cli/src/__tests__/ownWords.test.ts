@@ -115,7 +115,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/walked.ts': [1, 'notYet'],
   'packages/cli/src/report/draft.ts': [16, 'notYet'],
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
-  'packages/cli/src/sheet/coverage.ts': [27, 'developer'],
+  'packages/cli/src/sheet/coverage.ts': [28, 'developer'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
   'packages/cli/src/sheet/sheetFile.ts': [7, 'command'],
   'packages/cli/src/versions/diff.ts': [10, 'notYet'],
@@ -154,7 +154,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/scan/evidence.ts': [2, 'notYet'],
   'packages/floorplan/src/scan/roomModel.ts': [22, 'notYet'],
   'packages/floorplan/src/scan/toPlan.ts': [30, 'notYet'],
-  'packages/floorplan/src/types/floorplan.ts': [55, 'notYet'],
+  'packages/floorplan/src/types/floorplan.ts': [56, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
@@ -252,8 +252,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // (reviews/MSG-11.md, "After merging main"); and CNT-14 33: a door's handing refused in rooms
     // (handing.ts 6), kinds and handing in rooms text (compile.ts 7, read.ts 2), the opening edits'
     // receipts (edits.ts 7), the IFC's kinds (5), the diff's change lines (building.ts 3, compare.ts
-    // 1) and the opening schedule's new CSV columns (2) (reviews/CNT-14.md).
-    expect(left).toBeLessThanOrEqual(1507)
+    // 1) and the opening schedule's new CSV columns (2) (reviews/CNT-14.md); and CNT-6 1: a context
+    // shape's outline refusal in the schema (reviews/CNT-6.md).
+    expect(left).toBeLessThanOrEqual(1508)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

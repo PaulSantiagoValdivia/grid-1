@@ -14,7 +14,7 @@ import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, i
 import { causeText, checkPlan, checkTitle, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmSectionTitle, firmStandardsText, kindWord, limitsText, nothingCheckedText, partsText, placeText, type PlaceWords, problemsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { askedLanguage, languageFor } from '../command/language'
 import { inLanguage, t, tv } from '../command/words'
-import { LANGUAGES, say, type Language } from '@ongrid/floorplan/messages'
+import { LANGUAGES, english, said, say, type Language } from '@ongrid/floorplan/messages'
 import { readSeen, type SeenState } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
 import { describePlan, describeRooms, describeWalk, walkOf } from '../command/describe'
@@ -417,7 +417,7 @@ const areasTool: GridTool = {
     }
     // CNT-6: each building the plan names, from its own floors.
     if (buildings.length > 0) {
-      lines.push('Buildings, as the plan names them:')
+      lines.push(english(said('areas.buildings.heading')))
       for (const b of buildings) {
         const gross = areas.reader.gross.map((m) => `${m === 'grossInternal' ? 'gross internal' : 'gross external'} ${b[m] === null ? 'not known' : areaText(b[m]!, units)}`)
         lines.push(`  ${q(b.name)} (${b.floors.length} floor${b.floors.length === 1 ? '' : 's'}): net ${areaText(b.net, units)}, ${gross.join(', ')}${b.height === null ? '' : `, ${lengthText(b.height, units)} high`}.`)

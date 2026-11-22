@@ -1829,6 +1829,8 @@ export const en = {
   'drawing.key.outsideWall': 'Outside wall',
   'drawing.key.insideWall': 'Inside wall',
   'drawing.key.separatingWall': 'Separating wall',
+  'read.building.floors': 'A building lists at least one floor',
+  'areas.buildings.heading': 'Buildings, as the plan names them:',
   'takeoff.assumed.noRoofAbove': 'no roof: the plan states {above} above this floor',
   'takeoff.assumed.above.common': 'a common part of the building',
   'takeoff.assumed.above.neighbour': 'a neighbour',

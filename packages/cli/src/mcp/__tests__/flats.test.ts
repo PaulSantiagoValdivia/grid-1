@@ -106,7 +106,9 @@ describe('CNT-4 flats in the tool server', () => {
     const areas = await b.call('grid_areas', { plan: 'duplex.json' })
     expect(areas.text).toMatch(/"Duplex 1" \(Two-storey flat; 4 rooms\): [\d.]+ m², on 2 floors \("ground" [\d.]+ m², "first" [\d.]+ m²\)/)
     const check = await b.call('grid_check', { plan: 'duplex.json' })
-    expect(check.text).not.toContain('flat/')
+    // No fault of the list; CNT-6 says the studio, entered only through the duplex's hall, has no front door.
+    expect(check.text).not.toMatch(/flat\/(?!no-front-door)/)
+    expect(check.text).toContain('flat/no-front-door')
   })
 
   it('carries a door\'s and a window\'s kind and part into every flat placed, and schedules both the flats and the kinds (CNT-14)', async () => {
