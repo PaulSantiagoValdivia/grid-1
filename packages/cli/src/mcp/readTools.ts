@@ -48,7 +48,6 @@ import { SUN_RULE, sunAnswer } from '../quantities/sun'
 import { SITE_RULE, siteAnswer } from '../quantities/site'
 import { figureOf, roomIndicators, USE_RULE, wideRoute, wideRouteLines } from '../quantities/use'
 import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantities/survey'
-import { planChange } from '../quantities/change'
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
 import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
@@ -565,10 +564,12 @@ const takeoffTool: GridTool = {
         throw asRefusal(error)
       }
       const floors = floor === undefined ? {} : { floors: [floor] }
-      // CNT-10: the work of a plan with phases, as three lists, on the same rates.
-      const estimate = change ? planChange(loaded.plan, floors) : planEstimate(survey, floors)
       const units = displayFor(args['units'], args['decimal'], loaded.plan)
-      return estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv', change)
+      const answer = (estimate: Estimate): Answer => estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv', change)
+      // CNT-10: the work of a plan with phases, as three lists, on the same rates. Read only when
+      // asked for, so the command's file stays small.
+      if (change) return import('../quantities/change').then(({ planChange }) => answer(planChange(loaded.plan, floors)))
+      return answer(planEstimate(survey, floors))
     }
     if (args['rates'] !== undefined) throw new ToolRefusal('rates goes with for=estimate or for=change: the take-off by room holds no cost.')
     const { survey, floor } = load(context, args['plan'], args['floor'])

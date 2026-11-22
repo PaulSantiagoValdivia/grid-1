@@ -127,12 +127,33 @@ Run on a laptop shared with other sessions, with `--maxWorkers=2 --minWorkers=1`
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | passes; `packages/cli/dist/grid.mjs` is **539,280 bytes**, under the 550 kB cap of `grid.e2e.test.ts` |
+| `npm run build` | passes; before the merge, `packages/cli/dist/grid.mjs` was 539,280 bytes, under the 550 kB cap of `grid.e2e.test.ts` (see "The bundle cap" below for after it) |
 | Full suite (`vitest run --exclude '.claude/**'`) | 306 files, 5,428 passed, 2 skipped, 1 failed, in 720 s. The failure was `cli/src/__tests__/tolerances.test.ts`: a tolerance literal in `edit/phases.ts`, now `tolerance('joint')`; it passes when rerun with the phase tests, the IFC export tests, the envelope and roof tests and `estimate.test.ts` (6 files, 276 tests; then 17 files, 496 passed, 1 skipped). Two small changes made during the run (the envelope and the IFC ceilings read the state after the work) are covered by those reruns. No timing failure |
 | `npm run typecheck` | passes |
 | `npm run lint` | passes |
 | `npm run check:licenses` | passes: 363 licences, none GPL, LGPL, AGPL, MPL or EPL; no new dependency |
 | `npm run scoreboard` | passes, **same as the stored figures**: 197 rooms measured wrong, 278 damage silent, 18 turns answered, 5 mistakes named, 16 checks fed, 735 rooms not measured, 95 sound plans with a warning. Nothing to store |
+
+**The bundle cap.** Main moved to 26e928e (WRT-4, BRF-3) while this was built; main alone builds
+`grid.mjs` at 539,491 bytes, and the merge with CNT-10 at 553,417, past the cap. The change list
+(`quantities/change.ts`, 5.7 kB minified) is now read only when `grid_takeoff` is asked for
+`for=change` (a dynamic import, as the views and the stills already are). That gives it a chunk
+of its own, and the bundler moves the code it shares with the main file (the measuring) into a
+shared chunk the main file imports: `grid.mjs` is **531,494 bytes**, under the cap. Counted
+honestly, the whole `dist` (`grid.mjs` and every chunk) is 2,814,252 bytes against main's
+2,803,154: CNT-10 adds about 11.1 kB in all. The cap stays at 550 kB.
+
+**After merging main** (WRT-4's mirror and turn, BRF-3's plot): conflicts in `CHANGELOG.md`, the
+agents' changelog, `write.ts`, `diffTools.ts`, `floorplan.ts`, `types/floorplan.ts` and `look.ts`,
+each resolved keeping both sides. BRF-3 took convention C13, so the phases are C14. The checks
+after the merge are below.
+
+| Check, after the merge (main at 26e928e) | Result |
+| --- | --- |
+| `npm run build` | passes; `grid.mjs` 531,494 bytes |
+| Full suite | **312 files, 5,478 passed, 4 skipped, 0 failed**, in 900 s |
+| `npm run typecheck`, `npm run lint`, `npm run check:licenses` | pass (363 licences, no new dependency) |
+| `npm run scoreboard` | passes, same as the stored figures (main's: 197 rooms wrong, 278 silent, 19 turns answered); nothing to store |
 
 New tests: `floorplan/src/geometry/__tests__/phases.test.ts` (11), `floorplan/src/export/__tests__/phases.test.ts` (3), `viewer/src/picture/__tests__/phases.test.ts` (4), `cli/src/mcp/__tests__/phases.test.ts` (12), a case in `coverage.test.ts`, and the base plan's block in `everyPath.e2e.test.ts` (8).
 
