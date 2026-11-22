@@ -23,24 +23,9 @@ import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
 import type { LoadedPlan } from '../command/plan'
 import { planFacts } from '../describe/facts'
 import { SHEET_LOOK, sheetDate } from './pages'
+import { COMMON_SCALES, PAPERS, PAPER_NAMES, SCALES_TRIED, scaleText, type PaperName } from './drawingPapers'
 
-/** The papers a sheet is printed on, in millimetres, short side first (ISO 216). */
-export const PAPERS = {
-  A4: { width: 210, height: 297 },
-  A3: { width: 297, height: 420 },
-  A2: { width: 420, height: 594 },
-  A1: { width: 594, height: 841 },
-  A0: { width: 841, height: 1189 },
-} as const
-export type PaperName = keyof typeof PAPERS
-export const PAPER_NAMES = Object.keys(PAPERS) as PaperName[]
-
-/** The scales tried, in turn, when none is asked for: 1:100 first, as the card's prototype. */
-export const SCALES_TRIED = [100, 200, 500] as const
-/** The scales offered when a floor does not fit: the usual ones for a building. */
-export const COMMON_SCALES = [20, 25, 50, 100, 200, 250, 500, 1000] as const
-/** The largest N a scale may have: 1:1000, as the DXF's sheet allows. */
-export const SCALE_MAX = 1000
+export { PAPERS, PAPER_NAMES, SCALES_TRIED, COMMON_SCALES, SCALE_MAX, scaleText, type PaperName } from './drawingPapers'
 
 /** How long one picture pixel is on the paper: a dimension's figure (`TEXT_PX.dimension`) prints at 2.5 mm. */
 export const PIXEL_MM = 2.5 / TEXT_PX.dimension
@@ -299,9 +284,6 @@ const fits = (size: { width: number; height: number }, area: Layout['area']): bo
 /** The orientations to try for a drawing of this shape: the one that matches it first. */
 const orientations = (size: { width: number; height: number }): ('portrait' | 'landscape')[] =>
   size.width > size.height ? ['landscape', 'portrait'] : ['portrait', 'landscape']
-
-/** The scale as written on the sheet: `1:100`. */
-export const scaleText = (scale: number): string => `1:${scale}`
 
 /** The first paper (and orientation) at a scale the floor fits, smallest first, or null. */
 function paperFor(framed: Bounds, scale: number, papers: readonly PaperName[], foot: (innerWidth: number) => Foot): (Layout & { foot: Foot }) | null {

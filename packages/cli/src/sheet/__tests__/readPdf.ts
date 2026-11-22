@@ -189,8 +189,10 @@ export function readPdf(pdf: Uint8Array): PdfPage {
         // Skia writes each word, and each space, as a text of its own: one that goes on the
         // line the last one is on, at its size, is joined to it.
         const last = texts.at(-1)
-        if (current !== null && last && Math.abs(last.y - current.y) < 0.05 && Math.abs(last.size - current.size) < 0.01 && current.x > last.x) texts[texts.length - 1] = { ...last, text: last.text + current.text }
-        else if (current !== null) texts.push(current)
+        // Set by `show`, a closure, so the type is said here.
+        const piece = current as PdfText | null
+        if (piece !== null && last && Math.abs(last.y - piece.y) < 0.05 && Math.abs(last.size - piece.size) < 0.01 && piece.x > last.x) texts[texts.length - 1] = { ...last, text: last.text + piece.text }
+        else if (piece !== null) texts.push({ ...piece })
         current = null
         break
       }

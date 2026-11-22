@@ -15,8 +15,9 @@ import { quoted, type Project } from '../fs/projectFiles'
 import { sheetPages, SHEET_LAYOUTS, type SheetLayout } from './pages'
 import { sheetPdf } from './pdf'
 import { floorOption } from '../command/plan'
-import { DrawingDoesNotFit, drawingSheet, PAPER_NAMES, SCALE_MAX, scaleText, type DrawingRequest, type DrawingSheet, type PaperName } from './drawingSheet'
-import { drawingSheetFiles, sheetMeasure } from './drawingFiles'
+// SHT-6: the drawing's layout and files load only when one is made: a chunk of their own.
+import type { DrawingRequest, DrawingSheet } from './drawingSheet'
+import { PAPER_NAMES, SCALE_MAX, scaleText, type PaperName } from './drawingPapers'
 
 export const SHEET_FILE = 'sheet.json'
 const SHEET_FILE_MAX_BYTES = 64 * 1024
@@ -229,6 +230,8 @@ export async function makeDrawing(project: Project, planFile: string, request: D
   const lang = await languageFor(language, loaded.plan)
   const named = drawingStem(planFile, loaded, floor ?? planFloors(loaded.plan)[0]?.id ?? '')
   const projectName = words?.name ?? loaded.plan.title ?? exportBaseOf(planFile).base
+  const { DrawingDoesNotFit, drawingSheet } = await import('./drawingSheet')
+  const { drawingSheetFiles, sheetMeasure } = await import('./drawingFiles')
   let sheet: DrawingSheet
   try {
     sheet = drawingSheet(loaded, { ...request, ...(floor === undefined ? {} : { floor }) }, { project: projectName, date: new Date(), language: lang, measure: await sheetMeasure() })

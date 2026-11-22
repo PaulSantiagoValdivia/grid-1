@@ -31,6 +31,13 @@
 - Docs: `docs/commands.md` (a "One floor at a true scale" section under `grid sheet`, and a row in
   the command table), `docs/tool-server.md` (the `grid_sheet` row). Fragment: `changes/SHT-6.md`.
 - C32 is unused: no plan field and no convention.
+- The built file: with the drawing imported statically, `grid.mjs` was 717,761 bytes, over the
+  700 kB cap in `grid.e2e.test.ts`. The drawing's layout, walker and writers are now imported only
+  when a drawing is made (`sheetFile.ts`), so they are chunks of their own (8,313 and 5,452
+  bytes); the papers and scales the command and tool server check are in `drawingPapers.ts`.
+  `grid.mjs` is now 626,178 bytes. Be aware that part of that drop is esbuild moving viewer code
+  that the entry shares with the new chunk into a shared chunk the entry loads at start: the code
+  run at start-up is not 90 kB smaller, only the entry file is. The cap was left as it is.
 
 ## How "done when" is met
 
@@ -48,10 +55,19 @@
 
 ## Tests whose expected values changed
 
-None. Every new expectation is in new tests: `sheet/__tests__/drawingSheet.test.ts` (24),
-the SHT-6 block of `command/__tests__/sheet.e2e.test.ts`, the SHT-6 block of
-`mcp/__tests__/sheetTool.test.ts`. `src/__tests__/ownWords.test.ts`: counts for the files with new
-English refusals (see the results below).
+No expected figure of an existing test changed. New tests: `sheet/__tests__/drawingSheet.test.ts`
+(24), the SHT-6 block of `command/__tests__/sheet.e2e.test.ts` (9), the SHT-6 block of
+`mcp/__tests__/sheetTool.test.ts` (6). Existing tests touched:
+
+- `src/__tests__/ownWords.test.ts`: the counts of English sentences in `command/sheet.ts` (3 to 7,
+  the four options' help), `mcp/writeTools.ts` (120 to 128, `grid_sheet`'s layout drawing, its
+  arguments and refusals; tool text is English by design), `sheet/sheetFile.ts` (7 to 16, the
+  drawing's refusals and answer line) and the new `sheet/drawingSheet.ts` (1, the refusal of a
+  floor too large for the paper); the total cap 1,541 to 1,554. All command refusals, the kind
+  MSG-11 has not moved yet; the words printed on the sheet itself are message keys.
+- `mcp/__tests__/tools.test.ts` (MS-19, unknown floor): `grid_sheet` now takes `floor`, so the
+  test gives it its own arguments (`plan`, `layout: drawing`), as it does `grid_export`. One case
+  added to the chain; no order or other tool touched.
 
 ## For the owner
 
