@@ -47,6 +47,12 @@ Grid has not been released yet. The first release will hold:
 - A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
   all floors) and a door and window schedule that lists each opening once with the two rooms it
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.
+- Quantities for a first estimate: floor finishes and wall faces by room use, ceilings,
+  skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size,
+  and the slab, upper floors and roof worked out from the outlines and marked assumed, each line
+  with its rule. A cost comes only from your own rates file beside the plan, which must name its
+  currency; without one you get a rate card to fill in, and lines with no rate or a rate in the
+  wrong unit are listed, never filled.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
