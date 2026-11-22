@@ -59,7 +59,8 @@ export const CAPABILITIES = {
   // LVL-3: the lab's names (from, to, width, risers), and the walking line a stair is drawn along.
   stairs: { what: 'holds stairs', probe: schema('stairs', [{ id: 's1', from: 'ground', to: 'first', width: 0.9, run: [[1, 1], [1, 4.5]], risers: 16 }]) },
   ramps: { what: 'holds ramps', probe: schema('ramps', [{ id: 'r1', rise: 0.3, slope: 0.08 }]) },
-  roof: { what: 'holds a roof', probe: schema('roof', { type: 'gable', pitch: 35 }) },
+  // LVL-6: a floor's roof, with its shape, eaves and pitch, which its walls and rooms are cut to.
+  roof: { what: 'holds a roof', probe: schema('floors', [{ id: 'ground', name: 'Ground', level: 0, roof: { shape: 'gable', eaves: 2.7, pitch: 35 } }]) },
   fixtures: { what: 'holds fixtures (WC, basin, kitchen units)', probe: schema('rooms.0.fixtures', [{ type: 'wc' }]) },
   furniture: { what: 'holds furniture', probe: schema('furniture', [{ type: 'table', at: [1, 1], size: [1.8, 0.9] }]) },
   'door-leaves': { what: 'holds doors with several leaves (bifold, double)', probe: schema('openings.0.leaves', 2) },
