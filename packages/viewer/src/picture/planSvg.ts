@@ -8,7 +8,7 @@
  *
  * Pure: no DOM, no React. For PNG, see `drawPlan` in the `ongrid` package.
  */
-import { displayOf } from '@ongrid/floorplan/types/units'
+import { statedDisplay } from '@ongrid/floorplan/types/units'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { Bounds, Dimension, PlanDrawing } from '@ongrid/floorplan/geometry'
 import {
@@ -260,7 +260,7 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     look,
     ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
     // WRT-7: the labels and dimensions are in the call's display, else the plan's own.
-    labels: options.labels?.display !== undefined || plan.display === undefined ? options.labels : { ...options.labels, display: displayOf(plan.display.length, plan.display.decimal ?? 'point', plan.display.area, plan.display.precision) },
+    labels: options.labels?.display !== undefined || plan.display === undefined ? options.labels : { ...options.labels, display: statedDisplay(plan.display) },
     faults,
     uses,
     ...(above === undefined ? {} : { above }),

@@ -5,7 +5,8 @@
  */
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/floorplan/geometry'
 
-import { displayOf, METRES, showArea, showLength, type DecimalMark, type Display, type LengthKind } from '@ongrid/floorplan/types/units'
+import { LANGUAGE_DECIMAL, type Language } from '@ongrid/floorplan/messages'
+import { displayOf, METRES, showArea, showLength, statedDisplay, type DecimalMark, type Display, type LengthKind } from '@ongrid/floorplan/types/units'
 
 /** The units a call may ask for: metres, centimetres, millimetres, feet and inches (`ft` is the same). */
 export const DISPLAY_UNITS = ['m', 'cm', 'mm', 'ft-in', 'ft'] as const
@@ -24,13 +25,16 @@ export function sqFt(m2: number): number {
  * The display a call or a plan asks for (WRT-7): the call's `units` and `decimal` first, then
  * the plan's own `display`, then metres. It only changes how figures are written.
  */
-export function displayFor(units: unknown, decimal: unknown, plan?: { readonly display?: Partial<Display> & Pick<Display, 'length'> | undefined }): Display {
+export function displayFor(units: unknown, decimal: unknown, plan?: { readonly display?: Partial<Display> | undefined }, language?: Language): Display {
   const stated = plan?.display
-  const own: Display | undefined = stated === undefined ? undefined : displayOf(stated.length, stated.decimal ?? 'point', stated.area, stated.precision)
-  const mark = (decimal as DecimalMark | undefined) ?? own?.decimal ?? 'point'
-  if (units === undefined) return own === undefined ? { ...METRES, decimal: mark } : { ...own, decimal: mark }
+  // MSG-11: the call's language, else the plan's; its decimal mark unless one is chosen.
+  const tongue = language ?? stated?.language
+  const own: Display | undefined = stated === undefined ? undefined : statedDisplay({ ...stated, ...(tongue === undefined ? {} : { language: tongue }) })
+  const mark = (decimal as DecimalMark | undefined) ?? own?.decimal ?? LANGUAGE_DECIMAL[tongue ?? 'en']
+  const withLanguage = (display: Display): Display => (tongue === undefined ? display : { ...display, language: tongue })
+  if (units === undefined) return withLanguage(own === undefined ? { ...METRES, decimal: mark } : { ...own, decimal: mark })
   const length = units === 'ft' ? 'ft-in' : (units as Exclude<DisplayUnits, 'ft'>)
-  return displayOf(length, mark, undefined, own?.length === length ? own.precision : undefined)
+  return withLanguage(displayOf(length, mark, undefined, own?.length === length ? own.precision : undefined))
 }
 
 /** A length as the person reads it; `height` is a sill, written in inches in feet and inches. */

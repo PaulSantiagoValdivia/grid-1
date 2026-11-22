@@ -13,6 +13,7 @@
  * skipped and reported, and the rest of the plan still gets drawn.
  */
 
+import type { Said } from '../messages/say'
 import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
@@ -56,7 +57,13 @@ export interface Issue {
   readonly code: string
   readonly entity: EntityKind
   readonly id: string
+  /** The sentence in English, made from `said`. */
   readonly message: string
+  /**
+   * MSG-11: the sentence by its key and values (`messages/en.ts`, `issue.<code>`), so it can be
+   * said in any language and its figures read as data.
+   */
+  readonly said?: Said
   readonly severity: Severity
   /**
    * MSG-7: each change to one part that would clear this problem, as data, when there is one. The

@@ -77,6 +77,8 @@
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
+import { LANGUAGES } from '../messages/languages'
+import { useOfLabel } from '../messages/uses'
 
 export * from './planText'
 
@@ -425,14 +427,18 @@ export function foldUseWord(word: string): string {
 }
 
 /**
- * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; and a
- * word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is `staff`.
- * Anything else is left as it is, for the schema to read as unstated and `readingNotes` to name.
+ * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; the
+ * use's label in a language Grid writes (MSG-11, `USE_LABELS`), so `dormitorio` is `bedroom`;
+ * and a word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is
+ * `staff`. Anything else is left as it is, for the schema to read as unstated and
+ * `readingNotes` to name.
  */
 export function readUse(value: unknown): unknown {
   if (typeof value !== 'string') return value
   const lower = value.toLowerCase()
   if ((ROOM_USES as readonly string[]).includes(lower)) return lower
+  const labelled = useOfLabel(value)
+  if (labelled !== null) return labelled
   const folded = foldUseWord(value)
   if ((ROOM_USES as readonly string[]).includes(folded) && !FIGURE_READ_USES.includes(folded)) return folded
   return Object.hasOwn(USE_WORDS, folded) ? USE_WORDS[folded] : value
@@ -951,9 +957,13 @@ export const FloorPlanFieldsSchema = z.object({
   // WRT-7: how the person reads lengths and areas: the unit, the area unit, the decimal mark and
   // the precision (`types/units.ts`). It never changes a stored number: the file is in metres.
   // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  // MSG-11: `language` is the language Grid writes its words in for this plan (`en`, `es`); a
+  // language with a decimal comma writes one unless `decimal` says otherwise. With a language,
+  // `length` may be left out: then lengths are in metres.
   display: z
     .object({
-      length: z.enum(['m', 'cm', 'mm', 'ft-in']),
+      length: z.enum(['m', 'cm', 'mm', 'ft-in']).optional(),
+      language: z.enum(LANGUAGES).optional(),
       area: z.enum(['m2', 'ft2']).optional(),
       decimal: z.enum(['point', 'comma']).optional(),
       precision: z.number().int().min(0).max(5).optional(),
