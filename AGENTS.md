@@ -37,6 +37,13 @@ Notes for agents and people changing this repository.
   walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
   sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
+- A survey drawn from its own numbers (HND-11): a wall may be placed by a face (`face` in
+  `types/floorplan.ts`); the reading moves it to its centre line and records `placedBy`, and
+  `statedWall` writes the face back. Every change that moves a wall end goes through
+  `wallWithEnds`, so no centre point lands in a file as a face. `geometry/taped.ts` sets the
+  plan's `taped` lengths against the drawing; the CLI's `src/taped/table.ts` prints them after
+  `grid check` and every change. `geometry/export/origin.ts` decides where an export writes a
+  plan from: `site.origin` for a plan far from (0, 0), and the GLB keeps that offset in one node.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,
