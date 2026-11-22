@@ -17,6 +17,8 @@ import { buildingHeight, planStoreys } from '../storeys'
 import { validatePlan } from '../validate'
 import { readPlanParts } from '../../types/readParts'
 import { readingNotes } from '../../types/reading'
+import { readRoomsText } from '../../rooms/read'
+import { compileRoomsText } from '../../rooms/compile'
 
 const PLOT = [[0, 0], [18, 0], [22, 25], [0, 25]]
 const OUTLINE = [[3, 5], [15.762, 5], [18.482, 22], [3, 22]]
@@ -155,7 +157,16 @@ describe('the outline in the plan file (C15)', () => {
 
   it('leaves a faulty outline out on its own when read part by part, and keeps the floor', () => {
     const read = readPlanParts({ version: '1', units: 'm', floors: [{ id: 'g', name: 'G', outline: [[0, 0], [4, 4], [4, 0], [0, 4]] }] })
-    expect('plan' in read && read.plan.floors?.[0]?.id).toBe('g')
-    expect('plan' in read && read.plan.floors?.[0]?.outline).toBeUndefined()
+    expect(read.plan?.floors?.[0]?.id).toBe('g')
+    expect(read.plan?.floors?.[0]?.outline).toBeUndefined()
+  })
+
+  it('keeps the outline, the homes and the parking through rooms text, on a raw floor line', () => {
+    const plan = house(OUTLINE)
+    const withCounts = parseFloorPlan({ ...plan, floors: [{ ...plan.floors![0]!, homes: 1, parking: 2 }] })
+    const reading = readRoomsText(withCounts)
+    expect(reading.text).toContain('raw floor {"outline":[[3,5],[15.762,5],[18.482,22],[3,22]],"homes":1,"parking":2}')
+    const again = compileRoomsText(reading.text)
+    expect('plan' in again && again.plan !== null ? again.plan.floors?.[0] : null).toMatchObject({ outline: OUTLINE, homes: 1, parking: 2 })
   })
 })

@@ -1127,7 +1127,7 @@ const measureTool: GridTool = {
           answer: {
             ...site.data,
             storeys: { above: storeys.above, below: storeys.below, storeys: storeys.storeys, empty: storeys.empty },
-            limits: limits.map(({ text: _text, ...limit }) => limit),
+            limits: limits.map((limit) => Object.fromEntries(Object.entries(limit).filter(([key]) => key !== 'text'))),
             brief: read.brief === null ? null : read.file,
           },
           rule: `${SITE_RULE} ${LIMITS_RULE}`,

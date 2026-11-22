@@ -279,6 +279,7 @@ label.
 | `item/blocks-doorway` | {thing} stands in front of the doorway of {opening}, an indicator | the floor in front of a doorway clear of fixtures, within Grid's own approach depth |
 | `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
+| `floor/past-outline` | {thing}'s walls reach past the outline it states | walls inside the outline the floor states, the outside face of the floor |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
 | `floor/rooflight-misplaced` | {thing} has a rooflight that does not lie on one slope of its roof | a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips |
 | `floor/dormers-not-drawn` | {thing} lists dormers, which are not supported yet | a roof Grid can draw: dormers are not supported yet |
@@ -596,6 +597,29 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: massing before walls, and the person's site limits (BRF-4)
+
+- A floor may state its `outline` (C15), its outside face before any wall, and how many `homes`
+  and `parking` spaces it holds ([plan-file.md](plan-file.md#a-floor-outline-before-the-walls)).
+  The outline is joined with what the floor's walls enclose: the slab, the roof, the gross
+  external area, the plot's footprint and the floor-above line all take it. A floor with an
+  outline and no walls is massing. A plan that states no outline answers as before.
+- On a massing floor, `grid_areas` gives `grossExternal` and a null `grossInternal` with the
+  floor's `why`; its floor carries `massing: true` (left out on every other floor), and the
+  notes name the massing floors. `grid_areas` adds `storeys` (`above`, `below`, `storeys` by
+  level with their `floors` and `below`, `empty`), and a "Storeys:" line when a floor is massing.
+- A new worth-a-look line, `floor/past-outline`: the floor's walls reach past the outline it
+  states, with the area past it. A massing floor gives no `floor/unclaimed` and no
+  `floor/empty-top`, and a plan whose only content is outlines no `plan/empty`. A floor whose
+  walls and outline leave floor no room claims gives `floor/unclaimed` for it, as before.
+- The brief's `figures` take the person's site limits: `plot_coverage` (a percentage),
+  `floor_area_ratio` (with `measure`, `gross_external` or `gross_internal`), `building_height`
+  (metres) and `parking_per_home`. Their brief lines are met, missed or open, as the others.
+- `grid_measure what=site` adds to its `answer`: `storeys`, `limits` (each with `limit`, `edge`,
+  `state` `met`, `missed` or `not-measured`, `used`, `allowed`, `most`, `unit`, `rule`, `why`,
+  `assumed`, `source`) and `brief`, and its text the massing lines and "Site limits". The
+  plan's set-backs are among the limits, edge by edge.
 
 ### 2026-11-22: accessibility measurements, as numbers (CNT-17)
 

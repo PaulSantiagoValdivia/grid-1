@@ -74,3 +74,15 @@ export const FACT_COVERAGE = {
   'walls.properties': { shown: 'not shown', why: 'The sheet has no wall schedule; grid_find and the IFC and DXF files give a wall\'s facts.' },
   'floors.properties': { shown: 'not shown', why: 'Each floor page shows its plan and areas; grid_find and the IFC and DXF files give a floor\'s facts.' },
 } as const satisfies Record<FactField, Coverage>
+
+/**
+ * BRF-4 (C15): what the sheet does with the floor outline and the counts a floor states. Each is
+ * in `FloorSchema` (`coverage.test.ts` holds the list to it), placed here until a page does more.
+ */
+export const OUTLINE_COVERAGE = {
+  // The outline is drawn round its floor on the floor's page by `drawPlan`, the slab and roof it
+  // gives are in the 3D still, and its gross area is in the page's areas (`planAreas`).
+  'floors.outline': { shown: 'drawn and tabled' },
+  'floors.homes': { shown: 'not shown', why: 'The homes a floor states are counted against the person\'s parking limit by grid_measure what=site; the sheet states no limit.' },
+  'floors.parking': { shown: 'not shown', why: 'The parking spaces a floor states are counted against the person\'s parking limit by grid_measure what=site; the sheet states no limit.' },
+} as const satisfies Record<`floors.${'outline' | 'homes' | 'parking'}`, Coverage>

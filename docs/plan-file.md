@@ -13,6 +13,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
 - [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
 - [Sloped roofs and ceilings](#sloped-roofs-and-ceilings): `opening/above-roof`, `floor/rooflight-misplaced`, `floor/dormers-not-drawn`, `opening/missing-wall`
+- [A floor outline before the walls](#a-floor-outline-before-the-walls): `floor/past-outline`; massing, storeys, homes and parking spaces
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
@@ -48,7 +49,7 @@ file never reaches the exports with its letters turned into question marks. A fi
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
 | walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views or things on the site | 50,000 of each | |
 | the floors one opening pattern repeats on | 200 | |
-| the points of the site's boundary, or of one of its things | 2,000 | |
+| the points of the site's boundary, of one of its things, or of a floor's outline | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
 | the lowered zones of one ceiling, the rooflights of one roof | 50,000 | |
 | the walls a room lists | 2,000 | |
@@ -386,6 +387,44 @@ one `IfcSlab` `ROOF`, each rooflight an `IfcOpeningElement` filled by an `IfcWin
 roof cuts, and a space under it, are clipped solids, so the file holds the volume under the roof.
 A parapet stands on a flat roof only. Rooms text writes the roof as it is, on a `raw floor` line.
 
+## A floor outline before the walls
+
+A floor may state its `outline` (BRF-4, convention C15): its outside face, its corners in plan
+metres in order round it, either way round, as the plot's boundary is written; a last point on
+the first closes it. It may also state how many `homes` it holds and how many `parking` spaces:
+whole numbers, the agent's proposal, which Grid counts against the person's own limits and never
+brings a figure for. All three are optional and never defaulted (version 1); a floor that states
+none reads exactly as before.
+
+```json
+{ "floors": [{ "id": "ground", "name": "Ground floor", "level": 0, "height": 3, "building": "home",
+               "outline": [[3, 5], [15.762, 5], [18.482, 22], [3, 22]], "homes": 2, "parking": 3 }] }
+```
+
+- **Massing.** A floor with an outline and no walls is massing: its level, height and kind of
+  building (`building`) are the floor's own fields, and its outline gives its gross external
+  area, its slab, its roof, its place in the plot coverage and the distances to the boundary, and
+  a storey. It has no net area and no gross internal area until its walls are drawn, and nothing
+  inside it is checked: it gives no `floor/unclaimed` and no `floor/empty-top`, and a plan of
+  outlines only is not `plan/empty`. The plan of a floor draws its outline as a line round it.
+- **With walls inside it.** The outline is joined with what the floor's walls enclose: the slab,
+  the roof and the gross external area cover both, and floor inside the outline that no wall
+  encloses, a wing still to draw, is floor no room claims (`floor/unclaimed`), in the gross
+  figures only. An outline that is the walls' own outside face changes no figure.
+- **Walls past it.** Where the walls reach past the outline the floor states, the floor is
+  larger than its outline, and `floor/past-outline` says by how much. The slab, the roof and the
+  gross area still take in both.
+- **Storeys.** A storey is a level with at least one floor that holds something, an outline or
+  walls that close one: two floors at one level are one storey. Those at or above the ground
+  floor are counted apart from those below it, and a floor that holds nothing is in none.
+- **Homes and parking.** `homes` and `parking` are added up over the floors; the person's own
+  parking per home is set against them ([brief.md](brief.md#the-persons-own-figures)).
+
+An outline that crosses itself or encloses no ground is refused as a value, and read part by part
+it is left out alone, the floor kept (`plan/value-left-out`). `grid_mirror` mirrors and turns the
+outlines with the walls. Rooms text has no word for an outline, homes or parking yet: they are
+kept on a `raw floor` line. A shadow picture of the massing is not part of Grid.
+
 ## Floor no room claims
 
 Besides the findings, `grid check` lists problems in the drawing. Some of them come from the
@@ -395,7 +434,7 @@ Each of these is a warning ("worth a look"); nothing is left out because of it.
 
 | Code | What it says |
 |---|---|
-| `floor/unclaimed` | Enclosed floor that no room claims: its area, a point inside it and the walls around it. A forgotten room no longer makes the total smaller in silence |
+| `floor/unclaimed` | Enclosed floor that no room claims: its area, a point inside it and the walls around it. A forgotten room no longer makes the total smaller in silence. Floor inside a floor's stated outline that no wall encloses counts too ([a floor outline before the walls](#a-floor-outline-before-the-walls)) |
 | `room/space-mismatch` | A room whose outline is not the space its walls enclose: how much of it lies on walls it does not list (a pod, a column, furniture drawn as walls), outside the walls, or across a wall or dividing line into another space |
 | `room/not-enclosed` | A room its walls do not close off at all, because they leave a gap |
 | `floor/spaces-unknown` | A floor whose spaces could not be worked out, with the reason |
