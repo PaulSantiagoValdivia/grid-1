@@ -20,6 +20,13 @@ import { quoted } from '../fs/projectFiles'
 import type { Survey } from '../quantities/survey'
 import { listed, refuseCurved, type OpeningChange, type Patch } from './edits'
 import { EditRefused } from './refused'
+import { english, joined, name, said as sentence, type Value } from '@ongrid/floorplan/messages'
+
+/** CNT-18: ids in a sentence as `listed` gives them, at most three and then how many more. */
+function listedNames(ids: readonly string[], max = 3): Value {
+  const shown: Value[] = ids.length > max ? [...ids.slice(0, max - 1).map(name), sentence('issue.part.more', { n: ids.length - max + 1 })] : ids.map(name)
+  return joined(shown, 'join.comma', 'join.and')
+}
 import { r3, seatOpenings } from './seat'
 
 type Pair = [number, number]
@@ -77,13 +84,14 @@ export function squarePlan(survey: Survey, request: SquareRequest): Patch {
   const marks = planMarks(plan)
   // CNT-18: a curved wall is never squared and never moved; it is left as it is, and said.
   const curved = plan.walls.filter((w) => onFloor(w) && w.arc !== undefined && (request.all === true || wallSureness(marks, w.id).source === 'scanned'))
-  const curvedNote = curved.length === 0 ? null : `${curved.length === 1 ? 'Curved wall' : 'Curved walls'} ${listed(curved.map((w) => quoted(w.id)))} ${curved.length === 1 ? 'is' : 'are'} left as ${curved.length === 1 ? 'it is' : 'they are'}: squaring turns straight walls only.`
+  // MSG-11: the words are keys of the message files, said in English as the edits' answers are.
+  const curvedNote = curved.length === 0 ? null : english(sentence(curved.length === 1 ? 'edit.square.curvedLeft.one' : 'edit.square.curvedLeft.many', { walls: listedNames(curved.map((w) => w.id)) }))
   const walls = plan.walls.filter((w) => onFloor(w) && w.arc === undefined && w.start.some((v, i) => v !== w.end[i]))
   if (walls.length === 0) throw new EditRefused('That floor has no walls to square.')
   const scanned = walls.filter((w) => wallSureness(marks, w.id).source === 'scanned')
   const chosen = request.all === true ? walls : scanned
   if (chosen.length === 0 && curved.length > 0) {
-    throw new EditRefused(`Only curved walls are marked to square (${listed(curved.map((w) => quoted(w.id)))}), and squaring turns straight walls only: nothing would move.`)
+    throw new EditRefused(english(sentence('edit.square.onlyCurved', { walls: listedNames(curved.map((w) => w.id)) })))
   }
   if (chosen.length === 0) {
     throw new EditRefused('No wall is marked scanned, so nothing would be squared. Mark the scanned walls in the plan\'s marks (source scanned), or pass all to square every wall.')
@@ -157,7 +165,7 @@ export function squarePlan(survey: Survey, request: SquareRequest): Patch {
       const was: Vec2 = { x: wall[key][0], y: wall[key][1] }
       const other = meets(wall, was)
       if (!squared && (other === null || !lines.has(other.id))) continue
-      if (other !== null) refuseCurved([other], 'squaring the scan')
+      if (other !== null) refuseCurved([other], 'squareScan')
       const at = other === null ? null : intersectLines(own, lineOf(other))
       // A crossing far from the old end is not where the walls met: the end only comes onto its line.
       const now = at !== null && Math.hypot(at.x - was.x, at.y - was.y) <= wall.thickness + other!.thickness + tolerance('gap')

@@ -16,6 +16,7 @@
 import { heightByDefault, safeParseFloorPlan, statedWall, type FloorPlan, type Opening, type Room, type Wall } from '../types/floorplan'
 import { indexPlan } from '../geometry/plan'
 import { planFloors } from '../geometry/floors'
+import { english, said } from '../messages/say'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
 import { compileRoomsText, RAW_FLOOR_KEYS, type RoomsResult } from './compile'
@@ -647,7 +648,7 @@ export function readRoomsText(plan: FloorPlan, options: ReadOptions = {}): Rooms
     const floor = floorOf(wall)
     if (wall.arc === undefined || raw.has(floor) || !floors.includes(floor)) continue
     raw.add(floor)
-    why.set(floor, `wall ${quote(wall.id)} is curved, and rooms text writes straight walls only`)
+    why.set(floor, english(said('describe.rooms.curved', { wall: quote(wall.id) })))
   }
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
     const text = textOf(plan, rule, options.name, drafts, raw)

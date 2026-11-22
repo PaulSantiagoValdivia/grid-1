@@ -8,6 +8,7 @@
  * still, as for a 2D PNG.
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import type { Language } from '@ongrid/floorplan/messages'
 import { DEFAULT_STILL_HEIGHT, DEFAULT_STILL_WIDTH, planStill, type StillOptions } from '@ongrid/viewer/src/still'
 import { loadCanvas } from './canvas'
 import { stampLabel } from './stamp'
@@ -20,6 +21,8 @@ export interface StillDrawOptions extends Omit<StillOptions, 'width' | 'height'>
   readonly scale?: number
   /** MSG-3: the label in the top-left corner. On by default; off where the page carries it (a sheet). */
   readonly label?: boolean
+  /** MSG-11: the language the label is written in. English when left out. */
+  readonly language?: Language
 }
 
 /**
@@ -37,7 +40,7 @@ export interface StillDrawOptions extends Omit<StillOptions, 'width' | 'height'>
  * ```
  */
 export async function drawStill(plan: FloorPlan, options: StillDrawOptions = {}): Promise<Uint8Array> {
-  const { scale = 1, width = DEFAULT_STILL_WIDTH, height = DEFAULT_STILL_HEIGHT, label = true, ...still } = options
+  const { scale = 1, width = DEFAULT_STILL_WIDTH, height = DEFAULT_STILL_HEIGHT, label = true, language, ...still } = options
   if (!(scale > 0) || !Number.isFinite(scale)) throw new RangeError(`The scale must be a number above 0: got ${scale}`)
   const w = Math.round(width * scale)
   const h = Math.round(height * scale)
@@ -50,6 +53,6 @@ export async function drawStill(plan: FloorPlan, options: StillDrawOptions = {})
   const canvas = createCanvas(image.width, image.height)
   const context = canvas.getContext('2d')
   context.putImageData(new ImageData(image.data, image.width, image.height), 0, 0)
-  if (label) stampLabel(context, image.width)
+  if (label) stampLabel(context, image.width, undefined, language)
   return canvas.encode('png')
 }

@@ -17,7 +17,8 @@ import type { Wall } from './plan'
 import type { Vec2 } from './vec2'
 import { limit, tolerance } from './tolerances'
 import { metresText } from './rounding'
-import { quoted } from '../types/planText'
+import { name, num, said, type Said, type Value } from '../messages/say'
+import { pointSaid } from './issueWords'
 
 /** A curved wall's arc, worked out from the plan. */
 export interface WallCurve {
@@ -141,30 +142,31 @@ export function curveStationsBetween(curve: WallCurve, from: number, to: number)
   return out
 }
 
-/** A length in a message, to the millimetre. */
-const m3 = (value: number): string => metresText(value, 3)
+/** A length in a message, to the millimetre, as a figure the language writes with its decimal mark. */
+const m3 = (value: number): Value => num(metresText(value, 3))
 
-/** Degrees, for a message. */
-const degrees = (radians: number): string => `${Math.round((radians * 180) / Math.PI * 10) / 10}°`
+/** Degrees, for a message: to a tenth. */
+const degrees = (radians: number): Value => num(String(Math.round((radians * 180) / Math.PI * 10) / 10))
+
+/** A point in a message, to the millimetre. */
+const at = (x: number, y: number): Said => pointSaid(metresText(x, 3), metresText(y, 3))
 
 /**
  * Why a curved wall cannot be built, or null when it can: a radius of nothing or no more than
  * half its thickness (its inside face would have none), or an end that does not lie where the
- * sweep takes its start, within `arcEnds`.
+ * sweep takes its start, within `arcEnds`. MSG-11: the sentence is said by key
+ * (`issue.wall/arc-…`), in the person's language.
  */
-export function curveFault(wall: Wall): { readonly code: 'wall/arc-too-tight' | 'wall/arc-ends-apart'; readonly message: string } | null {
+export function curveFault(wall: Wall): { readonly code: 'wall/arc-too-tight' | 'wall/arc-ends-apart'; readonly said: Said } | null {
   if (wall.arc === undefined) return null
   const curve = wallCurve(wall)
-  const q = quoted(wall.id)
+  const id = name(wall.id)
   if (curve === null || curve.radius <= tolerance('noLength')) {
-    return { code: 'wall/arc-too-tight', message: `Wall ${q} curves round its own start: its centre is where it starts, so it has no radius. The centre is the middle of the circle the wall is part of` }
+    return { code: 'wall/arc-too-tight', said: said('issue.wall/arc-too-tight.noRadius', { wall: id }) }
   }
   const half = wall.virtual ? 0 : wall.thickness / 2
   if (curve.radius <= half) {
-    return {
-      code: 'wall/arc-too-tight',
-      message: `Wall ${q} curves round a radius of ${m3(curve.radius)} m, no more than half its thickness of ${m3(wall.thickness)} m, so its inside face has no curve to follow. A radius over ${m3(half)} m fits`
-    }
+    return { code: 'wall/arc-too-tight', said: said('issue.wall/arc-too-tight', { wall: id, radius: m3(curve.radius), thickness: m3(wall.thickness), half: m3(half) }) }
   }
   const stated = (wall.arc.sweep * Math.PI) / 180
   const endRadius = Math.hypot(wall.end[0] - curve.centre.x, wall.end[1] - curve.centre.y)
@@ -174,10 +176,14 @@ export function curveFault(wall: Wall): { readonly code: 'wall/arc-too-tight' | 
     const meant = curvePointAt({ ...curve, sweep: stated }, curve.radius * Math.abs(stated))
     return {
       code: 'wall/arc-ends-apart',
-      message:
-        `Wall ${q} turns ${degrees(stated)} round (${m3(curve.centre.x)}, ${m3(curve.centre.y)}) from its start, which ` +
-        `takes it to (${m3(meant.x)}, ${m3(meant.y)}), but its end is at (${m3(wall.end[0])}, ${m3(wall.end[1])}), ` +
-        `${m3(apart)} m off the curve. Move its end there, or give the sweep that reaches it`
+      said: said('issue.wall/arc-ends-apart', {
+        wall: id,
+        sweep: degrees(stated),
+        centre: at(curve.centre.x, curve.centre.y),
+        meant: at(meant.x, meant.y),
+        end: at(wall.end[0], wall.end[1]),
+        apart: m3(apart)
+      })
     }
   }
   return null

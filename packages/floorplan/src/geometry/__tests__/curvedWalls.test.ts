@@ -35,6 +35,7 @@ import { planEnvelope } from '../envelope'
 import { planFacade } from '../facade'
 import { expandPatterns } from '../patterns'
 import { pickInModel } from '../pick'
+import { english, loadLanguage, say } from '../../messages'
 import { planForFloor } from '../floors'
 import { wallRise } from '../through'
 import type { CameraRecord, Point3 } from '../camera'
@@ -671,5 +672,22 @@ describe('a curved wall through floors (LVL-5 with CNT-18)', () => {
     expect(Math.max(...tops)).toBeCloseTo(rise, 6)
     const top = wallPointAt(tower().walls[2]!, 1)
     expect(pickInModel(tower(), looking([top.x + (top.x - 2) * 3, top.y + (top.y - 3) * 3, 5], [-(top.x - 2), -(top.y - 3), 0]), 0.5, 0.5)).toMatchObject({ id: 'bay', kind: 'wall' })
+  })
+})
+
+describe('a curved wall in every language (MSG-11 with CNT-18)', () => {
+  it('says why a curve cannot be built by its key: the same English, and Spanish when asked', async () => {
+    await loadLanguage('es')
+    const plan = bayRoom()
+    plan.walls[2] = { ...plan.walls[2]!, end: [0.5, 3] }
+    const found = validatePlan(plan).issues.find((i) => i.code === 'wall/arc-ends-apart')!
+    expect(found.said.key).toBe('issue.wall/arc-ends-apart')
+    expect(found.message).toBe(english(found.said))
+    expect(found.message).toMatch(/^Wall "bay" turns 180° round \(2(\.0+)?, 3(\.0+)?\) from its start, which takes it to .* m off the curve\. Move its end there/)
+    const spanish = say('es', found.said.key, found.said.values)
+    expect(spanish).toMatch(/^El muro "bay" gira 180° en torno a \(2(,0+)?; 3(,0+)?\) desde su inicio/)
+    const tight = { ...bayRoom(), walls: bayRoom().walls.map((w) => (w.id === 'bay' ? { ...w, thickness: 4.5 } : w)) }
+    const tooTight = validatePlan(tight).issues.find((i) => i.code === 'wall/arc-too-tight')!
+    expect(say('es', tooTight.said.key, tooTight.said.values)).toMatch(/^El muro "bay" se curva con un radio de 2(,0+)? m/)
   })
 })

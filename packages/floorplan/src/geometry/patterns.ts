@@ -32,11 +32,13 @@ import type { Issue } from './validate'
 import { floorOf, planFloors, wallsOnFloor } from './floors'
 import { tolerance } from './tolerances'
 import type { OpeningPattern } from '../types/floorplan'
-import { PARTS_MAX, quoted } from '../types/planText'
+import { PARTS_MAX } from '../types/planText'
 import { likelyId } from '../types/nearest'
 import { metresText } from './rounding'
 import { wallLength, wallPointAt } from './wall'
 import { curveFault, wallCurve } from './arc'
+import { english, name, num, said, type Said, type Value } from '../messages/say'
+import { groupedNum, withSaid } from './issueWords'
 
 /** What expanding a plan's patterns gives. */
 export interface PatternExpansion {
@@ -57,11 +59,13 @@ interface Placement {
   readonly opening: Opening
 }
 
-function problem(pattern: OpeningPattern, code: string, message: string): Issue {
-  return { entity: 'pattern', id: pattern.id, code, message, severity: 'error' }
+/** MSG-11: a pattern's problem by its sentence (`issue.pattern/…`), with its English as `message`. */
+function problem(pattern: OpeningPattern, code: string, sentence: Said): Issue {
+  return withSaid({ entity: 'pattern', id: pattern.id, code, message: english(sentence), severity: 'error' }, sentence)
 }
 
-const label = (pattern: OpeningPattern): string => `Opening pattern ${quoted(pattern.id)}`
+const label = (pattern: OpeningPattern): Value => said('issue.part.Named.pattern', { id: name(pattern.id) })
+const m = (metres: number): Value => num(metresText(metres))
 
 /** A wall's axis, or null for a wall with no length or a number that is not finite. */
 function axisOf(wall: Wall): { sx: number; sy: number; dx: number; dy: number; length: number } | null {
@@ -74,26 +78,26 @@ function axisOf(wall: Wall): { sx: number; sy: number; dx: number; dy: number; l
 }
 
 /** The near-edge offsets of a pattern's openings along a wall `length` long, or why it does not fit. */
-function offsetsOn(pattern: OpeningPattern, length: number): number[] | string {
+function offsetsOn(pattern: OpeningPattern, length: number): number[] | Said {
   const width = pattern.opening.width
   const a = pattern.margins?.start ?? 0
   const b = length - (pattern.margins?.end ?? 0)
   const free = b - a
   const over = tolerance('openingOverrun')
-  const between = `between its margins, ${metresText(Math.max(0, free))} m of the wall's ${metresText(length)} m`
-  if (free + over < width) return `has no room for one opening ${metresText(width)} m wide ${between}`
+  const between = said('issue.pattern/does-not-fit.between', { free: m(Math.max(0, free)), length: m(length) })
+  if (free + over < width) return said('issue.pattern/does-not-fit.noRoom', { width: m(width), between })
   const { count, spacing } = pattern
   if (spacing === undefined) {
     const n = count!
-    if (n * width > free + over) return `needs ${metresText(n * width)} m for ${n} openings ${metresText(width)} m wide, and has ${between}`
+    if (n * width > free + over) return said('issue.pattern/does-not-fit.count', { needs: m(n * width), n, width: m(width), between })
     if (n === 1) return [a + (free - width) / 2]
     const step = (free - width) / (n - 1)
     return Array.from({ length: n }, (_, i) => a + i * step)
   }
-  if (spacing + over < width) return `has a spacing of ${metresText(spacing)} m, less than its openings' width of ${metresText(width)} m: they would overlap`
+  if (spacing + over < width) return said('issue.pattern/does-not-fit.spacing', { spacing: m(spacing), width: m(width) })
   const fits = Math.floor((free - width + over) / spacing) + 1
   const n = count ?? fits
-  if (n > fits) return `needs ${metresText((n - 1) * spacing + width)} m for ${n} openings ${metresText(spacing)} m apart, and has ${between}`
+  if (n > fits) return said('issue.pattern/does-not-fit.spaced', { needs: m((n - 1) * spacing + width), n, spacing: m(spacing), between })
   return Array.from({ length: n }, (_, i) => a + i * spacing)
 }
 
@@ -150,11 +154,14 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
   const named = plan.walls.filter((w) => w.id === pattern.wall)
   if (named.length === 0) {
     const near = likelyId(pattern.wall, plan.walls.map((w) => w.id))
-    issues.push(problem(pattern, 'pattern/unknown-wall', `${label(pattern)} names wall ${quoted(pattern.wall)}, which the plan does not have, so none of its openings is placed${near === null ? '' : `; the nearest wall id is ${quoted(near)}`}`))
+    const sentence = near === null
+      ? said('issue.pattern/unknown-wall', { pattern: label(pattern), wall: name(pattern.wall) })
+      : said('issue.pattern/unknown-wall.near', { pattern: label(pattern), wall: name(pattern.wall), near: name(near) })
+    issues.push(problem(pattern, 'pattern/unknown-wall', sentence))
     return []
   }
   if (named.length > 1) {
-    issues.push(problem(pattern, 'pattern/unknown-wall', `${label(pattern)} names wall ${quoted(pattern.wall)}, an id ${named.length} walls share, so its wall is not known and none of its openings is placed`))
+    issues.push(problem(pattern, 'pattern/unknown-wall', said('issue.pattern/unknown-wall.shared', { pattern: label(pattern), wall: name(pattern.wall), n: named.length })))
     return []
   }
   const base = named[0]!
@@ -162,12 +169,12 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
   const curved = base.arc !== undefined && curveFault(base) === null
   const axis = curved ? { sx: 0, sy: 0, dx: 0, dy: 0, length: wallLength(base) } : base.arc !== undefined ? null : axisOf(base)
   if (axis === null) {
-    issues.push(problem(pattern, 'pattern/does-not-fit', `${label(pattern)} is on wall ${quoted(base.id)}, which has no length to place openings along, so none of its openings is placed`))
+    issues.push(problem(pattern, 'pattern/does-not-fit', said('issue.pattern/does-not-fit.noLength', { pattern: label(pattern), wall: name(base.id) })))
     return []
   }
   const offsets = offsetsOn(pattern, axis.length)
-  if (typeof offsets === 'string') {
-    issues.push(problem(pattern, 'pattern/does-not-fit', `${label(pattern)} on wall ${quoted(base.id)} ${offsets}, so none of its openings is placed`))
+  if (!Array.isArray(offsets)) {
+    issues.push(problem(pattern, 'pattern/does-not-fit', said('issue.pattern/does-not-fit', { pattern: label(pattern), wall: name(base.id), why: offsets })))
     return []
   }
   const { type, width, sill, height, hinge, swing } = pattern.opening
@@ -190,7 +197,10 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
   for (const floor of floors) {
     if (!floorIds.includes(floor)) {
       const near = likelyId(floor, floorIds)
-      issues.push(problem(pattern, 'pattern/unknown-floor', `${label(pattern)} is to be repeated on floor ${quoted(floor)}, which the plan does not have, so nothing is placed there${near === null ? '' : `; the nearest floor id is ${quoted(near)}`}`))
+      const sentence = near === null
+        ? said('issue.pattern/unknown-floor', { pattern: label(pattern), floor: name(floor) })
+        : said('issue.pattern/unknown-floor.near', { pattern: label(pattern), floor: name(floor), near: name(near) })
+      issues.push(problem(pattern, 'pattern/unknown-floor', sentence))
       continue
     }
     const walls = wallsOnFloor(plan, floor)
@@ -203,8 +213,12 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
       else out.push({ pattern, opening: make(`${pattern.id}-${floor}-${i + 1}`, above.wall.id, above.offset) })
     })
     if (missed.length > 0) {
-      const which = missed.length === offsets.length ? 'none of its openings' : `opening${missed.length === 1 ? '' : 's'} ${missed.join(', ')} of ${offsets.length}`
-      issues.push(problem(pattern, 'pattern/no-wall-above', `${label(pattern)} finds no wall on floor ${quoted(floor)} in the line of wall ${quoted(base.id)} to hold ${which}, so ${missed.length === 1 ? 'it is' : 'they are'} not placed there`))
+      const which =
+        missed.length === offsets.length
+          ? said('issue.pattern/no-wall-above.none')
+          : said(missed.length === 1 ? 'issue.pattern/no-wall-above.opening' : 'issue.pattern/no-wall-above.openings', { numbers: missed.join(', '), of: offsets.length })
+      const key = missed.length === 1 ? 'issue.pattern/no-wall-above.one' : 'issue.pattern/no-wall-above.many'
+      issues.push(problem(pattern, 'pattern/no-wall-above', said(key, { pattern: label(pattern), floor: name(floor), wall: name(base.id), which })))
     }
   }
   return out
@@ -242,18 +256,19 @@ export function expandPatterns(plan: FloorPlan): PatternExpansion {
     placed.set(pattern.id, list)
     const placements = placementsOf(plan, pattern, floorIds, issues)
     if (added.length + placements.length + plan.openings.length > PARTS_MAX) {
-      issues.push(problem(pattern, 'pattern/does-not-fit', `${label(pattern)} would place ${placements.length.toLocaleString('en-US')} openings, past the ${PARTS_MAX.toLocaleString('en-US')} a plan may have, so none of its openings is placed`))
+      const n = groupedNum(placements.length.toLocaleString('en-US'))
+      issues.push(problem(pattern, 'pattern/does-not-fit', said('issue.pattern/does-not-fit.tooMany', { pattern: label(pattern), n, most: groupedNum(PARTS_MAX.toLocaleString('en-US')) })))
       continue
     }
     for (const { opening } of placements) {
       if (taken.has(opening.id)) {
-        issues.push(problem(pattern, 'pattern/id-clash', `${label(pattern)} would give an opening the id ${quoted(opening.id)}, which another part of the plan has, so that opening is not placed`))
+        issues.push(problem(pattern, 'pattern/id-clash', said('issue.pattern/id-clash', { pattern: label(pattern), opening: name(opening.id) })))
         continue
       }
       const on = spans.get(opening.wall) ?? []
       const hit = on.find((s) => Math.min(s.to, opening.offset + opening.width) - Math.max(s.from, opening.offset) > over)
       if (hit !== undefined) {
-        issues.push(problem(pattern, 'pattern/overlaps-opening', `${label(pattern)} would place ${quoted(opening.id)} over opening ${quoted(hit.id)} on wall ${quoted(opening.wall)}, so it is not placed`))
+        issues.push(problem(pattern, 'pattern/overlaps-opening', said('issue.pattern/overlaps-opening', { pattern: label(pattern), opening: name(opening.id), other: name(hit.id), wall: name(opening.wall) })))
         continue
       }
       taken.add(opening.id)

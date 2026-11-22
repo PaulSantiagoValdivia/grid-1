@@ -142,6 +142,18 @@ figure used here, with its basis and its status. The plugin's skill carries the 
 `npm run retell` scores how well a model keeps to them (see the scoreboard's
 [README](../scoreboard/README.md#the-retelling-set)).
 
+## The person's language
+
+`grid_check`, `grid_describe`, `grid_view` and `grid_sheet` take `language` (`en` or `es`; the
+plan's own `display.language` when left out): Grid's own words, the label first, come back in that
+language, with its decimal mark (MSG-11). The codes, kinds, ids, figures and each line's `values`
+are the same in every language, so an agent can retell a result in any language from the codes
+and values. Room names stay as written. The tools' own descriptions stay in English. For
+`grid_view`, the picture's words follow the language (a plan's key and marks, a facade's or a
+section's title, caption, level names and list of what Grid took); the answer's text stays the
+tool's English, and a section's `assumed` keeps its English `words`. The Spanish words are a draft
+translation, not reviewed yet ([Languages](languages.md)).
+
 ## A camera you can set, and saved views
 
 Read this when the person asks for a 3D view from somewhere in particular ("the living room from

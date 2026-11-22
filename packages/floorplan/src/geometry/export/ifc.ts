@@ -33,6 +33,7 @@
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
 import { planFloors, planForFloor } from '../floors'
 import { sharedPart, wholeWall } from '../through'
+import { english, said } from '../../messages/say'
 import { inIdOrder } from '../order'
 import { indexPlan, openingsOf } from '../plan'
 import {
@@ -59,7 +60,7 @@ import { planStairs } from '../stairs'
 import { stairBlocks } from '../scene3d'
 import type { WallEnds } from '../wall'
 import { openingChord, openingSpan, wallAxis, wallPolygon } from '../wall'
-import { curveStations, wallCurve } from '../arc'
+import { curveStations, wallCurve, type WallCurve } from '../arc'
 import type { Vec2 } from '../vec2'
 import { partPhases, phasedJoints } from '../phases'
 import type { Phase } from '../../types/floorplan'
@@ -812,7 +813,9 @@ interface WallElement {
  * before the first entity is written, so a failure leaves no dangling entity.
  */
 function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | undefined): WallElement {
-  if (wall.arc !== undefined) return writeCurvedWall(c, storey, wall, ends)
+  // A curve that cannot be worked out has no straight axis either: `wallAxis` refuses it below, and the wall is left out.
+  const curve = wallCurve(wall)
+  if (curve !== null) return writeCurvedWall(c, storey, wall, curve, ends)
   const axis = wallAxis(wall)
   const { w } = c
 
@@ -902,9 +905,7 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
  * body is a ring: its outer face with its inner face as a void. The note names the wall
  * (`Grid_Approximated`).
  */
-function writeCurvedWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | undefined): WallElement {
-  const curve = wallCurve(wall)
-  if (curve === null) throw new Error(`Wall ${wall.id} has no curve to write`)
+function writeCurvedWall(c: Context, storey: Storey, wall: Wall, curve: WallCurve, ends: WallEnds | undefined): WallElement {
   const { w } = c
   const wallPlacement = placement(w, storey.placement, [0, 0, 0])
 
@@ -2231,7 +2232,7 @@ function writeApproximations(c: Context, building: number, approximations: Appro
     const names = partNames(group.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))
     properties.push(value(count, `IFCINTEGER(${int(group.length)})`), value(ids, `IFCTEXT(${str(names.join(', '))})`))
   }
-  const set = c.w.add('IFCPROPERTYSET', str(c.guid('approximated', 'set')), ref(c.owner), str('Grid_Approximated'), str('Curves of the plan Grid wrote as straight pieces in this file'), refs(properties))
+  const set = c.w.add('IFCPROPERTYSET', str(c.guid('approximated', 'set')), ref(c.owner), str('Grid_Approximated'), str(english(said('drawing.ifc.approximated'))), refs(properties))
   c.w.add('IFCRELDEFINESBYPROPERTIES', str(c.guid('approximated', 'relation')), ref(c.owner), NULL, NULL, refs([building]), ref(set))
 }
 

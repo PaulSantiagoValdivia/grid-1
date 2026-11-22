@@ -26,7 +26,8 @@ import type { Floor, FloorPlan, Opening, Wall } from './plan'
 import { floorOf, planFloors } from './floors'
 import { floorElevations, type BuildingElevations } from './elevations'
 import { TOLERANCES, tolerance } from './tolerances'
-import { quoted } from '../types/planText'
+import { english, joined, name, said } from '../messages/say'
+import { withSaid } from './issueWords'
 import type { Issue } from './validate'
 
 /** Whether any wall of the plan rises through floors: one that states `through` another floor. */
@@ -285,20 +286,15 @@ export function throughIssues(plan: FloorPlan): Issue[] {
     if (problem === null) continue
     const own = floorOf(wall)
     const floors = floorsOf(plan)
-    const above = floors.filter((f) => levelOf(f) > levelOf(floors.find((x) => x.id === own) ?? { id: own, name: own, level: 0 })).map((f) => quoted(f.id))
-    const why =
-      problem === 'unknown'
-        ? `floor ${quoted(wall.through!)}, which the plan does not have`
-        : `floor ${quoted(wall.through!)}, which is not above its own floor ${quoted(own)}`
-    issues.push({
-      entity: 'wall',
-      id: wall.id,
-      code: 'wall/through-floor',
-      severity: 'warning',
-      message:
-        `Wall ${quoted(wall.id)} rises through ${why}, so it stands on its own floor only. ` +
-        (above.length === 0 ? `No floor is above ${quoted(own)}.` : `The floors above it are ${above.join(', ')}.`)
+    const above = floors.filter((f) => levelOf(f) > levelOf(floors.find((x) => x.id === own) ?? { id: own, name: own, level: 0 })).map((f) => name(f.id))
+    // MSG-11: by key, with the floors above (`issue.part.through.*`).
+    const sentence = said(problem === 'unknown' ? 'issue.wall/through-floor.unknown' : 'issue.wall/through-floor.below', {
+      wall: name(wall.id),
+      through: name(wall.through!),
+      own: name(own),
+      above: above.length === 0 ? said('issue.part.through.none', { own: name(own) }) : said('issue.part.through.above', { floors: joined(above, 'join.comma') })
     })
+    issues.push(withSaid({ entity: 'wall', id: wall.id, code: 'wall/through-floor', severity: 'warning', message: english(sentence) }, sentence))
   }
   return issues
 }

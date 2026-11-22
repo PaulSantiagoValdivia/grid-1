@@ -37,7 +37,9 @@ import { add, area, centroid, cross, dot, intersectLines, scale, signedArea, sub
 import { tolerance, tolerancesAsStated } from './tolerances'
 import { fixedText, metresText } from './rounding'
 import { likelyId } from '../types/nearest'
-import { quoted, quotedList } from '../types/planText'
+import { quotedList } from '../types/planText'
+import type { Said } from '../messages/say'
+import { english, joined, name, num, said } from '../messages/say'
 import type { WallAxis } from './wall'
 import { wallSegments } from './wall'
 import type { RoomNesting } from './nesting'
@@ -63,10 +65,13 @@ export class RoomOutlineError extends Error {
   readonly hole: number | null
   /** For two neighbours in the list that are parallel and form no corner: the two walls. */
   readonly parallel: readonly [string, string] | null
+  /** MSG-11: the message by its key and values; `message` is its English. */
+  readonly said: Said
 
-  constructor(code: RoomFaultCode, message: string, hole: number | null = null, parallel: readonly [string, string] | null = null) {
-    super(message)
+  constructor(code: RoomFaultCode, sentence: Said, hole: number | null = null, parallel: readonly [string, string] | null = null) {
+    super(english(sentence))
     this.name = 'RoomOutlineError'
+    this.said = sentence
     this.code = code
     this.hole = hole
     this.parallel = parallel
@@ -293,54 +298,48 @@ interface Ring {
   /** The hole's number, from 1, or null for the outline. */
   readonly hole: number | null
   /** As it reads after "In": `room "a"`, `hole 2 of room "a"`. */
-  readonly name: string
+  readonly name: Said
   /** The same, starting a sentence. */
-  readonly Name: string
+  readonly Name: Said
   /** What lists its walls: `boundary`, `list of hole 2`. */
-  readonly list: string
+  readonly list: Said
   /** What the walls go round: `room`, `hole`. */
-  readonly round: string
+  readonly round: Said
   /** The line for two walls whose faces cross. */
-  readonly squeezed: (a: Wall, b: Wall) => string
+  readonly squeezed: (a: Wall, b: Wall) => Said
   /** The line for faces that cross somewhere. */
-  readonly crossed: string
+  readonly crossed: Said
 }
 
+const THINNER = said('issue.room/inside-out.fix')
+
 function outlineRing(room: Room): Ring {
-  const q = quoted(room.id)
+  const q = name(room.id)
   return {
     ids: room.boundary,
     floor: 'inside',
     hole: null,
-    name: `room ${q}`,
-    Name: `Room ${q}`,
-    list: 'boundary',
-    round: 'room',
-    squeezed: (a, b) =>
-      `Room ${q} has no floor: walls ${quoted(a.id)} and ${quoted(b.id)} are thicker than the gap ` +
-      `between them, so their inner faces cross. Move the walls apart or make them thinner.`,
-    crossed:
-      `Part of room ${q} has no floor: somewhere its walls are thicker than the gap ` +
-      `between them, so their inner faces cross. Move the walls apart or make them thinner.`
+    name: said('issue.part.ring.room', { room: q }),
+    Name: said('issue.part.Ring.room', { room: q }),
+    list: said('issue.part.ringList.room'),
+    round: said('issue.part.ringRound.room'),
+    squeezed: (a, b) => said('issue.room/inside-out', { room: q, a: name(a.id), b: name(b.id), fix: THINNER }),
+    crossed: said('issue.room/inside-out.somewhere', { room: q, fix: THINNER })
   }
 }
 
 function holeRing(room: Room, ids: readonly string[], hole: number): Ring {
-  const q = quoted(room.id)
+  const q = name(room.id)
   return {
     ids,
     floor: 'outside',
     hole,
-    name: `hole ${hole} of room ${q}`,
-    Name: `Hole ${hole} of room ${q}`,
-    list: `list of hole ${hole}`,
-    round: 'hole',
-    squeezed: (a, b) =>
-      `Part of room ${q} has no floor: walls ${quoted(a.id)} and ${quoted(b.id)} round hole ${hole} are ` +
-      `thicker than the gap between them, so their faces cross. Move the walls apart or make them thinner.`,
-    crossed:
-      `Part of room ${q} has no floor: somewhere the walls round hole ${hole} are thicker than the gap ` +
-      `between them, so their faces cross. Move the walls apart or make them thinner.`
+    name: said('issue.part.ring.hole', { hole, room: q }),
+    Name: said('issue.part.Ring.hole', { hole, room: q }),
+    list: said('issue.part.ringList.hole', { hole }),
+    round: said('issue.part.ringRound.hole'),
+    squeezed: (a, b) => said('issue.room/inside-out.hole', { room: q, a: name(a.id), b: name(b.id), hole, fix: THINNER }),
+    crossed: said('issue.room/inside-out.holeSomewhere', { room: q, hole, fix: THINNER })
   }
 }
 
@@ -352,7 +351,9 @@ function resolveWalls(ring: Ring, index: PlanIndex): Wall[] {
       const meant = likelyId(wallId, [...index.wallsById.keys()])
       throw new RoomOutlineError(
         'room/unclosed',
-        `${ring.Name} references wall ${quoted(wallId)}, which is not in the plan` + (meant === null ? '' : `: did you mean ${quoted(meant)}?`),
+        meant === null
+          ? said('issue.room/unclosed.missingWall', { ring: ring.Name, wall: name(wallId) })
+          : said('issue.room/unclosed.missingWallMeant', { ring: ring.Name, wall: name(wallId), meant: name(meant) }),
         ring.hole
       )
     }
@@ -360,8 +361,8 @@ function resolveWalls(ring: Ring, index: PlanIndex): Wall[] {
   })
 }
 
-const metres = (value: number): string =>
-  value >= 1000 ? `${fixedText(value / 1000, 1)} km` : `${metresText(value)} m`
+const metres = (value: number): Said =>
+  value >= 1000 ? said('issue.part.kilometres', { n: num(fixedText(value / 1000, 1)) }) : said('issue.part.metres', { n: num(metresText(value)) })
 
 /**
  * How the inner faces of two neighbouring walls join, going round the room
@@ -441,7 +442,7 @@ interface TracedRing {
  * else is the same tracing.
  */
 function traceRing(ring: Ring, index: PlanIndex): TracedRing {
-  const refuse = (code: RoomFaultCode, message: string): RoomOutlineError => new RoomOutlineError(code, message, ring.hole)
+  const refuse = (code: RoomFaultCode, sentence: Said): RoomOutlineError => new RoomOutlineError(code, sentence, ring.hole)
   const outside = ring.floor === 'outside'
   const walls = resolveWalls(ring, index)
   // A curved wall is traced as its straight pieces (CNT-18): a whole circle closes on its own.
@@ -453,7 +454,7 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
     })
   )
   if (pieces.length < 3) {
-    throw refuse('room/unclosed', `${ring.Name} has ${walls.length} walls; at least 3 are needed to close`)
+    throw refuse('room/unclosed', said('issue.room/unclosed.fewWalls', { ring: ring.Name, n: walls.length }))
   }
   const firstPiece: number[] = []
   let count0 = 0
@@ -475,7 +476,7 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
     runs[0] = [...tail, ...runs[0]!]
   }
   if (runs.length < 3) {
-    throw refuse('room/unclosed', `${ring.Name} has ${runs.length} distinct sides; at least 3 are needed to close`)
+    throw refuse('room/unclosed', said('issue.room/unclosed.fewSides', { ring: ring.Name, n: runs.length }))
   }
 
   // 2 · The outline along the axes: where each run's line meets the next one's.
@@ -489,8 +490,7 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
     if (!at) {
       throw new RoomOutlineError(
         'room/unclosed',
-        `In ${ring.name}, walls ${quoted(a.wall.id)} and ${quoted(b.wall.id)} are parallel and form no ` +
-          `corner. The ${ring.list} may be out of order.`,
+        said('issue.room/unclosed.parallel', { ring: ring.name, a: name(a.wall.id), b: name(b.wall.id), list: ring.list }),
         ring.hole,
         [a.wall.id, b.wall.id]
       )
@@ -557,8 +557,7 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
     if (step === 'none') {
       throw refuse(
         'room/unclosed',
-        `In ${ring.name}, walls ${quoted(last.piece.wall.id)} and ${quoted(next.piece.wall.id)} are parallel ` +
-          `and form no corner. The ${ring.list} may be out of order.`
+        said('issue.room/unclosed.parallel', { ring: ring.name, a: name(last.piece.wall.id), b: name(next.piece.wall.id), list: ring.list })
       )
     }
     if (step) edges.push(step)
@@ -600,10 +599,14 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
     return done(
       refuse(
         'room/out-of-order',
-        `In ${ring.name}, walls ${quoted(stray.wallA)} and ${quoted(stray.wallB)} are listed one after the ` +
-          `other but do not meet: their lines cross ${metres(Math.min(stray.offA, stray.offB))} ` +
-          `away from both. The ${ring.list} is out of order, or a wall between them is missing. ` +
-          `List the walls in the order they are met going round the ${ring.round}.`
+        said('issue.room/out-of-order', {
+          ring: ring.name,
+          a: name(stray.wallA),
+          b: name(stray.wallB),
+          off: metres(Math.min(stray.offA, stray.offB)),
+          list: ring.list,
+          round: ring.round
+        })
       )
     )
   }
@@ -614,9 +617,7 @@ function traceRing(ring: Ring, index: PlanIndex): TracedRing {
     return done(
       refuse(
         'room/out-of-order',
-        `In ${ring.name}, the outline crosses itself: the side along wall ${quoted(first)} cuts ` +
-          `through the side along wall ${quoted(second)}. The ${ring.list} is out of order. List the walls ` +
-          `in the order they are met going round the ${ring.round}.`
+        said('issue.room/out-of-order.crosses', { ring: ring.name, a: name(first), b: name(second), list: ring.list, round: ring.round })
       )
     )
   }
@@ -713,15 +714,13 @@ function ringsMeet(p: readonly Vec2[], q: readonly Vec2[]): boolean {
  * outline's walls would make a U, or cut the room in two.
  */
 function holesPlaced(room: Room, polygon: readonly Vec2[], holes: readonly Vec2[][]): RoomOutlineError | null {
-  const q = quoted(room.id)
+  const q = name(room.id)
   for (let h = 0; h < holes.length; h++) {
     const hole = holes[h]!
     if (!hole.every((p) => pointInPolygon(p, polygon)) || ringsMeet(hole, polygon)) {
       return new RoomOutlineError(
         'room/hole-outside',
-        `Hole ${h + 1} of room ${q} does not lie inside the room: the faces of its walls reach or cross the ` +
-          `room's outline. A hole must sit inside the room with floor all round it. Check the walls the hole ` +
-          `lists, or draw the space as a room of its own.`,
+        said('issue.room/hole-outside', { hole: h + 1, room: q }),
         h + 1
       )
     }
@@ -732,8 +731,7 @@ function holesPlaced(room: Room, polygon: readonly Vec2[], holes: readonly Vec2[
       if (ringsMeet(a, b) || pointInPolygon(a[0]!, b) || pointInPolygon(b[0]!, a)) {
         return new RoomOutlineError(
           'room/holes-overlap',
-          `Holes ${h + 1} and ${k + 1} of room ${q} overlap or touch: the faces of their walls meet. Two holes ` +
-            `must have floor between them. If they are one hole, list its walls once.`,
+          said('issue.room/holes-overlap', { a: h + 1, b: k + 1, room: q }),
           k + 1
         )
       }
@@ -779,8 +777,11 @@ function withHoleHint(room: Room, index: PlanIndex, error: unknown): unknown {
     if (!holePolygon.every((point) => pointInPolygon(point, outerPolygon))) continue
     return new RoomOutlineError(
       error.code,
-      `${error.message} If walls ${quotedList(hole)} go round a hole in the room, list them as one of its holes, ` +
-        `as "holes": [[${quotedList(hole)}]], and the walls ${quotedList(outer)} as its boundary.`,
+      said('issue.part.both', {
+        first: error.said,
+        // The list in the plan file's own form is code, written as the file writes it.
+        then: said('issue.room/unclosed.holeHint', { hole: joined(hole.map(name), 'join.comma'), code: quotedList(hole), outer: joined(outer.map(name), 'join.comma') })
+      }),
       error.hole,
       error.parallel
     )

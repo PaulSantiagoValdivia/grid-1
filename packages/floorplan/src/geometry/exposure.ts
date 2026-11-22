@@ -247,12 +247,14 @@ const inBody = (p: Vec2, b: Body): boolean => {
 type Enclosed = (p: Vec2) => boolean
 
 function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>, bodies: Buckets<Body>, enclosed: Enclosed): WallSides {
+  const detached: WallSides = { wall: wall.id, stated: wall.kind, stretches: [], worked: 'detached', exposure: wall.kind === 'exterior' ? 'exterior' : 'detached', differs: null }
+  // A curve that cannot be built (CNT-18) has no length to work its sides out along.
+  if (curveFault(wall) !== null) return detached
   let total: number
   try {
-    if (curveFault(wall) !== null) throw new Error('a curve that cannot be built')
     total = wallLength(wall)
   } catch {
-    return { wall: wall.id, stated: wall.kind, stretches: [], worked: 'detached', exposure: wall.kind === 'exterior' ? 'exterior' : 'detached', differs: null }
+    return detached
   }
   const cover = listedCover(wall, listing)
   const cuts = [...new Set([0, total, ...cover.flatMap((c) => [c.from, c.to])])].sort((a, b) => a - b)

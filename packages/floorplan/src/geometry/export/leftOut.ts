@@ -13,6 +13,7 @@
  * the plan: each is written as a JSON string, and each format escapes that string its own way.
  */
 import type { EntityKind } from '../validate'
+import { english, num, said } from '../../messages/say'
 
 /**
  * The kinds of part an export can leave out: everything but the plan itself, and a flat (CNT-4),
@@ -121,24 +122,19 @@ export interface Approximations {
 
 export const NO_APPROXIMATIONS: Approximations = { parts: [], off: 0 }
 
-const APPROXIMATED: Readonly<Record<ApproximatedPart['kind'], string>> = {
-  wall: 'Curved walls written as straight pieces',
-  room: 'Rooms along a curved wall, their outlines written as straight pieces'
-}
-
-/** The note's lines for the curves a file writes as straight pieces; none when it writes none. */
+/**
+ * The note's lines for the curves a file writes as straight pieces; none when it writes none.
+ * MSG-11: a file's own words are the English of their keys (`drawing.approximated.*`).
+ */
 export function approximationLines(approximations: Approximations): string[] {
   const { parts, off } = approximations
   if (parts.length === 0) return []
-  const lines = [
-    `Grid wrote the curve of ${parts.length} part${parts.length === 1 ? '' : 's'} of the plan as straight pieces in this file, ` +
-      `at most ${off.toFixed(4)} m off the curve: this file writes no arc there. grid check measures the true curve.`
-  ]
+  const lines = [english(said(parts.length === 1 ? 'drawing.approximated.one' : 'drawing.approximated.many', { n: parts.length, off: num(off.toFixed(4)) }))]
   for (const kind of ['wall', 'room'] as const) {
     const group = parts.filter((part) => part.kind === kind)
     if (group.length === 0) continue
     const names = partNames(group.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))
-    lines.push(`${APPROXIMATED[kind]} (${group.length}): ${names.join(', ')}`)
+    lines.push(english(said('drawing.approximated.group', { what: said(`drawing.approximated.${kind}`), n: group.length, names: names.join(', ') })))
   }
   return lines
 }

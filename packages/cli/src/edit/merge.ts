@@ -147,7 +147,7 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
     const which = zonesOf(aId).length > 0 ? an : bn
     throw new EditRefused(`${which} has zones already, and a zone is part of a room, not of a zone. Merge without zones, and say the merged room's use.`)
   }
-  refuseCurved([...aRoom.boundary, ...bRoom.boundary].map((id) => plan.walls.find((w) => w.id === id)), 'merging rooms')
+  refuseCurved([...aRoom.boundary, ...bRoom.boundary].map((id) => plan.walls.find((w) => w.id === id)), 'mergeRooms')
 
   const shared: Array<{ wall: Wall; s0: number; s1: number }> = []
   for (const id of new Set(aRoom.boundary.filter((w) => bRoom.boundary.includes(w)))) {

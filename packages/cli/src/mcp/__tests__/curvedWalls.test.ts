@@ -256,3 +256,14 @@ describe('a curved wall in the parts merged from main (VEW-9, CNT-10)', () => {
     expect(d.split('L').length).toBeGreaterThan(100)
   })
 })
+
+describe('a curved wall in every language (MSG-11 with CNT-18)', () => {
+  const b = bench({ 'plan.json': plan })
+  afterAll(() => b.close())
+
+  it('describes a curved wall in Spanish, with its decimal comma', async () => {
+    const reply = await b.call('grid_describe', { plan: 'plan.json', length: 'walls', for: 'person', language: 'es' })
+    expect(reply.isError, reply.text).toBe(false)
+    expect(reply.text).toContain('en curva de 180° en sentido antihorario en torno a 2; 3 (radio 2, 6,28 a lo largo de la curva)')
+  })
+})

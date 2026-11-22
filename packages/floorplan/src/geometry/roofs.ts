@@ -38,6 +38,7 @@ import { wallAxis } from './wall'
 import type { Vec2 } from './vec2'
 import { roofFrame, roofSlope, roofTop, ridgeRunsOf, type RoofFrame } from '../types/roofFrame'
 import type { MultiPolygon } from 'polygon-clipping'
+import { said, type Said } from '../messages/say'
 
 /** A plane of the roof's underside: its height over (x, y) is `z0 + gx·x + gy·y`, above the floor's level. */
 export interface RoofPlane {
@@ -397,7 +398,7 @@ export interface RooflightPlace {
  * A rooflight's place on the roof, or why it has none: it must lie inside the roof's rectangle and
  * wholly on one plane of it, so it does not cross a ridge or a hip.
  */
-export function rooflightPlace(shape: RoofShapeOverFloor, rooflight: Rooflight): RooflightPlace | { readonly problem: string } {
+export function rooflightPlace(shape: RoofShapeOverFloor, rooflight: Rooflight): RooflightPlace | { readonly problem: Said } {
   const at = { x: rooflight.at[0], y: rooflight.at[1] }
   const planes = boundingPlanes(shape)
   let plane = planes[planes.length - 1]!
@@ -412,9 +413,9 @@ export function rooflightPlace(shape: RoofShapeOverFloor, rooflight: Rooflight):
   const corner = (a: number, b: number): Vec2 => ({ x: at.x + across.x * a + up.x * b, y: at.y + across.y * a + up.y * b })
   let outline = [corner(-w, -l), corner(w, -l), corner(w, l), corner(-w, l)]
   if (ringArea(outline) < 0) outline = outline.reverse()
-  if (!outline.every((p) => underRoof(shape, p))) return { problem: 'lies outside the roof' }
+  if (!outline.every((p) => underRoof(shape, p))) return { problem: said('issue.floor/rooflight-misplaced.outside') }
   const onPlane = outline.every((p) => planes.every((other) => planeAt(plane, p) <= planeAt(other, p) + tolerance('joint')))
-  if (!onPlane) return { problem: 'crosses a line where two slopes of the roof meet, so it would lie in both' }
+  if (!onPlane) return { problem: said('issue.floor/rooflight-misplaced.acrossSlopes') }
   return { rooflight, plane, outline, across, up, planLength }
 }
 

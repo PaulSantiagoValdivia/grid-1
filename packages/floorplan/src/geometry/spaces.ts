@@ -34,7 +34,8 @@ import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, roomWallIds } from './plan'
 import { straightPieces } from './wall'
 import { curveFault } from './arc'
-import { quoted } from '../types/planText'
+import type { Said } from '../messages/say'
+import { english, name, said } from '../messages/say'
 import { roomNesting, tryRoomPolygon } from './room'
 import { roomZones } from './zones'
 import { statedOutline } from './massing'
@@ -166,8 +167,13 @@ export interface FloorSpaces {
 /** Why a floor's spaces were not worked out. */
 export interface FloorSpacesUnknown {
   readonly floor: string
+  /** The reason in English, made from `reasonSaid`. */
   readonly reason: string
+  /** MSG-11: the reason by its key and values (`issue.part.far.*`). */
+  readonly reasonSaid: Said
 }
+
+const unknown = (floor: string, reasonSaid: Said): FloorSpacesUnknown => ({ floor, reason: english(reasonSaid), reasonSaid })
 
 /** A wall as a strip, and the rectangle around it that counts as being along it. */
 interface WallShape {
@@ -283,12 +289,18 @@ function lengthInside(a: Vec2, b: Vec2, polygon: readonly Vec2[]): number {
 
 /** Why the spaces of this floor cannot be worked out, or null when they can. */
 export function farReason(walls: readonly Wall[]): string | null {
+  const far = farSaid(walls)
+  return far === null ? null : english(far)
+}
+
+/** `farReason` by its key and values (MSG-11). */
+export function farSaid(walls: readonly Wall[]): Said | null {
   for (const wall of walls) {
     if ([...wall.start, ...wall.end].some((v) => !Number.isFinite(v) || Math.abs(v) > FAR())) {
-      return `wall ${quoted(wall.id)} lies more than ${FAR() / 1000} km from the origin`
+      return said('issue.part.far.wall', { wall: name(wall.id), km: FAR() / 1000 })
     }
     if (!wall.virtual && (!Number.isFinite(wall.thickness) || wall.thickness > FAR())) {
-      return `wall ${quoted(wall.id)} is more than ${FAR() / 1000} km thick`
+      return said('issue.part.far.thick', { wall: name(wall.id), km: FAR() / 1000 })
     }
   }
   return null
@@ -511,8 +523,14 @@ const reachOf = (walls: readonly Wall[], outline: Polygon | null = null): number
 
 /** BRF-4: why a stated outline is too far out to join, or null. */
 export function outlineFarReason(floor: string, outline: Polygon | null): string | null {
+  const far = outlineFarSaid(floor, outline)
+  return far === null ? null : english(far)
+}
+
+/** `outlineFarReason` by its key and values (MSG-11). */
+export function outlineFarSaid(floor: string, outline: Polygon | null): Said | null {
   if (outline === null) return null
-  return outline[0]!.some(([x, y]) => Math.abs(x) > FAR() || Math.abs(y) > FAR()) ? `the outline of floor ${quoted(floor)} lies more than ${FAR() / 1000} km from the origin` : null
+  return outline[0]!.some(([x, y]) => Math.abs(x) > FAR() || Math.abs(y) > FAR()) ? said('issue.part.far.outline', { floor: name(floor), km: FAR() / 1000 }) : null
 }
 
 /**
@@ -550,8 +568,8 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
   const zones = roomZones(index)
   const walls = floorWalls(plan, floor, broken).filter((wall) => !zones.lines.has(wall.id))
   const outline = statedOutline(plan, floor)
-  const far = farReason(walls) ?? outlineFarReason(floor, outline)
-  if (far) return { floor, reason: far }
+  const far = farSaid(walls) ?? outlineFarSaid(floor, outline)
+  if (far) return unknown(floor, far)
 
   const nesting = roomNesting(index)
   const rooms: DrawnRoom[] = []
@@ -560,7 +578,7 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
     const outline = tryRoomPolygon(room, index)
     if (!outline || outline.length < 3) continue
     if (outline.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > FAR() || Math.abs(p.y) > FAR())) {
-      return { floor, reason: `room ${quoted(room.id)} lies more than ${FAR() / 1000} km from the origin` }
+      return unknown(floor, said('issue.part.far.room', { room: name(room.id), km: FAR() / 1000 }))
     }
     const host = nesting.hosts.get(room.id)
     rooms.push(host ? { room, outline, region: host.region, area: host.area } : { room, outline, area: Math.abs(signedArea(outline)) })
@@ -576,7 +594,8 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
     }
   }
   const why = failure instanceof Error ? failure.message : String(failure)
-  return { floor, reason: `the walls could not be joined (${why})` }
+  // The polygon library's own error, in its words.
+  return unknown(floor, said('issue.part.notJoined', { error: why }))
 }
 
 /** `floorSpaces` for every floor of the plan, in floor order. */

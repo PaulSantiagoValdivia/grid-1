@@ -8,6 +8,7 @@
  */
 import path from 'path'
 import { planFloors, resolveFloor } from '@ongrid/floorplan/geometry'
+import { english, joined, said, type Said } from '@ongrid/floorplan/messages'
 import {
   EXPORT_FORMATS,
   exportFileName,
@@ -181,13 +182,15 @@ export function leftOutText(leftOut: readonly LeftOutPart[]): string | null {
  */
 export function approximatedText(approximated: readonly ApproximatedPart[]): string | null {
   if (approximated.length === 0) return null
-  const named = (kind: ApproximatedPart['kind'], one: string, many: string): string | null => {
+  // MSG-11: the words are keys of the message files (`drawing.export.approximated*`), said in English.
+  const named = (kind: ApproximatedPart['kind']): Said | null => {
     const parts = approximated.filter((part) => part.kind === kind)
     if (parts.length === 0) return null
-    return `${parts.length} ${parts.length === 1 ? one : many} (${someNames(parts.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))})`
+    const names = someNames(parts.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))
+    return said(`drawing.export.approximated.${kind}.${parts.length === 1 ? 'one' : 'many'}`, { n: parts.length, names })
   }
-  const said = [named('wall', 'curved wall', 'curved walls'), named('room', 'room along a curved wall', 'rooms along curved walls')].filter((text) => text !== null)
-  return `Wrote the curves of ${said.join(' and ')} as straight pieces that follow the curve, and the file says how far off they are; grid check measures the true curve.`
+  const parts = [named('wall'), named('room')].filter((part) => part !== null)
+  return english(said('drawing.export.approximated', { parts: joined(parts, 'join.and') }))
 }
 
 /**

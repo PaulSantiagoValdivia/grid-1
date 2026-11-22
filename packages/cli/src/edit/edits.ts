@@ -11,6 +11,7 @@
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
 import { cameraRecord, compassBearing, dot, drawingBearing, planOrientation, storedView, sub, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { english, name, said as sentence } from '@ongrid/floorplan/messages'
 import { FloorPlanSchema, wallWithEnds } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
@@ -84,14 +85,18 @@ export function listed(names: readonly string[], max = 3): string {
   return shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`
 }
 
+/** CNT-18: the edits that change straight walls only, by the key of the words that name them (`edit.curved.doing.*`). */
+export type CurvedEdit = 'placeOpening' | 'moveSide' | 'addRoom' | 'mergeRooms' | 'splitRoom' | 'squareScan' | 'stretch'
+
 /**
  * CNT-18: Grid's edits change straight walls only. An edit that would move, cut or measure a curved
- * wall along a side of a room is refused, naming the wall, before anything is changed.
+ * wall along a side of a room is refused, naming the wall, before anything is changed. MSG-11:
+ * the words are keys of the message files, said in English as the edits' answers are.
  */
-export function refuseCurved(walls: Iterable<{ readonly id: string; readonly arc?: unknown } | null | undefined>, doing: string): void {
+export function refuseCurved(walls: Iterable<{ readonly id: string; readonly arc?: unknown } | null | undefined>, doing: CurvedEdit): void {
   for (const wall of walls) {
     if (wall === null || wall === undefined || wall.arc === undefined) continue
-    throw new EditRefused(`Wall ${quoted(wall.id)} is curved, and ${doing} changes straight walls only. Change the curved wall in the plan file, or ask for a change that leaves it as it is.`)
+    throw new EditRefused(english(sentence('edit.curved.refused', { wall: name(wall.id), doing: sentence(`edit.curved.doing.${doing}`) })))
   }
 }
 
@@ -257,7 +262,7 @@ function wallOnSide(survey: Survey, roomId: string, side: Direction): { wall: Wa
   if (walls.length > 1) throw new EditRefused(`The ${side} side of ${name} is ${walls.length} walls (${walls.map((w) => quoted(w.id)).join(', ')}); name the opening's place on one with from and distance after moving it there by hand.`)
   const wall = walls[0]!
   if (wall.virtual === true) throw new EditRefused(`The ${side} side of ${name} is a dividing line, not a wall: it takes no door or window.`)
-  refuseCurved([wall], 'placing an opening on a side of a room')
+  refuseCurved([wall], 'placeOpening')
   const axis = wallAxis(wall)
   const along = edges.flatMap((edge) => [dot(sub(edge.from, axis.start), axis.dir), dot(sub(edge.to, axis.start), axis.dir)])
   return { wall, lo: Math.min(...along), hi: Math.max(...along) }
@@ -300,7 +305,7 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
   // CNT-18: on a curved wall an opening is placed along the curve, from its start or its end;
   // a side of the drawing or of a room is no way to measure along a curve.
   if (onto.arc !== undefined && request.from !== undefined && request.from !== 'start' && request.from !== 'end') {
-    throw new EditRefused(`Wall ${quoted(onto.id)} is curved: a place along it is measured from its start or its end, along the curve, not from ${request.from}.`)
+    throw new EditRefused(english(sentence('edit.curved.along', { wall: name(onto.id), from: request.from })))
   }
   const axis = onto.arc === undefined ? wallAxis(onto) : null
   const length = wallLength(onto)
@@ -450,7 +455,7 @@ export function moveRoomSide(survey: Survey, roomId: string, side: Direction, by
   if (walls.length > 1) throw new EditRefused(`The ${side} side of ${name} is made of ${walls.length} walls; move one wall at a time is not offered yet.`)
   const wall = walls[0]!
   if (wall.virtual === true) throw new EditRefused(`The ${side} side of ${name} is a dividing line, not a wall.`)
-  refuseCurved([wall], 'moving a side of a room')
+  refuseCurved([wall], 'moveSide')
   const v = { x: out.x * by, y: out.y * by }
   const plan: FloorPlan = survey.plan
   const floor = wall.floor ?? 'ground'
@@ -474,7 +479,7 @@ export function moveRoomSide(survey: Survey, roomId: string, side: Direction, by
     if (onAxis(s) && !onAxis(e)) change.start = moved(s)
     if (onAxis(e) && !onAxis(s)) change.end = moved(e)
     if (!change.start && !change.end) continue
-    refuseCurved([other], 'moving a side of a room')
+    refuseCurved([other], 'moveSide')
     const ns = change.start ? pt(change.start) : s
     const ne = change.end ? pt(change.end) : e
     const oldAxis = wallAxis(other)

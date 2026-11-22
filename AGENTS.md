@@ -17,6 +17,12 @@ Notes for agents and people changing this repository.
   `src/geometry/__tests__/tolerances.test.ts` fails on a tolerance literal anywhere else in the
   geometry, validation or schema, and when the table in `docs/tolerances.md` no longer matches
   it. Its figures are Grid's own drawing checks and cite no document.
+- `packages/floorplan/src/messages/` (MSG-11): Grid's own words, one file per language (`en.ts`, the
+  source; `es.ts`, a draft translation, not reviewed), keyed by code with named placeholders, and
+  `say`, which fills them with figures in the language's decimal mark and names as written.
+  `uses.ts` holds the room uses with a label per language. A sentence Grid writes goes there and
+  nowhere else: `packages/cli/src/__tests__/ownWords.test.ts` counts English sentences in every
+  other source file against its list of what is left to move. See `docs/languages.md`.
 - `packages/floorplan/src/geometry/areas.ts` (ARE-9): net, gross internal and gross external
   area per floor and per use, from the spaces and the worked-out outside walls. Every figure
   carries its rule from `MEASURES`, in Grid's own words; the table in `docs/areas.md` must match

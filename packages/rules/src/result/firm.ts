@@ -16,14 +16,14 @@
  */
 
 import { tolerance } from '@ongrid/floorplan/geometry'
+import { say, type Said } from '@ongrid/floorplan/messages'
 import type { Thing } from './types'
 
-/** The heading the firm's lines sit under, in every report. */
-export const FIRM_HEADING = "The firm's own standards" as const
+/** The heading the firm's lines sit under, in every report: its English (MSG-11: `report.firm.title`). */
+export const FIRM_HEADING = say('en', 'report.firm.title')
 
-/** Said under the heading: whose figures they are, and that no place limits them. */
-export const FIRM_NOTE =
-  "the firm's own figures, from its file beside the plan: not from any code or standard, and not tied to a place, so they are set against the plan wherever that file is"
+/** Said under the heading: whose figures they are, and that no place limits them. Its English (`report.firm.note`). */
+export const FIRM_NOTE = say('en', 'report.firm.note')
 
 /**
  * What a firm's standard can measure, each a least size: the code its lines carry, the unit, what
@@ -33,44 +33,44 @@ export const FIRM_MEASURES = {
   corridor_width: {
     code: 'firm/corridor-width',
     unit: 'm',
-    what: 'corridor width',
+    what: say('en', 'line.part.firm.what.corridor_width'),
     about: 'room',
-    measures: "the narrowest point of each room used as a corridor from end to end, its ends the sides of its outline no wider than it and farthest apart, as grid_measure what=access gives it: the widest body or trolley that gets through, clear of its walls and fixtures, measured on a grid of points a few centimetres apart; the widest circle it holds when Grid finds no two ends"
+    measures: say('en', 'line.part.firm.measures.corridor_width')
   },
   door_clear_width: {
     code: 'firm/door-clear-width',
     unit: 'm',
-    what: 'clear width of a doorway',
+    what: say('en', 'line.part.firm.what.door_clear_width'),
     about: 'opening',
-    measures: "what each door and doorless opening leaves clear: its hole in the wall, less what an open leaf and its stop take and what fixtures stand in front of it: CNT-13's clear width of a doorway"
+    measures: say('en', 'line.part.firm.measures.door_clear_width')
   },
   turning_circle: {
     code: 'firm/turning-circle',
     unit: 'm',
-    what: 'turning circle',
+    what: say('en', 'line.part.firm.what.turning_circle'),
     about: 'room',
-    measures: "the widest circle each room's free floor holds, clear of its walls and fixtures: CNT-13's turning space"
+    measures: say('en', 'line.part.firm.measures.turning_circle')
   },
   fixture_clearance: {
     code: 'firm/fixture-clearance',
     unit: 'm',
-    what: 'clear floor in front of a fixture',
+    what: say('en', 'line.part.firm.what.fixture_clearance'),
     about: 'item',
-    measures: "the clear floor straight out from the front of each fixture to the nearest wall face, doorway or other fixture, the least along its front: CNT-13's space in front of a fixture"
+    measures: say('en', 'line.part.firm.measures.fixture_clearance')
   },
   room_area: {
     code: 'firm/room-area',
     unit: 'm²',
-    what: 'room area',
+    what: say('en', 'line.part.firm.what.room_area'),
     about: 'room',
-    measures: "each room's net area, to the faces of its walls, as grid_areas gives it"
+    measures: say('en', 'line.part.firm.measures.room_area')
   },
   room_width: {
     code: 'firm/room-width',
     unit: 'm',
-    what: 'room width',
+    what: say('en', 'line.part.firm.what.room_width'),
     about: 'room',
-    measures: 'the widest circle each empty room holds between its wall faces, which for a rectangle is its shorter side, as grid_measure what=narrow gives it'
+    measures: say('en', 'line.part.firm.measures.room_width')
   }
 } as const
 
@@ -108,6 +108,8 @@ export interface FirmMeasured {
   readonly precision: number
   /** Where or between what it was measured, in words, with the plan's names quoted; empty when there is nothing to add. */
   readonly said: string
+  /** MSG-11: the same by key and values, to say in another language; `said` is its English. */
+  readonly sentence?: Said
   /** The other parts the line names. */
   readonly also: readonly string[]
 }
@@ -134,7 +136,8 @@ export interface FirmFigure {
 
 /** The record's account of the firm's file: what each standard looked at and how many notes it gave. */
 export interface FirmUsed {
-  readonly heading: typeof FIRM_HEADING
+  /** The heading, in English (`FIRM_HEADING`). */
+  readonly heading: string
   readonly file: string
   readonly read: boolean
   readonly standards: readonly {

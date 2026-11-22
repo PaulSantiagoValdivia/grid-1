@@ -1,41 +1,58 @@
 /**
  * Every code a result line can carry, each with its one wording, what is needed and the fix
- * (MSG-1). The wording is written here and nowhere else: a line's `message` is always made by
- * its code's `says`, so one code cannot be worded two ways (AU4-1). A finding's wording is its
- * check's own (`checks/messages.ts`, `planCheckWordings`), so the report, the notes and the
- * record say the same words.
+ * (MSG-1). The words are in the message files (MSG-11: `line.<code>.says`, `.found`, `.needed`
+ * and `.fix` in `@ongrid/floorplan/messages`), one file per language; this file says which
+ * values each code's wording takes and, where a code has several wordings, which one a line
+ * gets. A line's `message` is always made by its code's `says`, so one code cannot be worded two
+ * ways (AU4-1). A finding's wording is its check's own (`checks/messages.ts`, `planCheckSaids`),
+ * so the report, the notes and the record say the same words.
  *
- * Changing a wording here changes it everywhere at once, and goes in the contract's changelog
+ * Changing a wording changes it everywhere at once, and goes in the contract's changelog
  * (`docs/result-contract.md`). A code is never reused for another meaning.
  *
- * Plain English, never anything that reads as "this plan complies".
+ * Plain words, never anything that reads as "this plan complies".
  */
 
-import { areaText, figureText, metresText, openingWords, passageText, planCheckWordings, tolerance, wordingText, type PlanFix, type WordingPart } from '@ongrid/floorplan/geometry'
-import { BUILDING_TYPE_TEXT, quoted } from '@ongrid/floorplan/types/floorplan'
+import {
+  areaText,
+  figureText,
+  fixedText,
+  metresText,
+  oneKnownOpening,
+  openingsSaid,
+  planCheckSaids,
+  shiftWays,
+  tapedFiguresSaid,
+  tapedWhatSaid,
+  tolerance,
+  type PlanFix,
+  type TapedRow
+} from '@ongrid/floorplan/geometry'
+import { en, isSaid, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type Said, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
+import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
-import { buildingKindsText, findingReadFor, type BuildingKind } from '../checks/figures'
-import { wordings as figureWordings } from '../checks/messages'
-import { figureNeededText } from '../checks/figureWords'
+import { buildingKindsSaid, buildingTypeSaid, findingReadFor, type BuildingKind } from '../checks/figures'
+import { saids as figureSaids } from '../checks/messages'
+import { figureNeededSaid } from '../checks/figureWords'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
 import { FIRM_MEASURES, type FirmMeasure } from './firm'
 
-/** What a line's code is told about the thing, to word it. */
+/** What a line's code is told about the thing, to word it. A text of Grid's own is a `Value`, said in the line's language. */
 export interface Subject {
   /** The thing as the line names it: `Wall "w1"`, `Room "Kitchen"`, `Floor "Ground"`, `The plan`. */
-  readonly label: string
+  readonly label: Value
   /** The name of the room or floor alone, as the plan writes it (the id when it has none). */
   readonly name: string
   /** The floor's name, as the plan writes it. Empty for a line about the whole plan. */
   readonly floorName: string
-  /** The check's own sentence about the thing, word for word. Empty when there is none. */
-  readonly said: string
+  /** The check's own sentence about the thing. Empty when there is none. */
+  readonly said: Value
   /** The ids of the other parts the line names. */
   readonly also: readonly string[]
   /** The names of the rooms a finding or notice names, as the plan writes them. */
   readonly names: readonly string[]
-  /** CNT-13: the fixtures a line names, each as `kitchen run "k1"` (`itemName`). */
-  readonly items?: readonly string[]
+  /** CNT-13: the fixtures a line names, each as `kitchen run "k1"` (`itemNameSaid`). */
+  readonly items?: readonly Value[]
   /** How many floors the plan has. */
   readonly floors: number
   readonly finding?: RuleFinding
@@ -43,41 +60,41 @@ export interface Subject {
   /** Grid's name for the place the check was for, as a sentence writes it (`the United States`; COD-3), from its list, never as stated. Empty when there is none. */
   readonly country: string
   /** On a refusal: the place in the file, as `walls[2].thickness`. */
-  readonly place?: string
+  readonly place?: Value
   /** On a refusal: what the format wants there, in words. */
-  readonly wants?: string
+  readonly wants?: Value
   /** MSG-7: the changes to the part that would clear the line, as data. */
   readonly fixes?: readonly PlanFix[]
   /** On a word Grid does not read (MSG-4): the word, quoted, or what it is when it is not repeated. */
-  readonly word?: string
+  readonly word?: Value
   /** On a word Grid does not read: the word Grid knows that was most likely meant. */
   readonly nearest?: string | null
   /** On a field Grid does not read: whether the part already has the field most likely meant. */
   readonly nearestWritten?: boolean
   /** On a word Grid does not read: what that place may hold, as `the fields of a wall: id, start, …`. */
-  readonly known?: string
+  readonly known?: Value
   /** MSG-6, on a value read as meant: what it was read as. */
-  readonly read?: string
+  readonly read?: Value
   /** MSG-6, on a value left out: the default used, or null when it is read as not stated. */
-  readonly used?: string | null
+  readonly used?: Value | null
   /** MSG-6, on a part left out for its id: the part that keeps the id, as a line names it. */
-  readonly kept?: string
+  readonly kept?: Value
   /**
-   * HND-11, on a taped length: what was taped (`the side along wall "ext-s"`), the two figures
-   * and how far apart they are, and how close they may be and agree, each in words.
+   * HND-11, on a taped length: what was taped, the two figures and how close they may be and
+   * agree (MSG-11: said by the catalogue, `line.part.taped.*`).
    */
-  readonly taped?: { readonly what: string; readonly figures: string; readonly within: string }
-  /** MSG-6: an id no part has, to rename a part to. */
+  readonly taped?: Pick<TapedRow, 'what' | 'walls' | 'taped' | 'drawn' | 'off' | 'within'>
+  /** MSG-6: an id no part has, to rename a part to, quoted. */
   readonly rename?: string
   /** MSG-6, on an unfinished merge: what each side adds or changes, in words. */
-  readonly sides?: string
+  readonly sides?: Value
   /**
    * MSG-5, on a line that stands for the same note on several rooms (lab MS-14): their names, in
    * order, the first being `name`. The wording lists them where the one name goes.
    */
   readonly group?: readonly string[]
-  /** MSG-5, on a "could not be drawn" line: the notes it holds back, in words; empty when none. */
-  readonly heldSaid?: string
+  /** MSG-5, on a "could not be drawn" line: the notes it holds back, in words; '' when none. */
+  readonly heldSaid?: Value
   /** COD-8, on a `firm/` line: the firm's standard and what was measured for it. */
   readonly firm?: FirmSubject
 }
@@ -92,110 +109,79 @@ export interface FirmSubject {
   readonly file: string
   /** What the drawing measured; null when nothing could be. */
   readonly measured: number | null
-  /** Where or between what, with the plan's names quoted; empty when there is nothing to add. */
-  readonly said: string
+  /** Where or between what, with the plan's names quoted (MSG-11: a sentence by key, or its text); empty when there is nothing to add. */
+  readonly said: Value
 }
+
+export type Field = 'says' | 'found' | 'needed' | 'fix'
 
 export interface CodeEntry {
-  /** The one wording. */
-  readonly says: (s: Subject) => string
-  /** What was found. The check's own sentence when not given. */
-  readonly found?: (s: Subject) => string
-  readonly needed: (s: Subject) => string
-  readonly fix: (s: Subject) => string
+  /** The values its wordings take beyond what every line is told (`commonValues`). */
+  readonly values?: (s: Subject, language: Language) => Values
+  /** Which wording of a field a line gets, when the code has several: the last part of its key, or '' for the first. */
+  readonly variant?: Partial<Record<Field, (s: Subject) => string>>
 }
 
-const fixed = (text: string) => (): string => text
-/** LVL-5: how far a stair room or a shaft is moved from the one below, in words. */
-const shiftFound = (shift: RuleFinding['shift']): string => {
-  if (shift === undefined) return 'a room that joins the one below but is moved from it'
-  const ways = [
-    shift.east === 0 ? null : `${metresText(Math.abs(shift.east))} m ${shift.east > 0 ? 'east' : 'west'}`,
-    shift.north === 0 ? null : `${metresText(Math.abs(shift.north))} m ${shift.north > 0 ? 'north' : 'south'}`
-  ].filter((w): w is string => w !== null)
-  if (ways.length === 0) {
-    const sides = shift.sides.map((s) => `its ${s.side} side ${metresText(Math.abs(s.by))} m ${s.side === 'east' || s.side === 'west' ? (s.by > 0 ? 'east' : 'west') : s.by > 0 ? 'north' : 'south'}`)
-    return `${sides.join(' and ')} of the one below's, on the drawing (north is its top)`
-  }
-  return `moved ${ways.join(' and ')} of the one below, on the drawing (north is its top)`
-}
-/** BRF-3: the way an edge of the plot's boundary faces, and whether it is on a street, in words. */
-const edgeWords = (b: NonNullable<RuleFinding['boundary']>): string =>
-  `which faces ${b.faces}${b.northStated ? '' : ' (with north as the top of the drawing: the plan states no north)'}${b.street ? ', on the street' : ''}`
-/** How a use reads in a sentence: "a bedroom". */
-const USE_WORDS: Readonly<Record<string, string>> = { bedroom: 'a bedroom', living: 'a living room', dining: 'a dining room' }
 /**
- * CNT-8: on a finding about a room with zones, the whole room and the use it was checked as,
- * with the zone it was read from when it is not the room's own. Empty on any other.
+ * BRF-3: an edge of the plot's boundary, as a line's found names it: the way it faces, whether north
+ * is stated, and whether it is on a street (`line.part.edgeFaces`).
  */
-const wholeRoom = (s: Subject): string => {
+const edgeValues = (b: NonNullable<RuleFinding['boundary']>): Values => ({
+  edge: b.edge,
+  faces: said('line.part.edgeFaces', {
+    way: said(`describe.way.${b.faces}` as MessageKey),
+    north: b.northStated ? '' : said('line.part.edgeFaces.noNorth'),
+    street: b.street ? said('line.part.edgeFaces.street') : ''
+  })
+})
+/**
+ * CNT-8: on a finding about a room with zones, the use the whole room was checked as, and the
+ * zone it was read from when it is not the room's own (`line.room/too-small.found.whole`).
+ */
+const wholeRoom = (s: Subject, language: Language): Values => {
   const use = s.finding?.use
-  if (use === undefined) return ''
-  const as = USE_WORDS[use] ?? `a room used as ${use}`
-  return `, the whole room with its zones, checked as ${as}${s.finding?.zone === undefined ? '' : `, the use of its zone ${quoted(s.names[1] ?? s.finding.zone)}`}`
+  if (use === undefined) return {}
+  const as =
+    use === 'bedroom' || use === 'living' || use === 'dining'
+      ? said(`line.part.useAs.${use}`)
+      : said('line.part.useAs', { use: language === 'en' ? use : labelOfUse(language, use) })
+  const zone = s.finding?.zone
+  return zone === undefined ? { as } : { as, zone: name(s.names[1] ?? zone) }
 }
+const wholeVariant = (s: Subject): string => (s.finding?.use === undefined ? '' : s.finding.zone === undefined ? 'whole' : 'whole.zone')
 /** A figure from a line's fixes (MSG-7), or null. */
 const fixOf = (s: Subject, key: 'width' | 'offset' | 'height' | 'sill'): number | null => s.fixes?.find((f) => f[key] !== undefined)?.[key] ?? null
+/** A fix's figure as a value, by its name, when the line has it. */
+const fixValue = (s: Subject, key: 'width' | 'offset' | 'height'): Values => (fixOf(s, key) === null ? {} : { [key]: num(metresText(fixOf(s, key)!)) })
+/** Which of an opening's fits a line names: both, one, or none. */
+const fitsVariant = (s: Subject): string => {
+  const offset = fixOf(s, 'offset') !== null
+  const width = fixOf(s, 'width') !== null
+  return offset && width ? 'both' : offset ? 'offset' : width ? 'width' : ''
+}
 /** The wall most likely meant, from a line's fixes (MSG-7). */
 const meantWall = (s: Subject): string | null => s.fixes?.find((f) => f.wall !== undefined)?.wall ?? null
 const FAR = tolerance('farFromOrigin')
 
-/** A sentence's first letter in capitals. */
-const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
-const TIDY = 'grid tidy lists this fault and can make the fix it names. Otherwise correct the walls by hand.'
-const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every size is in metres.'
+const isRoomUse = (word: string): word is RoomUse => (ROOM_USES as readonly string[]).includes(word)
 
 /**
- * MSG-5: how a finding's wording reads for several rooms at once, part by part: the words that
- * change, singular then plural. Applied only outside the names; a test reads a line's wording
- * back with the same table, so a line for several rooms keeps its code's one wording.
+ * MSG-5 (lab MS-14): a finding's wording for its room, or, on a line for several rooms, its
+ * `.many` wording, with their names listed where the one name goes (`rooms`).
  */
-export const PLURALS: readonly (readonly [singular: string, plural: string])[] = [
-  ['The window of ', 'The windows of '],
-  ['A door from ', 'Doors from '],
-  ['An opening from ', 'Openings from '],
-  [' has no ', ' have no '],
-  [' is too ', ' are too '],
-  [' is under ', ' are under '],
-  [' leads ', ' lead '],
-  ['so it is not a way', 'so they are not ways']
-]
-
-/**
- * A finding's one wording for its room, or, on a line for several rooms (MSG-5), with their
- * names listed where the one name goes and the words in `PLURALS` made plural.
- */
-function named(s: Subject, parts: readonly WordingPart[]): string {
+const grouped = (s: Subject, one: Said): Value => {
   const group = s.group ?? []
-  if (group.length < 2) return wordingText(parts)
-  let listed = false
-  const plural = (text: string): string => PLURALS.reduce((out, [one, many]) => out.replace(one, many), text)
-  return wordingText(
-    parts.flatMap((part): WordingPart[] => {
-      if (part.name !== true) return [{ text: plural(part.text) }]
-      if (listed) return [part]
-      listed = true
-      return group.flatMap((name, i): WordingPart[] => (i === 0 ? [{ text: name, name: true }] : [{ text: ', ' }, { text: name, name: true }]))
-    })
-  )
+  if (group.length < 2) return one
+  return said(`${one.key}.many` as MessageKey, { ...one.values, rooms: joined(group.map(name), 'join.comma') })
 }
-
-/** "The door is 0.30 m wide" as "the door is 0.30 m wide". */
-const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1)
 
 /**
  * COD-2: after what a figure finding needed, the kind of building its figures were read for, as
  * "; this check's figures were read for homes (houses and flats people live in)".
  */
-function readFor(s: Subject): string {
+function readFor(s: Subject): Value {
   const kinds = s.finding === undefined ? [] : findingReadFor(s.finding)
-  return kinds.length === 0 ? '' : `; this check's figures were read for ${buildingKindsText(kinds)}`
-}
-
-/** CNT-5: the kind of building a `not_for_building` notice names, as a sentence names it: "an office". */
-function buildingText(s: Subject): string {
-  const building = s.notice?.building
-  return building === undefined ? 'another kind of building' : BUILDING_TYPE_TEXT[building]
+  return kinds.length === 0 ? '' : said('line.part.readFor', { kinds: buildingKindsSaid(kinds) })
 }
 
 /** CNT-5: the kinds of building the figures of a notice's check were read for. */
@@ -204,13 +190,13 @@ function ruleReadFor(s: Subject): readonly BuildingKind[] {
   return rule === 'habitable-room-area' || rule === 'escape-opening' ? RULE_READ_FOR[rule] : []
 }
 
-const NOT_FOR_BUILDING_FIX =
-  'Nothing to change in the plan if the kind of building is right: read how this is set out for that kind of building where it will be built. If it is not, correct the plan\'s building.'
+/** CNT-5: the kind of building a `not_for_building` notice names, and the kinds its figures were read for. */
+const buildingValues = (s: Subject): Values => ({ building: buildingTypeSaid(s.notice?.building), kinds: buildingKindsSaid(ruleReadFor(s)) })
 
 /** A figure a finding applied, by key, as "6.5 m²". */
-function figure(finding: RuleFinding | undefined, key: AppliedFigure['key']): string | null {
+function figure(finding: RuleFinding | undefined, key: AppliedFigure['key']): Value | null {
   const found = finding?.figures?.find((f) => f.key === key)
-  return found === undefined ? null : `${figureText(found.value)} ${found.unit}`
+  return found === undefined ? null : said('line.part.figureValue', { value: num(figureText(found.value)), unit: found.unit })
 }
 
 /** The figures a finding applied, by key, in the order given: what its `needed` names (MSG-3). */
@@ -218,1100 +204,549 @@ function figuresOf(finding: RuleFinding | undefined, keys: readonly AppliedFigur
   return keys.flatMap((key) => finding?.figures?.filter((f) => f.key === key) ?? [])
 }
 
-const area = (value: number | undefined): string => (value === undefined ? 'its area as drawn' : `${figureText(value)} m²`)
-const metres = (value: number | undefined): string => (value === undefined ? 'as drawn' : `${figureText(value)} m`)
+const area = (value: number | undefined): Value => (value === undefined ? said('line.part.areaAsDrawn') : said('line.part.area', { area: num(figureText(value)) }))
+const metres = (value: number | undefined): Value => (value === undefined ? said('line.part.asDrawn') : said('line.part.metres', { value: num(figureText(value)) }))
 
 /** The rooms a route finding opens into, by id. */
-function through(finding: RuleFinding | undefined): string {
+function through(finding: RuleFinding | undefined): Value {
   const rooms = [...new Set((finding?.through ?? []).map((step) => step.room))]
-  return rooms.length === 0 ? 'no door or opening that leads on' : `it opens only into ${rooms.map(quoted).join(', ')}`
+  return rooms.length === 0 ? said('line.part.noWayOn') : said('line.part.opensInto', { rooms: joined(rooms.map(name), 'join.comma') })
 }
 
-/** COD-8: a figure of the firm's in its measure's unit: "1.5 m", "9 m²", as the file gives it. */
-function firmFigure(measure: FirmMeasure, value: number): string {
-  return `${figureText(value)} ${FIRM_MEASURES[measure].unit}`
+/** MSG-7 (lab MS-13): an escape window's measures, each with what it needs and whether it falls short. */
+function escapeMeasures(s: Subject): { text: Value; need: Value | null; fails: boolean }[] {
+  const f = s.finding
+  const minWidth = f?.figures?.find((x) => x.key === 'escapeOpeningMinWidth')?.value
+  const minHeight = f?.figures?.find((x) => x.key === 'escapeOpeningMinHeight')?.value
+  return [
+    { text: said('line.part.inArea', { area: area(f?.area) }), need: f?.minimum === undefined ? null : area(f.minimum), fails: f?.area !== undefined && f.minimum !== undefined && f.area < f.minimum },
+    { text: said('line.part.wide', { size: metres(f?.width) }), need: minWidth === undefined ? null : metres(minWidth), fails: f?.width !== undefined && minWidth !== undefined && f.width < minWidth },
+    { text: said('line.part.high', { size: metres(f?.height) }), need: minHeight === undefined ? null : metres(minHeight), fails: f?.height !== undefined && minHeight !== undefined && f.height < minHeight }
+  ]
 }
 
-/** COD-8: what was measured, to the digits that set it apart from the firm's figure. */
-function firmMeasured(measure: FirmMeasure, measured: number | null, value: number): string | null {
-  if (measured === null) return null
-  return FIRM_MEASURES[measure].unit === 'm²' ? `${areaText(measured, 2, value)} m²` : `${metresText(measured, 2, value)} m`
+/** The measure that fails first, against what it needs; the ones that pass after. */
+function escapeWindowFound(s: Subject): Values {
+  const f = s.finding
+  const measures = escapeMeasures(s)
+  const failing = measures.filter((m) => m.fails)
+  const passing = measures.filter((m) => !m.fails)
+  return {
+    area: area(f?.area),
+    width: metres(f?.width),
+    height: metres(f?.height),
+    short: joined(failing.map((m) => said('line.part.under', { measure: m.text, need: m.need ?? '' })), 'join.commaAnd'),
+    passing: joined(passing.map((m) => m.text), 'join.and')
+  }
 }
 
-const FIRM_FIX_TAIL = "The figure is the firm's own: if it does not hold for this plan, change it in the firm's file."
+function escapeWindowVariant(s: Subject): string {
+  const measures = escapeMeasures(s)
+  const failing = measures.filter((m) => m.fails).length
+  const passing = measures.length - failing
+  return failing === 0 ? '' : passing === 0 ? 'short' : passing === 1 ? 'one' : 'many'
+}
+
+function escapeWindowParts(s: Subject): Value[] {
+  const wide = figure(s.finding, 'escapeOpeningMinWidth')
+  const high = figure(s.finding, 'escapeOpeningMinHeight')
+  return [
+    s.finding?.minimum === undefined ? null : area(s.finding.minimum),
+    wide === null ? null : said('line.part.wide', { size: wide }),
+    high === null ? null : said('line.part.high', { size: high })
+  ].filter((part): part is Value => part !== null)
+}
+
+function escapeWindowNeeded(s: Subject): Values {
+  const parts = escapeWindowParts(s)
+  const used = figuresOf(s.finding, ['escapeOpeningMinArea', 'escapeOpeningMinAreaGrade', 'escapeOpeningMinWidth', 'escapeOpeningMinHeight'])
+  return { readFor: readFor(s), figure: figureNeededSaid(said('line.part.atLeast', { what: joined(parts, 'join.comma') }), used) }
+}
 
 /**
- * COD-8: the one wording of a `firm/` code. The message says what was measured and the firm's
- * figure, as the firm's own; the needed is the firm's figure used here, from its file, and says
- * it is not from any code or standard.
+ * COD-8: the values of a `firm/` code's wording: the firm's figure and what was measured, to the
+ * digits that set it apart from it, in the measure's unit (`line.firm/<code>.*`); the firm's name
+ * for the standard, its file, and where it was measured. A line with nothing measured has the
+ * `none` wording.
  */
-function firmEntry(measure: FirmMeasure, phrase: (measured: string | null) => string, fix: string): CodeEntry {
-  const what = FIRM_MEASURES[measure].what
-  const named = (s: Subject): string => (s.firm?.name ? ` (${quoted(s.firm.name)})` : '')
-  return {
-    says: (s) => {
-      const f = s.firm
-      const measured = f === undefined ? null : firmMeasured(measure, f.measured, f.value)
-      const against = measured === null ? 'against' : 'under'
-      return `${s.label}: ${phrase(measured)}, ${against} the firm's own figure of ${firmFigure(measure, f?.value ?? 0)} for ${what}${named(s)}`
-    },
-    found: (s) => {
-      const f = s.firm
-      const measured = f === undefined ? null : firmMeasured(measure, f.measured, f.value)
-      return `${measured ?? 'no way through'}${f?.said ? `, ${f.said}` : ''}; measured as ${FIRM_MEASURES[measure].measures}`
-    },
-    needed: (s) => `at least ${firmFigure(measure, s.firm?.value ?? 0)}: the firm's figure used here${named(s)}, from ${quoted(s.firm?.file ?? '')}, the firm's own and not from any code or standard`,
-    fix: fixed(`${fix} ${FIRM_FIX_TAIL}`)
+function firmValues(measure: FirmMeasure): (s: Subject) => Values {
+  const area = FIRM_MEASURES[measure].unit === 'm²'
+  return (s) => {
+    const f = s.firm
+    const figure = num(figureText(f?.value ?? 0))
+    const measured = f === undefined || f.measured === null ? null : num(area ? areaText(f.measured, 2, f.value) : metresText(f.measured, 2, f.value))
+    return {
+      figure,
+      ...(measured === null ? {} : { measured }),
+      what: said(`line.part.firm.what.${measure}`),
+      measures: said(`line.part.firm.measures.${measure}`),
+      named: f?.name ? said('line.part.firm.named', { name: name(f.name) }) : '',
+      file: name(f?.file ?? ''),
+      where: f?.said === undefined || f.said === '' ? '' : said('line.part.firm.where', { where: f.said })
+    }
   }
+}
+const firmNone = (s: Subject): string => (s.firm === undefined || s.firm.measured === null ? 'none' : '')
+const firmEntry = (measure: FirmMeasure): CodeEntry => ({ values: firmValues(measure), variant: { says: firmNone, found: firmNone } })
+
+/**
+ * HND-11: a taped length's words (what was taped, as a sentence starts it too, and the two
+ * figures) and its figures as data: taped, drawn, drawn less taped and how close they may be.
+ */
+const tapedValues = (s: Subject): Values => {
+  const row = s.taped
+  if (row === undefined) return {}
+  return {
+    what: tapedWhatSaid(row),
+    What: tapedWhatSaid(row, true),
+    figures: tapedFiguresSaid(row),
+    within: num(fixedText(row.within, 3)),
+    taped: num(fixedText(row.taped, 3)),
+    ...(row.drawn === null ? {} : { drawn: num(fixedText(row.drawn, 3)) }),
+    ...(row.off === null ? {} : { off: num(fixedText(row.off, 3)) })
+  }
+}
+const tapedNone = (s: Subject): string => (s.taped === undefined ? 'none' : '')
+
+/**
+ * LVL-5 (lab WR-9): a moved stair room or shaft, by how far and which way it is moved from the one
+ * below (`line.room/stair-shifted.found`), or, for a shaft not moved as a whole, its sides.
+ */
+const shiftEntry: CodeEntry = {
+  values: (s): Values => {
+    const shift = s.finding?.shift
+    const ways = shift === undefined ? null : shiftWays(shift)
+    return {
+      ...(s.finding === undefined ? {} : { wording: s.finding.said ?? s.finding.message }),
+      ...(ways === null ? {} : ways.moved.length > 0 ? { ways: joined(ways.moved, 'join.and') } : { sideWays: joined(ways.sides, 'join.and') })
+    }
+  },
+  variant: {
+    says: (s) => (s.finding === undefined ? 'none' : ''),
+    found: (s) => {
+      const shift = s.finding?.shift
+      return shift === undefined ? 'none' : shiftWays(shift).moved.length > 0 ? '' : 'sides'
+    }
+  }
+}
+
+/** LVL-5 (lab A-16, VE-9): whether a "could not be drawn" notice knows what each opening is. */
+const openingKindsOf = (s: Subject) => {
+  const kinds = s.notice?.openingKinds
+  return kinds === undefined || kinds.length === 0 ? null : kinds
 }
 
 export const CODES = {
   // --- Reading: the plan could not be read, so nothing else ran ---------------------------------
-  'plan/not-json': {
-    says: fixed('The plan is not JSON'),
-    found: (s) => s.said,
-    needed: fixed('a plan file in JSON'),
-    fix: fixed('Write the plan as one JSON object with walls, rooms and openings.')
-  },
-  'plan/not-an-object': {
-    says: fixed('The plan is not a JSON object'),
-    found: fixed('JSON that is not an object'),
-    needed: fixed('one JSON object with walls, rooms and openings'),
-    fix: fixed('Write the plan as one JSON object with walls, rooms and openings.')
-  },
-  'plan/missing-field': {
-    says: (s) => `${s.label} is missing a field the format needs`,
-    found: (s) => `nothing at ${s.place}`,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Add ${s.place}.`
-  },
-  'plan/wrong-type': {
-    says: (s) => `${s.label} has a field of the wrong type`,
-    found: (s) => s.said,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Write ${s.place} as ${s.wants}.`
-  },
-  'plan/unknown-word': {
-    says: (s) => `${s.label} has a word the format does not know`,
-    found: (s) => `a word the format does not know at ${s.place}`,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Write ${s.place} as one of the words the format knows, letter for letter.`
-  },
-  'plan/out-of-range': {
-    says: (s) => `${s.label} has a value out of range`,
-    found: (s) => `a value out of range at ${s.place}`,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Correct ${s.place}. Sizes are in metres.`
-  },
-  'plan/not-in-format': {
-    says: (s) => `${s.label} has a field the format cannot read`,
-    found: (s) => `${s.place}: ${s.said}`,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Correct ${s.place}.`
-  },
-
+  'plan/not-json': {},
+  'plan/not-an-object': {},
+  'plan/missing-field': {},
+  'plan/wrong-type': {},
+  'plan/unknown-word': {},
+  'plan/out-of-range': {},
+  'plan/not-in-format': {},
   // --- Reading: words Grid does not read (MSG-4). The plan is read without them --------------
   'plan/unknown-field': {
-    says: (s) => `${s.label} has a field Grid does not know, ${s.word}`,
-    found: (s) => `${s.word} at ${s.place}, which Grid does not read${s.nearest ? `; the nearest field it knows is ${quoted(s.nearest)}` : ''}`,
-    needed: (s) => `one of ${s.known}`,
-    fix: (s) =>
-      s.nearest && s.nearestWritten
-        ? `Did you mean ${quoted(s.nearest)}? It is there too, and is what Grid reads: take ${s.word} out, or move its value to ${quoted(s.nearest)}.`
-        : s.nearest
-        ? `Did you mean ${quoted(s.nearest)}? Rename ${s.word} to ${quoted(s.nearest)}. Until then Grid reads the plan without it.`
-        : 'Grid has no field for this. Take it out, or say it with the fields listed. Until then Grid reads the plan without it.'
+    values: (s): Values => (s.nearest ? { nearest: name(s.nearest) } : {}),
+    variant: { found: (s) => (s.nearest ? 'nearest' : ''), fix: (s) => (s.nearest && s.nearestWritten ? 'written' : s.nearest ? 'nearest' : '') }
   },
   'plan/unknown-use': {
-    says: (s) => `${s.label} has a use Grid does not know, ${s.word}`,
-    found: (s) => `the use ${s.word} at ${s.place}, read as no use stated${s.nearest ? `; the nearest use Grid knows is ${quoted(s.nearest)}` : ''}`,
-    needed: (s) => `one of ${s.known}`,
-    fix: (s) =>
-      `${s.nearest ? `Did you mean ${quoted(s.nearest)}? Write it if that is what the room is; if none of the uses fits, "other".` : 'If none of the uses Grid knows fits, write "other".'} Until then the room has no use, and the checks that need one skip it.`
+    values: (s, language): Values => ({
+      known: said('line.part.knownUses', { uses: ROOM_USES.map((use) => labelOfUse(language, use)).join(', ') }),
+      other: name(labelOfUse(language, 'other')),
+      ...(s.nearest && isRoomUse(s.nearest) ? { nearest: name(labelOfUse(language, s.nearest)) } : s.nearest ? { nearest: name(s.nearest) } : {})
+    }),
+    variant: { found: (s) => (s.nearest ? 'nearest' : ''), fix: (s) => (s.nearest ? 'nearest' : '') }
   },
-  'plan/empty': {
-    says: fixed('The plan has nothing in it: no walls, rooms or openings'),
-    found: fixed('no walls, no rooms and no openings'),
-    needed: fixed('walls, and the rooms and openings they hold'),
-    fix: fixed('Add the walls, rooms and openings, or write the plan from rooms text with grid write. If the file was meant to hold a plan, check it is the right file.')
-  },
+  'plan/empty': {},
   'plan/unfinished-merge': {
-    says: fixed('The plan holds an unfinished git merge'),
-    found: (s) => s.said,
-    needed: fixed('one plan, with the merge finished'),
-    fix: (s) =>
-      `Finish the merge: ${s.sides ? `${s.sides}. Keep` : 'keep'} the side that is meant, or both, take out the lines git marks with <<<<<<<, ======= and >>>>>>>, and read the plan again.`
+    variant: { fix: (s) => (s.sides ? 'sides' : '') }
   },
-
   // --- Reading part by part (MSG-6): the plan is read, and the rest is checked -----------------
-  'plan/part-left-out': {
-    says: (s) => `${s.label} is left out: a value it needs cannot be read`,
-    found: (s) => `${s.said} at ${s.place}`,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Give ${s.place} ${s.wants}. Until then the part is left out of every view, measure and export, and the rest of the plan is checked without it.`
-  },
+  'plan/part-left-out': {},
   'plan/value-left-out': {
-    says: (s) => `${s.label} has a value the format cannot read, and is read without it`,
-    found: (s) => `${s.said} at ${s.place}, so ${s.used ? `the default, ${s.used}, is used` : 'it is read as not stated'}`,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Write ${s.place} as ${s.wants}, or leave it out${s.used ? ` to keep the default, ${s.used}` : ''}.`
+    variant: { found: (s) => (s.used ? 'used' : ''), fix: (s) => (s.used ? 'used' : '') }
   },
-  'plan/read-as-meant': {
-    says: (s) => `${s.label} has a value written another way, and it is read as meant`,
-    found: (s) => `${s.said} at ${s.place}, read as ${s.read}`,
-    needed: (s) => `${s.wants} at ${s.place}`,
-    fix: (s) => `Write ${s.place} as ${s.read}, so the plan says what is read.`
-  },
-  'plan/blank-id': {
-    says: (s) => `${s.label} is left out: its id is blank`,
-    needed: fixed('an id of its own on every part, with more than spaces in it'),
-    fix: fixed('Give it an id no other part has, and use that id where the plan points at it.')
-  },
+  'plan/read-as-meant': {},
+  'plan/blank-id': {},
   'plan/id-clash': {
-    says: (s) => `${s.label} is left out: another part has the same id`,
-    found: (s) => `the id of ${s.kept} again at ${s.place}`,
-    needed: fixed('every id on one part only, across the whole plan'),
-    fix: (s) => `Rename it${s.rename ? `, for example to ${s.rename}` : ''}. ${s.kept} keeps its id, and what points at that id points at it.`
+    variant: { fix: (s) => (s.rename ? 'rename' : '') }
   },
-  'plan/similar-id': {
-    says: (s) => `${s.label} is left out: its id differs from another part's only in capitals or spaces`,
-    needed: fixed('ids that differ in more than capitals or spaces'),
-    fix: fixed('If it is the other part, use its id letter for letter; if it is a part of its own, rename it. The other part keeps its id.')
-  },
-
+  'plan/similar-id': {},
   // --- Grid itself ----------------------------------------------------------------------------
-  'plan/check-failed': {
-    says: fixed('A check could not run on this plan: something went wrong inside Grid'),
-    needed: fixed('the check to run to the end'),
-    fix: fixed('Nothing to change in the plan for this line. The other lines still hold; tell the people who make Grid.')
-  },
-
+  'plan/check-failed': {},
   // --- The plan as a whole --------------------------------------------------------------------
-  'plan/no-walls': {
-    says: fixed('The plan has no walls, but its rooms and openings name walls'),
-    needed: fixed('the walls the rooms and openings name'),
-    fix: fixed('Put the walls back: every room lists its walls and every opening sits on one. The lines about each room and opening follow from this one and go away with it.')
-  },
+  'plan/no-walls': {},
   'plan/far-from-origin': {
-    says: fixed(`The plan reaches more than ${FAR} m from the origin`),
-    needed: fixed(`every point within ${FAR} m of the origin: the site's origin where the plan states one, else (0, 0)`),
-    fix: fixed('Check the units and look for a slipped coordinate. If the plan is in map or survey coordinates, keep them and state a point near the building as site.origin: the check measures from it, and every export writes the geometry from it, with the offset kept.')
+    values: (): Values => ({ far: num(String(FAR)) })
   },
-  'plan/duplicate-id': {
-    says: (s) => `Id ${s.label} names more than one wall, room or opening`,
-    needed: fixed('every id on one wall, room or opening only'),
-    fix: fixed('Rename all but one, and update what should point at the renamed one. Until then all of them are left out.')
-  },
-  'plan/similar-floor-id': {
-    says: (s) => `${s.label} has an id that differs from another floor's only in capitals or spaces`,
-    needed: fixed('floor ids that differ in more than capitals or spaces'),
-    fix: fixed('Use one spelling for one floor, or give the two floors ids that tell them apart.')
-  },
-  'plan/duplicate-floor': {
-    says: (s) => `${s.label} is listed more than once`,
-    needed: fixed('each floor listed once'),
-    fix: fixed('Remove the second entry, or give that floor its own id. Grid uses the first entry.')
-  },
-  'plan/units-question': {
-    says: fixed('The plan may not be in metres'),
-    needed: fixed('every length in metres'),
-    fix: fixed('If the plan was typed in another unit, multiply every length so it reads in metres, as the line found says.')
-  },
-
-  'plan/level-gap': {
-    says: fixed('The plan skips a floor level'),
-    needed: fixed('floor levels with no gap, or an elevation in metres on each floor'),
-    fix: fixed('If a floor is missing, add it. If not, state where each floor stands with an elevation in metres.')
-  },
-  'plan/same-level': {
-    says: (s) => `${s.label} is at the same level as another floor`,
-    needed: fixed('each floor at its own level, or an elevation in metres on each'),
-    fix: fixed('Give each floor its own level, or state where each stands with an elevation in metres.')
-  },
-
+  'plan/duplicate-id': {},
+  'plan/similar-floor-id': {},
+  'plan/duplicate-floor': {},
+  'plan/units-question': {},
+  'plan/level-gap': {},
+  'plan/same-level': {},
   // --- Walls ----------------------------------------------------------------------------------
-  'wall/too-large': {
-    says: (s) => `${s.label} has a number Grid does not accept`,
-    needed: fixed('finite numbers within the size Grid accepts'),
-    fix: fixed('Correct the number. Every size is in metres.')
-  },
-  'wall/zero-length': {
-    says: (s) => `${s.label} has no length`,
-    needed: fixed('a start and an end at different points'),
-    fix: fixed('Give the wall two different points, or remove it.')
-  },
+  'wall/too-large': {},
+  'wall/zero-length': {},
   // CNT-18: a curved wall that cannot be built.
-  'wall/arc-ends-apart': {
-    says: (s) => `${s.label} does not end where its curve takes it`,
-    needed: fixed('an end on the circle where the sweep takes the start round the centre'),
-    fix: fixed('Move its end to where the curve reaches, or give the sweep that reaches its end.')
-  },
-  'wall/arc-too-tight': {
-    says: (s) => `${s.label} curves round too small a radius`,
-    needed: fixed('a radius, from the centre to the start, over half the wall\'s thickness'),
-    fix: fixed('Move its centre further from its ends, or make the wall thinner.')
-  },
-  'wall/no-thickness': {
-    says: (s) => `${s.label} has no thickness`,
-    needed: fixed('a thickness above 0, or a virtual wall for a line with no substance'),
-    fix: fixed('Give it its thickness, or mark it virtual.')
-  },
-  'wall/no-height': {
-    says: (s) => `${s.label} has no height`,
-    needed: fixed('a height above 0, or a virtual wall for a line with no substance'),
-    fix: fixed('Give it its height, or mark it virtual.')
-  },
+  'wall/arc-ends-apart': {},
+  'wall/arc-too-tight': {},
+  'wall/no-thickness': {},
+  'wall/no-height': {},
   // LVL-5 (C19): a wall through floors that names no floor above its own.
-  'wall/through-floor': {
-    says: (s) => `${s.label} rises through a floor that is not above its own, so it stands on its own floor only`,
-    needed: fixed('through naming a floor above the wall\'s own, from the plan\'s floors'),
-    fix: fixed('Name in through a floor above the wall\'s own, or leave through out for a wall of one floor.')
-  },
-  'wall/unknown-floor': {
-    says: (s) => `${s.label} is on a floor the plan does not list`,
-    needed: fixed("a floor from the plan's floors"),
-    fix: fixed('Add the floor to the floors list, or put the wall on a floor it lists.')
-  },
-  'wall/kind-differs': {
-    says: (s) => `${s.label} is stated as one kind, but the rooms on its sides show another`,
-    needed: fixed('a kind that matches the rooms on its sides'),
-    fix: fixed('Leave out its kind, or state the kind the rooms beside it show.')
-  },
-  'wall/ends-in-opening': {
-    says: (s) => `${s.label} ends on another wall inside one of its openings`,
-    needed: fixed('a wall that meets another clear of its doors and windows'),
-    fix: fixed('Move the wall along, or move the opening clear of where the wall meets it.')
-  },
-  'wall/size-question': {
-    says: (s) => `${s.label} has a size that may not be meant`,
-    needed: fixed('the size of a wall in a building'),
-    fix: fixed(`${SIZE_QUESTION} A line on the floor with no substance is a virtual wall.`)
-  },
-  'wall/short': {
-    says: (s) => `${s.label} stops short of a corner`,
-    needed: fixed('wall ends that meet at the corner'),
-    fix: fixed(TIDY)
-  },
-  'wall/gap': {
-    says: (s) => `${s.label} leaves a gap in a straight side of a room`,
-    needed: fixed('the walls of a side meeting end to end'),
-    fix: fixed(TIDY)
-  },
-  'wall/overrun': {
-    says: (s) => `${s.label} runs past its corner`,
-    needed: fixed('a wall that ends at its corner'),
-    fix: fixed(TIDY)
-  },
-  'wall/duplicate': {
-    says: (s) => `${s.label} lies over another wall`,
-    needed: fixed('each wall drawn once'),
-    fix: fixed(TIDY)
-  },
-  'wall/line-on-wall': {
-    says: (s) => `${s.label} is a dividing line drawn over a wall`,
-    needed: fixed('a wall or a dividing line, not both'),
-    fix: fixed(TIDY)
-  },
-  'wall/crosses-room': {
-    says: (s) => `${s.label} runs across a room that does not list it`,
-    needed: fixed('every wall across a room listed by the rooms on its sides'),
-    fix: fixed(TIDY)
-  },
-  'wall/stands-in-room': {
-    says: (s) => `${s.label} stands inside a room that does not list it`,
-    needed: fixed('a wall inside a room drawn as part of a room'),
-    fix: fixed('If it is a room inside the room (a pod, a cupboard, a column), draw that room and mark it "inside". Otherwise remove the wall or move it.')
-  },
-
-  'wall/above-storey': {
-    says: (s) => `${s.label} is higher than the storey its floor states`,
-    needed: fixed("walls no higher than their floor's stated height"),
-    fix: fixed("Lower the wall, or raise the floor's height if the wall really is taller.")
-  },
-
+  'wall/through-floor': {},
+  'wall/unknown-floor': {},
+  'wall/kind-differs': {},
+  'wall/ends-in-opening': {},
+  'wall/size-question': {},
+  'wall/short': {},
+  'wall/gap': {},
+  'wall/overrun': {},
+  'wall/duplicate': {},
+  'wall/line-on-wall': {},
+  'wall/crosses-room': {},
+  'wall/stands-in-room': {},
+  'wall/above-storey': {},
   // --- Openings -------------------------------------------------------------------------------
-  'opening/too-large': {
-    says: (s) => `${s.label} has a number Grid does not accept`,
-    needed: fixed('finite numbers within the size Grid accepts'),
-    fix: fixed('Correct the number. Every size is in metres.')
-  },
-  'opening/broken-wall': {
-    says: (s) => `${s.label} is on a wall that cannot be drawn`,
-    needed: fixed('a wall that can be drawn'),
-    fix: fixed('Correct its wall first: this line goes away with it.')
-  },
+  'opening/too-large': {},
+  'opening/broken-wall': {},
   'opening/missing-wall': {
-    says: (s) => `${s.label} is on a wall that is not in the plan`,
-    needed: (s) => (meantWall(s) === null ? 'the id of a wall in the plan' : `the id of a wall in the plan, most likely ${quoted(meantWall(s)!)}`),
-    fix: (s) =>
-      meantWall(s) === null
-        ? 'Name a wall the plan has, letter for letter, or add the wall.'
-        : `Did you mean ${quoted(meantWall(s)!)}? Name it letter for letter, or add the wall.`
+    values: (s): Values => (meantWall(s) === null ? {} : { wall: name(meantWall(s)!) }),
+    variant: { needed: (s) => (meantWall(s) === null ? '' : 'meant'), fix: (s) => (meantWall(s) === null ? '' : 'meant') }
   },
-  'opening/degenerate': {
-    says: (s) => `${s.label} has no size`,
-    needed: fixed('a width and a height above 0'),
-    fix: fixed('Give it its width and its height.')
-  },
+  'opening/degenerate': {},
   'opening/out-of-wall': {
-    says: (s) => `${s.label} runs off its wall`,
-    needed: (s) => {
-      const fits = [
-        fixOf(s, 'offset') === null ? null : `an offset of at most ${metresText(fixOf(s, 'offset')!)} m`,
-        fixOf(s, 'width') === null ? null : `a width of at most ${metresText(fixOf(s, 'width')!)} m at its offset`
-      ].filter((part): part is string => part !== null)
-      return fits.length === 0 ? "its offset and width within the wall's length" : fits.join(', or ')
-    },
-    fix: (s) => {
-      const fits = [
-        fixOf(s, 'offset') === null ? null : `move it to an offset of ${metresText(fixOf(s, 'offset')!)} m or less`,
-        fixOf(s, 'width') === null ? null : `make it ${metresText(fixOf(s, 'width')!)} m wide or narrower, keeping its start`
-      ].filter((part): part is string => part !== null)
-      return fits.length === 0 ? 'Move it along the wall, or make it narrower, as the line found says.' : `${fits.join(', or ').replace(/^./, (c) => c.toUpperCase())}.`
-    }
+    values: (s): Values => ({ ...fixValue(s, 'offset'), ...fixValue(s, 'width') }),
+    variant: { needed: fitsVariant, fix: fitsVariant }
   },
   'opening/too-tall': {
-    says: (s) => `${s.label} reaches above the top of its wall`,
-    needed: (s) =>
-      fixOf(s, 'height') === null ? 'its sill and height together no higher than the wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
-    fix: (s) => (fixOf(s, 'height') === null ? 'Lower its height or its sill.' : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, or lower its sill.`)
+    values: (s): Values => fixValue(s, 'height'),
+    variant: { needed: (s) => (fixOf(s, 'height') === null ? '' : 'height'), fix: (s) => (fixOf(s, 'height') === null ? '' : 'height') }
   },
   'opening/above-roof': {
-    says: (s) => `${s.label} reaches above the roof over its wall`,
-    needed: (s) =>
-      fixOf(s, 'height') === null ? 'its sill and height together no higher than the roof over that stretch of its wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
-    fix: (s) =>
-      fixOf(s, 'height') === null
-        ? 'Lower it under the roof, move it along the wall to where the roof is higher, or, for a window in the slope, state it as a rooflight in the floor\'s roof.'
-        : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, lower its sill, or move it to where the roof is higher.`
+    values: (s): Values => fixValue(s, 'height'),
+    variant: { needed: (s) => (fixOf(s, 'height') === null ? '' : 'height'), fix: (s) => (fixOf(s, 'height') === null ? '' : 'height') }
   },
-  'opening/negative-sill': {
-    says: (s) => `${s.label} has its sill below the floor`,
-    needed: fixed('a sill at 0 or above'),
-    fix: fixed('Set the sill at the floor (0) or above.')
-  },
-  'opening/overlap': {
-    says: (s) => `${s.label} overlaps another opening on its wall`,
-    needed: fixed('openings on one wall that share no part of it'),
-    fix: fixed('Move one of them along the wall, or make one narrower. Until then the later one is left out.')
-  },
-  'opening/phase-wall': {
-    says: (s) => `${s.label} stands when its wall does not, so it is left out`,
-    found: (s) => s.said,
-    needed: fixed('an opening that stands only while its wall does: a new opening in an existing or new wall, an existing or demolished one in an existing wall'),
-    fix: fixed('Give the opening the phase of its wall, or put it in a wall that stands when it does. A widened door is its old opening, demolished, and a new one in the same place.')
-  },
-  'opening/size-question': {
-    says: (s) => `${s.label} has a size that may not be meant`,
-    needed: fixed('the size of a door or window in a building'),
-    fix: fixed(SIZE_QUESTION)
-  },
-  'opening/swing-without-hinge': {
-    says: (s) => `${s.label} says which way it opens but not which side it hangs on`,
-    found: fixed('a swing and no hinge, so it is drawn without a swing and its sweep is not checked'),
-    needed: fixed('both its hinge ("start" or "end") and its swing ("left" or "right")'),
-    fix: fixed('Add its hinge, or leave out its swing.')
-  },
-  'opening/hinge-without-swing': {
-    says: (s) => `${s.label} says which side it hangs on but not which way it opens`,
-    found: fixed('a hinge and no swing, so it is drawn without a swing and its sweep is not checked'),
-    needed: fixed('both its hinge ("start" or "end") and its swing ("left" or "right")'),
-    fix: fixed('Add its swing, or leave out its hinge.')
-  },
+  'opening/negative-sill': {},
+  'opening/overlap': {},
+  'opening/phase-wall': {},
+  'opening/size-question': {},
+  'opening/swing-without-hinge': {},
+  'opening/hinge-without-swing': {},
   'opening/door-blocked': {
-    says: (s) => `${s.label} hits a wall when it opens`,
-    found: (s) => `its leaf sweeps into ${s.also.length === 1 ? 'wall' : 'walls'} ${s.also.map(quoted).join(', ')}`,
-    needed: fixed('floor clear of walls where its leaf swings'),
-    fix: fixed('Hang it from its other end, open it the other way, or move it clear of that wall.')
+    values: (s): Values => ({ walls: joined(s.also.map(name), 'join.comma') }),
+    variant: { found: (s) => (s.also.length === 1 ? 'one' : '') }
   },
   'opening/door-hits-item': {
-    says: (s) => `${s.label} hits ${(s.items ?? []).join(', ') || 'a fixture'} when it opens`,
-    found: (s) => `its leaf sweeps the floor where ${(s.items ?? []).length === 1 ? 'that fixture stands' : 'those fixtures stand'}`,
-    needed: fixed('floor clear of fixtures where its leaf swings'),
-    fix: fixed('Hang it from its other end, open it the other way, or move the fixture out of its swing.')
+    values: (s): Values => ({ items: joined(s.items ?? [], 'join.comma') }),
+    variant: { says: (s) => ((s.items ?? []).length > 0 ? 'items' : ''), found: (s) => ((s.items ?? []).length === 1 ? 'one' : '') }
   },
   'opening/doors-collide': {
-    says: (s) => `${s.label} hits another door when they open`,
-    found: (s) => `its leaf and the leaf of door ${s.also.map(quoted).join(', ')} sweep the same floor`,
-    needed: fixed('door sweeps that do not overlap'),
-    fix: fixed('Turn one of them to open the other way or hang it from its other end, or move them apart.')
+    values: (s): Values => ({ doors: joined(s.also.map(name), 'join.comma') })
   },
-
-  'opening/crosses-wall': {
-    says: (s) => `${s.label} runs into a wall that meets its wall`,
-    needed: fixed('an opening within the clear run of its wall, between the walls that meet it'),
-    fix: fixed('Move it along its wall to the offset given, or make it narrower. It is cut through its own wall only.')
-  },
-  'opening/fills-wall': {
-    says: (s) => `${s.label} is as long as its wall`,
-    needed: fixed('some wall left beside an opening'),
-    fix: fixed('Make it narrower, or leave the wall out and let the rooms meet along a dividing line.')
-  },
-  'opening/on-dividing-line': {
-    says: (s) => `${s.label} is on a dividing line`,
-    needed: fixed('a door or window in a wall'),
-    fix: fixed('Make it a doorless opening if the rooms are open to each other there, or put it on a wall.')
-  },
-  'opening/window-between-rooms': {
-    says: (s) => `${s.label} has rooms on both sides`,
-    needed: fixed('a window in a wall with the outside on one side, unless it is a borrowed light'),
-    fix: fixed('Leave it if it is a borrowed light between two rooms. Otherwise move it to an outside wall.')
-  },
-
+  'opening/crosses-wall': {},
+  'opening/fills-wall': {},
+  'opening/on-dividing-line': {},
+  'opening/window-between-rooms': {},
   // --- Rooms ----------------------------------------------------------------------------------
-  'room/unknown-floor': {
-    says: (s) => `${s.label} is on a floor the plan does not list`,
-    needed: fixed("a floor from the plan's floors"),
-    fix: fixed('Add the floor to the floors list, or put the room on a floor it lists.')
-  },
-  'room/cross-floor': {
-    says: (s) => `${s.label} rests on a wall of another floor`,
-    needed: fixed('every wall it lists standing on its own floor'),
-    fix: fixed('Put the room on the floor of its walls, list walls of its own floor, or, for one wall that both floors share, let it rise through them (through on the wall).')
-  },
-  'room/broken-wall': {
-    says: (s) => `${s.label} rests on a wall that cannot be drawn`,
-    needed: fixed('walls that can be drawn'),
-    fix: fixed('Correct those walls first: this line goes away with them.')
-  },
-  'room/phase-wall': {
-    says: (s) => `${s.label} stands when one of its walls does not, so it is left out`,
-    found: (s) => s.said,
-    needed: fixed('a room whose walls stand whenever it does: an existing room round existing walls, a new room round existing or new walls, a demolished room round existing or demolished walls'),
-    fix: fixed('Give the room the phase it has in the work, or name the walls that stand when it does: two rooms knocked into one are both demolished, and the room they become is new.')
-  },
-  'room/empty': {
-    says: (s) => `${s.label} encloses no floor`,
-    needed: fixed('walls that enclose some floor'),
-    fix: fixed('Check that it lists the walls that surround it, and that they are not thicker than the room is wide.')
-  },
-  'room/unclosed': {
-    says: (s) => `${s.label} cannot be closed from the walls it lists`,
-    needed: fixed('at least three walls in the plan, each meeting the next, round the room'),
-    fix: fixed('List the walls in order round the room, each touching the next. A side open to another room is a virtual wall.')
-  },
-  'room/out-of-order': {
-    says: (s) => `${s.label} lists its walls out of order`,
-    needed: fixed('its walls in order round the room, each meeting the next'),
-    fix: fixed('List the walls in order round the room, each touching the next.')
-  },
-  'room/inside-out': {
-    says: (s) => `${s.label} has walls thicker than the gap between them`,
-    needed: fixed('inner wall faces that do not cross'),
-    fix: fixed('Move the walls apart or make them thinner.')
-  },
-  'room/hole-outside': {
-    says: (s) => `${s.label} has a hole that does not lie inside it`,
-    needed: fixed('a hole inside the room, with floor all round it'),
-    fix: fixed('Check the walls the hole lists, or draw the space as a room of its own.')
-  },
-  'room/holes-overlap': {
-    says: (s) => `${s.label} has two holes that overlap or touch`,
-    needed: fixed('floor between any two holes'),
-    fix: fixed('Move the holes apart. If they are one hole, list its walls once.')
-  },
-  'room/derived-edited': {
-    says: (s) => `${s.label}'s boundary was changed by hand in a plan written rooms first`,
-    needed: fixed('walls worked out from the rooms text'),
-    fix: fixed('Change the rooms text and write it again (grid write), or take "written" out of the plan to keep it as a hand-written one.')
-  },
-  'room/not-enclosed': {
-    says: (s) => `${s.label} is not enclosed by its walls`,
-    needed: fixed('walls that reach each other round the room'),
-    fix: fixed('Check that its walls reach each other.')
-  },
-  'room/space-mismatch': {
-    says: (s) => `${s.label} does not match the space its walls enclose`,
-    needed: fixed('a room that covers the space its walls close off, and no more'),
-    fix: fixed('List the walls that close the room, as the line found says, or draw the rest as a room of its own.')
-  },
-  'room/inside-no-host': {
-    says: (s) => `${s.label} is marked as inside another room, but no room holds it`,
-    needed: fixed('a room on its floor that holds it'),
-    fix: fixed('Draw it within the room it sits in, or leave out "inside".')
-  },
-  'room/zone-not-in-room': {
-    says: (s) => `${s.label} is marked as a zone of a room it does not lie in`,
-    needed: fixed('a room on its floor, not a zone itself, that holds the whole zone'),
-    fix: fixed('Draw it within the room it is part of, name that room in "partOf", or leave out "partOf".')
-  },
-  'room/overlap': {
-    says: (s) => `${s.label} overlaps another room`,
-    needed: fixed('rooms that share no floor, or one marked inside the other'),
-    fix: fixed('Move the wall between them, or mark the smaller one "inside" if it sits within the larger.')
-  },
-  'room/overlap-unknown': {
-    says: (s) => `${s.label} could not be compared with another room to see whether they overlap`,
-    needed: fixed('room outlines Grid can compare'),
-    fix: fixed('Correct the walls of the two rooms; the comparison runs once their outlines can be worked out.')
-  },
-  'room/wall-listed-twice': {
-    says: (s) => `${s.label} lists a wall more than once`,
-    needed: fixed('each wall once in its list'),
-    fix: fixed(TIDY)
-  },
-  'room/size-question': {
-    says: (s) => `${s.label} has a size that may not be meant`,
-    needed: fixed('the size of a room in a building'),
-    fix: fixed(`${SIZE_QUESTION} Check its walls' coordinates and thickness.`)
-  },
-
-  'room/offset-question': {
-    says: (s) => `${s.label} stands far above or below its storey's floor`,
-    needed: fixed("a room's step within what a storey holds, or a floor of its own"),
-    fix: fixed('If it is meant, leave it. If the room is a level of its own, give it its own floor with its elevation.')
-  },
-
+  'room/unknown-floor': {},
+  'room/cross-floor': {},
+  'room/broken-wall': {},
+  'room/phase-wall': {},
+  'room/empty': {},
+  'room/unclosed': {},
+  'room/out-of-order': {},
+  'room/inside-out': {},
+  'room/hole-outside': {},
+  'room/holes-overlap': {},
+  'room/derived-edited': {},
+  'room/not-enclosed': {},
+  'room/space-mismatch': {},
+  'room/inside-no-host': {},
+  'room/zone-not-in-room': {},
+  'room/overlap': {},
+  'room/overlap-unknown': {},
+  'room/wall-listed-twice': {},
+  'room/size-question': {},
+  'room/offset-question': {},
   // --- Stairs (LVL-3) --------------------------------------------------------------------------
-  'stair/unknown-floor': {
-    says: (s) => `${s.label} joins a floor the plan does not know`,
-    needed: fixed('the ids of two floors the plan has'),
-    fix: fixed("Correct its from or to to a floor id the plan's floors list.")
-  },
-  'stair/same-floor': {
-    says: (s) => `${s.label} starts and ends on one floor`,
-    needed: fixed('two different floors'),
-    fix: fixed("Make from and to the two floors it joins. A step inside a floor is a room's floorOffset.")
-  },
-  'stair/no-rise': {
-    says: (s) => `${s.label} joins floors that stand at one height`,
-    needed: fixed('two floors at different heights'),
-    fix: fixed("State the floors' elevations, or join two floors at different heights.")
-  },
-  'stair/run-too-short': {
-    says: (s) => `${s.label} has a stretch of its walking line too short for a flight`,
-    needed: fixed('stretches long enough for a tread, once the landings are taken off'),
-    fix: fixed('Lengthen the stretch, or leave out the turn.')
-  },
-  'stair/too-few-risers': {
-    says: (s) => `${s.label} states fewer risers than its flights need`,
-    needed: fixed('at least two risers on each flight'),
-    fix: fixed('State more risers, or leave the number out and Grid works it out.')
-  },
-  'stair/end-in-no-room': {
-    says: (s) => `${s.label} starts or ends in no room, so it joins nothing there`,
-    needed: fixed('each end of its walking line in a room'),
-    fix: fixed('Draw the room it starts from or arrives in, or move the end of its walking line into one.')
-  },
-  'stair/duplicate-id': {
-    says: (s) => `${s.label} shares its id with another stair`,
-    needed: fixed('an id of its own for each stair'),
-    fix: fixed('Give the second stair another id; until then it is left out.')
-  },
-
+  'stair/unknown-floor': {},
+  'stair/same-floor': {},
+  'stair/no-rise': {},
+  'stair/run-too-short': {},
+  'stair/too-few-risers': {},
+  'stair/end-in-no-room': {},
+  'stair/duplicate-id': {},
   // --- Opening patterns (LVL-8) ---------------------------------------------------------------
   // What kept a pattern's openings from being placed. The found is the expansion's own sentence:
   // which wall, how much room it needed and had, which opening it would have covered.
-  'pattern/unknown-wall': {
-    says: (s) => `${s.label} names a wall Grid cannot find`,
-    needed: fixed('the id of one wall of the plan'),
-    fix: fixed('Name the wall the openings go in by its id, as the plan file holds it; until then none of them is placed.')
-  },
-  'pattern/does-not-fit': {
-    says: (s) => `${s.label} does not fit its wall`,
-    needed: fixed('room on the wall, between its margins, for every opening of the pattern'),
-    fix: fixed('Make the margins smaller, the openings narrower, the count smaller or the spacing wider, or put the pattern on a longer wall.')
-  },
-  'pattern/unknown-floor': {
-    says: (s) => `${s.label} is to be repeated on a floor the plan does not have`,
-    needed: fixed('a floor of the plan in the pattern\'s floors'),
-    fix: fixed('Name the floors above by their ids, as the floor list holds them.')
-  },
-  'pattern/no-wall-above': {
-    says: (s) => `${s.label} finds no wall above to repeat on`,
-    needed: fixed('on each floor it is repeated on, a wall in the same line as its own, holding the opening\'s whole width'),
-    fix: fixed('Draw the wall above in line with the pattern\'s wall, or take that floor out of the pattern\'s floors.')
-  },
-  'pattern/overlaps-opening': {
-    says: (s) => `${s.label} would place an opening over another`,
-    needed: fixed('each opening of the pattern clear of the other openings on its wall'),
-    fix: fixed('Move the other opening, or change the pattern\'s margins, count or spacing so its openings stand clear of it.')
-  },
-  'pattern/id-clash': {
-    says: (s) => `${s.label} would give an opening an id another part has`,
-    needed: fixed('an id of its own for each opening a pattern places: the pattern\'s id, the floor and the number'),
-    fix: fixed('Rename the pattern, or the part that has the id.')
-  },
-
+  'pattern/unknown-wall': {},
+  'pattern/does-not-fit': {},
+  'pattern/unknown-floor': {},
+  'pattern/no-wall-above': {},
+  'pattern/overlaps-opening': {},
+  'pattern/id-clash': {},
   // --- Flats (CNT-4) --------------------------------------------------------------------------
   // The flats list's own faults. Each is worth a look: the flat is read without what it names
   // wrongly, and nothing else changes. The found is the check's own sentence, with the ids.
-  'flat/unknown-room': {
-    says: (s) => `${s.label} names a room the plan does not have`,
-    needed: fixed('rooms of the plan, by id'),
-    fix: fixed('Name the room by its id, as grid describe gives it, or take it out of the flat\'s rooms.')
-  },
-  'flat/room-in-two': {
-    says: (s) => `${s.label} names a room another flat names too`,
-    needed: fixed('each room in one flat at most'),
-    fix: fixed('Take the room out of one of the two flats; until then it is counted in the flat whose id comes first.')
-  },
-  'flat/unknown-type': {
-    says: (s) => `${s.label} is of a type the plan's flat types do not state`,
-    needed: fixed('a type stated in the plan\'s flat types, by id'),
-    fix: fixed('Add the type to the flat types with its name, name one of them, or leave out the flat\'s type.')
-  },
-  'flat/duplicate-id': {
-    says: (s) => `${s.label} is listed more than once`,
-    needed: fixed('an id of its own on every flat'),
-    fix: fixed('Give each flat its own id, or join the two lists of rooms into one flat.')
-  },
+  'flat/unknown-room': {},
+  'flat/room-in-two': {},
+  'flat/unknown-type': {},
+  'flat/duplicate-id': {},
   'flat/duplicate-type': {
-    says: (s) => `The plan states flat type ${s.also[0] === undefined ? 'one' : quoted(s.also[0])} more than once`,
-    needed: fixed('each flat type stated once'),
-    fix: fixed('Keep one entry for the type; the first is read until then.')
+    values: (s): Values => (s.also[0] === undefined ? {} : { type: name(s.also[0]) }),
+    variant: { says: (s) => (s.also[0] === undefined ? 'one' : '') }
   },
-  'flat/zone-without-room': {
-    says: (s) => `${s.label} names a zone but not the room it is part of`,
-    needed: fixed('the room a zone is part of, in the flat with it'),
-    fix: fixed('Name the room in the flat: a zone\'s floor is counted in its room, so the zone alone adds nothing.')
-  },
+  'flat/zone-without-room': {},
 
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
-  'item/too-large': {
-    says: (s) => `${s.label} has a number Grid does not accept`,
-    needed: fixed('finite numbers within the size Grid accepts'),
-    fix: fixed('Give its place, size and height in metres, and its turn in degrees.')
-  },
-  'item/no-size': {
-    says: (s) => `${s.label} has no size`,
-    needed: fixed('a width, a depth and a height above 0'),
-    fix: fixed('State its width and depth ("size") and its height, in metres.')
-  },
-  'item/unknown-kind': {
-    says: (s) => `${s.label} is a kind the plan does not hold yet`,
-    needed: fixed('a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run"'),
-    fix: fixed('Give a fixture one of those kinds. Loose furniture, points and seats are not held yet: leave them out of the items for now.')
-  },
-  'item/duplicate-id': {
-    says: (s) => `${s.label} has an id another part of the plan has too`,
-    needed: fixed('an id of its own on every item'),
-    fix: fixed('Give the item an id no wall, room, opening or other item has.')
-  },
-  'item/unknown-floor': {
-    says: (s) => `${s.label} is on a floor the plan does not have`,
-    needed: fixed('a floor of the plan'),
-    fix: fixed('Name one of the plan\'s floors, or leave the floor out for the ground floor.')
-  },
-  'item/outside-rooms': {
-    says: (s) => `${s.label} stands in no room`,
-    needed: fixed('its middle inside a room on its floor'),
-    fix: fixed('Move it into the room it belongs to: its "at" is the middle of its footprint.')
-  },
-  'item/into-wall': {
-    says: (s) => `${s.label} runs into a wall`,
-    needed: fixed('its footprint clear of the walls, against their faces at most'),
-    fix: fixed('Move it off the wall, turn it, or make it smaller: its "at" is the middle of its footprint.')
-  },
-  'item/too-tall': {
-    says: (s) => `${s.label} is taller than the room it stands in`,
-    needed: fixed('a fixture no higher than its room'),
-    fix: fixed('Lower its height, or give the room or its floor the height it really has.')
-  },
+  'item/too-large': {},
+  'item/no-size': {},
+  'item/unknown-kind': {},
+  'item/duplicate-id': {},
+  'item/unknown-floor': {},
+  'item/outside-rooms': {},
+  'item/into-wall': {},
+  'item/too-tall': {},
   // CNT-13: use indicators the drawing's check gives. The found is the check's own sentence:
   // what was measured, with what depth, and that it is an indicator.
   'item/blocks-doorway': {
-    says: (s) => `${s.label} stands in front of the doorway of ${s.also[0] === undefined ? 'an opening' : quoted(s.also[0])}, an indicator`,
-    needed: fixed('the floor in front of a doorway clear of fixtures, within Grid\'s own approach depth'),
-    fix: fixed('Move the fixture clear of the doorway, or move the doorway along its wall.')
+    values: (s): Values => (s.also[0] === undefined ? {} : { opening: name(s.also[0]) }),
+    variant: { says: (s) => (s.also[0] === undefined ? '' : 'opening') }
   },
   'item/blocks-window': {
-    says: (s) => `${s.label} stands in front of ${s.also[0] === undefined ? 'a window' : `window ${quoted(s.also[0])}`}, higher than its sill, an indicator`,
-    needed: fixed('a fixture in front of a window no higher than its sill, within Grid\'s own approach depth'),
-    fix: fixed('Move the fixture along the wall clear of the window, lower it, or raise the sill.')
+    values: (s): Values => (s.also[0] === undefined ? {} : { window: name(s.also[0]) }),
+    variant: { says: (s) => (s.also[0] === undefined ? '' : 'window') }
   },
-
   // --- The firm's own standards (COD-8) -------------------------------------------------------
   // Each is the firm's figure, from its file beside the plan, set against a CNT-13 measure or a
   // room's net area. Never a code's: the needed says so, and names the file.
-  'firm/corridor-width': firmEntry('corridor_width', (m) => (m === null ? 'there is no way through clear of its fixtures' : `the way through is ${m} wide at its narrowest`), 'Widen the corridor, or move what narrows it: grid_measure what=use shows the way through.'),
-  'firm/door-clear-width': firmEntry('door_clear_width', (m) => `it leaves ${m ?? 'nothing'} clear`, 'Make the opening wider, or move what stands in front of it.'),
-  'firm/turning-circle': firmEntry('turning_circle', (m) => `the widest circle its free floor holds is ${m ?? 'nothing'} across`, 'Make the room larger, or move its fixtures to free a wider circle.'),
-  'firm/fixture-clearance': firmEntry('fixture_clearance', (m) => `the clear floor in front of it is ${m ?? 'nothing'}`, 'Move the fixture, or what stands in front of it, to leave more floor.'),
-  'firm/room-area': firmEntry('room_area', (m) => `its net area is ${m ?? 'nothing'}`, 'Make the room larger, or check the use it is given.'),
-  'firm/room-width': firmEntry('room_width', (m) => `the widest circle it holds is ${m ?? 'nothing'} across`, 'Make the room wider.'),
+  'firm/corridor-width': firmEntry('corridor_width'),
+  'firm/door-clear-width': firmEntry('door_clear_width'),
+  'firm/turning-circle': firmEntry('turning_circle'),
+  'firm/fixture-clearance': firmEntry('fixture_clearance'),
+  'firm/room-area': firmEntry('room_area'),
+  'firm/room-width': firmEntry('room_width'),
   'firm/not-read': {
-    says: (s) => `The firm's standards in ${quoted(s.firm?.file ?? s.label)} were not read, so none of them was set against the plan`,
-    needed: fixed('a firm\'s standards file Grid reads: version "1" and a list of standards, as docs/firm-standards.md sets out'),
-    fix: fixed('Correct the file where the line says, or take it out of the plan\'s folder.')
+    values: (s): Values => ({ file: s.firm === undefined ? s.label : name(s.firm.file) })
   },
 
   // --- Floors ---------------------------------------------------------------------------------
-  'floor/unclaimed': {
-    says: (s) => `${s.label} has enclosed floor that no room claims`,
-    needed: fixed('every enclosed floor in a room'),
-    fix: fixed("If it is a room, draw it as one. If it is part of a room, list the walls that take it into that room's outline.")
-  },
+  'floor/unclaimed': {},
   // LVL-5 (lab WR-9): a floor whose outline does not lie over the floor below it.
-  'floor/out-of-line': {
-    says: (s) => `${s.label} does not line up with the floor below it`,
-    needed: fixed('a floor\'s outline over the floor below it, or marked overhang "meant" where it overhangs or sits back on purpose'),
-    fix: fixed('If it is meant, mark the floor with overhang "meant". If not, move its outside walls over the floor below, or let a wall both floors share rise through them (through).')
-  },
-  'floor/past-outline': {
-    says: (s) => `${s.label}'s walls reach past the outline it states`,
-    needed: fixed('walls inside the outline the floor states, the outside face of the floor'),
-    fix: fixed("If the walls are where the building is, widen the floor's outline to their outside face; if the outline is, move the walls inside it. Until then the slab, the roof and the gross area take in both.")
-  },
-  'floor/empty-top': {
-    says: (s) => `${s.label} is the top floor and has nothing drawn on it`,
-    needed: fixed('a top floor with something on it'),
-    fix: fixed('Remove the floor if nothing is on it yet: it still counts as a storey and the roof stands on it.')
-  },
-  'floor/rooflight-misplaced': {
-    says: (s) => `${s.label} has a rooflight that does not lie on one slope of its roof`,
-    needed: fixed("a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips"),
-    fix: fixed("Move the rooflight's middle (at) onto one slope, or make it smaller, so it neither leaves the roof nor crosses where two slopes meet. Until then it is left out.")
-  },
-  'floor/dormers-not-drawn': {
-    says: (s) => `${s.label} lists dormers, which are not supported yet`,
-    needed: fixed('a roof Grid can draw: dormers are not supported yet'),
-    fix: fixed("Grid draws and measures the roof without its dormers. A window in a dormer's face can be drawn in an outside wall raised to it; a window in the slope is a rooflight.")
-  },
-  'floor/size-question': {
-    says: (s) => `${s.label} states a height that may not be meant`,
-    needed: fixed('the height of a storey in a building'),
-    fix: fixed(`${SIZE_QUESTION} Walls with no height of their own take the floor's height.`)
-  },
-  'floor/spaces-unknown': {
-    says: (s) => `The spaces the walls enclose on ${s.label.replace(/^Floor/, 'floor')} could not be worked out`,
-    needed: fixed('walls Grid can join into spaces'),
-    fix: fixed('Correct the walls the other lines name. Floor no room claims is looked for once the spaces can be worked out.')
-  },
-  'floor/overlaps-unknown': {
-    says: (s) => `The rooms on ${s.label.replace(/^Floor/, 'floor')} were not all compared to see whether they overlap`,
-    needed: fixed('fewer pairs of rooms lying over each other'),
-    fix: fixed('Correct the overlaps already listed. The rest are compared once there are fewer.')
-  },
-
+  'floor/out-of-line': {},
+  'floor/past-outline': {},
+  'floor/empty-top': {},
+  'floor/rooflight-misplaced': {},
+  'floor/dormers-not-drawn': {},
+  'floor/size-question': {},
+  'floor/spaces-unknown': {},
+  'floor/overlaps-unknown': {},
   // --- Findings of the plan checks --------------------------------------------------------------
   'floor/no-exit': {
-    says: (s) => wordingText(planCheckWordings.noExit(s.floorName)),
-    found: fixed('no door or opening on this floor leads outside'),
-    needed: fixed('at least one door to the outside'),
-    fix: fixed('Add a door in an outside wall, or mark the wall a door is in as exterior if it leads outside.')
+    values: (s): Values => ({ wording: planCheckSaids.noExit(s.floorName) })
   },
   'room/no-door': {
-    says: (s) => named(s, planCheckWordings.roomWithoutDoor(s.name)),
-    found: fixed('no door, opening or open side'),
-    needed: fixed('a door, an opening or an open side to another space'),
-    fix: fixed('Add a door or an opening in a wall it shares with another room, or make an open side a virtual wall.')
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.roomWithoutDoor(s.name)) })
   },
   'room/no-route-out': {
-    says: (s) => named(s, planCheckWordings.noRoute(s.name)),
-    found: (s) => through(s.finding),
-    needed: fixed('a route through doors and openings to a door to the outside'),
-    fix: fixed('Add a door from it, or from a room it opens into, toward a room that reaches the outside.')
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.noRoute(s.name)), through: through(s.finding) })
   },
   'room/no-route-to-door-out': {
-    says: (s) => named(s, planCheckWordings.noRouteToAnyDoorOut(s.name)),
-    found: (s) => through(s.finding),
-    needed: fixed('a route to a door to the outside, or to the door into the space not drawn'),
-    fix: fixed('Add a door from it, or from a room it opens into, toward the way out.')
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.noRouteToAnyDoorOut(s.name)), through: through(s.finding) })
   },
   'opening/to-undrawn-space': {
-    says: (s) => named(s, planCheckWordings.doorToUndrawnSpace(s.name)),
-    found: fixed('no room and no outside wall on the far side of the door'),
-    needed: fixed('a room, or the outside, on the far side'),
-    fix: fixed('If that space is a shared landing or a stair, draw it as a room. If the door leads outside, mark its wall as exterior.')
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.doorToUndrawnSpace(s.name)) })
   },
   'opening/door-out-above-ground': {
-    says: (s) => named(s, planCheckWordings.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
-    found: (s) => `a door in an outside wall of a floor ${metresText(s.finding?.elevation ?? 0)} m above the ground`,
-    needed: fixed('a way out at ground level, or a stair down to one'),
-    fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
+    values: (s): Values => ({
+      wording: grouped(s, planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
+      height: num(metresText(s.finding?.elevation ?? 0))
+    })
   },
   'opening/below-ground': {
-    says: (s) => s.finding?.message ?? `${s.label} lies below the ground`,
-    found: (s) => {
+    values: (s): Values => {
       const b = s.finding?.belowGround
-      if (b === undefined) return 'a door or window in an outside wall below the ground level the site states'
-      return b.wholly
-        ? `a door or window in an outside wall whose top is ${metresText(b.top)} m under the ground level the site states`
-        : `a door or window in an outside wall whose foot is ${metresText(b.foot)} m under the ground level the site states, its top above it`
+      return { wording: s.finding?.said ?? s.finding?.message ?? s.label, ...(b === undefined ? {} : { top: num(metresText(b.top)), foot: num(metresText(b.foot)) }) }
     },
-    needed: fixed('a door or window above the ground outside, or a light well or an outside stair in front of it'),
-    fix: fixed('If the ground in front of it is dug away, as for a light well or an area, draw that space; if the ground level is not right, change site.ground.')
+    variant: { found: (s) => (s.finding?.belowGround === undefined ? '' : s.finding.belowGround.wholly ? 'wholly' : 'partly') }
   },
   // BRF-3 (lab EL-16): the building against its plot. The set-backs are the person's own figures:
   // a line says how far short of one the building stands, and never that a distance is enough.
   'plan/setback-short': {
-    says: (s) => s.finding?.message ?? 'The building stands nearer an edge of the plot\'s boundary than the set-back asked for',
-    found: (s) => {
+    values: (s): Values => {
       const b = s.finding?.boundary
-      if (b === undefined) return 'the building\'s outside face nearer the boundary than the set-back asked for'
-      return `the building's outside face ${metresText(b.distance, 2, b.asked?.distance)} m from edge ${b.edge} of the plot's boundary, ${edgeWords(b)}`
+      const asked = b?.asked ?? null
+      return {
+        wording: s.finding?.said ?? s.finding?.message ?? said('line.plan/setback-short.says.none'),
+        ...(b === undefined ? {} : { ...edgeValues(b), distance: num(metresText(b.distance, 2, b.asked?.distance)) }),
+        ...(asked === null
+          ? {}
+          : {
+              asked: num(metresText(asked.distance)),
+              who: said(asked.source === 'assumed' ? 'line.part.setbackWho.assumed' : 'line.part.setbackWho'),
+              from: said(`line.part.setbackFrom.${asked.from}`)
+            })
+      }
     },
-    needed: (s) => {
-      const asked = s.finding?.boundary?.asked
-      if (asked === null || asked === undefined) return 'the set-back asked for'
-      const from = asked.from === 'edge' ? 'that edge' : asked.from === 'street' ? 'the street edges' : 'every edge'
-      return `${metresText(asked.distance)} m from it, the set-back ${asked.source === 'assumed' ? 'assumed for the person, to confirm,' : 'the person asked for'} from ${from}: their own figure, not a code's`
-    },
-    fix: fixed('Move the building, or its walls on that side, away from that edge; if the set-back is not the one meant, change it in site.setbacks.')
+    variant: { found: (s) => (s.finding?.boundary === undefined ? '' : 'edge'), needed: (s) => (s.finding?.boundary?.asked == null ? '' : 'asked') }
   },
   'plan/over-boundary': {
-    says: (s) => s.finding?.message ?? 'The building reaches over an edge of the plot\'s boundary',
-    found: (s) => {
+    values: (s): Values => {
       const b = s.finding?.boundary
-      if (b === undefined) return 'the building\'s outside face past the plot\'s boundary'
-      return `the building's outside face ${metresText(b.past)} m past edge ${b.edge} of the plot's boundary, ${edgeWords(b)}`
+      return {
+        wording: s.finding?.said ?? s.finding?.message ?? said('line.plan/over-boundary.says.none'),
+        ...(b === undefined ? {} : { ...edgeValues(b), past: num(metresText(b.past)) })
+      }
     },
-    needed: fixed('the building inside the plot\'s boundary'),
-    fix: fixed('Move the building, or its walls on that side, back inside the boundary; if the boundary is not the plot\'s, change site.boundary.')
+    variant: { found: (s) => (s.finding?.boundary === undefined ? '' : 'edge') }
   },
   'room/stair-out-of-line': {
-    says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
-    found: fixed('no room used as a stair on the floor below lies under half of it'),
-    needed: fixed('the stair room over the one on the floor below'),
-    fix: fixed("Move it over the stair room below, or state the stair in the plan's stairs.")
+    values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
   },
   'room/lift-out-of-line': {
-    says: (s) => s.finding?.message ?? `${s.label} does not line up with the lift shaft below`,
-    found: fixed('no room used as a lift on the floor below lies under half of it'),
-    needed: fixed('the shaft over the one on the floor below'),
-    fix: fixed('Move it over the lift shaft below.')
+    values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
   },
   // LVL-5 (lab WR-9): joined to the one below, but moved from it.
-  'room/stair-shifted': {
-    says: (s) => s.finding?.message ?? `${s.label} is moved from the stair below`,
-    found: (s) => shiftFound(s.finding?.shift),
-    needed: fixed('the stair room over the one on the floor below, or marked overhang "meant" where it is moved on purpose'),
-    fix: fixed('Move it back over the stair room below, or, if it is meant, mark the room with overhang "meant".')
-  },
-  'room/lift-shifted': {
-    says: (s) => s.finding?.message ?? `${s.label} is moved from the lift shaft below`,
-    found: (s) => shiftFound(s.finding?.shift),
-    needed: fixed('the shaft over the one on the floor below, or marked overhang "meant" where it is moved on purpose'),
-    fix: fixed('Move it back over the shaft below, or, if it is meant, mark the room with overhang "meant".')
-  },
+  'room/stair-shifted': shiftEntry,
+  'room/lift-shifted': shiftEntry,
   'opening/too-small-to-pass': {
-    says: (s) => named(s, planCheckWordings.openingTooSmall(s.name)),
-    found: (s) => (s.finding?.passage === undefined ? s.said : lowerFirst(passageText(s.finding.passage))),
-    needed: (s) => {
+    values: (s): Values => {
       const p = s.finding?.passage
-      const size = metresText(p?.passable ?? 0)
-      const what = p?.short === 'sill' ? `a sill no more than ${size} m above the floor` : `at least ${size} m ${p?.short === 'height' ? 'high' : 'wide'}`
-      return `${what}: Grid's own size for a person to get through, not a code figure`
+      return {
+        wording: grouped(s, planCheckSaids.openingTooSmall(s.name)),
+        size: num(metresText(p?.passable ?? 0)),
+        ...(p === undefined ? {} : { passage: said(`line.part.passage.${p.kind}.${p.short}`, { size: num(metresText(p.drawn, 2, p.passable)) }) })
+      }
     },
-    fix: fixed('If people go through it, draw it at its real size. If it is a vent or a serving hatch, it is not a way through: give the room a door.')
+    variant: {
+      found: (s) => (s.finding?.passage === undefined ? '' : 'passage'),
+      needed: (s) => (s.finding?.passage?.short === 'sill' ? 'sill' : s.finding?.passage?.short === 'height' ? 'height' : 'width')
+    }
   },
   'room/too-small': {
-    says: (s) => named(s, figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
-    found: (s) => `${area(s.finding?.area)} net${wholeRoom(s)}`,
-    needed: (s) => `${figureNeededText(`at least ${area(s.finding?.minimum)}`, figuresOf(s.finding, ['habitableRoomMinArea']))}${readFor(s)}`,
-    fix: fixed('Make the room larger, or check the use it is given.')
+    values: (s, language): Values => ({
+      wording: grouped(s, figureSaids.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
+      area: area(s.finding?.area),
+      ...wholeRoom(s, language),
+      figure: figureNeededSaid(said('line.part.atLeast', { what: area(s.finding?.minimum) }), figuresOf(s.finding, ['habitableRoomMinArea'])),
+      readFor: readFor(s)
+    }),
+    variant: { found: wholeVariant }
   },
   'room/no-escape-opening': {
-    says: (s) => named(s, figureWordings.noEscapeOpening(s.name)),
-    found: fixed('no window or door in an outside wall'),
-    needed: (s) => `a window or door to the outside that someone can climb through${readFor(s)}`,
-    fix: fixed('Add a window or a door in one of its outside walls.')
+    values: (s): Values => ({ wording: grouped(s, figureSaids.noEscapeOpening(s.name)), readFor: readFor(s) })
   },
   'room/escape-window-too-small': {
-    says: (s) => named(s, figureWordings.escapeWindowTooSmall(s.name)),
-    // MSG-7 (lab MS-13): the measure that fails first, against what it needs; the ones that pass after.
-    found: (s) => {
-      const f = s.finding
-      const minWidth = f?.figures?.find((x) => x.key === 'escapeOpeningMinWidth')?.value
-      const minHeight = f?.figures?.find((x) => x.key === 'escapeOpeningMinHeight')?.value
-      const measures = [
-        { text: `${area(f?.area)} in area`, need: f?.minimum === undefined ? null : area(f.minimum), fails: f?.area !== undefined && f.minimum !== undefined && f.area < f.minimum },
-        { text: `${metres(f?.width)} wide`, need: minWidth === undefined ? null : metres(minWidth), fails: f?.width !== undefined && minWidth !== undefined && f.width < minWidth },
-        { text: `${metres(f?.height)} high`, need: minHeight === undefined ? null : metres(minHeight), fails: f?.height !== undefined && minHeight !== undefined && f.height < minHeight }
-      ]
-      const failing = measures.filter((m) => m.fails)
-      if (failing.length === 0) return `${area(f?.area)} as drawn, ${metres(f?.width)} wide and ${metres(f?.height)} high`
-      const passing = measures.filter((m) => !m.fails)
-      const short = failing.map((m) => `${m.text}, under the ${m.need} needed`).join(', and ')
-      return passing.length === 0 ? short : `${short}; ${passing.map((m) => m.text).join(' and ')}, which ${passing.length === 1 ? 'is' : 'are'} enough`
-    },
-    needed: (s) => {
-      const parts = [
-        s.finding?.minimum === undefined ? null : `${area(s.finding.minimum)}`,
-        figure(s.finding, 'escapeOpeningMinWidth') === null ? null : `${figure(s.finding, 'escapeOpeningMinWidth')} wide`,
-        figure(s.finding, 'escapeOpeningMinHeight') === null ? null : `${figure(s.finding, 'escapeOpeningMinHeight')} high`
-      ].filter((part): part is string => part !== null)
-      if (parts.length === 0) return `a window someone can climb through${readFor(s)}`
-      const used = figuresOf(s.finding, ['escapeOpeningMinArea', 'escapeOpeningMinAreaGrade', 'escapeOpeningMinWidth', 'escapeOpeningMinHeight'])
-      return `${figureNeededText(`at least ${parts.join(', ')}`, used)}${readFor(s)}`
-    },
-    fix: fixed('Make the window larger, or add one that is.')
+    values: (s): Values => ({ wording: grouped(s, figureSaids.escapeWindowTooSmall(s.name)), ...escapeWindowFound(s), ...escapeWindowNeeded(s) }),
+    variant: { found: escapeWindowVariant, needed: (s) => (escapeWindowParts(s).length === 0 ? 'none' : '') }
   },
   'room/escape-window-too-high': {
-    says: (s) => named(s, figureWordings.escapeWindowTooHigh(s.name)),
-    found: (s) => `a sill ${metres(s.finding?.sill)} above the floor`,
-    needed: (s) => `${s.finding?.maximum === undefined ? 'a lower sill' : figureNeededText(`a sill at most ${metres(s.finding.maximum)} above the floor`, figuresOf(s.finding, ['escapeOpeningMaxSill']))}${readFor(s)}`,
-    fix: fixed("Lower the window's sill.")
+    values: (s): Values => ({
+      wording: grouped(s, figureSaids.escapeWindowTooHigh(s.name)),
+      sill: metres(s.finding?.sill),
+      readFor: readFor(s),
+      ...(s.finding?.maximum === undefined
+        ? {}
+        : { figure: figureNeededSaid(said('line.part.sillAtMost', { sill: metres(s.finding.maximum) }), figuresOf(s.finding, ['escapeOpeningMaxSill'])) })
+    }),
+    variant: { needed: (s) => (s.finding?.maximum === undefined ? 'none' : '') }
   },
-
   // --- What a check could not look at -----------------------------------------------------------
   'floor/not-checked-no-stairs': {
-    says: (s) => wordingText(planCheckWordings.noStairs(s.floorName)),
-    found: fixed('a floor off the ground, and no stair joining it to the ground floor'),
-    needed: fixed('a stair joining it, through the floors between, to the ground floor'),
-    fix: fixed("State the stair in the plan's stairs, or draw a room used as a stair on each floor, one over the other.")
+    values: (s): Values => ({ wording: planCheckSaids.noStairs(s.floorName) })
   },
   'floor/not-checked-way-out-not-drawn': {
-    says: (s) => wordingText(planCheckWordings.wayOutNotDrawn(s.floorName)),
-    found: fixed('its only doors out lead to a space that is not drawn'),
-    needed: fixed('the space beyond its doors drawn as a room, or a door to the outside'),
-    fix: fixed('If that space is a shared landing or a stair, draw it as a room.')
+    values: (s): Values => ({ wording: planCheckSaids.wayOutNotDrawn(s.floorName) })
   },
   // MSG-5: with the notes held back because they rest on what could not be drawn.
   'floor/not-checked-rooms-not-drawn': {
-    says: (s) => wordingText(planCheckWordings.roomsNotDrawn(s.floorName, s.names)),
-    found: (s) => `rooms that cannot be drawn${s.heldSaid ? `; held back until they can be: ${s.heldSaid}` : ''}`,
-    needed: fixed('rooms that can be drawn'),
-    fix: fixed('Correct the lines that leave those rooms out. They are checked once they can be drawn, and so is what rests on them: a note held back comes back if it still holds.')
+    values: (s): Values => ({ wording: planCheckSaids.roomsNotDrawn(s.floorName, s.names), ...(s.heldSaid ? { held: s.heldSaid } : {}) }),
+    variant: { found: (s) => (s.heldSaid ? 'held' : '') }
   },
+  // LVL-5 (lab A-16, VE-9): each opening worded as what it is, never a window as a door.
   'floor/not-checked-doors-not-drawn': {
-    // LVL-5 (lab A-16, VE-9): each opening worded as what it is, never a window as a door.
-    says: (s) => wordingText(planCheckWordings.doorsNotDrawn(s.floorName, s.also, s.notice?.openingKinds)),
-    found: (s) => `${openingWords(s.notice?.openingKinds, s.also.length).plain} that cannot be drawn${s.heldSaid ? `; held back until they can be: ${s.heldSaid}` : ''}`,
-    needed: (s) => `${openingWords(s.notice?.openingKinds, s.also.length).plain.replace(/^doors or windows$/, 'doors and windows')} that can be drawn`,
-    fix: (s) => {
-      const w = openingWords(s.notice?.openingKinds, s.also.length)
-      const one = s.also.length === 1 && w.plain !== 'doors or windows'
-      return `Correct the lines that leave ${one ? w.these.replace(/^this /, 'that ') : w.these.replace(/^these /, 'those ')} out. ${one ? 'It is' : 'They are'} checked once ${one ? 'it can' : 'they can'} be drawn, and so is what rests on ${one ? 'it' : 'them'}: a note held back comes back if it still holds.`
+    values: (s): Values => {
+      const kinds = openingKindsOf(s) ?? undefined
+      return {
+        wording: planCheckSaids.doorsNotDrawn(s.floorName, s.also, kinds),
+        ...(s.heldSaid ? { held: s.heldSaid } : {}),
+        ...(kinds === undefined ? {} : { plain: openingsSaid(kinds, s.also.length, 'plain'), those: openingsSaid(kinds, s.also.length, 'those') })
+      }
+    },
+    variant: {
+      found: (s) => [openingKindsOf(s) === null ? '' : 'kinds', s.heldSaid ? 'held' : ''].filter((part) => part !== '').join('.'),
+      needed: (s) => (openingKindsOf(s) === null ? '' : 'kinds'),
+      fix: (s) => {
+        const kinds = openingKindsOf(s)
+        return kinds === null ? '' : oneKnownOpening(kinds, s.also.length) ? 'kinds.one' : 'kinds.many'
+      }
     }
   },
   'floor/sketch-drawn-only': {
-    says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,
-    found: (s) => `${s.said} on the sketch layer (${s.names.join(', ')})`,
-    needed: fixed('nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture'),
-    fix: fixed('Leave it as a sketch for the drawing. Where it is something Grid holds, such as a fixture, or a fence, a path, a tree or a pool on the site (site.things), write it as that instead; furniture will be offered the same way when Grid holds it.')
+    values: (s): Values => ({ categories: s.names.join(', ') })
   },
   // BRF-3: the site's things are drawn only, never measured or checked.
-  'plan/site-things-drawn-only': {
-    says: (s) => `The site's things are drawn only: ${s.said}, not measured or checked, and never taken as a wall, a room or a storey's height`,
-    found: (s) => `${s.said} on the site`,
-    needed: fixed('nothing: the site\'s things are for the drawing'),
-    fix: fixed('Leave them as they are. A part of the building, such as a shed with walls and a roof, is written as walls and a room instead.')
-  },
+  'plan/site-things-drawn-only': {},
   'plan/not-checked-boundary': {
-    says: (s) => s.said || 'No distance to the plot\'s boundary was measured: the building has no outline',
-    found: fixed('a boundary on the site, but no outline of the building to measure from'),
-    needed: fixed('walls that close the building\'s outline, on a floor at or above the ground floor'),
-    fix: fixed('Correct the lines that leave the outline unknown; the distances to the boundary are measured once it can be worked out.')
+    values: (s): Values => ({ wording: s.notice?.said ?? said('line.plan/not-checked-boundary.says.none') })
   },
-  'plan/boundary-crosses': {
-    says: () => 'The site\'s boundary is not one closed shape, so no distance to it and no plot coverage is measured',
-    needed: fixed('the plot\'s corners in order round it, each edge meeting only the next'),
-    fix: fixed('List the corners of the plot once each, in order round it; the last edge runs back to the first point by itself.')
-  },
-  'plan/note-no-place': {
-    says: (s) => `Note ${s.label} names a room the plan does not have, so it is not drawn`,
-    needed: fixed('a room id from the plan, or a point (at)'),
-    fix: fixed('Name one of the plan\'s rooms by its id, or place the note at a point.')
-  },
+  'plan/boundary-crosses': {},
+  'plan/note-no-place': {},
   // CNT-3: the front, and which way the plan's y runs.
-  'plan/front-not-said': {
-    says: (s) => `The front names ${s.label}, which ${s.said}, so no front is said`,
-    needed: fixed('a wall that faces outside, or an opening in one, such as the front door'),
-    fix: fixed('Name in front a wall of the plan that faces outside (wall), or the front door (opening).')
-  },
-  'plan/y-down': {
-    says: () => 'The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round',
-    found: fixed('yAxis is down: the coordinates are the building\'s mirror image, and Grid draws and exports them with y up'),
-    needed: fixed('a plan whose y runs up the page, as Grid draws it'),
-    fix: fixed('To have the drawings and exports the right way round, write the plan with y up: every y negated, north as 180 less what it was, and yAxis up.')
-  },
+  'plan/front-not-said': {},
+  'plan/y-down': {},
   'floor/not-checked-no-use': {
-    says: (s) => wordingText(figureWordings.noUse(s.floorName, s.names.length)),
-    found: fixed('rooms with no use stated'),
-    needed: fixed('a use on every room (bedroom, living, dining and so on)'),
-    fix: fixed('State what each room is for.')
+    values: (s): Values => ({ wording: figureSaids.noUse(s.floorName, s.names.length) })
   },
   'plan/not-checked-sizes-for-place': {
-    says: (s) => wordingText(figureWordings.noFiguresForPlace('Room sizes', s.country)),
-    found: (s) => `a plan for ${s.country}, and figures carried for the US only`,
-    needed: fixed('figures for the place, looked up and given to the check'),
-    fix: fixed('Look up the figures for the place and give them to the check, or read the local rules.')
+    values: (s): Values => ({ wording: figureSaids.noFiguresForPlace('Room sizes', s.country) })
   },
   'plan/not-checked-escapes-for-place': {
-    says: (s) => wordingText(figureWordings.noFiguresForPlace('Escape openings', s.country)),
-    found: (s) => `a plan for ${s.country}, and figures carried for the US only`,
-    needed: fixed('figures for the place, looked up and given to the check'),
-    fix: fixed('Look up the figures for the place and give them to the check, or read the local rules.')
+    values: (s): Values => ({ wording: figureSaids.noFiguresForPlace('Escape openings', s.country) })
   },
   // CNT-5 (lab EL-2): a figure check the plan's kind of building leaves out, for the whole plan
   // or one floor of it. The figures carried here were read for homes.
   'plan/not-checked-sizes-for-building': {
-    says: (s) => wordingText(figureWordings.notForBuilding('Room sizes', buildingKindsText(ruleReadFor(s)), buildingText(s))),
-    found: (s) => `a plan that says it is ${buildingText(s)}`,
-    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
-    fix: fixed(NOT_FOR_BUILDING_FIX)
+    values: (s): Values => ({ wording: figureSaids.notForBuilding('Room sizes', buildingKindsSaid(ruleReadFor(s)), buildingTypeSaid(s.notice?.building)), ...buildingValues(s) })
   },
   'plan/not-checked-escapes-for-building': {
-    says: (s) => wordingText(figureWordings.notForBuilding('Escape openings', buildingKindsText(ruleReadFor(s)), buildingText(s))),
-    found: (s) => `a plan that says it is ${buildingText(s)}`,
-    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
-    fix: fixed(NOT_FOR_BUILDING_FIX)
+    values: (s): Values => ({ wording: figureSaids.notForBuilding('Escape openings', buildingKindsSaid(ruleReadFor(s)), buildingTypeSaid(s.notice?.building)), ...buildingValues(s) })
   },
   'floor/not-checked-sizes-for-building': {
-    says: (s) => wordingText(figureWordings.floorNotForBuilding(s.floorName, 'Room sizes', buildingKindsText(ruleReadFor(s)), buildingText(s))),
-    found: (s) => `a floor the plan says is ${buildingText(s)}`,
-    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
-    fix: fixed(NOT_FOR_BUILDING_FIX)
+    values: (s): Values => ({ wording: figureSaids.floorNotForBuilding(s.floorName, 'Room sizes', buildingKindsSaid(ruleReadFor(s)), buildingTypeSaid(s.notice?.building)), ...buildingValues(s) })
   },
   'floor/not-checked-escapes-for-building': {
-    says: (s) => wordingText(figureWordings.floorNotForBuilding(s.floorName, 'Escape openings', buildingKindsText(ruleReadFor(s)), buildingText(s))),
-    found: (s) => `a floor the plan says is ${buildingText(s)}`,
-    needed: (s) => `figures read for ${buildingText(s)}; the ones here were read for ${buildingKindsText(ruleReadFor(s))}`,
-    fix: fixed(NOT_FOR_BUILDING_FIX)
+    values: (s): Values => ({ wording: figureSaids.floorNotForBuilding(s.floorName, 'Escape openings', buildingKindsSaid(ruleReadFor(s)), buildingTypeSaid(s.notice?.building)), ...buildingValues(s) })
   },
   // MSG-2: what a check skipped, said where it used to pass in silence.
   'floor/not-checked-above-escape-storeys': {
-    says: (s) => wordingText(figureWordings.aboveEscapeStoreys(s.floorName, s.names.length)),
-    found: (s) => `bedrooms above the third storey: ${s.names.map(quoted).join(', ')}`,
-    needed: fixed('figures for escape from bedrooms above the third storey, which these checks do not carry'),
-    fix: fixed('Nothing to change in the plan: look up how escape from these bedrooms is set out where it will be built.')
+    values: (s): Values => ({ wording: figureSaids.aboveEscapeStoreys(s.floorName, s.names.length), rooms: joined(s.names.map(name), 'join.comma') })
+  },
+  // CNT-10: a plan with phases is checked as it will be after the work; its counts (and base) as data.
+  'plan/read-after-work': {
+    values: (s): Values => (isSaid(s.said) ? { ...(s.said.values ?? {}) } : {})
   },
   // WRT-6 (lab WR-15): what the plan marks assumed, listed for the person to confirm.
-  'plan/read-after-work': {
-    says: (s) => `${s.label} holds work: ${s.said}. Its sizes, areas and checks are for the building as it will be after the work`,
-    found: (s) => s.said,
-    needed: fixed('nothing: the parts to be demolished are drawn dashed and checked as they stand before the work, and grid diff --since phase lists what the work does'),
-    fix: fixed('Nothing to fix. To see what the work does, compare by phase (grid diff --since phase, or grid_diff with since: phase).')
-  },
   'plan/value-assumed': {
-    says: (s) => `${s.word ? `The ${s.word} of ${s.label}` : s.label} was assumed, not given or measured`,
-    found: (s) => `marked assumed in the plan's marks${s.said ? `, ${s.said}` : ''}`,
-    needed: fixed('the person\'s word on it: this value confirmed, or the right one'),
-    fix: fixed('Ask the person. When they confirm it, mark it given or measured; when they give another, change it and mark that given.')
+    variant: { says: (s) => (s.word ? 'word' : ''), found: (s) => (s.said !== '' ? 'said' : '') }
   },
   'plan/mark-no-part': {
-    says: (s) => `A mark names ${s.label}, which the plan does not have, so the mark is not read`,
-    found: (s) => `a mark on ${s.label}${s.word ? ` (its ${s.word})` : ''}`,
-    needed: fixed('a mark on a part the plan has, by its id'),
-    fix: fixed('Name the part by the id the plan gives it now, or take the mark out.')
+    variant: { found: (s) => (s.word ? 'word' : '') }
   },
   // HND-11 (lab WR-14): a length taped on site against the same length drawn.
   'room/taped-differs': {
-    says: (s) => `${s.taped ? `${capital(s.taped.what)} taped in` : 'A length taped in'} ${s.label} is not the length drawn`,
-    found: (s) => s.taped?.figures ?? s.said,
-    needed: (s) => `the drawing within ${s.taped?.within ?? 'the tolerance'} of the length taped`,
-    fix: fixed('Draw the walls where the tape puts their faces: a survey taped to the inside faces places each wall by that face (`face` on the wall), so a thickness guessed, or left out, grows away from the room. If the tape was read wrong, correct the taped length.')
+    values: tapedValues,
+    variant: { says: tapedNone, found: tapedNone, needed: tapedNone }
   },
   'plan/taped-not-measured': {
-    says: (s) => `A length taped in ${s.label} cannot be set against the drawing: ${s.said}`,
-    found: (s) => (s.taped === undefined ? s.said : `${s.taped.what}, taped ${s.taped.figures}`),
-    needed: fixed('a taped length that names a room the plan has, and one of its walls or two of its corners, each corner by the two walls that meet there'),
-    fix: fixed('Name the room and its walls by the ids the plan gives them now; a corner is two walls of the room that meet there. Once the room is drawn, its taped lengths are measured.')
+    values: tapedValues,
+    variant: { found: tapedNone }
   },
-  // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured, never checked.
-  'plan/not-checked-access': {
-    says: (s) => `What the plan marks as needing to be accessible (${s.said}) was not checked: Grid holds no figure for it that a named person has confirmed`,
-    found: (s) => `${s.said} marked as needing to be accessible`,
-    needed: fixed('figures for the widths of doors and corridors, turning space and steps that a named person has confirmed against their source, or the person\'s own figures in the brief beside the plan'),
-    fix: fixed('Nothing to change in the plan: grid_measure what=access measures the doors, corridors, turning space and steps of what is marked, as numbers, against the person\'s own figures.')
-  },
+  'plan/not-checked-access': {},
   'plan/not-checked-no-rooms': {
-    says: () => wordingText(figureWordings.noRooms()),
-    found: fixed('walls, and no rooms'),
-    needed: fixed('the rooms drawn on the walls, each with the walls round it and its use'),
-    fix: fixed('Add the rooms. Room sizes, doors, routes and escape openings are checked once there are rooms.')
+    values: (): Values => ({ wording: figureSaids.noRooms() })
   }
 } as const satisfies Record<string, CodeEntry>
 
@@ -1319,4 +754,58 @@ export type LineCode = keyof typeof CODES
 
 export function isLineCode(code: string): code is LineCode {
   return Object.hasOwn(CODES, code)
+}
+
+/** What every line is told, by name: its wordings may use any of these. */
+function commonValues(s: Subject): Values {
+  const values: Record<string, Value> = { label: s.label, said: s.said }
+  if (s.name !== '') values['name'] = name(s.name)
+  if (s.floorName !== '') values['floorName'] = name(s.floorName)
+  if (s.place !== undefined) values['place'] = s.place
+  if (s.wants !== undefined) values['wants'] = s.wants
+  if (s.word !== undefined) values['word'] = s.word
+  if (s.known !== undefined) values['known'] = s.known
+  if (s.read !== undefined) values['read'] = s.read
+  if (s.used !== undefined && s.used !== null) values['used'] = s.used
+  if (s.kept !== undefined) values['kept'] = s.kept
+  if (s.rename !== undefined) values['rename'] = s.rename
+  if (s.sides !== undefined) values['sides'] = s.sides
+  if (s.country !== '') values['country'] = s.country
+  return values
+}
+
+/** A line's words in a language, made from its code: the one place a line is worded. */
+export interface LineWords {
+  readonly message: string
+  readonly found: string
+  readonly needed: string
+  readonly fix: string
+  /** MSG-11: the figures, names and places its words were made with, as data. Empty when there are none. */
+  readonly values: Record<string, string | number>
+}
+
+/**
+ * The words of a line of this code, in a language. A code missing from the catalogue still gives
+ * a line, the check's own words, and a test fails.
+ */
+export function wordLine(code: string, s: Subject, language: Language, options: SayOptions = {}): LineWords {
+  const entry: CodeEntry | null = isLineCode(code) ? CODES[code] : null
+  const own = entry?.values?.(s, language) ?? {}
+  const values: Values = { ...commonValues(s), ...own }
+  const said_ = sayValue(language, s.said, options)
+  const field = (f: Field): string | null => {
+    const variant = entry?.variant?.[f]?.(s) ?? ''
+    const key = `line.${code}.${f}${variant ? `.${variant}` : ''}`
+    return Object.hasOwn(en, key) ? say(language, key as MessageKey, values, options) : null
+  }
+  // The label and the check's own sentence are words, and the line's own text says them. A part
+  // left empty (COD-8's name and place of a firm's line) is no value.
+  const data = Object.fromEntries(Object.entries(values).filter(([key, value]) => key !== 'label' && key !== 'said' && value !== ''))
+  return {
+    message: entry === null ? said_ : field('says') ?? said_,
+    found: entry === null ? said_ : field('found') ?? said_,
+    needed: entry === null ? '' : field('needed') ?? '',
+    fix: entry === null ? '' : field('fix') ?? '',
+    values: valuesData(data)
+  }
 }

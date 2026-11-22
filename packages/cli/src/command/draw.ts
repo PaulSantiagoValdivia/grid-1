@@ -19,6 +19,7 @@ import { planPicture } from '@ongrid/viewer/src/picture'
 import { drawShowOf } from './drawShow'
 import { floorOption, type LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
+import { askedLanguage, LANG_OPTION, languageFor } from './language'
 import type { SectionLine } from '@ongrid/floorplan/geometry/section'
 import type { DrawingMarksAsked } from '@ongrid/floorplan/geometry/drawingMarks'
 import { marksAsked, readMarks, readSectionOption, towardOf } from './section'
@@ -38,6 +39,7 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8 (up to 4 with --3d). 1 when left out.' },
   '--units': { takesValue: true, help: 'How areas and dimensions are written: m, cm, mm or ft-in. The plan\'s own display, or m, when left out. Not with --3d.' },
   '--decimal': { takesValue: true, help: 'The decimal mark: point or comma. The plan\'s own display, or point, when left out.' },
+  ...LANG_OPTION,
   '--section': { takesValue: true, help: 'Draw a section instead of a floor plan: the line to cut along, x1,y1:x2,y2 in metres, through every floor, with its levels and room heights, and what it takes that the plan does not state hatched and listed. Not with --3d, --view or --facade.' },
   '--toward': { takesValue: true, help: 'With --section: the side of the line the section looks toward, walking from its first point to its second: left (the default) or right.' },
   '--marks': { takesValue: true, help: 'Marks to add to a floor plan, joined by commas: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of --section and the way it looks, on the plan, instead of drawing the section). Not with --3d, --view or --facade.' },
@@ -72,6 +74,8 @@ export interface DrawRequest {
   readonly colour?: string
   /** SHT-7: add a key the plan does not ask for. */
   readonly key?: boolean
+  /** MSG-11: the language Grid's own words on the drawing are in (`--lang`), as given. */
+  readonly lang?: string
   /** LVL-9: the line to cut a section along, as given (`x1,y1:x2,y2`). */
   readonly section?: string
   /** LVL-9: the side the section looks toward, as given. */
@@ -137,6 +141,7 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
     if (request.threeD && given !== undefined) throw new UsageError(`${flag} is for a floor plan, not the 3D model: leave ${flag} or --3d out.`)
   }
   drawShowOf(request)
+  askedLanguage(request.lang)
   sectionAsked(request)
   const look = (request.look ?? DRAW_LOOK) as LookName
   if (!(LOOK_NAMES as readonly string[]).includes(look)) {
@@ -179,16 +184,21 @@ function checkFacadeRequest(request: DrawRequest): void {
 }
 
 export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: number, look: LookName = DRAW_LOOK): Promise<DrawnFile> {
+  // MSG-11: the language asked for, else the plan's own, else English, with its messages loaded.
+  const asked = askedLanguage(request.lang)
+  const language = await languageFor(asked, loaded.plan)
   if (request.facade !== undefined) {
     const side = request.facade as FacadeSide
-    const file = request.png ? await drawFacade(loaded.plan, { format: 'png', side, look, scale }) : await drawFacade(loaded.plan, { format: 'svg', side, look })
+    const tongue = language === 'en' && asked === undefined ? {} : { language }
+    const file = request.png ? await drawFacade(loaded.plan, { format: 'png', side, look, scale, ...tongue }) : await drawFacade(loaded.plan, { format: 'svg', side, look, ...tongue })
     return { file, undecidedDoors: [] }
   }
-  const asked = sectionAsked(request)
-  if (asked.section !== null) {
-    // Loaded only for a section.
+  const drawing = sectionAsked(request)
+  if (drawing.section !== null) {
+    // Loaded only for a section. MSG-11: its words in the language asked for, else the plan's own.
     const { drawSection } = await import('../draw/drawSection')
-    const drawn = await drawSection(loaded.plan, asked.section, request.png ? { format: 'png', look, scale } : { format: 'svg', look })
+    const tongue = language === 'en' && asked === undefined ? {} : { language }
+    const drawn = await drawSection(loaded.plan, drawing.section, request.png ? { format: 'png', look, scale, ...tongue } : { format: 'svg', look, ...tongue })
     return { file: drawn.file, undecidedDoors: [], sectionNote: drawn.note }
   }
   const floor = floorOption(loaded.plan, request.floor)
@@ -204,12 +214,12 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
   if (request.threeD) {
     // Loaded only for a still: it brings Three and React with it.
     const { drawStill } = await import('../draw/drawStill')
-    return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale }), undecidedDoors: [] }
+    return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale, ...(language === 'en' ? {} : { language }) }), undecidedDoors: [] }
   }
-  const display = request.units === undefined && request.decimal === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan)
-  const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request), ...(asked.marks === null ? {} : { marks: asked.marks }) }
+  const display = request.units === undefined && request.decimal === undefined && asked === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan, language)
+  const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request), ...(drawing.marks === null ? {} : { marks: drawing.marks }) }
   // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
-  const faults = inspectPlan(loaded.plan).lines
+  const faults = inspectPlan(loaded.plan, language === 'en' ? {} : { language, ...(loaded.plan.display?.decimal ? { decimal: loaded.plan.display.decimal } : {}) }).lines
   const undecidedDoors = planPicture(loaded.plan, { floor, look, ...labels }).undecidedDoors
   const file = request.png
     ? await drawPlan(loaded.plan, { format: 'png', floor, scale, look, faults, ...labels })

@@ -17,6 +17,7 @@
     "./types/places": "./src/types/places.ts",
     "./export": "./src/export/planExport.ts",
     "./notes": "./src/notes/notes.ts",
+    "./messages": "./src/messages/index.ts",
     "./rooms": "./src/rooms/index.ts",
     "./scan": "./src/scan/index.ts",
     "./test-support/plans": "./src/test-support/plans.ts",

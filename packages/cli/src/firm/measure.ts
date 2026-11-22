@@ -10,18 +10,29 @@
  *
  * Pure but for `firmForCheck`, which reads the firm's file beside the plan through the project.
  */
-import { doorwayClearance, fixtureSpace, itemName, turningSpace, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { doorwayClearance, fixtureSpace, itemNameSaid, turningSpace, type FloorPlan, type Item, type Vec2 } from '@ongrid/floorplan/geometry'
+import { english, joined, name, num, said, type Said, type Value } from '@ongrid/floorplan/messages'
 import type { FirmInput, FirmMeasured, FirmStandard } from '@ongrid/rules'
 import type { Project } from '../fs/projectFiles'
 import { planAreas } from '../quantities/areas'
 import { measureRoom } from '../quantities/measure'
 import { surveyPlan, type Survey, type SurveyRoom } from '../quantities/survey'
 import { corridorEnds } from '../quantities/access'
-import { besideText, fixturesOf } from '../quantities/use'
+import { fixturesOf } from '../quantities/use'
 import { readFirm } from './standards'
 
-const q = (text: string): string => JSON.stringify(text)
-const m = (value: number): string => `${value.toFixed(2)} m`
+/** MSG-11: where a part was measured, by key (`line.part.firm.*`), with its English as `said`. */
+const where = (sentence: Said): { said: string; sentence: Said } => ({ said: english(sentence), sentence })
+const fig = (value: number): Value => num(value.toFixed(2))
+const point = (p: Vec2): Said => said('line.part.firm.point', { x: fig(p.x), y: fig(p.y) })
+const itemsNamed = (items: readonly Item[], ids: readonly string[]): Value => joined(items.filter((item) => ids.includes(item.id)).map(itemNameSaid), 'join.comma')
+/** What a way through runs beside, as `besideText` (`quantities/use.ts`) says it. */
+function besideSaid(passage: { beside: { fixtures: readonly string[]; wall: boolean } }, items: readonly Item[]): Value {
+  const named = items.some((item) => passage.beside.fixtures.includes(item.id))
+  if (!named) return passage.beside.wall ? said('line.part.firm.at.betweenWalls') : ''
+  const fixtures = itemsNamed(items, passage.beside.fixtures)
+  return passage.beside.wall ? said('line.part.firm.at.betweenFixtures', { fixtures }) : said('line.part.firm.at.beside', { fixtures })
+}
 
 /** The rooms a room standard is for: its uses, else every room (for a corridor width, the rooms used as corridor). Zones are part of a room, and not measured on their own. */
 function roomsFor(survey: Survey, standard: FirmStandard): SurveyRoom[] {
@@ -38,9 +49,9 @@ function corridorWay(survey: Survey, room: SurveyRoom, i: number): FirmMeasured 
   const { items, obstacles } = fixturesOf(survey)
   const { way, widest } = corridorEnds(room, obstacles(room.facts.floor))
   const base = { standard: i, thing: { kind: 'room', id: room.facts.id } as const, floor: room.facts.floor }
-  if (way === null) return { ...base, measured: widest, precision: 0, said: 'Grid finds no two ends to it, so the widest circle its free floor holds', also: [] }
-  const where = way.atDoorway ? '' : besideText(way, items)
-  return { ...base, measured: way.width, precision: way.step, said: `from end to end, at its narrowest at (${way.at.x.toFixed(2)}, ${way.at.y.toFixed(2)})${where}`, also: [...way.beside.fixtures] }
+  if (way === null) return { ...base, measured: widest, precision: 0, ...where(said('line.part.firm.at.noEnds')), also: [] }
+  const beside = way.atDoorway ? '' : besideSaid(way, items)
+  return { ...base, measured: way.width, precision: way.step, ...where(said('line.part.firm.at.corridor', { at: point(way.at), beside })), also: [...way.beside.fixtures] }
 }
 
 /** Every part each standard looks at, measured. */
@@ -60,21 +71,21 @@ export function firmMeasures(plan: FloorPlan, standards: readonly FirmStandard[]
         for (const room of roomsFor(survey, standard)) {
           const circle = turningSpace(room.polygon, room.holes, obstacles(room.facts.floor))
           const own = rows.filter((row) => row.room === room.facts.id).length
-          const clearOf = own === 0 ? 'the room holds no fixtures' : `clear of ${own === 1 ? 'its fixture' : `its ${own} fixtures`}`
-          out.push({ standard: i, thing: { kind: 'room', id: room.facts.id }, floor: room.facts.floor, measured: circle.diameter, precision: 0, said: `centred at (${circle.at.x.toFixed(2)}, ${circle.at.y.toFixed(2)}), ${clearOf}`, also: [] })
+          const clear = own === 0 ? said('line.part.firm.at.noFixtures') : own === 1 ? said('line.part.firm.at.clearOne') : said('line.part.firm.at.clearMany', { count: own })
+          out.push({ standard: i, thing: { kind: 'room', id: room.facts.id }, floor: room.facts.floor, measured: circle.diameter, precision: 0, ...where(said('line.part.firm.at.turning', { at: point(circle.at), clear })), also: [] })
         }
         return
       }
       case 'room_width':
         for (const room of roomsFor(survey, standard)) {
-          out.push({ standard: i, thing: { kind: 'room', id: room.facts.id }, floor: room.facts.floor, measured: measureRoom(room).widestCircle, precision: 0, said: 'the widest circle the empty room holds', also: [] })
+          out.push({ standard: i, thing: { kind: 'room', id: room.facts.id }, floor: room.facts.floor, measured: measureRoom(room).widestCircle, precision: 0, ...where(said('line.part.firm.at.width')), also: [] })
         }
         return
       case 'room_area':
         for (const room of roomsFor(survey, standard)) {
           const area = net.get(room.facts.id)
           if (area === undefined || area === null) continue
-          out.push({ standard: i, thing: { kind: 'room', id: room.facts.id }, floor: room.facts.floor, measured: area, precision: 0, said: 'net, to the faces of its walls', also: [] })
+          out.push({ standard: i, thing: { kind: 'room', id: room.facts.id }, floor: room.facts.floor, measured: area, precision: 0, ...where(said('line.part.firm.at.area')), also: [] })
         }
         return
       case 'door_clear_width': {
@@ -87,10 +98,10 @@ export function firmMeasures(plan: FloorPlan, standards: readonly FirmStandard[]
             if (!opening || !wall || wall.virtual === true) continue
             // LVL-5: the floor the door stands on, as CNT-17 reads it; a wall through floors stands on more than its own.
             const d = doorwayClearance(wall, opening, obstacles(facts.floor))
-            const leaf = d.leaf > 0 ? ` less ${m(d.leaf)} for the open leaf and its stop` : ''
-            const names = items.filter((item) => d.narrowedBy.includes(item.id)).map(itemName)
-            const narrowed = names.length === 0 ? '' : `, ${names.join(', ')} ${names.length === 1 ? 'stands' : 'stand'} in front of ${m(d.covered)} of it`
-            out.push({ standard: i, thing: { kind: 'opening', id: opening.id }, floor: facts.floor, measured: d.clear, precision: 0, said: `its ${m(d.hole)} hole${leaf}${narrowed}`, also: [...d.narrowedBy] })
+            const leaf = d.leaf > 0 ? said('line.part.firm.at.leaf', { leaf: fig(d.leaf) }) : ''
+            const count = items.filter((item) => d.narrowedBy.includes(item.id)).length
+            const narrowed = count === 0 ? '' : said(count === 1 ? 'line.part.firm.at.narrowed.one' : 'line.part.firm.at.narrowed.many', { names: itemsNamed(items, d.narrowedBy), covered: fig(d.covered) })
+            out.push({ standard: i, thing: { kind: 'opening', id: opening.id }, floor: facts.floor, measured: d.clear, precision: 0, ...where(said('line.part.firm.at.door', { hole: fig(d.hole), leaf, narrowed })), also: [...d.narrowedBy] })
           }
         }
         return
@@ -105,7 +116,7 @@ export function firmMeasures(plan: FloorPlan, standards: readonly FirmStandard[]
           const front = fixtureSpace(item, room.polygon, room.holes, obstacles(row.floor)).front
           // Nothing in front of it bounds the floor: it is open, so never short.
           if (front === null) continue
-          out.push({ standard: i, thing: { kind: 'item', id: row.id }, floor: row.floor, measured: front, precision: 0, said: `in ${q(room.facts.name)}, to the nearest wall face, doorway or fixture`, also: [room.facts.id] })
+          out.push({ standard: i, thing: { kind: 'item', id: row.id }, floor: row.floor, measured: front, precision: 0, ...where(said('line.part.firm.at.fixture', { room: name(room.facts.name) })), also: [room.facts.id] })
         }
         return
       }

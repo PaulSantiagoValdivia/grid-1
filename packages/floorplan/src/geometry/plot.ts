@@ -20,6 +20,7 @@ import { convexHull, cutOutline, piecesAsRings, strip } from './polygons'
 import { tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 import { fromTuple, signedArea } from './vec2'
+import { english, joined, said, sayValue, type Said, type Value } from '../messages/say'
 import { ringProblem } from './ring'
 
 /** Where a set-back an edge takes was asked for: for that edge, for the street edges, or for every edge. */
@@ -104,7 +105,16 @@ function corners(points: readonly (readonly [number, number])[]): Vec2[] {
   return open.map(fromTuple)
 }
 
-export { ringProblem, segmentsMeet } from './ring'
+export { ringFault, ringProblem, segmentsMeet } from './ring'
+
+/**
+ * How a line names an edge of the boundary (MSG-11): `the east boundary`, with its number when
+ * another edge of `edges` faces the same way. `BoundaryEdge.name` is its English.
+ */
+export function boundaryEdgeSaid(edges: readonly Pick<BoundaryEdge, 'faces'>[], edge: Pick<BoundaryEdge, 'edge' | 'faces'>): Said {
+  const numbered = edges.filter((e) => e.faces === edge.faces).length > 1
+  return said(numbered ? 'check.boundary.edge.numbered' : 'check.boundary.edge', { way: said(`describe.way.${edge.faces}`), edge: edge.edge })
+}
 
 /**
  * The plot's boundary, its edges and their set-backs, or null when the plan states no boundary or
@@ -134,9 +144,7 @@ export function plotBoundary(plan: Pick<FloorPlan, 'site' | 'north' | 'yAxis'>):
     const onStreet = streets.has(edge)
     return { edge, from, to, length, outward, bearing, faces: compassPoint(bearing), street: onStreet, setback: asked(edge) ?? (onStreet ? street : null) ?? all }
   })
-  const ways = new Map<CompassPoint, number>()
-  for (const e of raw) ways.set(e.faces, (ways.get(e.faces) ?? 0) + 1)
-  const edges = raw.map((e): BoundaryEdge => ({ ...e, name: `the ${e.faces} boundary${(ways.get(e.faces) ?? 0) > 1 ? ` (edge ${e.edge})` : ''}` }))
+  const edges = raw.map((e): BoundaryEdge => ({ ...e, name: english(boundaryEdgeSaid(raw, e)) }))
   return { points, edges, area: Math.abs(signedArea(points)), problem, northStated: orientation.north !== null }
 }
 
@@ -215,11 +223,19 @@ export function siteExtent(site: PlanSite): Vec2[] {
   return points
 }
 
-/** How many things of each kind the site holds, in `SITE_THING_WORDS` order, as words: `1 fence, 3 trees and 1 pool`. */
-export function siteThingsText(things: readonly Pick<SiteThing, 'kind'>[]): string {
+/**
+ * How many things of each kind the site holds, in `SITE_THING_WORDS` order, as a sentence by its
+ * keys (MSG-11, `line.part.siteThing.*`): `1 fence, 3 trees and 1 pool`.
+ */
+export function siteThingsSaid(things: readonly Pick<SiteThing, 'kind'>[]): Value {
   const counts = (Object.keys(SITE_THING_WORDS) as SiteThingKind[])
     .map((kind) => [kind, things.filter((t) => t.kind === kind).length] as const)
     .filter(([, count]) => count > 0)
-    .map(([kind, count]) => `${count} ${SITE_THING_WORDS[kind][count === 1 ? 0 : 1]}`)
-  return counts.length <= 1 ? (counts[0] ?? '') : `${counts.slice(0, -1).join(', ')} and ${counts.at(-1)}`
+    .map(([kind, count]): Value => said(`line.part.siteThing.${kind}.${count === 1 ? 'one' : 'many'}`, { count }))
+  return joined(counts, 'join.comma', 'join.and')
+}
+
+/** How many things of each kind the site holds, in English: `1 fence, 3 trees and 1 pool`. */
+export function siteThingsText(things: readonly Pick<SiteThing, 'kind'>[]): string {
+  return sayValue('en', siteThingsSaid(things))
 }

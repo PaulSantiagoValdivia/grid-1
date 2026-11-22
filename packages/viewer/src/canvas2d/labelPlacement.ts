@@ -20,6 +20,7 @@ import { areaText, doorSwing, metresText, poleOfInaccessibility, rectOf, rectTou
 import { TEXT_PX } from '../picture/look'
 import { showArea, showLength, type Display } from '@ongrid/floorplan/types/units'
 import type { DoorHanding } from './doorHanding'
+import { ENGLISH_WORDS, wordsOf, type DrawingWords } from '../picture/words'
 
 export interface Box {
   readonly minX: number
@@ -75,15 +76,25 @@ export interface LabelStyle {
  * drawing, and the boxes placed round them, are written one way.
  */
 let drawingDisplay: Display | null = null
+/** MSG-11: the language of the drawing being made, kept apart: a display of plain metres is dropped, its language is not. */
+let drawingLanguage: DrawingWords = ENGLISH_WORDS
 
 export function withDisplay<T>(display: Display | undefined, draw: () => T): T {
   const before = drawingDisplay
+  const beforeWords = drawingLanguage
   drawingDisplay = display === undefined || (display.length === 'm' && display.area === 'm2' && display.decimal === 'point' && display.precision === undefined) ? null : display
+  drawingLanguage = wordsOf(display)
   try {
     return draw()
   } finally {
     drawingDisplay = before
+    drawingLanguage = beforeWords
   }
+}
+
+/** MSG-11: the language and decimal mark the drawing being made writes its own words in. */
+export function drawingWords(): DrawingWords {
+  return drawingLanguage
 }
 
 /** A room's area as its tag prints it, rounded the core's one way (ARE-7), in the drawing's display. */

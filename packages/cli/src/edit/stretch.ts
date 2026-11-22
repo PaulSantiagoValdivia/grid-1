@@ -64,7 +64,7 @@ export function stretchPlan(survey: Survey, request: StretchRequest): Patch {
     const s = beyond(w.start)
     const e = beyond(w.end)
     if (!s && !e) continue
-    refuseCurved([w], 'stretching the plan')
+    refuseCurved([w], 'stretch')
     const change = { ...(s ? { start: move(w.start) } : {}), ...(e ? { end: move(w.end) } : {}) }
     const ns = change.start ?? w.start
     const ne = change.end ?? w.end

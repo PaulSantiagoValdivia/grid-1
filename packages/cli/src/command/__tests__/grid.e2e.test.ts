@@ -546,6 +546,8 @@ describe('the built file', () => {
     // 11,800 more, also with no new dependency.
     // CNT-18 merged with WRT-7, CNT-10, VEW-9 and VEW-4 from main: 578,078 bytes; with BRF-4 and
     // HND-12 too, 623,324 bytes; with CNT-4, LVL-5 and BRF-6 too, 643,587 bytes, under the same cap.
-    expect(statSync(bundle).size).toBeLessThan(650_000)
+    // 655 kB since CNT-18 merged with MSG-11: main was 648,688 bytes, and the curved walls with
+    // their words as keys of the message files make it 653,972, again with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(655_000)
   })
 })

@@ -17,7 +17,9 @@ import { tryRoomPolygon } from './room'
 import type { BuildingKind, ToleranceName } from './tolerances'
 import { limit } from './tolerances'
 import { fixedText } from './rounding'
-import { quoted } from '../types/planText'
+import type { Said, Value } from '../messages/say'
+import { english, joined, name, num, said } from '../messages/say'
+import { groupedNum, withSaid } from './issueWords'
 import type { Issue } from './validate'
 
 /** The room uses that make a plan a home. */
@@ -36,6 +38,11 @@ const UNITS = [
   { name: 'millimetres', metres: 1 / 1000 }
 ] as const
 
+/** A size as `size` writes it, as a figure: the sentence writes the unit. */
+const sized = (value: number): Value => num(size(value))
+/** A size with its unit, as one of a list. */
+const inMetresOf = (value: number): Said => said('issue.part.metres', { n: sized(value) })
+
 function median(values: readonly number[]): number | null {
   if (values.length === 0) return null
   const sorted = [...values].sort((a, b) => a - b)
@@ -50,13 +57,11 @@ function size(value: number): string {
   return /^-?0\.\d$/.test(shown) ? `${shown}0` : shown
 }
 
-const squareMetres = (value: number): string =>
-  `${value.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²`
+/** Square metres with their thousands grouped, as a figure: the sentence writes the unit. */
+const squareMetres = (value: number): Value =>
+  groupedNum(value.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 
-const NOT_A_RULE = "The limit is Grid's own, for catching a slipped digit or unit, and no rule."
-
-const inHome = (building: BuildingKind): string =>
-  building === 'home' ? ' in a home (a room in this plan is a bedroom or a living room)' : ''
+const inHome = (building: BuildingKind): Value => (building === 'home' ? said('issue.part.inHome') : '')
 
 function within(value: number, low: ToleranceName, high: ToleranceName): boolean {
   return value >= limit(low) && value <= limit(high)
@@ -81,88 +86,65 @@ function unitsQuestion(typical: Typical): Issue | null {
     if (!within(read(height), 'typicalHeightLowest', 'typicalHeightHighest')) continue
     if (!within(read(thickness), 'typicalThicknessLowest', 'typicalThicknessHighest')) continue
     if (door !== null && !within(read(door), 'typicalDoorLowest', 'typicalDoorHighest')) continue
-    const sizes = [`${size(height)} m high`, `${size(thickness)} m thick`]
-    const inMetres = [`${size(read(height))} m`, `${size(read(thickness))} m`]
-    const doors = door === null ? '' : `, and its doors ${size(door)} m wide`
-    if (door !== null) inMetres.push(`${size(read(door))} m`)
-    const list = inMetres.length === 3 ? `${inMetres[0]}, ${inMetres[1]} and ${inMetres[2]}` : `${inMetres[0]} and ${inMetres[1]}`
-    return {
-      entity: 'plan',
-      id: 'plan',
-      code: 'plan/units-question',
-      severity: 'warning',
-      message:
-        `Is this plan in ${unit.name}? Its walls are typically ${sizes.join(' and ')}${doors}: ` +
-        `read as ${unit.name}, those are ${list}. Grid reads every size as metres. If the plan was ` +
-        `typed in ${unit.name}, multiply every length by ${unit.metres} (wall points, thickness and ` +
-        `height; opening offset, width, sill and height).`
-    }
+    const inMetres = [inMetresOf(read(height)), inMetresOf(read(thickness))]
+    const doors = door === null ? '' : said('issue.plan/units-question.doors', { width: sized(door) })
+    if (door !== null) inMetres.push(inMetresOf(read(door)))
+    const sentence = said('issue.plan/units-question', {
+      unit: said(`issue.part.unit.${unit.name}`),
+      height: sized(height),
+      thickness: sized(thickness),
+      doors,
+      list: joined(inMetres, 'join.comma', 'join.and'),
+      factor: num(String(unit.metres))
+    })
+    return withSaid({ entity: 'plan', id: 'plan', code: 'plan/units-question', severity: 'warning', message: english(sentence) }, sentence)
   }
   return null
 }
 
-function wallQuestions(wall: Wall, others: readonly Wall[], building: BuildingKind, storey: number | undefined): string[] {
-  const asked: string[] = []
+function wallQuestions(wall: Wall, others: readonly Wall[], building: BuildingKind, storey: number | undefined): Said[] {
+  const asked: Said[] = []
+  const id = name(wall.id)
   const typicalHeight = others.length >= 3 ? median(others.map((w) => w.height)) : null
   const highest = limit('wallHighest', building)
   // LVL-1: a floor that states its height keeps it, whatever its walls.
   const stands =
     storey === undefined
-      ? `Grid stands a storey on its tallest wall, so this one makes the storey ${size(wall.height)} m high.`
-      : `Its floor states it is ${size(storey)} m high, so the storey stays that high.`
+      ? said('issue.wall/size-question.stands', { height: sized(wall.height) })
+      : said('issue.wall/size-question.stated', { height: sized(storey) })
   // Against the other walls first: that names what the wall most likely should be.
   if (typicalHeight !== null && wall.height >= typicalHeight * limit('wallHigherThanTypical')) {
-    asked.push(
-      `Wall ${quoted(wall.id)} is ${size(wall.height)} m high, the others on its floor typically ` +
-        `${size(typicalHeight)} m: is that meant? ${stands}`
-    )
+    asked.push(said('issue.wall/size-question.typical', { wall: id, height: sized(wall.height), typical: sized(typicalHeight), stands }))
   } else if (wall.height > highest) {
+    const values = { wall: id, height: sized(wall.height), limit: sized(highest), home: inHome(building) }
     asked.push(
-      `Wall ${quoted(wall.id)} is ${size(wall.height)} m high: is that meant? Grid asks about walls higher ` +
-        `than ${size(highest)} m${inHome(building)}` +
-        (storey === undefined ? ', and stands a storey on its tallest wall.' : `. ${stands}`)
+      storey === undefined
+        ? said('issue.wall/size-question.higher', values)
+        : said('issue.wall/size-question.higherStated', { ...values, stands })
     )
   } else if (wall.height < limit('wallLowest', building)) {
-    asked.push(
-      `Wall ${quoted(wall.id)} is ${size(wall.height)} m high: is that meant? Grid asks about solid walls ` +
-        `lower than ${size(limit('wallLowest', building))} m.`
-    )
+    asked.push(said('issue.wall/size-question.lower', { wall: id, height: sized(wall.height), limit: sized(limit('wallLowest', building)) }))
   }
   const thickest = limit('wallThickest', building)
   if (wall.thickness < limit('wallThinnest', building)) {
-    asked.push(
-      `Wall ${quoted(wall.id)} is ${size(wall.thickness)} m thick: is that meant? Grid asks about solid ` +
-        `walls thinner than ${size(limit('wallThinnest', building))} m. If it is a line on the ` +
-        `floor with no substance, mark it virtual.`
-    )
+    asked.push(said('issue.wall/size-question.thinner', { wall: id, thickness: sized(wall.thickness), limit: sized(limit('wallThinnest', building)) }))
   } else if (wall.thickness > thickest) {
-    asked.push(
-      `Wall ${quoted(wall.id)} is ${size(wall.thickness)} m thick: is that meant? Grid asks about walls ` +
-        `thicker than ${size(thickest)} m${inHome(building)}.`
-    )
+    asked.push(said('issue.wall/size-question.thicker', { wall: id, thickness: sized(wall.thickness), limit: sized(thickest), home: inHome(building) }))
   }
   return asked
 }
 
-const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as const
-
-function openingQuestions(opening: Opening, building: BuildingKind): string[] {
-  const asked: string[] = []
-  const noun = `${OPENING_NOUN[opening.type]} ${quoted(opening.id)}`
+function openingQuestions(opening: Opening, building: BuildingKind): Said[] {
+  const asked: Said[] = []
+  const noun = said(`issue.part.Named.${opening.type}`, { id: name(opening.id) })
   const narrowest = limit('openingNarrowest', building)
   if (opening.width < narrowest) {
-    const still = opening.type === 'door' ? ' It still counts as a way through.' : ''
-    asked.push(
-      `${noun} is ${size(opening.width)} m wide: is that meant? Grid asks about openings ` +
-        `narrower than ${size(narrowest)} m.${still}`
-    )
+    const still = opening.type === 'door' ? said('issue.opening/size-question.still') : ''
+    asked.push(said('issue.opening/size-question.narrower', { opening: noun, width: sized(opening.width), limit: sized(narrowest), still }))
   }
   const lowest = limit('openingLowest', building)
   if (opening.height < lowest) {
-    asked.push(
-      `${noun} is ${size(opening.height)} m high: is that meant? Grid asks about openings ` +
-        `lower than ${size(lowest)} m.`
-    )
+    asked.push(said('issue.opening/size-question.lower', { opening: noun, height: sized(opening.height), limit: sized(lowest) }))
   }
   return asked
 }
@@ -191,8 +173,9 @@ export function validatePlausibility(
     return
   }
 
-  const ask = (entity: Issue['entity'], id: string, code: string, message: string): void => {
-    issues.push({ entity, id, code, severity: 'warning', message: `${message} ${NOT_A_RULE}` })
+  const ask = (entity: Issue['entity'], id: string, code: string, question: Said): void => {
+    const sentence = said('issue.part.both', { first: question, then: said('issue.part.notARule') })
+    issues.push(withSaid({ entity, id, code, severity: 'warning', message: english(sentence) }, sentence))
   }
 
   // LVL-5: a wall through floors stands as a wall of the floor it rises through.
@@ -234,9 +217,7 @@ export function validatePlausibility(
       'room',
       room.id,
       'room/size-question',
-      `Room ${quoted(room.id)} measures ${squareMetres(measured)}: is that meant? Grid asks about rooms ` +
-        `larger than ${squareMetres(largest)}${inHome(building)}. Check its walls' coordinates and ` +
-        `thickness.`
+      said('issue.room/size-question', { room: name(room.id), area: squareMetres(measured), limit: squareMetres(largest), home: inHome(building) })
     )
   }
 }
