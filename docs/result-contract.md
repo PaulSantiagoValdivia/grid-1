@@ -694,6 +694,10 @@ A change that would add a problem that leaves a part out is refused, and nothing
   windows …"), and so do its `found`, `needed` and `fix`; the notice carries `openingKinds`. It no
   longer calls a window "doors or windows" (lab A-16). `room/cross-floor`'s `needed` and `fix`
   mention a wall that rises through floors.
+- With VEW-4 and CNT-10: `grid_preview`'s `parts` list a wall through floors, and an opening in
+  it, on each floor it is drawn on, and a click on the 3D picture meets the wall up to its whole
+  rise; `grid_takeoff for=change` takes a wall through floors off once, whole, its height its whole
+  rise, and `floors` takes it in when it stands on any floor named.
 - `resultVersion` stays 1.
 
 ### 2026-11-22: the preview, shared with the person (VEW-4)
