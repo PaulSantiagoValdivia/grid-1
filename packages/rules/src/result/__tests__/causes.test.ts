@@ -78,7 +78,8 @@ describe('a plan that may not be in metres', () => {
       copy.walls = copy.walls.map((w) => ({ ...w, start: [w.start[0] * 1000, w.start[1] * 1000], end: [w.end[0] * 1000, w.end[1] * 1000], thickness: w.thickness * 1000, height: w.height * 1000 }))
       copy.openings = copy.openings.map((o) => ({ ...o, offset: o.offset * 1000, width: o.width * 1000, height: o.height * 1000, sill: o.sill * 1000 }))
     })
-    const result = inspectPlan({ ...mm, units: 'mm' })
+    // A unit Grid does not read (WRT-7 reads m, cm, mm, ft and in), so the plan is read as metres.
+    const result = inspectPlan({ ...mm, units: 'yd' })
     const filed = result.lines.map((l) => `${l.code}${l.causedBy ? ` <- ${l.causedBy.code}` : ''}`)
     expect(filed.slice(0, 3)).toEqual(['plan/value-left-out', 'plan/units-question <- plan/value-left-out', 'plan/far-from-origin <- plan/units-question'])
     expect(filed).toContain('room/escape-window-too-high <- plan/units-question')

@@ -45,6 +45,7 @@ import {
 } from './floorplan'
 import type { JsonPath, TextMark } from './jsonText'
 import { quoted, textProblem } from './planText'
+import { FILE_UNITS, planInMetres } from './units'
 
 export type PartList = 'walls' | 'rooms' | 'openings' | 'floors' | 'items'
 
@@ -412,9 +413,15 @@ function readClashes(plan: FloorPlan, positions: Positions, faults: ReadFault[])
  * Reads a plan part by part. `raw` is the file as JSON; `marks` are the values its text held
  * that JSON does not (`readPlanText`), at their places. Never throws.
  */
-export function readPlanParts(raw: unknown, marks: readonly TextMark[] = []): PlanRead {
-  if (!isObject(raw)) return { plan: null, refusal: { kind: 'not-an-object' } }
+export function readPlanParts(given: unknown, marks: readonly TextMark[] = []): PlanRead {
+  if (!isObject(given)) return { plan: null, refusal: { kind: 'not-an-object' } }
   const faults: ReadFault[] = []
+  // WRT-7: a file that states its lengths in another unit is read in that unit, and in metres from here on.
+  const converted = planInMetres(given)
+  const raw = converted.raw
+  if (converted.from !== null) {
+    faults.push({ kind: 'read-as-meant', part: null, path: ['units'], found: JSON.stringify(given['units']), wants: '"m": Grid stores metres', read: `"m", every length read in ${FILE_UNITS[converted.from]!.name} and converted to metres` })
+  }
   const positions = Object.fromEntries(LISTS.map((list) => [list, [] as number[]])) as Positions
   const work: Record<string, unknown> = { ...raw }
   const whole = FloorPlanSchema.safeParse(raw)

@@ -72,7 +72,8 @@ M-9.
    gave 104 lines before MSG-5 (Grid has more checks than in the lab). Now 95 lines (11 notes held
    back, four pairs of identical notes made one, a few not-checked lines and `plan/no-walls`
    added), read as 30 problems with 48 lines filed beneath
-   them. The empty walls list is 1 problem with 19 lines under it; the zero-length wall 1 problem
+   them. After merging `main` 6fce2ae (WRT-7 reads f01's millimetres and f02's feet as stated,
+   one line each and no units question), 90 lines, 30 problems, 43 beneath. The empty walls list is 1 problem with 19 lines under it; the zero-length wall 1 problem
    with 5 beneath and the not-checked line. The test checks every follow-on sits under its cause.
    Of the 4 above the lab's 26: three walls that run past their corner because the wall they met
    was left out (f20), and a floor slip whose cause is a wall on the other floor with no line of
@@ -143,3 +144,24 @@ On top of `main` 666bb01:
   the part), so "damage that passes in silence" stays 386.
 - `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 239 test files passed;
   4,673 tests passed, 3 skipped (4,676).
+
+### Again after merging `main` 6fce2ae (MSG-3, MSG-16, WRT-7)
+
+Conflicts kept both sides: the contract's changelog (MSG-5 above MSG-3, MSG-16 and WRT-7), the
+exports of `rules/src/result/index.ts` (`problemsIn` and `approvalWords`), the imports of
+`readTools.ts` and `validate.ts`, and the hotel test, which keeps one line for twelve rooms with
+MSG-3's "the figure used here" `needed`.
+
+Two expectations changed because WRT-7 reads `"units": "mm"`, `"cm"`, `"ft"` and `"in"` in that
+unit:
+
+- `rules/src/result/__tests__/causes.test.ts`, "a plan that may not be in metres": the plan now
+  states `"yd"`, a unit Grid still does not read, so the size findings still sit under the units
+  question, and that question under the unit line.
+- `scoreboard/__tests__/causes.test.ts`, W-7: 95 lines with 48 beneath became 90 with 43; the
+  problems stay 30. f01 and f02 are one `plan/read-as-meant` line each.
+
+After the merge: `npm run build`, `npm run typecheck` and `npm run lint` pass. The tests of
+`packages/floorplan`, `packages/rules`, `packages/cli` and `scoreboard/__tests__`: 4,169 of 4,169
+pass, 3 skipped (two failed before the two changes above, then passed). `npm run scoreboard`:
+"Same as the stored figures".

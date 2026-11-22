@@ -66,11 +66,13 @@ describe("W-7: E's 26 fault plans", () => {
     expect(FAULTS).toHaveLength(26)
   })
 
-  it('read as 30 problems, with 48 of their 95 lines filed under them', () => {
+  // WRT-7 reads f01's millimetres and f02's feet as stated, one line each and no units question:
+  // 95 lines and 48 beneath became 90 and 43; the problems stay 30.
+  it('read as 30 problems, with 43 of their 90 lines filed under them', () => {
     const lines = results.reduce((sum, [, r]) => sum + r.count, 0)
     const problems = results.reduce((sum, [, r]) => sum + r.problems, 0)
     const following = results.reduce((sum, [, r]) => sum + r.lines.filter((l) => l.causedBy !== undefined).length, 0)
-    expect({ lines, problems, following }).toEqual({ lines: 95, problems: 30, following: 48 })
+    expect({ lines, problems, following }).toEqual({ lines: 90, problems: 30, following: 43 })
   })
 
   it('file each follow-on right under its cause, or under a line under it', () => {

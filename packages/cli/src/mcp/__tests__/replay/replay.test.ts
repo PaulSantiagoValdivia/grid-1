@@ -190,7 +190,7 @@ const TURNS: Turn[] = [
   {
     who: 'estate agent', n: 5, asked: 'Sizes in feet and inches; no m² under the names.', mark: 'S', why: 'grid_areas lists every room in feet and inches; the drawing\'s labels stay in metres',
     run: async (b) => {
-      expect((await ok(b, 'grid_areas', { plan: 'flipped.json', units: 'ft' })).text).toContain('15\' 1" × 11\' 10"')
+      expect((await ok(b, 'grid_areas', { plan: 'flipped.json', units: 'ft' })).text).toContain('15\'-1" × 11\'-10"')
     },
   },
   {
@@ -268,8 +268,9 @@ const TURNS: Turn[] = [
   {
     who: 'builder', n: 8, asked: 'As a spreadsheet.', mark: 'F', why: 'grid_takeoff and grid_schedule as CSV',
     run: async (b) => {
-      expect((await ok(b, 'grid_takeoff', { plan: 'existing.json', format: 'csv' })).text).toMatch(/^row,what,floor m2/)
-      expect((await ok(b, 'grid_schedule', { plan: 'existing.json', format: 'csv' })).text).toMatch(/^type,id,width m/)
+      // MSG-3: the label is the first row, in one cell; the table's header follows.
+      expect((await ok(b, 'grid_takeoff', { plan: 'existing.json', format: 'csv' })).text).toMatch(/^"General guidance, not your local rules"\nrow,what,floor m2/)
+      expect((await ok(b, 'grid_schedule', { plan: 'existing.json', format: 'csv' })).text).toMatch(/^"General guidance, not your local rules"\ntype,id,width m/)
     },
   },
   {

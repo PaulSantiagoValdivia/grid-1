@@ -14,7 +14,7 @@ import { mergeRooms } from '../edit/merge'
 import { renameRoom, type UseOrNone } from '../edit/rename'
 import { splitRoom } from '../edit/split'
 import { stretchPlan } from '../edit/stretch'
-import { floorArg, listSchema, objectSchema, PLAN_ARG, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
+import { DECIMAL_IN_ARG, floorArg, listSchema, objectSchema, PLAN_ARG, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
 import { EDIT_OUTPUT, OUT_ARG, writeChange } from './writeTools'
 
 const NAME = (description: string, example: string, required = false): { type: 'string'; maxLength: number; description: string; examples: string[]; required: boolean } => ({ type: 'string', maxLength: NAME_MAX, description, examples: [example], required })
@@ -56,19 +56,20 @@ const splitTool: GridTool = {
     + 'Rectangles square to the drawing only. Do not use to add a room outside the walls (grid_add_room). It replaces the plan file unless out is given. Units are metres.',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The room to split.', examples: ['bed2'] },
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'The side of the room the new room takes.', examples: ['east'] },
-    size: { type: 'number', required: true, description: 'The new room\'s inside size across from that side, in metres.', examples: [1.4], minimum: 0.3, maximum: 100 },
+    size: { type: 'number', length: true, required: true, description: 'The new room\'s inside size across from that side, in metres.', examples: [1.4], minimum: 0.3, maximum: 100 },
     new_room: { type: 'string', id: true, required: true, description: 'The new room\'s id.', examples: ['bath2'] },
     new_name: NAME('The new room\'s name.', 'Bathroom 2', true),
     new_use: USE('The new room\'s use.'),
     name: NAME('The room\'s own new name, if it changes.', 'Study'),
     use: USE('The room\'s own new use, if it changes.'),
     wall: { type: 'string', id: true, description: 'An id for the new wall. Made from the new room\'s when left out.', examples: ['study-east'] },
-    thickness: { type: 'number', description: 'The new wall\'s thickness, in metres. 0.1 when left out.', examples: [0.1], minimum: 0.03, maximum: 1 },
-    door_width: { type: 'number', description: 'The door in the new wall, in metres; 0 for none. 0.8 when left out.', examples: [0.7, 0], minimum: 0, maximum: 5 },
+    thickness: { type: 'number', length: true, description: 'The new wall\'s thickness, in metres. 0.1 when left out.', examples: [0.1], minimum: 0.03, maximum: 1 },
+    door_width: { type: 'number', length: true, description: 'The door in the new wall, in metres; 0 for none. 0.8 when left out.', examples: [0.7, 0], minimum: 0, maximum: 5 },
     door_from: { type: 'string', enum: DIRECTIONS, description: 'Which end of the new wall the door is measured from: a side of the room.', examples: ['south'] },
-    door_distance: { type: 'number', description: 'Metres from that side\'s inside face to the door\'s nearer edge.', examples: [1.35], minimum: 0, maximum: 100 },
+    door_distance: { type: 'number', length: true, description: 'Metres from that side\'s inside face to the door\'s nearer edge.', examples: [1.35], minimum: 0, maximum: 100 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
@@ -101,19 +102,20 @@ const addRoomTool: GridTool = {
     + 'Sizes are inside sizes unless size is centre (to the walls\' centre lines). Grid has no sliding or folding door: the door is drawn with no swing. Do not use to make an existing room bigger (grid_move_room_side) or to divide one (grid_split_room). It replaces the plan file unless out is given. Units are metres.',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The new room\'s id.', examples: ['extension'] },
     name: NAME('The new room\'s name.', 'Garden room', true),
     use: USE('The new room\'s use.'),
     against: { type: 'string', id: true, required: true, description: 'The room it is built against.', examples: ['living'] },
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'Which side of that room: north is the top of the drawing.', examples: ['south'] },
-    width: { type: 'number', required: true, description: 'Its size along that side, in metres.', examples: [3], minimum: 0.5, maximum: 100 },
-    depth: { type: 'number', required: true, description: 'Its size out from that side, in metres.', examples: [4], minimum: 0.5, maximum: 100 },
+    width: { type: 'number', length: true, required: true, description: 'Its size along that side, in metres.', examples: [3], minimum: 0.5, maximum: 100 },
+    depth: { type: 'number', length: true, required: true, description: 'Its size out from that side, in metres.', examples: [4], minimum: 0.5, maximum: 100 },
     size: { type: 'string', enum: SIZE_BASES, description: 'inside (the default) or centre: what width and depth measure to.', examples: ['inside', 'centre'] },
     from: { type: 'string', enum: DIRECTIONS, description: 'Its place along the side: which side of the room it is built against it is measured from. Centred when left out.', examples: ['west'] },
-    distance: { type: 'number', description: 'Metres from that side\'s inside face to the new room\'s inside face.', examples: [0.8], minimum: 0, maximum: 100 },
+    distance: { type: 'number', length: true, description: 'Metres from that side\'s inside face to the new room\'s inside face.', examples: [0.8], minimum: 0, maximum: 100 },
     in_the_way: { type: 'string', enum: IN_THE_WAY, description: 'What happens to doors and windows in the stretch of wall it covers: remove, or keep them between the two rooms.', examples: ['remove'] },
-    opening_width: { type: 'number', description: 'A doorless opening between the two rooms, centred, in metres.', examples: [2.4], minimum: 0, maximum: 50 },
-    door_width: { type: 'number', description: 'A door in the far side, to the outside, centred, in metres.', examples: [2.2], minimum: 0, maximum: 50 },
+    opening_width: { type: 'number', length: true, description: 'A doorless opening between the two rooms, centred, in metres.', examples: [2.4], minimum: 0, maximum: 50 },
+    door_width: { type: 'number', length: true, description: 'A door in the far side, to the outside, centred, in metres.', examples: [2.2], minimum: 0, maximum: 50 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
@@ -149,8 +151,9 @@ const stretchTool: GridTool = {
     + 'Do not use for one room (grid_move_room_side). It replaces the plan file unless out is given. Units are metres.',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'Which way it grows: north is the top of the drawing.', examples: ['east'] },
-    by: { type: 'number', required: true, description: 'Metres to grow; negative to shrink.', examples: [0.3, -0.2], minimum: -50, maximum: 50 },
+    by: { type: 'number', length: true, required: true, description: 'Metres to grow; negative to shrink.', examples: [0.3, -0.2], minimum: -50, maximum: 50 },
     through: { type: 'string', id: true, description: 'A room the line runs through, across its middle: it and the rooms in line with it grow.', examples: ['living'] },
     floor: { type: 'string', id: true, description: 'A floor id from the plan\'s "floors": stretch that floor only. Every floor when left out.', examples: ['ground'] },
     out: OUT_ARG,

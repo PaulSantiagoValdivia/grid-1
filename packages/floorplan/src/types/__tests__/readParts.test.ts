@@ -86,13 +86,28 @@ describe('readPlanParts (MSG-6)', () => {
     expect(result.plan.openings.find((o) => o.id === 'd_hk')?.hinge).toBeUndefined()
   })
 
-  it('reads a unit in other capitals as metres, and any other unit in metres, saying so', () => {
+  it('reads a unit in other capitals as metres, and a file in millimetres in millimetres, saying so (WRT-7)', () => {
     const upper = file()
     upper.units = 'M'
     expect(read(upper).faults).toMatchObject([{ kind: 'read-as-meant', part: null, path: ['units'], read: '"m"' }])
     const mm = file()
     mm.units = 'mm'
-    expect(read(mm).faults).toMatchObject([{ kind: 'value-left-out', part: null, path: ['units'], found: 'the text "mm"', used: '"m"' }])
+    const wall = mm.walls[0] as { thickness: number }
+    wall.thickness = wall.thickness * 1000
+    for (const w of mm.walls as Array<{ start: number[]; end: number[]; height?: number; thickness: number }>) {
+      w.start = w.start.map((v) => v * 1000)
+      w.end = w.end.map((v) => v * 1000)
+      if (w !== wall) w.thickness *= 1000
+      if (w.height !== undefined) w.height *= 1000
+    }
+    for (const o of mm.openings as Array<Record<string, number>>) for (const k of ['offset', 'width', 'sill', 'height']) if (typeof o[k] === 'number') o[k] *= 1000
+    const result = read(mm)
+    expect(result.faults).toMatchObject([{ kind: 'read-as-meant', part: null, path: ['units'], read: '"m", every length read in millimetres and converted to metres' }])
+    expect(result.plan!.walls).toEqual(read(file()).plan!.walls)
+    // A unit Grid has no word for keeps the default, metres, as before.
+    const furlongs = file()
+    furlongs.units = 'furlong'
+    expect(read(furlongs).faults).toMatchObject([{ kind: 'value-left-out', part: null, path: ['units'], used: '"m"' }])
   })
 
   it('names a wall with no id by its place, and leaves out the rooms on it with the reason', () => {

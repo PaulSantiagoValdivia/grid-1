@@ -18,6 +18,7 @@
 import type { Dimension, PlanOpening, Rect, Vec2 } from '@ongrid/floorplan/geometry'
 import { areaText, doorSwing, metresText, poleOfInaccessibility, rectOf, rectTouchesPolygon, spotsInside, tolerance } from '@ongrid/floorplan/geometry'
 import { TEXT_PX } from '../picture/look'
+import { showArea, showLength, type Display } from '@ongrid/floorplan/types/units'
 import type { DoorHanding } from './doorHanding'
 
 export interface Box {
@@ -58,6 +59,8 @@ export interface LabelStyle {
   readonly numbered?: boolean
   /** How many decimals the area keeps: 0, 1 or 2 (the default). */
   readonly areaDecimals?: 0 | 1 | 2
+  /** WRT-7: the person's units and decimal mark for areas and dimensions. Metres when left out. */
+  readonly display?: Display
   /**
    * The check view (VEW-2): each room's id after its name, in brackets, and each door's and
    * window's id beside it, as the plan file holds them, so a picture and the text that comes
@@ -66,13 +69,43 @@ export interface LabelStyle {
   readonly ids?: boolean
 }
 
-/** A room's area as its tag prints it, rounded the core's one way (ARE-7). */
+/**
+ * WRT-7: the person's display for the drawing being made, or null for metres. `planScene` sets
+ * it for the one drawing it makes and puts it back, so every label and dimension of that
+ * drawing, and the boxes placed round them, are written one way.
+ */
+let drawingDisplay: Display | null = null
+
+export function withDisplay<T>(display: Display | undefined, draw: () => T): T {
+  const before = drawingDisplay
+  drawingDisplay = display === undefined || (display.length === 'm' && display.area === 'm2' && display.decimal === 'point' && display.precision === undefined) ? null : display
+  try {
+    return draw()
+  } finally {
+    drawingDisplay = before
+  }
+}
+
+/** A room's area as its tag prints it, rounded the core's one way (ARE-7), in the drawing's display. */
 export function formatArea(area: number, decimals: 0 | 1 | 2 = 2): string {
+  if (drawingDisplay !== null) return showArea(area, drawingDisplay, drawingDisplay.area === 'ft2' ? Math.min(decimals, 1) : decimals)
   return `${areaText(area, decimals)} m²`
 }
 
-/** A dimension's number as it is drawn: metres to the millimetre, then to the centimetre (ARE-7). */
+/** An area figure without its unit, for "before → after" tags, in the drawing's display. */
+export function areaNumber(area: number, decimals: 0 | 1 | 2 = 2): string {
+  if (drawingDisplay !== null) return formatArea(area, decimals).replace(/ (m²|sq ft)$/, '')
+  return areaText(area, decimals)
+}
+
+/** The unit an area tag ends with. */
+export function areaUnit(): string {
+  return drawingDisplay?.area === 'ft2' ? 'sq ft' : 'm²'
+}
+
+/** A dimension's number as it is drawn: metres to the millimetre, then to the centimetre (ARE-7); else in the drawing's display, as 12'-6" or 2860. */
 export function dimensionText(value: number): string {
+  if (drawingDisplay !== null) return showLength(value, drawingDisplay, { unit: false })
   return metresText(value)
 }
 

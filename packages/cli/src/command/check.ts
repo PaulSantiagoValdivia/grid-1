@@ -11,6 +11,7 @@ import {
   buildingKindsText,
   checkLocalRules,
   coverageOnFloor,
+  figureUsedText,
   GENERAL_GUIDANCE_LABEL,
   inspectPlan,
   problemsIn,
@@ -67,6 +68,13 @@ const COUNTRY = /^[A-Za-z]{2}$/
 
 /** What no findings means, said wherever a check reports none. */
 export const NOTHING_FOUND = 'That only means these checks found nothing, not that the plan meets any rule.'
+/** MSG-3: what a report says when no check looked at anything. */
+export const NOTHING_CHECKED = 'Nothing was checked for this plan: no check found a floor, room or door to look at.'
+
+/** MSG-3: a check that looked at nothing, said as such. */
+export function nothingCheckedText(title: string, looksAt: CheckCoverage['looksAt']): string {
+  return `Nothing was checked for "${title}": it looked at no ${PARTS[looksAt][1]}`
+}
 
 /** The floor each wall, room and opening is on. */
 function floorsById(plan: FloorPlan): Map<string, string> {
@@ -183,7 +191,9 @@ export function checkText(result: CheckResult, floorCount: number): string {
   if (report.lookupNotice) lines.push(report.lookupNotice)
   if (result.floor !== undefined) lines.push(`Floor ${result.floor} only.`)
 
-  lines.push(...section('Checks run', report.rules.map((rule) => `${rule.title} (${rule.source.label})`)))
+  // MSG-3: an empty list is said in words, never left as a heading over nothing.
+  if (report.rules.length === 0) lines.push('', `Checks run: none. ${NOTHING_CHECKED}`)
+  else lines.push(...section('Checks run', report.rules.map((rule) => `${rule.title} (${rule.source.label})`)))
 
   // One list, one count (MSG-1): the drawing's problems, the door sweeps, the findings and what
   // was not checked, each with its code, what was found and needed, and the fix.
@@ -211,12 +221,8 @@ export function checkText(result: CheckResult, floorCount: number): string {
   lines.push(...coverageText(result))
 
   if (report.figures.length > 0) {
-    lines.push(...section('Figures used', report.figures.map((figure) => {
-      const value = `${figure.key} ${figure.value} ${figure.unit}`
-      if (figure.origin === 'lookup') return `${value}, looked up, status ${figure.status}, read for ${buildingKindsText([figure.readFor])}${figure.source ? `, ${figure.source.url}` : ''}`
-      const cited = figure.citations.map((c) => `${c.document} ${c.edition} ${c.clause}`).join('; ')
-      return `${value}, ${figure.jurisdiction}, ${cited}, read ${figure.readOn}, status ${figure.status}, read for ${buildingKindsText([figure.readFor])}`
-    })))
+    // MSG-3: each as the figure used here, with its basis and its status.
+    lines.push(...section('Figures used', report.figures.map(figureUsedText)))
   }
 
   lines.push(...section('What these checks never look at', report.limits))
@@ -269,8 +275,8 @@ export function coverageText(result: CheckResult): string[] {
   const several = new Set(coverage.flatMap((check) => [...check.lookedAt, ...check.skipped].map((group) => group.floor))).size > 1
   const lines = ['', `Looked at by at least one check: ${summary}.`, `What each check looked at (${coverage.length}):`]
   for (const check of coverage) {
-    const looked = check.lookedAtCount === 0 ? `looked at no ${PARTS[check.looksAt][1]}` : `looked at ${partsText(check.lookedAtCount, check.looksAt)}`
-    lines.push(`  - ${check.title}: ${looked}; ${check.findings} finding${check.findings === 1 ? '' : 's'}${readForText(check)}.`)
+    if (check.lookedAtCount === 0) lines.push(`  - ${nothingCheckedText(check.title, check.looksAt)}${readForText(check)}.`)
+    else lines.push(`  - ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}; ${check.findings} finding${check.findings === 1 ? '' : 's'}${readForText(check)}.`)
     if (check.lookedAtCount > 0 && check.lookedAtCount <= 8) lines.push(`      looked at: ${idsText(check.lookedAt.flatMap((group) => group.ids))}`)
     for (const skip of check.skipped) {
       const where = several && skip.floor !== '' ? ` on ${JSON.stringify(skip.floor)}` : ''

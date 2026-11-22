@@ -66,6 +66,8 @@ function editHelp(): string {
 /** An option's text as the argument its tool takes. */
 function valueOf(name: string, spec: ArgSpec, text: string | true): unknown {
   if (spec.type === 'boolean') return true
+  // WRT-7: a length goes to the tool as typed, and its reader takes the unit or the decimal comma.
+  if (spec.type === 'number' && spec.length === true && typeof text === 'string') return text
   if (spec.type === 'number') {
     const value = Number(text)
     if (typeof text !== 'string' || text.trim() === '' || !Number.isFinite(value)) throw new UsageError(`${optionOf(name)} takes a number, in metres: for example ${spec.examples[0]}.`)
