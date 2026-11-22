@@ -169,7 +169,12 @@ function checkWritable(project: Project, file: string): void {
 
 /** Says, on standard error, which parts a picture or an export leaves out. */
 function warnLeftOut(io: CommandIo, loaded: LoadedPlan): void {
-  const ids = [...loaded.broken].sort()
+  // MSG-6: a part the reader left out is named by its id, or its place when it has none.
+  const faults = loaded.faults ?? []
+  const read = faults.flatMap((f) => (f.kind === 'read-as-meant' || f.kind === 'value-left-out' ? [] : [f.part.id ?? `${f.part.list}[${f.part.index}]`]))
+  const ids = [...new Set([...loaded.broken, ...read])].sort()
+  const otherwise = faults.length - read.length
+  if (otherwise > 0) io.stderr(`Read ${otherwise} value${otherwise === 1 ? '' : 's'} otherwise than written. grid check says which.\n`)
   if (ids.length === 0) return
   const list = ids.length > 5 ? `${ids.slice(0, 5).join(', ')} and ${ids.length - 5} more` : ids.join(', ')
   io.stderr(`Left out ${ids.length} part${ids.length === 1 ? '' : 's'} that can't be drawn: ${list}. grid check says why.\n`)
@@ -281,7 +286,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const out = textOf(parsed, '--out')
     const ids = checkTidyRequest({ apply: textOf(parsed, '--apply'), out })
     const project = openProject(projectOption, io.cwd)
-    const loaded = loadPlan(project, planFile)
+    // Read whole: tidy writes the file back, and must not drop a part the reader would leave out.
+    const loaded = loadPlan(project, planFile, { whole: true })
     if (ids === null) {
       const list = tidyList(loaded)
       io.stdout(json ? `${JSON.stringify(list, null, 2)}\n` : tidyListText(list))

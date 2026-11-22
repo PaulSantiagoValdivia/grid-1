@@ -483,12 +483,21 @@ describe('known failures (expected to fail until fixed)', () => {
     expect(issuesOf(plan).some((i) => i.entity === 'opening' && i.id === 'd')).toBe(true)
   })
 
-  it.fails('MS-9 two ids that differ only by a trailing space are reported', () => {
-    const { walls, room } = outline(RECT)
-    const plan = planOf({ walls: [...walls, { ...walls[0]!, id: 'w1 ', start: [10, 10], end: [12, 10] }], rooms: [room] })
-    expect(issuesOf(plan).length).toBeGreaterThan(0)
-  })
+})
 
+/** Known failures from the lab (entry Z-4) that MSG-6 fixed. */
+describe('lab failures fixed by MSG-6', () => {
+  type P = [number, number]
+  const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
+
+  // The later of the two is refused and named; the first keeps its id, so the room on it is drawn.
+  it('MS-9 two ids that differ only by a trailing space are reported', () => {
+    const { walls, room } = outline(RECT)
+    const plan = parseFloorPlan({ walls: [...walls, { ...walls[0]!, id: 'w1 ', start: [10, 10], end: [12, 10] }], rooms: [room] })
+    const result = validatePlan(plan)
+    expect(result.issues.filter((i) => i.severity === 'error').map((i) => [i.code, i.entity, i.id])).toEqual([['plan/similar-id', 'wall', 'w1 ']])
+    expect([...result.broken]).toEqual(['w1 '])
+  })
 })
 
 /** Known failures from the lab (entry Z-4) that LVL-1 fixed. */

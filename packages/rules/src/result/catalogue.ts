@@ -40,6 +40,16 @@ export interface Subject {
   readonly place?: string
   /** On a refusal: what the format wants there, in words. */
   readonly wants?: string
+  /** MSG-6, on a value read as meant: what it was read as. */
+  readonly read?: string
+  /** MSG-6, on a value left out: the default used, or null when it is read as not stated. */
+  readonly used?: string | null
+  /** MSG-6, on a part left out for its id: the part that keeps the id, as a line names it. */
+  readonly kept?: string
+  /** MSG-6: an id no part has, to rename a part to. */
+  readonly rename?: string
+  /** MSG-6, on an unfinished merge: what each side adds or changes, in words. */
+  readonly sides?: string
 }
 
 export interface CodeEntry {
@@ -117,6 +127,50 @@ export const CODES = {
     found: (s) => `${s.place}: ${s.said}`,
     needed: (s) => `${s.wants} at ${s.place}`,
     fix: (s) => `Correct ${s.place}.`
+  },
+
+  'plan/unfinished-merge': {
+    says: fixed('The plan holds an unfinished git merge'),
+    found: (s) => s.said,
+    needed: fixed('one plan, with the merge finished'),
+    fix: (s) =>
+      `Finish the merge: ${s.sides ? `${s.sides}. Keep` : 'keep'} the side that is meant, or both, take out the lines git marks with <<<<<<<, ======= and >>>>>>>, and read the plan again.`
+  },
+
+  // --- Reading part by part (MSG-6): the plan is read, and the rest is checked -----------------
+  'plan/part-left-out': {
+    says: (s) => `${s.label} is left out: a value it needs cannot be read`,
+    found: (s) => `${s.said} at ${s.place}`,
+    needed: (s) => `${s.wants} at ${s.place}`,
+    fix: (s) => `Give ${s.place} ${s.wants}. Until then the part is left out of every view, measure and export, and the rest of the plan is checked without it.`
+  },
+  'plan/value-left-out': {
+    says: (s) => `${s.label} has a value the format cannot read, and is read without it`,
+    found: (s) => `${s.said} at ${s.place}, so ${s.used ? `the default, ${s.used}, is used` : 'it is read as not stated'}`,
+    needed: (s) => `${s.wants} at ${s.place}`,
+    fix: (s) => `Write ${s.place} as ${s.wants}, or leave it out${s.used ? ` to keep the default, ${s.used}` : ''}.`
+  },
+  'plan/read-as-meant': {
+    says: (s) => `${s.label} has a value written another way, and it is read as meant`,
+    found: (s) => `${s.said} at ${s.place}, read as ${s.read}`,
+    needed: (s) => `${s.wants} at ${s.place}`,
+    fix: (s) => `Write ${s.place} as ${s.read}, so the plan says what is read.`
+  },
+  'plan/blank-id': {
+    says: (s) => `${s.label} is left out: its id is blank`,
+    needed: fixed('an id of its own on every part, with more than spaces in it'),
+    fix: fixed('Give it an id no other part has, and use that id where the plan points at it.')
+  },
+  'plan/id-clash': {
+    says: (s) => `${s.label} is left out: another part has the same id`,
+    found: (s) => `the id of ${s.kept} again at ${s.place}`,
+    needed: fixed('every id on one part only, across the whole plan'),
+    fix: (s) => `Rename it${s.rename ? `, for example to ${s.rename}` : ''}. ${s.kept} keeps its id, and what points at that id points at it.`
+  },
+  'plan/similar-id': {
+    says: (s) => `${s.label} is left out: its id differs from another part's only in capitals or spaces`,
+    needed: fixed('ids that differ in more than capitals or spaces'),
+    fix: fixed('If it is the other part, use its id letter for letter; if it is a part of its own, rename it. The other part keeps its id.')
   },
 
   // --- Grid itself ----------------------------------------------------------------------------

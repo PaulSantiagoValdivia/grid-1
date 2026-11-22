@@ -1777,6 +1777,19 @@ class Compiler {
       for (const id of ids) count.set(id, (count.get(id) ?? 0) + 1)
     }
     const idOf = (fl: FloorDraft, id: string): string => ((count.get(id) ?? 0) > 1 ? `${fl.id}-${id}` : id)
+    // MSG-6 (lab AB-7): an id written once is kept as written; one Grid had to change is named
+    // with what it is now, so the next call can use it.
+    const changed = [...count].filter(([id, n]) => id !== '' && n > 1).map(([id]) => {
+      const on = this.floors.filter((fl) => fl.rooms.has(id) || fl.openings.some((o) => o.words[1] === id))
+      return `'${id}' is ${on.map((fl) => `'${idOf(fl, id)}' on floor '${fl.id}'`).join(' and ')}`
+    })
+    if (changed.length > 0) {
+      this.warn(
+        'rooms/id-changed',
+        null,
+        `Ids are unique across the whole plan, and ${changed.length === 1 ? 'this one was' : 'these were'} written on more than one floor, so each takes its floor's id in front: ${changed.join('; ')}. Every other id is kept as written. Use these ids in later calls.`
+      )
+    }
     const trueAreas = new Map<string, number>()
     for (const fl of this.floors) {
       const wallPrefix = multi ? `${fl.id}-` : ''
