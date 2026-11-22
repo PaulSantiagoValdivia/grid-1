@@ -350,14 +350,15 @@ export interface Passage {
  * (`use/passage-width`), keeping clear of its walls, its holes and the fixtures: the floor is
  * tried on a grid of points `useRaster` apart (coarser for a room that would take more than
  * `useRasterCells` points), and the way is the one whose narrowest point is widest. A mouth is a
- * doorway's edge on the room's face (`openingMouth`), a dividing line's stretch (`lineMouth`), or
- * a point, such as the room's widest point. The room's outline is open along the two mouths.
+ * doorway's edge on the room's face (`openingMouth`), a dividing line's stretch (`lineMouth`), a
+ * point, such as the room's widest point (`pointMouth`), or null for anywhere in the room, where a
+ * way starts or ends for a person already in it. The room's outline is open along the two mouths.
  * Null when the mouths are not joined by free floor at all.
  */
-export function passageWidth(polygon: readonly Vec2[], holes: Holes, fixtures: readonly Obstacle[], from: Segment, to: Segment): Passage | null {
+export function passageWidth(polygon: readonly Vec2[], holes: Holes, fixtures: readonly Obstacle[], from: Segment | null, to: Segment | null): Passage | null {
   if (polygon.length < 3) return null
   const contact = tolerance('wallContact')
-  const mouths = [from, to].filter(([a, b]) => length(sub(b, a)) > tolerance('noLength'))
+  const mouths = [from, to].filter((mouth): mouth is Segment => mouth !== null && length(sub(mouth[1], mouth[0])) > tolerance('noLength'))
 
   // What a body keeps clear of: the outline less the mouths, the holes, the fixtures.
   const obstacles: { readonly segment: Segment; readonly owner: string | null }[] = []
@@ -413,7 +414,7 @@ export function passageWidth(polygon: readonly Vec2[], holes: Holes, fixtures: r
 
   // Where a body starts and ends: the free points beside each mouth.
   const reach = step * 1.5
-  const beside = (mouth: Segment): Set<number> => new Set(free.filter((i) => distanceToSegment(centre(i), mouth) <= reach))
+  const beside = (mouth: Segment | null): Set<number> => new Set(mouth === null ? free : free.filter((i) => distanceToSegment(centre(i), mouth) <= reach))
   const starts = beside(from)
   const ends = beside(to)
   if (starts.size === 0 || ends.size === 0) return null

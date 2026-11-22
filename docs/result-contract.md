@@ -444,6 +444,28 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: use indicators round the fixtures (CNT-13)
+
+- A fixture is an obstacle to a door's swing: `opening/door-hits-item` (worth a look) names the
+  door, has the fixtures' ids in `also`, and words each by its label, kind and id:
+  `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens`. A wall in the way is still
+  `opening/door-blocked`.
+- New codes, worth a look, about a fixture (`thing.kind` `item`) with the opening's id in
+  `also`: `item/blocks-doorway`, a fixture within `useApproachDepth` (0.3 m) in front of a
+  doorway's hole, and `item/blocks-window`, one higher than a window's sill in front of it. Each
+  `found` says what was measured, with what depth, and that it is an indicator, not a rule. A
+  plan without fixtures gets none of them.
+- `grid_measure` takes `what=use` (with `room`, and optionally `width`, `diameter` and the new
+  `clearance`): `answer.indicators` lists each indicator as `{ code, about, measured, figure:
+  { value, from: "person" | "grid" }, under, at?, detail? }`, with `code` one of
+  `use/turning-space`, `use/doorway-clear-width`, `use/passage-width`, `use/space-by-fixture`
+  and `use/window-blocked`. Each text line starts `Indicator,`.
+- `what=route` takes `width`, a body or a trolley: `answer` holds `through`, `width`, `figure`,
+  `way` (the way it gets through by, or null), `shortest` (the way with the fewest rooms,
+  measured: each room's `width` with `at`, `beside` and `atDoorway`, each step's `clear` width
+  and `narrowedBy`) and `narrower` (what on it is narrower than `width`). Without `width`, the
+  route answer is as before.
+
 ### 2026-11-22: a short report, and notes set aside as seen (MSG-10)
 
 - `grid_check`'s text is short by default: the label, the lines, what each check looked at in
