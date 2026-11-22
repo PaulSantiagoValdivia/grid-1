@@ -2350,6 +2350,8 @@ export const es: Messages = {
   'describe.column.label': '{label}, ',
   'describe.column.in': ', en {room}',
   // CNT-19 (C29): plazas de aparcamiento y rampas.
+  'read.bay.blankNumber': 'está en blanco: deja el número fuera',
+  'read.ramp.tooManyPoints': 'tiene {count} puntos; la línea media de una rampa puede tener como mucho {most}',
   'issue.part.bay': 'La plaza {id}',
   'issue.part.bay.numbered': 'La plaza {number} ({id})',
   'issue.part.ramp': 'La rampa {id}',

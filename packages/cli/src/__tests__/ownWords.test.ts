@@ -88,7 +88,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
   // ARE-14: one more, grid_areas' description of the party walls, free floor and outdoor_rules.
-  'packages/cli/src/mcp/readTools.ts': [316, 'tools'],
+  // CNT-19: one more, grid_takeoff's description of the parking bays and the ramps.
+  'packages/cli/src/mcp/readTools.ts': [317, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -150,7 +151,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
   // CNT-16: +5, what the three column and grid entries decide.
   // SHT-10: five more pieces of the table's own descriptions (sillProjection, and the frame and glass entries).
-  'packages/floorplan/src/geometry/tolerances.ts': [255, 'developer'],
+  // CNT-19: four more, what bayOverlap and rampSlopeDiffers decide.
+  'packages/floorplan/src/geometry/tolerances.ts': [259, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [2, 'developer'],

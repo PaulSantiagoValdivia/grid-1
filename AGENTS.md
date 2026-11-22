@@ -69,6 +69,11 @@ Notes for agents and people changing this repository.
   the floor it takes off that room's area (`roomColumnArea`, read by `roomFloorArea`), the floors it
   rises `through` and its checks. `structuralGrid.ts` works out a named grid's lines (`grids`) and
   the dimensions of their spacing; a grid is drawn only.
+- `packages/floorplan/src/geometry/parking.ts` (CNT-19): parking bays (`bays`, C29), things of
+  their own, never rooms: their footprints, each floor's count by number (`planBayCounts`) and
+  their checks; and ramps (`ramps`) between two floors, laid out as stairs are (`planRamps`): the
+  two levels in metres, the length along the middle line, the slope worked out beside the one the
+  plan states. A ramp opens its upper floor's slab (`envelope.ts`). A swept-path check is not here.
 - `packages/floorplan/src/types/facts.ts` (CNT-9): facts of the person's own, in `properties` on
   walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the

@@ -2127,7 +2127,7 @@ export const StructuralGridSchema = z
  */
 export const BaySchema = z.object({
   id: text('id').pipe(z.string().min(1)),
-  number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
+  number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: english(said('read.bay.blankNumber')) })).optional(),
   at: Vec2,
   width: finite().positive(),
   length: finite().positive(),
@@ -2158,7 +2158,7 @@ export const RampSchema = z.preprocess(withRunFromEnds, z.object({
       if (list.length <= RAMP_RUN_MAX) return
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `has ${list.length.toLocaleString('en-US')} points; a ramp's middle line may have at most ${RAMP_RUN_MAX}`,
+        message: english(said('read.ramp.tooManyPoints', { count: list.length, most: RAMP_RUN_MAX })),
       })
     }),
   slope: finite().positive().optional(),

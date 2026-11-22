@@ -2336,6 +2336,8 @@ export const en = {
   'describe.column.label': '{label}, ',
   'describe.column.in': ', in {room}',
   // CNT-19 (C29): parking bays and ramps.
+  'read.bay.blankNumber': 'is blank: leave the number out instead',
+  'read.ramp.tooManyPoints': 'has {count} points; a ramp\'s middle line may have at most {most}',
   'issue.part.bay': 'Bay {id}',
   'issue.part.bay.numbered': 'Bay {number} ({id})',
   'issue.part.ramp': 'Ramp {id}',
