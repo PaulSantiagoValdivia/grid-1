@@ -145,7 +145,7 @@ function collidingWallIds(plan: FloorPlan): ReadonlySet<string> {
  * the collision as `plan/duplicate-id` so it is not silent.
  */
 export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
-  // LVL-5 (C17): a wall through floors stands on each floor it rises through, as its stretch
+  // LVL-5 (C18): a wall through floors stands on each floor it rises through, as its stretch
   // there, with the part of each of its openings that lies in it (`throughFloorParts`).
   if (hasWallsThrough(plan)) {
     const parts = throughFloorParts(plan, floorId)
@@ -238,6 +238,8 @@ export function isFloorSlice(plan: FloorPlan): boolean {
 export function floorHasGeometry(plan: FloorPlan, floorId: string): boolean {
   return (
     plan.walls.some((wall) => wallStandsOn(plan, wall, floorId)) ||
-    plan.rooms.some((room) => floorOf(room) === floorId)
+    plan.rooms.some((room) => floorOf(room) === floorId) ||
+    // BRF-4 (C17): a floor's stated outline is something drawn on it, before any wall.
+    (plan.floors?.some((floor) => floor.id === floorId && floor.outline !== undefined) ?? false)
   )
 }

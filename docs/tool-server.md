@@ -46,7 +46,7 @@ the same facts as data; a view also returns its picture. A length argument is me
 | `grid_mark_start` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside the plan, for `grid_diff` to compare with; or takes one off. At most 5 |
 | `grid_mark_seen` | Sets a note of `grid_check` aside as seen, with the person's reason and the name or role they give, in `plan.seen.json` beside the plan; or takes the mark off (see below) |
 | `grid_write_brief` | Writes the brief beside the plan from the person's words, before the first room: room areas and counts, inside sizes, the footprint, rooms that must or must not touch, and the person's own figures, each with its level, its quote and whether it was given or assumed, and what is still open; answers with each line met or missed ([brief.md](brief.md)) |
-| `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
+| `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out; with `scan`, from a phone room scan, as `grid write --scan`, with what was assumed and the scan kept beside the plan ([commands.md](commands.md#a-plan-from-a-phone-room-scan-grid-write---scan)) |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom (`how`), or turns it a quarter or half round (`turn`: 90, 180, 270 or -90 degrees, counter-clockwise as Grid draws it) |
@@ -460,6 +460,36 @@ The data holds `boundary` (`area`, `problem`, and each edge's `edge`, `from`, `t
 `faces` and `things`. `grid_check` gives the same shortfall as a finding,
 `plan/setback-short`. The geometry is `siteMeasures` in `@ongrid/floorplan`
 (`src/geometry/site.ts`).
+
+### How much fits: massing, storeys and the person's site limits
+
+Before any wall exists, a floor may state its outline (BRF-4,
+[plan-file.md](plan-file.md#a-floor-outline-before-the-walls)), and the answer measures it as it
+would the walls: after the plot's lines come the storeys and each floor's gross external area,
+massing marked as such, then "Site limits": the person's own `plot_coverage`, `floor_area_ratio`,
+`building_height` and `parking_per_home` from the brief beside the plan
+([brief.md](brief.md#the-persons-own-figures)), and the plan's set-backs edge by edge. Each says
+what is used, the limit and met or not met, and how it was measured, naming the area rule: Grid
+brings no limit, proposes no layout and optimises nothing. FD-1's massing, two floors of the
+outline (3, 5), (15.762, 5), (18.482, 22), (3, 22) on the lab's 500 m² plot:
+
+```text
+Storeys: 2 storeys at or above the ground floor, none below it; counted by level, from the floors that hold an outline or walls that close one.
+  "Ground floor": gross external 240.07 m², massing: its outline, no walls yet.
+  "First floor": gross external 240.07 m², massing: its outline, no walls yet.
+Site limits, the person's own figures: theirs, not from any code or standard.
+  Plot coverage: used 48.0%, your limit at most 40%: not met. Measured as the building seen from above, every floor at or above the ground floor, inside the plot's boundary, over the plot's area: 240.07 m² over 500.00 m².
+  Floor area ratio: used 0.96, your limit at most 1: met. Measured as Gross external area (…), of every floor at or above the ground floor, over the plot's area: 480.15 m² over 500.00 m².
+  Building height: used 6.50 m, your limit at most 9.00 m: met. …
+  Parking per home: used 0.75 spaces per home, your limit at least 1 space per home: not met. …
+```
+
+The data adds `storeys` (`above`, `below`, `storeys`, `empty`), `limits` (each `limit`, `edge`
+for a set-back, `state` `met`, `missed` or `not-measured`, `used`, `allowed`, `most`, `unit`,
+`rule`, `why`, `assumed`, `source`) and `brief`. The same limits are lines of the brief in every
+change's answer. `grid_areas` gives the storeys too (`storeys`, and a line when a floor is
+massing). The geometry is `planStoreys` and `buildingHeight` in `@ongrid/floorplan`
+(`src/geometry/storeys.ts`); the limits are `siteLimits` (`packages/cli/src/quantities/limits.ts`).
 
 ## A note set aside as seen
 

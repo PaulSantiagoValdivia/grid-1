@@ -450,7 +450,7 @@ export const CODES = {
     needed: fixed('a height above 0, or a virtual wall for a line with no substance'),
     fix: fixed('Give it its height, or mark it virtual.')
   },
-  // LVL-5 (C17): a wall through floors that names no floor above its own.
+  // LVL-5 (C18): a wall through floors that names no floor above its own.
   'wall/through-floor': {
     says: (s) => `${s.label} rises through a floor that is not above its own, so it stands on its own floor only`,
     needed: fixed('through naming a floor above the wall\'s own, from the plan\'s floors'),
@@ -902,6 +902,11 @@ export const CODES = {
     says: (s) => `${s.label} does not line up with the floor below it`,
     needed: fixed('a floor\'s outline over the floor below it, or marked overhang "meant" where it overhangs or sits back on purpose'),
     fix: fixed('If it is meant, mark the floor with overhang "meant". If not, move its outside walls over the floor below, or let a wall both floors share rise through them (through).')
+  },
+  'floor/past-outline': {
+    says: (s) => `${s.label}'s walls reach past the outline it states`,
+    needed: fixed('walls inside the outline the floor states, the outside face of the floor'),
+    fix: fixed("If the walls are where the building is, widen the floor's outline to their outside face; if the outline is, move the walls inside it. Until then the slab, the roof and the gross area take in both.")
   },
   'floor/empty-top': {
     says: (s) => `${s.label} is the top floor and has nothing drawn on it`,

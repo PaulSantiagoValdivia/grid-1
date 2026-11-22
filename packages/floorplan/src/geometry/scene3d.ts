@@ -413,7 +413,7 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
       continue
     }
 
-    // LVL-5 (C17): a wall through floors is raised once, whole, from its own floor, with its
+    // LVL-5 (C18): a wall through floors is raised once, whole, from its own floor, with its
     // openings as stated; on the floors above it is there already.
     const whole = wholeWall(wall, openingsOf(index, wall.id).filter((o) => !broken.has(o.id)))
     if (whole === null) continue

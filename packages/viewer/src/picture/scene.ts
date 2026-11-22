@@ -256,6 +256,8 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     stairAbove: { fill: 'none', stroke: ink, 'stroke-width': width('stair'), 'stroke-dasharray': dashes('above') } as Attrs,
     stairArrow: { fill: ink, stroke: 'none' } as Attrs,
     above: { fill: 'none', stroke: ink, 'stroke-width': width('above'), 'stroke-dasharray': dashes('above') } as Attrs,
+    // BRF-4: a floor's stated outline, solid, at the weight of the floor above's line.
+    outline: { fill: 'none', stroke: ink, 'stroke-width': width('above') } as Attrs,
     fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
     fixtureLine: { fill: 'none', stroke: ink, 'stroke-width': width('fixture'), 'stroke-linecap': 'butt' } as Attrs,
     doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
@@ -656,6 +658,13 @@ function planSceneIn(input: SceneInput): SvgNode[] {
         `lift:${lift.id}`
       )
     )
+  }
+
+  // BRF-4 (C17): the outline the floor states, a solid line round it: the massing before any
+  // wall, under the walls once they are drawn. Drawing, not a target.
+  const floorRing = drawing.outline
+  if (floorRing !== undefined && floorRing.length >= 3) {
+    out.push(el('path', { 'data-part': 'floor-outline', d: virtualPath([...floorRing, floorRing[0]!]), ...paint.outline, 'pointer-events': 'none', 'aria-hidden': 'true' }, [], 'floor-outline'))
   }
 
   // SHT-11: the outline of the floor above, dashed, over the floors and under the walls, so a

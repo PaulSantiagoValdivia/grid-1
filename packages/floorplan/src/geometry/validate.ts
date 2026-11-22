@@ -391,7 +391,7 @@ function validateOpening(
   // A dividing line stands no height (0 unless it says otherwise), so a gap in it cannot be
   // too tall for it.
   const head = opening.sill + opening.height
-  // LVL-5 (C17): in a wall through floors an opening may reach as high as the wall rises, from its
+  // LVL-5 (C18): in a wall through floors an opening may reach as high as the wall rises, from its
   // own floor's level. The roof over its top floor is checked on that floor's slice.
   const through = wall.through !== undefined && wall.through !== floorOf(wall)
   const rise = through ? wallRise(index.plan, wall) : wall.height
@@ -465,7 +465,7 @@ function validateOverlaps(index: PlanIndex, broken: Set<string>, issues: Issue[]
     const spans = openingsOf(index, wall.id)
       .filter((opening) => !broken.has(opening.id))
       .map(openingSpan)
-    // LVL-5 (C17): a wall through floors holds a window on each floor, one over the other: two
+    // LVL-5 (C18): a wall through floors holds a window on each floor, one over the other: two
     // openings overlap there only where they share a stretch of the wall at the same height.
     if (wall.through !== undefined && wall.through !== floorOf(wall)) {
       const kept: typeof spans = []
@@ -688,7 +688,7 @@ function validateFloors(
       // the real fault and has marked the id broken.
       if (duplicated.has(wallId)) return false
       const wall = index.wallsById.get(wallId)
-      // LVL-5 (C17): a wall through floors stands on each floor it rises through.
+      // LVL-5 (C18): a wall through floors stands on each floor it rises through.
       return wall !== undefined && !wallStandsOn(plan, wall, floor)
     })
     if (strays.length === 0) continue
@@ -862,7 +862,22 @@ function traceItemRooms(plan: FloorPlan, spaces: readonly FloorSpaces[], broken:
 }
 
 function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): void {
-  for (const piece of result.unclaimed) {
+  // BRF-4 (C17): a floor with an outline and no walls is massing: all of it is floor no room
+  // claims yet, and saying so would be the whole floor, every time. Its areas say it is massing.
+  const massing = !plan.walls.some((wall) => floorOf(wall) === result.floor && !broken.has(wall.id))
+  if (result.pastOutline !== null && result.pastOutline >= tolerance('areaReported')) {
+    issues.push(
+      issue(
+        'floor',
+        result.floor,
+        'floor/past-outline',
+        `Floor ${quoted(result.floor)}'s walls reach ${result.pastOutline.toFixed(2)} m² past the outline it states. ` +
+          'The slab, the roof and the gross area take in both, so the floor is larger than its outline.',
+        'warning'
+      )
+    )
+  }
+  for (const piece of massing ? [] : result.unclaimed) {
     if (refusedRoomFor(result.floor, piece, plan, broken)) continue
     const found = issue('floor', result.floor, 'floor/unclaimed', unclaimedMessage(result.floor, piece), 'warning')
     issues.push(followOn(found, unclaimedCause(piece, plan, broken, leftOut)))

@@ -151,7 +151,19 @@
  *   own work, are read into the plan as existing and are never written back to it; the plan's own
  *   parts that state no phase are new. Both optional and never defaulted (version 1).
  *
- * C17 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
+ * C17 · Floor outlines (BRF-4, lab FD-1)
+ *   A floor MAY state its `outline`: its outside face, its corners in plan metres in order round
+ *   it, either way round, as `site.boundary` is written (C13). It is the one shape a floor's slab
+ *   covers, its roof is cut from and its gross external area is measured to: joined with what
+ *   the floor's walls enclose, so a floor with walls and no outline reads exactly as before. A
+ *   floor with an outline and no walls is massing: its level, height (C5) and kind of building
+ *   (`building`, CNT-5) give its gross area and its storey, and nothing inside it is checked.
+ *   Floor inside the outline that no room claims is floor no room claims. A floor MAY also state
+ *   how many `homes` it holds and how many `parking` spaces: the agent's proposal, which Grid
+ *   counts against the person's own limits and never brings a figure for. All three are optional
+ *   and never defaulted (version 1).
+ *
+ * C18 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
  *   C5 put every wall on one floor. Reopened: a wall MAY state `through`, the highest floor it rises
  *   through. It stands on its own `floor` and on every floor above it up to that one, in order of
  *   `level`: one wall, shared by those floors, so one edit moves it on all of them, and a room on
@@ -171,6 +183,7 @@ import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } f
 import { factKey } from './facts'
 import { placeProblem } from './places'
 import { roofFrame, roofTop } from './roofFrame'
+import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
 export * from './facts'
@@ -355,7 +368,7 @@ export const RoofSchema = z
   })
 
 /**
- * LVL-5 (C17): the one word `overhang` takes, on a floor or on a room used as a stair or a lift:
+ * LVL-5 (C18): the one word `overhang` takes, on a floor or on a room used as a stair or a lift:
  * it does not line up with the floor below on purpose.
  */
 export const OVERHANG_MEANT = ['meant'] as const
@@ -386,11 +399,28 @@ export const FloorSchema = z.object({
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
   building: BuildingTypeSchema.optional(),
-  // LVL-5 (C17): the floor's outline overhangs or sits back from the floor below it on purpose, so
+  // LVL-5 (C18): the floor's outline overhangs or sits back from the floor below it on purpose, so
   // Grid does not say it does not line up. Optional and never defaulted (version 1).
   overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
+  // last point on the first closes it. Joined with what the walls enclose for the slab, the roof
+  // and the gross external area. Optional and never defaulted (version 1).
+  outline: z
+    .array(Vec2)
+    .min(3)
+    .max(BOUNDARY_MAX)
+    .superRefine((points, ctx) => {
+      const open = boundaryEdgeCount(points) === points.length ? points : points.slice(0, -1)
+      const problem = ringProblem(open.map(([x, y]) => ({ x, y })))
+      if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
+    })
+    .optional(),
+  // BRF-4 (C17): how many homes the floor holds, and how many parking spaces: the agent's
+  // proposal, counted against the person's own limits. Optional and never defaulted (version 1).
+  homes: z.number().int().min(0).max(PARTS_MAX).optional(),
+  parking: z.number().int().min(0).max(PARTS_MAX).optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -617,7 +647,7 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
-      // LVL-5 (C17): the highest floor the wall rises through, from its own floor: it is one wall
+      // LVL-5 (C18): the highest floor the wall rises through, from its own floor: it is one wall
       // on each floor between, and its height is measured from this floor's level. Optional and
       // never defaulted: unstated, the wall stands on its own floor only (version 1).
       through: text('id').pipe(z.string().min(1)).optional(),
@@ -846,7 +876,7 @@ export const RoomSchema = z.object({
   // written before ARE-6 reads with no key added (version 1).
   holes: parts(wallList(), 'holes in one room').optional(),
   // C5: unstated means the ground floor. Every wall in `boundary` must stand on this
-  // same floor — a cross-floor boundary is a validation error. LVL-5 (C17): a wall that rises
+  // same floor — a cross-floor boundary is a validation error. LVL-5 (C18): a wall that rises
   // through floors stands on each of them.
   floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
@@ -885,7 +915,7 @@ export const RoomSchema = z.object({
   ceiling: CeilingSchema.optional(),
   // CNT-5: who the room is for (`ROOM_TENURES`). Optional and never defaulted (version 1).
   tenure: RoomTenureSchema.optional(),
-  // LVL-5 (C17): a room used as a stair or a lift that does not lie over the one below on
+  // LVL-5 (C18): a room used as a stair or a lift that does not lie over the one below on
   // purpose, so Grid does not say it is shifted. Optional and never defaulted (version 1).
   overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-5: the firm's own type for the room, as its room data sheets name it ("B2 double
