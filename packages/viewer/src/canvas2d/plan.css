@@ -268,6 +268,13 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* A fixture is a group of paths that carry their own ink (CNT-13): light the paths. */
+.canvas [data-part='fixture'][data-hit='true'] > path {
+  stroke: var(--plan-warning, #b4531a);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
 .canvas [data-part='label'] {
   fill: var(--plan-label, #232320);
   font-family: var(--font-sans);
