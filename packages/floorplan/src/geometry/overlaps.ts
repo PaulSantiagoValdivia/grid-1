@@ -14,7 +14,8 @@
  *
  * A room is compared by its floor as Grid measures it: its outline, less any room marked
  * `inside` that sits in it (`nesting.ts`). A room inside a room is therefore never said to
- * overlap the room it sits in, nor any room further out that holds both.
+ * overlap the room it sits in, nor any room further out that holds both. Nor is a zone (CNT-8,
+ * `zones.ts`) said to overlap its room.
  *
  * Only pairs whose boxes overlap by at least `areaReported` are cut, found by sweeping the
  * rooms in order of their left edge, so a floor of thousands of rooms in a row costs a few
@@ -30,6 +31,7 @@ import { roomNesting, tryRoomPolygon } from './room'
 import type { Vec2 } from './vec2'
 import { TOLERANCES, tolerance } from './tolerances'
 import { sitsWithin } from './nesting'
+import { roomZones } from './zones'
 import type { Box } from './polygons'
 import { boxOfRings, multiArea, pointInside, polygonArea } from './polygons'
 
@@ -147,6 +149,11 @@ export function roomOverlaps(plan: FloorPlan, options: OverlapOptions = {}): Roo
   const index = options.index ?? indexPlan(plan)
   const broken = options.broken ?? new Set<string>()
   const nesting = roomNesting(index)
+  const zones = roomZones(index)
+  const zoneOver = (zone: string, other: string): boolean => {
+    const of = zones.zoneOf.get(zone)
+    return of !== undefined && (of === other || sitsWithin(nesting, other, of))
+  }
 
   const byFloor = new Map<string, Measured[]>()
   plan.rooms.forEach((room, order) => {
@@ -179,6 +186,9 @@ export function roomOverlaps(plan: FloorPlan, options: OverlapOptions = {}): Roo
         const q = rooms[j]!
         if (boxShare(p.box, q.box) < tolerance('areaReported')) continue
         if (sitsWithin(nesting, p.room.id, q.room.id) || sitsWithin(nesting, q.room.id, p.room.id)) continue
+        // A zone lies in its room on purpose (CNT-8), and over what sits inside that room: neither
+        // is counted twice, since a zone is counted in no total. Two zones of one room share no floor.
+        if (zoneOver(p.room.id, q.room.id) || zoneOver(q.room.id, p.room.id)) continue
         if (cuts >= MAX_CUTS) {
           stopped.push(floor)
           break pairs

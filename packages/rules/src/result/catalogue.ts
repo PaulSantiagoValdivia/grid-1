@@ -84,6 +84,18 @@ export interface CodeEntry {
 }
 
 const fixed = (text: string) => (): string => text
+/** How a use reads in a sentence: "a bedroom". */
+const USE_WORDS: Readonly<Record<string, string>> = { bedroom: 'a bedroom', living: 'a living room', dining: 'a dining room' }
+/**
+ * CNT-8: on a finding about a room with zones, the whole room and the use it was checked as,
+ * with the zone it was read from when it is not the room's own. Empty on any other.
+ */
+const wholeRoom = (s: Subject): string => {
+  const use = s.finding?.use
+  if (use === undefined) return ''
+  const as = USE_WORDS[use] ?? `a room used as ${use}`
+  return `, the whole room with its zones, checked as ${as}${s.finding?.zone === undefined ? '' : `, the use of its zone ${quoted(s.names[1] ?? s.finding.zone)}`}`
+}
 /** A figure from a line's fixes (MSG-7), or null. */
 const fixOf = (s: Subject, key: 'width' | 'offset' | 'height' | 'sill'): number | null => s.fixes?.find((f) => f[key] !== undefined)?.[key] ?? null
 /** The wall most likely meant, from a line's fixes (MSG-7). */
@@ -601,6 +613,11 @@ export const CODES = {
     needed: fixed('a room on its floor that holds it'),
     fix: fixed('Draw it within the room it sits in, or leave out "inside".')
   },
+  'room/zone-not-in-room': {
+    says: (s) => `${s.label} is marked as a zone of a room it does not lie in`,
+    needed: fixed('a room on its floor, not a zone itself, that holds the whole zone'),
+    fix: fixed('Draw it within the room it is part of, name that room in "partOf", or leave out "partOf".')
+  },
   'room/overlap': {
     says: (s) => `${s.label} overlaps another room`,
     needed: fixed('rooms that share no floor, or one marked inside the other'),
@@ -854,7 +871,7 @@ export const CODES = {
   },
   'room/too-small': {
     says: (s) => named(s, figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
-    found: (s) => `${area(s.finding?.area)} net`,
+    found: (s) => `${area(s.finding?.area)} net${wholeRoom(s)}`,
     needed: (s) => `${figureNeededText(`at least ${area(s.finding?.minimum)}`, figuresOf(s.finding, ['habitableRoomMinArea']))}${readFor(s)}`,
     fix: fixed('Make the room larger, or check the use it is given.')
   },

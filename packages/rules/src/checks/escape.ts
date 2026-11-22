@@ -7,13 +7,20 @@
  * drawn", and a window that opens only in part needs a bigger frame than these figures.
  */
 
-import { indexPlan, overFigure, rounded, shownAgainst, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
+import { indexPlan, overFigure, roomZones, rounded, shownAgainst, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
 import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
-import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import { RULE_USES } from './catalogue'
 import type { FloorScope } from './coverage'
 import { ESCAPE_TOP_LEVEL } from './figures'
 import { messages } from './messages'
-import type { AppliedFigure, RuleFinding } from './types'
+import type { AppliedFigure, RuleFinding, WholeRoom } from './types'
+import { appliedUse, type AppliedUse } from './zoned'
+
+/**
+ * The uses this check covers, as its coverage lists them (CNT-5's `uses`). CNT-8: a room with a
+ * sleeping zone is one someone sleeps in.
+ */
+const COVERS = RULE_USES['escape-opening']
 
 /** The figures of the check. One that is `null` is not tested. */
 export interface EscapeFigures {
@@ -77,28 +84,38 @@ export function escapeCheck(
    * at grade where one is carried. Unstated, the floor at level 0.
    */
   atGround: boolean = level === 0
-): { findings: RuleFinding[]; scope: FloorScope } {
+): { findings: RuleFinding[]; scope: FloorScope; wholeRooms: WholeRoom[] } {
   const index = indexPlan(storey)
   const outlines = roomOutlines(storey, index, leftOut)
+  const zones = roomZones(index)
   // MSG-2: every room of the floor is looked at or skipped, with the reason. Only bedrooms are
-  // looked at; a room with no use stated may be one, so it is said apart.
+  // looked at; a room with no use stated may be one, so it is said apart. CNT-8: a room with a
+  // zone that is a bedroom is looked at as a whole, through every outside wall it has, and a
+  // zone is looked at as part of its room.
   const above = level > ESCAPE_TOP_LEVEL.level
   const scope: FloorScope = { lookedAt: [], skipped: { cannot_be_drawn: [], no_use: [], use_not_covered: [], above_escape_storeys: [] } }
+  const applied = new Map<string, AppliedUse>()
+  const wholeRooms: WholeRoom[] = []
   for (const room of storey.rooms) {
+    const use = appliedUse(room, storey.rooms, zones, COVERS)
+    applied.set(room.id, use)
     const reason = !outlines.has(room.id)
       ? 'cannot_be_drawn'
-      : !(ROOM_USES as readonly unknown[]).includes(room.use)
-        ? 'no_use'
-        : room.use !== 'bedroom'
-          ? 'use_not_covered'
-          : above
-            ? 'above_escape_storeys'
-            : null
+      : use.kind === 'zone'
+        ? 'part_of_room'
+        : use.kind === 'no_use'
+          ? 'no_use'
+          : use.kind === 'not_covered'
+            ? 'use_not_covered'
+            : above
+              ? 'above_escape_storeys'
+              : null
     if (reason === null) scope.lookedAt.push(room.id)
-    else scope.skipped[reason]!.push(room.id)
+    else (scope.skipped[reason] ??= []).push(room.id)
+    if (reason === null && use.kind === 'checked' && zones.zones.has(room.id)) wholeRooms.push({ floor, room: room.id, use: use.use, zone: use.zone })
   }
   // Above the third storey the figures here stop: the bedrooms are said to be not checked (CH-4).
-  if (above || !hasEscapeFigures(figures)) return { findings: [], scope }
+  if (above || !hasEscapeFigures(figures)) return { findings: [], scope, wholeRooms }
 
   const minArea = atGround ? (figures.minAreaGrade ?? figures.minArea) : figures.minArea
   const { minWidth, minHeight, maxSill } = figures
@@ -136,7 +153,8 @@ export function escapeCheck(
 
   const findings: RuleFinding[] = []
   for (const room of storey.rooms) {
-    if (room.use !== 'bedroom' || !outlines.has(room.id)) continue
+    const use = applied.get(room.id)!
+    if (use.kind !== 'checked' || !outlines.has(room.id)) continue
     const openings = outside.get(room.id) ?? []
     // A door straight outside is enough.
     if (openings.some((o) => o.type === 'door')) continue
@@ -144,7 +162,9 @@ export function escapeCheck(
     const windows = openings.map(measure)
     if (windows.some((w) => bigEnough(w) && lowEnough(w))) continue
 
-    const base = { ruleId: 'escape-opening', floor, rooms: [room.id] }
+    // CNT-8: a room with zones says which use the check applied, and the zone it read it from.
+    const whole = zones.zones.has(room.id) ? { use: use.use, ...(use.zone === null ? {} : { zone: use.zone }) } : {}
+    const base = { ruleId: 'escape-opening', floor, rooms: use.zone === null ? [room.id] : [room.id, use.zone], ...whole }
     if (windows.length === 0) {
       findings.push({ ...base, code: 'no_escape_opening', openings: [], message: messages.noEscapeOpening(roomName(room.id)) })
       continue
@@ -176,5 +196,5 @@ export function escapeCheck(
       figures: present([minArea, minWidth, minHeight])
     })
   }
-  return { findings, scope }
+  return { findings, scope, wholeRooms }
 }
