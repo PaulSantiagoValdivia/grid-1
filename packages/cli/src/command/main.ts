@@ -31,7 +31,9 @@ import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
 import { readSeen, SeenRefused } from '../seen/marks'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
-import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
+import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms, describeWalk, walkOf } from './describe'
+import { walkPictures } from '../describe/walkPictures'
+import type { WalkStop } from '../describe/walk'
 import { DIFF_OPTIONS, MARK_OPTIONS, runDiff, runMark } from './diff'
 import { MARKERS_MAX, MarkerRefused } from '../versions/markers'
 import { GitUnread } from '../versions/git'
@@ -41,7 +43,7 @@ import { DxfProfileRefused } from '../export/dxfProfile'
 import type { LeftOutPart } from '@ongrid/floorplan/export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
-import { loadPlan, PlanRefused, type LoadedPlan } from './plan'
+import { floorOption, loadPlan, PlanRefused, type LoadedPlan } from './plan'
 import { SHEET_OPTIONS } from './sheet'
 import { checkTidyRequest, TIDY_OPTIONS, tidyAppliedText, tidyFile, tidyList, tidyListText } from './tidy'
 import { readRoomsFile, RoomsRefused, WRITE_OPTIONS, writeRoomsIntoProject } from './write'
@@ -96,8 +98,8 @@ const COMMANDS = {
     options: CHECK_OPTIONS,
   },
   describe: {
-    usage: 'grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--project <folder>]',
-    summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls. --for agent adds the ids. --as rooms reads it back as rooms text to change and write again.',
+    usage: 'grid describe [<plan.json>] [--length line|rooms|walls|walk] [--for person|agent] [--as rooms] [--floor <id>] [--pictures <folder>] [--project <folder>]',
+    summary: 'Describes the plan in a few lines: its rooms, which rooms each opening joins, and its walls with --length walls, and with --length walk the plan walked room by room from its way in, with --pictures a picture from each doorway. --for agent adds the ids. --as rooms reads it back as rooms text to change and write again.',
     options: DESCRIBE_OPTIONS,
   },
   draw: {
@@ -347,9 +349,23 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   }
 
   if (name === 'describe') {
-    const request = { length: textOf(parsed, '--length'), for: textOf(parsed, '--for'), as: textOf(parsed, '--as') }
+    const request = { length: textOf(parsed, '--length'), for: textOf(parsed, '--for'), as: textOf(parsed, '--as'), floor: textOf(parsed, '--floor'), pictures: textOf(parsed, '--pictures') }
     const { length, audience, as } = checkDescribeRequest(request)
-    const loaded = loadPlan(openProject(projectOption, io.cwd), planFile)
+    const project = openProject(projectOption, io.cwd)
+    // VEW-9: the pictures' folder is checked before anything is read or drawn (CMD-15).
+    const pictureFile = (n: number): string => `${request.pictures!.replace(/[\\/]+$/, '')}/walk-${String(n).padStart(2, '0')}.png`
+    if (request.pictures !== undefined) checkWritable(project, pictureFile(1))
+    const loaded = loadPlan(project, planFile)
+    if (length === 'walk') {
+      const { survey, walk } = walkOf(loaded, floorOption(loaded.plan, request.floor))
+      const pictures = new Map<WalkStop, string>()
+      if (request.pictures !== undefined) {
+        const shots = await walkPictures(survey, walk)
+        shots.forEach((shot, i) => pictures.set(shot.stop, project.shown(write(project, pictureFile(i + 1), shot.png))))
+      }
+      io.stdout(describeWalk(survey, walk, audience, pictures))
+      return EXIT_OK
+    }
     io.stdout(as === 'rooms' ? describeRooms(loaded) : describePlan(loaded, length, audience))
     return EXIT_OK
   }

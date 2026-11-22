@@ -6,7 +6,9 @@
  *   opening in it with the room on its other side and its distance to the two inside
  *   corners of that side of the room.
  * - `walls`: the rooms, then every wall with its openings, each with the rooms on its two
- *   sides. The agent's form leaves openings and neighbours out of its room lines, to stay
+ *   sides.
+ * - `walk` (VEW-9): the plan walked room by room from its way in, standing in each doorway;
+ *   `walk.ts` works it out and words it, and `describePlan` sends it there. The agent's form leaves openings and neighbours out of its room lines, to stay
  *   short: every opening under its wall names the rooms it joins.
  *
  * The person's form names rooms and floors by their names and never prints an id: ids are
@@ -24,7 +26,7 @@
 import { BUILDING_TYPE_TEXT } from '@ongrid/floorplan/types/floorplan'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
-export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls'] as const
+export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls', 'walk'] as const
 export type DescribeLength = (typeof DESCRIBE_LENGTHS)[number]
 
 export const DESCRIBE_AUDIENCES = ['person', 'agent'] as const
@@ -66,7 +68,7 @@ function capped(items: readonly string[], most: number): string[] {
 const isSide = (side: OpeningSide | Beyond): side is OpeningSide => typeof side !== 'string'
 
 /** Names for a person: a room by its name, numbered when two on a floor share it. */
-class PersonNames {
+export class PersonNames {
   private readonly rooms = new Map<string, string>()
   private readonly floors = new Map<string, string>()
 

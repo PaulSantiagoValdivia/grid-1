@@ -35,6 +35,7 @@ import {
 import { planFixtures, type FixtureRow } from './fixtures'
 import { OUTSIDE, routeBetween, wayGraph } from './measure'
 import type { Survey, SurveyRoom } from './survey'
+import { WALKED_RULE, walkedLength } from './walked'
 
 const q = (text: string): string => JSON.stringify(text)
 
@@ -275,6 +276,8 @@ export interface Way {
   readonly steps: readonly WayStep[]
   /** The widest body the whole way takes: its narrowest room or doorway. */
   readonly width: number | null
+  /** VEW-9: how far it is walked (`WALKED_RULE`), in metres; null when a room on it has no outline. */
+  readonly length: number | null
 }
 
 export interface WideRoute {
@@ -338,7 +341,8 @@ export function wideRoute(survey: Survey, from: string, to: string, width: numbe
     })
     const all = [...wayRooms.map((r) => r.width), ...steps.filter((s) => s.type !== 'open side').map((s) => s.clear)]
     const width = all.some((w) => w === null) ? null : Math.min(...(all as number[]))
-    return { rooms: wayRooms, steps, width }
+    const length = walkedLength(survey, rooms, vias, goal === OUTSIDE)?.length ?? null
+    return { rooms: wayRooms, steps, width, length }
   }
   const wide = (w: number | null): boolean => w !== null && w + tolerance('joint') >= width
 
@@ -416,6 +420,8 @@ export function wideRouteLines(survey: Survey, route: WideRoute, figure: Figure,
     lines.push(route.way === null ? `No way through the plan's doors and openings is ${L(route.width)} wide all along.` : `It gets through another way: ${stepsText(route.way)}.`)
   }
   lines.push(`Each room on the way, clear of its fixtures: ${roomsText(route.way ?? shortest)}.`)
+  const walked = (route.way ?? shortest).length
+  if (walked !== null) lines.push(`Walked, ${L(walked)}.`, WALKED_RULE)
   lines.push(`Door widths are what the hole in the wall leaves less ${L(limit('useOpenLeaf'))} for an open leaf, and less any fixture standing in front of it.`)
   return lines
 }

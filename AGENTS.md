@@ -61,7 +61,9 @@ Notes for agents and people changing this repository.
   (WRT-2) writes a plan from rooms text, the main way to write one; `describe --as rooms` reads
   it back. `tidy` (MSG-12) lists the
   library's wall faults and makes the chosen fixes on the plan file as read. `describe` (VEW-5, `src/describe/`)
-  prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`). A
+  prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`), and
+  walked room by room as its long form (VEW-9, `walk.ts`, `--length walk`); a route's walked
+  length is `src/quantities/walked.ts`. A
   folder holding `grid.json` (`grid init` writes it) is a Grid project: there `check`,
   `describe`, `draw`, `export` and `sheet` read its `plan.json` when no plan is named. `check`
   (MSG-10) is short by default and whole with `--full`; `--seen <n>` sets a note aside as seen in
