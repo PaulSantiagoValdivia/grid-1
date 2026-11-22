@@ -164,8 +164,9 @@ the study, shows on the first read. It answers in three lengths:
 `--for agent` is terse and carries every id, the offsets along each wall and a key line, so an
 agent can edit the plan from it. A floor laid out like an earlier one is said once. Wall and
 sill heights are one line: the usual height and the exceptions. What the plan cannot say,
-such as where north is, the kind of building, how floors connect when it holds no stairs and
-which rooms make each flat, is said as such. Directions are on the drawing, with north at the
+such as where north is, the kind of building when the plan does not say it, how floors connect
+when it holds no stairs and which rooms make each flat, is said as such; a kind the plan states
+is said after the first line. Directions are on the drawing, with north at the
 top. The card checks nothing; it ends with the label "General guidance, not your local rules".
 
 ## Walls that do not meet: `grid tidy`

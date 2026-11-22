@@ -7,6 +7,7 @@ section explains. Rooms text, the main way to write a plan, is in
 [tolerances.md](tolerances.md).
 
 - [What a plan file may hold](#what-a-plan-file-may-hold)
+- [What kind of building it is, and what each room is for](#what-kind-of-building-it-is-and-what-each-room-is-for): `plan/not-checked-sizes-for-building`, `plan/not-checked-escapes-for-building`, `floor/not-checked-sizes-for-building`, `floor/not-checked-escapes-for-building`, `plan/unknown-use`
 - [Floor levels and heights](#floor-levels-and-heights): `plan/level-gap`, `plan/same-level`, `floor/empty-top`, `wall/above-storey`, `floor/size-question`, `wall/unknown-floor`, `room/unknown-floor`
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
@@ -65,6 +66,73 @@ version Grid does not read, `walls` that is not a list) still refuses the plan.
 `grid write` and the tools that change the plan write it back, so they read it whole and refuse a
 plan with anything left out, naming the first. The record's codes are in
 [the result contract](result-contract.md).
+
+## What kind of building it is, and what each room is for
+
+A plan may say what kind of building it is with `building`, and a floor may say otherwise for
+itself with its own `building`: the shop on the ground floor of a block of flats (CNT-5). Both
+are optional; unstated, a floor is the plan's kind, and a plan that says nothing is read and
+checked as before.
+
+```json
+{ "version": "1", "building": "home", "floors": [{ "id": "ground", "name": "Ground floor", "level": 0, "building": "shop" }, …] }
+```
+
+| `building` | What it is |
+|---|---|
+| `home` | a house or a flat people live in |
+| `office` | an office |
+| `shop` | a shop |
+| `food` | a café, restaurant or bar |
+| `hotel` | a hotel or hostel |
+| `school` | a school |
+| `health` | a health building, such as a clinic |
+| `sport` | a sports building |
+| `assembly` | a building people gather in, such as a hall |
+| `industry` | a workshop or factory |
+| `warehouse` | a warehouse |
+| `parking` | a car park |
+| `other` | another kind of building |
+
+A check that applies a figure runs only in the kinds of building its figures were read for, or
+where the plan does not say. Every figure Grid carries today was read for homes, so the room-size
+and escape checks run on a floor that is a `home` or says nothing, and on no other: their rooms
+are skipped (`not_for_building`), and one line says so. It is about the whole plan when the
+plan's own kind is the reason on every floor (`plan/not-checked-sizes-for-building`,
+`plan/not-checked-escapes-for-building`), and about the floor otherwise
+(`floor/not-checked-sizes-for-building`, `floor/not-checked-escapes-for-building`). Each check in
+the record's `coverage` says the uses it looks at and the kinds of building it runs in. A floor
+the plan says is a home gets the figure checks, and their notes say the plan says it is a home.
+
+A room says what it is for with `use`, one of 27:
+
+| Group | Uses |
+|---|---|
+| A home | `bedroom`, `living`, `dining`, `kitchen`, `bathroom`, `toilet`, `utility`, `study` |
+| Work, trade, learning, care, sport | `office`, `meeting`, `reception`, `retail`, `classroom`, `treatment`, `waiting`, `sport`, `changing`, `staff`, `worship`, `assembly` |
+| Moving about | `corridor`, `stair`, `lift` |
+| Services | `storage`, `plant`, `parking` |
+| Anything else | `other` |
+
+The person's own word for a room is its `name`: "Pooja room", "Bryggers", "Open office (12
+desks)". A use is read whatever its capitals, and a word that plainly means a use is read as it
+(`USE_WORDS` in `packages/floorplan/src/types/floorplan.ts`): `WC` is `toilet`, `staff room` is
+`staff`, `warehouse` is `storage`, `bryggers` is `utility`, `pooja room` is `worship`. No word
+is read as `bedroom`, `living` or `dining`, the uses the figure checks look at, so a room comes
+under them only by its author's choice: `lounge` and `living room` give a `plan/unknown-use`
+line that suggests `living`. A word that means two things (`hall`, `studio`) is not read either.
+Any other word is read as no use stated, with a line that names it.
+
+A room may also say:
+
+| Field | What it states |
+|---|---|
+| `tenure` | Who it is for: `private` (one household's or one tenant's own), `shared` (some households' or tenants', not all), `common` (the building's, for everyone in it, such as the stair or the bin store) or `commercial` (let or run as a business) |
+| `roomType` | The firm's own type for the room, as its room data sheets name it ("B2 double bedroom"), beside the fixed use. At most 120 characters, one line. Grid keeps it and reads nothing from it |
+
+No check reads `tenure` or `roomType` yet. Rooms text writes all of these: `building office`,
+`floor ground "Ground floor" building shop`, and `tenure common` and `type "B2"` on a room line
+([rooms-first.md](rooms-first.md)).
 
 ## Floor levels and heights
 

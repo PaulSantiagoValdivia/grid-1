@@ -25,7 +25,7 @@ import {
   type Vec2,
   type Wall,
 } from '@ongrid/floorplan/geometry'
-import { DEFAULT_FLOOR_ID, type RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_FLOOR_ID, type BuildingType, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { openingSides, roomOutlines, sidesAt, type RoomOutline } from '@ongrid/floorplan/geometry/rules/graph'
 
@@ -163,6 +163,8 @@ export interface PlanFacts {
   readonly openingCount: number
   /** Rooms with a stair use: the plan may say a stair is there, never what it joins. */
   readonly stairRooms: number
+  /** CNT-5: what kind of building the plan says it is, and each floor that says otherwise for itself. */
+  readonly building: { readonly plan: BuildingType | undefined; readonly floors: readonly { readonly floor: string; readonly building: BuildingType }[] }
 }
 
 /** How far a point may be from a wall's face and still be on it, in metres. */
@@ -449,5 +451,12 @@ export function planFacts(plan: FloorPlan): PlanFacts {
     wallCount: plan.walls.length,
     openingCount: plan.openings.length,
     stairRooms: plan.rooms.filter((room) => room.use === 'stair').length,
+    building: {
+      plan: plan.building,
+      floors: floors.flatMap((floor) => {
+        const own = (plan.floors ?? []).find((f) => f.id === floor.id)?.building
+        return own === undefined || own === plan.building ? [] : [{ floor: floor.id, building: own }]
+      }),
+    },
   }
 }

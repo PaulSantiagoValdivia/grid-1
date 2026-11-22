@@ -199,6 +199,10 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
+| `plan/not-checked-sizes-for-building` | Room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
+| `plan/not-checked-escapes-for-building` | Escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
+| `floor/not-checked-sizes-for-building` | On "{floor}", room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
+| `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 
@@ -208,7 +212,10 @@ A plan with a field Grid does not know, or a room use it does not know, is still
 that field, and with that room's use not stated. Each is a line worth a look, about the part it
 is on, with the nearest word Grid knows when one was most likely meant: `thick` on a wall gives
 `plan/unknown-field`, whose `found` and `fix` name `thickness` ("Did you mean "thickness"?"). A
-use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line. A plan with no
+use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line; and a word that
+plainly means a use is read as it (CNT-5, `USE_WORDS` in the plan format), so `WC` is `toilet` and
+gives no line. No word is read as `bedroom`, `living` or `dining`, the uses the figure checks look
+at: `lounge` gives a line that suggests `living`. A plan with no
 walls, rooms or openings, `{}` among them, gives `plan/empty`. A field name or a use that breaks
 the text rule (MSG-9) is never repeated: the line says it is not. The fields each part has are
 read from the format itself (`readingNotes` in `@ongrid/floorplan/types/reading`), so a field
@@ -232,6 +239,7 @@ checks first, then the figure checks, whether it ran or not:
 | `skippedCount` | How many parts that is. |
 | `findings` | How many findings it gave. |
 | `readFor` | Only on a figure check that looked at something: the kinds of building its figures were read for, as `["homes"]` (COD-2). |
+| `uses`, `buildings` | Only on a figure check: the room uses it looks at, as `["bedroom"]`, and the kinds of building it runs in, as `["home"]` (CNT-5). It runs too where the plan does not say what kind of building it is. |
 
 A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
 so a record with no findings says what it is: these parts were looked at and nothing was
@@ -239,6 +247,7 @@ found in them. A `reason` is one of:
 
 | Reason | Why |
 |---|---|
+| `not_for_building` | the figures were read for homes (houses and flats people live in), and the plan says this is {an office}: the plan, or that floor, is a kind of building the check does not run in (CNT-5) |
 | `no_figures_for_place` | no figures for the place the plan is for: the ones here are from US model codes |
 | `no_rooms` | no rooms on the floor |
 | `cannot_be_drawn` | could not be drawn |
@@ -347,6 +356,33 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: what kind of building it is, and more room uses (CNT-5)
+
+- A plan may say what kind of building it is (`building`: `home`, `office`, `shop`, `food`,
+  `hotel`, `school`, `health`, `sport`, `assembly`, `industry`, `warehouse`, `parking` or
+  `other`), and a floor may say otherwise for itself (`floors[].building`). Unstated, nothing
+  changes.
+- The figure checks (room size, escape openings) run only where the building, or its floor, is
+  a home, or where the plan does not say. Elsewhere their rooms are skipped as
+  `not_for_building`, and one line says so: about the plan (`plan/not-checked-sizes-for-building`,
+  `plan/not-checked-escapes-for-building`) when the plan's own kind is the reason on every
+  floor, else about each floor (`floor/not-checked-sizes-for-building`,
+  `floor/not-checked-escapes-for-building`). New codes and a new reason, all `not-checked`;
+  `resultVersion` stays.
+- `coverage` adds `uses` and `buildings` on each figure check: the room uses it looks at and the
+  kinds of building it runs in.
+- Room uses run to 27: `toilet`, `utility`, `study`, `office`, `meeting`, `reception`, `retail`,
+  `classroom`, `treatment`, `waiting`, `sport`, `changing`, `staff`, `worship`, `assembly`, `lift`,
+  `plant` and `parking` join the nine, and `other` is listed last. A word that plainly means a use
+  (`WC`, `staff room`, `warehouse`, `bryggers`) is read as it and gives no `plan/unknown-use`
+  line; no word is read as `bedroom`, `living` or `dining`. The tools' `use` arguments take the
+  new uses.
+- A room may say who it is for (`tenure`: `private`, `shared`, `common` or `commercial`) and carry
+  the firm's own room type (`roomType`). No check reads either yet.
+- A note or sheet line that used a figure, on a floor the plan says is a home, ends "and the plan
+  says this is a home" instead of COD-2's "the plan does not say what kind of building it is, so
+  Grid applied them as they are", which stays where the plan does not say.
 
 ### 2026-11-22: a problem report the person files (CMD-13)
 

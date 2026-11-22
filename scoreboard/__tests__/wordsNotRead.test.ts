@@ -1,7 +1,8 @@
 /**
  * MSG-4 (lab W-5): of the 338 lab plans that passed with 0 issues, 19 had a room use Grid does
  * not know and 14 a field it drops, and nothing said so. Each now gets a line that names it.
- * Two plans are in both lists, so they are 31 plans. The names are where the plans sat in the
+ * Two plans are in both lists, so they are 31 plans. CNT-5: the words of 15 of the 19 are uses
+ * now, or plainly mean one, and are read as such. The names are where the plans sat in the
  * lab (`scoreboard/data/lab-plans.ndjson.gz`), listed by the lab's own layer.
  */
 import { describe, expect, it } from 'vitest'
@@ -64,8 +65,14 @@ describe('the W-5 plans', () => {
     expect(new Set([...UNKNOWN_USE, ...DROPPED_FIELD]).size).toBe(31)
   })
 
-  it('each with a use Grid does not know gets a line that names it', () => {
-    for (const name of UNKNOWN_USE) expect(codes(name), name).toContain('plan/unknown-use')
+  // CNT-5: 15 of the 19 wrote words Grid now reads as uses (office, classroom, consulting,
+  // warehouse, garage…), so they give no line; the four left still do.
+  it('each with a use Grid still does not know gets a line that names it, and the 15 whose words it reads now get none', () => {
+    const still = ['A/scenarios/probes/studio-one-room.json', 'C/scenarios/gym.json', 'G/scenarios/s02b-terrace-porch-words.json', 'G/scenarios/s03b-flat-balcony-words.json']
+    for (const name of UNKNOWN_USE) {
+      if (still.includes(name)) expect(codes(name), name).toContain('plan/unknown-use')
+      else expect(codes(name), name).not.toContain('plan/unknown-use')
+    }
   })
 
   it('each with a field Grid drops gets a line that names it', () => {

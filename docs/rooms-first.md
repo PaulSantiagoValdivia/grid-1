@@ -24,6 +24,11 @@ window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
   default. The answer states for each room what its size measured to, and its inside size.
 - `floor -0.15` on a room line puts its floor that far below its storey's (a genkan; LVL-7),
   `height 2.4` gives its own height.
+- The word after a room's name is its use: one of Grid's uses, a word that plainly means one
+  (`wc` is toilet, `bryggers` utility), or `-` for none. The name keeps the person's own word.
+  `tenure common` and `type "B2 double"` on a room line say who it is for and the firm's own room
+  type. `building office` says what kind of building the plan is, and `building shop` on a
+  `floor` line what that floor is ([the plan file](plan-file.md#what-kind-of-building-it-is-and-what-each-room-is-for)).
 - `*` stretches a side as far as the room named after `until`. `inside <room> corner ne` cuts a
   room out of another's corner. `unit`, `place`, `repeat` and `mirror` write a group of rooms
   once; `copy <floor>` starts a floor from another.

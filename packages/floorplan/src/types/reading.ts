@@ -18,7 +18,7 @@
  * name or a use is text from the file: one that breaks the text rule of MSG-9 is never repeated.
  */
 import { z } from 'zod'
-import { FloorPlanSchema, ROOM_USES, readUse, type RoomUse } from './floorplan'
+import { FloorPlanSchema, ROOM_USES, foldUseWord, readUse, type RoomUse } from './floorplan'
 import { textProblem } from './planText'
 
 /** A part of the plan a note is about, by where it is in the file. */
@@ -106,44 +106,26 @@ export function nearestWord<T extends string>(word: string, known: readonly T[])
 }
 
 /**
- * Words agents write for a room use that mean one Grid knows (lab AU3-3). Only a suggestion:
- * a use is never read as another word. A use with no match here and no near spelling is told
- * to use "other".
+ * Words agents write for a room use that mean one Grid knows (lab AU3-3), but that Grid does not
+ * read as it (CNT-5): the words for the uses the figure checks look at, which a room takes only
+ * by its author's own choice, and words that mean two things. Only a suggestion: a word that
+ * plainly means a use is read as it (`USE_WORDS` in the schema), and never reaches this table.
+ * A use with no match here and no near spelling is told to use "other".
  */
 const USE_MEANS: Readonly<Record<string, RoomUse>> = {
   bed: 'bedroom',
   lounge: 'living',
   sitting: 'living',
-  livingroom: 'living',
+  living: 'living',
   family: 'living',
-  diningroom: 'dining',
-  kitchenette: 'kitchen',
-  toilet: 'bathroom',
-  wc: 'bathroom',
-  restroom: 'bathroom',
-  washroom: 'bathroom',
-  lavatory: 'bathroom',
-  shower: 'bathroom',
-  ensuite: 'bathroom',
+  dining: 'dining',
   hall: 'corridor',
-  hallway: 'corridor',
-  landing: 'corridor',
-  lobby: 'corridor',
-  passage: 'corridor',
-  stairs: 'stair',
-  staircase: 'stair',
-  stairwell: 'stair',
-  store: 'storage',
-  closet: 'storage',
-  cupboard: 'storage',
-  pantry: 'storage',
-  larder: 'storage',
-  wardrobe: 'storage',
 }
 
 /** The use Grid knows that a use it does not know most likely meant, or null. */
 export function nearestUse(use: string): RoomUse | null {
-  return (Object.hasOwn(USE_MEANS, fold(use)) ? USE_MEANS[fold(use)] : undefined) ?? nearestWord(use, ROOM_USES)
+  const folded = foldUseWord(use)
+  return (Object.hasOwn(USE_MEANS, folded) ? USE_MEANS[folded] : undefined) ?? nearestWord(use, ROOM_USES)
 }
 
 // ---------------------------------------------------------------------------------------------
