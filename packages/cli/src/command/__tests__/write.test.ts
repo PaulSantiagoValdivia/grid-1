@@ -57,7 +57,8 @@ describe('grid write', () => {
     const ran = await grid(dir, 'write', 'plan.rooms')
     expect(ran.err).toBe('')
     expect(ran.status).toBe(0)
-    expect(ran.out).toMatch(/^Wrote plan\.json from rooms text/)
+    // MSG-3: the label first, then what was written.
+    expect(ran.out).toMatch(/^General guidance, not your local rules\nWrote plan\.json from rooms text/)
     expect(ran.out).toContain('1 floor, 6 rooms; 9 walls and their kinds worked out; 13 openings placed')
     expect(ran.out).toContain('Sizes are to the inside faces unless a room says otherwise (the default).')
     const plan = planOf(dir)

@@ -25,6 +25,10 @@ Grid has not been released yet. The first release will hold:
   be drawn, parts very likely wrong, what the checks found, and what they could not check.
 - Every report, `grid_check` and the check sheet list what the checks never look at, ceiling
   height and which walls carry load among them.
+- "General guidance, not your local rules" comes first in every report, list and tool answer,
+  and is on every drawing and in every DXF, IFC, GLB and OBJ file. No line says a plan passes,
+  complies or is approved, and a figure is given as the figure used here, with where it comes
+  from and how far a person has checked it.
 - `grid tidy` lists the walls that do not meet and makes the fixes you choose.
 - Every note and pass that used a figure says which kind of building the figure was read for:
   today, homes. A plan cannot say yet what kind of building it is, so a café or a hotel is
@@ -43,7 +47,17 @@ Grid has not been released yet. The first release will hold:
 - A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
   all floors) and a door and window schedule that lists each opening once with the two rooms it
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.
+- Quantities for a first estimate: floor finishes and wall faces by room use, ceilings,
+  skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size,
+  and the slab, upper floors and roof worked out from the outlines and marked assumed, each line
+  with its rule. A cost comes only from your own rates file beside the plan, which must name its
+  currency; without one you get a rate card to fill in, and lines with no rate or a rate in the
+  wrong unit are listed, never filled.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
   only the floor it shows.
+- `grid check` says where an opening does not fit: a door or window that runs into a wall meeting
+  its wall, a wall that ends inside a window, an opening as long as its wall, a door on a dividing
+  line, and a window between two rooms (perhaps a borrowed light). `grid_split_room` will not end
+  a new wall inside a door or window, and says the nearest size that is clear.

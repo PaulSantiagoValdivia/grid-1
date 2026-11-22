@@ -132,6 +132,11 @@ export interface FloorSpaces {
   /** Inside the outer edge of the walls, in square metres. */
   readonly outlineArea: number
   /**
+   * That outer edge, piece by piece: each piece's rings as points, the outer ring first, with no
+   * point repeated at the end (ARE-13 measures the outside face and the roof from it).
+   */
+  readonly outline: readonly (readonly (readonly Vec2[])[])[]
+  /**
    * Taken by the solid walls and the corners made good between them, less any such corner a
    * room's outline takes in (see `cornerFills`), so that the four figures add up.
    */
@@ -438,6 +443,7 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
   return {
     floor,
     outlineArea,
+    outline: filled.map((polygon) => polygon.map((ring) => ring.slice(0, -1).map(([x, y]) => ({ x, y })))),
     wallArea,
     floorArea: outlineArea - wallArea,
     roomArea: rooms.reduce((sum, r) => sum + r.area, 0),

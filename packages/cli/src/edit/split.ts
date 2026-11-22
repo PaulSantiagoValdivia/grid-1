@@ -10,7 +10,7 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { indexPlan, sub, tolerance, wallAxis, wallEndInOpening, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { heightStated } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
@@ -84,6 +84,7 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
   }
   const c = side === 'east' ? box.x1 - size - t / 2 : side === 'west' ? box.x0 + size + t / 2 : side === 'north' ? box.y1 - size - t / 2 : box.y0 + size + t / 2
   const [lo, hi]: [Direction, Direction] = across ? ['south', 'north'] : ['west', 'east']
+  const index = indexPlan(plan)
   /** Where the new wall's line meets the centre line of the wall on that side. */
   const meet = (on: Direction): { wall: Wall; at: [number, number] } => {
     for (const wall of sides[on]) {
@@ -93,6 +94,16 @@ export function splitRoom(survey: Survey, roomId: string, request: SplitRequest)
       const s = ((across ? c - axis.start.x : c - axis.start.y) / k)
       if (s < -0.02 || s > axis.length + 0.02) continue
       const p = { x: axis.start.x + axis.dir.x * s, y: axis.start.y + axis.dir.y * s }
+      // MSG-16: the new wall must not land in a door or window of the wall it meets.
+      const landing = wallEndInOpening(index, wall.id, s, t)
+      if (landing) {
+        const kind = landing.opening.type === 'opening' ? 'opening' : landing.opening.type
+        const where = `The new wall would end inside ${kind} ${quoted(landing.opening.id)} of wall ${quoted(wall.id)}, on the ${on} side of ${name}.`
+        if (landing.nearest === null) throw new EditRefused(`${where} No place along that wall is clear of its openings.`)
+        const at = (across ? axis.start.x : axis.start.y) + k * landing.nearest
+        const clear = side === 'east' ? box.x1 - at - t / 2 : side === 'west' ? at - box.x0 - t / 2 : side === 'north' ? box.y1 - at - t / 2 : at - box.y0 - t / 2
+        throw new EditRefused(`${where} The nearest size clear of it is ${clear.toFixed(2)} m across from the ${side} side; or move the ${kind} first.`)
+      }
       return { wall, at: [r3(p.x), r3(p.y)] }
     }
     throw new EditRefused(`No wall of ${name} lies where the new wall would end on its ${on} side.`)

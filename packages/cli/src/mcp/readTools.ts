@@ -8,8 +8,9 @@
  * output schema. Names and ids that come from the plan file are quoted.
  */
 import { floorOf, itemFootprint, limit, tolerance, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { checkPlan, countsText, KIND_WORDS, partsText, thingText, usedFigures } from '../command/check'
+import { checkPlan, countsText, KIND_WORDS, nothingCheckedText, partsText, thingText, usedFigures } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
 import { UsageError } from '../command/options'
@@ -41,16 +42,20 @@ import {
 import { openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
+import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
+import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
 import { areaText, csv, DISPLAY_UNITS, displayFor, lengthText, sqFt } from '../quantities/units'
 import type { Display } from '@ongrid/floorplan/types/units'
 import {
   asRefusal,
+  BOOLEAN,
   FLOOR_ARG,
   floorArg,
   listSchema,
   m,
   NULLABLE_NUMBER,
+  NULLABLE_STRING,
   NUMBER,
   objectSchema,
   openingArg,
@@ -341,18 +346,117 @@ const areasTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_takeoff
 
+/** ARE-13: a quantity as the bill writes it. */
+function quantityText(quantity: number, unit: QuantityUnit, units: Display): string {
+  if (unit === 'nr') return `${Math.round(quantity)} nr`
+  return unit === 'm2' ? areaText(quantity, units) : lengthText(quantity, units)
+}
+
+const money = (amount: number, currency: string): string =>
+  `${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`
+
+const UNIT_SHOWN: Readonly<Record<QuantityUnit, string>> = { m2: 'm²', m: 'm', nr: 'nr' }
+
+/** ARE-13: the bill of quantities, priced from the person's rates or as a rate card. */
+function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Display, asCsv: boolean): Answer {
+  const rules = [...new Set(estimate.lines.map((line) => line.rule))]
+  const data: Record<string, unknown> = {
+    label: GENERAL_GUIDANCE_LABEL,
+    lines: pricing?.lines ?? estimate.lines,
+    notes: estimate.notes,
+    rules,
+    ...(pricing === null
+      ? { rateCard: rateCard(estimate) }
+      : {
+          cost: {
+            file: pricing.file,
+            label: pricing.label,
+            currency: pricing.currency,
+            total: pricing.total,
+            complete: pricing.complete,
+            missing: pricing.missing,
+            wrongUnit: pricing.wrongUnit,
+            unused: pricing.unused,
+            wholeBuilding: pricing.wholeBuilding,
+          },
+          orders: pricing.orders,
+          orderProblems: pricing.orderProblems,
+        }),
+  }
+  if (asCsv) return { text: estimateCsv(estimate, pricing), data }
+  const lines: string[] = [
+    `Quantities for a first estimate, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`,
+    pricing === null
+      ? 'Rate card: no rates given, so no cost. Each line with its key and unit, ready to fill:'
+      : `Priced from ${q(pricing.file)}${pricing.label ? ` (${q(pricing.label)})` : ''}, in ${q(pricing.currency)}: the person's rates, not a price list.`,
+  ]
+  const shown: readonly (EstimateLine & Partial<PricedLine>)[] = pricing?.lines ?? estimate.lines
+  shown.forEach((line, i) => {
+    let cost = ''
+    if (pricing !== null) {
+      if (line.state === 'priced' || line.state === 'alternative') {
+        const waste = line.given!.waste === 0 ? '' : ` + ${+(line.given!.waste * 100).toFixed(2)}% waste`
+        cost = `${waste} × ${money(line.rate!, pricing.currency)}/${UNIT_SHOWN[line.unit]} = ${money(line.amount!, pricing.currency)}${line.state === 'alternative' ? ', an alternative to the total' : ''}`
+      } else if (line.state === 'wrong unit') {
+        cost = `, not priced: the rate ${q(line.rateKey!)} is per ${line.given!.unit}`
+      } else {
+        cost = line.key === WHOLE_BUILDING_KEY ? '' : line.rateKey === null || line.rateKey === undefined ? ', no rate' : `, no rate: ${q(line.rateKey)} is not filled in`
+      }
+    }
+    const assumed = line.assumed ? ', assumed' : ''
+    lines.push(`  ${line.key}: ${line.what}, ${quantityText(line.quantity, line.unit, units)}${pricing === null ? `${assumed}; rate per ${line.unit}` : `${cost}${assumed}`}`)
+    // Each line's rule follows it, once for a run of lines that share one (AC-14).
+    if (shown[i + 1]?.rule !== line.rule) lines.push(`    Rule: ${line.rule}`)
+  })
+  if (pricing === null) {
+    lines.push(
+      `To price it, save the rate card as ${RATES_FILE} beside the plan, or pass the file as rates: {"currency": "EUR", "label": "where the rates come from", "rates": {"<key>": {"rate": 40, "unit": "m2"}}}. `
+        + 'A shorter key covers longer ones: "wall:exterior" prices every outside wall, "door" every door, "floor" every floor finish. '
+        + `Units: ${RATE_UNITS.join(', ')}; a rate per ft2 or ft is turned into one per m² or m. The data's rateCard is the file, ready to fill.`,
+    )
+  } else {
+    const gaps: string[] = []
+    if (pricing.missing.length > 0) gaps.push(`${pricing.missing.length} ${pricing.missing.length === 1 ? 'line has' : 'lines have'} no rate (${pricing.missing.join(', ')})`)
+    if (pricing.wrongUnit.length > 0) {
+      gaps.push(`${pricing.wrongUnit.length} ${pricing.wrongUnit.length === 1 ? 'line has its rate' : 'lines have their rate'} in the wrong unit (${pricing.wrongUnit.map((w) => `${w.key}: ${q(w.rateKey)} is per ${w.rateUnit}, the line is in ${w.unit}`).join('; ')})`)
+    }
+    lines.push(`Total of the priced lines: ${money(pricing.total, pricing.currency)}.${gaps.length === 0 ? ' Every line is priced.' : ` Not the whole cost: ${gaps.join(', and ')}.`}`)
+    if (pricing.wholeBuilding !== null) lines.push(`The whole building at the ${WHOLE_BUILDING_KEY} rate: ${money(pricing.wholeBuilding, pricing.currency)}, an alternative to the total, never added to it.`)
+    if (pricing.unused.length > 0) lines.push(`Rates that price no line of this plan: ${pricing.unused.map(q).join(', ')}.`)
+    if (pricing.orders.length > 0) {
+      lines.push('Orders, from the rates file:')
+      for (const order of pricing.orders) {
+        lines.push(`  ${q(order.name)}: ${order.packs} ${order.pack} (${order.needed.toFixed(2)} ${UNIT_SHOWN[order.unit]} needed)${order.assumed ? ', assumed: it rests on an assumed line' : ''}`)
+        lines.push(`    Rule: ${order.rule}`)
+      }
+    }
+    lines.push(...pricing.orderProblems)
+  }
+  lines.push(...estimate.notes)
+  return { text: lines.join('\n'), data }
+}
+
 const takeoffTool: GridTool = {
   name: 'grid_takeoff',
   title: 'Quantities for pricing',
   hint: 'read',
   description:
     'Use this when a builder or the person asks for quantities to price work: metres of wall (outside walls, inner walls, partitions), plaster or paint area per room less openings, ceiling areas, skirting lengths, or these as a spreadsheet. '
+    + 'With for=estimate, or when the person asks what the plan will cost, how much flooring, paint or plasterboard it takes, or for a bill of quantities, it gives the figures a first estimate needs instead: floor finishes and wall faces by room use, ceilings, skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size, the slab, upper floors and the roof (assumed: the plan holds none), and the gross internal area, each line with a key, its rule and an assumed mark. '
+    + `A cost comes only from the person's own rates file (rates, or ${RATES_FILE} beside the plan), which must name its currency; with none, the answer is a rate card to fill in and holds no money. Lines with no rate and rates in the wrong unit are listed apart. Grid has no prices. `
     + 'Every figure is worked out from the plan\'s walls and openings by a rule stated in the answer. '
     + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). The plan holds no finishes, ceilings or fixtures. Units are metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
-    rooms: { type: 'array', description: 'Only these rooms, by id. Every room when left out.', examples: [['kitchen', 'bath']], items: { id: true }, minItems: 1, maxItems: 200 },
+    rooms: { type: 'array', description: 'Only these rooms, by id. Every room when left out. Not with for=estimate.', examples: [['kitchen', 'bath']], items: { id: true }, minItems: 1, maxItems: 200 },
+    for: { type: 'string', enum: ['estimate'], description: 'estimate for the bill of quantities of a first estimate, priced from the person\'s rates or as a rate card. The take-off by room when left out.', examples: ['estimate'] },
+    rates: {
+      type: 'string',
+      maxLength: PATH_MAX,
+      description: `The person's rates file, as a path inside the project folder: JSON with a currency and a rate per line key. ${RATES_FILE} beside the plan when left out, if there is one. Only with for=estimate.`,
+      examples: [RATES_FILE, 'costs/rates-2027.json'],
+    },
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
@@ -362,8 +466,33 @@ const takeoffTool: GridTool = {
     rooms: listSchema(objectSchema({ id: STRING, name: STRING, floor: STRING, floorArea: NUMBER, ceiling: NUMBER, perimeter: NUMBER, skirting: NUMBER, wallFace: NUMBER, openingsOff: NUMBER, height: NULLABLE_NUMBER })),
     totals: objectSchema({ floorArea: NUMBER, ceiling: NUMBER, skirting: NUMBER, wallFace: NUMBER }),
     rules: listSchema(STRING),
-  }),
+    // ARE-13, with for=estimate: the lines, and the cost from the person's rates or the rate card.
+    label: STRING,
+    lines: listSchema(objectSchema({ key: STRING, what: STRING, quantity: NUMBER, unit: STRING, rule: STRING, assumed: BOOLEAN }, ['key', 'what', 'quantity', 'unit', 'rule', 'assumed'])),
+    notes: listSchema(STRING),
+    rateCard: objectSchema({ label: STRING, currency: STRING, rates: { type: 'object' } }),
+    cost: objectSchema({ file: STRING, label: NULLABLE_STRING, currency: STRING, total: NUMBER, complete: BOOLEAN, missing: listSchema(STRING), wrongUnit: { type: 'array' }, unused: listSchema(STRING), wholeBuilding: NULLABLE_NUMBER }),
+    orders: { type: 'array' },
+    orderProblems: listSchema(STRING),
+  }, ['rules']),
   run(args, context) {
+    if (args['for'] === 'estimate') {
+      if (args['rooms'] !== undefined) throw new ToolRefusal('for=estimate takes no rooms: its walls, outside face, slab and roof belong to no one room. Pass floor for one floor.')
+      const { project, file, loaded } = readPlan(context, args['plan'])
+      const survey = surveyPlan(loaded.plan)
+      const floor = floorArg(loaded.plan, args['floor'])
+      let rates: Rates | null
+      try {
+        rates = readRates(project, file, args['rates'] as string | undefined)
+      } catch (error) {
+        if (error instanceof RatesRefused) throw new ToolRefusal(error.message)
+        throw asRefusal(error)
+      }
+      const estimate = planEstimate(survey, floor === undefined ? {} : { floors: [floor] })
+      const units = displayFor(args['units'], args['decimal'], loaded.plan)
+      return estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv')
+    }
+    if (args['rates'] !== undefined) throw new ToolRefusal('rates goes with for=estimate: the take-off by room holds no cost.')
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const rooms = args['rooms'] as string[] | undefined
     for (const id of rooms ?? []) roomArg(survey.plan, id, 'rooms item')
@@ -384,6 +513,7 @@ const takeoffTool: GridTool = {
       ...t.rooms.map((r) => `  ${q(r.name)}: floor ${areaText(r.floorArea, units)}, ceiling ${areaText(r.ceiling, units)}, skirting ${lengthText(r.skirting, units)}, wall face ${areaText(r.wallFace, units)} (${r.openingsOff.toFixed(2)} m² of openings off, walls ${r.height === null ? 'none' : `${r.height.toFixed(2)} m`} high)`),
       `Totals: floor ${areaText(t.totals.floorArea, units)}, ceiling ${areaText(t.totals.ceiling, units)}, skirting ${lengthText(t.totals.skirting, units)}, wall face ${areaText(t.totals.wallFace, units)}.`,
       ...Object.values(TAKEOFF_RULES),
+      'For a first estimate (finishes, reveals, walls by thickness, doors and windows by size, slab, roof) and a cost from the person\'s rates, ask with for=estimate.',
     ]
     return { text: lines.join('\n'), data }
   },
@@ -659,7 +789,7 @@ const measureTool: GridTool = {
       const lines = [
         `From ${name(route.from)} to ${name(route.to)}: ${steps}.`,
         route.narrowestPassage ? `Narrowest door or opening on the way: ${q(route.narrowestPassage.via)}, ${L(route.narrowestPassage.width)}.` : 'No door or opening on the way, only open sides.',
-        `Widest circle in each room passed: ${widths}.`,
+        `Widest circle in each room on the way: ${widths}.`,
         EMPTY_ROOM_RULE,
       ]
       return { text: lines.join('\n'), data: { what, answer: { found: true, ...route }, rule: EMPTY_ROOM_RULE } }
@@ -977,7 +1107,7 @@ const checkTool: GridTool = {
     for (const check of record.coverage) {
       const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
       const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
-      lines.push(`  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
+      lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}${readFor}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
     }
     // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
     lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
