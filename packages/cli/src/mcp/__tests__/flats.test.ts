@@ -56,7 +56,8 @@ describe('CNT-4 flats in the tool server', () => {
     expect(reply.text).toContain('Flats, as the plan lists them:')
     expect(reply.text).toContain('  "Flat A" (One bedroom; 5 rooms): 68.27 m²')
     expect(reply.text).toContain('  "Flat D" (Two bedrooms, mirrored; 6 rooms): 99.23 m²')
-    expect(reply.text).toContain('  In no flat: 84.49 m².')
+    // ARE-14: with the common parts' area to the party walls after it.
+    expect(reply.text).toContain('  In no flat: 84.49 m²; to the party walls 95.85 m² to the inside face of the outer walls, 99.35 m² to the outside face of the outer walls.')
     expect(reply.text).toContain("A flat's area is the net area of the rooms the plan lists for it")
     const csv = await b.call('grid_areas', { plan: 'four.json', format: 'csv' })
     expect(csv.text).toContain('ground,A,Flat A,One bedroom,,,68.267,734.821,flat,proven')

@@ -28,6 +28,7 @@ Notes for agents and people changing this repository.
   carries its rule from `MEASURES`, in Grid's own words; the table in `docs/areas.md` must match
   it, and no measuring standard is named anywhere but in a figure record (a test checks both).
   The CLI's `quantities/areas.ts` adds room sizes, free floor, circulation and each figure's state.
+  `partyWalls.ts` (ARE-14) measures a flat, or the rooms in no flat, to the middle of its party walls.
 - `packages/floorplan/src/geometry/arc.ts` (CNT-18): a curved wall (C21, `arc` in the schema):
   its curve worked out from its centre and sweep, its faults, and the stations straight pieces
   follow it by. Read a wall that may be curved through `wall.ts`: `wallLength`, `wallFrameAt`,

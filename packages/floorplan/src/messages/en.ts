@@ -2358,7 +2358,27 @@ export const en = {
   'outdoor.open': 'open',
   'areas.room.outdoor': ', {kind}, {roofed}: outdoor space, listed apart',
   'areas.outdoor': 'Outdoor space, listed apart: {area} ({kinds}), {roofed} roofed and {open} open. {rule}',
-  'areas.outdoor.kind': '{kind} {area}'
+  'areas.outdoor.kind': '{kind} {area}',
+  'areas.measure.partyWall.name': 'Area to the party walls',
+  'areas.measure.partyWall.measures': "Area to the party walls is the floor of a flat's rooms with the walls and partitions between them, measured to the middle of each wall it shares with another flat, the common parts or a neighbour, and to the inside face of the walls that face outside, or to their outside face for the outside-face figure.",
+  'areas.measure.partyWall.notTakenOff': 'Nothing inside the flat is taken off: its inner walls, its partitions, its columns and its stair, on each floor it stands on, are all in it.',
+  'areas.measure.partyWall.cannotSay': "The plan cannot say which rooms make a flat but by its flats list, so floor no room claims and outdoor space are in no flat's figure, and a wall to a neighbour counts to its middle only once the plan marks it separating.",
+  'areas.measure.freeFloor.name': 'Free floor',
+  'areas.measure.freeFloor.measures': "Free floor is a room's net area less the floor its fixtures stand on: their footprints, joined where they overlap, within the room.",
+  'areas.measure.freeFloor.notTakenOff': 'Only the fixtures the plan states are taken off, at the sizes it states: loose furniture, which the plan does not hold, and the floor kept clear in front of a fixture both count as free.',
+  'areas.measure.freeFloor.cannotSay': "The plan cannot say what stands in a room beyond what it states: a room with no fixtures stated is free floor all over, and a zone's fixtures are its room's too.",
+  'areas.toPartyWalls.grossInternal': '{area} to the inside face of the outer walls',
+  'areas.toPartyWalls.grossExternal': '{area} to the outside face of the outer walls',
+  'areas.flat.toPartyWalls': '; to the party walls {areas}',
+  'areas.flat.free': '; free floor {area}',
+  'areas.flat.outdoor': '; outdoor space {area}, listed apart',
+  'areas.flat.outdoorCounted': '; outdoor space {area}, of which your rules count {counted}: {withIt} with it',
+  'areas.free.total': 'Free floor: {free}, the net less the {taken} its fixtures stand on. {rule}',
+  'areas.free.floor': ', free floor {area}',
+  'areas.outdoor.leftOut': 'No rule you stated counts any of it, so it is left out of every total.',
+  'areas.outdoor.counted': 'Your rule counts {share}% of each {kind}, and Grid has not checked it ({rule}): {area}.',
+  'areas.outdoor.notCounted': 'No rule you stated counts any {kinds}, so that space is left out of every total.',
+  'areas.outdoor.withNet': 'Net with the outdoor space your rules count: {area}. Every other figure here leaves it out.'
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof en

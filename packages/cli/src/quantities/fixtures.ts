@@ -11,7 +11,10 @@ import {
   ITEM_KINDS,
   itemFloorTaken,
   itemRoom,
+  MEASURES,
   roomShapes,
+  roomZones,
+  tryRoomShape,
   validatePlan,
   type FloorPlan,
   type Item,
@@ -20,7 +23,8 @@ import {
 
 export const FIXTURE_RULES = {
   count: 'Fixtures are the plan\'s items, counted by kind; the room each is in is the one that holds the middle of its footprint. The plan holds fixed fixtures only: loose furniture, points and seats come later.',
-  free: 'Free floor is a room\'s net area less the floor its fixtures stand on: their footprints, joined where they overlap, within the room.',
+  // ARE-14: one of the area measures, said in its words.
+  free: MEASURES.freeFloor.measures,
 } as const
 
 export interface FixtureRow {
@@ -46,6 +50,8 @@ export interface Fixtures {
   readonly counts: Readonly<Record<ItemKind, number>>
   /** The floor fixtures take in each room, by room id, in square metres. */
   readonly taken: ReadonlyMap<string, number>
+  /** ARE-14: the floor fixtures take in each zone (CNT-8), by zone id: those whose middle is in the zone, within it. Its room's `taken` holds them too. */
+  readonly zoneTaken: ReadonlyMap<string, number>
   /** Items left out (a kind not held yet, a number not accepted): grid_check says why. */
   readonly leftOut: readonly string[]
 }
@@ -57,7 +63,7 @@ function emptyCounts(): Record<ItemKind, number> {
 /** The plan's fixtures, on the floors given (every floor when left out). */
 export function planFixtures(plan: FloorPlan, floors?: readonly string[]): Fixtures {
   const items = (plan.items ?? []).filter((item) => floors === undefined || floors.includes(floorOf(item)))
-  if (items.length === 0) return { rows: [], counts: emptyCounts(), taken: new Map(), leftOut: [] }
+  if (items.length === 0) return { rows: [], counts: emptyCounts(), taken: new Map(), zoneTaken: new Map(), leftOut: [] }
   const index = indexPlan(plan)
   const { broken } = validatePlan(plan, index)
   const shapes = roomShapes(index, broken)
@@ -82,7 +88,13 @@ export function planFixtures(plan: FloorPlan, floors?: readonly string[]): Fixtu
       turn: item.turn ?? 0,
     }
   })
-  return { rows, counts, taken: itemFloorTaken(sound, shapes), leftOut }
+  const zones = roomZones(index)
+  const zoneShapes = plan.rooms.flatMap((room) => {
+    if (broken.has(room.id) || !zones.zoneOf.has(room.id)) return []
+    const shape = tryRoomShape(room, index)
+    return shape === null ? [] : [{ room, shape }]
+  })
+  return { rows, counts, taken: itemFloorTaken(sound, shapes), zoneTaken: zoneShapes.length === 0 ? new Map() : itemFloorTaken(sound, zoneShapes), leftOut }
 }
 
 /** "2 toilets, 1 basin", kinds with none left out; "no fixtures" when there are none. */

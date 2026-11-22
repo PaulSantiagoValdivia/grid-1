@@ -204,7 +204,13 @@ describe('the outdoor mark (C26)', () => {
     expect(plain.outdoor!.byKind).toEqual({ other: plain.outdoor!.area })
     const balcony = marked('s03a-flat-balcony', { balcony: { outdoor: 'balcony' } })
     const weighted = planAreaFigures(balcony, { outdoorWeights: { balcony: { weight: 0.5, rule: 'Half a balcony, a rule the caller states.' } } })
-    expect(weighted.outdoor!.weighted).toEqual({ area: weighted.outdoor!.area / 2, rules: ['Half a balcony, a rule the caller states.'] })
+    // ARE-14 adds each kind the rule counts and the net with that floor beside it.
+    expect(weighted.outdoor!.weighted).toEqual({
+      area: weighted.outdoor!.area / 2,
+      rules: ['Half a balcony, a rule the caller states.'],
+      kinds: [{ kind: 'balcony', area: weighted.outdoor!.area, share: 0.5, counted: weighted.outdoor!.area / 2, rule: 'Half a balcony, a rule the caller states.' }],
+      withNet: weighted.net.area! + weighted.outdoor!.area / 2,
+    })
     expect(weighted.net.area).toBe(planAreaFigures(balcony).net.area)
   })
 })
