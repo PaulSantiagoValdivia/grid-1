@@ -868,6 +868,33 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Columns and structural grids (CNT-16) ─────────────────────────────────────────────────
+  columnRoundPieces: {
+    kind: 'limit',
+    value: 32,
+    unit: 'count',
+    decides:
+      'How many straight sides a round column is drawn and exported with, and cut to its room ' +
+      'with; its own area, and what it takes off a room it stands wholly in, is the true circle\'s.',
+    basis: own
+  },
+  gridLinesMost: {
+    kind: 'limit',
+    value: 100,
+    unit: 'count',
+    decides: 'The most lines one set of a structural grid may have; a set with more is refused.',
+    basis: own
+  },
+  gridOverrun: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'How far a structural grid\'s lines are drawn past the outermost line across them, where ' +
+      'their names are written and their spacing is dimensioned.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',

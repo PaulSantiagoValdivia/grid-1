@@ -70,6 +70,7 @@ import type { Vec2 } from '../vec2'
 import { partPhases, phasedJoints } from '../phases'
 import type { Phase } from '../../types/floorplan'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
+import { columnArea, columnDepth, columnFloorIds, columnPart, soundColumns } from '../columns'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { roomFloorArea } from '../room'
 import { FLAT_AREA_RULE, MEASURES, planAreaFigures } from '../areas'
@@ -592,7 +593,7 @@ function analyseFloor(plan: FloorPlan, floor: Floor): FloorModel {
   } catch {
     // Validation is total, but the export must be even if it is not: a floor
     // that cannot be analysed is a floor with nothing sound on it.
-    const empty: FloorPlan = { ...plan, walls: [], rooms: [], openings: [], items: [] }
+    const empty: FloorPlan = { ...plan, walls: [], rooms: [], openings: [], items: [], ...(plan.columns === undefined ? {} : { columns: [] }) }
     return { floor, index: indexPlan(empty), broken: new Set(), walls: [] }
   }
 }
@@ -2244,6 +2245,64 @@ function writeItems(building: Context, storeys: readonly Storey[]): void {
   }
 }
 
+/**
+ * CNT-16 (C25): each column as an IfcColumn on the storey of its own floor, raised once, whole: a
+ * square column a rectangle and a round one a circle, swept from the storey's level to its top
+ * (the floor it rises through, its stated height above that floor's level, else that storey's
+ * height), turned as the plan turns it. `ObjectType` is its shape and `Tag` its id, with its base
+ * quantities: its length, its cross-section and its volume. Written after the stairs, in a
+ * containment relation of their own per storey, so a plan with no columns writes the same file.
+ */
+function writeColumns(building: Context, plan: FloorPlan, storeys: readonly Storey[]): void {
+  if ((plan.columns ?? []).length === 0) return
+  const byFloor = new Map(storeys.map((storey) => [storey.model.floor.id, storey] as const))
+  for (const storey of storeys) {
+    const { index, floor } = storey.model
+    const c = onFloor(building, floor.id)
+    const written: number[] = []
+    for (const column of soundColumns(index.plan)) {
+      const part = columnPart(column)
+      if (part !== null && !part.base) continue
+      try {
+        const whole = part?.whole ?? column
+        const floors = columnFloorIds(plan, whole)
+        const top = byFloor.get(floors[floors.length - 1]!) ?? storey
+        const rise = top.elevation + (whole.height ?? top.height) - storey.elevation
+        if (!(rise > 0)) continue
+        const turn = ((column.turn ?? 0) * Math.PI) / 180
+        const along: Triple = [Math.cos(turn), Math.sin(turn), 0]
+        const columnPlacement = placement(c.w, storey.placement, [column.at[0], column.at[1], 0], along)
+        const position = c.w.add('IFCAXIS2PLACEMENT2D', ref(c.w.add('IFCCARTESIANPOINT', reals([0, 0]))), ref(c.shared.east2))
+        const profile = column.shape === 'round'
+          ? c.w.add('IFCCIRCLEPROFILEDEF', en('AREA'), NULL, ref(position), real(column.width / 2))
+          : rectangleProfile(c, column.width, columnDepth(column), 0)
+        const body = bodyRepresentation(c, extrusion(c, profile, rise))
+        const element = c.w.add(
+          'IFCCOLUMN',
+          str(c.guid('column', column.id)),
+          ref(c.owner),
+          str(column.label ?? column.id),
+          NULL,
+          str(column.shape),
+          ref(columnPlacement),
+          ref(productShape(c, [body])),
+          str(column.id)
+        )
+        const section = columnArea(column)
+        quantitySet(c, `column:${column.id}`, 'Qto_ColumnBaseQuantities', [
+          ['LENGTH', 'Length', rise],
+          ['AREA', 'CrossSectionArea', section],
+          ['VOLUME', 'GrossVolume', section * rise],
+        ], element)
+        written.push(element)
+      } catch {
+        // A column that cannot be built is left out.
+      }
+    }
+    if (written.length > 0) relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `columns:${floor.id}`, refs(written), ref(storey.id))
+  }
+}
+
 /** CNT-9: the name of the property set that holds a part's facts of the person's own. */
 export const IFC_FACTS_SET = 'Grid_Properties'
 
@@ -2531,6 +2590,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeSlabs(c, plan, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
+  writeColumns(c, plan, storeys)
   writeZones(c, plan, storeys)
   writeFacts(c)
   writePhases(c)

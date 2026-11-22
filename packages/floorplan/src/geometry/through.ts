@@ -49,8 +49,14 @@ function floorsOf(plan: FloorPlan): readonly Floor[] {
   return floors
 }
 
-/** Why a wall's `through` reaches no floor above its own, or null when it does. */
-export function throughProblem(plan: FloorPlan, wall: Wall): 'unknown' | 'not-above' | null {
+/** A part that may rise through floors: a wall (LVL-5) or a column (CNT-16). */
+export interface RisingPart {
+  readonly floor?: string
+  readonly through?: string
+}
+
+/** Why a wall's (or a column's, CNT-16) `through` reaches no floor above its own, or null when it does. */
+export function throughProblem(plan: FloorPlan, wall: RisingPart): 'unknown' | 'not-above' | null {
   if (wall.through === undefined || wall.through === floorOf(wall)) return null
   const floors = floorsOf(plan)
   const base = floors.find((f) => f.id === floorOf(wall))
@@ -64,7 +70,7 @@ export function throughProblem(plan: FloorPlan, wall: Wall): 'unknown' | 'not-ab
  * it rises `through`. A wall that rises through no floor, or names one that is not above its own,
  * stands on its own floor only (and `throughIssues` says so).
  */
-export function wallFloorIds(plan: FloorPlan, wall: Wall): string[] {
+export function wallFloorIds(plan: FloorPlan, wall: RisingPart): string[] {
   const own = floorOf(wall)
   if (wall.through === undefined || wall.through === own || throughProblem(plan, wall) !== null) return [own]
   const floors = floorsOf(plan)

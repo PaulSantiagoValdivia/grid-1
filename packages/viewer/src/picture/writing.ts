@@ -145,6 +145,9 @@ export function keyEntries(
   }
   if (phases !== undefined && [...drawing.walls, ...drawing.openings].some((part) => part.phase === 'demolished')) entries.push({ swatch: 'dash', color: phases.demolished, words: say('drawing.key.demolished') })
   if (drawing.walls.some((wall) => wall.virtual)) entries.push({ swatch: 'dash', color: look.virtual, words: say('drawing.key.virtual') })
+  // CNT-16: the columns, in the outside walls' tone, and the structural grid's chain lines.
+  if ((drawing.columns ?? []).length > 0) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.column') })
+  if ((drawing.grids ?? []).length > 0) entries.push({ swatch: 'dash', color: look.dimension, words: say('drawing.key.grid') })
   if (drawing.openings.some((o) => o.type === 'window')) entries.push({ swatch: 'fill', color: look.window, words: say('drawing.key.window') })
   if (shown.swings && drawing.openings.some((o) => o.type === 'door' && o.hinge !== undefined && o.swing !== undefined)) {
     entries.push({ swatch: 'door', color: look.wall, words: say('drawing.key.door') })

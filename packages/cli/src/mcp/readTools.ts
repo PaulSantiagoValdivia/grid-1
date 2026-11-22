@@ -14,7 +14,7 @@ import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, i
 import { causeText, checkPlan, checkTitle, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmSectionTitle, firmStandardsText, kindWord, limitsText, nothingCheckedText, partsText, placeText, type PlaceWords, problemsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { askedLanguage, languageFor } from '../command/language'
 import { inLanguage, t, tv } from '../command/words'
-import { LANGUAGES, english, said, say, type Language } from '@ongrid/floorplan/messages'
+import { LANGUAGES, english, joined, num, said, say, type Language } from '@ongrid/floorplan/messages'
 import { readSeen, type SeenState } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
 import { describePlan, describeRooms, describeWalk, walkOf } from '../command/describe'
@@ -62,7 +62,7 @@ import { FIGURES_HEADING, readBrief } from '../brief/brief'
 import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantities/survey'
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
 import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
-import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
+import { columnRule, planTakeoff, TAKEOFF_RULES, type ColumnRun } from '../quantities/takeoff'
 import { FINISH_RULE, FINISH_SURFACES, FINISH_UNITS, WALL_TYPE_RULE, planFinishes, wallTypeRuns, type FinishSurface } from '../quantities/finishes'
 import {
   askPlan,
@@ -562,6 +562,20 @@ function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Disp
   return { text: lines.join('\n'), data }
 }
 
+/** CNT-16: the take-off's columns, in a line, by shape and size. */
+function columnsLine(runs: readonly ColumnRun[], units: Display): string {
+  const parts = runs.map((run) =>
+    said(run.depth === null ? 'takeoff.columns.round' : 'takeoff.columns.square', {
+      count: run.count,
+      width: num(lengthText(run.width, units)),
+      depth: num(run.depth === null ? '' : lengthText(run.depth, units)),
+      length: num(lengthText(run.length, units)),
+      volume: num(run.volume.toFixed(2)),
+    })
+  )
+  return english(said('takeoff.columns', { runs: joined(parts, 'join.semicolon') }))
+}
+
 /** CNT-15: one line per surface with each finish's quantity, a finish not stated last. */
 function finishLines(totals: readonly { readonly surface: FinishSurface; readonly finish: string | null; readonly quantity: number; readonly rooms: readonly string[] }[], units: Display): string[] {
   const words: Record<FinishSurface, string> = { floor: 'Floor', walls: 'Wall faces', ceiling: 'Ceilings', skirting: 'Skirting' }
@@ -605,6 +619,8 @@ const takeoffTool: GridTool = {
   },
   outputSchema: objectSchema({
     walls: listSchema(objectSchema({ kind: STRING, count: NUMBER, gross: NUMBER, net: NUMBER })),
+    // CNT-16: the columns by shape and size, on a plan that states any.
+    columns: listSchema(objectSchema({ shape: STRING, width: NUMBER, depth: NULLABLE_NUMBER, count: NUMBER, length: NUMBER, volume: NUMBER })),
     // CNT-15, on a plan that names wall types or finishes: the walls of each named type, and each finish's total.
     wallTypes: listSchema(objectSchema({ type: STRING, name: STRING, kind: NULLABLE_STRING, material: NULLABLE_STRING, glazed: BOOLEAN, count: NUMBER, gross: NUMBER, net: NUMBER, face: NUMBER })),
     finishes: listSchema(objectSchema({ surface: STRING, finish: NULLABLE_STRING, unit: STRING, quantity: NUMBER, rooms: listSchema(STRING) })),
@@ -668,6 +684,7 @@ const takeoffTool: GridTool = {
     const finishes = rooms === undefined && planHasFinishes(survey.plan) ? planFinishes(survey, floor === undefined ? undefined : [floor]).totals : null
     const data = {
       walls: t.walls,
+      ...(t.columns === undefined ? {} : { columns: t.columns }),
       ...(wallTypes.length === 0 ? {} : { wallTypes }),
       ...(finishes === null ? {} : { finishes }),
       rooms: t.rooms,
@@ -679,6 +696,8 @@ const takeoffTool: GridTool = {
     if (args['format'] === 'csv') {
       const rows = [
         ...t.walls.map((w) => ['wall', `${w.kind} walls (${w.count})`, null, null, null, null, w.gross, w.net, null]),
+        // CNT-16: the columns, their metres as the length.
+        ...(t.columns ?? []).map((c) => ['column', `${c.shape} ${c.depth === null ? c.width : `${c.width} x ${c.depth}`} (${c.count})`, null, null, null, null, c.length, null, null]),
         ...t.rooms.map((r) => ['room', r.name, r.floorArea, r.ceiling, r.skirting, r.wallFace, r.perimeter, null, null]),
         ['total', 'all rooms', t.totals.floorArea, t.totals.ceiling, t.totals.skirting, t.totals.wallFace, null, null, null],
         // LVL-4: worked out from the outlines, never stated by the plan (AC-6).
@@ -705,6 +724,7 @@ const takeoffTool: GridTool = {
     const assumed = [...new Set(t.envelope.floors.flatMap((f) => f.assumed))]
     const lines = [
       `Walls: ${t.walls.map((w) => `${w.kind} ${lengthText(w.gross, units)} (${w.count} wall${w.count === 1 ? '' : 's'}; ${lengthText(w.net, units)} less openings)`).join('; ')}.`,
+      ...(t.columns === undefined ? [] : [columnsLine(t.columns, units)]),
       'By room: floor and ceiling, skirting, wall face to plaster.',
       ...t.rooms.map((r) => `  ${q(r.name)}: floor ${areaText(r.floorArea, units)}, ceiling ${areaText(r.ceiling, units)}, skirting ${lengthText(r.skirting, units)}, wall face ${areaText(r.wallFace, units)} (${r.openingsOff.toFixed(2)} m² of openings off, walls ${r.height === null ? 'none' : `${r.height.toFixed(2)} m`} high)`),
       `Totals: floor ${areaText(t.totals.floorArea, units)}, ceiling ${areaText(t.totals.ceiling, units)}, skirting ${lengthText(t.totals.skirting, units)}, wall face ${areaText(t.totals.wallFace, units)}.`,
@@ -719,6 +739,7 @@ const takeoffTool: GridTool = {
       ...Object.values(TAKEOFF_RULES),
       ...(wallTypes.length === 0 ? [] : [WALL_TYPE_RULE]),
       ...(finishes === null ? [] : [FINISH_RULE]),
+      ...(t.columns === undefined ? [] : [columnRule()]),
       'For a first estimate (finishes, reveals, walls by thickness, doors and windows by size, slab, roof) and a cost from the person\'s rates, ask with for=estimate.',
     ]
     return { text: lines.join('\n'), data }

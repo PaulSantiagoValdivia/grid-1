@@ -28,6 +28,7 @@
 
 import type { PlanDrawing, PlanRoom, PlanWall, Bounds } from './floorplan'
 import { computeBounds } from './floorplan'
+import { gridDimensions } from './structuralGrid'
 import { signedDistanceToOutline } from './innerPoint'
 import { tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
@@ -35,9 +36,10 @@ import { add, cross, distance, dot, length, normalize, perp, scale, signedArea, 
 
 /**
  * What a dimension measures: the plan's overall size, a chain of walls or of openings outside
- * the plan, a room inside it, or one opening on its own wall (`openingDimensions`).
+ * the plan, a room inside it, one opening on its own wall (`openingDimensions`), or (CNT-16) the
+ * spacing of a structural grid's lines (`gridDimensions`).
  */
-export type DimensionKind = 'overall' | 'wall' | 'opening' | 'room'
+export type DimensionKind = 'overall' | 'wall' | 'opening' | 'room' | 'grid'
 
 /** What one end of a dimension measures to. */
 export type MeasuredTo = 'centre-line' | 'face' | 'finish'
@@ -552,6 +554,8 @@ export interface DimensionOptions {
   readonly rooms?: boolean
   /** Each door and window's width on its own wall, inside walls too. Off by default. */
   readonly openings?: boolean
+  /** CNT-16: the spacing of the structural grids drawn, line to line and in all. */
+  readonly grids?: boolean
 }
 
 /**
@@ -564,7 +568,7 @@ export function buildDimensions(
   whole: PlanDrawing,
   options: DimensionOptions = {}
 ): Dimension[] {
-  const { overall = true, chains = true, rooms = true, openings = false } = options
+  const { overall = true, chains = true, rooms = true, openings = false, grids = true } = options
   // CNT-10: the sizes are of the building after the work; what is to be demolished has none.
   const standing = (part: { readonly phase?: string }): boolean => part.phase !== 'demolished'
   const drawing = whole.walls.every(standing) && whole.openings.every(standing) ? whole : { ...whole, walls: whole.walls.filter(standing), openings: whole.openings.filter(standing) }
@@ -573,6 +577,7 @@ export function buildDimensions(
   result.push(...outsideDimensions(drawing, { overall, chains }))
   if (rooms) for (const room of drawing.rooms) result.push(...roomDimensions(room, drawing.walls))
   if (openings) result.push(...openingDimensions(drawing))
+  if (grids) for (const grid of drawing.grids ?? []) result.push(...gridDimensions(grid))
 
   return result
 }

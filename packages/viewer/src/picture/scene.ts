@@ -46,7 +46,7 @@ import {
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { Look, PlanLook } from './look'
-import { LINE_PX, TEXT_PX, UNDRAWN_TINT, USE_FILLS, lengthText, lineMetres, toLook } from './look'
+import { GRID_BUBBLE_PX, LINE_PX, TEXT_PX, UNDRAWN_TINT, USE_FILLS, lengthText, lineMetres, toLook } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 import type { NumberedFault } from './faults'
@@ -268,6 +268,12 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     outline: { fill: 'none', stroke: ink, 'stroke-width': width('above') } as Attrs,
     fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
     fixtureLine: { fill: 'none', stroke: ink, 'stroke-width': width('fixture'), 'stroke-linecap': 'butt' } as Attrs,
+    // CNT-16: a column cut through as a wall is, in the outside walls' tone, outlined in ink; a
+    // structural grid's chain lines and its names' circles in the dimensions' colour.
+    column: { fill: look.wallExterior, stroke: ink, 'stroke-width': width('column'), 'stroke-linejoin': 'miter' } as Attrs,
+    gridLine: { fill: 'none', stroke: look.dimension, 'stroke-width': width('grid'), 'stroke-dasharray': dashes('chain') } as Attrs,
+    gridBubble: { fill: look.paper, stroke: look.dimension, 'stroke-width': width('grid') } as Attrs,
+    gridName: text(look.dimensionText, TEXT_PX.gridName),
     doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
     doorArc: { fill: 'none', stroke: ink, 'stroke-width': width('doorArc') } as Attrs,
     windowFace: { stroke: ink, 'stroke-width': width('windowFace'), 'stroke-linecap': 'butt' } as Attrs,
@@ -729,6 +735,33 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     )
   }
 
+  // CNT-16: each structural grid, its chain lines over the room fills and under the walls, and
+  // each line's name in a circle past both its ends. Drawing, not a target. Its spacing is with
+  // the other dimensions.
+  for (const grid of drawing.grids ?? []) {
+    const r = GRID_BUBBLE_PX * mpp
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'grid', 'data-id': grid.id, 'data-name': grid.name ?? undefined, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        grid.lines.flatMap((line, index) => {
+          const ends = [
+            { x: line.from.x + line.along.x * r, y: line.from.y + line.along.y * r },
+            { x: line.to.x - line.along.x * r, y: line.to.y - line.along.y * r }
+          ]
+          return [
+            el('path', { 'data-part': 'grid-line', 'data-line': line.name, d: virtualPath([line.from, line.to]), ...paint.gridLine }, [], `l${index}`),
+            ...ends.flatMap((at, end) => [
+              el('circle', { 'data-part': 'grid-bubble', cx: at.x, cy: -at.y, r, ...paint.gridBubble }, [], `b${index}-${end}`),
+              el('g', { transform: labelTransform(at, mpp) }, [el('text', { 'data-part': 'grid-name', dy: String(DIMENSION_DY), ...paint.gridName }, [line.name])], `n${index}-${end}`)
+            ])
+          ]
+        }),
+        `grid:${grid.id}`
+      )
+    )
+  }
+
   // CNT-12: the fixtures, over the room fills and under the walls, so a wall covers a fixture
   // that runs into it. Each is its symbol to scale, in the wall's ink on the paper. Drawing, not
   // a target: clicks reach the room underneath. Lit, like a wall, while the warning of a door
@@ -870,6 +903,16 @@ function planSceneIn(input: SceneInput): SvgNode[] {
         ),
         wall.id
       )
+    )
+  }
+
+  // CNT-16: each column, cut through as the walls are, over them where it meets one. A round one
+  // is its true circle. Drawing, not a target: clicks reach the room underneath.
+  for (const column of drawing.columns ?? []) {
+    out.push(
+      column.radius !== undefined
+        ? el('circle', { 'data-part': 'column', 'data-id': column.id, 'data-shape': column.shape, 'data-room': column.room ?? undefined, cx: column.centre.x, cy: -column.centre.y, r: column.radius, 'pointer-events': 'none', ...paint.column }, [], `column:${column.id}`)
+        : el('path', { 'data-part': 'column', 'data-id': column.id, 'data-shape': column.shape, 'data-room': column.room ?? undefined, d: pathOf(column.outline), 'pointer-events': 'none', ...paint.column }, [], `column:${column.id}`)
     )
   }
 

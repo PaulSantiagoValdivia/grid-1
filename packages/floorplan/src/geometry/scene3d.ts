@@ -38,6 +38,7 @@ import { planStairs } from './stairs'
 import { floorElevations } from './elevations'
 import { planFloors, wholePlan } from './floors'
 import { wholeWall } from './through'
+import { columnFootprint, columnPart, columnRise, soundColumns } from './columns'
 import { floorEnvelope, type FloorRoof } from './envelope'
 import { wallTopProfile, type RoofPlane, type WallTopPoint } from './roofs'
 import { piecesAsRings } from './polygons'
@@ -351,6 +352,18 @@ function roofSolidOf(roof: FloorRoof, base: number): SceneSolid {
   return { pieces, bottom: 0, top: roof.thickness }
 }
 
+/**
+ * CNT-16: a column, raised once, whole, from its own floor's z = 0 to its top (`columnRise`): its
+ * footprint, counter-clockwise, solid from `bottom` to `top`.
+ */
+export interface SceneColumn {
+  readonly id: string
+  readonly shape: 'square' | 'round'
+  readonly outline: readonly Vec2[]
+  readonly bottom: number
+  readonly top: number
+}
+
 export interface Scene3D {
   readonly walls: readonly SceneWall[]
   /** CNT-14: the frames, leaves and glass of the doors and windows the walls hold. */
@@ -359,6 +372,8 @@ export interface Scene3D {
   readonly dividers: readonly SceneDivider[]
   /** The stairs that rise from this floor (LVL-3); empty when the plan states none. */
   readonly stairs: readonly SceneStair[]
+  /** CNT-16: the columns raised from this floor, each once, whole; `buildScene` always gives the list, empty when the plan states none. */
+  readonly columns?: readonly SceneColumn[]
   /** The slab under this floor and the roof over its parts with nothing above (LVL-4), or null. */
   readonly shell: SceneShell | null
   /** Plan envelope, for framing the camera. */
@@ -627,6 +642,20 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
     }
   }
 
+  // CNT-16: each column standing here, raised once from its own floor; on a floor above, where a
+  // column through floors has been raised already, nothing.
+  const columns: SceneColumn[] = []
+  if ((plan.columns ?? []).length > 0) {
+    const { whole } = wholePlan(plan)
+    for (const column of soundColumns(plan)) {
+      const part = columnPart(column)
+      if (part !== null && !part.base) continue
+      const top = columnRise(whole, part?.whole ?? column)
+      if (!(top > 0)) continue
+      columns.push({ id: column.id, shape: column.shape, outline: columnFootprint(column), bottom: 0, top })
+    }
+  }
+
   // The bounds stay the walls' axes and the rooms, as before: the shell reaches out to the walls'
   // faces, which the bounds do not frame either.
   const shell = options.shell !== undefined ? options.shell : sceneShell(plan)
@@ -635,5 +664,5 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
   const order = new Map(plan.openings.map((o, i) => [o.id, i] as const))
   openings.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
 
-  return { walls, openings, slabs, dividers, stairs, shell, bounds: computeBounds(extent), height, issues }
+  return { walls, openings, slabs, dividers, stairs, columns, shell, bounds: computeBounds(extent), height, issues }
 }

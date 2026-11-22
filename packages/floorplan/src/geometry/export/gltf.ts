@@ -17,7 +17,7 @@
  */
 
 import type { Scene3D } from '../scene3d'
-import { OPENING_PART_KINDS, floorMesh, makeNamer, openingPartMesh, shellMesh, stairMesh, wallMesh } from './mesh'
+import { OPENING_PART_KINDS, columnMesh, floorMesh, makeNamer, openingPartMesh, shellMesh, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { english, name, said } from '../../messages/say'
@@ -109,7 +109,7 @@ interface Part {
   readonly glass?: true
 }
 
-/** Everything the scene could build, walls first, then room floors, stairs, the doors' and windows' parts (CNT-14) and the shell (LVL-4), as OBJ lists them. */
+/** Everything the scene could build, walls first, then room floors, stairs, columns (CNT-16), the doors' and windows' parts (CNT-14) and the shell (LVL-4), as OBJ lists them. */
 function partsOf(scene: Scene3D): Part[] {
   const nameOf = makeNamer()
   const parts: Part[] = []
@@ -124,6 +124,11 @@ function partsOf(scene: Scene3D): Part[] {
   for (const stair of scene.stairs) {
     const mesh = stairMesh(stair)
     if (mesh) parts.push({ name: nameOf('stair', stair.id), mesh })
+  }
+  // CNT-16: each column, once, whole.
+  for (const column of scene.columns ?? []) {
+    const mesh = columnMesh(column)
+    if (mesh) parts.push({ name: nameOf('column', column.id), mesh })
   }
   // CNT-14: each door's and window's frame, leaves and glass; the glass in its own material.
   for (const opening of scene.openings) {

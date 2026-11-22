@@ -43,10 +43,11 @@ const pairs = (values: readonly unknown[]): Pair2[] =>
  * Where the plan's zero goes in an export: (0, 0) for a plan near it, else the site's origin, else
  * the middle of its walls in whole steps of `farFromOrigin`.
  */
-export function exportOrigin(plan: Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site'>): Pair2 {
+export function exportOrigin(plan: Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site' | 'columns' | 'grids'>): Pair2 {
   const wallPoints = pairs(plan.walls.flatMap((wall) => [wall.start, wall.end]))
   const others = pairs([
     ...(plan.items ?? []).map((item) => item.at),
+    ...(plan.columns ?? []).map((column) => column.at),
     ...(plan.stairs ?? []).flatMap((stair) => (Array.isArray(stair.run) ? stair.run : []))
   ])
   if ([...wallPoints, ...others].some(([x, y]) => Math.hypot(x, y) > limit('largest'))) return [0, 0]
@@ -63,10 +64,10 @@ export function exportOrigin(plan: Pick<FloorPlan, 'walls' | 'items' | 'stairs' 
 
 /**
  * The plan as an export writes it, near zero, and where its zero went (`exportOrigin`). The
- * walls, the fixtures and the stairs are moved; `site.origin` is not, so it stays the plan's own
+ * walls, the fixtures, the stairs, the columns and the grids are moved; `site.origin` is not, so it stays the plan's own
  * point. Everything else is a size, or is placed by a wall.
  */
-export function nearOrigin<P extends Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site'>>(plan: P): NearOrigin<P> {
+export function nearOrigin<P extends Pick<FloorPlan, 'walls' | 'items' | 'stairs' | 'site' | 'columns' | 'grids'>>(plan: P): NearOrigin<P> {
   const at = exportOrigin(plan)
   if (at[0] === 0 && at[1] === 0) return { plan, at: [0, 0] }
   function move<T>(value: T): T {
@@ -79,6 +80,9 @@ export function nearOrigin<P extends Pick<FloorPlan, 'walls' | 'items' | 'stairs
       // CNT-18: a curved wall's centre moves with its ends.
       walls: plan.walls.map((wall) => ({ ...wall, start: move(wall.start), end: move(wall.end), ...(wall.arc === undefined ? {} : { arc: { ...wall.arc, centre: move(wall.arc.centre) } }) })),
       ...(plan.items === undefined ? {} : { items: plan.items.map((item) => ({ ...item, at: move(item.at) })) }),
+      // CNT-16: a column by its middle, a structural grid by its origin.
+      ...(plan.columns === undefined ? {} : { columns: plan.columns.map((column) => ({ ...column, at: move(column.at) })) }),
+      ...(plan.grids === undefined ? {} : { grids: plan.grids.map((grid) => ({ ...grid, origin: move(grid.origin) })) }),
       ...(plan.stairs === undefined
         ? {}
         : { stairs: plan.stairs.map((stair) => (Array.isArray(stair.run) ? { ...stair, run: stair.run.map(move) } : stair)) })

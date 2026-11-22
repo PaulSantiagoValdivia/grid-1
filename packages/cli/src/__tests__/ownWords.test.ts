@@ -117,7 +117,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/walked.ts': [1, 'notYet'],
   'packages/cli/src/report/draft.ts': [16, 'notYet'],
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
-  'packages/cli/src/sheet/coverage.ts': [28, 'developer'],
+  // CNT-16: +1, the columns' place on the sheet ("drawn and tabled").
+  'packages/cli/src/sheet/coverage.ts': [29, 'developer'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
   'packages/cli/src/sheet/sheetFile.ts': [7, 'command'],
   'packages/cli/src/versions/diff.ts': [10, 'notYet'],
@@ -142,7 +143,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/rounding.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/rules/doors.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
-  'packages/floorplan/src/geometry/tolerances.ts': [245, 'developer'],
+  // CNT-16: +5, what the three column and grid entries decide.
+  'packages/floorplan/src/geometry/tolerances.ts': [250, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [2, 'developer'],
