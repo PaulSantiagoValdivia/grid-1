@@ -10,14 +10,18 @@
  * ceiling, skirting and wall face of each room), the areas (`areas.ts`: gross internal per
  * floor), the opening facts (each door and window once, as the schedule counts them) and the
  * library's outlines (`planShell`: the outside face, the slab and the roof). Floor finishes and
- * wall faces are grouped by the room's stated use, because the plan holds no finishes (lab
- * AC-4): which finish a use gets is the person's, through the key they price.
+ * wall faces are grouped by the room's stated use where the room names no finish (lab AC-4):
+ * which finish a use gets is the person's, through the key they price. CNT-15 (C24): a finish a
+ * room or a zone names is a line of its own (`floor:finish:<name>`), a wall of a named type is
+ * priced by its type (`wall-type:<id>:<thickness>`), and a door or window of one by its type
+ * (`door-type:<id>`), so a separating wall is never priced as a partition (lab AC-5).
  *
  * Pure: a survey in, lines out. Nothing here reads a file.
  */
-import { planShell, shellKnown, tolerance } from '@ongrid/floorplan/geometry'
+import { openingTypeOf, planHasFinishes, planShell, shellKnown, tolerance, wallTypeOf } from '@ongrid/floorplan/geometry'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import { AREA_RULES, planAreas } from './areas'
+import { finishShares, type FinishSurface } from './finishes'
 import type { Survey } from './survey'
 import { roomTakeoff } from './takeoff'
 
@@ -31,6 +35,9 @@ export const ESTIMATE_RULES = {
   skirting: 'Each room\'s inside perimeter less the width of every door and doorless opening on it; dividing lines take none.',
   reveals: 'Round each door and window, its two sides and its head, and its sill when it has one, times the thickness of its wall; doorless openings are left out.',
   walls: 'The centre-line length of each solid wall of this kind and thickness, each wall counted once, times its height, less every opening in it; the kind is the one the plan states.',
+  wallType: 'The centre-line length of each solid wall of this type the plan names, at this thickness, each wall counted once, times its height, less every opening in it.',
+  finish: 'The rooms and zones that name this finish: floor and ceiling by their net area, wall faces by each inside side times its wall\'s height less every opening, skirting by the inside perimeter less doorways; a zone\'s finish is its part of its room.',
+  openingType: 'Counted once per opening of this type the plan names; one that states a size of its own is still of its type.',
   externalFinish: 'The outer edge of each floor\'s outline, corners included, times the height of the wall it runs along, less every opening in those walls.',
   openings: 'Counted once per opening, not once per room, by the size of its hole in the wall, width by height; the plan holds no frames, leaves or types.',
   slab: 'Assumed: a slab under the lowest floor\'s outline, its gross external area, because the plan holds no slab.',
@@ -96,6 +103,7 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
   const areas = planAreas(survey, options.floors === undefined ? {} : { floors: options.floors })
   // SHT-11: a stair room over a stair room below has its floor counted there, as in the net area.
   const overStair = new Set(areas.floors.flatMap((f) => f.rooms.filter((room) => room.countedWith !== undefined).map((room) => `${f.floor}\u0000${room.id}`)))
+  const overStairRoom = (room: string, floor: string): boolean => overStair.has(`${floor}\u0000${room}`)
 
   // Rooms: floor and wall faces by use, ceilings and skirting.
   const floorByUse = new Map<string, number>()
@@ -103,6 +111,17 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
   let ceiling = 0
   let skirting = 0
   const leftOut: string[] = []
+  // CNT-15: each finish a room or zone names, by surface, and the part of each room that names none.
+  const byFinish = new Map<string, { surface: FinishSurface; finish: string; quantity: number }>()
+  const finished = planHasFinishes(survey.plan)
+  const shares = finished ? finishShares(survey, onFloor) : []
+  for (const share of shares) {
+    if (share.finish === null || share.quantity <= 0) continue
+    if (share.surface === 'floor' && overStairRoom(share.room, share.floor)) continue
+    const key = `${share.surface}\u0000${share.finish}`
+    const total = byFinish.get(key) ?? { surface: share.surface, finish: share.finish, quantity: 0 }
+    byFinish.set(key, { ...total, quantity: total.quantity + share.quantity })
+  }
   for (const room of survey.rooms) {
     // A zone's floor and walls are its room's (CNT-8): priced once.
     if (!onFloor(room.facts.floor) || room.facts.zoneOf !== undefined) continue
@@ -112,22 +131,44 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
     }
     const t = roomTakeoff(room)
     const use = room.facts.use ?? NO_USE
-    if (!overStair.has(`${room.facts.floor}\u0000${room.facts.id}`)) floorByUse.set(use, (floorByUse.get(use) ?? 0) + t.floorArea)
-    wallByUse.set(use, (wallByUse.get(use) ?? 0) + t.wallFace)
-    ceiling += t.ceiling
-    skirting += t.skirting
+    // CNT-15: what is left of a room once its own finishes and its zones' are priced by finish.
+    const id = room.facts.id
+    const left = (surface: FinishSurface, whole: number): number => {
+      if (!finished) return whole
+      const own = shares.find((share) => share.room === id && share.zone === null && share.surface === surface)
+      return own === undefined ? whole : own.finish === null ? own.quantity : 0
+    }
+    if (!overStair.has(`${room.facts.floor}\u0000${room.facts.id}`)) floorByUse.set(use, (floorByUse.get(use) ?? 0) + left('floor', t.floorArea))
+    wallByUse.set(use, (wallByUse.get(use) ?? 0) + left('walls', t.wallFace))
+    ceiling += left('ceiling', t.ceiling)
+    skirting += left('skirting', t.skirting)
   }
   const uses = [...ROOM_USES, NO_USE].filter((use) => floorByUse.has(use))
+  const finishLines = (surface: FinishSurface): void => {
+    const words: Record<FinishSurface, { key: string; what: string; unit: QuantityUnit }> = {
+      floor: { key: 'floor', what: 'Floor finish', unit: 'm2' },
+      walls: { key: 'wall_finish', what: 'Inside wall faces', unit: 'm2' },
+      ceiling: { key: 'ceiling', what: 'Ceilings', unit: 'm2' },
+      skirting: { key: 'skirting', what: 'Skirting', unit: 'm' },
+    }
+    const of = [...byFinish.values()].filter((f) => f.surface === surface).sort((a, b) => (a.finish < b.finish ? -1 : a.finish > b.finish ? 1 : 0))
+    for (const f of of) add({ key: `${words[surface].key}:finish:${f.finish}`, what: `${words[surface].what}, ${f.finish}`, quantity: f.quantity, unit: words[surface].unit, rule: ESTIMATE_RULES.finish, assumed: false })
+  }
+  finishLines('floor')
   for (const use of uses) add({ key: `floor:${use}`, what: `Floor finish, ${USE_WORDS[use]}`, quantity: floorByUse.get(use)!, unit: 'm2', rule: ESTIMATE_RULES.floor, assumed: false })
-  add({ key: 'ceiling', what: 'Ceilings, every room', quantity: ceiling, unit: 'm2', rule: ESTIMATE_RULES.ceiling, assumed: true })
+  finishLines('ceiling')
+  add({ key: 'ceiling', what: finished ? 'Ceilings, every room that names no ceiling finish' : 'Ceilings, every room', quantity: ceiling, unit: 'm2', rule: ESTIMATE_RULES.ceiling, assumed: true })
+  finishLines('walls')
   for (const use of uses) add({ key: `wall_finish:${use}`, what: `Inside wall faces, ${USE_WORDS[use]}`, quantity: wallByUse.get(use)!, unit: 'm2', rule: ESTIMATE_RULES.wallFinish, assumed: false })
-  add({ key: 'skirting', what: 'Skirting, every room', quantity: skirting, unit: 'm', rule: ESTIMATE_RULES.skirting, assumed: false })
+  finishLines('skirting')
+  add({ key: 'skirting', what: finished ? 'Skirting, every room that names no skirting' : 'Skirting, every room', quantity: skirting, unit: 'm', rule: ESTIMATE_RULES.skirting, assumed: false })
 
   // Openings, each once: the holes they take out of their walls, their reveals and their sizes.
   const holes = new Map<string, number>()
   const wallKey = (floor: string, wall: string): string => `${floor}\u0000${wall}`
   let reveals = 0
-  const counts = new Map<string, { type: 'door' | 'window'; width: number; height: number; count: number }>()
+  const counts = new Map<string, { type: 'door' | 'window'; width: number; height: number; count: number; name?: string }>()
+  const statedOpenings = new Map(survey.plan.openings.map((o) => [o.id, o] as const))
   for (const floor of survey.facts.floors) {
     if (!onFloor(floor.id)) continue
     const walls = new Map(floor.walls.map((wall) => [wall.id, wall] as const))
@@ -138,15 +179,20 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
       holes.set(wallKey(floor.id, wall.id), (holes.get(wallKey(floor.id, wall.id)) ?? 0) + opening.width * height)
       if (opening.type === 'opening') continue
       if (wall.virtual !== true) reveals += (2 * height + opening.width * (opening.sill > tolerance('noLength') ? 2 : 1)) * wall.thickness
-      const key = `${opening.type}:${size(opening.width)}x${size(opening.height)}`
-      const counted = counts.get(key) ?? { type: opening.type, width: opening.width, height: opening.height, count: 0 }
+      // CNT-15: a door or window of a type the plan names is priced by its type.
+      const own = statedOpenings.get(opening.id)
+      const named = own === undefined ? null : openingTypeOf(survey.plan, own)
+      const key = named === null ? `${opening.type}:${size(opening.width)}x${size(opening.height)}` : `${opening.type}-type:${named.id}`
+      const counted = counts.get(key) ?? { type: opening.type, width: opening.width, height: opening.height, count: 0, ...(named === null ? {} : { name: named.name }) }
       counts.set(key, { ...counted, count: counted.count + 1 })
     }
   }
   add({ key: 'reveals', what: 'Reveal linings round doors and windows', quantity: reveals, unit: 'm2', rule: ESTIMATE_RULES.reveals, assumed: false })
 
   // Walls by kind and thickness, on their centre lines.
-  const byKind = new Map<string, { kind: keyof typeof KIND_ORDER; thickness: number; area: number }>()
+  const byKind = new Map<string, { kind: keyof typeof KIND_ORDER; thickness: number; area: number; name?: string; order?: number }>()
+  const statedWalls = new Map(survey.plan.walls.map((w) => [w.id, w] as const))
+  const typeOrder = new Map((survey.plan.types?.walls ?? []).map((t, i) => [t.id, i] as const))
   for (const floor of survey.facts.floors) {
     if (!onFloor(floor.id)) continue
     for (const wall of floor.walls) {
@@ -154,15 +200,20 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
       // Along a curved wall's curve (CNT-18).
       const length = wall.curve?.length ?? Math.hypot(wall.end.x - wall.start.x, wall.end.y - wall.start.y)
       if (length < tolerance('noLength')) continue
-      const key = `wall:${wall.kind}:${size(wall.thickness)}`
-      const run = byKind.get(key) ?? { kind: wall.kind, thickness: wall.thickness, area: 0 }
+      // CNT-15: a wall of a type the plan names is priced by its type and thickness (lab AC-5).
+      const own = statedWalls.get(wall.id)
+      const named = own === undefined ? null : wallTypeOf(survey.plan, own)
+      const key = named === null ? `wall:${wall.kind}:${size(wall.thickness)}` : `wall-type:${named.id}:${size(wall.thickness)}`
+      const run = byKind.get(key) ?? { kind: wall.kind, thickness: wall.thickness, area: 0, ...(named === null ? {} : { name: named.name, order: typeOrder.get(named.id) ?? 0 }) }
       byKind.set(key, { ...run, area: run.area + Math.max(0, length * wall.height - (holes.get(wallKey(floor.id, wall.id)) ?? 0)) })
     }
   }
-  const kinds = [...byKind.entries()].sort(([, a], [, b]) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.thickness - b.thickness)
+  // CNT-15: the plan's named types first, in the order it lists them, then Grid's by kind.
+  const kinds = [...byKind.entries()].sort(([, a], [, b]) => (a.order === undefined) !== (b.order === undefined) ? (a.order === undefined ? 1 : -1) : (a.order ?? 0) - (b.order ?? 0) || (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9) || a.thickness - b.thickness)
   for (const [key, run] of kinds) {
     const kind = run.kind.charAt(0).toUpperCase() + run.kind.slice(1)
-    add({ key, what: `${kind} walls ${metres(run.thickness)} m thick`, quantity: run.area, unit: 'm2', rule: ESTIMATE_RULES.walls, assumed: false })
+    if (run.name !== undefined) add({ key, what: `${run.name} walls ${metres(run.thickness)} m thick`, quantity: run.area, unit: 'm2', rule: ESTIMATE_RULES.wallType, assumed: false })
+    else add({ key, what: `${kind} walls ${metres(run.thickness)} m thick`, quantity: run.area, unit: 'm2', rule: ESTIMATE_RULES.walls, assumed: false })
   }
 
   // The outside: the outline's edge, then what stands on and over the outlines.
@@ -180,8 +231,10 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
     for (const wall of faced) outside -= holes.get(wallKey(shell.floor, wall)) ?? 0
   }
   add({ key: 'external_finish', what: 'Outside face of the outer walls', quantity: Math.max(0, outside), unit: 'm2', rule: ESTIMATE_RULES.externalFinish, assumed: false })
-  for (const [key, c] of [...counts.entries()].sort(([, a], [, b]) => (a.type === b.type ? 0 : a.type === 'door' ? -1 : 1) || a.width - b.width || a.height - b.height)) {
-    add({ key, what: `${c.type === 'door' ? 'Door' : 'Window'} ${metres(c.width)} × ${metres(c.height)} m`, quantity: c.count, unit: 'nr', rule: ESTIMATE_RULES.openings, assumed: false })
+  const namedFirst = (a: string | undefined, b: string | undefined): number => ((a === undefined) === (b === undefined) ? 0 : a === undefined ? 1 : -1)
+  for (const [key, c] of [...counts.entries()].sort(([, a], [, b]) => (a.type === b.type ? 0 : a.type === 'door' ? -1 : 1) || namedFirst(a.name, b.name) || a.width - b.width || a.height - b.height)) {
+    const what = c.name === undefined ? `${c.type === 'door' ? 'Door' : 'Window'} ${metres(c.width)} × ${metres(c.height)} m` : `${c.type === 'door' ? 'Door' : 'Window'}, ${c.name}`
+    add({ key, what, quantity: c.count, unit: 'nr', rule: c.name === undefined ? ESTIMATE_RULES.openings : ESTIMATE_RULES.openingType, assumed: false })
   }
 
   const lowest = built[0]

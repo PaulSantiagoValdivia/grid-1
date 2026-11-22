@@ -26,6 +26,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
 - [Kinds of door and window, their handing and the part that opens](#kinds-of-door-and-window-their-handing-and-the-part-that-opens): `opening/wide-single-leaf`, `opening/kind-not-for-type`, `opening/part-too-large`, `floor/not-checked-door-swings`
+- [Named wall, door and window types, and finishes](#named-wall-door-and-window-types-and-finishes): `type/unknown`, `type/duplicate-id`, `type/wrong-part`; materials, and the template an office keeps
 - [Existing, demolished and new](#existing-demolished-and-new): `plan/read-after-work`, `opening/phase-wall`, `room/phase-wall`; a fit-out on a base plan
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
@@ -54,6 +55,8 @@ file never reaches the exports with its letters turned into question marks. A fi
 | the trace image's path, the base plan's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
+| a named type's id, and the type a wall, door, window or default names (CNT-15); a type's name, its material, a room's finish | 64 characters; 120 | the same |
+| the wall types, door types or window types | 50,000 of each | |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
 | walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats, flat types, buildings or context shapes | 50,000 of each | |
@@ -1012,6 +1015,85 @@ the kind, the part and the handing.
 | `opening/kind-not-for-type` | A kind its type does not take, such as a window that is a `garage`, or any kind on a doorless opening. It is drawn as one with no kind |
 | `opening/part-too-large` | A part that opens wider or higher than the opening, or on a fixed window or a doorless opening. It is taken as the whole opening |
 | `floor/not-checked-door-swings` | Not checked: the doors on a floor whose kind swings or folds and that state neither `hinge` nor `swing`. Each is drawn with a "?" on a sheet and its sweep is not checked |
+
+## Named wall, door and window types, and finishes
+
+A plan may hold a short list of named types in `types`, and a wall, a door or a window may name
+the one it is (CNT-15, convention C24). A type fills what a part leaves out, so one change to the
+type changes every part of it: "make every partition 120 mm" is one change, to the type.
+
+```json
+"types": {
+  "walls": [
+    { "id": "party", "name": "Party wall 250", "thickness": 0.25, "kind": "interior", "material": "Concrete" },
+    { "id": "stud-100", "name": "Stud partition 100", "thickness": 0.1, "height": "floor", "kind": "partition", "material": "Plasterboard on timber studs" },
+    { "id": "glass", "name": "Glass partition", "thickness": 0.05, "kind": "partition", "glazed": true, "material": "Laminated glass" }
+  ],
+  "doors": [{ "id": "D90", "name": "Internal door 900", "width": 0.9, "height": 2.1, "kind": "single", "material": "Oak" }],
+  "windows": [{ "id": "W12", "name": "Casement 1200", "width": 1.2, "height": 1.2, "sill": 0.9 }],
+  "defaults": { "walls": { "partition": "stud-100" }, "door": "D90" }
+}
+{ "id": "w-hall-bath", "start": [4, 0], "end": [4, 3], "wallType": "stud-100" }
+{ "id": "door-bath", "wall": "w-hall-bath", "type": "door", "offset": 0.4, "doorType": "D90", "swing": "left", "hinge": "start" }
+```
+
+| Type | It holds | It fills on a part that names it |
+|---|---|---|
+| a wall type (`types.walls`) | `id`, `name`; any of `thickness`, `height` (metres, or `floor`), `kind`, `glazed`, `material` | `thickness`, `height`, `kind` |
+| a door type (`types.doors`) | `id`, `name`; any of `width`, `height`, `kind` (C20), `opens`, `glazed`, `material` | `width`, `height`, `kind`, `opens` |
+| a window type (`types.windows`) | the same, a window's kinds, and `sill` | `width`, `height`, `sill`, `kind`, `opens` |
+
+- **A part names its type** in `wallType`, `doorType` (a door) or `windowType` (a window), by id. A
+  value the part states itself wins: the type fills only what the part leaves out. So a door of
+  the type that states its own width is still of the type, and a supplier's schedule lists it as
+  a type apart. A dividing line takes no type.
+- **The reading fills the part** before anything else reads it, and says what it filled in
+  `typed`, which no file writes (a file that does is told it is not read) and no change writes
+  back: the file keeps only what the part states. Every reader, the drawing, the checks, the
+  areas and the exports, sees the filled values.
+- **A wall type's height** is metres, or `floor`: as high as a wall on its floor that states none,
+  the floor's stated height or the roof over it ([floor levels](#floor-levels-and-heights)). A
+  type that states no height leaves its walls' heights as they are.
+- **`defaults`** names the type a part takes when it names none: `walls` by the wall's kind (a
+  wall that states no kind is read as `interior`), `door` and `window`. A part given its type by a
+  default is written back naming none. The `types` block, defaults and all, is the template an
+  office keeps: copy it into a new plan, and every wall, door and window drawn takes the office's
+  types.
+- **Materials.** A type's `material` is the person's own word for what it is made of. Grid checks
+  none. The IFC writes it as the type's one layer, and `Not stated` where no material is given,
+  for a wall of no type too (lab AU3-4); [what the IFC holds](commands.md#what-the-ifc-holds-hnd-2).
+  Layered build-ups are not held.
+- **The kind** a wall type states is one of the wall kinds (`WallKindSchema`): `exterior`,
+  `interior`, `partition` or CNT-6's `separating` (a party wall, or one to the common parts), so
+  a party wall type gives its walls the kind the route and estimate checks read, and the walls
+  are priced by their type, apart from partitions of the same thickness (lab AC-5).
+- **A file in other units** has its types' lengths read in that unit too ([units](#units)).
+
+A room or a zone may name its `finishes`, each by the person's own name: `floor`, `walls` (the
+inside faces of its walls), `ceiling` and `skirting`. A zone's finish is its part of its room:
+the room's finish covers the rest. Grid checks no finish; it measures each one
+(`grid_schedule of=finishes`, `grid_takeoff`, [areas](areas.md#finishes-and-wall-types)).
+
+```json
+{ "id": "kitchen", "name": "Kitchen", "boundary": ["…"], "use": "kitchen", "partOf": "open-plan", "finishes": { "floor": "Porcelain tile", "walls": "Tiled splashback" } }
+```
+
+A finish follows the room or zone that names it, never the room's use. Two rooms that name
+different finishes for one surface are merged (`grid_merge_rooms`) only as zones of one
+open-plan room (`zones: true`), each keeping its own, so a kitchen's tiled floor stays the
+kitchen's after a knock-through (lab AC-4); the merged room names the finishes the two share. A
+plan read back as rooms text and written again keeps every part's type and every room's
+finishes, and leaves to a part's type each value the text writes that the type gives the same.
+
+To change a type, give a part a type or make a type the default, use `grid_change_type` (`grid
+edit type`); to set a room's finishes, `grid_rename_room` with `floor_finish`, `wall_finish`,
+`ceiling_finish` and `skirting_finish` (`none` takes one out).
+
+| Code | What it says |
+|---|---|
+| `type/unknown` | A wall, door or window names a type the plan's types do not hold, with the type most likely meant; or a default does. The part is read as naming no type |
+| `type/duplicate-id` | Two types of one list have the same id. The first is read |
+| `type/wrong-part` | A type on a part that takes none of that list: a dividing line naming a wall type, a window naming a door type. It is not read |
 
 ## Existing, demolished and new
 

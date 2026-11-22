@@ -255,6 +255,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plan', call: tool('grid_change_opening', { plan: '@', opening: 'bed2-door', hinge: 'end' }), given: asIs },
     { arg: 'out', call: tool('grid_change_opening', { plan: PLAN, opening: 'bed2-door', hinge: 'end', out: '@.json' }), given: (p) => `${p}.json` },
   ],
+  // CNT-15: one named type, which every part of it takes.
+  grid_change_type: [
+    { arg: 'plan', call: tool('grid_change_type', { plan: '@', of: 'wall', type: 'stud', name: 'Stud partition' }), given: asIs },
+    { arg: 'out', call: tool('grid_change_type', { plan: PLAN, of: 'wall', type: 'stud', name: 'Stud partition', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
   grid_move_room_side: [
     { arg: 'plan', call: tool('grid_move_room_side', { plan: '@', room: 'kitchen', side: 'east', by: 0.2 }), given: asIs },
     { arg: 'out', call: tool('grid_move_room_side', { plan: PLAN, room: 'kitchen', side: 'east', by: 0.2, out: '@.json' }), given: (p) => `${p}.json` },

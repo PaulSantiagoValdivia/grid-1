@@ -55,7 +55,9 @@ function mostCommon<T>(values: readonly T[], fallback: T): T {
 }
 
 // A wall is written as its file states it: a value the reading filled in is left out (WRT-6).
-const rawLine = (kind: 'wall' | 'room' | 'opening', part: unknown): string => `raw ${kind} ${JSON.stringify(kind === 'wall' ? statedWall(part as Wall) : part)}`
+// CNT-15: a raw line keeps the values a part's type gave it, so it is read the same with no types to
+// read them from; writing it again leaves to the type what it gives the same (`carryFacts`).
+const rawLine = (kind: 'wall' | 'room' | 'opening', part: unknown): string => `raw ${kind} ${JSON.stringify(kind === 'wall' ? statedWall({ ...(part as Wall), typed: undefined }) : { ...(part as Record<string, unknown>), typed: undefined })}`
 
 /** The read-back as rooms text writes it again, read as Grid reads a plan file (WRT-6). */
 type ReadBack = Omit<RoomsResult, 'plan'> & { readonly plan: FloorPlan | null }

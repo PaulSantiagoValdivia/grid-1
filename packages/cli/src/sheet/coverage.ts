@@ -76,6 +76,10 @@ export const SHEET_COVERAGE = {
   // its floors', in grid_areas. Context shapes are drawn on the floor they stand on, in no table.
   buildings: { shown: 'not shown', why: "Each floor's page measures that floor; a building's own areas and height are in grid_areas (CNT-6)." },
   context: { shown: 'drawn' },
+  // CNT-15: the plan's named door and window types are the check set's "Door and window types"
+  // page, from the same rows as grid_schedule of=doors and of=windows; a wall type and a finish
+  // are in grid_takeoff and grid_schedule of=finishes, not on the sheet yet.
+  types: { shown: 'tabled' },
   // CNT-16: the columns are drawn on each floor's plan by `drawPlan`, cut through as the walls are,
   // stand in the 3D still, and come off the room table's areas (`planAreas`). The structural grid
   // is drawn on each floor's plan with its lines' names and its spacing dimensioned.

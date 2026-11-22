@@ -10,6 +10,11 @@
  * stretch becomes a dividing line the two zones list, each keeps its id, name and use, and the
  * merged room is a new room round both.
  *
+ * CNT-15 (C24, lab AC-4): nor are two rooms' finishes. Two rooms that name different finishes for
+ * one surface are merged only as zones, each keeping its own, so a kitchen's tiled floor stays the
+ * kitchen's; the merged room names the finishes the two share. Without zones, a finish only one
+ * of them names is the merged room's.
+ *
  * The way of doing it comes from the lab's edit prototype (`merge-rooms`): the wall is cut at
  * the centre lines of the walls that meet it where the two rooms stop sharing it, so what is
  * left of it still bounds the rooms beside it; every room that named the wall names the pieces
@@ -17,7 +22,7 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { cross, dot, signedArea, sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { FINISH_SURFACES, cross, dot, roomFinishes, signedArea, sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { factOf, statedWall, wallWithEnds } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import type { Survey, SurveyRoom } from '../quantities/survey'
@@ -175,6 +180,16 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
     )
   }
   if (request.zones !== true && request.id !== undefined) throw new EditRefused('new_room names the merged room made with zones: true; without zones the merged room keeps the id of the first.')
+  // CNT-15 (lab AC-4): a finish is never changed in silence by a knock-through.
+  const aFinish = roomFinishes(aRoom)
+  const bFinish = roomFinishes(bRoom)
+  const clash = FINISH_SURFACES.filter((surface) => aFinish[surface] !== null && bFinish[surface] !== null && aFinish[surface] !== bFinish[surface])
+  if (request.zones !== true && clash.length > 0) {
+    const surface = clash[0]!
+    throw new EditRefused(
+      `${an} has a ${surface} finish of ${quoted(aFinish[surface]!)} and ${bn} of ${quoted(bFinish[surface]!)}, and one room has one ${surface} finish. Keep both with zones: true, as zones of one open-plan room that each keep their own finishes, or give one of them the other's finish first (grid_rename_room).`
+    )
+  }
   const axis = wallAxis(wall)
   const c0 = cutAt(plan, wall, s0)
   const c1 = cutAt(plan, wall, s1)
@@ -238,6 +253,12 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
     // One of the two states no use: the merged room takes the other's, so no use is lost.
     else if (aRoom.use === undefined && bRoom.use !== undefined) change.use = bRoom.use
     if (mergedFacts !== null) change.properties = mergedFacts
+    // CNT-15: a finish only the second room names is the merged room's, so no finish is lost.
+    const taken = FINISH_SURFACES.filter((surface) => aFinish[surface] === null && bFinish[surface] !== null)
+    if (taken.length > 0) {
+      change.finishes = Object.fromEntries(FINISH_SURFACES.flatMap((surface) => { const finish = aFinish[surface] ?? bFinish[surface]; return finish === null ? [] : [[surface, finish]] }))
+      said.push(`${request.name !== undefined ? quoted(request.name) : an} takes the ${taken.join(' and ')} finish${taken.length === 1 ? '' : 'es'} of ${bn}.`)
+    }
     rooms.set(aId, change)
     if (request.name === undefined) guessed.push(`The merged room keeps the id, name and use of ${an} (${change.use ?? aRoom.use ?? 'no use'}); pass name or use to change them.`)
     if (bRoom.number !== undefined) notKept.push(`The room number of ${bn}, ${quoted(bRoom.number)}, is gone with it${aRoom.number !== undefined ? `; the merged room keeps ${quoted(aRoom.number)}` : ''}.`)
@@ -256,6 +277,9 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
     rooms.set(bId, { boundary: zoneBoundary(B, bRoom.boundary), partOf: merged })
     // The merged room gets what a merged room gets without zones: the first room's number and facts.
     const facts = mergedFacts ?? (Object.keys(aFacts).length > 0 ? aFacts : null)
+    // CNT-15: the merged room names the finishes its two zones share; each zone keeps its own.
+    const shared = Object.fromEntries(FINISH_SURFACES.flatMap((surface) => (aFinish[surface] !== null && aFinish[surface] === bFinish[surface] ? [[surface, aFinish[surface]!]] : [])))
+    if (FINISH_SURFACES.some((surface) => aFinish[surface] !== null || bFinish[surface] !== null)) said.push(`${an} and ${bn} keep their own finishes as zones${Object.keys(shared).length === 0 ? '' : `; ${quoted(mergedName)} names the ones they share`}.`)
     addRooms.push({
       id: merged,
       name: mergedName,
@@ -264,6 +288,7 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
       ...(aRoom.floor === undefined ? {} : { floor: aRoom.floor }),
       ...(aRoom.number === undefined ? {} : { number: aRoom.number }),
       ...(facts === null ? {} : { properties: { ...facts } }),
+      ...(Object.keys(shared).length === 0 ? {} : { finishes: shared }),
     })
     if (aRoom.number !== undefined) said.push(`${quoted(mergedName)} takes the room number of ${an}, ${quoted(aRoom.number)}.`)
     if (bRoom.number !== undefined) {

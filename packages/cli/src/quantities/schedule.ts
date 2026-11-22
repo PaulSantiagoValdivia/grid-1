@@ -3,8 +3,8 @@
  * listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no
  * frame, leaf or clear width.
  */
-import { compareIds, partHeight, partWidth, planForFloor, roomNumbers, sideSeenFrom, statedKind, tolerance } from '@ongrid/floorplan/geometry'
-import { factText, type Facts, type FloorPlan, type Opening, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
+import { compareIds, openingTypeOf, partHeight, partWidth, planForFloor, roomNumbers, sideSeenFrom, statedKind, tolerance } from '@ongrid/floorplan/geometry'
+import { factText, type DoorType, type Facts, type FloorPlan, type Opening, type OpeningKind, type WindowType } from '@ongrid/floorplan/types/floorplan'
 import { english, said, type Said } from '@ongrid/floorplan/messages'
 import type { OpeningFacts } from '../describe/facts'
 import { AREA_RULES, FLAT_RULE, planAreas } from './areas'
@@ -152,7 +152,10 @@ export interface OpeningScheduleRow {
    * openings of its type in the schedule of every floor, the same whichever floors are asked for.
    */
   readonly mark: string
-  /** ARE-15: the door or window type it is (`openingTypeKey`); null for a doorless opening. */
+  /**
+   * ARE-15: the door or window type it is (`openingTypeKey`); null for a doorless opening. CNT-15:
+   * `door-type:<id>` (`namedTypeKey`) for one that takes a type the plan names.
+   */
   readonly typeKey: string | null
   readonly id: string
   readonly type: 'door' | 'window' | 'opening'
@@ -284,9 +287,11 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
       const own = stated.get(opening.id)
       const kind = statedKind(opening.type, own?.kind)
       const opens = own?.opens === undefined || opening.type === 'opening' ? null : { width: partWidth(opening.width, own.opens), height: partHeight(opening.height, own.opens) }
+      // CNT-15 (C24): a door or window that takes one of the plan's named types is of that type.
+      const named = own === undefined ? null : openingTypeOf(survey.plan, own)
       all.push({
         mark: `${MARK_LETTERS[opening.type]}${seenOf[opening.type]}`,
-        typeKey: opening.type === 'opening' ? null : openingTypeKey(opening.type, kind, opening.width, opening.height, opens),
+        typeKey: opening.type === 'opening' ? null : named !== null ? namedTypeKey(opening.type, named, opening.width, opening.height) : openingTypeKey(opening.type, kind, opening.width, opening.height, opens),
         id: opening.id,
         type: opening.type,
         floor: floor.id,
@@ -316,10 +321,9 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
 // ARE-15: the door schedule and the window schedule by type, and the marks that tie the drawing
 // to the schedules' rows.
 //
-// A type is, for now, the kind the plan states and the size of the opening, with the part that
-// opens when the plan states one (`basis: 'kind-and-size'`). CNT-15's named door and window types
-// are not built yet: when they are, a type the plan names is a row of its own with `basis: 'named'`,
-// keyed by its id, and the openings that name none stay grouped as here.
+// A type is the kind the plan states and the size of the opening, with the part that opens when
+// the plan states one (`basis: 'kind-and-size'`). CNT-15 (C24): a type the plan names is a row of
+// its own (`basis: 'named'`), keyed by its id, and the openings that name none stay grouped as here.
 
 /** A size in a type's key, to the millimetre: `0.9`, `2.1`. */
 const keySize = (value: number): string => String(Math.round(value * 1000) / 1000)
@@ -331,6 +335,16 @@ const keySize = (value: number): string => String(Math.round(value * 1000) / 100
  */
 export function openingTypeKey(type: 'door' | 'window', kind: OpeningKind | null, width: number, height: number, opens: { readonly width: number; readonly height: number } | null): string {
   return `${type}:${kind === null ? '' : `${kind}:`}${keySize(width)}x${keySize(height)}${opens === null ? '' : `:opens:${keySize(opens.width)}x${keySize(opens.height)}`}`
+}
+
+/**
+ * CNT-15: the key of a type the plan names: `door-type:<id>`, and the size after it for the doors
+ * or windows of the type that state a size of their own, which are a type apart for a supplier.
+ */
+export function namedTypeKey(type: 'door' | 'window', named: DoorType | WindowType, width: number, height: number): string {
+  const near = (a: number | undefined, b: number): boolean => a === undefined || Math.abs(a - b) <= tolerance('noLength')
+  const own = near(named.width, width) && near(named.height, height)
+  return `${type}-type:${named.id}${own ? '' : `:${keySize(width)}x${keySize(height)}`}`
 }
 
 /** One opening of a type, by its mark. */
@@ -348,9 +362,14 @@ export interface OpeningTypeItem {
 export interface OpeningTypeRow {
   /** 1, 2, 3… in the schedule's order. */
   readonly number: number
-  /** What makes the type. Only `kind-and-size` now; CNT-15's named types will be `named`. */
-  readonly basis: 'kind-and-size'
+  /** What makes the type: its kind and size, or (CNT-15) a type the plan names. */
+  readonly basis: 'kind-and-size' | 'named'
   readonly key: string
+  /** CNT-15: the named type's id, name, material (null when it states none) and whether it is glazed; all null for a type of kind and size. */
+  readonly typeId: string | null
+  readonly name: string | null
+  readonly material: string | null
+  readonly glazed: boolean | null
   readonly type: 'door' | 'window'
   readonly kind: OpeningKind | null
   readonly width: number
@@ -373,7 +392,13 @@ export interface OpeningTypeSchedule {
 }
 
 export const OPENING_TYPE_RULE =
-  "Doors and windows are grouped into types by the kind the plan states and the size of the opening in the wall, width by height, and by the part that opens when the plan states one; the plan names no types of its own yet. Each type lists the marks of its openings, as the drawing shows them (grid_view marks schedule) and the opening schedule numbers them (of=openings)."
+  "Doors and windows of a type the plan names are that type, first, in the order the plan lists its types; one that states a size of its own is a type apart. The others are grouped into types by the kind the plan states and the size of the opening in the wall, width by height, and by the part that opens when the plan states one. Each type lists the marks of its openings, as the drawing shows them (grid_view marks schedule) and the opening schedule numbers them (of=openings)."
+
+/** CNT-15: the plan's named types first, in the order it lists them, then the types of kind and size. */
+function namedFirst(a: string | null, b: string | null, order: ReadonlyMap<string, number>): number {
+  if (a === null || b === null) return a === b ? 0 : a === null ? 1 : -1
+  return (order.get(a) ?? 0) - (order.get(b) ?? 0)
+}
 
 /** ARE-15: the doors, or the windows, grouped by type, each type with its openings' marks. */
 export function openingTypeSchedule(survey: Survey, of: 'door' | 'window', options: { floors?: readonly string[] } = {}): OpeningTypeSchedule {
@@ -385,12 +410,21 @@ export function openingTypeSchedule(survey: Survey, of: 'door' | 'window', optio
     group.rows.push(row)
     groups.set(key, group)
   }
+  const listedTypes = of === 'door' ? survey.plan.types?.doors ?? [] : survey.plan.types?.windows ?? []
+  const typeOrder = new Map(listedTypes.map((type, i) => [type.id, i] as const))
+  const stated = new Map(survey.plan.openings.map((o) => [o.id, o] as const))
   const rows = [...groups.entries()]
     .map(([key, { rows: of_ }]) => {
       const first = of_[0]!
+      const own = stated.get(first.id)
+      const named = own === undefined || !key.startsWith(`${of}-type:`) ? null : openingTypeOf(survey.plan, own)
       return {
-        basis: 'kind-and-size' as const,
+        basis: named === null ? ('kind-and-size' as const) : ('named' as const),
         key,
+        typeId: named?.id ?? null,
+        name: named?.name ?? null,
+        material: named === null ? null : named.material ?? null,
+        glazed: named === null ? null : named.glazed === true,
         type: of,
         kind: first.kind,
         width: first.width,
@@ -402,7 +436,7 @@ export function openingTypeSchedule(survey: Survey, of: 'door' | 'window', optio
         items: of_.map((r) => ({ mark: r.mark, id: r.id, floor: r.floor, floorName: r.floorName, sill: r.sill, handing: r.handing, between: r.between })),
       }
     })
-    .sort((a, b) => kindOrder(a.kind, b.kind) || a.width - b.width || a.height - b.height || (a.opens?.width ?? a.width) - (b.opens?.width ?? b.width) || (a.opens?.height ?? a.height) - (b.opens?.height ?? b.height))
+    .sort((a, b) => namedFirst(a.typeId, b.typeId, typeOrder) || (a.typeId !== null && a.typeId === b.typeId ? a.key.length - b.key.length || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) : 0) || kindOrder(a.kind, b.kind) || a.width - b.width || a.height - b.height || (a.opens?.width ?? a.width) - (b.opens?.width ?? b.width) || (a.opens?.height ?? a.height) - (b.opens?.height ?? b.height))
     .map((row, i): OpeningTypeRow => ({ number: i + 1, ...row }))
   return { of, rows, count: listed.length, rule: OPENING_TYPE_RULE }
 }
@@ -411,17 +445,19 @@ export function openingTypeSchedule(survey: Survey, of: 'door' | 'window', optio
 export function openingTypeScheduleCsv(schedule: OpeningTypeSchedule): string {
   const name = `${schedule.of} schedule`
   const windows = schedule.of === 'window'
+  // CNT-15: a schedule with a type the plan names has its name and material, after the key.
+  const named = schedule.rows.some((r) => r.basis === 'named')
   const rows: Cell[][] = schedule.rows.map((r, i) => {
     const n = i + 1
     return [
-      numberCell(name, n, 'number', r.number, false), textCell(name, n, 'type', r.key), r.kind,
+      numberCell(name, n, 'number', r.number, false), textCell(name, n, 'type', r.key), ...(named ? [r.name, r.material] : []), r.kind,
       numberCell(name, n, 'width', r.width, false), numberCell(name, n, 'height', r.height, false),
       r.opens?.width ?? null, r.opens?.height ?? null,
       ...(windows ? [r.sills.length === 1 ? r.sills[0]! : r.sills.join('; ')] : []),
       numberCell(name, n, 'count', r.count, false), r.marks.join('; '),
     ]
   })
-  return csv(['number', 'type', 'kind', 'width m', 'height m', 'opens width m', 'opens height m', ...(windows ? ['sill m'] : []), 'count', 'marks'], rows)
+  return csv(['number', 'type', ...(named ? ['name', 'material'] : []), 'kind', 'width m', 'height m', 'opens width m', 'opens height m', ...(windows ? ['sill m'] : []), 'count', 'marks'], rows)
 }
 
 /** ARE-15: the marks asked for, with the schedules' marks of the plan's rooms and openings. */

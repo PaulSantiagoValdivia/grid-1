@@ -511,6 +511,12 @@ export const CODES = {
   'plan/building-duplicate-id': {},
   'plan/building-unknown-floor': {},
   'plan/building-floor-in-two': {},
+  // --- Named types (CNT-15) -------------------------------------------------------------------
+  // The types list's own faults. Each is worth a look: the part is read as taking no type, and
+  // nothing else changes. The found is the check's own sentence, with the ids.
+  'type/unknown': {},
+  'type/duplicate-id': {},
+  'type/wrong-part': {},
   // --- Columns and structural grids (CNT-16) ----------------------------------------------------
   // A column's own faults leave it out of every view, measure and export; a grid naming a floor
   // the plan does not have is drawn on the others. The found is the check's own sentence.
