@@ -30,6 +30,7 @@ import {
   type StoreyLevel
 } from '../elevations'
 import { tryRoomShape } from '../room'
+import { roomZones } from '../zones'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
 import { brokenOnFloor, validatePlan } from '../validate'
@@ -1009,7 +1010,8 @@ function writeSlabs(building: Context, storeys: readonly Storey[]): void {
     const slabs: number[] = []
 
     for (const room of index.plan.rooms) {
-      if (broken.has(room.id)) continue
+      // A zone's floor is its room's slab (CNT-8).
+      if (broken.has(room.id) || roomZones(index).zoneOf.has(room.id)) continue
       try {
         const footprint = roomFootprint(storey, room)
         if (!footprint) continue
@@ -1173,7 +1175,8 @@ function writeStoreyContents(building: Context, storey: Storey): void {
 
   const spaces: number[] = []
   for (const room of index.plan.rooms) {
-    if (broken.has(room.id)) continue
+    // A zone (CNT-8) is no space of its own: its floor is in its room's space, counted once.
+    if (broken.has(room.id) || roomZones(index).zoneOf.has(room.id)) continue
     try {
       const space = writeSpace(c, storey, room)
       if (space !== null) spaces.push(space)

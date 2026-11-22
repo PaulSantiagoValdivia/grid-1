@@ -34,6 +34,7 @@ import { floorSpaces, spacesKnown, type FloorSpaces } from './spaces'
 import { planWallSides, type WallSides } from './exposure'
 import { validatePlan } from './validate'
 import { cornerFills, polygonArea, strip, union } from './polygons'
+import { roomZones } from './zones'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 
@@ -112,6 +113,11 @@ export interface RoomAreaFigure {
   readonly area: number
   /** Named as outside by the caller: listed apart, in no net or gross internal figure. */
   readonly outside: boolean
+  /**
+   * CNT-8: the room this one is a zone of, or null. A zone is listed and measured, and is in no
+   * figure: its floor is its room's. Its area goes to `byUse` under its own use, out of its room's.
+   */
+  readonly zoneOf: string | null
 }
 
 /** A room Grid could not draw, so it is in no figure. */
@@ -302,6 +308,7 @@ function floorFigures(
 ): FloorAreaFigures {
   const rooms: RoomAreaFigure[] = []
   const leftOut: RoomLeftOut[] = []
+  const zones = roomZones(index)
   for (const room of plan.rooms) {
     if (floorOf(room) !== floor) continue
     // The rooms `floorSpaces` sets against the spaces, so that the figures add up.
@@ -310,11 +317,30 @@ function floorFigures(
       leftOut.push({ id: room.id, name: nameOf(room), floor })
       continue
     }
-    rooms.push({ id: room.id, name: nameOf(room), use: room.use ?? null, floor, area: roomFloorArea(room, index, outline), outside: outside.has(room.id) })
+    const zoneOf = zones.zoneOf.get(room.id) ?? null
+    rooms.push({ id: room.id, name: nameOf(room), use: room.use ?? null, floor, area: roomFloorArea(room, index, outline), outside: outside.has(room.id), zoneOf })
   }
-  const counted = rooms.filter((room) => !room.outside)
+  // A zone is in no figure (CNT-8): its floor is its room's, counted once.
+  const counted = rooms.filter((room) => !room.outside && room.zoneOf === null)
   const byUse: Record<string, number> = {}
-  for (const room of counted) byUse[room.use ?? NOT_SAID] = (byUse[room.use ?? NOT_SAID] ?? 0) + room.area
+  const add = (use: string | null, value: number): void => {
+    byUse[use ?? NOT_SAID] = (byUse[use ?? NOT_SAID] ?? 0) + value
+  }
+  for (const room of counted) {
+    // A room with zones gives each zone's floor to the zone's use, and keeps the rest for its own.
+    // Zones that hold more than the room (two that overlap) leave it to the room's own use.
+    const own = rooms.filter((zone) => zone.zoneOf === room.id)
+    const zoned = sum(own.map((zone) => zone.area))
+    if (own.length === 0 || zoned > room.area + tolerance('areaReported')) {
+      add(room.use, room.area)
+      continue
+    }
+    // What is left is the room's own; a sliver left by rounding goes with the first zone, so the
+    // uses still add up to the net area to the last digit.
+    const rest = room.area - zoned
+    own.forEach((zone, i) => add(zone.use ?? room.use, zone.area + (i === 0 && rest < tolerance('areaReported') ? rest : 0)))
+    if (rest >= tolerance('areaReported')) add(room.use, rest)
+  }
   const net = sum(counted.map((room) => room.area))
   const outsideRooms = sum(rooms.filter((room) => room.outside).map((room) => room.area))
   const base = { floor, rooms, leftOut, net, byUse, outsideRooms }
