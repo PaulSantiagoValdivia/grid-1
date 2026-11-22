@@ -1,0 +1,35 @@
+{
+  "version": "1",
+  "units": "m",
+  "floors": [
+    {"id": "ground", "name": "Main floor", "level": 0},
+    {"id": "loft", "name": "Sleeping loft", "level": 1}
+  ],
+  "walls": [
+    {"id": "ground-ext-south", "start": [0.057, 0.057], "end": [7.26, 0.057], "thickness": 0.114, "height": 3.2, "kind": "exterior", "floor": "ground"},
+    {"id": "ground-open-living-kitchen", "start": [3.314, 0.057], "end": [3.314, 2.533], "thickness": 0.001, "height": 3.2, "kind": "interior", "virtual": true, "floor": "ground"},
+    {"id": "ground-ext-north", "start": [7.26, 2.533], "end": [0.057, 2.533], "thickness": 0.114, "height": 3.2, "kind": "exterior", "floor": "ground"},
+    {"id": "ground-ext-west", "start": [0.057, 2.533], "end": [0.057, 0.057], "thickness": 0.114, "height": 3.2, "kind": "exterior", "floor": "ground"},
+    {"id": "ground-w-kitchen-bath", "start": [5.3585, 0.057], "end": [5.3585, 2.533], "thickness": 0.089, "height": 3.2, "kind": "interior", "floor": "ground"},
+    {"id": "ground-ext-east", "start": [7.26, 0.057], "end": [7.26, 2.533], "thickness": 0.114, "height": 3.2, "kind": "exterior", "floor": "ground"},
+    {"id": "loft-ext-south", "start": [3.289, 0.057], "end": [7.263, 0.057], "thickness": 0.114, "height": 1.1, "kind": "exterior", "floor": "loft"},
+    {"id": "loft-ext-east", "start": [7.263, 0.057], "end": [7.263, 2.533], "thickness": 0.114, "height": 1.1, "kind": "exterior", "floor": "loft"},
+    {"id": "loft-ext-north", "start": [7.263, 2.533], "end": [3.289, 2.533], "thickness": 0.114, "height": 1.1, "kind": "exterior", "floor": "loft"},
+    {"id": "loft-ext-west", "start": [3.289, 2.533], "end": [3.289, 0.057], "thickness": 0.05, "height": 1.1, "kind": "partition", "floor": "loft"}
+  ],
+  "rooms": [
+    {"id": "ground-living", "name": "Living", "use": "living", "boundary": ["ground-ext-south", "ground-open-living-kitchen", "ground-ext-north", "ground-ext-west"], "floor": "ground"},
+    {"id": "ground-kitchen", "name": "Kitchen", "use": "kitchen", "boundary": ["ground-ext-south", "ground-w-kitchen-bath", "ground-ext-north", "ground-open-living-kitchen"], "floor": "ground"},
+    {"id": "ground-bath", "name": "Bathroom", "use": "bathroom", "boundary": ["ground-ext-south", "ground-ext-east", "ground-ext-north", "ground-w-kitchen-bath"], "floor": "ground"},
+    {"id": "loft-loft", "name": "Sleeping loft", "use": "bedroom", "boundary": ["loft-ext-south", "loft-ext-east", "loft-ext-north", "loft-ext-west"], "floor": "loft"}
+  ],
+  "openings": [
+    {"id": "ground-d-in", "wall": "ground-ext-south", "type": "door", "offset": 2.197, "width": 0.76, "sill": 0.0, "height": 2.1, "swing": "left", "hinge": "end"},
+    {"id": "ground-d-bath", "wall": "ground-w-kitchen-bath", "type": "door", "offset": 0.933, "width": 0.61, "sill": 0.0, "height": 2.1, "swing": "right", "hinge": "start"},
+    {"id": "ground-w-l1", "wall": "ground-ext-west", "type": "window", "offset": 0.638, "width": 1.2, "sill": 0.9, "height": 1.2},
+    {"id": "ground-w-l2", "wall": "ground-ext-south", "type": "window", "offset": 0.657, "width": 1.5, "sill": 0.9, "height": 1.2},
+    {"id": "ground-w-k", "wall": "ground-ext-north", "type": "window", "offset": 2.496, "width": 0.9, "sill": 1.05, "height": 1.2},
+    {"id": "ground-w-b", "wall": "ground-ext-north", "type": "window", "offset": 0.707, "width": 0.5, "sill": 1.5, "height": 0.5},
+    {"id": "loft-w-loft", "wall": "loft-ext-east", "type": "window", "offset": 0.738, "width": 1.0, "sill": 0.3, "height": 0.6}
+  ]
+}

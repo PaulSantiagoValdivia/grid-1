@@ -157,8 +157,9 @@ describe('one scale for every floor (VEW-7)', () => {
 describe('the check layout (VEW-7)', () => {
   const sheet = sheetPages(house, words, 'check', { name: 'two-floor-house', date })
 
-  it('is a summary, then one page per floor', () => {
-    expect(sheet.pages.map((p) => p.kind)).toEqual(['summary', 'floor', 'floor'])
+  it('is a summary, then one page per floor, then the room schedule and the door and window schedule (ARE-12)', () => {
+    expect(sheet.pages.map((p) => p.kind)).toEqual(['summary', 'floor', 'floor', 'summary', 'summary'])
+    expect(sheet.pages.slice(3).map((p) => p.title)).toEqual(['Room schedule', 'Door and window schedule'])
   })
 
   it('takes nothing from sheet.json', () => {
@@ -408,7 +409,7 @@ describe('small things a sheet says (VEW-7)', () => {
     const sheet = sheetPages(quiet, null, 'check', { name: 'x', date })
     expect(checkPlan(quiet, {}).report.findings).toEqual([])
     expect(sheet.pages[0]!.notes).toContain(`Findings: none. ${NOTHING_FOUND}`)
-    const floors = sheet.pages.slice(1)
+    const floors = sheet.pages.filter((p) => p.kind === 'floor')
     expect(floors.some((p) => p.notes.some((n) => n.startsWith('Not checked: ')))).toBe(true)
     for (const page of floors) expect(page.notes).toContain(`Findings on this floor: none. ${NOTHING_FOUND}`)
   })
@@ -565,6 +566,7 @@ describe('floors with the same name (VEW-7)', () => {
 
   it.each(['client', 'check'] as const)('says which floor a floor page is, continued or not (%s)', (layout) => {
     const sheet = sheetPages(sameNames(false), null, layout, { name: 'x', date })
-    expect(sheet.pages.map((p) => p.floor)).toEqual([null, 'ground', 'first'])
+    // The check set ends with its two schedules (ARE-12), which belong to no floor.
+    expect(sheet.pages.map((p) => p.floor)).toEqual(layout === 'check' ? [null, 'ground', 'first', null, null] : [null, 'ground', 'first'])
   })
 })

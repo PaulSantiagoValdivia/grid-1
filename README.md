@@ -89,7 +89,7 @@ Each page answers one kind of question, so read only the one you need.
 | Run a command: `init`, `write`, `check`, `describe`, `draw`, `export`, `sheet`, `tidy`, `occupancy`; options, exit codes, the project folder | [docs/commands.md](docs/commands.md) |
 | Call Grid as an agent: the `grid_…` tools, measuring from faces, protocol versions | [docs/tool-server.md](docs/tool-server.md) |
 | Know what a plan file may hold and what each drawing check's code means: floors, steps, overlapping rooms, holes, fixtures, wall faults, inside and outside walls, and where people's names go instead | [docs/plan-file.md](docs/plan-file.md) |
-| Know what an area figure means: net, gross internal and gross external, and which comes first where | [docs/areas.md](docs/areas.md) |
+| Know what an area figure means: net, gross internal and gross external, and which comes first where; the room schedule and the door and window schedule | [docs/areas.md](docs/areas.md) |
 | Know the figure behind a check, and when Grid asks whether a size is meant | [docs/tolerances.md](docs/tolerances.md) |
 | Read what `grid check` and `grid_check` return: the record and every message code | [docs/result-contract.md](docs/result-contract.md) |
 | Change Grid itself | [AGENTS.md](AGENTS.md) |

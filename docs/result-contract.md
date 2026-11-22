@@ -323,6 +323,15 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: schedules (ARE-12)
+
+- `grid_schedule` takes `of`: `rooms` gives the room schedule, `openings` each door, window and
+  doorless opening once. Its data then holds `rows` (each numbered by Grid, in one order whatever
+  the file's), and for rooms `floors` (each floor's total, with its name) and `total` (all floors),
+  each total with its state, and `rules`. Without `of` the answer is as before. With `of`, `types`
+  and `narrower_than` are refused. A row that cannot be written is an error naming the row.
+- `grid sheet --layout check` ends with two pages, "Room schedule" and "Door and window schedule".
+
 ### 2026-11-22: a fault stays local (MSG-6)
 
 - A value Grid cannot read inside a wall, room, opening, floor or fixture no longer refuses the
