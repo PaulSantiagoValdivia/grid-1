@@ -49,6 +49,8 @@ Tests: `packages/cli/src/mcp/__tests__/schedules.test.ts` (10).
   per floor" now lists `summary, floor, floor, summary, summary`; "says a floor with no findings
   found nothing" picks the floor pages by kind instead of every page after the first; "says
   which floor a floor page is" expects two more pages with no floor on the check layout.
+- `packages/cli/src/command/__tests__/sheet.e2e.test.ts`, "writes the expected pages, the same
+  twice (check)": the check PDF of the two-floor house has 5 pages, not 3. The client PDF keeps 3.
 - No other expectation changed. `grid_schedule` without `of` answers exactly as before.
 
 ## For the owner
@@ -78,4 +80,12 @@ marks on the drawing. The schedule numbers are not drawn on the plan.
 
 ## Checks run
 
-CHECKS_LINE
+On `main` at 89f1f15 (it had not moved when the branch was finished):
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean. `npm run check:licenses`: 363
+  licences, none GPL, LGPL, AGPL, MPL or EPL.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,462 passed, 1 failed,
+  of 4,463 in 213 files (403 s). The one was real: the check sheet's page count in
+  `sheet.e2e.test.ts` (above). Updated; that file then passed, 22 of 22.
+- `npm run scoreboard`: 197, 386, 16, 2, 5, 735, 95. Same as stored. The scoreboard probes only
+  the library, and the schedules are in the command's package, so no capability moved.
