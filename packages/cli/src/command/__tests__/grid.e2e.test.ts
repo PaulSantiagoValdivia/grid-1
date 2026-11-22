@@ -312,6 +312,21 @@ describe('grid check', () => {
     expect(viaOngrid.stdout.equals(direct.stdout)).toBe(true)
   })
 
+  // CMD-4: the lab's own two-bedroom flat, the one its bench and scoreboard use, not only the
+  // drawing tests' flat above.
+  it('gives the same bytes through node, grid and ongrid on the lab\'s two-bedroom flat', () => {
+    const bench = JSON.parse(readFileSync(resolve(cli, '../../scoreboard/data/bench-examples.json'), 'utf8')) as { twoBedFlat: unknown }
+    writeFileSync(join(dir, 'lab-flat.json'), JSON.stringify(bench.twoBedFlat))
+    const direct = grid('check', 'lab-flat.json')
+    expect([direct.status, direct.err]).toEqual([0, ''])
+    expect(direct.out.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
+    for (const name of ['grid', 'ongrid'] as const) {
+      const run = shim(name, 'check', 'lab-flat.json')
+      expect(run.status).toBe(0)
+      expect(run.stdout.equals(direct.stdout)).toBe(true)
+    }
+  })
+
   it('prints JSON with the label with --json', () => {
     const run = grid('check', 'two-bed-flat.json', '--json')
     expect(run.status).toBe(0)
@@ -373,6 +388,19 @@ describe('a refused plan: exit 1, one line, nothing written', () => {
       expectRefusal(grid(...args), 1, reason)
     }
     expect(filesIn(dir).filter((name) => name !== 'broken.json')).toEqual(['two-bed-flat.json'])
+  })
+
+  // CMD-4: every picture and every export format refuses it the same way, not only SVG and DXF.
+  it('is refused the same way as a PNG, a 3D still and in every export format', () => {
+    writeFileSync(join(dir, 'broken.json'), '{ "walls": [')
+    for (const args of [
+      ['draw', 'broken.json', '--png', '--out', 'plan.png'],
+      ['draw', 'broken.json', '--3d', '--out', 'still.png'],
+      ...['dxf', 'ifc', 'glb', 'obj'].map((format) => ['export', 'broken.json', '--format', format]),
+    ]) {
+      expectRefusal(grid(...args), 1, 'broken.json is not JSON')
+    }
+    expect(filesIn(dir)).toEqual(['broken.json', 'two-bed-flat.json'])
   })
 
   it('reads a plan with a fault inside one part, names it, and still checks and draws (MSG-6)', () => {
