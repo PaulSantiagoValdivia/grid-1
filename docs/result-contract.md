@@ -303,7 +303,7 @@ its text, which says the same.
 
 | Tool | Receipt (`structuredContent`) |
 |---|---|
-| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (parts that could not be drawn), `note`. |
+| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_change_opening`, `grid_move_room_side`, `grid_mirror` | `written`, `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, and `doors` (each door that now joins other rooms). |
@@ -322,6 +322,19 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: an export says what it leaves out (HND-6)
+
+- `grid_export` adds `leftOutParts`: each part of the plan the file leaves out, with its kind,
+  id, place, floor and the code of the line that leaves it out. The file says it too: the
+  property set `Grid_LeftOut` in an IFC, the layer `GRID-LEFT-OUT` in a DXF, comment lines in an
+  OBJ, `asset.extras.gridLeftOut` in a GLB. A file that leaves nothing out is as it was.
+- `leftOut` counts what this file leaves out: the parts the reader left out (`plan/id-clash`,
+  `plan/part-left-out`) and the parts its floors cannot draw. Before, it counted the ids
+  `grid_check` calls broken in the whole plan, which named walls a file holds (a wall id used
+  on several floors is drawn on each) and missed parts the reader left out.
+- An export that would hold no wall, room or fixture is refused (`isError: true`, one line that
+  starts "Nothing to export"), and nothing is written. Before, it wrote a valid empty file.
 
 ### 2026-11-22: a fault stays local (MSG-6)
 

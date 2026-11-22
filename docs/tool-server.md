@@ -28,7 +28,7 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
 | `grid_preview` | Points the live preview at a floor or room of the plan |
-| `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/` |
+| `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/`, and says what the file leaves out of the plan (the file says it too); a file that would hold nothing of the plan is refused |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into) or removes it |
@@ -47,6 +47,12 @@ Room names and ids go into every export and sheet, and travel with the plan file
 person's name in a room's name or id. Who sits where belongs in the occupancy file beside the
 plan, which no export, sheet or tool reads ([People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan)).
 `grid_write_rooms`, `grid_export`, `grid_sheet` and the server's instructions say so.
+
+`grid_export` answers with what its file leaves out (HND-6): `leftOut`, how many parts, and
+`leftOutParts`, each part with its `kind`, `id`, `place` (for a part left out when the plan was
+read), `floor` and `code` (the line of `grid_check` that leaves it out). The file carries the
+same note ([What an export leaves out](commands.md#what-an-export-leaves-out-hnd-6)). An export
+that would hold no wall, room or fixture is refused, and nothing is written.
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.

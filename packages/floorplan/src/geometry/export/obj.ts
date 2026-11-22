@@ -18,11 +18,25 @@
 import type { Scene3D } from '../scene3d'
 import { floorMesh, makeNamer, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
+import { leftOutLines, leftOutSummary, type LeftOutPart } from './leftOut'
 
 /** Avoids `-0.000000`, which readers parse and nobody wants to read. */
 function num(value: number): string {
   const fixed = value.toFixed(6)
   return fixed === '-0.000000' ? '0.000000' : fixed
+}
+
+export interface ObjOptions {
+  /** HND-6: the parts of the plan this file leaves out, named in comments after the header. */
+  readonly leftOut?: readonly LeftOutPart[]
+}
+
+/**
+ * A comment line. OBJ has no escape: a line break would end the comment and start a command, so
+ * every character a line could break at is dropped. Ids are JSON strings already (`partName`).
+ */
+function objComment(text: string): string {
+  return `# ${text.replace(/[\p{Cc}\u2028\u2029]/gu, '')}`
 }
 
 /**
@@ -32,8 +46,11 @@ function num(value: number): string {
  * scene could not build is already absent from it, so a broken plan exports the
  * part that is sound — the same graceful degradation the canvases apply.
  */
-export function toObj(scene: Scene3D): string {
+export function toObj(scene: Scene3D, options: ObjOptions = {}): string {
   const lines = ['# Grid floor plan', '# Units: metres. X and Y are the plan, Z is up.']
+  // HND-6: what the file leaves out, as comments after the header. Only when something is.
+  const leftOut = options.leftOut ?? []
+  if (leftOut.length > 0) lines.push(...[leftOutSummary(leftOut), ...leftOutLines(leftOut)].map(objComment))
   const nameOf = makeNamer()
   let offset = 0
 

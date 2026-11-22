@@ -20,6 +20,7 @@ import type { PlanDrawing } from '../floorplan'
 import { doorSwing, type SwingArc } from '../door'
 import { TOLERANCES } from '../tolerances'
 import { areaText } from '../rounding'
+import { kindLabel, leftOutByKind, leftOutSummary, partNames, type LeftOutPart } from './leftOut'
 
 /**
  * Layer names are the only organisation a DXF carries, so they are part of the
@@ -37,7 +38,10 @@ export const DXF_LAYERS = {
   doorSwings: 'GRID-DOOR-SWINGS',
   // CNT-12: fixtures, on a layer of their own and never with the walls. Listed only in a drawing
   // that has fixtures, so the file of a plan without any is as it was.
-  fixtures: 'GRID-FIXTURES'
+  fixtures: 'GRID-FIXTURES',
+  // HND-6: the note that says what the file leaves out of the plan. Listed only in a file that
+  // leaves something out, so every other file is as it was.
+  leftOut: 'GRID-LEFT-OUT'
 } as const
 
 export type DxfLayer = (typeof DXF_LAYERS)[keyof typeof DXF_LAYERS]
@@ -161,7 +165,8 @@ const LAYER_LINE_TYPE: Readonly<Record<DxfLayer, (typeof LINE_TYPES)[number]['na
   'GRID-OPENINGS': 'CONTINUOUS',
   'GRID-LABELS': 'CONTINUOUS',
   'GRID-DOOR-SWINGS': 'CONTINUOUS',
-  'GRID-FIXTURES': 'CONTINUOUS'
+  'GRID-FIXTURES': 'CONTINUOUS',
+  'GRID-LEFT-OUT': 'CONTINUOUS'
 }
 
 function writeLineTypeTable(w: DxfWriter): void {
@@ -185,8 +190,10 @@ function writeLineTypeTable(w: DxfWriter): void {
   w.pair(0, 'ENDTAB')
 }
 
-function writeTables(w: DxfWriter, drawing: PlanDrawing): void {
-  const names = Object.values(DXF_LAYERS).filter((name) => name !== DXF_LAYERS.fixtures || drawing.items.length > 0)
+function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
+  const names = Object.values(DXF_LAYERS).filter(
+    (name) => (name !== DXF_LAYERS.fixtures || drawing.items.length > 0) && (name !== DXF_LAYERS.leftOut || leftOut.length > 0)
+  )
 
   w.pair(0, 'SECTION')
   w.pair(2, 'TABLES')
@@ -287,7 +294,51 @@ function writeText(w: DxfWriter, layer: string, at: Vec2, text: string): void {
   w.point(at.x, at.y, [11, 21, 31])
 }
 
-function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
+/**
+ * The lines of the note, each within R12's cap: a kind's names run on over as many lines as they
+ * need, and a line never ends inside a name. A name longer than a line is cut by `sanitizeText`.
+ */
+function noteLines(leftOut: readonly LeftOutPart[]): string[] {
+  const lines = [leftOutSummary(leftOut)]
+  for (const { kind, parts } of leftOutByKind(leftOut)) {
+    let line = kindLabel(kind, parts.length)
+    let first = true
+    for (const name of partNames(parts)) {
+      const next = first ? name : `, ${name}`
+      if (!first && sanitizeText(`${line}${next},`).length >= MAX_TEXT) {
+        lines.push(`${line},`)
+        line = `  ${name}`
+      } else {
+        line += next
+      }
+      first = false
+    }
+    lines.push(line)
+  }
+  return lines
+}
+
+/**
+ * HND-6: the note, on its own layer, one TEXT per line, starting a line below the drawing's lower
+ * left corner and running to the right. R12 TEXT holds one line; the summary may be cut at
+ * `MAX_TEXT`, which keeps its count and the kinds.
+ */
+function writeLeftOut(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
+  if (leftOut.length === 0) return
+  const { min } = drawing.bounds
+  const at = writablePoints([min]) ? min : { x: 0, y: 0 }
+  for (const [n, line] of noteLines(leftOut).entries()) {
+    const value = sanitizeText(line)
+    if (value.length === 0) continue
+    w.pair(0, 'TEXT')
+    w.pair(8, DXF_LAYERS.leftOut)
+    w.point(at.x, at.y - TEXT_HEIGHT * 2 * (n + 1))
+    w.pair(40, num(TEXT_HEIGHT))
+    w.pair(1, value)
+  }
+}
+
+function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[]): void {
   w.pair(0, 'SECTION')
   w.pair(2, 'ENTITIES')
 
@@ -352,7 +403,14 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
     }
   }
 
+  writeLeftOut(w, drawing, leftOut)
+
   w.pair(0, 'ENDSEC')
+}
+
+export interface DxfOptions {
+  /** HND-6: the parts of the plan this file leaves out, named on the `GRID-LEFT-OUT` layer. */
+  readonly leftOut?: readonly LeftOutPart[]
 }
 
 /**
@@ -362,12 +420,13 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
  * drawing could not resolve is already absent from it, so a broken plan exports
  * the part that is sound — the same graceful degradation the canvases apply.
  */
-export function toDxf(drawing: PlanDrawing): string {
+export function toDxf(drawing: PlanDrawing, options: DxfOptions = {}): string {
   const w = new DxfWriter()
+  const leftOut = options.leftOut ?? []
 
   writeHeader(w, drawing)
-  writeTables(w, drawing)
-  writeEntities(w, drawing)
+  writeTables(w, drawing, leftOut)
+  writeEntities(w, drawing, leftOut)
 
   w.pair(0, 'EOF')
   return w.toString()
