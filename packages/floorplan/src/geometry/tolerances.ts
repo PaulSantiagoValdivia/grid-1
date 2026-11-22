@@ -362,6 +362,18 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── A survey drawn from its own numbers (HND-11) ──────────────────────────────────────────
+  tapedAgree: {
+    kind: 'tolerance',
+    value: 0.01,
+    unit: 'm',
+    decides:
+      'A length taped on site and the same length drawn agree when they are no further apart ' +
+      'than this, unless the taped length states its own; further apart, the taped length is ' +
+      'named with both figures (`room/taped-differs`).',
+    basis: own
+  },
+
   // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
   wallAboveStorey: {
     kind: 'tolerance',
@@ -612,7 +624,9 @@ export const TOLERANCES = {
     kind: 'limit',
     value: 500,
     unit: 'm',
-    decides: 'A plan reaching further than this from the origin gets a warning: most likely a scale or unit error.',
+    decides:
+      'A plan reaching further than this from its origin gets a warning: most likely a scale or ' +
+      'unit error. The origin is the site\'s, where the plan states one (HND-11), else (0, 0).',
     basis: own
   },
 

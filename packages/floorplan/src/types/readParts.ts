@@ -123,9 +123,10 @@ const SCHEMAS: Record<PartList, z.ZodTypeAny> = {
  * decimal comma, a word) is a statement, not a gap: the default would change what is drawn and
  * measured (a wall stated -0.3 thick drawn 0.2 thick), so the part is left out instead. Only
  * `null`, which states nothing, takes the default. A floor's `level` is not one of them: it only
- * orders the floors, and leaving a floor out would leave out everything on it.
+ * orders the floors, and leaving a floor out would leave out everything on it. HND-11: a wall's
+ * `face` is one too: read as its centre line, the wall would stand half its thickness off.
  */
-const STATED_SIZES: Partial<Record<PartList, readonly string[]>> = { walls: ['thickness', 'height'], openings: ['sill'] }
+const STATED_SIZES: Partial<Record<PartList, readonly string[]>> = { walls: ['thickness', 'height', 'face'], openings: ['sill'] }
 
 /** The order ids are kept in: walls first, because rooms and openings name them. */
 const ID_ORDER: readonly PartList[] = ['walls', 'rooms', 'openings', 'items']

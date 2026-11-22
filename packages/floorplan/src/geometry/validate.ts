@@ -124,24 +124,32 @@ const followOn = (found: Issue, cause: string | null): Issue => (cause === null 
  * lives on XY and z=0 is floor level. A plan that shows up hundreds of meters
  * away (`farFromOrigin`) is still drawable, but it almost always means the agent
  * lost the scale.
+ *
+ * HND-11 (lab MS-12): a plan kept at survey or map coordinates states a point near the building
+ * as `site.origin`, and is measured from that point: its exports write the geometry from it.
  */
 function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
+  const stated = plan.site?.origin
+  const origin = stated !== undefined && stated.every((v) => Number.isFinite(v) && Math.abs(v) <= tolerance('largest')) ? stated : null
+  const [ox, oy] = origin ?? [0, 0]
   let farthest = 0
   for (const wall of plan.walls) {
     for (const [x, y] of [wall.start, wall.end]) {
-      const distance = Math.hypot(x, y)
       // A number past `largest` is refused on its own wall (`validateWall`).
-      if (distance > farthest && distance <= tolerance('largest')) farthest = distance
+      if (Math.hypot(x, y) > tolerance('largest')) continue
+      const distance = Math.hypot(x - ox, y - oy)
+      if (distance > farthest) farthest = distance
     }
   }
 
   if (farthest > tolerance('farFromOrigin')) {
+    const from = origin === null ? 'the origin' : `its site's origin (${fixedText(ox, 2)}, ${fixedText(oy, 2)})`
     issues.push(
       issue(
         'plan',
         'plan',
         'plan/far-from-origin',
-        `The plan reaches ${fixedText(farthest, 0)} m from the origin. The origin is where the ` +
+        `The plan reaches ${fixedText(farthest, 0)} m from ${from}. The origin is where the ` +
           `3D rises from; at this distance there is most likely a scale or unit error.`,
         'warning'
       )

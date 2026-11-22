@@ -61,6 +61,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `briefAbout` | tolerance | 0.05 ratio | A size the person asked for as a figure, not as at least or at most, is met when the drawn size is within this share of it, above or below (BRF-1) |
 | `nameSize` | tolerance | 0.02 ratio | A size written in a room's name and the size drawn differ when they are further apart than this share of the size named (BRF-1) |
 | `diffPlace` | tolerance | 0.05 m | Two walls whose ends are this close, or two openings whose middles are, stand in the same place when two versions are compared by what stands where (WRT-8) |
+| `tapedAgree` | tolerance | 0.01 m | A length taped on site and the same length drawn agree when they are no further apart than this, unless the taped length states its own tolerance; further apart, `room/taped-differs` names both figures (HND-11) |
 | `wallAboveStorey` | tolerance | 0.001 m | How far a wall may rise past the height its floor states; past it, `wall/above-storey` names both heights |
 | `sameLevelOverlap` | tolerance | 0.5 ratio | Two floors at one level whose walls' boxes share more than this of the smaller one stand one over the other (`plan/same-level`) |
 | `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground (the level the site states, else the ground floor's) is named and is not a way out |
@@ -85,7 +86,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `planCutHeight` | limit | 1.2 m | How high above a floor its plan is cut: a stair rising from the floor is drawn solid up to this height, with a break line there, and dashed above (SHT-11) |
 | `aboveSameEdge` | tolerance | 0.02 m | A stretch of the outline of the floor above this close to the outline of the floor drawn, along it, is the same wall face, and is not drawn dashed (SHT-11) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
-| `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning |
+| `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning: from `site.origin` where the plan states one, else from (0, 0) (HND-11) |
 | `wallThinnest` | limit | 0.02 m | A thinner solid wall is questioned; a line with no substance should be virtual |
 | `wallThickest` | limit | 3 m (1.5 in a home) | A thicker wall is questioned |
 | `wallLowest` | limit | 0.1 m | A lower solid wall is questioned |
