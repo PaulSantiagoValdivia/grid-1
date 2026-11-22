@@ -316,7 +316,9 @@ async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page:
   // The frame is in plan metres and the box has one size on every floor: one scale throughout.
   // The picture is `grow` times the box, cut to it; its PNG has `PLAN_SCALE` pixels per point.
   const { options, grow } = planPictureOptions(page.picture)
-  const png = await drawPlan(plan, { format: 'png', scale: (PLAN_SCALE * PLAN_BOX.width * grow) / options.width!, ...options })
+  // A box shrunk to fit under a tall header prints the plan smaller: its scale's N grows.
+  const paperScale = (options.paperScale! * PLAN_BOX.width) / box.width
+  const png = await drawPlan(plan, { format: 'png', scale: (PLAN_SCALE * PLAN_BOX.width * grow) / options.width!, ...options, paperScale })
   const w = box.width * grow
   const h = box.height * grow
   ctx.save()

@@ -29,7 +29,7 @@ import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
-import { checkDrawRequest, DRAW_OPTIONS, drawFile } from './draw'
+import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
@@ -77,8 +77,8 @@ const COMMANDS = {
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
-    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png. With --3d, draws the 3D model as the app opens it, as a PNG.',
+    usage: 'grid draw [<plan.json>] [--png | --3d] [--look <name>] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another. With --3d, draws the 3D model as the app opens it, as a PNG.',
     options: DRAW_OPTIONS,
   },
   export: {
@@ -259,15 +259,18 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
       ids: parsed.values.has('--ids'),
+      look: textOf(parsed, '--look'),
     }
-    const { scale } = checkDrawRequest(request)
+    const { scale, look } = checkDrawRequest(request)
     if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {
       throw new UsageError('A PNG is not shown in a terminal: name a file with --out, or send the output to a file or another program.')
     }
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
-    const picture = await drawFile(loaded, request, scale)
+    const { file: picture, undecidedDoors } = await drawFile(loaded, request, scale, look)
     warnLeftOut(io, loaded)
+    const undecided = undecidedNote(undecidedDoors)
+    if (undecided) io.stderr(undecided)
     if (request.out === undefined) {
       io.stdout(picture)
     } else {

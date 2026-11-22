@@ -37,7 +37,10 @@ Notes for agents and people changing this repository.
   gets its one wording, what is needed and the fix in that catalogue, and a line in the
   contract's code table and changelog.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
-  computes geometry of its own.
+  computes geometry of its own. A look (SHT-1, `src/picture/look.ts`) is a named set of values
+  the one drawing function, `planScene`, applies to the same geometry: `working` for the screen
+  and every picture an agent gets, `technical` for sheets and `grid draw`, black on white with
+  line weights in millimetres on paper from a pen set chosen by scale (1:50, 1:100, 1:200).
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `check`,
   `describe`, `draw`, `export`, `sheet`, `tidy`, `serve` and `mcp`, in `src/command/`. `write`
   (WRT-2) writes a plan from rooms text, the main way to write one; `describe --as rooms` reads
