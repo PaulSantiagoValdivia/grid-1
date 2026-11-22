@@ -211,3 +211,9 @@ Run on a laptop shared with about ten other sessions, with `--maxWorkers=2 --min
   "turned a quarter" without which way.
 - Main's bundle size was not measured on this machine.
 
+
+## After merging main at c05d051
+
+VEW-3 (a camera and saved views), with BRF-1, CNT-8 and others, conflicted in `CHANGELOG.md`, the agents' changelog, `edits.ts` and the bundle cap. Each was kept whole: `turnPlanBy` beside VEW-3's `mirroredViews`, WRT-4's entries first, and the cap at the 550 kB both sides had chosen, its comment naming both.
+
+**Not done:** a turn does not turn the saved views VEW-3 brings, though `grid_mirror`'s mirror now does; nor, as before, stairs, annotations or the sketch. A plan with saved views keeps them pointed as before a turn.

@@ -38,10 +38,11 @@ const ORDER = [
   'grid_stretch',
   'grid_rename_room',
   'grid_square_scan',
+  'grid_save_view',
 ]
 
 const READ_ONLY = new Set(['grid_compare', 'grid_diff', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_fields', 'grid_find', 'grid_count', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
-const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan'])
+const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan', 'grid_save_view'])
 
 interface Listed {
   name: string
@@ -92,7 +93,8 @@ describe('tools/list', () => {
     // 28 since WRT-8: what a change did (grid_diff), and the start marker it compares with
     // where there is no git (grid_mark_start).
     // 29 since BRF-1: the brief, what the person asked for, written before the first room.
-    expect((await listed()).length).toBeLessThanOrEqual(29)
+    // 30 since VEW-3: a view saved by name changes the plan file, which grid_view never does (lab SE-7).
+    expect((await listed()).length).toBeLessThanOrEqual(30)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -213,6 +215,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_stretch: { side: 'east', by: 0.3, out: 'wider.json' },
     grid_rename_room: { room: 'bed2', name: 'Study', use: 'other', out: 'renamed.json' },
     grid_square_scan: { all: true, out: 'squared.json' },
+    grid_save_view: { name: 'Garden corner', camera: { target: { room: null, point: [5, 4, 1] }, bearing: 135, tilt: 30, distance: 20, lens: { focalLength: 35 }, cut: null }, out: 'viewed.json' },
   }
 
   it('answers every tool with text and data that fit its output schema', async () => {

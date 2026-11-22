@@ -7,6 +7,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 - [The tools](#the-tools)
 - [Asking across the parts: fields, find and count](#asking-across-the-parts-fields-find-and-count)
 - [The label, and retelling a report](#the-label-and-retelling-a-report)
+- [A camera you can set, and saved views](#a-camera-you-can-set-and-saved-views)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [What a change did](#what-a-change-did)
 - [A note set aside as seen](#a-note-set-aside-as-seen)
@@ -17,8 +18,8 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker, the seen mark and the brief, and last the ten that
-change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
+requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker, the seen mark and the brief, and last the eleven that
+change the plan, writing it rooms first leading and saving a view last. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
 
@@ -33,7 +34,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_find` | The walls, doors, windows, openings, rooms or floors that meet every condition, by id, with only the fields asked for, and a `view` for `grid_view` that picks them out |
 | `grid_count` | The parts that meet every condition, grouped by a field or fact, each group with its count, its sums and its ids, and a `view` for `grid_view` that colours each group |
 | `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; and which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall) |
-| `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
+| `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), the model through a camera you set (a side or corner, or a bearing from the plan's north, with tilt, distance, eye height, lens and a room to point at), a saved view by name, or an eye-level view in a room with the window sills against the eye; every 3D picture with its camera record ([below](#a-camera-you-can-set-and-saved-views)) |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules", then the place the figures were for (the plan's `site.country`, or `country`; with none, no figure is applied); the notes the person set aside are listed under Seen |
 | `grid_report_problem` | A draft issue about a failure the agent met, for the person to file or not: Grid sends nothing (see below) |
@@ -53,6 +54,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_stretch` | Makes the whole building wider or longer, at its outside wall or through a room |
 | `grid_rename_room` | Renames a room or changes its use, saying which checks now look at it |
 | `grid_square_scan` | Squares a scanned plan: turns each wall marked scanned (every wall with `all`) within about 3 degrees of the plan's main directions onto them, and says how far each wall turned and moved ([Where a value came from](plan-file.md#where-a-value-came-from)) |
+| `grid_save_view` | Saves a camera record `grid_view` returned under a name, with the plan, in its `views`, as Grid's setting and as BCF's camera; with `replace` over a view of that name, with `remove` takes one out ([below](#a-camera-you-can-set-and-saved-views)) |
 
 Every change answers with what it changed, what it guessed and what it could not keep, and
 names the plan by its path in the project, so its size does not grow with the building. When a
@@ -132,6 +134,40 @@ say a plan complies, is approved, meets code or has passed anything; give each f
 figure used here, with its basis and its status. The plugin's skill carries the same words.
 `npm run retell` scores how well a model keeps to them (see the scoreboard's
 [README](../scoreboard/README.md#the-retelling-set)).
+
+## A camera you can set, and saved views
+
+Read this when the person asks for a 3D view from somewhere in particular ("the living room from
+the south-west, from higher up"), asks to move one ("a bit lower and more from the left"), or
+asks to keep one. `grid_view kind=3d` takes the camera (VEW-3):
+
+| Argument | What it sets |
+|---|---|
+| `room` | The room to point at: the middle of its floor, half way up its storey. On a plan of several floors the room's floor is cut away unless `floor` says otherwise. The middle of the building when left out |
+| `from` or `bearing` | Where the camera stands: a side or corner of the drawing (`south-east`, `above`; north is the drawing's top here, as in every argument), or a compass bearing in degrees from the north the plan states, or from the top of the drawing when it states none |
+| `tilt` | Degrees the camera looks down; below 0 it looks up. At most 89 |
+| `distance` | Metres from the camera to what it is pointed at |
+| `eye_height` | Metres from the floor of the room pointed at (or the floor cut away, or the ground floor) up to the camera. With a tilt and no distance, the camera stands back along its bearing until it is that high; level, or with a distance, the point it looks at moves up or down to meet it |
+| `lens` | The focal length in millimetres on a 36 × 24 mm sensor. 28.97 (45° tall, as the app opens) when left out |
+| `floor` | The floor cut away: nothing above it is drawn |
+| `camera` | A camera record `grid_view` returned, to start from |
+| `view` | A view saved with the plan, by name, to start from |
+| `turn`, `tilt_by` | From `camera`, `view` or Grid's own framing: walk round what the camera is pointed at, degrees to its left (below 0 to its right), and add degrees to its tilt (below 0 lower) |
+
+Every 3D and eye picture comes back with its camera record in `camera`: the setting (`target`,
+`bearing`, `bearingFrom`, `north`, `tilt`, `distance`, `lens`, `cut`), what follows from it on
+this plan (`eyeHeight` above `floor`, the `floors` drawn, and `standingIn`, the room the camera
+stands in or "outside any room"), and BCF's camera (`position`, `direction`, `up`, `fieldOfView`,
+`aspectRatio`). The fields are in [the plan file](plan-file.md#saved-views-and-the-camera-record).
+The text says the same in a few lines, and names the views the plan has saved.
+
+"Lower and more from the left" is one call: send the last record back as `camera` with `turn: 20,
+tilt_by: -10`, or with its `bearing` and `tilt` changed; both give the same camera. A record sent
+back unchanged gives the same record, digit for digit. `grid_save_view` saves a record under a
+name the person gives; `grid_view view=<name>` and `grid draw --view <name>` call it up with the
+same record. A name already saved is refused unless `replace` is true. The app's 3D view opens
+at a record handed to it (`Canvas3D`'s `camera`), and the stills are taken with the same
+settings (`recordCamera`), so the person and the agent see the same picture.
 
 ## Measuring from faces, and a room's height
 

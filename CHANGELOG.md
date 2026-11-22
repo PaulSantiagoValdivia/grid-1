@@ -16,6 +16,7 @@ Grid say that a plan complies with anything.
 
 - Write a room type once and place it many times: rooms text's `repeat` places a unit in a row from where its line says, with settings for the two end rooms, so the lab's twelve-room hotel floor is 17 lines. A floor line can copy another floor (`floor l4 "Fourth floor" level 4 copy l3`), and `through <floor>` stands a room such as a stair core on the floors above its own, walls and all. `grid edit mirror --turn 90` (or `turn` for `grid_mirror`) turns the plan a quarter or half round. `grid diff` says first when the plan is the earlier one mirrored or turned, and whether every room kept its size, instead of listing every wall as moved (WRT-4).
 
+- A 3D view can be asked for the way a person describes it: from a bearing or a side or corner, looking down so many degrees, from so far or with the eye so high, at a room, with a lens in millimetres, and moved with "a bit lower and more from the left" in one step. Every 3D picture comes with its camera, which says whether it stands in a room or outside any room. A view can be saved by name with the plan (`grid_save_view`) and called up again, the same, by an agent (`grid_view view=…`), by you (`grid draw --view …`) or in the app's 3D view; it is stored as Grid's setting and as the camera the open BCF format writes (VEW-3).
 - "Which rooms get the sun" has an answer as a table: `grid_measure what=sun` gives each room's window walls, the way each faces (a bearing and a point of the compass, by the plan's north or, said first, the top of the drawing), the window area against the floor area, and how deep the room runs from each window wall. It is geometry, not a daylight result, and says so on every line (BRF-5).
 
 - A floor can state its roof: flat, mono-pitch, gable or hip, with an eaves height and a pitch or a ridge height (LVL-6). Its walls are cut to the roof, so an attic's gables are gables in the 3D view, the OBJ, the glTF and the IFC, and a door or window whose top would stand above the roof is refused with the height that fits. `grid_areas` gives each attic room's floor with at least 1.5 m and at least 2.2 m of headroom, Grid's own bands; the IFC holds the volume under the roof, in its bodies and in the base quantities of its walls, spaces and roof slab; rooflights are windows in the roof. Dormers are not supported yet, and the plan says so.
@@ -67,7 +68,7 @@ Grid has not been released yet. The first release will hold:
   the tests, the licence check and the scoreboard.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 28 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 30 tools.
 - A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
   all floors) and a door and window schedule that lists each opening once with the two rooms it
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.

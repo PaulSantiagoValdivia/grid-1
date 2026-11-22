@@ -1,3 +1,4 @@
+import type { CameraRecord } from '@ongrid/floorplan/geometry'
 import type { BuildingFrame } from './building'
 
 /**
@@ -72,4 +73,32 @@ export interface OpeningCameraProps {
  */
 export function openingCamera(frame: Pick<BuildingFrame, 'position'>, camera: ViewCamera = OPENING_CAMERA): OpeningCameraProps {
   return { position: frame.position, fov: camera.lens, near: camera.near, far: camera.far }
+}
+
+/**
+ * VEW-3: a camera record (`cameraRecord` in the geometry core) as the perspective camera's
+ * settings, in Three's axes (C4: plan `(x, y, z)` is Three's `(x, z, -y)`). The app's 3D view
+ * opens at it and a still is taken with it, so a named view is the same picture in both.
+ * `target` is what the orbit controls turn round. `up` is the record's; the camera is pointed
+ * at `target` with Three's own up, which turns it the same way, with no roll.
+ */
+export interface RecordCameraProps extends OpeningCameraProps {
+  readonly target: Vec3
+  readonly up: Vec3
+}
+
+/** Near enough for an eye in a small room, as the eye view has always used. */
+const RECORD_NEAR = 0.05
+
+const three = (p: readonly [number, number, number]): Vec3 => [p[0], p[2], -p[1] + 0]
+
+export function recordCamera(record: CameraRecord): RecordCameraProps {
+  return {
+    position: three(record.position),
+    target: three(record.target.point),
+    up: three(record.up),
+    fov: record.fieldOfView,
+    near: RECORD_NEAR,
+    far: OPENING_CAMERA.far
+  }
 }

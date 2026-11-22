@@ -5,8 +5,8 @@ import { cleanup, render } from '@testing-library/react'
 import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { Vector3 } from 'three'
-import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import { floorElevations } from '@ongrid/floorplan/geometry'
+import { parseFloorPlan, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { cameraRecord, floorElevations, type CameraRecord } from '@ongrid/floorplan/geometry'
 
 /**
  * The still and the app's opening view use one camera record. WebGL does not run here, so the
@@ -28,7 +28,7 @@ vi.mock('@react-three/fiber', async (importOriginal) => ({
 const { OrbitControls } = await import('../../canvas3d/OrbitControls')
 const { Canvas3D } = await import('../../canvas3d/Canvas3D')
 const { buildingFrame } = await import('../../canvas3d/building')
-const { OPENING_CAMERA, openingCamera, stillScene, LIGHT_COLORS_3D } = await import('..')
+const { OPENING_CAMERA, openingCamera, recordCamera, stillScene, LIGHT_COLORS_3D } = await import('..')
 
 afterEach(cleanup)
 
@@ -90,6 +90,46 @@ describe('the still and the app open with the same camera', () => {
       const looking = still.camera.getWorldDirection(new Vector3())
       const toPivot = new Vector3(...(pivot as [number, number, number])).sub(still.camera.position).normalize()
       expect(looking.distanceTo(toPivot)).toBeLessThan(1e-9)
+    } finally {
+      still.close()
+      flags.IS_REACT_ACT_ENVIRONMENT = act
+    }
+  })
+})
+
+describe('the still and the app open at the same camera record (VEW-3)', () => {
+  const read = (plan: FloorPlan): FloorPlan => parseFloorPlan(plan)
+  const records: [string, FloorPlan, CameraRecord][] = [
+    ['the flat from the south-west, looking down', read(flat), cameraRecord(read(flat), { target: { room: 'lounge', point: [7, 5, 1.3] }, bearing: 220, tilt: 25, distance: 12, focalLength: 35, cut: null })],
+    ['two storeys, the ground floor cut away, looking up', read(twoStoreys(flat)), cameraRecord(read(twoStoreys(flat)), { target: { room: null, point: [4, 3, 2] }, bearing: 10, tilt: -5, distance: 9, focalLength: 18, cut: 'ground' })]
+  ]
+  it.each(records)('%s', (_name, plan, record) => {
+    render(<Canvas3D floorPlan={plan} focus={record.cut} camera={record} />)
+    const app = seen.camera!
+    const pivot = orbitTarget(seen.children)
+    const set = recordCamera(record)
+    // Plan (x, y, z) is Three's (x, z, -y).
+    expect(set.position).toEqual([record.position[0], record.position[2], -record.position[1]])
+    expect(set.target).toEqual([record.target.point[0], record.target.point[2], -record.target.point[1]])
+    expect(app).toEqual({ position: set.position, fov: record.fieldOfView, near: set.near, far: set.far })
+    expect(pivot).toEqual(set.target)
+
+    const flags = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    const act = flags.IS_REACT_ACT_ENVIRONMENT
+    flags.IS_REACT_ACT_ENVIRONMENT = false
+    const still = stillScene(plan, { focus: record.cut, colors: LIGHT_COLORS_3D, width: 1200, height: 800, camera: record })
+    try {
+      expect(still.camera.position.toArray()).toEqual(app.position)
+      expect([still.camera.fov, still.camera.near, still.camera.far]).toEqual([app.fov, app.near, app.far])
+      // It looks along the record's direction, at the app's pivot.
+      const looking = still.camera.getWorldDirection(new Vector3())
+      const direction = new Vector3(record.direction[0], record.direction[2], -record.direction[1])
+      expect(looking.distanceTo(direction)).toBeLessThan(1e-5)
+      const toPivot = new Vector3(...(pivot as [number, number, number])).sub(still.camera.position).normalize()
+      expect(looking.distanceTo(toPivot)).toBeLessThan(1e-9)
+      // And its up is the record's: no roll.
+      const up = new Vector3(0, 1, 0).applyQuaternion(still.camera.quaternion)
+      expect(up.distanceTo(new Vector3(record.up[0], record.up[2], -record.up[1]))).toBeLessThan(1e-5)
     } finally {
       still.close()
       flags.IS_REACT_ACT_ENVIRONMENT = act
