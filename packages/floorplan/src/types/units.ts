@@ -32,8 +32,9 @@ export interface Display {
 
 export const METRES: Display = { length: 'm', area: 'm2', decimal: 'point' }
 
-const INCH = 0.0254
-const FOOT = 0.3048
+/** Exact by definition: 25.4 mm, and twelve of them. */
+const INCH = 254 / 10_000
+const FOOT = 12 * INCH
 const PER_METRE: Record<Exclude<LengthUnit, 'ft-in'>, number> = { m: 1, cm: 100, mm: 1000 }
 
 /** Why a length could not be read, in words, naming what was meant. Never the text sent. */
@@ -163,8 +164,8 @@ export function displayOf(length: LengthUnit, decimal: DecimalMark = 'point', ar
 /** The units a plan file may state for its lengths, with metres per unit. Grid writes metres. */
 export const FILE_UNITS: Readonly<Record<string, { metres: number; name: string }>> = {
   m: { metres: 1, name: 'metres' },
-  cm: { metres: 0.01, name: 'centimetres' },
-  mm: { metres: 0.001, name: 'millimetres' },
+  cm: { metres: 1 / 100, name: 'centimetres' },
+  mm: { metres: 1 / 1000, name: 'millimetres' },
   ft: { metres: FOOT, name: 'feet' },
   in: { metres: INCH, name: 'inches' },
 }

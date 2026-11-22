@@ -1,5 +1,6 @@
 // The five counts, and two guards that keep them honest. README.md beside this folder defines
 // each one in words; this file is the definition in code.
+import { FILE_UNITS } from '@ongrid/floorplan/types/units'
 import { capabilityTable } from './capabilities'
 import * as data from './data'
 import { basePlans, damageSet, fingerprint, mentions, soundPlans, type Mutation } from './damage'
@@ -58,8 +59,14 @@ function tallyAreas(t: AreaTally, raw: unknown, expected: ReadonlyMap<string, nu
     t.plansGridCannotRead++
     return
   }
-  for (const [key, want] of expected) {
-    if (want === null) continue
+  // WRT-7: the referee measures a file in its own numbers; Grid reads one that states its unit
+  // (`"units": "mm"`) in metres, so the referee's area is put in square metres to compare.
+  const stated = typeof raw === 'object' && raw !== null ? (raw as { units?: unknown }).units : undefined
+  const unit = typeof stated === 'string' ? FILE_UNITS[stated.trim().toLowerCase()] : undefined
+  const k = unit === undefined ? 1 : unit.metres * unit.metres
+  for (const [key, given] of expected) {
+    if (given === null) continue
+    const want = given * k
     const area = got.get(key)
     if (area === undefined || area === null) {
       t.notMeasured++
