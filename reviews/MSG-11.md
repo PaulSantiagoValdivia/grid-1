@@ -354,3 +354,103 @@ MSG-11 left in English. ownWords: the profile's refusals are listed as the comma
 - Floorplan `geometry/` (the DXF and profile tests among them), `export/`, `messages/`, `types/`,
   rules `result/`, and the CLI's guard, `export/`, `command/` and `mcp/`: 173 files, 3,908 tests
   pass (2 skipped). No expectation changed. The full suite and the scoreboard were not run here.
+
+## After merging main at 26e928e1
+
+Main brought BRF-3 (the plot: its boundary, street edges, set-backs, the distances to them and
+the site's things) and WRT-4 (repeat, floors copied from their line, rooms through floors, quarter
+turns, and a mirrored or turned plan recognised by `grid diff`). Ten files conflicted. Main adds
+no tool and no top-level plan field (the plot is under `site`, which `coverage.ts` already places,
+now `drawn`). Main's English output is kept word for word.
+
+### How the conflicts were resolved
+
+- **The plot check** (`geometry/rules/check.ts`, `rules/messages.ts`, `rules/catalogue.ts`,
+  `rules/types.ts`): the findings `setback_short` and `over_boundary` carry their sentence
+  (`withSentence`) from `saids.setbackShort` and `saids.overBoundary` (`check.setbackShort`,
+  `check.overBoundary`, `check.asked[.assumed]`); main's `askedText`, `setbackShortText` and
+  `overBoundaryText` stay exported, as their English. An edge is named by
+  `boundaryEdgeSaid` in `plot.ts` (`check.boundary.edge[.numbered]`, the way from
+  `describe.way.*`), and `BoundaryEdge.name` is its English, as before. The notice
+  `boundary_not_measured` is worded per reason (`check.boundaryNotMeasured.*`) from the site's
+  reason by key (`SiteMeasures.whySaid`, not enumerable, `check.siteWhy.*`); `NotChecked` gains
+  the optional, not enumerable `said` that findings already had. The check's title is
+  `check.title.site-boundary`; main's new limit is `check.limit.plan.5`, and the structure limit,
+  which stays last, is now `check.limit.plan.6`.
+- **The drawing check** (`validate.ts`, `plot.ts`): `plan/boundary-crosses` is
+  `issue.plan/boundary-crosses`, with the problem by key (`ringFault`, `issue.part.boundary.*`);
+  `ringProblem` stays, as its English.
+- **Skip reasons** (`checks/coverage.ts`): `check.skip.no_building_outline` and
+  `check.skip.boundary_not_closed`; the report's parts for `looksAt: "edge"` are
+  `report.parts.edge.one|many|none` (`command/check.ts`).
+- **The record** (`result/catalogue.ts`, `inspect.ts`): the five new codes have their catalogue
+  entries and `line.<code>.*` keys. `plan/setback-short` and `plan/over-boundary` word their found
+  and needed from the finding's `boundary` (`line.part.edgeFaces*`, `line.part.setbackWho*`,
+  `line.part.setbackFrom.*`), and their lines' `values` hold `edge`, `distance`, `past` and
+  `asked`. The site's things are counted by key (`siteThingsSaid`, `line.part.siteThing.*`;
+  `siteThingsText` is its English). The stage `site` is `line.part.stage.site`. The new sketch fix
+  replaces `line.floor/sketch-drawn-only.fix` in both languages. The contract's code-table rows are
+  main's.
+- **Describe** (`command/describe.ts`): the person's form says the plot by key, in
+  `describe/site.ts` (`describe.site.*`), as `personFacing` does for north; the agent's form keeps
+  main's `siteDescription`.
+- **The drawing** (`viewer/scene.ts`): both imports; the site is drawn with no words.
+- **Docs**: `CHANGELOG.md` keeps every Unreleased line; the contract keeps MSG-11's section first of
+  the day, with a line on BRF-3's codes in Spanish, then main's WRT-4 and BRF-3 sections.
+  `docs/languages.md` adds the plot's Spanish terms (parcela, linde, tramo, retranqueo, ocupación
+  de la parcela).
+
+New keys, in `en.ts` with main's English and in `es.ts` as a draft: `join.space`;
+`issue.plan/boundary-crosses`, `issue.part.boundary.*` (4); `check.boundary.edge[.numbered]`,
+`check.asked[.assumed]`, `check.setbackShort`, `check.overBoundary`, `check.siteWhy.*` (4),
+`check.boundaryNotMeasured.*` (4), `check.title.site-boundary`, `check.limit.plan.6`,
+`check.skip.no_building_outline`, `check.skip.boundary_not_closed`; `line.part.siteThing.*` (12),
+`line.part.edgeFaces[.noNorth|.street]`, `line.part.setbackWho[.assumed]`,
+`line.part.setbackFrom.*` (3), `line.part.stage.site`; the `line.*` keys of `plan/setback-short`
+(7), `plan/over-boundary` (6), `plan/site-things-drawn-only` (4), `plan/not-checked-boundary` (5)
+and `plan/boundary-crosses` (3); `report.parts.edge.*` (3); `describe.site.*` (7).
+
+### The ownWords guard
+
+`plot.ts`, `geometry/site.ts`, `describe/site.ts` and the moved parts are at none. Listed:
+
+- *Shown to the person, not moved yet* (+57): `quantities/site.ts` 19 (the `grid_measure
+  what=site` answer, as `sun.ts`), `geometry/diff/turn.ts` 7, `diff/building.ts` 22 → 25,
+  `notes/notes.ts` 15 → 17, `rooms/compile.ts` 108 → 115, `types/floorplan.ts` 38 → 50 (schema
+  refusals of the site), `edit/edits.ts` 42 → 49.
+- *Command line* (+6): `planText.ts` 15 → 18, `write.ts` 23 → 26.
+- Not in the ratchet: `writeTools.ts` 93 → 99 (tools), `tolerances.ts` 192 → 197 and
+  `sheet/coverage.ts` 21 → 20 (developer).
+
+The ratchet moves from 1125 to 1188; 2,184 literals in 119 files are listed in all.
+
+### Results after 26e928e1
+
+- `npm run build`: `dist/grid.mjs` 548,593 bytes, under main's 550,000 (1,407 bytes to spare); the
+  Spanish chunk 140,997 bytes.
+- `npm run typecheck`, `npm run lint`: clean.
+- Floorplan `messages/`, `geometry/`, `types/`, `rooms/`, all of `rules/src` and viewer `picture/`:
+  156 files, 3,609 tests pass (1 skipped).
+- The CLI's guard, `describe/`, `draw/`, `sheet/`, `mcp/` (tools, server, replay, BRF-3's `site`
+  and `facing` tests), `command/` (everyPath, grid.e2e, language.e2e, the short report),
+  `versions/` (WRT-4's diff), `edit/` and `quantities/`: 81 files, 1,033 tests pass (1 skipped).
+  No expectation changed in this merge; main's tests and golden files pass unchanged.
+- By hand: `grid check --lang es` on a house 0.90 m from the east edge where 3 m was asked says
+  "El edificio está a 0,90 m de la linde este; pidió 3,00 m", with its found, needed and fix in
+  Spanish; `grid describe --lang es` says "La parcela: 450,00 m², con un 20,9 % ocupado por el
+  edificio; …"; the English is main's.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (26e928e1)
+
+17. **The ratchet was raised, 1125 to 1188.** BRF-3 and WRT-4 added 63 unmoved sentences of the
+    kinds MSG-11 left for later: rooms text's `repeat`, `copy` and `through`, the edit receipts
+    of a turn, the diff's turn line, the site's schema refusals, the plot's notes and the
+    `grid_measure what=site` answer. Everything the check report, the record, the drawing check
+    and the person's description say about the plot is moved.
+18. **The bundle cap is close.** 548,593 of 550,000 bytes. The next merge that adds code to the main
+    file may need a cap decision, or English moved out of `en.ts` into a chunk of its own.
+19. **Spanish terms for the plot are a draft**: "linde" for the boundary and "tramo" for its edge
+    (so "la linde este (tramo 2)"), "retranqueo" for set-back, "parcela", "ocupación de la
+    parcela", and "cancela" for a gate. A floor's outline reason (`outline.ts`) inside the
+    "not measured" notice stays English, as the other measures give it.
