@@ -7,7 +7,7 @@
  * no lines only means these checks found nothing.
  */
 
-import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, Rule } from '../checks/types'
+import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
 
 /** Raised when a field changes meaning or is taken away; adding a field or a code keeps it. */
 export const RESULT_VERSION = 1 as const
@@ -23,6 +23,15 @@ export const RESULT_VERSION = 1 as const
  */
 export const LINE_KINDS = ['refused', 'left-out', 'worth-a-look', 'finding', 'not-checked'] as const
 export type LineKind = (typeof LINE_KINDS)[number]
+
+/**
+ * How far a number Grid gives is borne out by the plan (MSG-2, lab AA-12, AC-9): `proven` when
+ * every part it is made of was measured and nothing in the drawing questions them; `not-proven`
+ * when a part was left out or is in doubt, and it says which; `not-looked-at` when nothing it
+ * would be made of could be measured. A number is never shown as more than its state.
+ */
+export const NUMBER_STATES = ['proven', 'not-proven', 'not-looked-at'] as const
+export type NumberState = (typeof NUMBER_STATES)[number]
 
 /** What a line is about. The plan as a whole has the id `''`. An `item` is a fixture (CNT-12). */
 export type ThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item'
@@ -72,8 +81,13 @@ export interface GridResult {
   readonly basis: 'general-baseline' | 'local-lookup'
   /** Only when a looked-up figure was applied. */
   readonly lookupNotice?: typeof LOOKUP_NOTICE
-  /** Every check that ran. Empty when the plan was refused. */
+  /** Every check that ran and looked at something. Empty when the plan was refused. */
   readonly checks: readonly Rule[]
+  /**
+   * MSG-2: what each check looked at and skipped, with the reason and a count, whether it ran or
+   * not. Empty when the plan was refused, or when the checks could not run.
+   */
+  readonly coverage: readonly CheckCoverage[]
   /** Every figure a check applied. */
   readonly figures: readonly AppliedFigure[]
   /** What these checks never look at, whatever the plan: the same lines every time. */

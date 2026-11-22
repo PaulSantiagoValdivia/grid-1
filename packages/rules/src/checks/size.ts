@@ -12,6 +12,7 @@ import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { HABITABLE_USES } from './catalogue'
 import { messages } from './messages'
 import type { AppliedFigure, NotChecked, RuleFinding } from './types'
+import type { FloorScope } from './coverage'
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -28,22 +29,31 @@ export function sizeCheck(
   roomName: (id: string) => string,
   /** The minimum net area of a habitable room. */
   minimum: AppliedFigure
-): { findings: RuleFinding[]; notChecked: NotChecked[] } {
+): { findings: RuleFinding[]; notChecked: NotChecked[]; scope: FloorScope } {
   const index = indexPlan(storey)
   const outlines = roomOutlines(storey, index, leftOut)
   const findings: RuleFinding[] = []
   const unstated: string[] = []
+  // MSG-2: every room of the floor is looked at or skipped, with the reason.
+  const scope: FloorScope = { lookedAt: [], skipped: { cannot_be_drawn: [], use_not_covered: [] } }
 
   for (const room of storey.rooms) {
     const outline = outlines.get(room.id)
     // Rooms that don't close are already named as not checked.
-    if (outline === undefined) continue
+    if (outline === undefined) {
+      scope.skipped.cannot_be_drawn!.push(room.id)
+      continue
+    }
     const use = stated(room.use)
     if (use === null) {
       unstated.push(room.id)
       continue
     }
-    if (!HABITABLE_USES.includes(use)) continue
+    if (!HABITABLE_USES.includes(use)) {
+      scope.skipped.use_not_covered!.push(room.id)
+      continue
+    }
+    scope.lookedAt.push(room.id)
     // Net of any room marked `inside` that sits in it, as Grid measures every room (ARE-5).
     // Compared as measured, never rounded first (ARE-7): 6.4951 m² is under 6.5 m².
     const net = roomFloorArea(room, index, outline.polygon)
@@ -75,5 +85,6 @@ export function sizeCheck(
             message: messages.noUse(floorLabel, new Set(unstated).size)
           }
         ]
-  return { findings, notChecked }
+  scope.skipped.no_use = unstated
+  return { findings, notChecked, scope }
 }

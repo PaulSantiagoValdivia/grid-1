@@ -19,7 +19,9 @@ npm test
 npm run check:licenses
 ```
 
-Use [conventional commits](https://www.conventionalcommits.org/) for commit messages.
+Use [conventional commits](https://www.conventionalcommits.org/) for commit messages. If people
+will notice your change, add a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
+[RELEASING.md](RELEASING.md) says how a version is released.
 
 Building-code figures have their own rules: see [packages/rules/README.md](packages/rules/README.md).
 Never copy text from a standard, a code or a regulation.

@@ -19,7 +19,8 @@
     "test": "vitest run",
     "check:licenses": "node scripts/check-licenses.mjs",
     "check:data": "node scripts/check-data.mjs",
-    "scoreboard": "node scoreboard/build.mjs && node scoreboard/dist/scoreboard.mjs"
+    "scoreboard": "node scoreboard/build.mjs && node scoreboard/dist/scoreboard.mjs",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.7.5",
