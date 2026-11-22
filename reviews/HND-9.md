@@ -43,7 +43,7 @@
 - `everyPath.e2e.test.ts`: **added** the `occupancy` command's plan slot and a `PLAN_READERS`
   line, as that test asks of a new command that takes a path. Nothing changed or removed.
 
-## Decisions for the owner
+## For the owner
 
 1. **A linked file, not a marked section in the plan.** The card allows either. A section in
    the plan would be a schema change (CNT-1's rule) and would travel with the plan file itself,
