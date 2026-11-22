@@ -8,6 +8,7 @@
  * be anything (MS-19, T-3).
  */
 import { planFloors, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { likelyId } from '@ongrid/floorplan/types/nearest'
 import { PATH_MAX, PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { PROJECT_FILE, projectPlanFile } from '../command/init'
 import { UsageError } from '../command/options'
@@ -282,35 +283,16 @@ export function floorArg(plan: FloorPlan, floor: unknown): string | undefined {
   throw new ToolRefusal(`That floor is not in this plan. Its floors: ${floorList(plan)}.`)
 }
 
-/** How many letters must change to turn one text into the other, ignoring case. */
-function editDistance(a: string, b: string): number {
-  const x = a.toLowerCase()
-  const y = b.toLowerCase()
-  let row = Array.from({ length: y.length + 1 }, (_, j) => j)
-  for (let i = 1; i <= x.length; i++) {
-    const next = [i]
-    for (let j = 1; j <= y.length; j++) next[j] = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (x[i - 1] === y[j - 1] ? 0 : 1))
-    row = next
-  }
-  return row[y.length]!
-}
-
 /**
- * The known id nearest the one sent, as a sentence for a refusal (ARE-10); the plan's first
- * wins a tie. Only the known id is quoted: the one sent is text from the agent (MS-19).
+ * The known id most likely meant by the one sent, as a sentence for a refusal (ARE-10), from
+ * Grid's one nearest-id helper (MSG-7, `likelyId`); the plan's first wins a tie, and an id that
+ * is not near any gives no sentence. Only the known id is quoted: the one sent is text from the
+ * agent (MS-19).
  */
 export function nearestIdText(sent: unknown, known: readonly string[]): string {
-  if (typeof sent !== 'string' || known.length === 0) return ''
-  let best = known[0]!
-  let score = editDistance(sent, best)
-  for (const id of known.slice(1)) {
-    const d = editDistance(sent, id)
-    if (d < score) {
-      best = id
-      score = d
-    }
-  }
-  return ` The nearest known id is ${quoted(best)}.`
+  if (typeof sent !== 'string') return ''
+  const best = likelyId(sent, known)
+  return best === null ? '' : ` The nearest known id is ${quoted(best)}.`
 }
 
 /** A room the call named, checked against the plan, with the nearest id and the rooms it has when it is not there. */
@@ -334,7 +316,10 @@ export function openingArg(plan: FloorPlan, opening: unknown): string {
 /** A wall the call named, checked against the plan, with the nearest wall id when it is not there. */
 export function wallArg(plan: FloorPlan, wall: unknown): string {
   if (plan.walls.some((w) => w.id === wall)) return wall as string
-  throw new ToolRefusal(`The wall named is not in this plan.${nearestIdText(wall, plan.walls.map((w) => w.id)) || ' It has no walls.'}`)
+  const ids = plan.walls.map((w) => w.id)
+  // No near id: its walls, so the agent can choose (MSG-7).
+  const listed = ids.length === 0 ? ' It has no walls.' : ` Its walls: ${ids.slice(0, 40).map(quoted).join(', ')}${ids.length > 40 ? ` and ${ids.length - 40} more` : ''}.`
+  throw new ToolRefusal(`The wall named is not in this plan.${nearestIdText(wall, ids) || listed}`)
 }
 
 /** What a measure between two things may name: a wall, an opening or a room. */

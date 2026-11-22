@@ -65,6 +65,7 @@ record. It never throws: a check that fails inside Grid becomes a line
 | `needed` | What would be right. |
 | `fix` | What to change. A suggestion: the plan is the author's. |
 | `figures` | Only on a finding that compared the plan with a figure: those figures, as in `figures` above. |
+| `fixes` | Only where a change to one part would clear the line (MSG-7): each such change as data, `{ part: "opening", id, width \| offset \| height \| sill \| wall }`. Several when more than one would do. `width` keeps the opening's start; `wall` is the id most likely meant. In `grid_check`, each line with fixes also carries `calls`: the same changes as calls to `grid_change_opening`, with the plan argument, ready to send. A `wall` fix has no call: no tool sets an opening's wall. |
 
 ### The kinds, in list order
 
@@ -346,6 +347,34 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: what would be right (MSG-7)
+
+- A line gets `fixes` where a change to one part would clear it, and in `grid_check` the
+  `calls` that make them, ready to send: `opening/out-of-wall` (the offset that fits keeping its
+  width, and the width that fits keeping its offset), `opening/too-tall` (the height that fits at
+  its sill), `opening/negative-sill` (a sill of 0) and `opening/missing-wall` (the wall most
+  likely meant, as data only). `grid_check`'s text says how many lines carry a call.
+- Wordings changed, each in `found` (the check's sentence) and, where named, in `needed` and `fix`:
+  - `wall/zero-length`: "starts and ends at the same point, (x, y), so it has no length", in
+    place of "has start === end".
+  - `opening/missing-wall` and `room/unclosed` for a wall the plan does not have: "which is not
+    in the plan", with ": did you mean "…"?" when one is near, in place of "which does not
+    exist". `needed` and `fix` name the wall meant.
+  - `opening/out-of-wall`: `found` adds "at its offset of 0.50 m, a width up to 3.80 m fits";
+    `needed` and `fix` give the offset and width that fit, in metres, in place of "as the line
+    found says".
+  - `opening/too-tall`: `found` adds the height that fits at its sill; `needed` and `fix` give it.
+  - `opening/negative-sill`: `found` says how far below the floor, and that a sill of 0.00 m or
+    above fits.
+  - `room/escape-window-too-small`: `found` names the measure that fails against what it needs
+    first ("0.6 m high, under the 0.61 m needed"), then the ones that are enough. The figures,
+    their sources and status, and the label are unchanged.
+- The nearest id is worked out one way everywhere (`likelyMeant`, `likelyId` and `closestId` in
+  `@ongrid/floorplan/types/nearest`): MSG-4's unknown words, the drawing check's walls, the
+  floor ids, and the tool server's refusals. A refusal now names "the nearest known id" only when
+  one is near (a shortening, other capitals or joins, or one slip); `grid_measure`'s refusal of a
+  wall that is not there lists the plan's walls when none is near.
 
 ### 2026-11-22: version 1 (WRT-3)
 

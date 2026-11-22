@@ -7,6 +7,7 @@
  * no lines only means these checks found nothing.
  */
 
+import type { PlanFix } from '@ongrid/floorplan/geometry'
 import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
 
 /** Raised when a field changes meaning or is taken away; adding a field or a code keeps it. */
@@ -64,6 +65,12 @@ export interface ResultLine {
    * sources and how far it has been checked.
    */
   readonly figures?: readonly AppliedFigure[]
+  /**
+   * MSG-7: each change to one part that would clear the line, as data, when there is one: the
+   * opening, and its new width, offset, height or sill. `grid_check` gives each as the call that
+   * makes it (`calls`). Several when more than one would do.
+   */
+  readonly fixes?: readonly PlanFix[]
 }
 
 export interface GridResult {

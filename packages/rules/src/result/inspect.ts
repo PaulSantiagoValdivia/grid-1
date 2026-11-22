@@ -29,7 +29,7 @@ import { readingNotes, type ReadingNote } from '@ongrid/floorplan/types/reading'
 import { FIGURE_LIMITS } from '../checks/catalogue'
 import { checkLocalRules, type CheckOptions } from '../checks/check'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from '../checks/types'
-import { CODES, isLineCode, type Subject } from './catalogue'
+import { CODES, isLineCode, type CodeEntry, type Subject } from './catalogue'
 import { LINE_KINDS, RESULT_VERSION, type GridResult, type LineKind, type ResultLine, type Thing, type ThingKind } from './types'
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
@@ -62,10 +62,10 @@ function errorText(error: unknown): string {
 }
 
 /** One line from its code and what the code is told. */
-function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures'>> = {}): ResultLine {
+function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures' | 'fixes'>> = {}): ResultLine {
   // A code missing from the catalogue still gives a line: the check's own words, and a test fails.
-  const entry = isLineCode(code) ? CODES[code] : null
-  const found = entry && 'found' in entry && entry.found ? entry.found(subject) : subject.said
+  const entry: CodeEntry | null = isLineCode(code) ? CODES[code] : null
+  const found = entry?.found ? entry.found(subject) : subject.said
   return {
     code,
     kind,
@@ -379,9 +379,10 @@ function issueLine(issue: Issue & { readonly hits?: readonly string[] }, names: 
     floorName: at.floor === null ? '' : names.floorName(at.floor),
     said: oneLine(issue.message),
     also: [...also, ...(issue.hits ?? [])],
-    floors: names.floors
+    floors: names.floors,
+    ...(issue.fixes ? { fixes: issue.fixes } : {})
   }
-  return line(issue.code, issue.severity === 'error' ? 'left-out' : 'worth-a-look', thing, at.floor, subject)
+  return line(issue.code, issue.severity === 'error' ? 'left-out' : 'worth-a-look', thing, at.floor, subject, issue.fixes ? { fixes: issue.fixes } : {})
 }
 
 function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: ReadonlySet<string>): ResultLine {
