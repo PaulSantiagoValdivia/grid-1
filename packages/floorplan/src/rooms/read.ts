@@ -285,7 +285,9 @@ function roomLine(room: Room, poly: P[], local: string): string {
   const step = room.floorOffset !== undefined ? ` floor ${metres(room.floorOffset)}` : ''
   const tenure = room.tenure !== undefined ? ` tenure ${room.tenure}` : ''
   const type = room.roomType !== undefined ? ` type ${quote(room.roomType)}` : ''
-  return `room ${local} ${quote(room.name)} ${use} ${where}${height}${step}${tenure}${type}`
+  // CNT-7 (C26): `outdoor: true` has no word of its own, so such a room's floor is given raw.
+  const outdoor = typeof room.outdoor === 'string' ? ` outdoor ${room.outdoor}${room.roofed === undefined ? '' : room.roofed ? ' roofed' : ' unroofed'}` : ''
+  return `room ${local} ${quote(room.name)} ${use} ${where}${height}${step}${tenure}${type}${outdoor}`
 }
 
 /** The rooms on the two sides of an opening's middle: [left, right] of its wall. */

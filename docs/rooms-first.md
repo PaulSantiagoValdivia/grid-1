@@ -38,6 +38,11 @@ window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
   `tenure common` and `type "B2 double"` on a room line say who it is for and the firm's own room
   type. `building office` says what kind of building the plan is, and `building shop` on a
   `floor` line what that floor is ([the plan file](plan-file.md#what-kind-of-building-it-is-and-what-each-room-is-for)).
+- `outdoor terrace` on a room line marks it as outdoor space (CNT-7), one of `garden`,
+  `courtyard`, `terrace`, `balcony`, `light-well`, `porch`, `carport` or `other`, and `roofed` or
+  `unroofed` after it says whether a roof covers it; unstated, a porch and a carport are roofed.
+  Its walls are written as any room's are, so give its open sides with `open` or a `virtual` wall
+  ([outdoor space](plan-file.md#outdoor-space-roofed-or-open)).
 - `*` stretches a side as far as the room named after `until`. `inside <room> corner ne` cuts a
   room out of another's corner. `unit`, `place`, `repeat` and `mirror` write a group of rooms
   once; `copy <floor>` starts a floor from another, and `through <floor>` stands a room on the

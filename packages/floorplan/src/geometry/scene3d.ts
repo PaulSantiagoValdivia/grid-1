@@ -40,6 +40,8 @@ import { planFloors, wholePlan } from './floors'
 import { wholeWall } from './through'
 import { columnFootprint, columnPart, columnRise, soundColumns } from './columns'
 import { floorEnvelope, type FloorRoof } from './envelope'
+import { outdoorKind, outdoorRoofed } from './outdoor'
+import type { OutdoorKind } from '../types/floorplan'
 import { wallTopProfile, type RoofPlane, type WallTopPoint } from './roofs'
 import { piecesAsRings } from './polygons'
 import type { MultiPolygon } from 'polygon-clipping'
@@ -164,6 +166,8 @@ export interface SceneSlab {
    * as a platform.
    */
   readonly offset?: number
+  /** CNT-7 (C26): on an outdoor space only, its kind and whether a roof covers it (lab EL-18). */
+  readonly outdoor?: { readonly kind: OutdoorKind; readonly roofed: boolean }
 }
 
 /**
@@ -541,7 +545,15 @@ export function roomSlab(room: Room, index: PlanIndex): SceneSlab | null {
   const shape = tryRoomShape(room, index)
   if (!shape) return null
   const offset = roomFloorOffset(room)
-  return { roomId: room.id, name: room.name, polygon: shape.polygon, holes: shape.holes, ...(offset !== 0 && { offset }) }
+  const kind = outdoorKind(room)
+  return {
+    roomId: room.id,
+    name: room.name,
+    polygon: shape.polygon,
+    holes: shape.holes,
+    ...(offset !== 0 && { offset }),
+    ...(kind === null ? {} : { outdoor: { kind, roofed: outdoorRoofed(room) === true } })
+  }
 }
 
 /**

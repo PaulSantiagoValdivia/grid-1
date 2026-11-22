@@ -72,7 +72,11 @@ export function toObj(scene: Scene3D, options: ObjOptions = {}): string {
   }
 
   for (const wall of scene.walls) write('wall', wall.id, wallMesh(wall))
-  for (const slab of scene.slabs) write('floor', slab.roomId, floorMesh(slab))
+  for (const slab of scene.slabs) {
+    // CNT-7 (C26): an outdoor space's floor says so, its kind and whether a roof covers it (lab EL-18).
+    if (slab.outdoor !== undefined && floorMesh(slab) !== null) lines.push(`# grid-outdoor ${slab.outdoor.kind} roofed=${slab.outdoor.roofed}`)
+    write('floor', slab.roomId, floorMesh(slab))
+  }
   for (const stair of scene.stairs) write('stair', stair.id, stairMesh(stair))
   // CNT-16: each column, once, whole.
   for (const column of scene.columns ?? []) write('column', column.id, columnMesh(column))

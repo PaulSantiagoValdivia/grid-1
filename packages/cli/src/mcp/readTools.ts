@@ -14,7 +14,7 @@ import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, i
 import { causeText, checkPlan, checkTitle, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmSectionTitle, firmStandardsText, kindWord, limitsText, nothingCheckedText, partsText, placeText, type PlaceWords, problemsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { askedLanguage, languageFor } from '../command/language'
 import { inLanguage, t, tv } from '../command/words'
-import { LANGUAGES, english, joined, num, said, say, type Language } from '@ongrid/floorplan/messages'
+import { LANGUAGES, english, joined, num, said, say, type Language, type MessageKey } from '@ongrid/floorplan/messages'
 import { readSeen, type SeenState } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
 import { describePlan, describeRooms, describeWalk, walkOf } from '../command/describe'
@@ -372,7 +372,7 @@ const areasTool: GridTool = {
       ...(buildings.length === 0 ? {} : { buildings }),
     }
     if (args['format'] === 'csv') {
-      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.zoneOf !== undefined ? 'zone' : r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
+      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.zoneOf !== undefined ? 'zone' : r.outdoor !== undefined ? 'outdoor' : r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
       // CNT-4: each flat, then the rooms in no flat, after the rooms and before the totals.
       for (const flat of areas.flats) rows.push([flat.floors.join(' '), flat.id, flat.name, flat.typeName ?? flat.type ?? '', null, null, flat.net, sqFt(flat.net), 'flat', flat.state.state])
       if (areas.notInFlats !== null) rows.push(['all', '', 'In no flat', '', null, null, areas.notInFlats, sqFt(areas.notInFlats), 'not in a flat', areas.states.net.state])
@@ -396,7 +396,9 @@ const areasTool: GridTool = {
         const below = r.countedWith ? `, counted once with ${q(r.countedWith.room)} on floor ${q(r.countedWith.floor)}, the stair it rises from` : ''
         // LVL-6: under a roof the floor states, the room's floor by headroom band.
         const headroom = r.headroom === undefined ? '' : `; ${bandsText(r.headroom.bands, units)}, headroom ${lengthText(r.headroom.lowest, units)} to ${lengthText(r.headroom.highest, units)}`
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.net === null ? '' : surenessText(r.sureness, units)}${r.outside ? ', outside: not counted' : ''}${zone}${below}${headroom}`)
+        // CNT-7: an outdoor space is listed apart, with its kind and whether a roof covers it.
+        const outdoor = r.outdoor === undefined ? '' : english(said('areas.room.outdoor', { kind: said(`outdoor.kind.${r.outdoor.kind}`), roofed: said(r.outdoor.roofed ? 'outdoor.roofed' : 'outdoor.open') }))
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.net === null ? '' : surenessText(r.sureness, units)}${r.outside ? ', outside: not counted' : ''}${outdoor}${zone}${below}${headroom}`)
       }
     }
     if (several) {
@@ -441,8 +443,13 @@ const areasTool: GridTool = {
     }
     const outsideArea = areas.floors.reduce((sum, f) => sum + f.outsideRooms, 0)
     if (outsideArea > 0) lines.push(`Outside, listed apart: ${areaText(outsideArea, units)}.`)
+    // CNT-7 (C26): the outdoor spaces, listed apart from every total, by kind.
+    if (areas.outdoor !== undefined) {
+      const kinds = Object.entries(areas.outdoor.byKind).map(([kind, area]) => said('areas.outdoor.kind', { kind: said(`outdoor.kind.${kind}` as MessageKey), area: areaText(area ?? 0, units) }))
+      lines.push(english(said('areas.outdoor', { area: areaText(areas.outdoor.area, units), kinds: joined(kinds, 'join.comma'), roofed: areaText(areas.outdoor.roofed, units), open: areaText(areas.outdoor.open, units), rule: areas.outdoor.rule.measures })))
+    }
     for (const rule of areas.measures) {
-      if (rule.measure === 'net' || rule.measure === 'headroom' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
+      if (rule.measure === 'net' || rule.measure === 'headroom' || rule.measure === 'outdoor' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
     }
     // Any rule beyond the measures', such as free floor where fixtures stand (CNT-12).
     const measureRules: readonly string[] = [...Object.values(AREA_RULES), MEASURES.headroom.measures]

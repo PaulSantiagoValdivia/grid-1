@@ -77,14 +77,14 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
     name: 'Net area',
     measures: 'Net area is the floor inside each room, measured to the faces of its walls, less any hole in it, any room drawn inside it and the floor the columns standing in it cover; a stair drawn as a room on floor after floor counts once, on the floor it rises from.',
     notTakenOff: 'Nothing else inside a room is taken off: fixed units, a column drawn as a short wall rather than as a column, and floor under a low ceiling all count.',
-    cannotSay: 'The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside.',
+    cannotSay: 'The plan cannot say which rooms the reader counts: a store drawn as a room counts unless it is named as outside, and a balcony, a terrace or a garden counts unless it is marked as outdoor space.',
   },
   grossInternal: {
     measure: 'grossInternal',
     name: 'Gross internal area',
     measures: 'Gross internal area is the floor inside the inside face of the walls that face outside, with the inner walls and partitions counted.',
     notTakenOff: 'Inner walls, partitions, stairs and floor no room claims are not taken off.',
-    cannotSay: 'Which walls face outside is worked out from the rooms beside them; the plan cannot say whether floor no room claims, such as a courtyard or a light well, is covered, so it counts.',
+    cannotSay: 'Which walls face outside is worked out from the rooms beside them, an outdoor space being the outside; floor no room claims, such as a courtyard or a light well not drawn as outdoor space, may be covered or not, so it counts.',
   },
   grossExternal: {
     measure: 'grossExternal',
@@ -100,13 +100,15 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
     notTakenOff: 'It is measured on the room\'s whole floor: nothing standing in the room is taken off, a column neither, and floor under a lowered zone of the ceiling counts by that zone\'s height.',
     cannotSay: 'The plan cannot say how deep the roof is built up or where a low slope is boxed in, so the height is taken to the roof\'s underside as stated, from its eaves on the outside walls\' lines.',
   },
+  // CNT-7: its words are in the message files (MSG-11), said here in English as the rest are.
   outdoor: {
     measure: 'outdoor',
     name: 'Outdoor area',
-    measures: 'Outdoor area is the floor of each room the plan marks as outdoor space, roofed or open, measured to the faces of its walls and edges as a room is.',
-    notTakenOff: 'It is in no net, gross internal or gross external figure, and nor is a wall that bounds outdoor space and no room, such as a fence or a parapet.',
-    cannotSay: 'The plan cannot say how much of an outdoor space a local rule counts, such as part of a balcony: Grid counts none of it unless the caller states such a rule, with where it comes from.',
+    measures: english(said('areas.measure.outdoor.measures')),
+    notTakenOff: english(said('areas.measure.outdoor.notTakenOff')),
+    cannotSay: english(said('areas.measure.outdoor.cannotSay')),
   },
+
 }
 
 /**
