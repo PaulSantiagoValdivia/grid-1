@@ -12,6 +12,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [Describing a plan: `grid describe`](#describing-a-plan-grid-describe)
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
 - [What went wrong, on the drawing: `grid draw`](#what-went-wrong-on-the-drawing-grid-draw)
+- [What a drawing shows: `--hide`, `--colour` and `--key`](#what-a-drawing-shows---hide---colour-and---key)
 - [The 3D model as a picture: `grid draw --3d`](#the-3d-model-as-a-picture-grid-draw---3d)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
@@ -24,7 +25,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)) |
 | `grid check [<plan>] [--floor <id>] [--country <code>] [--json]` | Prints the report. Every report is labelled "General guidance, not your local rules" |
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
-| `grid draw [<plan>] [--png \| --3d] [--look <name>] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark` |
+| `grid draw [<plan>] [--png \| --3d] [--look <name>] [--hide <parts>] [--colour use] [--key] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror`, each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`) |
@@ -179,6 +180,17 @@ only after it was tried and left every room it touches with an outline. `grid ti
 again before each fix, and one an earlier fix took care of is skipped and said so. The plan file
 is changed as read, keys Grid does not know included; `--out <file.json>` writes the tidied plan
 there instead. `--json` prints the list or what was applied as JSON.
+
+## What a drawing shows: `--hide`, `--colour` and `--key`
+
+A floor plan picture shows the plan's title and key in a band under the drawing, its notes, tags
+and symbols, its sketch, the sizes, the room areas, the door swings and the warnings (the
+plan file's writing is in [plan-file.md](plan-file.md#writing-on-the-drawing-and-the-sketch-layer)).
+`--hide` leaves parts off, named and joined by commas: `title`, `key`, `notes`, `sketch`,
+`dimensions`, `areas`, `swings`, `warnings`. `--colour use` fills each room by its use and lists
+the uses in the key. `--key` adds a key where the plan asks for none. A word Grid does not know
+is refused by name, and none of the three is taken with `--3d`. `grid_view` takes the same as
+`hide`, `colour` and `key`.
 
 ## What went wrong, on the drawing: `grid draw`
 
