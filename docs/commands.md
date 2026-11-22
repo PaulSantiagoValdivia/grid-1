@@ -168,7 +168,9 @@ sill heights are one line: the usual height and the exceptions. What the plan ca
 such as where north is, the kind of building, how floors connect when no stair joins them and
 which rooms make each flat, is said as such. The stairs that join the floors are one line, with
 the risers and going Grid worked out. Directions are on the drawing, with north at the
-top. The card checks nothing; it ends with the label "General guidance, not your local rules".
+top. A plan that states its real north or its front gets a few more lines: that north, which
+way each side of the drawing really faces, and which rooms face each way
+([plan-file.md](plan-file.md#north-front-and-where-the-building-is)). The card checks nothing; it ends with the label "General guidance, not your local rules".
 
 ## Walls that do not meet: `grid tidy`
 

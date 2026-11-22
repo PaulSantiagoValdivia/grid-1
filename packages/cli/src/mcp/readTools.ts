@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, tolerance, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { floorOf, itemFootprint, limit, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan, type ResultLine } from '@ongrid/rules'
 import { checkPlan, countsText, KIND_WORDS, partsText, thingText, usedFigures } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
@@ -40,6 +40,7 @@ import {
 } from '../quantities/measure'
 import { openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
+import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
 import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
 import { areaText, csv, DISPLAY_UNITS, lengthText, sqFt, type DisplayUnits } from '../quantities/units'
@@ -506,12 +507,12 @@ const measureTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
-    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under. '
+    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so). '
     + 'It measures the room between wall faces: what=fit keeps clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas) or for what a building code asks (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow'], description: 'What to measure: room, between, wall, fit, route or narrow.', examples: ['between', 'fit', 'route'] },
-    room: { type: 'string', id: true, description: 'For room, fit and route: the room id, where the route starts.', examples: ['kitchen', 'hall'] },
+    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing'], description: 'What to measure: room, between, wall, fit, route, narrow or facing.', examples: ['between', 'fit', 'route', 'facing'] },
+    room: { type: 'string', id: true, description: 'For room, fit and route: the room id, where the route starts. For facing: one room only, every room when left out.', examples: ['kitchen', 'hall'] },
     from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening, fixture or room to measure from.', examples: ['front-door', 'w-west'] },
     to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening, fixture or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
     x: { type: 'number', description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
@@ -526,7 +527,7 @@ const measureTool: GridTool = {
   outputSchema: objectSchema({ what: STRING, answer: { type: 'object' }, rule: STRING }),
   run(args, context) {
     const { survey } = load(context, args['plan'])
-    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow'
+    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing'
     const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
     const L = (v: number): string => lengthText(v, units)
     const allowed: Record<string, readonly string[]> = {
@@ -536,6 +537,7 @@ const measureTool: GridTool = {
       fit: ['room', 'width', 'depth', 'diameter'],
       route: ['room', 'to'],
       narrow: ['under'],
+      facing: ['room'],
     }
     const stray = ['room', 'from', 'to', 'x', 'y', 'wall', 'width', 'depth', 'diameter', 'under'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`what=${what} takes ${allowed[what]!.join(', ')}, not ${stray.join(', ')}.`)
@@ -556,6 +558,12 @@ const measureTool: GridTool = {
         text: `${q(r.name)}: ${size}, ${areaText(r.area, units)}, perimeter ${L(r.perimeter)}. Sides, going round: ${sides}. The widest circle it holds is ${L(r.widestCircle)} across.\n${heightText(height, L)}\n${EMPTY_ROOM_RULE}\n${HEIGHT_RULE}`,
         data: { what, answer: { ...r, height }, rule: `${EMPTY_ROOM_RULE} ${HEIGHT_RULE}` },
       }
+    }
+    if (what === 'facing') {
+      // CNT-3: which way the rooms, their outside walls and their windows face.
+      const id = args['room'] === undefined ? undefined : roomArg(survey.plan, args['room'])
+      const facing = facingAnswer(survey.plan, id)
+      return { text: [...facing.lines, FACING_RULE].join('\n'), data: { what, answer: facing.data, rule: FACING_RULE } }
     }
     if (what === 'between') {
       if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening, fixture or room.')
@@ -715,7 +723,7 @@ const viewTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks to see the plan: "can I see it", a floor plan, a 3D view from the garden side or from above, "stand me in the kitchen looking at the garden", "can I see out sitting down", or a black and white drawing. '
-    + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model from a side of the drawing (north is the top of the drawing: the plan holds no real north); kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
+    + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model from a side of the drawing (north here is the top of the drawing, whatever north the plan states; grid_measure what=facing says which way the rooms face); kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
     + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export) or to move the person\'s live preview (grid_preview). The model has no roof, furniture, glass or door leaves. Units are metres.',
   args: {
     plan: PLAN_ARG,
@@ -762,7 +770,7 @@ const viewTool: GridTool = {
       }
       const dimensions = args['dimensions'] !== false && shownParts.showDimensions
       const view = await planView(plan, { floor: shown, look: asked, dimensions, ids: withIds, faults, show: shownParts.show, ...(crop ? { frame: cropFrame(crop) } : {}) })
-      const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
+      const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. ${plan.north === undefined ? 'North is the top of the drawing; the plan holds no real north.' : `The north arrow in its top-right corner points to the north the plan states, ${northWords(wrapDegrees(plan.north))}; the sides named in other answers are the drawing's, north at the top.`} Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
       const undecided = view.undecidedDoors ?? []
       if (undecided.length > 0) {
@@ -783,7 +791,7 @@ const viewTool: GridTool = {
       const { modelView } = await import('../draw/views')
       const view = await modelView(plan, { from, ...(floor ? { floor } : {}) })
       return {
-        text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing. The model has no roof, furniture, glass or door leaves. Look at the picture before you describe it.`,
+        text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing${plan.north === undefined ? '' : `, not the north the plan states (${northWords(wrapDegrees(plan.north))})`}. The model has no roof, furniture, glass or door leaves. Look at the picture before you describe it.`,
         data: { kind, floor: floor ?? null, camera: view.camera, pxPerMetre: null, sills: [], ids: [], boxes: [] },
         image: { data: view.png, mimeType: 'image/png' },
       }

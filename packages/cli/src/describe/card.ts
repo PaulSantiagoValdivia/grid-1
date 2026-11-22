@@ -13,8 +13,8 @@
  * the plan's own handles, which an agent needs to edit it and a person never does. The
  * agent's form is terse and carries every id.
  *
- * What the plan cannot say (north, the kind of building, how floors connect, which rooms
- * make a flat) is said as such. A floor laid out like an earlier one is said once. Wall and
+ * What the plan cannot say (north when it states none, the kind of building, how floors
+ * connect, which rooms make a flat) is said as such. A floor laid out like an earlier one is said once. Wall and
  * sill heights are one line: the usual height and the exceptions.
  *
  * The cards check nothing, and say so with the label "General guidance, not your local
@@ -166,8 +166,9 @@ function agentLine(facts: PlanFacts): string {
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */
 function unsaid(facts: PlanFacts, names: PersonNames): { person: string[]; agent: string[] } {
-  const person = ['where north is', 'what kind of building it is']
-  const agent = ['north', 'kind of building']
+  // CNT-3: a plan that states its north says so in its own lines.
+  const person = [...(facts.northStated ? [] : ['where north is']), 'what kind of building it is']
+  const agent = [...(facts.northStated ? [] : ['north']), 'kind of building']
   if (facts.floors.length > 1) {
     // Floors no stair joins (LVL-3): a stair the plan states, or stair rooms one over the other.
     const { unjoined } = facts.connections

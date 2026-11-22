@@ -29,7 +29,7 @@ import { LOOKS, toLook } from './look'
 import { planScene } from './scene'
 import type { FaultLine, PictureKey } from './faults'
 import { faultKey, faultsOnFloor } from './faults'
-import { keyEntries, stackBands, writingBand } from './writing'
+import { keyEntries, northArrowNode, stackBands, writingBand } from './writing'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
@@ -108,7 +108,10 @@ export interface Picture {
    * plan does not state, in a look that marks them (`technical`). Empty in any other look.
    */
   readonly undecidedDoors: readonly string[]
-  /** The plan's elements: exactly what the app's 2D view draws inside its `<svg>`. */
+  /**
+   * The plan's elements: exactly what the app's 2D view draws inside its `<svg>`, and, when the
+   * plan states its north, the north arrow in the corner of the view (CNT-3).
+   */
   readonly nodes: readonly SvgNode[]
   /**
    * The key under the drawing, when the picture was given faults: `height` more pixels below
@@ -241,7 +244,7 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const show = options.show ?? {}
   const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key'>): boolean => show[part] !== false
   const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
-  const nodes = planScene({
+  const scene = planScene({
     drawing,
     handings,
     doorWarnings: warningMessages(doorWarningsOf(slice, drawing)),
@@ -261,6 +264,8 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
       colourBy: show.colourBy ?? null
     }
   })
+  // CNT-3: a plan that states its north gets a north arrow in the corner of the view.
+  const nodes = drawing.north === null ? scene : [...scene, northArrowNode(drawing.north, view, view.width / width, look.colors)]
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
   const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))

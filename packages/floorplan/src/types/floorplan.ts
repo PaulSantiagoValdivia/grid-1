@@ -51,6 +51,19 @@
  *   room an item is in is found from the outlines (the smallest room on its floor that holds its
  *   middle), never named. This version holds fixed fixtures only (`ITEM_KINDS`); loose furniture,
  *   points and seats are later, in the same shape.
+ *
+ * C7 · North, front and where the building is (CNT-3)
+ *   C4 names the sides of the drawing (+Y is called north, as rooms text and the edits do); the
+ *   plan MAY also state its real north. `north` is the way north lies on the drawing, in degrees
+ *   counter-clockwise from +Y, as a north symbol's `turn` is: 0 north is up the drawing, 90 it
+ *   points to -X, -90 to +X. `yAxis` says which way +Y runs on the drawing as the building is
+ *   seen from above, with +X to the right: `up` is C4, `down` says the coordinates are the
+ *   building's mirror image (as a screen or an image's pixels run). `front` names the part whose
+ *   outside face is the front: a wall, or an opening (the front door) by its wall. `site` says
+ *   where the building sits: `origin`, a point of the plan, and where that point is on the earth
+ *   (`latitude` and `longitude` in degrees, `elevation` in metres). All four are optional and
+ *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
+ *   north, and its y runs up (C4).
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
@@ -482,6 +495,43 @@ export const SketchItemSchema = z
     }
   })
 
+/** CNT-3 (C7): which way +Y runs on the drawing, with +X to the right. `up` is C4. */
+export const Y_AXES = ['up', 'down'] as const
+export type YAxis = (typeof Y_AXES)[number]
+
+/**
+ * CNT-3 (C7): the front of the building: the outside face of a wall, or of the wall an opening
+ * (the front door) is in. Exactly one of the two.
+ */
+export const FrontSchema = z
+  .object({
+    wall: text('id').pipe(z.string().min(1)).optional(),
+    opening: text('id').pipe(z.string().min(1)).optional(),
+  })
+  .superRefine((front, ctx) => {
+    if ((front.wall === undefined) === (front.opening === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['wall'], message: 'names the front by one part: wall, a wall\'s id, or opening, an opening\'s id' })
+    }
+  })
+
+/**
+ * CNT-3 (C7): where the building sits. `origin` is a point of the plan, in metres; `latitude` and
+ * `longitude` (degrees, north and east positive, given together) and `elevation` (metres above
+ * sea level) say where that point is on the earth. Only `origin` is needed.
+ */
+export const SiteSchema = z
+  .object({
+    origin: Vec2,
+    latitude: finite().min(-90).max(90).optional(),
+    longitude: finite().min(-180).max(180).optional(),
+    elevation: finite().optional(),
+  })
+  .superRefine((site, ctx) => {
+    if ((site.latitude === undefined) !== (site.longitude === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [site.latitude === undefined ? 'latitude' : 'longitude'], message: 'needs latitude and longitude together: one alone places nothing' })
+    }
+  })
+
 /**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap, because after that a wall that
@@ -539,6 +589,12 @@ export const FloorPlanFieldsSchema = z.object({
   title: text('name').optional(),
   annotations: parts(AnnotationSchema, 'annotations').optional(),
   sketch: parts(SketchItemSchema, 'sketch items').optional(),
+  // CNT-3 (C7): the plan's real north (degrees counter-clockwise from +Y), which way its y runs,
+  // its front and where it sits. Optional and never defaulted (version 1).
+  north: finite().optional(),
+  yAxis: z.enum(Y_AXES).optional(),
+  front: FrontSchema.optional(),
+  site: SiteSchema.optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -569,6 +625,8 @@ export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type Annotation = z.infer<typeof AnnotationSchema>
 export type SketchItem = z.infer<typeof SketchItemSchema>
+export type Front = z.infer<typeof FrontSchema>
+export type Site = z.infer<typeof SiteSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

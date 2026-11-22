@@ -17,6 +17,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
+- [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -350,6 +351,77 @@ states no kind reads as. Where they disagree, one warning says so:
 
 In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
 worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.
+
+## North, front and where the building is
+
+The drawing's sides have names of their own: its top is called north, as rooms text, the
+anchors, `grid describe` and the edits call it. A plan may also say how it sits on the earth
+(CNT-3). All four fields are optional; a plan that states none reads, draws and exports as
+before, with no north and y up the page.
+
+```json
+{ "north": 30, "yAxis": "up", "front": { "opening": "entry" }, "site": { "origin": [0, 0], "latitude": 40.4168, "longitude": -3.7038, "elevation": 650 } }
+```
+
+| Field | What it states |
+|---|---|
+| `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
+| `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
+| `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level |
+
+North is drawn and written where the plan states it:
+
+- **The drawing.** Each floor's plan, in `grid draw`, `grid_view` and the sheet, shows a north
+  arrow in the top-right corner of its view, turned to the stated north: the north symbol of
+  [the writing on the drawing](#writing-on-the-drawing-and-the-sketch-layer), on a disc. A
+  floor that places a north symbol of its own gets no second arrow, and a north symbol that
+  states no `turn` points to the stated north. The 3D views name their sides by the drawing,
+  as before.
+- **The IFC file.** The model's `TrueNorth` is the stated north, as a direction in the plan's
+  x and y. A plan that states none gets none: `TrueNorth` is left empty, where Grid wrote +y
+  for every plan before. A program that reads IFC takes an empty `TrueNorth` as +y, so the
+  model lands the same; the file only stops claiming a north it was never told. A plan with a
+  `site` puts the IFC site's origin on that point, with its latitude, longitude and elevation
+  (`RefLatitude`, `RefLongitude`, `RefElevation`); the building keeps the plan's coordinates.
+- **Which way the rooms face.** `grid_measure` with `what=facing` says which way each outside
+  wall, each opening in one and each room behind them faces: the normal of the wall's outside
+  face, the one with no room on it ([inside and outside walls](#inside-and-outside-walls)),
+  turned into a compass point by the stated north. A room faces each way its outside walls do,
+  longest first, and lists the ways its windows face. So "which rooms face east" has an answer.
+  For a 6 × 4 m house of two rooms, the living room to the west and the kitchen to the east,
+  with `"north": 30` and the front door named as its front:
+
+  ```text
+  North, as the plan states it: 30° counter-clockwise from the top of the drawing (north 30).
+  Rooms by the way their outside walls face:
+    north-east: "Living" (living, window), "Kitchen" (kitchen)
+    south-east: "Kitchen" (kitchen, window)
+    south-west: "Living" (living), "Kitchen" (kitchen)
+    north-west: "Living" (living)
+  The front, opening "entry", faces south-west (bearing 210°).
+  ```
+
+  A plan that states no north is answered with north taken as the top of the drawing, and the
+  answer says first that this is not known to be north. `grid describe` adds the same in a few
+  lines, with which real way each side of the drawing faces, for a plan that states its north
+  or its front.
+
+A rotation cannot undo a mirror: a plan drawn with its y running down the page is the
+building's mirror image, and no north makes it right. So the plan says which way its y runs.
+Grid draws and exports the coordinates as the file holds them, with y up, and `grid check`
+says that the drawings are mirrored (`plan/y-down`); the ways the rooms face are read the right
+way round.
+
+`grid_mirror` makes a new design, the old one mirrored. The stated north is mirrored with it,
+to minus itself, so the swap it promises is the real one: left to right, what faced east faces
+west, whichever way the drawing is turned. The site's origin is mirrored with the walls, the
+front stays the part it names, and `yAxis` is kept.
+
+| Code | What it says |
+|---|---|
+| `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
+| `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
 
 ## People are kept out of the plan
 
