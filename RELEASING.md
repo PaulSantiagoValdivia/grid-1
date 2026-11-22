@@ -169,6 +169,11 @@ Each release, in order. Tick each line in the release's issue or pull request.
 
 These wait on the owner, and none is done yet:
 
+- review the parts inside ready-built packages that are under MPL-2.0 (`ACCEPTED_BUNDLED` in
+  `scripts/check-licenses.mjs`, named in `NOTICE`; four inside `@napi-rs/canvas` today),
+  accepted on 2026-11-22 until this review. Decide, with legal advice if Grid is sold or built
+  into another product, whether `NOTICE` is enough or the PNG library is replaced (for example
+  by `canvaskit-wasm`, Skia as WebAssembly under BSD-3-Clause, once its own parts are checked);
 - remove `"private": true` from the packed manifest (`packageManifest` in `listing.ts`) and the
   test that holds it, for `ongrid` only;
 - set up npm for the package (an account or organisation, and trusted publishing for this
