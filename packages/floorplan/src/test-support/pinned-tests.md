@@ -169,8 +169,9 @@ From the lab's entry Z-7. None of these is built here.
 - **Generated room plans.** `room-shapes.test.ts` builds 300 rooms shaped L, T, U, Z and
   cross from a fixed seed and checks their areas. There are none yet for validation or for
   whole plans (MS-20).
-- **Timing guards.** Only the plan comparison has one. The door-swing check needs one (SC-2,
-  SC-3); its lab probe ran 400 rooms in about a third of a second, so it is not a failure today.
+- **Timing guards.** The plan comparison has one. The door-swing check has one that runs only
+  when asked (QAR-7, SC-2): `GRID_TIMING=1` runs `scoreboard/__tests__/doorSweeps.test.ts` on a
+  5,000-room floor, whose drawing takes minutes to build. Nothing times `buildFloorPlan` itself.
 - **Pictures and real readers.** Nothing compares what the 2D or 3D view draws, and exported
   files are compared with Grid's own output and four golden IFC files, never opened by the
   programs people use (SE-8, SE-9, DR-3, EX-1).
