@@ -46,6 +46,8 @@ export interface PlanWall {
   readonly slices: readonly Vec2[][]
   /** The axis, for drawing virtual walls as a line. */
   readonly centerline: readonly [Vec2, Vec2]
+  /** How thick it is, in metres: 0 for a virtual wall, which is a line (SHT-4: where its faces are). */
+  readonly thickness: number
 }
 
 export interface PlanRoom {
@@ -261,7 +263,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       virtual: wall.virtual === true,
       exposure: wallExposure(index, wall.id),
       slices,
-      centerline: wallCenterline(wall)
+      centerline: wallCenterline(wall),
+      thickness: wall.virtual ? 0 : wall.thickness
     })
 
     for (const slice of slices) extent.push(...slice)
