@@ -24,7 +24,11 @@ const finished = (): FloorPlan => ({
 
 let b: Bench
 beforeAll(() => {
-  b = bench({ 'flat.json': TWO_BED, 'finished.json': finished() })
+  b = bench({
+    'flat.json': TWO_BED,
+    'finished.json': finished(),
+    'misnamed.json': { ...TWO_BED, types: { walls: [{ id: 'stud-100', name: 'Stud partition 100', thickness: 0.1 }] }, walls: TWO_BED.walls.map((w) => (w.id === 'spine' ? { ...w, wallType: 'stud-10' } : w)) },
+  })
 })
 afterAll(() => b.close())
 
@@ -187,5 +191,15 @@ describe('CNT-15 written again from rooms text', () => {
     // And so a change to the type still reaches them.
     await ok('grid_change_type', { plan: 'rt.json', of: 'wall', type: 'stud-100', thickness: 0.12 })
     expect(readOf('rt.json').walls.filter((w) => inside.includes(w.id)).every((w) => w.thickness === 0.12)).toBe(true)
+  })
+})
+
+describe('CNT-15 the check names a type the plan does not hold', () => {
+  it('gives the line its wording, what is needed and the fix, with the type most likely meant', async () => {
+    const reply = await ok('grid_check', { plan: 'misnamed.json', full: true })
+    const lines = (reply.data!['lines'] as { code: string; message: string; needed: string; fix: string; found: string }[]).filter((l) => l.code === 'type/unknown')
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ message: 'Wall "spine" names a type the plan\'s types do not hold', needed: 'a type in the plan\'s types, by id' })
+    expect(lines[0]!.found).toContain('"stud-100" is the type most likely meant')
   })
 })

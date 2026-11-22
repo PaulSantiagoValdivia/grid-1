@@ -10,7 +10,8 @@ const CHANGES = fileURLToPath(new URL('../../../../../changes/', import.meta.url
 const FRAGMENTS = existsSync(CHANGES)
   ? readdirSync(CHANGES).filter((name) => name.endsWith('.md') && name !== 'README.md').map((name) => readFileSync(`${CHANGES}${name}`, 'utf8'))
   : []
-const CODE_ROW = /^\| `((?:plan|floor|wall|room|opening|item|stair|pattern|firm|flat)\/[a-z0-9-]+)` \|/gm
+// CNT-15: `type/`, the named types list's own codes.
+const CODE_ROW = /^\| `((?:plan|floor|wall|room|opening|item|stair|pattern|firm|flat|type)\/[a-z0-9-]+)` \|/gm
 
 describe('docs/result-contract.md', () => {
   it('lists every code the catalogue words, and no other, with the codes waiting in changes/', () => {
