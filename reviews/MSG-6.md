@@ -123,7 +123,7 @@ Decision of 20 November 2026 (owner): ids stay unique across the whole plan.
 
 SCOREBOARD_FIGURES
 
-## Decisions for the owner
+## For the owner
 
 - **A unit other than metres is read as metres, with a line.** The alternative, refusing the
   plan, would keep the 25 damaged plans with `units` "mm", "cm" or "ft" refused, against the
