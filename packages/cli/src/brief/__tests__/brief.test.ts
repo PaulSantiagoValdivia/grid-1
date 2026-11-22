@@ -12,6 +12,8 @@ import { gunzipSync } from 'zlib'
 import { afterEach, describe, expect, it } from 'vitest'
 import { approvalWords } from '@ongrid/rules'
 import { bench, type Bench } from '../../mcp/__tests__/replay/harness'
+import { MARK_SOURCES } from '@ongrid/floorplan/types/floorplan'
+import { SOURCES } from '../brief'
 import { namedSize, type BriefLine } from '../lines'
 
 const LAB = resolve(__dirname, '../../../../../scoreboard/data/lab-plans.ndjson.gz')
@@ -193,6 +195,14 @@ describe('the brief before the first room (lab AA-11)', () => {
     expect(file.rooms[0]).toEqual({ name: 'Kitchen', inside: [3, 4], level: 'must', source: 'given', quote: 'a kitchen about three by four' })
     expect(file.rooms[1]).toEqual({ name: 'Study', level: 'should', source: 'assumed' })
     expect(existsSync(join(b.folder, 'plan.json'))).toBe(false)
+  })
+
+  it('marks each wish given or assumed in WRT-6\'s words, and refuses the plan\'s other two', async () => {
+    expect(SOURCES).toEqual(['given', 'assumed'])
+    for (const source of SOURCES) expect(MARK_SOURCES).toContain(source)
+    b = bench({})
+    const reply = await b.call('grid_write_brief', { plan: 'plan.json', brief: { rooms: [{ name: 'Kitchen', area: 12, level: 'must', source: 'scanned' }] } })
+    expect(reply).toMatchObject({ isError: true, text: 'The brief was not written: rooms[0].source must be given (the person said it) or assumed (for the person to confirm).' })
   })
 
   it('refuses a wish given with no words of the person\'s', async () => {

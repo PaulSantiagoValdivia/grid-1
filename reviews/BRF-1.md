@@ -141,9 +141,13 @@ no stored figure changes.
 
 The owner is away, so each choice took the reversible option; each is one line to change.
 
-1. **WRT-6 is not on `main`.** The roadmap said its source marks were; they are on
-   `claude/wrt-6`, unmerged. The brief uses its words (`given`, `assumed`) as its own two-value
-   `SOURCES`, a subset of WRT-6's `MARK_SOURCES`, so they can be one list once WRT-6 lands.
+1. **The brief speaks WRT-6's words.** WRT-6 reached `main` at 680530f. The brief's `Source` is
+   now `Extract<MarkSource, 'given' | 'assumed'>` and `SOURCES` is filtered from WRT-6's
+   `MARK_SOURCES` (`@ongrid/floorplan/types/floorplan`), so both features use one list. A wish
+   takes only `given` and `assumed`: it is said, not taped or captured, so `measured` and
+   `scanned` stay the plan's and are refused in a brief (a test holds both). The words are the
+   same, so no brief file changes on disk. If a brief should ever take `measured`, that is one
+   line in `brief.ts`.
 2. **The brief's lines are in the change receipts and the brief tool, not in `grid_check`.** No
    new message code, so the result record and the scoreboard are unchanged. Putting them in the
    record would be a new kind of line with its own codes.

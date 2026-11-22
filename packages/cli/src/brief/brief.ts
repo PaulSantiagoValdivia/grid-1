@@ -21,7 +21,7 @@
  *   }
  *
  * Every wish carries a level (`must`, `should`, `avoid`) and where it came from, in WRT-6's
- * words: `given` by the person, with their words beside it, or `assumed` by whoever wrote the
+ * words (`MARK_SOURCES`): `given` by the person, with their words beside it, or `assumed` by whoever wrote the
  * brief, for the person to confirm. What the person said with no figure yet is `open`.
  *
  * The figures under `figures` are the person's own, never a code's: the file and every answer
@@ -29,7 +29,7 @@
  * A refusal names the place and never repeats the text.
  */
 import path from 'path'
-import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import { MARK_SOURCES, ROOM_USES, type MarkSource } from '@ongrid/floorplan/types/floorplan'
 import { PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { NAME_MAX } from '../command/planText'
@@ -48,9 +48,14 @@ export const WISHES_MAX = 500
 export const LEVELS = ['must', 'should', 'avoid'] as const
 export type Level = (typeof LEVELS)[number]
 
-/** WRT-6's words for where a value came from: given by the person, or assumed by whoever wrote it. */
-export const SOURCES = ['given', 'assumed'] as const
-export type Source = (typeof SOURCES)[number]
+/**
+ * Where a wish came from, in WRT-6's own words (`MARK_SOURCES`, the plan's marks): `given` by the
+ * person, or `assumed` by whoever wrote the brief. A wish is said, not taped or captured, so the
+ * other two, `measured` and `scanned`, are for the plan's values and not for a brief.
+ */
+export type Source = Extract<MarkSource, 'given' | 'assumed'>
+const WISH_SOURCES: ReadonlySet<MarkSource> = new Set<Source>(['given', 'assumed'])
+export const SOURCES: readonly Source[] = MARK_SOURCES.filter((source): source is Source => WISH_SOURCES.has(source))
 
 /** The heading the person's figures sit under, in the file and in every answer. */
 export const FIGURES_HEADING = "The person's own figures: theirs, not from any code or standard."
