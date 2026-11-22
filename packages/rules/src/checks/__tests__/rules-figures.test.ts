@@ -135,6 +135,7 @@ describe('resolveFigure', () => {
       value: 6.5,
       unit: 'm²',
       origin: 'baseline',
+      readFor: 'homes',
       status: 'ai-found',
       jurisdiction: 'US model codes',
       citations: [
@@ -151,6 +152,7 @@ describe('resolveFigure', () => {
       value: 9,
       unit: 'm²',
       origin: 'lookup',
+      readFor: 'homes',
       status: 'ai-found',
       source
     })

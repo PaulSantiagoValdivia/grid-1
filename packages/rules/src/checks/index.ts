@@ -9,11 +9,15 @@ export {
   FIGURES,
   US_MODEL_CODES,
   VERIFICATION_STATUSES,
+  BUILDING_KINDS,
   baselineApplies,
+  buildingKindsText,
+  findingReadFor,
+  readForSentence,
   isFigureKey,
   isPlausible,
   resolveFigure
 } from './figures'
-export type { FigureKey, FigureSpec, FigureUnit, Provenance, SourceCitation, Verification, VerificationStatus } from './figures'
+export type { BuildingKind, FigureKey, FigureSpec, FigureUnit, Provenance, SourceCitation, Verification, VerificationStatus } from './figures'
 export { figuresFromSheet } from './fromSheet'
 export { coverageOnFloor, LOOKS_AT, roomsLookedAt, skipWhy } from './coverage'
