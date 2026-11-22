@@ -205,7 +205,8 @@ describe('a figure says which kind of building it was read for (COD-2)', () => {
     expect(size.readFor).toEqual(['homes'])
     // MSG-10: the short report says it once, for the one check that used figures.
     const short = checkText(result, 1)
-    expect(short).toContain('  - Rooms people live or sleep in have a minimum floor area: 1 room; not looked at 1: no use stated.\n')
+    // CNT-5 reads the servery's "servery" as `retail`, a use the check is not about, so the short report names no gap.
+    expect(short).toContain('  - Rooms people live or sleep in have a minimum floor area: 1 room.\n')
     expect(short).toContain(`\nThe check that uses figures read them for ${HOMES}.\n`)
     const text = checkText(result, 1, { full: true })
     expect(text).toContain(`  - Rooms people live or sleep in have a minimum floor area: looked at 1 room; 0 findings; its figures were read for ${HOMES}.`)
@@ -259,12 +260,18 @@ describe('what kind of building it is (CNT-5)', () => {
       ['plan/not-checked-sizes-for-building', 'plan', `Room sizes were not checked: the figures here were read for ${HOMES}, and the plan says this is an office`],
       ['plan/not-checked-escapes-for-building', 'plan', `Escape openings were not checked: the figures here were read for ${HOMES}, and the plan says this is an office`],
     ])
-    const text = checkText(result, 1)
+    // MSG-10: the short report counts what was not looked at and why; the full one lists the rooms.
+    const short = checkText(result, 1)
+    expect(short).toContain(`Room sizes were not checked: the figures here were read for ${HOMES}, and the plan says this is an office.`)
+    expect(short).toContain(`  - Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms; not looked at 7: the figures were read for ${HOMES}, and the plan says this is an office.`)
+    const text = checkText(result, 1, { full: true })
     expect(text).toContain(`Room sizes were not checked: the figures here were read for ${HOMES}, and the plan says this is an office.`)
     expect(text).toContain(`      not looked at, 7 rooms: the figures were read for ${HOMES}, and the plan says this is an office: `)
-    expect(text).toContain(GENERAL_GUIDANCE_LABEL)
-    // No line says anything was approved or complies.
-    expect(text).not.toMatch(/complies|approved/i)
+    for (const report of [short, text]) {
+      expect(report).toContain(GENERAL_GUIDANCE_LABEL)
+      // No line says anything was approved or complies.
+      expect(report).not.toMatch(/complies|approved/i)
+    }
   })
 
   it('the office with no kind stated is checked as before, with COD-2\'s sentence', () => {
