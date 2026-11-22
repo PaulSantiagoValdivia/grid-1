@@ -596,6 +596,10 @@ A change that would add a problem that leaves a part out is refused, and nothing
   needs `cut`, and `cut` and `toward` are refused on a plan without it. A plan with no `marks`
   is drawn as before.
 - `grid draw` takes `--section`, `--toward` and `--marks` the same way.
+- `kind=section` refuses VEW-3's camera arguments (`bearing`, `tilt`, `distance`, `eye_height`,
+  `lens`, `room`, `camera`, `view`, `turn`, `tilt_by`) by name, and `kind=3d` refuses `cut`,
+  `toward` and `marks`; `grid draw` refuses `--section` and `--marks` with `--view`. A section's
+  `data` has `view` null.
 - No new code in the result record: a section and its marks are pictures. `resultVersion`
   stays 1.
 

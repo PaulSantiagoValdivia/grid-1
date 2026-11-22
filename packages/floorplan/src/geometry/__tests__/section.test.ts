@@ -169,6 +169,27 @@ describe('the levels of a section (LVL-9 done-when 2)', () => {
   })
 })
 
+describe('a section under a roof the floor states (after LVL-6)', () => {
+  /** The lab's converted loft with the gable its walls show, as LVL-6's tests state it. */
+  const loft = (roof: Record<string, unknown>): FloorPlan => {
+    const raw = JSON.parse(JSON.stringify(labPlan('A/scenarios/loft-sloped.json'))) as { floors: { id: string }[] }
+    for (const f of raw.floors) if (f.id === 'attic') Object.assign(f, { roof })
+    return parseFloorPlan(raw)
+  }
+  const ACROSS_RIDGE: SectionLine = { from: { x: 2, y: -1 }, to: { x: 2, y: 7 }, toward: 'left' }
+
+  it('says a sloped roof is drawn flat at its eaves, not that the plan states no roof', () => {
+    const roof = planSection(loft({ shape: 'gable', eaves: 1, ridge: 3.6, ridgeRuns: 'east-west' }), ACROSS_RIDGE).assumed.find((a) => a.kind === 'roof')
+    expect(roof?.words).toBe('The roof over "Attic (converted loft)" is stated as a gable roof, but a section does not draw its slope yet: it is drawn flat at its eaves, 0.25 m thick, and the walls under it are not cut to it.')
+    expect(roof?.hatched).toBe(true)
+  })
+
+  it('says a stated flat roof is the floor\'s, with Grid\'s thickness', () => {
+    const roof = planSection(loft({ shape: 'flat', eaves: 2.6 }), ACROSS_RIDGE).assumed.find((a) => a.kind === 'roof')
+    expect(roof?.words).toBe('The roof over "Attic (converted loft)" is drawn flat at its eaves, as the floor states it, and taken as 0.25 m thick.')
+  })
+})
+
 describe('a line that cuts nothing', () => {
   it('gives the ground along the line and nothing else', () => {
     const section = planSection(townhouse(), { from: { x: 20, y: 5 }, to: { x: 30, y: 5 }, toward: 'left' })

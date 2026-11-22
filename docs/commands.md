@@ -453,9 +453,13 @@ Everything on it is the model's own, as the 3D view, the IFC and the take-off re
   the floors below, a ground level the site does not state, a room height taken from the storey,
   a stair room with no stated stair and a stair's worked-out risers are listed, not hatched.
   `grid draw` says on standard error how many it hatched and listed.
+- **A roof the floor states** (`floors[].roof`, LVL-6) stands at its eaves. A section does not
+  draw a sloped roof's slope yet, nor cut the walls under it to the roof: it draws the roof flat
+  at its eaves, hatched, and says so in the list.
 
 A section cuts every floor and writes its levels in metres, so `--floor`, `--hide`, `--colour`,
-`--key`, `--ids`, `--units` and `--decimal` are refused with it, by name; so is `--3d`.
+`--key`, `--ids`, `--units` and `--decimal` are refused with it, by name; so are `--3d` and
+`--view`, and `--marks` with either.
 
 `--marks` adds the marks for the plan's other drawings to a floor plan, joined by commas:
 

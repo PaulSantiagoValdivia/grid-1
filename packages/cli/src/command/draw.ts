@@ -103,6 +103,7 @@ export function sectionAsked(request: DrawRequest): SectionAsked {
   if (request.toward !== undefined && request.section === undefined) throw new UsageError('--toward says which way a section looks: add --section, or leave --toward out.')
   const words = request.marks === undefined ? null : readMarks(request.marks.split(',').map((w) => w.trim()).filter((w) => w.length > 0))
   for (const [given, flag] of [[request.section, '--section'], [request.marks, '--marks']] as const) {
+    if (request.view !== undefined && given !== undefined) throw new UsageError(`${flag} is for a drawing, not a saved view of the 3D model: leave ${flag} or --view out.`)
     if (request.threeD && given !== undefined) throw new UsageError(`${flag} is for a drawing, not the 3D model: leave ${flag} or --3d out.`)
   }
   if (words?.has('section') && request.section === undefined) throw new UsageError('--marks section draws the line of a section on the plan: add --section with the line, or leave section out of --marks.')

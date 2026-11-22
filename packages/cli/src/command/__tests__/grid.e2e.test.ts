@@ -430,6 +430,8 @@ describe('options: each command refuses what it does not take, by name', () => {
     [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--units', 'cm'], '--units is for a floor plan'],
     [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--marks', 'levels'], 'add section to --marks'],
     [['draw', 'two-bed-flat.json', '--3d', '--section', '1,2:9,2'], '--section is for a drawing, not the 3D model'],
+    [['draw', 'two-bed-flat.json', '--view', 'Garden corner', '--section', '1,2:9,2'], '--section is for a drawing, not a saved view of the 3D model: leave --section or --view out.'],
+    [['draw', 'two-bed-flat.json', '--view', 'Garden corner', '--marks', 'levels'], '--marks is for a drawing, not a saved view of the 3D model: leave --marks or --view out.'],
     [['draw', 'two-bed-flat.json', '--marks', 'section'], '--marks section draws the line of a section on the plan: add --section'],
     [['draw', 'two-bed-flat.json', '--marks', 'levels,levels'], '--marks names levels twice'],
     [['draw', 'two-bed-flat.json', '--marks', 'grid'], '--marks "grid" is not a mark Grid draws on a plan'],

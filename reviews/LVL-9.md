@@ -228,3 +228,57 @@ Each is the reversible choice, taken and recorded rather than stopped on.
   section's drawing and its tool answer are loaded only when a section is asked for.
 - **Lab paths.** No lab path is committed: the tests read the townhouse by name through
   `labPlan` and `labPlanText`.
+
+## After merging main (c05d051)
+
+Main brought VEW-3 (a camera an agent can set, saved views, `grid_save_view`), LVL-6 (sloped roofs)
+and BRF-5 (the sun table). LVL-8 (facades) is not on main yet.
+
+- **Conflicts**, all kept both sides: `CHANGELOG.md` (LVL-9's line first, then VEW-3's, BRF-5's and
+  LVL-6's), `docs/commands.md` (both contents lines; one `grid draw` row with `--view` and
+  `--section`; VEW-3's `--view` paragraph, then this section), `docs/result-contract.md` (LVL-9's
+  entry above VEW-3's, BRF-5's and LVL-6's), `docs/tool-server.md` (BRF-5's `grid_measure` row;
+  `grid_view`'s row with the camera and the section), `command/draw.ts` and `command/main.ts`
+  (every option of both: `--view`, `--section`, `--toward`, `--marks`), `draw/views.ts` (the
+  section's imports beside VEW-3's `planStill`), `mcp/readTools.ts` (`grid_view` keeps `plan`,
+  `3d`, `eye` and `section`, VEW-3's camera arguments and `cut`/`marks`, one description naming
+  both, the output schema with `view` and `section`), `geometry/index.ts` (both sides' exports),
+  `versions/__tests__/diff.test.ts` (main's, which passes `--use bedroom` as 23dc34d did).
+- **Refusals between the two**: `grid_view kind=section` refuses VEW-3's camera arguments by name
+  (`bearing`, `tilt`, `distance`, `eye_height`, `lens`, `room`, `camera`, `view`, `turn`,
+  `tilt_by`), and `kind=3d` refuses `cut`, `toward` and `marks`, through the one list of what each
+  kind takes. `grid draw --view` with `--section` or `--marks` is refused naming `--view` (it was
+  refused before as `--3d`, which the person did not type). A section's `data` carries `view: null`,
+  as VEW-3's output schema asks of every kind. Tested in `sectionView.test.ts` and two rows of the
+  e2e options table.
+- **Expectation changed**: `sectionView.test.ts`'s refusal of `marks` with `kind=3d` now lists
+  VEW-3's 3d arguments.
+- **LVL-6's stated roofs.** A section draws every roof flat at `planEnvelope`'s `bottom`, which for
+  a roof the floor states is its eaves. Its list said "the plan states no roof" for those too; it
+  now says a stated flat roof is the floor's, with Grid's thickness, and that a stated sloped roof
+  is drawn flat at its eaves because a section does not draw a slope yet (two tests on the lab's
+  converted loft). `docs/commands.md` says the same.
+
+### For the owner
+
+- **A section does not draw a sloped roof yet.** Under a gable, mono-pitch or hip roof (LVL-6) it
+  draws the roof flat at the eaves, and walls as rectangles to their height, which on such a floor
+  is the ridge when they state none, so a gable wall can rise through the flat roof drawn. It is
+  hatched and listed. Cutting walls to `wallTopProfile` and the roof along its `facets`, with the
+  faces beyond, is the follow-up; room heights under a sloped roof are likewise the storey's, not
+  `roomHeadroom`'s.
+- **Elevation marks stay named by compass side** and are not linked to LVL-8's facades, which are
+  not on main.
+- **`--view` with `--toward` alone** is refused as `--toward` without `--section`, as before.
+
+### Checks run
+
+On a loaded machine shared with other sessions, once each, at the end:
+
+| Check | Result |
+|---|---|
+| `npm run build` | exit 0; `grid.mjs` 494,058 bytes, under the 550 kB limit main set for VEW-3, which did not move |
+| `npm run typecheck` | exit 0, every workspace |
+| `npm run lint` | exit 0, no problems |
+| `timeout 1500 npx vitest run packages/floorplan/src/geometry packages/viewer packages/cli --maxWorkers=2 --minWorkers=1` | Test Files 231 passed (231); Tests 4491 passed, 2 skipped (4493); 481 s |
+| `npm run scoreboard` | "Same as the stored figures." |

@@ -67,4 +67,10 @@ describe('grid_view kind=plan with marks', () => {
     await expect(call({ kind: 'plan', marks: ['north'] })).rejects.toThrow('each item of marks takes one of levels, elevations, section.')
     await expect(call({ kind: '3d', marks: ['levels'] })).rejects.toThrow('kind=3d takes floor, from, bearing, tilt, distance, eye_height, lens, room, camera, view, turn, tilt_by, not marks.')
   })
+
+  it('refuses a camera with a section, and a cut with a camera (after VEW-3)', async () => {
+    await expect(call({ kind: 'section', cut: THROUGH_STAIR, bearing: 200, tilt: 25 })).rejects.toThrow('kind=section takes cut, toward, look, not bearing, tilt.')
+    await expect(call({ kind: 'section', cut: THROUGH_STAIR, view: 'Garden corner' })).rejects.toThrow('kind=section takes cut, toward, look, not view.')
+    await expect(call({ kind: '3d', cut: THROUGH_STAIR, toward: 'left' })).rejects.toThrow('kind=3d takes floor, from, bearing, tilt, distance, eye_height, lens, room, camera, view, turn, tilt_by, not toward, cut.')
+  })
 })

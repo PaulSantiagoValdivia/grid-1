@@ -35,7 +35,7 @@
 
 import type { MultiPolygon } from 'polygon-clipping'
 import { heightByDefault } from '../types/floorplan'
-import type { Floor, FloorPlan, Wall } from './plan'
+import type { Floor, FloorPlan, RoofShape, Wall } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import { floorOf, planFloors, planForFloor } from './floors'
 import { floorElevations, isFiniteWall } from './elevations'
@@ -424,7 +424,7 @@ export function planSection(plan: FloorPlan, line: SectionLine): PlanSection {
   // The slabs, roofs and parapets (LVL-4).
   const roofs: { floor: string; level: number }[] = []
   const unstatedSlabs: { floor: Floor; rings: Vec2[][] }[] = []
-  const roofRings: { floor: Floor; rings: Vec2[][]; thickness: number }[] = []
+  const roofRings: { floor: Floor; rings: Vec2[][]; thickness: number; shape: RoofShape | null }[] = []
   for (const floor of floors) {
     const shell = envelope.floors.find((f) => f.floor === floor.id)
     if (shell === undefined) continue
@@ -447,7 +447,7 @@ export function planSection(plan: FloorPlan, line: SectionLine): PlanSection {
       const rings = inside(frame, ringsOf(roof.pieces)).map(([x0, x1]) => rect(snap, x0, x1, roof.bottom, roofTop))
       if (rings.length > 0) {
         parts.push({ kind: 'roof', id: floor.id, floor: floor.id, rings })
-        roofRings.push({ floor, rings, thickness: roof.thickness })
+        roofRings.push({ floor, rings, thickness: roof.thickness, shape: roof.shape })
         roofs.push({ floor: floor.id, level: snap(roofTop) })
       }
       for (const piece of piecesAsRings(roof.pieces)) for (const ring of [piece.outline, ...piece.holes]) ringFaces('roof', floor.id, floor.id, ring, roof.bottom, roofTop)
@@ -508,8 +508,14 @@ export function planSection(plan: FloorPlan, line: SectionLine): PlanSection {
     const thickness = envelope.floors.find((f) => f.floor === floor.id)?.slab?.thickness ?? 0
     notes.push({ kind: 'slab', ids: [floor.id], words: `The slab under ${nameOf(floor.id)} is taken as ${metresText(thickness)} m thick: the floor states no slab.`, hatched: true, pieces: joined(rings) })
   }
-  for (const { floor, rings, thickness } of roofRings) {
-    notes.push({ kind: 'roof', ids: [floor.id], words: `The roof over ${nameOf(floor.id)} is taken as flat and ${metresText(thickness)} m thick, on its walls: the plan states no roof.`, hatched: true, pieces: joined(rings) })
+  for (const { floor, rings, thickness, shape } of roofRings) {
+    // LVL-6: a roof the floor states stands at its eaves; the section does not draw a slope yet.
+    const words = shape === null
+      ? `The roof over ${nameOf(floor.id)} is taken as flat and ${metresText(thickness)} m thick, on its walls: the plan states no roof.`
+      : shape === 'flat'
+        ? `The roof over ${nameOf(floor.id)} is drawn flat at its eaves, as the floor states it, and taken as ${metresText(thickness)} m thick.`
+        : `The roof over ${nameOf(floor.id)} is stated as a ${shape} roof, but a section does not draw its slope yet: it is drawn flat at its eaves, ${metresText(thickness)} m thick, and the walls under it are not cut to it.`
+    notes.push({ kind: 'roof', ids: [floor.id], words, hatched: true, pieces: joined(rings) })
   }
   for (const [floor, ids] of defaultHeights) {
     const rings = parts.filter((p) => p.kind === 'wall' && p.floor === floor && ids.includes(p.id)).flatMap((p) => p.rings)
