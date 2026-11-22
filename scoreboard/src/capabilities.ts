@@ -70,7 +70,8 @@ export const CAPABILITIES = {
   'existing-new': { what: 'holds which parts are existing, new or removed', probe: schema('walls.0.status', 'existing') },
   'outdoor-space': { what: 'holds outdoor spaces (garden, courtyard, balcony)', probe: schema('rooms.0.outdoor', true) },
   flats: { what: 'groups rooms into homes or flats', probe: schema('flats', [{ id: 'a', rooms: ['r1'] }]) },
-  'ceiling-height': { what: 'holds ceiling heights', probe: schema('rooms.0.ceilingHeight', 2.5) },
+  // LVL-4: a room's ceiling, at the room's height (ARE-10), with the zones lowered under it at theirs.
+  'ceiling-height': { what: 'holds ceiling heights', probe: schema('rooms.0.ceiling', { lowered: [{ points: [[0, 0], [1, 0], [1, 1]], height: 2.3 }] }) },
   'gross-area': {
     what: 'gives gross areas (to the outside of the walls)',
     // ARE-9: gross external, and gross internal, each with the rule it follows.

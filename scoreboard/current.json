@@ -5,7 +5,7 @@
   "damageSilent": 386,
   "turnsAnswered": 16,
   "mistakesNamed": 2,
-  "checksFed": 11,
+  "checksFed": 12,
   "roomsNotMeasured": 735,
   "soundPlansWithAlarm": 95
  },
@@ -58,7 +58,7 @@
   },
   "checks": {
    "checks": 42,
-   "fed": 11,
+   "fed": 12,
    "labYes": 5
   },
   "capabilities": {
@@ -93,7 +93,7 @@
    "existing-new": "no",
    "outdoor-space": "no",
    "flats": "no",
-   "ceiling-height": "no",
+   "ceiling-height": "yes",
    "gross-area": "yes",
    "area-table": "yes",
    "room-width": "no",
