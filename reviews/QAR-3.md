@@ -82,4 +82,16 @@ about a point away from the origin, and completes the pinned list. No production
 
 ## Checks run
 
-CHECKS_LINE
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean, before and after merging `main`.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1` on `main` at 56ed9b5
+  plus this branch: 4,556 passed, 2 failed, 1 skipped (SC-2, load average about 210), of 4,559
+  in 225 files (853 s). Neither failure is in a file this branch touches:
+  - `reportProblem.test.ts` (CMD-13): fixed on `main` by f29ccb8, merged here; passes.
+  - `grid.e2e.test.ts`, "starts with a shebang and is one file": the bundle is 459,241 bytes
+    against the test's 450,000. This branch adds only tests and docs, so the bundle is `main`'s;
+    it fails on `main` at 3634cae as well. Left for whoever owns that limit.
+- After merging `main` at 3634cae (QAR-7, CMD-13's test fix): one conflict, the timing-guards
+  note in `pinned-tests.md`, where both guards are now listed. The affected tests (the probe
+  files, `room-areas`, `test-support`, `grid.e2e`, `reportProblem`) gave 386 passed, 1 skipped,
+  1 failed (the bundle size above).
+- `npm run scoreboard`: 197, 386, 16, 2, 5, 735, 95. Same as stored.
