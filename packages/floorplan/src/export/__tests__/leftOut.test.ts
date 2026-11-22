@@ -129,7 +129,8 @@ describe('what an export leaves out (HND-6)', () => {
     expect(obj.some((line) => line.startsWith('# Walls left out (1): "x\\nf 1 2 3'))).toBe(true)
     const dxf = text(exportPlan(plan, 'dxf', ids).data).split('\r\n')
     expect(dxf.filter((line) => line === 'EOF')).toHaveLength(1)
-    expect(dxf.some((line) => line.includes('\\U+00E9'))).toBe(true)
+    // HND-1: the letter as it is, in UTF-8, and the backslashes of the JSON string as codes.
+    expect(dxf.some((line) => line.includes('EOF \u00e9') && line.includes('\\U+005Cn'))).toBe(true)
     const ifc = text(exportPlan(plan, 'ifc', ids).data)
     expect(ifc).toContain("WallIds',$,IFCTEXT('\"x\\\\nf 1 2 3\\\\r\\\\n0\\\\r\\\\nEOF \\X2\\00E9\\X0\\''\"')")
   })

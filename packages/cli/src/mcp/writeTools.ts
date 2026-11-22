@@ -13,7 +13,8 @@ import { keptDerived } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
-import { checkExportRequest, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
+import { checkExportRequest, dxfProfileLine, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
+import { DXF_PROFILE_FILE, DxfProfileRefused } from '../export/dxfProfile'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, readingAfter, TURNS, turnPlanBy, type Direction, type From, type Mirror, type Patch, type Turn } from '../edit/edits'
@@ -74,6 +75,7 @@ const exportTool: GridTool = {
   description:
     'Use this when the person wants the plan as a file to open in another program: dxf for AutoCAD and other 2D CAD programs (the nearest to DWG), ifc for BIM programs such as Revit, glb or obj for 3D. '
     + 'It writes the file into the exports folder beside the plan, replacing an earlier copy of the same export, and answers with the path it wrote and every part of the plan the file leaves out (the file says so too). It never changes the plan, and refuses a file that would hold nothing of it. '
+    + `A dxf is in metres, with doors and windows as blocks, filled walls, dimensions, room tags and an A3 sheet; it takes its layer names and pens from ${DXF_PROFILE_FILE} in the project folder when there is one, and answers with that file as dxfProfile. `
     + `${ROOM_NAMES_TRAVEL} `
     + 'Do not use for a picture to look at (grid_view). For a PDF to read or print, use grid_sheet; JPG is not made. The plan must be a file inside the project folder: any other path is refused.',
   args: {
@@ -89,6 +91,7 @@ const exportTool: GridTool = {
       objectSchema({ kind: STRING, id: NULLABLE_STRING, place: NULLABLE_STRING, floor: NULLABLE_STRING, code: NULLABLE_STRING }, ['kind', 'id', 'place', 'floor', 'code'])
     ),
     note: { type: ['string', 'null'] },
+    dxfProfile: { type: ['string', 'null'] },
   }),
   run(args, context) {
     const project = projectOf(context)
@@ -107,9 +110,11 @@ const exportTool: GridTool = {
       // HND-6: what this file leaves out, which the file says too.
       const left = leftOutText(done.leftOut)
       if (left !== null) lines.push(left)
-      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, note: done.note ?? null } }
+      // HND-1: a DXF names the project's profile when its layers and pens came from one.
+      if (done.dxfProfile !== null) lines.push(dxfProfileLine(done.dxfProfile))
+      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, note: done.note ?? null, dxfProfile: done.dxfProfile } }
     } catch (error) {
-      if (error instanceof PathRefused || error instanceof PlanRefused || error instanceof ExportWriteFailed) throw new ToolRefusal(error.message)
+      if (error instanceof PathRefused || error instanceof PlanRefused || error instanceof ExportWriteFailed || error instanceof DxfProfileRefused) throw new ToolRefusal(error.message)
       if (error instanceof UsageError) throw new ToolRefusal(asArguments(error.message))
       throw error
     }

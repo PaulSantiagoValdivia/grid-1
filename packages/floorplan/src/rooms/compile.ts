@@ -48,6 +48,11 @@
  *   raw wall|room|opening { ...Grid's own JSON... }     a part written the Grid way
  *   raw floor { "roof": {...}, "parapet": <m> }         the floor's fields rooms text has no words for (LVL-6)
  *
+ * An opening pattern (LVL-8) is not rooms text, in a unit or out of one: a `pattern` line is
+ * refused with where a pattern goes instead (`patternLine`). It lives in the plan file's
+ * `patterns`, naming its wall by id, and `grid write` keeps it, so the wall ids written here are
+ * what keep it placed (WRT-4: the same on every writing, and when a row grows by one).
+ *
  * Pure: text in, a plan and a report out. Nothing here reads or writes a file.
  */
 import { BUILDING_TYPES, ROOM_TENURES, ROOM_USES, WALL_DEFAULTS, WallKindSchema, readUse, type BuildingType, type FloorPlan, type Opening, type Room, type RoomTenure, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
@@ -117,6 +122,14 @@ function signedArea(pts: readonly P[]): number {
     s += a[0] * b[1] - b[0] * a[1]
   }
   return s / 2
+}
+
+/**
+ * WRT-4 with LVL-8: why a `pattern` line (or `raw pattern`) is refused, and where a pattern goes.
+ * A unit cannot hold one either: a pattern names one wall by its id, not a unit's room side.
+ */
+function patternLine(at: number, inUnit: boolean): string {
+  return `line ${at}: an opening pattern is not rooms text${inUnit ? ', and a unit cannot hold one' : ''}. Write it in the plan file's "patterns", naming its wall by id (grid describe --as rooms gives the ids; 'id <id>' on a wall line fixes one): grid write keeps it, and its openings are placed on that wall and on the floors it names. Openings written in a unit are placed with every copy of it.`
 }
 
 function contains(poly: readonly P[], pt: P): boolean {
@@ -425,6 +438,7 @@ class Compiler {
         this.rawFloor(rawFloor[1]!, at)
         continue
       }
+      if (/^\s*raw\s+pattern\b/.test(text)) this.stop('rooms/syntax', at, patternLine(at, false))
       const raw = /^\s*raw\s+(wall|room|opening)\s+(.*)$/.exec(text)
       if (raw) {
         this.rawPart(raw[1] as 'wall' | 'room' | 'opening', raw[2]!, at)
@@ -562,6 +576,8 @@ class Compiler {
       case 'remove':
         this.stRemove(t, at)
         return
+      case 'pattern':
+        return this.stop('rooms/syntax', at, patternLine(at, false))
       default:
         this.stop(
           'rooms/syntax',
@@ -1078,6 +1094,7 @@ class Compiler {
       if (words[0] === 'room') this.addRoom(this.readRoom(words, line, ctx), ctx)
       else if (words[0] === 'door' || words[0] === 'window' || words[0] === 'opening') pending.push({ words, line })
       else if (words[0] === 'wall') this.stWall(words, line)
+      else if (words[0] === 'pattern') this.stop('rooms/syntax', line, patternLine(line, true))
       else this.stop('rooms/syntax', line, `line ${line}: a unit may hold room, wall, door, window and opening lines, not '${words[0]}'.`)
     }
     const rooms = [...ctx.local.values()]

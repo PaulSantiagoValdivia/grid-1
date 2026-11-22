@@ -38,6 +38,7 @@ import { compareText } from './order'
 import { alignPlans, type Redrawn, type RenamedId } from './place'
 import { findTurn, turnPlan, type PlanTurn } from './turn'
 import { diffPlans } from './diff'
+import { withPatterns } from '../patterns'
 import { changesOutsideScope } from './scope'
 import type { DiffIssue, EntityRef, IssueCode, PlanChange, PlanDiff } from './types'
 
@@ -339,8 +340,14 @@ const ISSUE_ORDER: Readonly<Record<string, number>> = {
 
 // ── The comparison ────────────────────────────────────────────────────────────────────────
 
-/** Compares two versions of a plan by what stands where in the building. */
-export function compareBuildings(earlier: FloorPlan, later: FloorPlan, options: CompareOptions = {}): BuildingComparison {
+/**
+ * Compares two versions of a plan by what stands where in the building. LVL-8: each is compared
+ * with its opening patterns expanded, so a pattern's openings are paired, mirrored and turned as
+ * plain openings are (a plan already expanded is taken as it is).
+ */
+export function compareBuildings(earlierStated: FloorPlan, laterStated: FloorPlan, options: CompareOptions = {}): BuildingComparison {
+  const earlier = withPatterns(earlierStated)
+  const later = withPatterns(laterStated)
   const roomsFirst = earlier.written?.from === 'rooms' && later.written?.from === 'rooms'
   // WRT-4: a mirror or a quarter turn first, so a flipped plan is not every wall moved.
   const turn = findTurn(earlier, later)

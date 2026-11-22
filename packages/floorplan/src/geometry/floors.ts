@@ -148,8 +148,12 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
   const wallIds = new Set(walls.map((wall) => wall.id))
   const collided = collidingWallIds(plan)
 
+  // LVL-8: a slice holds plain openings only. A pattern names a wall on one floor and repeats on
+  // others, so it is expanded on the whole plan (`expandPatterns`), never on a slice.
+  const { patterns: _patterns, ...whole } = plan
+  void _patterns
   const slice: FloorPlan = {
-    ...plan,
+    ...whole,
     walls,
     rooms: plan.rooms.filter((room) => floorOf(room) === floorId),
     openings: plan.openings.filter(

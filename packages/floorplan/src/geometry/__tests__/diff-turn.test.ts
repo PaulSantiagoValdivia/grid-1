@@ -7,7 +7,7 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseFloorPlan, type FloorPlan } from '../../types/floorplan'
+import { parseFloorPlan, type FloorPlan, type OpeningPattern } from '../../types/floorplan'
 import { compileRoomsText } from '../../rooms/compile'
 import { stampFor } from '../../rooms/stamp'
 import { compareBuildings, diffPlans, findTurn, turnPlan } from '../diff'
@@ -49,6 +49,21 @@ describe('a plan mirrored or turned (lab Y-5, WR-16)', () => {
     expect(compared.verdict).toBe('The plan is mirrored left to right (east and west swap), and every room keeps its size. Nothing else changed.')
     expect(compared.changes).toEqual([])
     expect(compared.issues).toEqual([])
+  })
+
+  it("reads a plan's opening patterns as the openings they place, so a pattern's doors mirror with the rest (LVL-8)", () => {
+    const garden: OpeningPattern = { id: 'garden', wall: 'ext-north', opening: { type: 'door', width: 0.9, height: 2.1, sill: 0, hinge: 'start', swing: 'left' }, count: 2, margins: { start: 5, end: 1 } }
+    const before = { ...flat(), patterns: [garden] }
+    const swung: OpeningPattern = { ...garden, opening: { ...garden.opening, swing: 'right' } }
+    const mirrored = { ...moved(flat(), (p) => [Math.round((9.2 - p[0]) * 1000) / 1000, p[1]], true), patterns: [swung] }
+    const compared = compareBuildings(before, mirrored)
+    expect(compared.turn).toMatchObject({ id: 'mirror-left-right', mirrored: true })
+    expect(compared.changes).toEqual([])
+    // The pattern's doors left swinging as they were are the only change, by the ids it gives them.
+    const unswung = compareBuildings(before, { ...mirrored, patterns: [garden] })
+    expect(unswung.turn).toMatchObject({ id: 'mirror-left-right' })
+    expect(unswung.changes.length).toBeGreaterThan(0)
+    expect(JSON.stringify(unswung.changes)).toContain('garden-')
   })
 
   it('tells each quarter turn and the half turn apart, counter-clockwise as Grid draws it', () => {

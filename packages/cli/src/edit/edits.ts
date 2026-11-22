@@ -44,6 +44,12 @@ export interface Patch {
   readonly plan?: Readonly<Record<string, unknown>>
   /** CNT-12: fixtures moved or turned, by id. Left out by a change that moves none. */
   readonly items?: ReadonlyMap<string, { at: Pair; turn: number }>
+  /**
+   * WRT-4 with LVL-8: the opening patterns, by id, whose door swings the other way (a mirror), as
+   * each plain door's does. A pattern is otherwise kept as the file has it: its wall keeps its id,
+   * start and end, so its places along the wall and its floors hold through a mirror or a turn.
+   */
+  readonly swingPatterns?: ReadonlySet<string>
   /** One line per thing changed, in Grid's words. */
   readonly said: readonly string[]
   /** Walls taken out; walls added go where the first one taken out was, or at the end. */
@@ -146,8 +152,20 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
           return change ? { ...item, ...change } : item
         }),
       }
+  // LVL-8: a pattern's door swings the other way with every plain door's; a plan with no patterns keeps no key.
+  const swing = patch.swingPatterns
+  const patterns = swing === undefined || swing.size === 0 || !Array.isArray(raw['patterns'])
+    ? {}
+    : {
+        patterns: list('patterns').map((pattern) => {
+          const opening = pattern['opening'] as RawRecord | undefined
+          const side = opening?.['swing']
+          if (!swing.has(pattern['id'] as string) || (side !== 'left' && side !== 'right')) return pattern
+          return { ...pattern, opening: { ...opening, swing: side === 'left' ? 'right' : 'left' } }
+        }),
+      }
   const top = (patch.plan === undefined ? raw : merged(raw, patch.plan)) as T
-  return { ...top, walls, openings, rooms, ...items }
+  return { ...top, walls, openings, rooms, ...items, ...patterns }
 }
 
 /** The free stretches of a wall, measured from its start, between the other openings in it. */
@@ -494,6 +512,8 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     if (o.anchor !== undefined && turns(o.anchor.from)) change.anchor = { ...o.anchor, from: MIRRORED[o.anchor.from] as From }
     if (Object.keys(change).length > 0) openings.set(o.id, change)
   }
+  // LVL-8: a pattern's door swings the other way too; its places along its wall stay, as a plain opening's offset does.
+  const swingPatterns = new Set((plan.patterns ?? []).filter((p) => p.opening.swing !== undefined).map((p) => p.id))
   const rooms = new Map(plan.rooms.map((room) => [room.id, { boundary: [...room.boundary].reverse() }]))
   // CNT-12: a fixture's middle is mirrored, and its front faces the mirrored way: left to right
   // turns it to minus its turn, top to bottom to a half turn less it.
@@ -515,9 +535,16 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     removeOpenings: new Set(),
     rooms,
     ...(items.size === 0 ? {} : { items }),
+    ...(swingPatterns.size === 0 ? {} : { swingPatterns }),
     ...(Object.keys(top).length === 0 ? {} : { plan: top }),
-    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${views === null ? '' : ` The ${views.length === 1 ? 'saved view is' : `${views.length} saved views are`} mirrored with it.`}`],
+    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${views === null ? '' : ` The ${views.length === 1 ? 'saved view is' : `${views.length} saved views are`} mirrored with it.`}${patternsFollow(plan)}`],
   }
+}
+
+/** LVL-8: one sentence when the plan has opening patterns: they stay patterns and their openings follow their walls. */
+function patternsFollow(plan: FloorPlan): string {
+  const n = plan.patterns?.length ?? 0
+  return n === 0 ? '' : ` ${n === 1 ? 'Its opening pattern stays a pattern' : `Its ${n} opening patterns stay patterns`}, and the openings ${n === 1 ? 'it places follow its wall' : 'they place follow their walls'}.`
 }
 
 /** WRT-4: the turns `grid_mirror` makes, in degrees counter-clockwise on the drawing as Grid draws it (y up). */
@@ -567,7 +594,7 @@ export function turnPlanBy(survey: Survey, turn: Turn): Patch {
     rooms: new Map(),
     ...(items.size === 0 ? {} : { items }),
     ...(Object.keys(top).length === 0 ? {} : { plan: top }),
-    said: [`Turned the plan ${TURN_WORDS[turn]} about the middle of its walls: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${down}`],
+    said: [`Turned the plan ${TURN_WORDS[turn]} about the middle of its walls: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${down}${patternsFollow(plan)}`],
   }
 }
 

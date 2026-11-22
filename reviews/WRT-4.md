@@ -202,6 +202,19 @@ Run on a laptop shared with about ten other sessions, with `--maxWorkers=2 --min
    `scoreboard/README.md`.
 12. **A y-down flat is reported as mirrored, not told to say `yAxis: down`.** After a real
    `grid_mirror top-bottom` such a hint would mislead, so the line says only what it sees.
+13. **Opening patterns (LVL-8) stay out of rooms text, in a unit too** (after merging main at
+   8a43380). A `pattern` or `raw pattern` line is refused (`rooms/syntax`) with where a pattern
+   goes: the plan file's `patterns`, which `grid write` keeps. A unit cannot carry one, since a
+   pattern names one wall by id; openings written in a unit already go with every copy. The other
+   way, a `pattern` statement in rooms text (in a unit, one pattern per placement), is LVL-8's
+   "later step" and waits on a decision about its ids.
+14. **A pattern counts from its wall's start.** So the ids it gives hold when a row grows only if
+   the row grows toward that wall's end. Rooms text winds outside walls counter-clockwise, so on a
+   row growing east the south wall works as written and the north wall needs `reversed` (shown in
+   `docs/rooms-first.md`). Nothing is renumbered or turned for you. The other way, numbering a
+   pattern's openings from the end nearer the row's first room, would change LVL-8's ids.
+15. **The bundle cap stays at 550 kB.** The merged `packages/cli/dist/grid.mjs` is 532,807 bytes,
+   under it, with no new dependency. The test's comment records the figure.
 
 ## Not done or not verified
 
@@ -217,3 +230,47 @@ Run on a laptop shared with about ten other sessions, with `--maxWorkers=2 --min
 VEW-3 (a camera and saved views), with BRF-1, CNT-8 and others, conflicted in `CHANGELOG.md`, the agents' changelog, `edits.ts` and the bundle cap. Each was kept whole: `turnPlanBy` beside VEW-3's `mirroredViews`, WRT-4's entries first, and the cap at the 550 kB both sides had chosen, its comment naming both.
 
 **Not done:** a turn does not turn the saved views VEW-3 brings, though `grid_mirror`'s mirror now does; nor, as before, stairs, annotations or the sketch. A plan with saved views keeps them pointed as before a turn.
+
+## After merging main at 8a43380
+
+Main brought LVL-8 (facades and opening patterns) and HND-1 (the DXF a drafter can keep working
+in). Git stopped on two conflicts, `CHANGELOG.md` and the agents' changelog in
+`docs/result-contract.md`. Both are resolved with every entry kept and WRT-4's first.
+`writeTools.ts` merged cleanly and keeps both `turn` and HND-1's `dxfProfile`.
+
+**How ids stay stable with LVL-8's patterns.** The two schemes stay apart by shape. A repeat
+names a part `<id>-<label>`, with its floor in front on a plan of written floors (`g-win-1`,
+`f1-win-1` on the copied floor). A pattern names its openings `<pattern>-<floor>-<n>`
+(`north-row-f1-1`). Patterns are expanded after every written part, so a coincidental match is
+left out and named (`pattern/id-clash`), never given twice. A pattern names its wall by id, and
+rooms text's wall ids hold across two compiles and when a row grows by one (`g-ext-south`,
+`g-w-room-1-room-2`). So a pattern on a repeated row places the same openings with the same ids.
+Its `floors` reach a floor copied from the row's by the wall in line. The test is in
+`packages/floorplan/src/rooms/__tests__/repeat.test.ts`: "gives a patterned row the same ids on
+every writing, none shared, and keeps them when the row grows by one". It covers four cells, then
+five, a floor copied with its openings, and two patterns repeated on the copy: ids are equal across
+compiles and unique, every earlier id and place is kept, and there are no pattern issues. A second
+test, "refuses a pattern line, in a unit or out of one, and says where a pattern goes", covers the
+case the two cannot combine (items 13 and 14 under "For the owner").
+
+**Mirror, turn and the comparison.** A pattern is expanded before the comparison, which is now in
+the core: `compareBuildings` calls `withPatterns`, so a pattern's openings are paired, mirrored and
+turned as plain ones. A pattern in the file is kept, not expanded, by `turnPlanBy` and `mirrorPlan`.
+They keep each wall's id, start and end, so a pattern's margins, its places along the wall and its
+floors hold. A mirror also swings a pattern's door the other way, as every plain door's swings, by
+a new `swingPatterns` in the patch (`applyPatch`). A turn changes nothing in a pattern. Both
+answers add one sentence when the plan has patterns. `grid write` now counts its "after" drawing
+problems with the kept patterns, as "before" already did. It also says in one line when the walls
+just written leave a kept pattern without its wall. Tests: `diff.test.ts` "mirrors and turns a plan
+with an opening pattern…" (it fails without the swing), `diff-turn.test.ts` "reads a plan's opening
+patterns as the openings they place…", and `facadeView.test.ts` (the write line). Docs:
+`docs/rooms-first.md`, both changelogs.
+
+
+**Gates after the merge** (with `--maxWorkers=2 --minWorkers=1`):
+- `npm run build`, `npm run typecheck` and `npm run lint` pass. The bundle is 532,807 bytes.
+- The scoped vitest run passed 176 files: 3,913 tests passed, 2 skipped, none failed. It covered
+  floorplan, cli edit, versions, mcp and command, and rules result.
+- `npm run scoreboard` says "Same as the stored figures", so nothing is stored.
+
+**Not run:** the full suite, including viewer and the rest of cli.

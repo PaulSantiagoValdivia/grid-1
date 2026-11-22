@@ -64,7 +64,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
-| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3) or an opening pattern (`pattern`, LVL-8). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
 | `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
@@ -259,6 +259,12 @@ label.
 | `stair/too-few-risers` | {thing} states fewer risers than its flights need | at least two risers on each flight |
 | `stair/end-in-no-room` | {thing} starts or ends in no room, so it joins nothing there | each end of its walking line in a room |
 | `stair/duplicate-id` | {thing} shares its id with another stair | an id of its own for each stair |
+| `pattern/unknown-wall` | {thing} names a wall Grid cannot find | the id of one wall of the plan |
+| `pattern/does-not-fit` | {thing} does not fit its wall | room on the wall, between its margins, for every opening of the pattern |
+| `pattern/unknown-floor` | {thing} is to be repeated on a floor the plan does not have | a floor of the plan in the pattern's floors |
+| `pattern/no-wall-above` | {thing} finds no wall above to repeat on | on each floor it is repeated on, a wall in the same line as its own, holding the opening's whole width |
+| `pattern/overlaps-opening` | {thing} would place an opening over another | each opening of the pattern clear of the other openings on its wall |
+| `pattern/id-clash` | {thing} would give an opening an id another part has | an id of its own for each opening a pattern places: the pattern's id, the floor and the number |
 | `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
 | `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
@@ -554,7 +560,7 @@ its text, which says the same.
 
 | Tool | Receipt (`structuredContent`) |
 |---|---|
-| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
+| `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`, `dxfProfile` (HND-1: for a DXF, the project's profile file its layers and pens came from, `dxf-layers.json`; null for Grid's own layers and for the other formats). An export that would hold no wall, room or fixture is refused, and so is a DXF whose project profile is wrong. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
@@ -598,6 +604,48 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `first` and `last` settings; a `floor` line may end with `copy <floor> [with openings]`; a room
   line may say `through <floor>`. A room that rises through a floor not written after its own is
   refused with `rooms/unknown-floor`. No new message code and no new tool.
+- With LVL-8's opening patterns: `grid_mirror` swings a pattern's door the other way with every
+  plain door's, and its text, mirror or turn, adds `Its opening pattern stays a pattern, and the
+  openings it places follow its wall.` when the plan has patterns. `grid_write_rooms` adds one
+  line when the plan file has patterns, `Kept the plan's opening pattern as the file has it: …`,
+  ending with the first thing the walls just written keep a pattern from placing, if any; its
+  `drawingProblems.after` counts the plan with its kept patterns, as `before` does. A `pattern`
+  line in rooms text is refused (`rooms/syntax`), saying where a pattern goes.
+
+### 2026-11-22: a DXF a drafter can keep working in (HND-1)
+
+- `grid_export` adds `dxfProfile`: for a DXF, the profile file in the project folder its layers
+  and pens came from (`dxf-layers.json`), else null; the text adds `Layers and pens from
+  dxf-layers.json.` when one was used. A profile that is there and wrong is refused, naming each
+  part that is wrong (`layers.doors.colour must be a whole number from 1 to 255`); no file is
+  written. No new code in the record: it is a refusal of the tool, as an empty export is.
+- The DXF itself changed: AutoCAD 2013's version (`AC1027`) in UTF-8, in metres
+  (`$INSUNITS` 6), with doors, windows and openings as blocks, filled wall outlines, dimension
+  entities, a tag block per room and an A3 layout. The old layer names stay, with new ones beside
+  them (`GRID-WALLS-FILL`, `GRID-DOORS`, `GRID-WINDOWS`, `GRID-ROOM-TAGS`, `GRID-DIMENSIONS`,
+  `GRID-SHEET`, `GRID-VIEWPORT`); a room's name and area are attributes of its tag, no longer
+  texts on `GRID-LABELS`, which now holds the label only. A layer is listed only when something is
+  drawn on it. See [what the DXF holds](commands.md#what-the-dxf-holds-hnd-1).
+
+### 2026-11-22: facades, and opening patterns (LVL-8)
+
+- `grid_view` takes `kind: "facade"` with `side` (`north`, `east`, `south` or `west`, the sides
+  of the drawing, north its top) and `look`: one side of the building in elevation, every floor
+  at its level. Its data: `kind` `facade`, `floor` and `camera` null, `pxPerMetre`, `ids` (the
+  openings it shows) and a new optional `facade`: `side`, `compass` (`{ bearing, faces }` by the
+  plan's north, or null), `ground` (`{ level, stated }`), `levels` (`floor`, `name`, `level`,
+  `height`), `walls`, `openings` and `extent` (`u0`, `u1`, `bottom`, `top`, or null when nothing
+  faces that side). `side` with any other kind is refused, as the other kinds' arguments are.
+- A plan may state opening patterns, `patterns`. Every tool and check reads the plain openings
+  they expand into, with ids `<pattern>-<floor>-<n>`, as if written by hand: `grid_check`'s
+  escape and route checks count them, the schedules list them, the exports hold them. The tools
+  that change the plan keep the patterns as patterns.
+- A new kind of thing, `pattern`, and six codes for what kept a pattern's openings from being
+  placed, each `left-out`: `pattern/unknown-wall`, `pattern/does-not-fit`,
+  `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening` and
+  `pattern/id-clash`. A pattern the reader cannot read is `plan/part-left-out`, named
+  `Opening pattern "id"`. `resultVersion` stays 1: no field changed meaning.
+- `plan/unknown-field`'s `needed` on the plan lists `patterns` among the plan's fields.
 
 ### 2026-11-22: a camera an agent can set, saved as a named view (VEW-3)
 

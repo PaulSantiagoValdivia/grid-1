@@ -85,6 +85,16 @@ The plan file holds every room, wall and opening written out, floor by floor, wi
 text gave them: a repeat, a copy or a room through several floors leaves nothing in the file for
 another program to work out.
 
+An [opening pattern](plan-file.md#opening-patterns) is not rooms text, in a unit or out of one: a
+`pattern` line is refused with where it goes. It lives in the plan file's `patterns`, naming its
+wall by id, and `grid write` keeps it, so a row's outside wall can carry a pattern on its own floor
+and, with its `floors`, on the floors copied from it. Its openings take ids of their own,
+`<pattern>-<floor>-<n>`, beside the row's `l3-win-301`; an id that would be another part's is
+left out and named (`pattern/id-clash`). A pattern counts from its wall's start, so for a row that
+grows, write that wall to start where the row starts (`wall 1 north reversed`): then its openings,
+like the rooms, keep their ids when the row grows by one. When the walls written leave a kept
+pattern without its wall, `grid write` says so in its answer.
+
 **The plan file is the source of truth.** Its walls stay in it, and they can still be changed
 there or with the tools; rooms text is a way of writing the plan and of reading it.
 `grid describe --as rooms` reads any plan back as rooms text, and writing that text again
