@@ -7,7 +7,7 @@ import type { PictureShow } from '@ongrid/viewer/src/picture/planSvg'
 import { UsageError } from './options'
 
 /** SHT-7: what `--hide` may name. */
-export const HIDE_PARTS = ['title', 'key', 'notes', 'sketch', 'dimensions', 'areas', 'swings', 'warnings'] as const
+export const HIDE_PARTS = ['title', 'key', 'notes', 'sketch', 'dimensions', 'areas', 'swings', 'warnings', 'above'] as const
 
 /** SHT-7: what a drawing shows, from `--hide`, `--colour` and `--key`. */
 export interface DrawShow {

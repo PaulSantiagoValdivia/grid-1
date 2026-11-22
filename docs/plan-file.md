@@ -242,17 +242,22 @@ Grid works out the rise, the number of risers and their height, the going and th
 which room the stair leaves from and arrives in (`planStairs`). For the stair above: a 2.95 m
 rise in 14 risers of 0.211 m, treads of 0.215 m. `grid describe` says them. The 2D drawing
 shows the stair on both floors, with a line at every riser and its walking line ending in an
-arrow pointing up; 3D, the OBJ and glTF files and the IFC file (an `IfcStair` of
-`IfcStairFlight`s and landing slabs) draw a block per tread. The stair adds no floor of its own:
-its area is counted once, in the rooms it stands in. Nothing here judges a riser, a going or a
-width.
+arrow pointing up. On the floor it rises from, the plan is cut 1.2 m above the floor
+(`planCutHeight`): the stair is solid up to where its flight reaches that height, a break line
+crosses it there, and the rest is dashed; on the floor it arrives on it is drawn whole (SHT-11).
+3D, the OBJ and glTF files and the IFC file (an `IfcStair` of `IfcStairFlight`s and landing
+slabs) draw a block per tread. The stair adds no floor of its own: its area is counted once, in
+the rooms it stands in. Rooms used as a stair on floor after floor, one over the other, are
+counted once too, on the floor the stair rises from ([areas.md](areas.md)). Nothing here judges a
+riser, a going or a width.
 
 The way-out check follows routes up and down the stair, so an upper floor or a basement is
 checked through it down to a door. Rooms used as a stair on neighbouring floors that lie one over
 the other (sharing at least half of the smaller one) are taken as a stair too, as agents already
 draw them; where both floors have stair rooms and none lies over another, they are named as out
 of line (`stair_out_of_line`), and so are lift shafts (rooms used as a `lift`,
-`lift_out_of_line`). A lift is never taken as a way out. A floor no stair joins to the ground floor
+`lift_out_of_line`). A lift shaft is drawn with a cross in it, corner to corner, on every floor
+(SHT-11). A lift is never taken as a way out. A floor no stair joins to the ground floor
 is said not to be checked. A stair that cannot be laid out is said and left out
 (`stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
 `stair/too-few-risers`, `stair/duplicate-id`), and one whose end stands in no room joins nothing
