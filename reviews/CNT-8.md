@@ -331,3 +331,71 @@ Changed beyond the marked conflicts, so a zone is counted once in both:
 For the owner: a zone keeps a band of its own in `grid_areas` (from the walls and dividing lines
 round it), shown on its line, and added into no total. A zone can be marked assumed like any
 part, and is listed to confirm.
+
+## After merging main (ca2db98, MSG-5 and CNT-9)
+
+Main had gained MSG-5 (notes traced to their cause, held notes, identical notes as one line) and
+CNT-9 (facts of the person's own on walls, openings, rooms and floors, a room's stated `number`,
+and `grid_fields`, `grid_find` and `grid_count`). The merge commit resolves eight conflicted
+files, keeping both sides in each; the changes beyond them are in the follow-up commit.
+
+- `docs/result-contract.md`: both changelog sections, CNT-8's on top, then CNT-9's and MSG-5's.
+  The code rows (`plan/no-walls`, `room/zone-not-in-room`) and the reasons (`waits_for_part`,
+  `part_of_room`) merged cleanly.
+- `packages/rules/src/result/catalogue.ts`: `room/too-small` says MSG-5's `named(…)` (one line
+  for several rooms) and keeps CNT-8's whole-room `found`.
+- `packages/rules/src/checks/types.ts`: the skip reasons' comment names both `waits_for_part` and
+  `part_of_room`.
+- `packages/cli/src/command/planText.ts`: a room's `partOf` and `number` are both held to an id.
+- `packages/cli/src/edit/edits.ts`: `RoomChange` takes both `partOf` and `properties`.
+- `packages/cli/src/quantities/schedule.ts`: rows carry CNT-9's `roomNumber` and `properties` and
+  CNT-8's `zones`; no zone is a row.
+- `packages/floorplan/src/geometry/roomNumbers.ts`: CNT-9's order (stated numbers first, by
+  number) over the rooms only: a zone gets no number, counted or stated.
+- `packages/cli/src/edit/merge.ts`: CNT-9's facts and numbers on both paths. Without zones (with
+  `use`, or rooms of one use), main's rule: the merged room keeps the first room's facts and
+  number and takes the second's facts it lacks, and `notKept` names what the second said
+  otherwise and its number. With zones, both rooms keep their facts and stated numbers as zones,
+  and the new room gets what main's merged room gets: the first room's number and facts, with
+  the second's it does not carry. The answer says the new room takes the first room's number,
+  and that the second's stays on its zone but is not shown.
+
+Changed beyond the marked conflicts, so a zone is numbered and counted once, in its room:
+
+- `packages/cli/src/quantities/query.ts`, `mcp/readTools.ts`: CNT-9's parts list zones as rooms.
+  `grid_count` summed a zone's area and facts with its room's (area per department counted the
+  open-plan floor twice); it now counts no zone in a group or the total, and its text names the
+  zones left out. `grid_find` still lists zones, but a zone's `number` is null.
+- `packages/floorplan/src/geometry/export/dxf.ts`: `dxfFactsOf` wrote a zone's stated number as
+  `room number` on `GRID-FACTS`; a zone now writes its facts only.
+- `quantities/schedule.ts`: each zone under its room carries its facts (`properties`).
+- `docs/result-contract.md` (a paragraph in CNT-8's changelog section) and `docs/tool-server.md`
+  (`grid_count` and zones).
+- MSG-5's code was read for zones too: zones are skipped by the figure checks before anything is
+  held or grouped, so no zone gets a finding of its own to hold, group or trace. Nothing changed.
+- New test: `packages/cli/src/edit/__tests__/zoneFacts.test.ts`, on CNT-9's stand-in office (every
+  room numbered and with facts): a zones merge of the open office and the meeting room keeps each
+  zone's facts and number, gives the new room the first room's, and gives the same
+  `roomNumbers`, room schedule rows and totals, `grid_count` groups and total as main's merge of
+  the same two rooms; `grid_find` finds `G.02` on the room only, and the DXF writes no number
+  for a zone.
+
+For the owner:
+
+- **A zone keeps the number it states, unread.** CNT-9 does not ask for zones to be numbered, so
+  CNT-8's rule stands: a zone has no room number. A zones merge keeps the number in the file on
+  each zone (the reversible option: nothing is lost, and a zone made a room again has its number
+  back), so the first room's number is stated on its zone and on the new room. Only the room's is
+  read. The alternative is to take the number off both zones; one line in `merge.ts`.
+- **`grid_count` counts no zone.** "How many kitchens" on an open-plan flat counts no kitchen
+  zone; the text names the zones left out and `grid_find` lists them. The alternative is to count
+  zones in their own groups but leave them out of the sums; that double-counts the count instead.
+
+Checks after the merge and the follow-up: `npm run build`, `npm run typecheck` and `npm run lint`
+exit 0, with no type errors. `vitest run packages/floorplan/src packages/rules packages/cli
+--maxWorkers=2 --minWorkers=1`: Test Files 1 failed | 204 passed (205), Tests 1 failed | 4484
+passed | 2 skipped (4487). The one failure was the new test's line on the merged room's number,
+added while the run was going against a `merge.ts` it had already loaded; after the rebuild,
+`packages/cli/src/edit`, `mcp/__tests__/facts.test.ts` and `tools.test.ts` pass alone: Test Files
+7 passed (7), Tests 71 passed (71). None failed on timing. The scoreboard and the full suite were
+not run for this merge.

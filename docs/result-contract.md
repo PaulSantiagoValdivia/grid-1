@@ -555,6 +555,13 @@ A change that would add a problem that leaves a part out is refused, and nothing
   is added into no floor's or plan's `sureness`, so those are the same as for the room drawn
   without zones. In the IFC a zone has no space and no number (`roomNumbers` numbers rooms
   only), so the room schedule and the spaces number every other room as without zones.
+- With CNT-9 and MSG-5 (merged from `main`): a zone keeps its facts of the person's own, and any
+  number it states stays in the plan but is not read: `roomNumbers`, the schedule, the IFC, the
+  DXF and `grid_find`'s `number` give a zone none. A zones merge gives the merged room what a
+  merged room gets without zones (the first room's number and facts, with the second's it does
+  not carry), and both rooms keep theirs as zones. `grid_count` counts no zone in a group or the
+  total, and its text names the zones left out. The schedule lists each zone's facts under its
+  room. No message code changed.
 
 ### 2026-11-22: facts of the person's own, and asking across them (CNT-9)
 

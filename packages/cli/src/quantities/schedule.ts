@@ -104,6 +104,8 @@ export interface RoomScheduleZone {
   readonly name: string
   readonly use: string | null
   readonly area: number | null
+  /** CNT-9: the zone's own facts, as the plan gives them. It has no number: its room has. */
+  readonly properties: Facts
 }
 
 /** A total of the room schedule: one floor's, or all floors'. */
@@ -198,7 +200,7 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
       const zones = figures.rooms
         .filter((zone) => zone.zoneOf === room.id)
         .sort((a, z) => compareIds(a.id, z.id))
-        .map((zone) => ({ id: zone.id, name: zone.name, use: zone.use, area: zone.net }))
+        .map((zone) => ({ id: zone.id, name: zone.name, use: zone.use, area: zone.net, properties: own.get(zone.id)?.properties ?? {} }))
       rows.push({
         number,
         roomNumber: stated,

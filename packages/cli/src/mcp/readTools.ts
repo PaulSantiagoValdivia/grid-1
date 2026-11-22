@@ -882,12 +882,15 @@ const countTool: GridTool = {
       const by = args['by'] === undefined ? null : fieldOf(ask, args['by'] as string, 'by')
       const sums = ((args['sum'] as string[] | undefined) ?? []).map((name, i) => fieldOf(ask, name, `sum item ${i + 1}`))
       checkSums(ask, sums)
-      const found = select(ask, {
+      const picked = select(ask, {
         ...(kinds === undefined ? {} : { kinds }),
         ...(args['floor'] === undefined ? {} : { floor: args['floor'] as string }),
         ...(args['room'] === undefined ? {} : { room: args['room'] as string }),
         ...(args['where'] === undefined ? {} : { where: args['where'] as string[] }),
       })
+      // CNT-8: a zone's floor and facts are its room's to count, so a zone is counted in no group.
+      const found = picked.filter((part) => part.zoneOf === undefined)
+      const zones = picked.filter((part) => part.zoneOf !== undefined)
       const groups = groupParts(ask, found, by, sums)
       const [total] = groupParts(ask, found, null, sums)
       const units = Object.fromEntries(sums.map((field) => [fieldName(field), unitOf(field)]))
@@ -901,6 +904,7 @@ const countTool: GridTool = {
         ? []
         : [`By ${q(fieldName(by))}:`, ...groups.slice(0, 40).map((g) => `  ${g.value === null ? 'not stated' : valueText(by, g.value)}: ${partsWord(kinds, g.count)}${sums.length === 0 ? '' : `, ${sumText(g)}`}`), ...(groups.length > 40 ? [`  … and ${groups.length - 40} more groups in the data.`] : [])]
       lines.push(`In all: ${partsWord(kinds, found.length)}${sums.length === 0 || total === undefined ? '' : `, ${sumText(total)}`}.`)
+      if (zones.length > 0) lines.push(`Not counted: ${zones.length === 1 ? 'a zone' : `${zones.length} zones`} of a room, counted with the room: ${zones.slice(0, 20).map((p) => q(p.id)).join(', ')}${zones.length > 20 ? ', …' : ''}. grid_find lists ${zones.length === 1 ? 'it' : 'them'}.`)
       const { view, floors } = viewOf(ask, found.map((p) => p.id), by === null ? { highlight: found.slice(0, 2000).map((p) => p.id) } : { colour: fieldName(by) })
       if (found.length > 0) lines.push(`To see ${by === null ? 'them picked out' : 'each group in its own colour'}, pass view to grid_view${floors.length > 1 ? `: they are on ${floors.length} floors, so draw each floor in turn` : ''}.`)
       lines.push(QUERY_RULE)

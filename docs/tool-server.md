@@ -96,6 +96,8 @@ is one call for one request.
   the fields of numbers in `sum`: each group's `value`, `count`, `sums`, `missing` (how many had
   no value to add) and `ids`, largest first and the parts that state none last, then the
   `total`. "Area per department" is `{ "kind": ["room"], "by": "department", "sum": ["area"] }`.
+  A zone of a room (CNT-8) is counted in no group: its floor is its room's. The text names the
+  zones left out; `grid_find` lists them, and gives a zone no `number`, since its room has one.
 
 Both take `kind`, `floor` and `room` (the room, the walls beside it and the openings into it) to
 narrow what is looked at. A condition is one line, a field or fact and a test: `is missing`,
