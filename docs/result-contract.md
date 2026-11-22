@@ -173,6 +173,7 @@ label.
 | `opening/swing-without-hinge` | {thing} says which way it opens but not which side it hangs on | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
+| `opening/door-hits-item` | {thing} hits {the fixtures, by kind and id} when it opens | floor clear of fixtures where its leaf swings |
 | `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
 | `opening/crosses-wall` | {thing} runs into a wall that meets its wall | an opening within the clear run of its wall, between the walls that meet it |
 | `opening/fills-wall` | {thing} is as long as its wall | some wall left beside an opening |
@@ -211,6 +212,8 @@ label.
 | `item/outside-rooms` | {thing} stands in no room | its middle inside a room on its floor |
 | `item/into-wall` | {thing} runs into a wall | its footprint clear of the walls, against their faces at most |
 | `item/too-tall` | {thing} is taller than the room it stands in | a fixture no higher than its room |
+| `item/blocks-doorway` | {thing} stands in front of the doorway of {opening}, an indicator | the floor in front of a doorway clear of fixtures, within Grid's own approach depth |
+| `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
@@ -449,6 +452,28 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: use indicators round the fixtures (CNT-13)
+
+- A fixture is an obstacle to a door's swing: `opening/door-hits-item` (worth a look) names the
+  door, has the fixtures' ids in `also`, and words each by its label, kind and id:
+  `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens`. A wall in the way is still
+  `opening/door-blocked`.
+- New codes, worth a look, about a fixture (`thing.kind` `item`) with the opening's id in
+  `also`: `item/blocks-doorway`, a fixture within `useApproachDepth` (0.3 m) in front of a
+  doorway's hole, and `item/blocks-window`, one higher than a window's sill in front of it. Each
+  `found` says what was measured, with what depth, and that it is an indicator, not a rule. A
+  plan without fixtures gets none of them.
+- `grid_measure` takes `what=use` (with `room`, and optionally `width`, `diameter` and the new
+  `clearance`): `answer.indicators` lists each indicator as `{ code, about, measured, figure:
+  { value, from: "person" | "grid" }, under, at?, detail? }`, with `code` one of
+  `use/turning-space`, `use/doorway-clear-width`, `use/passage-width`, `use/space-by-fixture`
+  and `use/window-blocked`. Each text line starts `Indicator,`.
+- `what=route` takes `width`, a body or a trolley: `answer` holds `through`, `width`, `figure`,
+  `way` (the way it gets through by, or null), `shortest` (the way with the fewest rooms,
+  measured: each room's `width` with `at`, `beside` and `atDoorway`, each step's `clear` width
+  and `narrowedBy`) and `narrower` (what on it is narrower than `width`). Without `width`, the
+  route answer is as before.
 
 ### 2026-11-22: stairs counted once, and the drawing's symbols (SHT-11)
 
