@@ -65,7 +65,7 @@ Two guards stop the counts from improving the wrong way:
   lower count 2.
 
 A guard can rise for a good reason, for example a new refusal with a clear message. In that
-case, store the new figure in the same commit and say why.
+case, the change says why, and the new figure is stored as "Changing a count" says.
 
 ## Capabilities
 
@@ -388,10 +388,13 @@ All 2,300 generated plans have a referee figure.
 
 ## Changing a count
 
-- A change that makes a count better: run `npm run scoreboard -- --write-current` and commit
-  `current.json` with the change. Say in the message which count moved.
-- A change that makes a count worse fails CI. If the change is still right (a guard rising
-  for a good reason), store the new figure in the same commit and say why.
+- A feature branch does not edit `current.json`, so branches built at the same time never
+  conflict there. It runs the scoreboard and says in its review note which counts it moves,
+  from what to what. A count made worse fails the run; if the change is still right (a guard
+  rising for a good reason), the note says why, and that one count is the only failure.
+- The person who merges runs `npm run scoreboard` on `main` after the merge, checks the counts
+  against what the branch said, and stores them with `npm run scoreboard -- --write-current`
+  in a commit of their own (`chore(scoreboard): …`), saying which counts moved and why.
 - Never edit `baseline.json`. It records one fixed commit.
 - New data goes under `data/`, passes `npm run check:data`, and the total stays under about
   25 MB. A test checks the size.

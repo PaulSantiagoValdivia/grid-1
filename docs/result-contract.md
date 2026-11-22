@@ -2,10 +2,11 @@
 
 This is what Grid tells an agent about a plan, written down before more is built on it
 (MSG-1). It covers the result record, refusals, the receipts of the tools that change or
-write something, the promise about what may change, and a changelog for agents. A new entry
-goes at the top of that changelog; the release step puts the release's heading above the
-entries it ships, so an entry under a release heading shipped in that release (QAR-10,
-RELEASING.md).
+write something, the promise about what may change, and a changelog for agents. A change
+writes its entry, and any new code's row of the code table, in its own file in `changes/`
+(`changes/README.md`); the release step puts them at the top of that changelog and in the
+table, and the release's heading above the entries it ships, so an entry under a release
+heading shipped in that release (QAR-10, RELEASING.md).
 
 Every record, every rendering of it and every report starts with the label "General
 guidance, not your local rules". No line says a plan complies, passes or is approved: a
