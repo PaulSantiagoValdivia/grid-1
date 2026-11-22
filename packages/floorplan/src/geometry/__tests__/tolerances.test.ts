@@ -102,8 +102,8 @@ describe('the tolerance table', () => {
     expect(TOLERANCES.areaEqual.value).toBe(1e-6)
   })
 
-  it('is stated in the README, entry by entry, with the value Grid uses', () => {
-    const readme = readFileSync(resolve(SOURCE, '../../../README.md'), 'utf8')
+  it('is stated in docs/tolerances.md, entry by entry, with the value Grid uses', () => {
+    const readme = readFileSync(resolve(SOURCE, '../../../docs/tolerances.md'), 'utf8')
     for (const [name, entry] of Object.entries(TOLERANCES)) {
       if (entry.kind === 'arithmetic' || !('value' in entry)) continue
       const home = 'home' in entry ? ` (${String((entry as ToleranceEntry).home)} in a home)` : ''
