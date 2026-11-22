@@ -463,7 +463,8 @@ describe('the built file', () => {
   it('starts with a shebang and is one file', () => {
     expect(readFileSync(bundle, 'utf8').startsWith('#!/usr/bin/env node\n')).toBe(true)
     // 400 kB since VEW-7, to catch a second zod; 450 kB since WRT-3, whose edits and their tools
-    // take the file just past 400 kB (400,863 bytes) with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(450_000)
+    // take the file just past 400 kB (400,863 bytes) with no new dependency; 475 kB since MSG-16,
+    // whose opening checks take it past 450 kB (460,998 bytes) with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(475_000)
   })
 })

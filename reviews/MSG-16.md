@@ -82,6 +82,16 @@ No other count moved.
 - Changed: in `validation.test.ts`, MS-8 went from `it.fails` to `it`, in a new "lab failures
   fixed by MSG-16" block. The "known failures" block it leaves is empty, so it was removed.
   `pinned-tests.md` moves MS-8 to the fixed table.
+- Changed, because MSG-16 names something real or changes what a call meets first:
+  - `room-rows-flats.test.ts`: the Berlin flat's list of drawing lines gains three, all real. The
+    railing `b-n` ends inside window `f-kueche` (see 6 below). Window `f-berliner`, set 0.1 m
+    from the corner of the 0.51 m court wall, runs 0.16 m into `sw`, and partition `x5` ends
+    0.025 m inside it.
+  - `everyPath.e2e.test.ts`: the `grid_split_room` slots split `bed1` 1 m from the west, not
+    1.5 m. At 1.5 m the new wall lands in the bedroom's window and is refused before the path is
+    looked at, which is not what that test is about.
+  - `grid.e2e.test.ts`: the built file may be 475 kB, up from 450 kB. MSG-16 takes it to 460,998
+    bytes with no new dependency.
 - Removed: none.
 
 ## For the owner
@@ -98,8 +108,13 @@ No other count moved.
    the opening. Both lines name both, so the scoreboard counts both as named.
 3. **Doorless openings on a dividing line say nothing.** That is how an open-plan opening is drawn.
    Doors and windows there are named, as decided.
-4. **A borrowed light needs both faces of the stretch under the window to have rooms.** A window
-   in a wall with a room on one face only is not named, whatever kind the wall is stated as.
+4. **A borrowed light needs rooms on both faces, in a wall not stated as outside.** A window in a
+   wall stated `exterior` is not named, even with a room drawn on its other face. The Madrid flat's
+   kitchen and bedroom windows look onto a light well drawn as a room, and MSG-13 keeps those walls
+   as stated. A window in a wall with a room on one face only is never named.
+6. **A wall no higher than a window's sill stands under it, not across it**, and is not named.
+   The Berlin flat's 1 m balcony railing ends inside the kitchen window, whose sill is at 0.9 m,
+   so it is named.
 5. **How near a split's nearest clear size looks.** `grid_split_room` gives the nearest size clear
    of the opening at the end it hits first, the west or south end. That size may still land in an
    opening at the other end; the next call then says so.

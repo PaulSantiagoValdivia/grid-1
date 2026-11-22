@@ -13,8 +13,8 @@
  * - `opening/fills-wall`: the opening is as long as its wall; nothing of the wall is left.
  * - `opening/on-dividing-line`: a door or a window on a dividing line, which has no wall to hang
  *   it in. A warning, not a refusal: an open-plan opening is sometimes drawn that way.
- * - `opening/window-between-rooms`: a window in a wall with rooms on both sides. It may be a
- *   borrowed light, so it is a warning, not a refusal.
+ * - `opening/window-between-rooms`: a window in a wall with rooms on both sides, unless the wall
+ *   is stated as an outside wall. It may be a borrowed light, so it is a warning, not a refusal.
  *
  * Walls meet as the wall faults have them meet: an end within half the other wall's thickness
  * plus `gap` of its line. A meeting sharper than `mitreReach` half thicknesses is left out, as the
@@ -48,6 +48,8 @@ interface Cover {
   readonly to: number
   /** `end`: that wall ends on this one, inside its length. `across`: this wall ends on it, or it passes through. */
   readonly how: 'end' | 'across'
+  /** How high that wall stands. */
+  readonly height: number
 }
 
 const half = (wall: Wall): number => (wall.virtual ? 0 : wall.thickness / 2)
@@ -87,7 +89,8 @@ function coverOf(wall: Wall, a: WallAxis, other: Wall, b: WallAxis): Cover | nul
     wall: other.id,
     from: Math.max(0, s - body),
     to: Math.min(a.length, s + body),
-    how: otherEnds && !wallEnds ? 'end' : 'across'
+    how: otherEnds && !wallEnds ? 'end' : 'across',
+    height: other.height
   }
 }
 
@@ -206,6 +209,8 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
         for (const cover of here) {
           const into = Math.min(span.to, cover.to) - Math.max(span.from, cover.from)
           if (!(into > overrun)) continue
+          // A wall no higher than the sill stands under the window, not across it.
+          if (cover.height <= opening.sill + overrun) continue
           if (cover.how === 'end') {
             issues.push(
               warning(
@@ -234,9 +239,11 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
 
         if (opening.type === 'window' && !wall.virtual) {
           const sides = wallSides(index, wall.id)
+          // A wall stated as outside is kept so (MSG-13), and a window in it is what was meant:
+          // onto a light well drawn as a room, say.
           const left = new Set<string>()
           const right = new Set<string>()
-          for (const stretch of sides?.stretches ?? []) {
+          for (const stretch of sides && sides.exposure !== 'exterior' ? sides.stretches : []) {
             if (!(Math.min(span.to, stretch.to) - Math.max(span.from, stretch.from) > overrun)) continue
             stretch.left.forEach((room) => left.add(room))
             stretch.right.forEach((room) => right.add(room))

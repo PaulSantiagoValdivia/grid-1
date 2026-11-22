@@ -58,6 +58,14 @@ describe('where each opening stands (MSG-16)', () => {
     expect(placeIssues(box([door('d', 's', 3.1)])).map((i) => [i.code, i.id, i.hits])).toEqual([['opening/crosses-wall', 'd', ['e', 's']]])
   })
 
+  it('says nothing of a wall no higher than the sill, which stands under the window', () => {
+    const low = wall('p', [2, 0], [2, 3], { kind: 'partition', height: 0.9 })
+    const plan: FloorPlan = { ...box([window_('win', 's', 1.4)], { walls: [low] }), rooms: [] }
+    expect(placeIssues(plan)).toEqual([])
+    const higher: FloorPlan = { ...plan, walls: plan.walls.map((w) => (w.id === 'p' ? { ...w, height: 1 } : w)) }
+    expect(placeIssues(higher).map((i) => [i.code, i.id])).toEqual([['wall/ends-in-opening', 'p']])
+  })
+
   it('MS-8 warns of a door on a dividing line, naming the door and the line, and leaves it drawn', () => {
     const line = { id: 'v', start: [2, 0] as [number, number], end: [2, 3] as [number, number], thickness: 0, height: 2.7, kind: 'interior' as const, virtual: true }
     const plan: FloorPlan = { ...box([door('d', 'v', 1)], { walls: [line] }), rooms: [] }
