@@ -150,6 +150,11 @@ Each of these is the reversible choice, taken and recorded rather than stopped o
 - **Ceiling height.** A ceiling stands at the room's `height` (ARE-10); there is no separate
   `ceiling.height`, so a suspended ceiling under a taller structure is said with the room's height.
 - **The scoreboard's ceiling probe** now asks for LVL-4's field, `rooms.0.ceiling` (see below).
+- **Two roofs in `grid_takeoff`, after merging ARE-13.** ARE-13's estimate (`for=estimate`)
+  works out its slab and roof lines from its own `planShell`; the plain take-off works out LVL-4's
+  from `planEnvelope`, which also opens the slab over stairs, lifts and voids. The merge keeps both
+  as they were. Making the estimate read `planEnvelope` is a follow-up: it would move the
+  estimate's slab figure by the openings, so it is the owner's call.
 - **Lab paths.** No lab path is committed: the tests read the lab's plans by name from
   `scoreboard/data/lab-plans.ndjson.gz` through `packages/floorplan/src/test-support/lab.ts`.
 
@@ -246,3 +251,13 @@ within `shellGrid` of the line through its neighbours is none) and the scoreboar
 not yet stored). The timing test "answers grid check on the sample flat in under 500 ms" failed
 once at 4.2 s in a run of the CLI's tests under a load average near 250; it passed alone, and in
 both full runs.
+
+## After merging main at 0b8b641
+
+Merged SHT-4, ARE-13, MSG-3, MSG-16 and WRT-7. Conflicts in the contract's changelog (both
+entries kept), `docs/tool-server.md` and `readTools.ts` (both descriptions of `grid_takeoff`
+joined), `takeoff.ts` (`roomTakeoff` exported for ARE-13, its ceiling argument optional), the
+plan's field list in `result.test.ts` (now `…, stairs, site, …, sketch, display, written`) and
+`scoreboard/current.json` (main's 278 silent and 5 mistakes named, LVL-4's 12 checks fed). After
+the merge: build, typecheck, lint and licences clean; full suite 250 files, 4815 passed, 4
+skipped; scoreboard "Same as the stored figures".
