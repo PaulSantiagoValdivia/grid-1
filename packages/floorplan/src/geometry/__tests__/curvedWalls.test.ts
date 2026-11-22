@@ -309,6 +309,13 @@ describe('exporting a curved wall', () => {
     expect(dxf).toContain('GRID-LEFT-OUT')
   })
 
+  it('writes a whole circle with no opening as two half arcs on each face', () => {
+    const dxf = exportPlan(roundRoom([]), 'dxf', options).data as string
+    const bulges = dxf.split(/\r?\n/).filter((line, i, lines) => lines[i - 1]?.trim() === '42').map(Number)
+    expect(bulges).toHaveLength(4)
+    for (const bulge of bulges) expect(Math.abs(bulge)).toBeCloseTo(1, 9)
+  })
+
   it('writes a curved dividing line as an arc in the DXF', () => {
     const line: FloorPlan = { ...bayRoom(), walls: bayRoom().walls.map((w) => (w.id === 'bay' ? { ...w, virtual: true, thickness: 0, height: 0 } : w)), openings: [] }
     const dxf = exportPlan(line, 'dxf', options).data as string

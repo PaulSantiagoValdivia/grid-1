@@ -5,6 +5,10 @@
  * number (`thickness`). Here it becomes the shapes both views draw: a polygon
  * in plan, and a list of parts to raise in 3D. Its ends are cut as the joints
  * with other walls decide (`joints.ts`), and square where it meets none.
+ *
+ * A curved wall (CNT-18, C8) has an arc for its axis instead (`arc.ts`). Every length along
+ * it is along the curve, and its shapes follow the curve: exactly in `wallSliceShape`, by its
+ * stations in the polygons. Code that reads a wall as lines reads `wallSegments`.
  */
 
 import type { Opening, Wall } from './plan'
@@ -282,8 +286,10 @@ function curveFace(curve: WallCurve, faceFrom: number, faceTo: number, offset: n
     return { points, exact: { points, turns: [0] } }
   }
   const points = curveStationsBetween(curve, a, b).map(at)
-  const exactPoints = [at(a), at(b)]
-  const turns = [(Math.sign(curve.sweep) * (b - a)) / curve.radius]
+  // No stretch turns more than half a circle: a whole one, with no opening, would have no bulge.
+  const halves = (b - a) / curve.radius > Math.PI ? 2 : 1
+  const exactPoints = Array.from({ length: halves + 1 }, (_, k) => at(a + ((b - a) * k) / halves))
+  const turns = Array.from({ length: halves }, () => (Math.sign(curve.sweep) * (b - a)) / curve.radius / halves)
   if (faceFrom < a) {
     points.unshift(at(faceFrom))
     exactPoints.unshift(at(faceFrom))
