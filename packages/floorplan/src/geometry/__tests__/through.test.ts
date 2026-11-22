@@ -16,6 +16,7 @@ import { buildScene } from '../scene3d'
 import { planSection } from '../section'
 import { planAreaFigures } from '../areas'
 import { toIfc } from '../export/ifc'
+import { isMassing } from '../massing'
 
 const asWritten = stairWindowAsWritten
 const throughBoth = stairWindowThrough
@@ -138,6 +139,24 @@ describe('the lab\'s stair window through two storeys (VE-9)', () => {
     expect(issue.message).toBe('Wall "g-n" rises through floor "roof", which the plan does not have, so it stands on its own floor only. The floors above it are "first".')
     // It is then a wall of the ground floor alone: the first floor's rooms rest on another floor's wall.
     expect(codes(plan)).toContain('room/cross-floor f-stair')
+  })
+
+  it('does not take a floor a wall rises through for massing (BRF-4)', () => {
+    // The first floor keeps only its stated outline and the ground floor's north wall through it.
+    const raw = JSON.parse(JSON.stringify(throughBoth())) as FloorPlan
+    const firstWalls = new Set(raw.walls.filter((w) => (w.floor ?? 'ground') === 'first').map((w) => w.id))
+    const plan = parseFloorPlan({
+      ...raw,
+      floors: raw.floors!.map((f) => (f.id === 'first' ? { ...f, outline: [[0, 0], [8, 0], [8, 6], [0, 6]] } : f)),
+      walls: raw.walls.filter((w) => !firstWalls.has(w.id)),
+      rooms: raw.rooms.filter((r) => (r.floor ?? 'ground') !== 'first'),
+      openings: raw.openings.filter((o) => !firstWalls.has(o.wall))
+    })
+    expect(isMassing(plan, 'first')).toBe(false)
+    const first = planAreaFigures(plan).floors.find((f) => f.floor === 'first')!
+    expect(first.massing).toBe(false)
+    // As its areas say, the floor holds a wall: the floor inside its outline no room claims is said.
+    expect(codes(plan)).toContain('floor/unclaimed first')
   })
 
   it('keeps a plan with no wall through floors exactly as it was sliced', () => {

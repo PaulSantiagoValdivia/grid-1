@@ -864,7 +864,8 @@ function traceItemRooms(plan: FloorPlan, spaces: readonly FloorSpaces[], broken:
 function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): void {
   // BRF-4 (C17): a floor with an outline and no walls is massing: all of it is floor no room
   // claims yet, and saying so would be the whole floor, every time. Its areas say it is massing.
-  const massing = !plan.walls.some((wall) => floorOf(wall) === result.floor && !broken.has(wall.id))
+  // LVL-5: a wall that rises through the floor from below stands on it, so it is not massing.
+  const massing = !plan.walls.some((wall) => wallStandsOn(plan, wall, result.floor) && !broken.has(wall.id))
   if (result.pastOutline !== null && result.pastOutline >= tolerance('areaReported')) {
     issues.push(
       issue(

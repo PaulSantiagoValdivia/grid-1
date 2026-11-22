@@ -699,6 +699,8 @@ A change that would add a problem that leaves a part out is refused, and nothing
   it, on each floor it is drawn on, and a click on the 3D picture meets the wall up to its whole
   rise; `grid_takeoff for=change` takes a wall through floors off once, whole, its height its whole
   rise, and `floors` takes it in when it stands on any floor named.
+- With BRF-4: a floor that states an outline and has a wall rising through it from below is not
+  massing, so `grid_check` gives its `floor/unclaimed`, as `grid_areas` measures it.
 - `resultVersion` stays 1.
 
 ### 2026-11-22: a plan from a phone room scan (HND-12)
