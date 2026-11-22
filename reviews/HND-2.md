@@ -172,4 +172,14 @@ so there is no entry in the agents' changelog; `CHANGELOG.md` has a line under "
 
 ## Checks run
 
-CHECKS_LINE
+On `main` at ef88ec9 plus this branch:
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,803 passed, 4 skipped
+  (timing guards), of 4,807 in 246 files (499 s). No failure.
+- `npm run scoreboard`: 197, 278, 16, 5, 11, 735, 95. Same as stored.
+
+After merging `main` at 0b8b641 (SHT-4), with no conflict: build, typecheck and lint clean; the
+affected tests (`packages/floorplan/src/geometry/export`, `src/export`, `roomNumbers`,
+`tolerances`, `areas`, the CLI's `schedules`, `exportTool`, `grid.e2e` and the sheet tests)
+passed, 654 of 654 in 23 files.
