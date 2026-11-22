@@ -14,7 +14,7 @@
  * puts it (`forSkia`).
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import type { PictureOptions } from '@ongrid/viewer/src/picture'
+import type { Picture, PictureOptions } from '@ongrid/viewer/src/picture'
 import { fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
 import { loadCanvas } from './canvas'
 import { forSkia } from './skiaText'
@@ -63,6 +63,12 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   const picture = planPicture(plan, pictureOptions)
   if (format === 'svg') return pictureToSvg(picture, 1, { label })
   if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
+  return pictureToPng(picture, { scale, label })
+}
+
+/** A picture the viewer laid out, as a PNG's bytes: a plan's (`drawPlan`), or a comparison's (WRT-8). */
+export async function pictureToPng(picture: Picture, options: { readonly scale?: number; readonly label?: boolean } = {}): Promise<Uint8Array> {
+  const { scale = 1, label = true } = options
   if (!(scale > 0) || !Number.isFinite(scale)) throw new RangeError(`The scale must be a number above 0: got ${scale}`)
 
   const width = Math.round(picture.width * scale)

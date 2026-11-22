@@ -19,6 +19,7 @@ import type {
 } from '@ongrid/floorplan/geometry'
 import type { BuildingType, RoomUse } from '@ongrid/floorplan/types/floorplan'
 import type { BuildingKind, FigureKey, FigureUnit, VerificationStatus } from './figures'
+import type { PlaceUsed } from './place'
 
 export { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from '@ongrid/floorplan/geometry'
 export type { Rule, RuleCitation, RuleSource, RouteStep } from '@ongrid/floorplan/geometry'
@@ -152,11 +153,13 @@ export interface NotChecked extends Omit<PlanNotChecked, 'reason' | 'held'> {
 
 /**
  * Why a check did not look at a part (MSG-2). Two kinds: the check could not look at it
- * (`cannot_be_drawn`, `waits_for_part`, `no_stairs`, `way_out_not_drawn`, `no_use`,
- * `no_figures_for_place`, `above_escape_storeys`, `no_rooms`, `alone_off_ground`), or the check is not about it
- * (`use_not_covered`).
+ * (`cannot_be_drawn`, `waits_for_part`, `no_stairs`, `way_out_not_drawn`, `no_use`, `no_place`,
+ * `no_figures_for_place`, `above_escape_storeys`, `no_rooms`, `alone_off_ground`), or the check is
+ * not about it (`use_not_covered`).
  */
 export type SkipReason =
+  /** COD-3: no place is stated, so no figure was applied. */
+  | 'no_place'
   | 'cannot_be_drawn'
   | 'no_stairs'
   | 'way_out_not_drawn'
@@ -234,6 +237,14 @@ export interface RulesReport extends Omit<PlanRulesReport, 'basis' | 'findings' 
   readonly notChecked: readonly NotChecked[]
   /** Every figure the checks applied, baseline or looked up. */
   readonly figures: readonly AppliedFigure[]
+  /**
+   * COD-3: the place the figure checks were for, from Grid's list: from the caller's request,
+   * the plan's `site.country`, or assumed (`withoutPlace: 'us-figures'`). Null when none is stated:
+   * then no figure was applied.
+   */
+  readonly place: PlaceUsed | null
+  /** COD-3: only when no place is stated: how many lines the figure checks give with the US figures. */
+  readonly withoutPlace?: { readonly usLines: number }
   /**
    * MSG-2: what each check looked at and skipped, one entry per check Grid has, in `RULES` order,
    * whether it ran or not. `rules` lists only the checks that looked at something.

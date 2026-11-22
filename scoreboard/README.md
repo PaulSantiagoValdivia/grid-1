@@ -36,8 +36,9 @@ Two areas "differ" when they are more than 0.01 m² apart.
    changed, an opening moved, a number set wrong, a word misspelt and so on. A plan counts
    here when Grid reads it, nothing throws, and Grid's results change (areas, issues, notes,
    storey heights or exports), but Grid prints nothing new. Nothing new means no new issue, no
-   new door warning, no new rules note and no new "not checked" line, both with and without a
-   country. The other outcomes are listed under "Damage" in the printout:
+   new door warning, no new rules note and no new "not checked" line, both with the US and with
+   Spain stated as the place (before COD-3, with no country and with Spain: a plan that states
+   no place now gets no figure, so the scoreboard states the US, whose figures it measured). The other outcomes are listed under "Damage" in the printout:
    - Grid names the damaged part;
    - Grid names something else;
    - the schema refuses the plan;

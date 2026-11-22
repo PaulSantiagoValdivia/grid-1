@@ -59,22 +59,37 @@ contract; `src/result/catalogue.ts` holds the one wording of every code.
 - **Not advice.** The local authority and a licensed professional decide.
 - **Not affiliated** with, or endorsed by, the publishers of the documents named. Their
   names are used only to say where a figure was read.
+- **Only where the place is stated.** A figure from a US model code is applied only when the
+  plan or the caller says the plan is for the US. With no place stated, none is.
 
 ## Where the plan will be built
 
 ```ts
 import { checkLocalRules, figuresFromSheet, planNotes } from '@ongrid/rules'
 
-checkLocalRules(plan)                                   // no place stated
-checkLocalRules(plan, { country: 'ES' })                // a two-letter country code
+checkLocalRules(plan)                                   // the place the plan states, site.country
+checkLocalRules(plan, { country: 'Spain' })             // another place, for this check
 checkLocalRules(plan, { country: 'ES', figures })       // with figures looked up for the place
+checkLocalRules(plan, { withoutPlace: 'us-figures' })   // with no place stated, the US figures, as before COD-3
 ```
 
-- With no country stated, or `US`, the two figure checks run on the carried figures, and
-  every finding names them as its basis.
-- With another country stated, a carried figure is not that place's rule, so it is not
-  applied. A check runs only on figures that were looked up for the place, and the report
-  says which checks did not run.
+The place picks the figures (COD-3, `src/checks/place.ts`). It is the plan's own
+`site.country`, or the `country` a caller gives in its place: a country's name or its two- or
+three-letter code on Grid's list (`@ongrid/floorplan/types/places`), so `US`, `usa` and
+`United States` are one place. A `country` not on the list throws `PlaceRefused`, whose message
+names the argument and never the text. The report's `place` says which place was used and
+where it came from, by Grid's name for it.
+
+- With the US, the two figure checks run on the carried figures, and every finding names them
+  as its basis.
+- With another place, a carried figure is not that place's rule, so it is not applied. A check
+  runs only on figures that were looked up for the place, and the report says which checks did
+  not run, naming the place from the list.
+- With no place stated, no figure is applied (lab W-12): neither figure check runs, their
+  coverage gives the reason `no_place`, and the report's `withoutPlace.usLines` counts the lines
+  the US figures would have given. `WITHOUT_PLACE` is the one switch back: `us-figures` applies
+  the US figures to a plan that states no place, and the report's place is then `assumed`. Who
+  the figure checks are for is the owner's decision (COD-1).
 - A looked-up figure is always marked `ai-found`, and the report adds a line saying some
   figures were found online and have not been checked.
 
@@ -89,6 +104,7 @@ reads and writes files, so it is a separate entry: `@ongrid/rules/store`.
 | `src/checks/catalogue.ts` | The two rules, the figures each one uses, and what the checks leave out |
 | `src/checks/size.ts`, `escape.ts` | The two checks |
 | `src/checks/check.ts` | The full check: the core's plan checks and these, in one report |
+| `src/checks/place.ts` | The place a check is for: the caller's, the plan's, or none (COD-3) |
 | `src/notes` | The report as notes a person reads on the plan |
 | `src/sheet` | The build location and the rules sheet a lookup produces, as schemas |
 | `src/lookup` | The prompt of a rules lookup. Running a lookup is not part of this package yet |

@@ -25,8 +25,11 @@ const result = inspectPlan(raw, { country: 'ES' })
 ```
 
 `inspectPlan(raw, options?)` takes the plan as parsed JSON, or as its text, and the options of
-the full check (`country`, `figures`). It reads the plan, runs every check, and returns one
-record. It never throws: a check that fails inside Grid becomes a line
+the full check (`country`, `figures`, `withoutPlace`). It reads the plan, runs every check, and
+returns one record. The figure checks are for the place the plan states (`site.country`), or
+the `country` given here in its place: a name or a code on Grid's list, such as `US`, `USA`,
+`United States` or `Spain` (COD-3). With no place stated, no figure is applied; see "The
+place". It never throws: a check that fails inside Grid becomes a line
 (`plan/check-failed`), and the other checks still run. Run over the 3,000 damaged plans and
 442 sound plans of the scoreboard, it gives 0 exceptions and 0 failed checks
 (`scoreboard/__tests__/frontDoor.test.ts`).
@@ -52,6 +55,8 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `coverage` | What each check looked at and skipped, one entry per check Grid has, whether it ran or not. See "What each check looked at". Empty when the plan was refused. |
 | `figures` | Every figure a check applied, with its document, edition, clause, place, day read, status and `readFor`, the kind of building it was read for (`homes` for every figure today). The figures of a check that looked at nothing are not listed. |
 | `limits` | What these checks never look at, whatever the plan. The same lines every time. |
+| `place` | The place the figure checks were for (COD-3): `country`, its two-letter code; `name`, Grid's name for it; `from`, `request` (the caller's `country`), `plan` (`site.country`) or `assumed` (`withoutPlace: "us-figures"`). `null` when no place is stated, and then no figure was applied; `null` too when the plan was refused. |
+| `withoutPlace` | Only on a plan that was read and states no place: `{ usLines }`, how many lines the figure checks would have given with the US figures. |
 
 ### A line
 
@@ -130,7 +135,7 @@ A line's number is its place in `lines`, counting from 1. `grid check` prints it
 and keeps it when only one floor is shown (`--floor`), so a floor's lines can skip numbers.
 `grid draw` and `grid_view` mark each line with the same number on the part it is about, and
 list them under the drawing (MSG-8). The numbers follow the record the drawing was made from:
-`grid check --country` can add lines, and with them change the numbers after them.
+`grid check --country` can add or take away lines, and with them change the numbers after them.
 
 ### One wording per code
 
@@ -287,8 +292,8 @@ label.
 | `floor/not-checked-doors-not-drawn` | On "{floor}", these doors or windows could not be drawn, so they and what rests on them were not checked: "{id}", … | doors and windows that can be drawn |
 | `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
-| `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
-| `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
+| `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {place} | figures for the place, looked up and given to the check |
+| `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {place} | figures for the place, looked up and given to the check |
 | `plan/not-checked-sizes-for-building` | Room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
 | `plan/not-checked-escapes-for-building` | Escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
 | `floor/not-checked-sizes-for-building` | On "{floor}", room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
@@ -339,6 +344,7 @@ found in them. A `reason` is one of:
 
 | Reason | Why |
 |---|---|
+| `no_place` | no place is stated, so no figure was applied |
 | `not_for_building` | the figures were read for homes (houses and flats people live in), and the plan says this is {an office}: the plan, or that floor, is a kind of building the check does not run in (CNT-5) |
 | `no_figures_for_place` | no figures for the place the plan is for: the ones here are from US model codes |
 | `no_rooms` | no rooms on the floor |
@@ -377,10 +383,51 @@ each total (`net`, `circulation`, `grossInternal`, `grossExternal`, `circulation
 A total that left a room out names it, in `leftOut`, in its text ("not proven: leaves out
 "Kitchen", which could not be measured") and in a note. The CSV has a `state` column.
 
+## The place
+
+The figure checks apply figures from building codes, and a figure holds only where its code
+does (COD-3). The plan states where it will be built in `site.country`
+([plan-file.md](plan-file.md#the-place)); `grid check --country` and `grid_check`'s `country`
+name another for one check, and that one is used. A place is a country's name or its two- or
+three-letter code (ISO 3166-1) on Grid's list (`packages/floorplan/src/types/places.ts`), in any
+case, with spaces round it: `US`, `usa`, ` United States ` and `U.S.A.` are one place. Anything
+else is refused, by the argument or the field and never by the text: `the moon` given as
+`country` is refused (exit code 2 from `grid check`, an error result from the tool), and in a
+plan file it is left out with a `plan/value-left-out` line at `site.country`, the rest of the
+site kept. Every word a report says about the place is Grid's own name for it, from the list.
+
+- **The US.** The figure checks run on the figures carried here, from US model codes.
+- **Another place.** No carried figure is applied; a check runs on figures looked up for the
+  place, and `plan/not-checked-sizes-for-place` and `plan/not-checked-escapes-for-place` say
+  which did not run, naming the place from the list.
+- **No place stated.** No figure is applied (lab W-12): neither figure check runs, `place` is
+  `null`, and `withoutPlace.usLines` counts the lines the US figures would have given. Their
+  `coverage` skips every room with the reason `no_place`. No line is added for it, so the short
+  report of a small plan still fits (see below); the first line after the label says it.
+  `withoutPlace: "us-figures"` (or `WITHOUT_PLACE` in `packages/rules/src/checks/place.ts`)
+  applies the US figures to a plan that states no place, as before COD-3, with `place.from`
+  `assumed`.
+
+- **The place and the kind of building.** A figure applies only where both hold: the place is
+  one Grid carries figures for, and the building (or its floor) is a kind they were read for, or
+  the plan does not say (CNT-5). Each says so its own way: the place in the line after the
+  label and in `place`, the kind of building in its own `not-checked` lines
+  (`plan/not-checked-sizes-for-building`, …) and the coverage reason `not_for_building`. The US
+  stated for an office gives "Place: United States, from the plan; no figure was applied: its
+  figures were read for homes, and the plan says this is an office." and the two
+  `…-for-building` lines; no place stated for an office gives the no-place line and the same two.
+
+The first line of every report after the label says the place and the figures applied:
+"Place: United States, from the plan; figures from US model codes, read for homes." ("from
+--country" in `grid check`, "from the country argument" in `grid_check`), or "Place: Spain, from
+the plan; Grid carries no figures for it, so none was applied.", or with no place "No place is
+stated, so no figure was applied: the US figures would have given 2 lines. State it in the plan
+as site.country, or give --country."
+
 ## The short report, and seen notes
 
 `grid check` and `grid_check` print a short report by default, sized to the plan (MSG-10): the
-label first; the lines, each with what was found and needed and the fix; the figures those
+label first, then the place (COD-3); the lines, each with what was found and needed and the fix; the figures those
 lines used, each as the figure used here with its document, edition, clause and status; what
 each check looked at, in counts (the rooms looked at by at least one check, each check's count,
 and the parts it could not look at, with the reason); and one line on what the whole report
@@ -388,9 +435,12 @@ adds. A check that looked at nothing still says "Nothing was checked for …". `
 and `grid_check` with `full: true` add the checks run, every figure the checks applied, each
 check's parts one by one, and what these checks never look at (`limits`). The data is the same
 either way: `grid check --json` gives the whole check, and `grid_check`'s data keeps `coverage`
-and `limits`. For the lab's 62.65 m² flat the short text is 1,201 bytes from `grid check` and 1,184
-from `grid_check` (`packages/cli/src/command/__tests__/shortReport.test.ts`): 988 and 973 without
-the line saying the plan states no ground level (LVL-4).
+and `limits`. For the lab's 62.65 m² flat, which states no place, the short text is 1,196 bytes
+from `grid check` and 1,179 from `grid_check`, 984 and 969 without the line saying the plan
+states no ground level (LVL-4); with the US stated it is 1,200 from `grid check`, 988 without
+that line (`packages/cli/src/command/__tests__/shortReport.test.ts`). The figure checks that did
+not run because no place is stated are said together in one line of the counts, and when every
+check that used figures read them for one kind of building, the place line says it.
 
 A person can set a note aside as seen, with a reason and the name or role they give, through
 `grid check --seen <n> --reason <text> --by <name>` or `grid_mark_seen`. A seen note is never left
@@ -536,7 +586,7 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `ceiling_height`, under the heading "The person's own figures: theirs, not from any code or
   standard.") and `open`. Each wish has a `level` (`must`, `should`, `avoid`) and a `source`
   (`given`, which needs `quote`, or `assumed`). A figure Grid does not know is refused with the
-  ones it knows. Left without `brief`, it reads the brief and writes nothing. With WRT-6's `grid_square_scan` and CNT-9's three reading tools, the tools are 27.
+  ones it knows. Left without `brief`, it reads the brief and writes nothing. With WRT-6's `grid_square_scan`, CNT-9's three reading tools and WRT-8's `grid_diff` and `grid_mark_start`, the tools are 29.
 - Every change to the plan, and `grid_write_rooms`, adds `brief` to its receipt: `{ file,
   problem, lines }`, each line met, missed, open or differs, with `asked` and `drawn` in words.
   The text adds the lines, at most 12, missed first. A brief that can't be read is one line and
@@ -547,6 +597,45 @@ A change that would add a problem that leaves a part out is refused, and nothing
   it, never a refusal.
 - No new code in the result record: the brief's lines are in the change receipts, not in
   `grid_check`. `resultVersion` stays 1.
+
+### 2026-11-22: what a change did, by what stands where (WRT-8)
+
+- New tool `grid_diff`, second in the list after `grid_compare`: the plan against a start marker
+  or its last commit. Data: `since` (`kind` `marker` or `git`, `name`, `at`, `commit`),
+  `verdict`, `sameBuilding`, `roomsFirst`, `shift`, `renamed` (`count`, `walls`, `openings`,
+  `rooms`), `issues` (`code`, `message`, `entities`), `rooms` (`room`, `name`, `status`
+  `unchanged`, `changed`, `moved`, `added` or `removed`, `before`, `after`, `moved`, `text`),
+  `changes` (`text`, `entities`, `rooms`), `stayed` (`opening`, `text`), `scope` (`checked`,
+  `rooms`, `outside`) and `picture` (`floor`, `width`, `height`, `pxPerMetre`, or null). Issue
+  codes: `door_joins_other_rooms`, `opening_crossed`, `room_unclosed`, `dangling_host`,
+  `invalid_base`, `invalid_head`, `unknown_target`, `note_added`, `note_gone`,
+  `suspected_id_churn`. They are the comparison's own, not lines of the result record.
+- New tool `grid_mark_start`, before `grid_mark_seen`: writes `plan.markers.json` beside the plan
+  and never the plan. Data: `written`, `name`, `at`, `replaced`, `removed`, `markers`. With
+  WRT-6's and CNT-9's tools, the tools are 28.
+- `diffPlans` in `@ongrid/floorplan` reads a room's walls as a ring: the same walls from another
+  wall, or the other way round, are no change (lab U-4). Walls in another order still are.
+
+### 2026-11-22: the place stored with the plan (COD-3)
+
+- The plan may state its place, `site.country`: a country's name or its two- or three-letter
+  code on Grid's list. `grid_check` reads it on its own; its `country` argument names another
+  for one call and now takes the same names and codes (`US`, `USA`, `United States`, `Spain`),
+  up to 60 characters. A place not on the list is refused, naming the argument, never the text.
+- **With no place stated, no figure is applied.** Before, the US figures applied to every plan
+  that named no country. Now neither figure check runs: no `room/too-small` or escape line, no
+  figure in `figures`, and their `coverage` skips every room with the new reason `no_place`.
+  Pass `country: "US"`, or write `site.country`, for the US figures.
+- The record and `grid_check`'s data gain `place` (`{ country, name, from }`, or `null`) and,
+  with no place, `withoutPlace: { usLines }`, the lines the US figures would have given.
+- The text's second line, after the label, says the place and the figures applied, or that none
+  was and how many lines the US figures would have given.
+- `plan/not-checked-sizes-for-place` and `plan/not-checked-escapes-for-place` name the place by
+  Grid's name for it ("this plan is for Spain", "for the United Kingdom"), never as it was given
+  ("for ES").
+- The short report says the two figure checks that did not run for want of a place in one line,
+  and the kind of building the figures were read for in the place line, in place of the line
+  "Both checks that use figures read them for …".
 
 ### 2026-11-22: facts of the person's own, and asking across them (CNT-9)
 

@@ -33,8 +33,15 @@ const sideName = (side: DoorFace): string =>
 
 const sideKey = (side: DoorFace): string => ('room' in side ? `0${side.room}` : 'outside' in side ? '1' : '2')
 
-/** What each door and doorless opening of the plan joins, by id. Windows join nothing. */
-function doorSides(plan: FloorPlan): Map<string, { floor: string; sides: [DoorFace, DoorFace] }> {
+/**
+ * What lies on each side of each door and doorless opening of the plan, by id; of every window
+ * too with `windows` (WRT-8: the rooms an opening is in). Windows join nothing.
+ */
+export function openingFaces(plan: FloorPlan, options: { readonly windows?: boolean } = {}): Map<string, { floor: string; sides: [DoorFace, DoorFace] }> {
+  return doorSides(plan, options.windows === true)
+}
+
+function doorSides(plan: FloorPlan, windows = false): Map<string, { floor: string; sides: [DoorFace, DoorFace] }> {
   const found = new Map<string, { floor: string; sides: [DoorFace, DoorFace] }>()
   for (const floor of planFloors(plan)) {
     const { storey, leftOut } = drawable(planForFloor(plan, floor.id))
@@ -42,7 +49,7 @@ function doorSides(plan: FloorPlan): Map<string, { floor: string; sides: [DoorFa
     const outlines = roomOutlines(storey, index, leftOut.rooms)
     const outside = outsideTest(storey, index)
     for (const opening of storey.openings) {
-      if (opening.type === 'window') continue
+      if (opening.type === 'window' && !windows) continue
       const wall = index.wallsById.get(opening.wall)
       if (wall === undefined) continue
       const along = opening.offset + opening.width / 2

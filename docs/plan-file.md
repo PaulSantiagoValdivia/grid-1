@@ -37,6 +37,7 @@ file never reaches the exports with its letters turned into question marks. A fi
 | a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
 | an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
+| the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
 | walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
@@ -591,7 +592,7 @@ before, with no north and y up the page.
 | `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
 | `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
 | `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
-| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin` |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for |
 
 North is drawn and written where the plan states it:
 
@@ -645,6 +646,37 @@ front stays the part it names, and `yAxis` is kept.
 |---|---|
 | `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
+
+## The place
+
+The figure checks apply figures from building codes, and a figure holds only where its code
+does. So the plan says where it will be built, in `site.country` (COD-3):
+
+```json
+{ "site": { "country": "United States" } }
+```
+
+The place is a country's name or its two- or three-letter code (ISO 3166-1), as Grid's own list
+has it (`packages/floorplan/src/types/places.ts`): every country and territory with a code, its
+short English name, and a few other names people use, such as `USA`, `United States of America`,
+`UK`, `Great Britain`, `Holland` or `Ivory Coast`. Capitals, accents, dots and the spaces round
+it do not matter: `US`, `usa`, ` United States ` and `U.S.A.` are one place. A name that could
+mean two places (`Congo`, `Korea`) and a part of a country (`England`) are not on the list:
+write the code. It is kept as written, and every report names it by Grid's name for it, never
+by the text in the file. Anything else is not a place: the plan is read without it, the rest of
+the `site` kept, and `grid check` says so with a `plan/value-left-out` line at `site.country`
+that names the field and never repeats the text.
+
+- **The US.** The figure checks run on the figures carried here, from US model codes.
+- **Another place.** No US figure is applied; `grid check` says which checks did not run for
+  want of figures for the place.
+- **No place stated.** No figure is applied, and the report says so on its first line after the
+  label, with how many lines the US figures would have given.
+
+`grid check --country` and `grid_check`'s `country` name another place for one check, in place
+of the plan's; the report says which was used ("from the plan", "from --country"). `grid write`
+keeps `site` as the file has it, so rooms text, which holds the walls, rooms and openings, loses
+nothing of the place. The sheet does not print it.
 
 ## Where a value came from
 

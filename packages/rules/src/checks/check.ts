@@ -17,6 +17,8 @@ import { allSkipped, coverageOf, heldCoverage, LOOKS_AT, planCheckScopes, type F
 import { escapeCheck, hasEscapeFigures, type EscapeFigures } from './escape'
 import { buildingKindsText, resolveFigure, type FigureKey } from './figures'
 import { messages, type FigureSubject } from './messages'
+import { countryInText } from '@ongrid/floorplan/types/places'
+import { placeFor, type WithoutPlace } from './place'
 import { sizeCheck } from './size'
 import type { AppliedFigure, CheckCoverage, FindingCode, NotChecked, RuleFigures, RuleFinding, RulesReport } from './types'
 import { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE } from './types'
@@ -28,8 +30,8 @@ const GROUP_OF = (code: FindingCode): number =>
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
 
-/** What a skipped check is called in its notice. */
-const SUBJECT: Record<FigureRuleId, FigureSubject> = {
+/** What a skipped check is called in its notice, and in a short report's coverage (COD-3). */
+export const SUBJECT: Record<FigureRuleId, FigureSubject> = {
   'habitable-room-area': 'Room sizes',
   'escape-opening': 'Escape openings'
 }
@@ -38,17 +40,34 @@ export interface CheckOptions {
   /** Looked-up figures. A missing, non-finite or implausible one is ignored. */
   readonly figures?: RuleFigures
   /**
-   * Where the plan will be built, as a two-letter country code (ISO 3166-1, such as `US`
-   * or `ES`). The figures carried here are from US model codes: with another country
-   * stated, a check only runs on figures that were looked up, and says so when it has none.
-   * Not stated, the carried figures apply and every finding names them as its basis.
+   * Where the plan will be built, for this check: a country's name or its two- or three-letter
+   * code on Grid's list (`US`, `USA`, `United States`, `ES`, `Spain`), in place of the plan's
+   * own `site.country` (COD-3). One not on the list throws `PlaceRefused`. The figures carried
+   * here are from US model codes: with another country, a check only runs on figures that were
+   * looked up, and says so when it has none.
    */
   readonly country?: string
+  /**
+   * With no place stated, in the plan or here: `no-figures` (the default, `WITHOUT_PLACE`) applies
+   * no figure, and the report says how many lines the US figures would have given; `us-figures`
+   * applies the US figures, as before COD-3, and the report says the place was assumed.
+   */
+  readonly withoutPlace?: WithoutPlace
   /**
    * MSG-5: the walls, rooms and openings the reader left out of the plan (`readPlanParts`). A
    * finding that rests on one is held back, as one on a part the drawing check leaves out is.
    */
   readonly leftOut?: readonly LeftOutPart[]
+}
+
+/** The findings only the figure checks give, and the notices only they give, to count what the US figures would have given. */
+const FIGURE_FINDINGS: ReadonlySet<FindingCode> = new Set(['room_too_small', ...ESCAPE_CODES])
+const FIGURE_NOTICES: ReadonlySet<NotChecked['reason']> = new Set(['no_use', 'above_escape_storeys'])
+
+/** COD-3: how many lines the figure checks give on this plan with the US figures. */
+function usLinesOf(plan: FloorPlan, leftOut: readonly LeftOutPart[]): number {
+  const us = checkLocalRules(plan, { country: 'US', leftOut })
+  return us.findings.filter((f) => FIGURE_FINDINGS.has(f.code)).length + us.notChecked.filter((n) => FIGURE_NOTICES.has(n.reason)).length
 }
 
 /** 'local-lookup' when a check applied a looked-up figure. */
@@ -57,7 +76,10 @@ export function basisOf(figures: readonly AppliedFigure[]): RulesReport['basis']
 }
 
 export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): RulesReport {
-  const resolve = (key: FigureKey): AppliedFigure | null => resolveFigure(key, options.figures, options.country)
+  // COD-3: the caller's place, else the plan's; with none, no figure is applied.
+  const place = placeFor(plan, options)
+  const skippedFor = place === null ? 'no_place' : 'no_figures_for_place'
+  const resolve = (key: FigureKey): AppliedFigure | null => (place === null ? null : resolveFigure(key, options.figures, place.country))
   const minRoomArea = resolve('habitableRoomMinArea')
   const escape: EscapeFigures = {
     minArea: resolve('escapeOpeningMinArea'),
@@ -130,7 +152,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
           message: messages.aboveEscapeStoreys(floorName, above.length)
         })
       }
-    } else scopes['escape-opening'].push([floor.id, allSkipped(storey, 'no_figures_for_place')])
+    } else scopes['escape-opening'].push([floor.id, allSkipped(storey, skippedFor)])
     if (!reads('habitable-room-area')) {
       // Skipped above, with the reason.
     } else if (minRoomArea !== null) {
@@ -139,7 +161,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
       findings.push(...sizes.findings)
       notChecked.push(...sizes.notChecked)
       scopes['habitable-room-area'].push([floor.id, sizes.scope])
-    } else scopes['habitable-room-area'].push([floor.id, allSkipped(storey, 'no_figures_for_place')])
+    } else scopes['habitable-room-area'].push([floor.id, allSkipped(storey, skippedFor)])
   }
   // MSG-5: an escape note held back goes on its floor's "could not be drawn" notice, after the
   // plan checks' own.
@@ -187,9 +209,10 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     }
   }
   // A check with no figure for the place did not run: said once, about the whole plan, unless the
-  // plan's kind of building left it out on every floor already.
+  // plan's kind of building left it out on every floor already. With no place, the report says so
+  // at its top instead (`withoutPlace`, COD-3), and the coverage gives why.
   for (const rule of FIGURE_RULES) {
-    if (ran[rule.id]) continue
+    if (ran[rule.id] || place === null) continue
     if (notFor[rule.id].length === floors.length) continue
     notChecked.push({
       reason: 'no_figures_for_place',
@@ -197,7 +220,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
       floor: '',
       rooms: [],
       openings: [],
-      message: messages.noFiguresForPlace(SUBJECT[rule.id], (options.country ?? '').trim().toUpperCase())
+      message: messages.noFiguresForPlace(SUBJECT[rule.id], countryInText(place.country))
     })
   }
 
@@ -235,6 +258,8 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     basis,
     label: GENERAL_GUIDANCE_LABEL,
     ...(basis === 'local-lookup' ? { lookupNotice: LOOKUP_NOTICE } : {}),
+    place,
+    ...(place === null ? { withoutPlace: { usLines: usLinesOf(plan, options.leftOut ?? []) } } : {}),
     rules: [...base.rules, ...FIGURE_RULES].filter((rule) => looked.has(rule.id)),
     findings: findings.sort(
       (a, b) =>
