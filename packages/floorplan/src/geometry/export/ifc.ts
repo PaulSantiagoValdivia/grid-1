@@ -40,6 +40,7 @@ import type { WallEnds } from '../wall'
 import { wallAxis } from '../wall'
 import { wallJoints } from '../joints'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
+import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
 
 export interface IfcOptions {
   /**
@@ -57,6 +58,11 @@ export interface IfcOptions {
    * without one, `IFC_DEFAULT_TIMESTAMP` is used.
    */
   readonly timestamp?: Date
+  /**
+   * HND-6: the parts of the plan this file leaves out, written as the building's property set
+   * `Grid_LeftOut`. None, and the file is as it was.
+   */
+  readonly leftOut?: readonly LeftOutPart[]
 }
 
 /** The project identity used when the caller supplies none. */
@@ -1224,6 +1230,45 @@ function writeItems(building: Context, storeys: readonly Storey[]): void {
   }
 }
 
+/** The property names of `Grid_LeftOut`, by kind: a count and the names. */
+const LEFT_OUT_PROPERTIES: Readonly<Record<LeftOutKind, readonly [string, string]>> = {
+  wall: ['Walls', 'WallIds'],
+  room: ['Rooms', 'RoomIds'],
+  opening: ['Openings', 'OpeningIds'],
+  item: ['Fixtures', 'FixtureIds'],
+  stair: ['Stairs', 'StairIds'],
+  floor: ['Floors', 'FloorIds']
+}
+
+/**
+ * HND-6: what the file leaves out of the plan, as a property set on the building, the place a BIM
+ * tool shows for the whole model. `Parts` is how many, `Note` says so in words, and each kind
+ * has its count and its ids (JSON strings, then a STEP string like every other text here). The
+ * set's name is Grid's own: `Pset_` names are the standard's. Written last, so that a file that
+ * leaves nothing out is as it was.
+ */
+function writeLeftOut(c: Context, building: number, leftOut: readonly LeftOutPart[]): void {
+  if (leftOut.length === 0) return
+  const value = (name: string, nominal: string): number => c.w.add('IFCPROPERTYSINGLEVALUE', str(name), NULL, nominal, NULL)
+  const properties = [
+    value('Parts', `IFCINTEGER(${int(leftOut.length)})`),
+    value('Note', `IFCTEXT(${str(leftOutSummary(leftOut))})`)
+  ]
+  for (const { kind, parts } of leftOutByKind(leftOut)) {
+    const [count, ids] = LEFT_OUT_PROPERTIES[kind]
+    properties.push(value(count, `IFCINTEGER(${int(parts.length)})`), value(ids, `IFCTEXT(${str(partNames(parts).join(', '))})`))
+  }
+  const set = c.w.add(
+    'IFCPROPERTYSET',
+    str(c.guid('left-out', 'set')),
+    ref(c.owner),
+    str('Grid_LeftOut'),
+    str('Parts of the plan Grid left out of this file'),
+    refs(properties)
+  )
+  c.w.add('IFCRELDEFINESBYPROPERTIES', str(c.guid('left-out', 'relation')), ref(c.owner), NULL, NULL, refs([building]), ref(set))
+}
+
 /** The id the plan stores (QAR-5), else the caller's, else the default. */
 function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
   const stored: unknown = plan.projectId
@@ -1330,6 +1375,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeSlabs(c, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
+  writeLeftOut(c, building, options.leftOut ?? [])
 
   return w.toString([
     `FILE_DESCRIPTION((${str('ViewDefinition [CoordinationView_V2.0]')}),${str('2;1')});`,

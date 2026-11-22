@@ -7,9 +7,19 @@
  *
  * Every format writes the plan's parts in id order (QAR-5), so the same building gives the
  * same bytes whatever order its file lists them in.
+ *
+ * HND-6: every export also says what it leaves out (`leftOut`), and the file says it too, each
+ * format in its own way (see `geometry/export/leftOut.ts`). `empty` says the file holds nothing
+ * of the plan: the library still writes it, and the command and the tool server refuse it.
  */
 import type { FloorPlan } from '../types/floorplan'
+import type { ReadFault } from '../types/readParts'
 import { buildFloorPlan, buildScene, inIdOrder, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj } from '../geometry'
+import type { LeftOutPart } from '../geometry/export/leftOut'
+import { exportContents } from './leftOut'
+
+export type { LeftOutKind, LeftOutPart } from '../geometry/export/leftOut'
+export { countText, kindsText, leftOutByKind, partName, partNames } from '../geometry/export/leftOut'
 
 export type ExportFormat = 'dxf' | 'ifc' | 'obj' | 'glb'
 
@@ -34,12 +44,18 @@ export interface PlanExportOptions {
   /** The floor shown in the views; a missing or stale id falls back to the lowest floor. */
   readonly floorId?: string | null
   readonly now: Date
+  /** What the reader did with the plan file (MSG-6): the parts it left out are named too. */
+  readonly faults?: readonly ReadFault[]
 }
 
 export interface PlanExport {
   readonly data: string | Uint8Array
   readonly fileName: string
   readonly filter: { name: string; extensions: string[] }
+  /** HND-6: the parts of the plan this file leaves out, which the file names too. */
+  readonly leftOut: readonly LeftOutPart[]
+  /** HND-6: the file holds no wall, room or fixture of the plan. */
+  readonly empty: boolean
 }
 
 function slug(value: string): string {
@@ -62,18 +78,22 @@ export function exportFileName(projectName: string, format: ExportFormat, floorN
 
 export function exportPlan(plan: FloorPlan, format: ExportFormat, options: PlanExportOptions): PlanExport {
   const filter = { name: FILTER_NAMES[format], extensions: [format] }
+  const ordered = inIdOrder(plan)
   if (format === 'ifc') {
-    const data = toIfc(plan, { projectId: options.projectId, projectName: options.projectName, timestamp: options.now })
-    return { data, fileName: exportFileName(options.projectName, format, null), filter }
+    const contents = exportContents(ordered, planFloors(ordered).map((floor) => floor.id), options.faults)
+    const data = toIfc(plan, { projectId: options.projectId, projectName: options.projectName, timestamp: options.now, leftOut: contents.leftOut })
+    return { data, fileName: exportFileName(options.projectName, format, null), filter, ...contents }
   }
 
   const floorId = resolveFloor(plan, options.floorId)
-  const storey = planForFloor(inIdOrder(plan), floorId)
-  const data = format === 'dxf' ? toDxf(buildFloorPlan(storey))
-    : format === 'obj' ? toObj(buildScene(storey))
-    : toGlb(buildScene(storey))
+  const contents = exportContents(ordered, [floorId], options.faults)
+  const storey = planForFloor(ordered, floorId)
+  const note = { leftOut: contents.leftOut }
+  const data = format === 'dxf' ? toDxf(buildFloorPlan(storey), note)
+    : format === 'obj' ? toObj(buildScene(storey), note)
+    : toGlb(buildScene(storey), note)
   const floors = planFloors(plan)
   const floor = floors.find((f) => f.id === floorId)
   const floorName = floors.length > 1 ? (floor?.name || floorId) : null
-  return { data, fileName: exportFileName(options.projectName, format, floorName), filter }
+  return { data, fileName: exportFileName(options.projectName, format, floorName), filter, ...contents }
 }

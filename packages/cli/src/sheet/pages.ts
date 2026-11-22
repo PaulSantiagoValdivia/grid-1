@@ -8,7 +8,7 @@
 import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geometry'
 import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { findingReadFor, GENERAL_GUIDANCE_LABEL, readForSentence } from '@ongrid/rules'
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 import { pictureView, undecidedDoorsOf, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
@@ -18,7 +18,9 @@ import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { quoted } from '../fs/projectFiles'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
+import { openingSchedule, roomSchedule } from '../quantities/schedule'
 import { surveyPlan } from '../quantities/survey'
+import { sqFt } from '../quantities/units'
 
 export type SheetLayout = 'client' | 'check'
 export const SHEET_LAYOUTS: readonly SheetLayout[] = ['client', 'check']
@@ -245,11 +247,14 @@ function issueLine(issue: { severity: string; entity: string; id: string; messag
 }
 
 /** A finding, by the ids of the rooms and openings it names, as a drawing problem is by its own. */
-export function findingLine(finding: { rooms: readonly string[]; openings: readonly string[]; message: string }): string {
+export function findingLine(finding: Parameters<typeof findingReadFor>[0] & { rooms: readonly string[]; openings: readonly string[]; message: string }): string {
   const ids = (one: string, list: readonly string[]): string[] =>
     list.length === 0 ? [] : [`${list.length === 1 ? one : `${one}s`} ${list.map(quoted).join(', ')}`]
   const named = [...ids('room', finding.rooms), ...ids('opening', finding.openings)]
-  return named.length === 0 ? `Finding: ${finding.message}` : `Finding, ${named.join(', ')}: ${finding.message}`
+  // COD-2: a finding that used a figure says which kind of building the figure was read for.
+  const kinds = findingReadFor(finding)
+  const message = kinds.length === 0 ? finding.message : `${finding.message}. ${readForSentence(kinds)}`
+  return named.length === 0 ? `Finding: ${message}` : `Finding, ${named.join(', ')}: ${message}`
 }
 
 function noticeLine(notice: { message: string }): string {
@@ -302,7 +307,49 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
       notes: shown,
     }
   })
-  return [summary, ...pages]
+  return [summary, ...pages, ...scheduleBodies(loaded, name)]
+}
+
+/**
+ * ARE-12: the room schedule and the door and window schedule, as tables on the check set, from
+ * the same rows as `grid_schedule` (of=rooms, of=openings). The totals cover all floors, and each
+ * floor's total names its floor.
+ */
+function scheduleBodies(loaded: LoadedPlan, name: string): Body[] {
+  const survey = surveyPlan(loaded.plan)
+  const rooms = roomSchedule(survey)
+  const openings = openingSchedule(survey)
+  const several = rooms.floors.length > 1
+  const roomRows: SheetRow[] = rooms.rows.map((r) => ({
+    name: `${r.number}. ${r.name}`,
+    detail: [r.use ?? 'use not said', r.height === null ? 'height not known' : `${metresText(r.height)} m high`, ...(several ? [r.floorName] : [])].join(', '),
+    area: r.area === null ? 'not measured' : areaText(r.area, 1),
+  }))
+  for (const t of rooms.floors) if (several) roomRows.push({ name: `Total, ${t.floorName}`, detail: `${t.rooms} rooms`, area: areaText(t.area, 1) })
+  const total = rooms.total
+  const roomTable: SheetTable = {
+    heading: 'Room schedule / m²',
+    rows: roomRows,
+    total: { name: several ? 'Total, all floors' : 'Total', detail: `${total.rooms} rooms, ${Math.round(sqFt(total.area))} sq ft`, area: areaText(total.area, 1) },
+    note: rooms.rules[0]!,
+  }
+  const openingRows: SheetRow[] = openings.rows.map((r) => ({
+    name: `${r.number}. ${r.type} ${r.id}`,
+    detail: `${metresText(r.width)} × ${metresText(r.height)} m${r.type === 'window' ? `, sill ${metresText(r.sill)} m` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}`,
+    area: '1',
+  }))
+  const c = openings.counts
+  const openingTable: SheetTable = {
+    heading: 'Door and window schedule / count',
+    rows: openingRows,
+    total: { name: 'In all', detail: `${c.door} doors, ${c.window} windows, ${c.opening} doorless openings, each once`, area: String(c.door + c.window + c.opening) },
+    note: openings.rule,
+  }
+  const body = (title: string, table: SheetTable): Body => ({
+    kind: 'summary', floor: null, topLine: `${name} / ${title}`, title, subtitle: null,
+    paragraphs: [], figures: [], table, picture: null, notes: [],
+  })
+  return [body('Room schedule', roomTable), body('Door and window schedule', openingTable)]
 }
 
 export function sheetPages(loaded: LoadedPlan, words: SheetWords | null, layout: SheetLayout, options: SheetOptions): Sheet {

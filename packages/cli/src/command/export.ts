@@ -8,10 +8,20 @@
  */
 import path from 'path'
 import { planFloors, resolveFloor } from '@ongrid/floorplan/geometry'
-import { EXPORT_FORMATS, exportFileName, exportPlan, isExportFormat, type ExportFormat, type PlanExport } from '@ongrid/floorplan/export'
+import {
+  EXPORT_FORMATS,
+  exportFileName,
+  exportPlan,
+  isExportFormat,
+  kindsText,
+  partNames,
+  type ExportFormat,
+  type LeftOutPart,
+  type PlanExport
+} from '@ongrid/floorplan/export'
 import { writeProjectExport } from '../export/projectExports'
 import { PathRefused, type Project } from '../fs/projectFiles'
-import { floorOption, loadPlan, type LoadedPlan } from './plan'
+import { floorOption, loadPlan, PlanRefused, type LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
 export const EXPORT_OPTIONS: OptionSpecs = {
@@ -136,11 +146,55 @@ export interface MadeExport extends PlanExport {
   readonly name: ExportName
 }
 
-/** `planFile` is the path as given: a plan reached through a link is named after the link. */
+/** The most names a line on the left-out parts gives; the rest are counted. */
+export const LEFT_OUT_NAMES_SHOWN = 5
+
+/** `"a", "b" and 3 more`: a kind's names, each once, the first few. */
+function someNames(parts: readonly LeftOutPart[]): string {
+  const names = partNames(parts)
+  const shown = names.slice(0, LEFT_OUT_NAMES_SHOWN).join(', ')
+  return names.length > LEFT_OUT_NAMES_SHOWN ? `${shown} and ${names.length - LEFT_OUT_NAMES_SHOWN} more` : shown
+}
+
+/**
+ * HND-6: the line that says what an export leaves out, or null when it leaves out nothing. The
+ * same line goes to standard error from `grid export` and into `grid_export`'s answer.
+ */
+export function leftOutText(leftOut: readonly LeftOutPart[]): string | null {
+  if (leftOut.length === 0) return null
+  const read = leftOut.filter((part) => part.place !== null)
+  const drawn = leftOut.filter((part) => part.place === null)
+  const said = [
+    drawn.length > 0 ? `${kindsText(drawn)} that can't be drawn (${someNames(drawn)})` : null,
+    read.length > 0 ? `${kindsText(read)} left out when the plan was read (${someNames(read)})` : null
+  ].filter((text) => text !== null)
+  return `Left out ${leftOut.length} part${leftOut.length === 1 ? '' : 's'} of the plan, and the file says so: ${said.join('; ')}. grid check says why.`
+}
+
+/**
+ * HND-6: an export that would hold nothing of the plan is refused, so an empty file that looks
+ * whole is never written. Says which floor, when the plan has several, and what is left out.
+ */
+function nothingToExport(loaded: LoadedPlan, planFile: string, format: ExportFormat, made: PlanExport, floorId: string | undefined): string {
+  const several = format !== 'ifc' && planFloors(loaded.plan).length > 1
+  // Quoted: a floor id is text from the plan file.
+  const where = several ? ` on floor ${JSON.stringify(resolveFloor(loaded.plan, floorId))}` : ''
+  const left = made.leftOut.length > 0
+    ? ` Left out: ${kindsText(made.leftOut)} (${someNames(made.leftOut)}); grid check says why.`
+    : ''
+  return `Nothing to export: ${planFile} has no wall, room or fixture that can be drawn${where}.${left} No file was written.`
+}
+
+/**
+ * `planFile` is the path as given: a plan reached through a link is named after the link. An
+ * export that would hold nothing of the plan is refused (`PlanRefused`, HND-6).
+ */
 export function exportFile(loaded: LoadedPlan, planFile: string, format: ExportFormat, request: ExportRequest): MadeExport {
   const floorId = floorOption(loaded.plan, request.floor)
   const project = projectNameOf(planFile)
-  const made = exportPlan(loaded.plan, format, { projectId: project, projectName: project, floorId, now: new Date() })
+  const options = { projectId: project, projectName: project, floorId, now: new Date() }
+  const made = exportPlan(loaded.plan, format, loaded.faults === undefined ? options : { ...options, faults: loaded.faults })
+  if (made.empty) throw new PlanRefused(nothingToExport(loaded, planFile, format, made, floorId))
   return { ...made, name: exportNameOf(planFile, format, floorNumberOf(loaded, format, floorId)) }
 }
 
@@ -153,6 +207,8 @@ export interface ExportDone {
   readonly loaded: LoadedPlan
   /** The real path written. */
   readonly written: string
+  /** HND-6: what the file leaves out of the plan, which the file names too. */
+  readonly leftOut: readonly LeftOutPart[]
   readonly note?: string
 }
 
@@ -168,7 +224,8 @@ export function exportIntoProject(project: Project, planFile: string, format: Ex
   const loaded = loadPlan(project, planFile)
   const made = exportFile(loaded, planFile, format, request)
   const written = writeBesidePlan(project, planFile, made.name.fileName, made.data)
-  return made.name.note === undefined ? { loaded, written } : { loaded, written, note: made.name.note }
+  const done = { loaded, written, leftOut: made.leftOut }
+  return made.name.note === undefined ? done : { ...done, note: made.name.note }
 }
 
 /**

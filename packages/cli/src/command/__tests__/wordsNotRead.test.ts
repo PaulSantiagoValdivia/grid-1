@@ -38,9 +38,9 @@ describe('grid check', () => {
   it('names thick on a wall, with the field meant, and a use Grid does not know', () => {
     const result = checkPlan(loadPlan(project, 'plan.json'), {})
     const text = checkText(result, 1)
-    expect(text).toMatch(/^ {2}- worth a look, wall "s": Wall "s" has a field Grid does not know, "thick"\. \[plan\/unknown-field\]$/m)
+    expect(text).toMatch(/^ {2}\d+\. worth a look, wall "s": Wall "s" has a field Grid does not know, "thick"\. \[plan\/unknown-field\]$/m)
     expect(text).toMatch(/^ {6}fix: Did you mean "thickness"\? Rename "thick" to "thickness"\./m)
-    expect(text).toMatch(/^ {2}- worth a look, room "r": Room "Office" has a use Grid does not know, "office"\. \[plan\/unknown-use\]$/m)
+    expect(text).toMatch(/^ {2}\d+\. worth a look, room "r": Room "Office" has a use Grid does not know, "office"\. \[plan\/unknown-use\]$/m)
   })
 
   it('says an empty plan is empty', () => {

@@ -12,7 +12,7 @@ import { keptDerived } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
-import { checkExportRequest, ExportWriteFailed, exportIntoProject } from '../command/export'
+import { checkExportRequest, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type From, type Mirror, type Patch } from '../edit/edits'
@@ -69,7 +69,7 @@ const exportTool: GridTool = {
   hint: 'write-file',
   description:
     'Use this when the person wants the plan as a file to open in another program: dxf for AutoCAD and other 2D CAD programs (the nearest to DWG), ifc for BIM programs such as Revit, glb or obj for 3D. '
-    + 'It writes the file into the exports folder beside the plan, replacing an earlier copy of the same export, and answers with the path it wrote. It never changes the plan. '
+    + 'It writes the file into the exports folder beside the plan, replacing an earlier copy of the same export, and answers with the path it wrote and every part of the plan the file leaves out (the file says so too). It never changes the plan, and refuses a file that would hold nothing of it. '
     + `${ROOM_NAMES_TRAVEL} `
     + 'Do not use for a picture to look at (grid_view). For a PDF to read or print, use grid_sheet; JPG is not made. The plan must be a file inside the project folder: any other path is refused.',
   args: {
@@ -77,7 +77,15 @@ const exportTool: GridTool = {
     format: { type: 'string', required: true, enum: EXPORT_FORMATS, description: 'The file format.', examples: ['dxf', 'ifc'] },
     floor: { ...FLOOR_ARG, description: 'dxf, obj and glb only: a floor id from the plan\'s "floors". The lowest floor when left out.' },
   },
-  outputSchema: objectSchema({ written: STRING, format: STRING, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
+  outputSchema: objectSchema({
+    written: STRING,
+    format: STRING,
+    leftOut: { type: 'number' },
+    leftOutParts: listSchema(
+      objectSchema({ kind: STRING, id: NULLABLE_STRING, place: NULLABLE_STRING, floor: NULLABLE_STRING, code: NULLABLE_STRING }, ['kind', 'id', 'place', 'floor', 'code'])
+    ),
+    note: { type: ['string', 'null'] },
+  }),
   run(args, context) {
     const project = projectOf(context)
     const plan = args['plan'] as string
@@ -92,9 +100,10 @@ const exportTool: GridTool = {
       const written = project.relative(done.written)
       const lines = [`Wrote ${quoted(written)} in the project folder.`]
       if (done.note) lines.push(done.note)
-      const leftOut = done.loaded.broken.size
-      if (leftOut > 0) lines.push(leftOutLine(leftOut))
-      return { text: lines.join('\n'), data: { written, format, leftOut, note: done.note ?? null } }
+      // HND-6: what this file leaves out, which the file says too.
+      const left = leftOutText(done.leftOut)
+      if (left !== null) lines.push(left)
+      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, note: done.note ?? null } }
     } catch (error) {
       if (error instanceof PathRefused || error instanceof PlanRefused || error instanceof ExportWriteFailed) throw new ToolRefusal(error.message)
       if (error instanceof UsageError) throw new ToolRefusal(asArguments(error.message))

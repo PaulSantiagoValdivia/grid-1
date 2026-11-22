@@ -229,3 +229,9 @@ golden file changed. After this merge every check passed, the two timing tests i
 - After the merge one test fails, `wordsNotRead.test.ts` "names thick on a wall…": it expects a
   line to start with "- ", and MSG-8 numbers the lines. The test and `check.ts` are as c4f773f
   has them, so it fails there too; main's later commits change that test.
+
+## Merging main again (COD-2, ARE-12, HND-6, CMD-13, QAR-7), at 3634cae
+
+- `ifc.ts` writes the stairs, then HND-6's `Grid_LeftOut` property set. A stair that cannot be laid
+  out is a part kind of its own in the left-out lists (`stair`, "Stairs" and "StairIds" in the
+  IFC), between fixtures and floors.

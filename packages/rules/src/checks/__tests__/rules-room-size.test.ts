@@ -105,6 +105,7 @@ describe('small rooms people live or sleep in', () => {
             value: 6.5,
             unit: 'm²',
             origin: 'baseline',
+            readFor: 'homes',
             status: 'ai-found',
             jurisdiction: 'US model codes',
             citations: [

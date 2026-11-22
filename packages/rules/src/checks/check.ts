@@ -129,7 +129,13 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   const coverage: CheckCoverage[] = [
     // A plan check this file does not know yet keeps no coverage, and stays listed: a test fails.
     ...base.rules.filter((rule) => Object.hasOwn(LOOKS_AT, rule.id)).map((rule) => coverageOf(rule, planScopes.get(rule.id) ?? [], findingsOf(rule.id))),
-    ...FIGURE_RULES.map((rule) => coverageOf(rule, scopes[rule.id], findingsOf(rule.id)))
+    // COD-2: a figure check that looked at something says which kind of building its figures were
+    // read for, so a pass with no finding says it too. One that looked at nothing used no figure.
+    ...FIGURE_RULES.map((rule) => {
+      const covered = coverageOf(rule, scopes[rule.id], findingsOf(rule.id))
+      const kinds = ran[rule.id] && covered.lookedAtCount > 0 ? [...new Set(RULE_FIGURES[rule.id].flatMap((key) => resolve(key)?.readFor ?? []))] : []
+      return kinds.length > 0 ? { ...covered, readFor: kinds } : covered
+    })
   ]
   const looked = new Set([
     ...coverage.filter((c) => c.lookedAtCount > 0).map((c) => c.ruleId),
