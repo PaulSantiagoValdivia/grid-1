@@ -65,6 +65,8 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `sameLevelOverlap` | tolerance | 0.5 ratio | Two floors at one level whose walls' boxes share more than this of the smaller one stand one over the other (`plan/same-level`) |
 | `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground (the level the site states, else the ground floor's) is named and is not a way out |
 | `openingBelowGround` | tolerance | 0.005 m | A door or window in an outside wall whose foot lies less than this under the site's stated ground level stands at the ground; further down, `opening/below-ground` names it |
+| `headroomLow` | limit | 1.5 m | Grid's own size, not a code figure: a room's floor with at least this much height over it, to its ceiling or the roof above it, is reported as one area (LVL-6, [areas.md](areas.md)) |
+| `headroomFull` | limit | 2.2 m | Grid's own size, not a code figure: a room's floor with at least this much height over it is reported as a second area |
 | `passableWidth` | limit | 0.4 m | Grid's own size, not a code figure: a door or doorless opening narrower than this is named (`opening/too-small-to-pass`) and is not a way through |
 | `passableHeight` | limit | 1.2 m | Grid's own size, not a code figure: one lower than this is named and is not a way through |
 | `passableSill` | limit | 0.3 m | Grid's own size, not a code figure: one whose sill stands higher than this above its floor is named and is not a way through |
