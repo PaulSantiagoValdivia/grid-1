@@ -330,6 +330,17 @@ export const TOLERANCES = {
     decides: 'And a removed room and an added one whose centres are closer than this may be the same.',
     basis: own
   },
+  diffPlace: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'When two versions are compared by what stands where (WRT-8): two walls whose ends are this ' +
+      'close, either way round, once the drawing is moved to its new origin, stand in the same ' +
+      'place, and so do two openings whose middles are this close. An opening has stayed where it ' +
+      'was in its room when it moved along its wall by less than this beyond the room itself.',
+    basis: own
+  },
 
   // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
   wallAboveStorey: {
