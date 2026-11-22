@@ -324,6 +324,37 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── A way through that a person fits (MSG-18) ─────────────────────────────────────────────
+  passableWidth: {
+    kind: 'limit',
+    value: 0.4,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. A door or a doorless opening narrower than this is ' +
+      'too narrow for a person to pass: it is named, and no route, way out or door to another ' +
+      'room is read through it.',
+    basis: own
+  },
+  passableHeight: {
+    kind: 'limit',
+    value: 1.2,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. A door or a doorless opening lower than this is too ' +
+      'low for a person to pass, even stooping: it is named and is not a way through.',
+    basis: own
+  },
+  passableSill: {
+    kind: 'limit',
+    value: 0.3,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. A door or a doorless opening whose sill stands higher ' +
+      'than this above its floor is not at the floor: it is named and is not a way through. Lower, ' +
+      'it is a step.',
+    basis: own
+  },
+
   // ── A step inside a floor (LVL-7) ─────────────────────────────────────────────────────────
   sameFloorLevel: {
     kind: 'tolerance',
@@ -407,7 +438,9 @@ export const TOLERANCES = {
     kind: 'limit',
     value: 0.2,
     unit: 'm',
-    decides: 'An opening narrower than this is questioned. A door still counts as a way through.',
+    decides:
+      'An opening narrower than this is questioned. Whether a door is a way through is ' +
+      '`passableWidth`.',
     basis: own
   },
   openingLowest: {

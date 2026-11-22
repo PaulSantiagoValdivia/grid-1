@@ -156,6 +156,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/no-route-to-door-out` | "{name}" has no route to a door to the outside, nor to a door into a space that is not drawn | a route to a door to the outside, or to the door into the space not drawn |
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
 | `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or stairs the plan cannot hold yet |
+| `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to pass through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to pass, not a code figure |
 | `room/too-small` | "{name}" is under {minimum} m² | at least {minimum} m² |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
 | `room/escape-window-too-small` | The window of "{name}" is too small to escape through | a window someone can climb through |
@@ -216,6 +217,17 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: MSG-18
+
+- New finding `opening/too-small-to-pass`: a door or doorless opening narrower than 0.4 m,
+  lower than 1.2 m, or with its sill more than 0.3 m above its floor is named and is no longer
+  a way through. These are Grid's own sizes (`passableWidth`, `passableHeight`,
+  `passableSill` in the tolerance table), not code figures. A room or floor that had only such
+  an opening now also gets `room/no-door` or `floor/no-exit`. The finding carries `passage`:
+  what it falls short of, its size there as drawn and the passable size.
+- The limits line "Which way a door opens, and how wide doors and corridors are, are not
+  checked" now ends ", beyond whether a person fits through a door at all".
 
 ### 2026-11-21: version 1 (MSG-1)
 
