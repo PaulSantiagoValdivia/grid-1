@@ -111,7 +111,7 @@ describe('a field Grid does not know', () => {
     raw['rooms'][0].colour = 'red'
     raw['openings'][0].colour = 'red'
     raw['floors'] = [{ id: 'ground', name: 'Ground', level: 0, colour: 'red' }]
-    raw['referenceImage'] = { path: 'a.png', scale: 2 }
+    raw['referenceImage'] = { path: 'a.png', zoom: 2 }
     raw['site'] = { area: 300 }
     raw['plot'] = { area: 300 }
     // In the order the file gives them: this plan lists its rooms and openings first. `site` is a
@@ -121,7 +121,7 @@ describe('a field Grid does not know', () => {
       ['openings[0]', 'colour', { list: 'openings', index: 0 }],
       ['walls[1]', 'colour', { list: 'walls', index: 1 }],
       ['floors[0]', 'colour', { list: 'floors', index: 0 }],
-      ['referenceImage', 'scale', null],
+      ['referenceImage', 'zoom', null],
       ['site', 'area', null],
       ['', 'plot', null]
     ])

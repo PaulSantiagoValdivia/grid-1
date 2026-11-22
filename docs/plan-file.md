@@ -33,6 +33,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [A wall placed by its face](#a-wall-placed-by-its-face): a survey drawn from its own numbers, the thickness known or not
 - [Lengths taped on site](#lengths-taped-on-site): `room/taped-differs`, `plan/taped-not-measured`
+- [A trace image under the plan](#a-trace-image-under-the-plan): a scan, photo or sketch placed, scaled and drawn under a floor
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
 - [Survey coordinates at a stored origin](#survey-coordinates-at-a-stored-origin): `plan/far-from-origin`
 - [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
@@ -1414,6 +1415,66 @@ Taped against drawn (4; 1 differs): each length taped on site, set against the d
 |---|---|
 | `room/taped-differs` | A length taped and the same length drawn are further apart than its tolerance: both figures, and by how much the drawing is longer or shorter |
 | `plan/taped-not-measured` | A taped length that names a room or a wall the plan does not have, a wall that is not one of the room's, two walls that make no corner of it, or a room that cannot be drawn |
+
+## A trace image under the plan
+
+A scan, a photo or a sketch can be traced over (HND-10, C31). The plan names it in
+`referenceImage`, says where it lies and how large it is, and Grid draws it under that floor's
+plan in every picture an agent gets: `grid_view`, `grid draw` and the preview's picture. It is in
+no measure, check, export or sheet.
+
+```json
+"referenceImage": {
+  "path": "assets/ground-floor-scan.png",
+  "floor": "ground",
+  "at": [-1.2, 9.4],
+  "rotation": 0,
+  "calibration": { "from": [212, 148], "to": [1012, 148], "length": 8.4 },
+  "opacity": 0.5
+}
+```
+
+| Field | What it states |
+|---|---|
+| `path` | The picture, from the project folder: a relative path that stays inside it and ends in `.png`, `.jpg` or `.jpeg` |
+| `floor` | Optional: the floor it lies under. Unstated, the lowest floor, the one a picture draws when none is asked for |
+| `at` | Optional: the point of the plan, in metres, that the picture's top-left corner lies on. Unstated, `[0, 0]` |
+| `rotation` | Optional: its turn about that corner, in degrees counter-clockwise. Unstated, 0 |
+| `calibration` | Optional: its scale, set from two points on it and the length between them: `from` and `to` in the picture's own pixels, from its top-left corner with y down, and `length`, how far apart they are on the building in metres |
+| `scale` | Optional: its scale stated outright, in metres per pixel. Never with `calibration` |
+| `opacity` | How strongly it is drawn, 0 to 1. Unstated, 0.4 |
+
+The picture's pixel (u, v) lies on the plan at `at + turn(rotation)(u × scale, −v × scale)`: its
+pixels run down the page, the plan's y runs up. A trace image with neither `calibration` nor
+`scale` has no scale: it is drawn at one centimetre a pixel (`traceUnscaled`,
+[tolerances.md](tolerances.md)) and every answer says it is not to scale. To scale a photo, pick
+two points on it whose distance on the building you know, in the same plane as what you trace
+(a photo of a wall at an angle has no one scale). Two points that are the same, a length of 0,
+or a scale beside a calibration are refused; the reader leaves that one field out and keeps the
+image ([a fault stays where it is](#a-fault-stays-where-it-is)).
+
+It is drawn over the rooms' fills and under every line of the plan, so a wall traced off its line
+shows by eye, and the view frames the picture with the drawing: on a floor with nothing drawn
+yet, the picture alone. `grid_view`'s answer and `grid draw`'s standard error say where it lies,
+its scale and where it came from, and how to turn a pixel into a point of the plan:
+
+```text
+The trace image "assets/ground-floor-scan.png", 1600 × 1200 px, is drawn under the plan, 1 px = 0.0105 m, set from two points on it 800 px apart that are 8.4 m apart on the building. Its top-left corner is at (-1.2, 9.4) m, and its pixel (u, v) lies at x = -1.2 + 0.0105·u, y = 9.4 − 0.0105·v.
+```
+
+A plan may come from someone else, so the path is held to the project folder: another folder,
+`..`, a web address, a script (`javascript:`), an absolute path or an ending that is not a
+picture refuses the whole plan, in every command and tool, with the path and the folder
+([the project folder](commands.md#the-project-folder)). A path that is fine but leads to nothing
+yet, to a file that is not a PNG or a JPEG whatever its ending, to a file over 32 MB or to a
+picture more than 16,384 pixels along a side is not drawn, and the answer says which. The
+picture is read through the project's own files and handed to the drawing as the picture
+itself; the drawing reads no file and fetches nothing.
+
+A hand sketch with its sizes written on is best written rooms first ([rooms-first.md](rooms-first.md)),
+from the sketch's numbers, with the sketch as the trace image to check the result by eye. Mark
+the parts whose sizes the sketch gave as `given` ([where a value came from](#where-a-value-came-from))
+and anything you took from the picture alone as `assumed`, for the person to confirm.
 
 ## North, front and where the building is
 

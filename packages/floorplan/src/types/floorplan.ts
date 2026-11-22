@@ -276,6 +276,19 @@
  *   outside. An outdoor space on the lowest level stands on the ground, with no slab, and only a
  *   roofed one has a roof. Its `use`, when stated, is kept, and no check reads it. Optional and
  *   never defaulted: a plan with none reads exactly as before (version 1).
+ *
+ * C31 · A trace image under the plan (HND-10, lab AU2, WR-13, T-5, AE-11)
+ *   `referenceImage` is a scan, photo or sketch to trace over. Its `path` starts from the project
+ *   folder, stays inside it and ends in `.png`, `.jpg` or `.jpeg`. Its pixels run from its
+ *   top-left corner with y down; `at` is the point of the plan that corner lies on ([0, 0]
+ *   unstated), `rotation` turns it about that corner, in degrees counter-clockwise (0 unstated),
+ *   and its scale is metres per pixel: stated as `scale`, or set from two points on it and the
+ *   length between them on the building (`calibration`), never both. Pixel (u, v) lies at
+ *   `at + turn(rotation)(u·scale, -v·scale)`. With neither it has no scale, and is drawn at one
+ *   centimetre a pixel and said to be unscaled. It lies under one floor: `floor`, else the lowest,
+ *   the floor a picture draws when none is asked for. It is drawn under that floor's plan in the pictures an agent gets, and is
+ *   in no measure, check, export or sheet. All optional and never defaulted: a plan that states
+ *   only `path` reads as before (version 1).
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -1329,6 +1342,21 @@ export const OpeningPatternSchema = z
     }
   })
 
+/**
+ * HND-10 (C31): how a trace image's scale is set from two points on it and the length between
+ * them: `from` and `to` in the picture's own pixels, from its top-left corner with y down, and
+ * `length`, the length they lie apart on the building, in metres.
+ */
+export const TraceCalibrationSchema = z.object({
+  from: Vec2,
+  to: Vec2,
+  length: finite().positive(),
+}).superRefine((calibration, ctx) => {
+  if (calibration.from[0] === calibration.to[0] && calibration.from[1] === calibration.to[1]) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['to'], message: english(said('read.trace.samePoint')) })
+  }
+})
+
 export const ReferenceImageSchema = z.object({
   // Path relative to the project directory
   path: text('path'),
@@ -1338,6 +1366,18 @@ export const ReferenceImageSchema = z.object({
   // extension changes no other field — without this the renderer would keep
   // showing the previous picture until a reload.
   updatedAt: finite().optional(),
+  // HND-10 (C31): the floor it is traced on, where its top-left corner lies on the plan, its turn
+  // and its scale, stated (`scale`, metres per pixel) or set from two points (`calibration`).
+  // Optional and never defaulted (version 1).
+  floor: text('id').pipe(z.string().min(1)).optional(),
+  at: Vec2.optional(),
+  rotation: finite().optional(),
+  scale: finite().positive().optional(),
+  calibration: TraceCalibrationSchema.optional(),
+}).superRefine((image, ctx) => {
+  if (image.scale !== undefined && image.calibration !== undefined) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['scale'], message: english(said('read.trace.scaleAndCalibration')) })
+  }
 })
 
 /** LVL-3: the most points a stair's walking line may have: a foot, a head and the turns between. */

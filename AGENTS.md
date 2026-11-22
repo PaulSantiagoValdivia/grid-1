@@ -54,6 +54,12 @@ Notes for agents and people changing this repository.
   (`<plan>.scan.json`, written by `packages/cli/src/command/scan.ts`), keyed by the scan's ids,
   which a re-scan is matched to. Test scans are invented in `test-support/roomScan.ts`, never
   copied from a real scan or Apple's samples.
+- A trace image under the plan (HND-10, C31): `packages/floorplan/src/geometry/trace.ts` works out
+  its scale (from `calibration`, two points and a length, or `scale`), its floor, its corners and
+  the one transform it is drawn with; `packages/cli/src/trace/traceImage.ts` reads the picture
+  through the project's files (a `.png`, `.jpg` or `.jpeg`, checked by its header) and says what
+  became of it; the viewer's `planPicture` draws it, given as a `data:` address, over the rooms'
+  fills and under every line, and reads no file. `loadPlan` refuses a path that is not a picture.
 - `packages/floorplan/src/geometry/items.ts` (CNT-12): the plan's fixtures (`items`, C6 in
   `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
   CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind

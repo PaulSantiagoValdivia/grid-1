@@ -25,9 +25,11 @@ import {
   planForFloor,
   planWallMaterials,
   resolveFloor,
+  tracePlacement,
   validateFloorDoorSweeps,
   withPatterns
 } from '@ongrid/floorplan/geometry'
+import type { TracePlacement } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import type { LabelStyle } from '../canvas2d/labelPlacement'
 import { doorHandingOf } from '../canvas2d/doorHanding'
@@ -108,7 +110,24 @@ export interface PictureOptions {
    * id. None by default.
    */
   readonly marks?: DrawingMarksAsked
+  /**
+   * HND-10 (C31): the plan's trace image, read by the caller: the picture itself, as a `data:`
+   * address of a PNG or a JPEG, and its size in pixels. It is drawn on the floor it lies under,
+   * where the plan places it and at its opacity, over the rooms' fills and under every line of the
+   * plan, and the view frames it with the drawing. The viewer reads no file and fetches nothing. Not drawn when left out.
+   */
+  readonly trace?: TracePicture
 }
+
+/** HND-10: a trace image as a picture is given it: a PNG or a JPEG as a `data:` address, and its size in pixels. */
+export interface TracePicture {
+  readonly href: string
+  readonly width: number
+  readonly height: number
+}
+
+/** The only addresses a trace image is drawn from: the picture itself, never a file or the network. */
+const TRACE_HREF = /^data:image\/(?:png|jpeg);base64,[A-Za-z0-9+/]*={0,2}$/
 
 /** SHT-7: what a picture shows. */
 export interface PictureShow {
@@ -277,9 +296,44 @@ function framePicture(plan: FloorPlan, options: PictureOptions) {
   const around = framingOf(drawing, dimensions)
   // LVL-9: the marks stand outside the drawing and its dimensions, and the view frames them too.
   const marks = marksOf(plan, floor, drawing, around, options.marks)
-  const framed = options.frame ?? (marks === null ? around : withMarks(around, marks))
+  // HND-10: the trace image under this floor, framed with the drawing so a floor not yet traced shows it whole.
+  const trace = traceOf(plan, floor, options.trace)
+  const drawn = marks === null ? around : withMarks(around, marks)
+  const framed = options.frame ?? (trace === null ? drawn : withTrace(drawn, trace.placement, drawing.walls.length + drawing.rooms.length > 0))
   const { width, height } = sizeOf(framed, options)
-  return { floor, slice, drawing, dimensions, marks, width, height, view: fitTo(framed, width / height) }
+  return { floor, slice, drawing, dimensions, marks, trace, width, height, view: fitTo(framed, width / height) }
+}
+
+/** HND-10: the plan's trace image placed under `floor`, or null when it lies under another or none is given. */
+function traceOf(plan: FloorPlan, floor: string, given: TracePicture | undefined): { placement: TracePlacement; picture: TracePicture; opacity: number } | null {
+  const image = plan.referenceImage
+  if (given === undefined || image === undefined) return null
+  if (!TRACE_HREF.test(given.href)) throw new RangeError('A trace image is drawn from a PNG or a JPEG given as a data: address, never from a file or the network')
+  const placement = tracePlacement(plan, given)
+  if (placement === null || placement.floor !== floor) return null
+  return { placement, picture: given, opacity: image.opacity }
+}
+
+/** The frame round the drawing and the trace image's corners; the image alone on a floor with nothing drawn yet. */
+function withTrace(around: Bounds, placement: TracePlacement, drawn: boolean): Bounds {
+  return computeBounds(drawn ? [around.min, around.max, ...placement.corners] : [...placement.corners])
+}
+
+/** HND-10: the trace image, drawn under every line of the plan. */
+function traceNode(trace: { placement: TracePlacement; picture: TracePicture; opacity: number }): SvgNode {
+  // To ten figures: a picture's corner far from the origin must not move by a rounding.
+  const matrix = trace.placement.matrix.map((n) => String(Number(n.toPrecision(10)))).join(' ')
+  return el('image', {
+    'data-part': 'trace-image',
+    href: trace.picture.href,
+    x: 0,
+    y: 0,
+    width: trace.picture.width,
+    height: trace.picture.height,
+    preserveAspectRatio: 'none',
+    opacity: lengthText(trace.opacity),
+    transform: `matrix(${matrix})`
+  })
 }
 
 function marksOf(plan: FloorPlan, floor: string, drawing: PlanDrawing, around: Bounds, asked: DrawingMarksAsked | undefined): DrawingMarks | null {
@@ -321,7 +375,7 @@ export function displayOfPicture(plan: FloorPlan, options: PictureOptions): Disp
 
 /** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
 export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
-  const { floor, slice, drawing, dimensions, marks, width, height, view } = framePicture(plan, options)
+  const { floor, slice, drawing, dimensions, marks, trace, width, height, view } = framePicture(plan, options)
   const display = displayOfPicture(plan, options)
   const words = wordsOf(display)
   const look = lookOf(options.look)
@@ -369,7 +423,12 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   })
   // CNT-3: a plan that states its north gets a north arrow in the corner of the view.
   const withMarkNodes = marks === null ? scene : [...scene, ...drawingMarkNodes(marks, look, view.width / width, options.paperScale, words)]
-  const nodes = drawing.north === null ? withMarkNodes : [...withMarkNodes, northArrowNode(drawing.north, view, view.width / width, look.colors)]
+  const withNorth = drawing.north === null ? withMarkNodes : [...withMarkNodes, northArrowNode(drawing.north, view, view.width / width, look.colors)]
+  // HND-10: the trace image over the rooms' fills, which would hide it, and under every line the
+  // plan draws: walls, openings, dimensions and labels.
+  const fills = withNorth.findIndex((node) => node.attrs['data-part'] !== 'room')
+  const at = fills < 0 ? withNorth.length : fills
+  const nodes = trace === null ? withNorth : [...withNorth.slice(0, at), traceNode(trace), ...withNorth.slice(at)]
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
   const painted = show.paintKey ?? []

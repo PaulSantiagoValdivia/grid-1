@@ -15,7 +15,9 @@ import { mergeBase, planFloors, validatePlan, withPatterns, type Issue } from '@
 import { FloorPlanSchema, quoted, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type UnfinishedMerge } from '@ongrid/floorplan/types/jsonText'
 import { readPlanParts, type LeftOutPart, type ReadFault } from '@ongrid/floorplan/types/readParts'
-import { PathRefused, type Project } from '../fs/projectFiles'
+import { PathRefused, quoted as quotedPath, type Project } from '../fs/projectFiles'
+import { hasPictureEnding } from '../trace/traceImage'
+import { say } from '@ongrid/floorplan/messages'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
 import { UsageError } from './options'
@@ -175,6 +177,10 @@ function traceImageCheck(project: Project, file: string, plan: FloorPlan): void 
     if (!(error instanceof PathRefused)) throw error
     throw new PlanRefused(`${file} can't be used: its trace image, referenceImage.path, is refused. ${error.message} `
       + 'Take referenceImage out of the plan, or name a picture inside the project folder.')
+  }
+  // HND-10 (T-5): and it is a picture by its ending, so no script, page or other file is named as one.
+  if (!hasPictureEnding(image.path)) {
+    throw new PlanRefused(say('en', 'trace.refused.ending', { file, path: quotedPath(image.path), folder: quotedPath(project.folder) }))
   }
 }
 

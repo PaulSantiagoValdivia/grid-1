@@ -465,6 +465,17 @@ describe('the trace image a plan names (T-5)', () => {
     expectOutsideUntouched()
   }, 60_000)
 
+  it('HND-10: makes every command and tool refuse the plan when it does not end as a picture', async () => {
+    const path = 'notes/plan.sh'
+    const plan = tracePlan('traced.json', path)
+    for (const [, args] of PLAN_READERS) {
+      expectCommandRefused(grid(args(plan)), path, 'referenceImage.path', 'does not end in .png, .jpg or .jpeg')
+    }
+    const answers = await callTools(PLAN_TOOLS.map(([, call]) => call(plan)))
+    for (const answer of answers) expectToolRefused(answer, path, 'referenceImage.path', 'does not end in .png, .jpg or .jpeg')
+    expect(tree(project)).toEqual([ROOMS, PLAN, plan].sort())
+  }, 120_000)
+
   it('is refused through a link to a folder outside, by the command and the tool server', async () => {
     linkFolder(outside, join(project, 'linked'))
     const plan = tracePlan('traced.json', 'linked/victim.svg')

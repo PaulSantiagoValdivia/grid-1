@@ -2390,5 +2390,20 @@ export const es: Messages = {
   'areas.outdoor.leftOut': 'Ninguna regla que hayas indicado cuenta nada de él, así que queda fuera de todos los totales.',
   'areas.outdoor.counted': 'Tu regla cuenta el {share} % de cada {kind}, y Grid no la ha comprobado ({rule}): {area}.',
   'areas.outdoor.notCounted': 'Ninguna regla que hayas indicado cuenta {kinds}, así que ese espacio queda fuera de todos los totales.',
-  'areas.outdoor.withNet': 'Superficie útil con el espacio exterior que cuentan tus reglas: {area}. Las demás cifras lo dejan fuera.'
+  'areas.outdoor.withNet': 'Superficie útil con el espacio exterior que cuentan tus reglas: {area}. Las demás cifras lo dejan fuera.',
+  // HND-10 (C31): the trace image under the plan.
+  'trace.drawn': 'La imagen de calco {path}, de {width} × {height} px, se dibuja bajo el plano, {scale}. Su esquina superior izquierda está en ({x}, {y}) m, y su píxel (u, v) cae en x = {x} + {metres}·u, y = {y} − {metres}·v.',
+  'trace.drawnTurned': 'La imagen de calco {path}, de {width} × {height} px, se dibuja bajo el plano, {scale}, girada {degrees}° en sentido antihorario alrededor de su esquina superior izquierda, en ({x}, {y}) m.',
+  'trace.scale.calibration': '1 px = {metres} m, fijada con dos puntos de la imagen a {pixels} px que en el edificio distan {length} m',
+  'trace.scale.stated': '1 px = {metres} m, la escala que indica el plano',
+  'trace.scale.none': 'todavía sin escala, así que a 1 px = {metres} m: no está a escala hasta que su escala se fije con dos puntos de la imagen y la longitud entre ellos (referenceImage.calibration)',
+  'trace.missing': 'La imagen de calco {path} aún no está en la carpeta del proyecto, así que no se dibuja.',
+  'trace.notPicture': 'La imagen de calco {path} no es una imagen PNG ni JPEG, así que no se dibuja.',
+  'trace.tooLarge': 'La imagen de calco {path} ocupa más de {megabytes} MB, así que no se dibuja.',
+  'trace.tooManyPixels': 'La imagen de calco {path} mide {width} × {height} px, más de {most} px de lado, así que no se dibuja.',
+  'trace.unknownFloor': 'La imagen de calco {path} está bajo la planta {floor}, que el plano no tiene, así que no se dibuja.',
+  'trace.otherFloor': 'La imagen de calco {path} está bajo la planta {floor}, así que no se dibuja en esta.',
+  'read.trace.samePoint': 'es el mismo punto que from: una escala necesita dos puntos separados',
+  'read.trace.scaleAndCalibration': 'se indica junto a calibration: da la escala o los dos puntos y su longitud, no ambas cosas',
+  'trace.refused.ending': 'No se puede usar {file}: su imagen de calco, referenceImage.path, se rechaza. {path} no termina en .png, .jpg ni .jpeg, así que no es una imagen que Grid dibuje. Indica una imagen PNG o JPEG dentro de la carpeta del proyecto {folder}, o quita referenceImage del plano.'
 }

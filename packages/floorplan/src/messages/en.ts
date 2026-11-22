@@ -2378,7 +2378,22 @@ export const en = {
   'areas.outdoor.leftOut': 'No rule you stated counts any of it, so it is left out of every total.',
   'areas.outdoor.counted': 'Your rule counts {share}% of each {kind}, and Grid has not checked it ({rule}): {area}.',
   'areas.outdoor.notCounted': 'No rule you stated counts any {kinds}, so that space is left out of every total.',
-  'areas.outdoor.withNet': 'Net with the outdoor space your rules count: {area}. Every other figure here leaves it out.'
+  'areas.outdoor.withNet': 'Net with the outdoor space your rules count: {area}. Every other figure here leaves it out.',
+  // HND-10 (C31): the trace image under the plan.
+  'trace.drawn': 'The trace image {path}, {width} × {height} px, is drawn under the plan, {scale}. Its top-left corner is at ({x}, {y}) m, and its pixel (u, v) lies at x = {x} + {metres}·u, y = {y} − {metres}·v.',
+  'trace.drawnTurned': 'The trace image {path}, {width} × {height} px, is drawn under the plan, {scale}, turned {degrees}° counter-clockwise about its top-left corner at ({x}, {y}) m.',
+  'trace.scale.calibration': '1 px = {metres} m, set from two points on it {pixels} px apart that are {length} m apart on the building',
+  'trace.scale.stated': '1 px = {metres} m, the scale the plan states',
+  'trace.scale.none': 'with no scale yet, so at 1 px = {metres} m: it is not to scale until its scale is set from two points on it and the length between them (referenceImage.calibration)',
+  'trace.missing': 'The trace image {path} is not in the project folder yet, so it is not drawn.',
+  'trace.notPicture': 'The trace image {path} is not a PNG or a JPEG picture, so it is not drawn.',
+  'trace.tooLarge': 'The trace image {path} is larger than {megabytes} MB, so it is not drawn.',
+  'trace.tooManyPixels': 'The trace image {path} is {width} × {height} px, more than {most} px along a side, so it is not drawn.',
+  'trace.unknownFloor': 'The trace image {path} lies under floor {floor}, which the plan does not have, so it is not drawn.',
+  'trace.otherFloor': 'The trace image {path} lies under floor {floor}, so it is not drawn on this one.',
+  'read.trace.samePoint': 'is the same point as from: a scale needs two points apart',
+  'read.trace.scaleAndCalibration': 'is stated beside calibration: give the scale or the two points and their length, not both',
+  'trace.refused.ending': "{file} can't be used: its trace image, referenceImage.path, is refused. {path} does not end in .png, .jpg or .jpeg, so it is not a picture Grid draws. Name a PNG or JPEG picture inside the project folder {folder}, or take referenceImage out of the plan."
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof en

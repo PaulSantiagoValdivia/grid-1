@@ -711,6 +711,12 @@ Over the lab's plans, half the pictures took under 25 ms as SVG and under 70 ms 
 hundred rooms in a grid took about 2 s, of five hundred about 17 s. The figures are in
 `reviews/VEW-1.md`.
 
+A plan that names a trace image (`referenceImage`, HND-10) has it drawn under the floor it lies
+under, over the rooms' fills and under every line, read from the project folder; standard error
+says where it lies and at what scale, or why it is not drawn. A path that leaves the folder or
+does not end in `.png`, `.jpg` or `.jpeg` refuses the plan. The plan file's page says how to place
+and scale it: [a trace image under the plan](plan-file.md#a-trace-image-under-the-plan).
+
 ## Sections, and the marks on a plan: `grid draw --section` and `--marks`
 
 `grid draw --section x1,y1:x2,y2` draws a section instead of a floor plan: a cut along the line

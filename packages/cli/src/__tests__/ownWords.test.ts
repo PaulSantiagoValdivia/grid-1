@@ -150,7 +150,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
   // CNT-16: +5, what the three column and grid entries decide.
   // SHT-10: five more pieces of the table's own descriptions (sillProjection, and the frame and glass entries).
-  'packages/floorplan/src/geometry/tolerances.ts': [255, 'developer'],
+  // HND-10: one more, the trace image's unscaled drawing scale (traceUnscaled).
+  'packages/floorplan/src/geometry/tolerances.ts': [256, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [2, 'developer'],
@@ -179,7 +180,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/viewer/src/canvas2d/Canvas2D.tsx': [1, 'notWords'],
   'packages/viewer/src/page/previewPage.ts': [5, 'notYet'],
   'packages/viewer/src/picture/facade.ts': [2, 'developer'],
-  'packages/viewer/src/picture/planSvg.ts': [3, 'developer'],
+  // HND-10: one more, the refusal of a trace image given as anything but a data: address.
+  'packages/viewer/src/picture/planSvg.ts': [4, 'developer'],
   'packages/viewer/src/picture/section.ts': [1, 'developer'],
   'packages/viewer/src/still/index.ts': [2, 'developer'],
 }
