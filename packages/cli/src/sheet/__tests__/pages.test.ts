@@ -583,7 +583,7 @@ describe("the person's units on the sheet (WRT-7)", () => {
     const floor = sheet.pages[1]!
     expect(floor.table!.heading).toBe('Rooms / sq ft')
     const shown = sumText(areas.floors[0]!.rooms.filter((r) => r.zoneOf === undefined && r.countedWith === undefined).map((r) => sqFt(r.net ?? 0)), sqFt(areas.floors[0]!.net), 0)
-    expect(floor.table!.total.area).toBe(shown.total)
+    expect(floor.table!.total!.area).toBe(shown.total)
   })
 
   it('keeps metres for a plan with no display, as before', () => {
