@@ -1,5 +1,5 @@
 /**
- * Flats (CNT-4, C15; lab EL-1, WR-6, AR-7): which rooms make each flat, read from the plan's own
+ * Flats (CNT-4, C16; lab EL-1, WR-6, AR-7): which rooms make each flat, read from the plan's own
  * list, never from the rooms' names.
  *
  * A flat is a named group of rooms: an id, a name, the type it is and its rooms, by id, on one

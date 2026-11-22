@@ -7,6 +7,13 @@
  *   Grows symmetrically from the axis: thickness/2 on each side of the start→end line.
  *   The wall axis IS the reference line.
  *
+ *   Reopened by HND-11 (lab WR-14): a wall MAY say its start→end line is one of its faces,
+ *   `face: "left"` or `"right"` as you walk from start to end, so a survey taped to the inside
+ *   faces is drawn from its own numbers, and a thickness guessed later, or left out, grows away
+ *   from the room. The reading moves the line half the thickness to the wall's centre (the
+ *   derived layer), so every reader still reads C1, and says so in `placedBy`; `statedWall`
+ *   writes the face line back. Optional and never defaulted (version 1).
+ *
  * C2 · Opening position
  *   `offset` is the distance from wall.start to the NEAR edge of the opening,
  *   measured along the wall axis.
@@ -127,7 +134,13 @@
  *   that are no room are said and not measured, never refused. Optional and never defaulted
  *   (version 1).
  *
- * C15 · Flats (CNT-4, lab EL-1, WR-6, AR-7, CP3-6)
+ * C15 · Taped lengths (HND-11, lab WR-14)
+ *   A plan MAY keep what was taped on site, beside the drawing, in `taped`: a room's side along
+ *   one of its walls, or the distance between two of its corners (a diagonal), each with the
+ *   length taped. They are checks, never geometry: nothing is drawn or placed from them, and
+ *   every run says each one taped against drawn. Optional and never defaulted (version 1).
+ *
+ * C16 · Flats (CNT-4, lab EL-1, WR-6, AR-7, CP3-6)
  *   A plan MAY say which rooms make each flat (a dwelling, a unit), in `flats`: each with an id, a
  *   name, the `type` it is, by id, and its `rooms`, by id, on one floor or several (a duplex). A
  *   flat type is stated once, in `flatTypes` (an id and a name), and placed many times: a flat
@@ -401,25 +414,135 @@ function withWallDefaults(raw: unknown): unknown {
     if (wall.height === undefined || (raw as Record<symbol, unknown>)[HEIGHT_FROM_FLOOR] === true) left.push('height')
     if (wall.kind === undefined) left.push('kind')
   }
-  return {
+  const filled: Record<string, unknown> = {
     ...wall,
     thickness: wall.thickness === undefined ? defaults.thickness : wall.thickness,
     height: wall.height === undefined ? defaults.height : wall.height,
     ...(left.length > 0 ? { unstated: left } : {}),
   }
+  // HND-11: a wall placed by its face stands, in the reading, on its centre line, and says which
+  // face its file gave (`placedBy`). A face, a thickness or an end that cannot be read is left
+  // for the schema to name, as it is.
+  const face = filled['face']
+  const thickness = virtual ? 0 : filled['thickness']
+  if (isFace(face) && isEndPair(filled['start']) && isEndPair(filled['end']) && typeof thickness === 'number' && Number.isFinite(thickness) && thickness >= 0) {
+    const [start, end] = centreFromFace(filled['start'], filled['end'], face, thickness)
+    delete filled['face']
+    return { ...filled, start, end, placedBy: face }
+  }
+  return filled
+}
+
+/**
+ * HND-11 (C1, reopened): which face of a wall its start→end line is, as you walk from its start
+ * to its end. The wall's body lies on the other side of the line.
+ */
+export const WALL_FACES = ['left', 'right'] as const
+export type WallFace = (typeof WALL_FACES)[number]
+
+type Pair = readonly [number, number]
+
+const isFace = (value: unknown): value is WallFace => value === 'left' || value === 'right'
+const isEndPair = (value: unknown): value is Pair =>
+  Array.isArray(value) && value.length === 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])
+
+/** A written number without the arithmetic's last digits: a face moved there and back reads as it was stated. */
+const written = (value: number): number => {
+  const clean = Number(value.toPrecision(15))
+  return Object.is(clean, -0) ? 0 : clean
+}
+
+/**
+ * The line `start`→`end` moved `by` metres to its left (to its right when negative), or null for
+ * a line of no length, which has no left.
+ */
+function shiftedLine(start: Pair, end: Pair, by: number): [[number, number], [number, number]] | null {
+  const dx = end[0] - start[0]
+  const dy = end[1] - start[1]
+  const length = Math.hypot(dx, dy)
+  if (!(length > 0) || !Number.isFinite(length)) return null
+  const nx = (-dy / length) * by
+  const ny = (dx / length) * by
+  return [
+    [start[0] + nx, start[1] + ny],
+    [end[0] + nx, end[1] + ny],
+  ]
+}
+
+/**
+ * HND-11: a wall's centre line from the face its file gives: half the thickness away from that
+ * face, into the wall's body. A left face has the body on its right. A line of no length is
+ * returned as it is.
+ */
+export function centreFromFace(start: Pair, end: Pair, face: WallFace, thickness: number): [[number, number], [number, number]] {
+  return shiftedLine(start, end, (face === 'left' ? -1 : 1) * (thickness / 2)) ?? [[start[0], start[1]], [end[0], end[1]]]
+}
+
+/** HND-11: the face line a file gives a wall placed by its face, from the wall's centre line. */
+export function faceFromCentre(start: Pair, end: Pair, face: WallFace, thickness: number): [[number, number], [number, number]] {
+  const [s, e] = shiftedLine(start, end, (face === 'left' ? 1 : -1) * (thickness / 2)) ?? [[start[0], start[1]], [end[0], end[1]]]
+  return [
+    [written(s[0]), written(s[1])],
+    [written(e[0]), written(e[1])],
+  ]
+}
+
+const otherFace = (face: WallFace): WallFace => (face === 'left' ? 'right' : 'left')
+
+/** The thickness a wall's line is moved by: none for a dividing line, else the one stated or the default. */
+function movingThickness(wall: Readonly<Record<string, unknown>>): number {
+  if (wall['virtual'] === true) return 0
+  const stated = wall['thickness']
+  const value = typeof stated === 'number' ? stated : typeof stated === 'string' ? Number.parseFloat(stated) : Number.NaN
+  return Number.isFinite(value) && value > 0 ? value : WALL_DEFAULTS.solid.thickness
+}
+
+/**
+ * HND-11: a wall, as a file states it or as Grid reads it, with its centre line's ends moved to
+ * `ends` (either may be left out), and turned over left to right when `mirrored`. A wall its file
+ * places by its face (`face`) keeps that face, and the line written is the face's; one Grid read
+ * so (`placedBy`) keeps saying so. Every change that moves a wall end goes through here, so no
+ * centre point ever lands in a file as a face.
+ */
+export function wallWithEnds<T extends Record<string, unknown>>(wall: T, ends: { readonly start?: Pair | undefined; readonly end?: Pair | undefined }, mirrored = false): T {
+  const face = wall['face']
+  if (isFace(face) && isEndPair(wall['start']) && isEndPair(wall['end'])) {
+    const thickness = movingThickness(wall)
+    const [s, e] = centreFromFace(wall['start'], wall['end'], face, thickness)
+    const now = mirrored ? otherFace(face) : face
+    const [start, end] = faceFromCentre(ends.start ?? s, ends.end ?? e, now, thickness)
+    return { ...wall, start, end, face: now }
+  }
+  const placed = wall['placedBy']
+  const moved: Record<string, unknown> = { ...wall }
+  if (ends.start !== undefined) moved['start'] = [...ends.start]
+  if (ends.end !== undefined) moved['end'] = [...ends.end]
+  if (isFace(placed) && mirrored) moved['placedBy'] = otherFace(placed)
+  return moved as T
 }
 
 /**
  * A wall as its file states it (WRT-6): without the values the reading filled in and without
  * `unstated`, for whatever writes a wall back, so a default never lands in a file that stated
- * none. A wall that left nothing out is returned as it is.
+ * none. HND-11: a wall Grid read from its face (`placedBy`) is given back by that face, with
+ * `face`, as its file gave it. A wall that left nothing out is returned as it is.
  */
-export function statedWall<T extends { readonly unstated?: readonly UnstatedWallValue[] }>(wall: T): Omit<T, 'unstated'> {
-  if (wall.unstated === undefined) return wall
-  const { unstated, ...rest } = wall
+export function statedWall<T extends { readonly unstated?: readonly UnstatedWallValue[]; readonly placedBy?: WallFace | undefined }>(wall: T): Omit<T, 'unstated' | 'placedBy'> {
+  if (wall.unstated === undefined && wall.placedBy === undefined) return wall
+  const { unstated, placedBy, ...rest } = wall
   const out: Record<string, unknown> = { ...rest }
-  for (const key of unstated) delete out[key]
-  return out as Omit<T, 'unstated'>
+  if (placedBy !== undefined && isEndPair(out['start']) && isEndPair(out['end'])) {
+    const [start, end] = faceFromCentre(out['start'], out['end'], placedBy, movingThickness(out))
+    const ordered: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(out)) {
+      ordered[key] = key === 'start' ? start : key === 'end' ? end : value
+      if (key === 'end') ordered['face'] = placedBy
+    }
+    for (const key of unstated ?? []) delete ordered[key]
+    return ordered as Omit<T, 'unstated' | 'placedBy'>
+  }
+  for (const key of unstated ?? []) delete out[key]
+  return out as Omit<T, 'unstated' | 'placedBy'>
 }
 
 /** Whether a wall's height was left out of its file, so the reading filled it (WRT-6). */
@@ -461,6 +584,12 @@ export const WallSchema = z.preprocess(
       floor: text('id').pipe(z.string().min(1)).optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
+      // HND-11 (C1, reopened): start→end is this face of the wall, not its centre line. The
+      // reading moves the wall to its centre line (`withWallDefaults`), so a wall Grid read has
+      // `placedBy` in its place. Optional and never defaulted (version 1).
+      face: z.enum(WALL_FACES).optional(),
+      // HND-11: the face its file placed it by. Grid's reading only, written back as `face`.
+      placedBy: z.enum(WALL_FACES).optional(),
       // WRT-6: what the file left out and the reading filled in (`withWallDefaults`). Grid's
       // reading only: never in a file, and written back by `statedWall` without those values.
       unstated: z.array(z.enum(UNSTATED_WALL_VALUES)).optional(),
@@ -1096,6 +1225,10 @@ export function boundaryEdgeCount(points: readonly (readonly [number, number])[]
  * sea level) say where that point is on the earth. Each is optional, and a field Grid does not
  * hold is named (MSG-4); nothing is placed on the earth until `origin` is stated.
  *
+ * HND-11 (lab MS-12): a plan may keep survey or map coordinates as they are and state, as
+ * `origin`, a point near the building: the far-from-origin check measures from it, and every export
+ * writes the geometry from it, near zero, with the origin as its offset.
+ *
  * LVL-4: `ground` is the level of the ground outside, in metres from the ground floor's floor
  * level (0), the same datum as a floor's `elevation` (not `site.elevation`, which is above sea
  * level): -0.15 for a floor 15 cm above the ground. It needs no `origin`. With it stated, a door
@@ -1250,6 +1383,36 @@ export const ViewSchema = z
   })
 
 /**
+ * HND-11 (C15, lab WR-14): a length taped on site, kept beside the drawing as a check. `room` is
+ * the room it was taped in; then either `wall`, the room's side along that wall (its inside face,
+ * corner to corner), or `from` and `to`, two corners of the room, each named by the two walls
+ * that meet there (a diagonal, or any corner to corner). `length` is the length taped, in
+ * metres; `tolerance`, how far the drawing may be from it and still agree (unstated,
+ * `tapedAgree`). `id` is optional, for the person's own reference. Nothing is drawn or placed
+ * from it: every run says it taped against drawn.
+ */
+export const TapedSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)).optional(),
+    room: text('id').pipe(z.string().min(1)),
+    wall: text('id').pipe(z.string().min(1)).optional(),
+    from: z.tuple([text('id').pipe(z.string().min(1)), text('id').pipe(z.string().min(1))]).optional(),
+    to: z.tuple([text('id').pipe(z.string().min(1)), text('id').pipe(z.string().min(1))]).optional(),
+    length: finite().positive(),
+    tolerance: finite().positive().optional(),
+  })
+  .superRefine((taped, ctx) => {
+    const corners = taped.from !== undefined || taped.to !== undefined
+    if (taped.wall !== undefined && corners) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['wall'], message: 'names a side and corners at once: give wall, or from and to' })
+    } else if (taped.wall === undefined && !corners) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['wall'], message: 'says neither what was taped along nor between: give wall, the side along that wall, or from and to, two corners' })
+    } else if (corners && (taped.from === undefined || taped.to === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [taped.from === undefined ? 'from' : 'to'], message: 'needs both corners, from and to, each named by the two walls that meet there' })
+    }
+  })
+
+/**
  * CNT-17 (C14): a route that needs to be accessible: `to` a room, by id, and `from` a room or,
  * unstated, from the entrance (the front door the plan names, else its doors to the outside on
  * the ground floor).
@@ -1269,7 +1432,7 @@ export const AccessibleSchema = z.object({
 })
 
 /**
- * CNT-4 (C15): a kind of flat, stated once and placed many times: an id the flats name in their
+ * CNT-4 (C16): a kind of flat, stated once and placed many times: an id the flats name in their
  * `type`, and a name to read it by ("One bedroom"). Optional and never defaulted (version 1).
  */
 export const FlatTypeSchema = z.object({
@@ -1278,7 +1441,7 @@ export const FlatTypeSchema = z.object({
 })
 
 /**
- * CNT-4 (C15): a flat (a dwelling, a unit): an id, a name, the type it is (an id in `flatTypes`),
+ * CNT-4 (C16): a flat (a dwelling, a unit): an id, a name, the type it is (an id in `flatTypes`),
  * its rooms by id (on one floor or several: a duplex), and whether it is its type's mirror image.
  * A group of rooms, never a room. Optional and never defaulted (version 1).
  */
@@ -1328,7 +1491,9 @@ function withFloorHeights(raw: unknown): unknown {
       if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return []
       const w = wall as Record<string, unknown>
       if (w.virtual === true || floorOfRaw(w) !== id || !isPair(w.start) || !isPair(w.end)) return []
-      return [{ start: w.start, end: w.end, outside: w.kind === 'exterior' }]
+      // HND-11: a wall placed by its face frames the roof on its centre line, as it is read.
+      const [start, end] = isFace(w.face) ? centreFromFace(w.start, w.end, w.face, movingThickness(w)) : [w.start, w.end]
+      return [{ start, end, outside: w.kind === 'exterior' }]
     })
     const outside = lines.filter((l) => l.outside)
     const frame = roofFrame(outside.length > 0 ? outside : lines)
@@ -1398,7 +1563,10 @@ export const FloorPlanFieldsSchema = z.object({
   // CNT-17 (C14): the rooms and routes that need to be accessible (`AccessibleSchema`). Optional
   // and never defaulted (version 1).
   accessible: AccessibleSchema.optional(),
-  // CNT-4 (C15): the flat types, each stated once (`FlatTypeSchema`), and the flats, each a group
+  // HND-11 (C15): lengths taped on site, kept as checks beside the drawing (`TapedSchema`).
+  // Optional and never defaulted (version 1).
+  taped: parts(TapedSchema, 'taped lengths').optional(),
+  // CNT-4 (C16): the flat types, each stated once (`FlatTypeSchema`), and the flats, each a group
   // of rooms by id (`FlatSchema`). Optional and never defaulted (version 1).
   flatTypes: parts(FlatTypeSchema, 'flat types').optional(),
   flats: parts(FlatSchema, 'flats').optional(),
@@ -1460,6 +1628,7 @@ export type Mark = z.infer<typeof MarkSchema>
 export type View = z.infer<typeof ViewSchema>
 export type Accessible = z.infer<typeof AccessibleSchema>
 export type AccessibleRoute = z.infer<typeof AccessibleRouteSchema>
+export type Taped = z.infer<typeof TapedSchema>
 export type FlatType = z.infer<typeof FlatTypeSchema>
 export type Flat = z.infer<typeof FlatSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>

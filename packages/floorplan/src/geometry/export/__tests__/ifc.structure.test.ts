@@ -476,7 +476,7 @@ describe('HND-2 a plan at survey coordinates is written near the origin', () => 
     }
   })
 
-  it('keeps a stated site on its point, with its data and the north, and the building holds the rest of the move (CNT-3)', () => {
+  it('keeps a stated site on its point, with its data and the north, and writes the elements from it (CNT-3, HND-11)', () => {
     const step = limit('farFromOrigin')
     const stated: readonly [number, number] = [FAR[0] + 1, FAR[1] + 2]
     const sited = parseDoc(toIfc({ ...farFlat(), north: -30, site: { origin: [...stated], latitude: 40.5, longitude: -3.25, elevation: 650 } }, OPTIONS))
@@ -486,11 +486,11 @@ describe('HND-2 a plan at survey coordinates is written near the origin', () => 
     expect([nums(s.args[9]), nums(s.args[10]), num(s.args[11])]).toEqual([[40, 30, 0, 0], [-3, -15, 0, 0], 650])
     const building = ofType(sited, 'IFCBUILDING')[0]!
     expect(ref(entity(sited, ref(building.args[5])).args[0])).toBe(ref(s.args[5]))
-    // The site's point and the building's, against it, add up to the move near the origin.
+    // HND-11: the elements are written from the site's own origin, so the building stands on it.
+    // Before, they were moved by whole steps of farFromOrigin and the building held the rest.
     const [bx, by] = pointOf(ref(building.args[5]))
-    const moved = [stated[0] + bx!, stated[1] + by!]
-    expect(moved.map((v) => Math.abs(v / step - Math.round(v / step)) < 1e-9)).toEqual([true, true])
-    expect(Math.hypot(moved[0]! - FAR[0], moved[1]! - FAR[1])).toBeLessThan(step)
+    expect([bx, by]).toEqual([0, 0])
+    expect(Math.hypot(stated[0] - FAR[0], stated[1] - FAR[1])).toBeLessThan(step)
     const context = ofType(sited, 'IFCGEOMETRICREPRESENTATIONCONTEXT')[0]!
     const [nx, ny] = nums(entity(sited, ref(context.args[5])).args[0])
     expect(nx).toBeCloseTo(0.5, 9)

@@ -127,19 +127,38 @@ function partsOf(scene: Scene3D): Part[] {
 export interface GlbOptions {
   /** HND-6: the parts of the plan this file leaves out, written into `asset.extras`. */
   readonly leftOut?: readonly LeftOutPart[]
+  /**
+   * HND-11 (lab MS-12): where the scene's zero is on the plan, when the scene was built near zero
+   * from a plan far from it (`nearOrigin`). The model is then one node that holds every part,
+   * moved there by its translation, and `asset.extras.gridOrigin` says so. A 32-bit point holds
+   * about seven digits, so the points stay small and the offset, a JSON number, stays exact.
+   */
+  readonly origin?: readonly [number, number]
 }
+
+/** The name of the node that holds the model when it is moved to where the plan's zero is. */
+export const GLB_ORIGIN_NODE = 'origin'
 
 /**
  * The asset block. HND-6: when the file leaves parts of the plan out, `asset.extras.gridLeftOut`
  * says so: a note in words, the count, and each part. `extras` is glTF's place for data of an
  * application's own, which every reader keeps and none acts on. JSON escapes the ids.
  */
-function assetOf(leftOut: readonly LeftOutPart[]): object {
+function assetOf(leftOut: readonly LeftOutPart[], origin: readonly [number, number] | null): object {
   // MSG-3: the label travels in the file, where glTF keeps data of the file's own.
-  const asset = { version: '2.0', generator: GENERATOR, extras: { label: GENERAL_GUIDANCE_LABEL } }
-  if (leftOut.length === 0) return asset
-  const note = [leftOutSummary(leftOut), ...leftOutLines(leftOut)]
-  return { ...asset, extras: { ...asset.extras, gridLeftOut: { count: leftOut.length, note, parts: leftOut } } }
+  const extras: Record<string, unknown> = { label: GENERAL_GUIDANCE_LABEL }
+  if (origin !== null) {
+    extras['gridOrigin'] = {
+      x: origin[0],
+      y: origin[1],
+      note: `The points are from the plan's (${origin[0]}, ${origin[1]}); the node "${GLB_ORIGIN_NODE}" moves the model there. Plan x is glTF x, plan y is glTF -z.`
+    }
+  }
+  if (leftOut.length > 0) {
+    const note = [leftOutSummary(leftOut), ...leftOutLines(leftOut)]
+    extras['gridLeftOut'] = { count: leftOut.length, note, parts: leftOut }
+  }
+  return { version: '2.0', generator: GENERATOR, extras }
 }
 
 /**
@@ -152,7 +171,8 @@ function assetOf(leftOut: readonly LeftOutPart[]): object {
  */
 export function toGlb(scene: Scene3D, options: GlbOptions = {}): Uint8Array {
   const parts = partsOf(scene)
-  const asset = assetOf(options.leftOut ?? [])
+  const moved = options.origin !== undefined && (options.origin[0] !== 0 || options.origin[1] !== 0) ? options.origin : null
+  const asset = assetOf(options.leftOut ?? [], moved)
   if (parts.length === 0) return encodeGlb({ asset, scene: 0, scenes: [{}] }, null)
 
   // Per mesh: its positions, then its indices. Both are 4 bytes a component, so
@@ -220,11 +240,14 @@ export function toGlb(scene: Scene3D, options: GlbOptions = {}): Uint8Array {
     nodes.push({ name, mesh: index })
   }
 
+  // HND-11: a model built near zero is held by one node, moved to where the plan's zero is.
+  // `0 - y`, as for the points, so y = 0 is not written as -0.
+  const holder = moved === null ? [] : [{ name: GLB_ORIGIN_NODE, translation: [moved[0], 0, 0 - moved[1]], children: nodes.map((_, i) => i) }]
   const document = {
     asset,
     scene: 0,
-    scenes: [{ nodes: nodes.map((_, i) => i) }],
-    nodes,
+    scenes: [{ nodes: moved === null ? nodes.map((_, i) => i) : [nodes.length] }],
+    nodes: [...nodes, ...holder],
     meshes,
     materials: [MATERIAL],
     accessors,
