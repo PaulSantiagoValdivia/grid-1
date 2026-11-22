@@ -62,6 +62,11 @@ export interface Subject {
   readonly used?: string | null
   /** MSG-6, on a part left out for its id: the part that keeps the id, as a line names it. */
   readonly kept?: string
+  /**
+   * HND-11, on a taped length: what was taped (`the side along wall "ext-s"`), the two figures
+   * and how far apart they are, and how close they may be and agree, each in words.
+   */
+  readonly taped?: { readonly what: string; readonly figures: string; readonly within: string }
   /** MSG-6: an id no part has, to rename a part to. */
   readonly rename?: string
   /** MSG-6, on an unfinished merge: what each side adds or changes, in words. */
@@ -121,6 +126,9 @@ const fixOf = (s: Subject, key: 'width' | 'offset' | 'height' | 'sill'): number 
 /** The wall most likely meant, from a line's fixes (MSG-7). */
 const meantWall = (s: Subject): string | null => s.fixes?.find((f) => f.wall !== undefined)?.wall ?? null
 const FAR = tolerance('farFromOrigin')
+
+/** A sentence's first letter in capitals. */
+const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1)
 const TIDY = 'grid tidy lists this fault and can make the fix it names. Otherwise correct the walls by hand.'
 const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every size is in metres.'
 
@@ -373,8 +381,8 @@ export const CODES = {
   },
   'plan/far-from-origin': {
     says: fixed(`The plan reaches more than ${FAR} m from the origin`),
-    needed: fixed(`every point within ${FAR} m of the origin (0, 0)`),
-    fix: fixed('Check the units and look for a slipped coordinate. If the plan is in map or survey coordinates, move it so it starts near the origin.')
+    needed: fixed(`every point within ${FAR} m of the origin: the site's origin where the plan states one, else (0, 0)`),
+    fix: fixed('Check the units and look for a slipped coordinate. If the plan is in map or survey coordinates, keep them and state a point near the building as site.origin: the check measures from it, and every export writes the geometry from it, with the offset kept.')
   },
   'plan/duplicate-id': {
     says: (s) => `Id ${s.label} names more than one wall, room or opening`,
@@ -1178,6 +1186,19 @@ export const CODES = {
     found: (s) => `a mark on ${s.label}${s.word ? ` (its ${s.word})` : ''}`,
     needed: fixed('a mark on a part the plan has, by its id'),
     fix: fixed('Name the part by the id the plan gives it now, or take the mark out.')
+  },
+  // HND-11 (lab WR-14): a length taped on site against the same length drawn.
+  'room/taped-differs': {
+    says: (s) => `${s.taped ? `${capital(s.taped.what)} taped in` : 'A length taped in'} ${s.label} is not the length drawn`,
+    found: (s) => s.taped?.figures ?? s.said,
+    needed: (s) => `the drawing within ${s.taped?.within ?? 'the tolerance'} of the length taped`,
+    fix: fixed('Draw the walls where the tape puts their faces: a survey taped to the inside faces places each wall by that face (`face` on the wall), so a thickness guessed, or left out, grows away from the room. If the tape was read wrong, correct the taped length.')
+  },
+  'plan/taped-not-measured': {
+    says: (s) => `A length taped in ${s.label} cannot be set against the drawing: ${s.said}`,
+    found: (s) => (s.taped === undefined ? s.said : `${s.taped.what}, taped ${s.taped.figures}`),
+    needed: fixed('a taped length that names a room the plan has, and one of its walls or two of its corners, each corner by the two walls that meet there'),
+    fix: fixed('Name the room and its walls by the ids the plan gives them now; a corner is two walls of the room that meet there. Once the room is drawn, its taped lengths are measured.')
   },
   // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured, never checked.
   'plan/not-checked-access': {

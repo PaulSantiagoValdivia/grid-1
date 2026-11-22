@@ -128,9 +128,10 @@ const SCHEMAS: Record<PartList, z.ZodTypeAny> = {
  * `null`, which states nothing, takes the default. A floor's `level` is not one of them: it only
  * orders the floors, and leaving a floor out would leave out everything on it. Nor is a wall's
  * `arc` (CNT-18): it has no default, so one that cannot be read is read as not stated, as a hinge
- * is, and the line says so; the wall is drawn straight.
+ * is, and the line says so; the wall is drawn straight. HND-11: a wall's
+ * `face` is one too: read as its centre line, the wall would stand half its thickness off.
  */
-const STATED_SIZES: Partial<Record<PartList, readonly string[]>> = { walls: ['thickness', 'height'], openings: ['sill'] }
+const STATED_SIZES: Partial<Record<PartList, readonly string[]>> = { walls: ['thickness', 'height', 'face'], openings: ['sill'] }
 
 /** The order ids are kept in: walls first, because rooms and openings name them. */
 const ID_ORDER: readonly PartList[] = ['walls', 'rooms', 'openings', 'items', 'patterns']

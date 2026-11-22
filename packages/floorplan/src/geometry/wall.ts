@@ -6,7 +6,7 @@
  * in plan, and a list of parts to raise in 3D. Its ends are cut as the joints
  * with other walls decide (`joints.ts`), and square where it meets none.
  *
- * A curved wall (CNT-18, C15) has an arc for its axis instead (`arc.ts`). Every length along
+ * A curved wall (CNT-18, C16) has an arc for its axis instead (`arc.ts`). Every length along
  * it is along the curve, and its shapes follow the curve: exactly in `wallSliceShape`, by its
  * stations in the polygons. Code that reads a wall as lines reads `wallSegments`.
  */
@@ -58,7 +58,7 @@ export function pointAlong(axis: WallAxis, s: number): Vec2 {
   return add(axis.start, scale(axis.dir, s))
 }
 
-/** Whether the wall is a curve (CNT-18, C15). */
+/** Whether the wall is a curve (CNT-18, C16). */
 export function isCurved(wall: Wall): boolean {
   return wall.arc !== undefined
 }
@@ -138,7 +138,7 @@ export function wallPath(wall: Wall): Vec2[] {
 /**
  * The straight hole an opening makes in its wall: between its two edges on the axis. On a
  * straight wall it lies along the axis; on a curved one it is the chord between them, and its
- * `dir` and `normal` are the chord's, so a door's leaf closes along it (C15).
+ * `dir` and `normal` are the chord's, so a door's leaf closes along it (C16).
  */
 export function openingChord(wall: Wall, from: number, to: number): WallSegment {
   return segmentOf(wallPointAt(wall, from), wallPointAt(wall, to), from, to)

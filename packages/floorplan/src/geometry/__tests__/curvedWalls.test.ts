@@ -14,7 +14,7 @@ import { planAreaFigures } from '../areas'
 import { wallLength, wallPointAt, wallSegments, wallSlicePolygon } from '../wall'
 import { curveFault, wallCurve } from '../arc'
 import { area, distance } from '../vec2'
-import { parseFloorPlan } from '../../types/floorplan'
+import { parseFloorPlan, wallWithEnds } from '../../types/floorplan'
 import { wallJoints } from '../joints'
 import { wallExposure } from '../exposure'
 import { floorSpaces, spacesKnown } from '../spaces'
@@ -22,6 +22,7 @@ import { wallFaults } from '../wallFaults'
 import { wallRevision } from '../revision'
 import { diffPlans, PLAN_TURNS, turnPlan } from '../diff'
 import { planSection } from '../section'
+import { tapedLengths } from '../taped'
 import { planFacing } from '../orientation'
 import { doorSwing } from '../door'
 import { validateDoorSweeps } from '../sweep'
@@ -73,7 +74,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C15)', () => {
+describe('a curved wall in the plan file (C16)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
@@ -471,5 +472,52 @@ describe('a section through a curved wall (CNT-17 with CNT-18)', () => {
     expect(b1 - b0).toBeCloseTo(0.2, 2)
     expect(bay!.rings).toHaveLength(2)
     expect(section.beyond.filter((f) => f.id === 'bay').length).toBeGreaterThan(2)
+  })
+})
+
+describe('a curved wall placed by its face (HND-11 with CNT-18)', () => {
+  // A round room taped on its inside face: radius 2.9 m, the wall 0.2 m thick. Going
+  // counter-clockwise, the left face is the inside one.
+  const taped = {
+    version: '1',
+    walls: [{ id: 'c', start: [2.9, 0], end: [2.9, 0], thickness: 0.2, height: 2.7, kind: 'exterior', face: 'left', arc: { centre: [0, 0], sweep: 360 } }],
+    rooms: [{ id: 'r', name: 'Round', boundary: ['c'] }],
+    openings: []
+  }
+
+  it('reads its centre line half the thickness out along the radius, so the room keeps its taped size', () => {
+    const plan = parseFloorPlan(taped)
+    const w = plan.walls[0]!
+    expect(Math.hypot(w.start[0], w.start[1])).toBeCloseTo(3, 9)
+    expect(curveFault(w)).toBeNull()
+    const room = roomArea(plan.rooms[0]!, indexPlan(plan))
+    expect(Math.abs(room - Math.PI * 2.9 * 2.9) / (Math.PI * 2.9 * 2.9)).toBeLessThan(0.001)
+  })
+
+  it('writes its face back round the arc it is moved to', () => {
+    const moved = wallWithEnds(taped.walls[0]!, { start: [-3, 0], end: [-3, 0], arc: { centre: [0, 0], sweep: -360 } }, true)
+    // Mirrored, the inside face is now its right one, still at the taped 2.9 m.
+    expect(moved['face']).toBe('right')
+    expect(Math.hypot((moved['start'] as number[])[0]!, (moved['start'] as number[])[1]!)).toBeCloseTo(2.9, 9)
+  })
+})
+
+describe('a taped length along a curved wall (HND-11 with CNT-18)', () => {
+  it('measures a side round the curve, and says a corner on it is not worked out', () => {
+    const plan = parseFloorPlan({
+      version: '1',
+      walls: [{ id: 'c', start: [3, 0], end: [3, 0], thickness: 0.2, height: 2.7, kind: 'exterior', arc: { centre: [0, 0], sweep: 360 } }],
+      rooms: [{ id: 'r', name: 'Round', boundary: ['c'] }],
+      openings: [],
+      taped: [
+        { room: 'r', wall: 'c', length: 2 * Math.PI * 2.9 },
+        { room: 'r', from: ['c', 'c'], to: ['c', 'c'], length: 1 }
+      ]
+    })
+    const [side, corner] = tapedLengths(plan)
+    expect(side!.state).toBe('agrees')
+    expect(Math.abs(side!.drawn! - 2 * Math.PI * 2.9) / (2 * Math.PI * 2.9)).toBeLessThan(0.001)
+    expect(corner!.state).toBe('not-measured')
+    expect(corner!.missing).toBe('no-corner')
   })
 })

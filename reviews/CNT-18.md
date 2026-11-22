@@ -9,7 +9,7 @@ under "For the owner".
 
 ## What changed
 
-- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C15 in its header).
+- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C16 in its header).
   A wall may state `arc: { centre: [x, y], sweep }`: `sweep` is the angle in degrees the wall
   turns through round `centre` from `start` to `end`, counter-clockwise positive as `turn` and
   `north` are, never 0 and at most a whole turn either way (the schema refuses others). 360 is a
@@ -270,6 +270,27 @@ room is measured as before.
   `scoreboard/__tests__`), 300 files: the first run passed 147 files and stopped at its time limit
   with the machine's load near 260, and the 153 left then passed on their own (1,048 tests).
 
+- After merging `main` at 90a933b1 (HND-11, surveys in): eight conflicts, both sides kept
+  (`CHANGELOG.md`, `docs/result-contract.md`, `cli/src/edit/edits.ts`, `export/gltf.ts`,
+  `types/floorplan.ts`, `types/readParts.ts`, and the field lists in `reading.test.ts` and
+  `result.test.ts`, which now end `…, floor, arc, properties, face`). HND-11 took convention C15,
+  so the curved wall is C16 now. HND-11's new code was made to take the curve:
+  - a wall placed by its face (`face`): on a curved wall the face is a circle round the same
+    centre, so its centre line is half the thickness along each radius, not square to the line
+    between its ends; reading it, writing it back after an edit (round the arc it is moved to)
+    and the roof's lines all do so;
+  - `nearOrigin`, which moves a plan far from zero before an export, moves an arc's centre with
+    its ends;
+  - the glTF's `asset.extras` holds both `gridOrigin` and `gridApproximated`;
+  - a taped side along a curved wall is measured round its face's circle; a taped corner on a
+    curved wall is not worked out and says so (`no-corner`).
+  Tests added: a round room taped on its inside face reads its centre line at 3.0 m and its area
+  within 0.1%; that face written back after a mirror; a taped side round the room agrees.
+  Build, typecheck and lint clean; the bundle 547,487 bytes, under the 600,000 cap; the
+  scoreboard "Same as the stored figures"; the whole suite, twice
+  (`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`): 322 of 322 files,
+  5,629 tests passed and 2 skipped, then 5,627 passed and 4 skipped.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -281,7 +302,7 @@ room is measured as before.
    | Room outline (`room.ts`) | pieces | traced by its chords; a round room of 2.9 m inside radius is 0.016% under |
    | Areas (net, gross internal, gross external) | pieces | the same outline and chord strips |
    | Wall length, offsets, opening fit | exact | along the curve (`wallLength`) |
-   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C15) |
+   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C16) |
    | Door swings, sweep check | exact | from the straight hole; the swing is a true arc |
    | Routes (door graph, way-out checks) | exact | each opening's sides from the curve's normal at its middle; room floors by the outline |
    | Exposure, spaces, outside walls, facing, use indicators | pieces | by the chords |
@@ -347,3 +368,6 @@ room is measured as before.
     pieces (named in the note), and so is the room tag's area, which is the drawing's (0.016%
     under the true circle for the round room). A project's DXF profile renames the layers; the
     curves go on whatever it names for walls, fill and dividing lines.
+- **Taped corners on a curve.** A taped distance between two corners, one of them on a curved
+  wall, is listed as not measured (`no-corner`): Grid finds a corner where two faces' lines meet,
+  and a curve has no one line. A taped side along a curved wall is measured round it.
