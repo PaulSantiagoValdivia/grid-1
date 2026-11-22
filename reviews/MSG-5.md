@@ -225,3 +225,54 @@ After the merge: `npm run build`, `npm run typecheck` and `npm run lint` pass. T
 `packages/floorplan`, `packages/rules`, `packages/cli` and `scoreboard/__tests__`: 193 files,
 4,307 tests pass, 2 skipped (4,309); the first run failed only the CNT-5 expectation above.
 `npm run scoreboard`: "Same as the stored figures", so `current.json` is unchanged.
+
+### Again after merging `main` 25747b7 (SHT-11, CNT-13)
+
+Conflicts, each keeping both sides:
+
+- `docs/result-contract.md`: the changelog for agents keeps every entry, newest first: MSG-5,
+  then CNT-13 and SHT-11, then CNT-5 and the rest as before. The code table merged without
+  conflict and holds both sides' rows (`plan/no-walls`, `opening/door-hits-item`,
+  `item/blocks-doorway`, `item/blocks-window`).
+- `packages/floorplan/src/geometry/validate.ts`: the imports of both (`LeftOutPart`,
+  `itemUseIssues`). `catalogue.ts`, `inspect.ts` and `readTools.ts` merged on their own; every
+  code of both sides keeps its one wording.
+
+**The item codes and their causes** (`feat(rules)` commit after the merge):
+
+- `item/blocks-doorway` and `item/blocks-window` follow from nothing. `itemUseIssues` skips an
+  opening, a wall or a fixture in `broken`, so neither is ever given on a door that runs off its
+  wall, an id clash, a wall left out or a fixture the drawing refuses: that is already MSG-5's
+  rule, no note on a part not drawn, and the floor's "could not be drawn" line names the opening.
+  The suggested test (a fixture blocking a door off its wall, filed under the door's line) cannot
+  happen, so the test pins what does: no item line, `opening/out-of-wall` and the floor's line
+  naming `d1`; moved to fit, `item/blocks-doorway` is given, a problem of its own.
+- A fixture in a room that could not be drawn: its doorway and window lines are measured from
+  the wall, the opening and the fixture alone, so they are true whatever the room and fixing the
+  room does not clear them. They stay given, with no cause. What that case did give falsely is
+  CNT-12's `item/outside-rooms` ("stands in no room"): it now follows from the room's line, by
+  `floor/unclaimed`'s pattern (a drawing line filed under the room, not a held note, which is the
+  rules' pattern for findings). `traceItemRooms` in `validate.ts` finds the unclaimed floor the
+  fixture's middle is on and the refused room listing its walls (`refusedRoomOf`), else the room
+  `unclaimedCause` names, a room the reader left out included.
+- `GROUPED`: no item code. It groups rule findings only; the item codes are drawing lines, each
+  naming one fixture, one opening and its measures.
+- Test: `packages/rules/src/result/__tests__/causes.test.ts`, "a fixture beside a part that could
+  not be drawn (CNT-13)": the toilet in a bathroom whose walls are out of order gives
+  `item/outside-rooms` right under `room/unclosed` with `causedBy { code: 'room/unclosed', id:
+  'r2' }`, and `item/blocks-doorway` with none (2 problems); drawn, only the doorway line is left.
+  And the door off its wall, as above. The contract's causes section and MSG-5's changelog entry
+  say so.
+
+No expectation changed.
+
+After the merge: `npm run build`, `npm run typecheck` and `npm run lint` pass. The tests of
+`packages/floorplan`, `packages/rules`, `packages/cli` and `scoreboard/__tests__`: 198 files,
+4,361 tests pass, 4 skipped (4,365). `npm run scoreboard`: "Same as the stored figures", so
+`current.json` is unchanged.
+
+For the owner:
+
+10. **A fixture's lines beside a room not drawn.** Only "stands in no room" follows from the room.
+    The doorway and window lines are kept as problems of their own because they hold after the
+    room is fixed; holding them back (W-6's cautious reading) would hide true notes.
