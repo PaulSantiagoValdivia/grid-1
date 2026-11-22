@@ -90,6 +90,8 @@ export const DXF_LAYERS = {
   // pocket, a garage door open overhead, a high-level window), dashed.
   openingsAbove: neutral('openings-above'),
   fixtures: neutral('fixtures'),
+  columns: neutral('columns'),
+  structuralGrid: neutral('structural-grid'),
   dimensions: neutral('dimensions'),
   notes: neutral('notes'),
   facts: neutral('facts'),
@@ -1029,6 +1031,36 @@ function writeModel(space: Space, drawing: PlanDrawing, parts: ModelParts): Boun
     )
     if (runs !== null) for (const run of runs) space.polyline(layer, run.points, true, run.turns)
     else for (const slice of wall.slices) space.polyline(layer, slice, true)
+  }
+
+  // CNT-16: each column, cut through as a wall is: filled, then its outline; a round one a true
+  // circle, as two half-circle turns.
+  for (const column of drawing.columns ?? []) {
+    const layer = space.layer('columns')
+    if (column.radius !== undefined) {
+      const ends = [{ x: column.centre.x - column.radius, y: column.centre.y }, { x: column.centre.x + column.radius, y: column.centre.y }]
+      space.hatch(layer, [ends], [[1, 1]])
+      space.polyline(layer, ends, true, [1, 1])
+    } else {
+      space.hatch(layer, [column.outline])
+      space.polyline(layer, column.outline, true)
+    }
+  }
+
+  // CNT-16: each structural grid's lines, chain lines, with the line's name in a circle past each
+  // end. Its spacing is with the other dimensions.
+  for (const grid of drawing.grids ?? []) {
+    const layer = space.layer('structural-grid')
+    const r = size.text
+    for (const line of grid.lines) {
+      space.line(layer, line.from, line.to)
+      for (const [end, way] of [[line.from, line.along], [line.to, scale(line.along, -1)]] as const) {
+        const centre = add(end, scale(way, r))
+        space.circle(layer, centre, r)
+        space.text(layer, sub(centre, { x: 0, y: size.text / 2 }), line.name, size.text)
+        points.push(add(centre, { x: r, y: r }), sub(centre, { x: r, y: r }))
+      }
+    }
   }
 
   // The openings, each its block on its kind's layer.

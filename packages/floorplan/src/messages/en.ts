@@ -2294,7 +2294,9 @@ export const en = {
   'line.plan/grid-unknown-floor.needed': 'floors of the plan, by id',
   'line.plan/grid-unknown-floor.fix': 'Name the floor by its id, as grid describe gives it, or take it out of the grid\'s floors.',
   'areas.columns.one': '{area} m² of floor under {count} column is taken off the net area of the room it stands in; the gross figures still hold it.',
-  'areas.columns.many': '{area} m² of floor under {count} columns is taken off the net area of the rooms they stand in; the gross figures still hold it.'
+  'areas.columns.many': '{area} m² of floor under {count} columns is taken off the net area of the rooms they stand in; the gross figures still hold it.',
+  'drawing.key.column': 'Column',
+  'drawing.key.grid': 'Structural grid'
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof en

@@ -180,8 +180,13 @@ export const TEXT_PX = {
   /** SHT-7: sketch text, notes and tags, and the title under the drawing. */
   sketch: 11,
   note: 12,
-  title: 18
+  title: 18,
+  /** CNT-16: a structural grid line's name, in its circle. */
+  gridName: 11
 } as const
+
+/** CNT-16: the radius of the circle a structural grid line's name is written in, in screen pixels. */
+export const GRID_BUBBLE_PX = 10
 
 /** A length for an attribute: short, and the same on every machine. */
 export function lengthText(value: number): string {
@@ -232,6 +237,10 @@ export type LinePart =
   | 'mark'
   /** CNT-10: the dashed outline of a wall or an opening to be demolished. */
   | 'demolished'
+  /** CNT-16: a column's outline, cut through as a wall is. */
+  | 'column'
+  /** CNT-16: a structural grid's chain lines and the circles its names are written in. */
+  | 'grid'
 
 /** The parts of the drawing a look gives a dash pattern. */
 export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'chain' | 'boundary' | 'demolished'
@@ -427,7 +436,11 @@ const SCREEN_LINES: ScreenLines = {
     // has none. A section's ground, what it sees beyond and its level marks are LVL-8's parts.
     hatch: 0.75,
     mark: 1,
-    demolished: DEMOLISHED_PX.width
+    demolished: DEMOLISHED_PX.width,
+    // CNT-16: a column and a structural grid, which the app draws only through this tree, so
+    // plan.css has none.
+    column: 1,
+    grid: 0.75
   },
   dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, boundary: [12, 3, 2, 3], chain: [12, 3, 2, 3], demolished: DEMOLISHED_PX.dash }
 }
@@ -478,7 +491,10 @@ const PAPER_LINES: PaperLines = {
     hatch: 'finest',
     mark: 'fine',
     // CNT-10: what is to be demolished, dashed with the medium pen.
-    demolished: 'medium'
+    demolished: 'medium',
+    // CNT-16: a column is cut, as a wall is; a structural grid's lines and circles are finest.
+    column: 'cut',
+    grid: 'finest'
   },
   dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], boundary: [5, 1, 0.6, 1], chain: [6, 1.5, 0.8, 1.5], demolished: [2, 1] }
 }

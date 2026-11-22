@@ -2308,5 +2308,7 @@ export const es: Messages = {
   'line.plan/grid-unknown-floor.needed': 'plantas del plano, por su id',
   'line.plan/grid-unknown-floor.fix': 'Nombre la planta por su id, como la da grid describe, o quítela de las plantas de la retícula.',
   'areas.columns.one': '{area} m² de suelo bajo {count} pilar se descuentan de la superficie útil del local en el que está; las superficies construidas lo siguen contando.',
-  'areas.columns.many': '{area} m² de suelo bajo {count} pilares se descuentan de la superficie útil de los locales en los que están; las superficies construidas lo siguen contando.'
+  'areas.columns.many': '{area} m² de suelo bajo {count} pilares se descuentan de la superficie útil de los locales en los que están; las superficies construidas lo siguen contando.',
+  'drawing.key.column': 'Pilar',
+  'drawing.key.grid': 'Retícula estructural'
 }
