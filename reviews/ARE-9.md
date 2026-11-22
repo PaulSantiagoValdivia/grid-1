@@ -141,19 +141,21 @@ areas answer is not part of the check's result record, and its notes carry no co
 
 ## Checks run
 
-After merging `main` (0d4d6f8), on a machine with a load average of about 210:
+Final runs, after merging `main` at fc78ff7 (CNT-12 and MSG-18). The merge conflicted in
+`packages/cli/src/quantities/areas.ts`, where CNT-12 had added each room's fixtures and free floor
+to the old `planAreas`; they are carried onto the new one, and `grid_areas` still prints the
+free-floor rule when a plan has fixtures. The geometry index exports both `areas` and `items`.
 
 - `npm run build`: bundled, no output beyond the command.
 - `npm run typecheck`: no errors in any of the four packages.
 - `npm run lint`: no findings.
 - `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
-- `npx vitest run --exclude '.claude/**'`: 4,203 passed, 5 failed, of 4,208 in 197 files. Rerun alone:
-  - `grid.e2e.test.ts` speed (half a second), `cropView.test.ts` boxes, `diff-size.test.ts`
-    (1,000 entities in a second): pass alone. Timing under load.
-  - `scoreboard.test.ts`: failed in the full run because it ran before the new turns figure was
-    stored ("better than stored", not "same as"). Rerun alone after storing: 19 passed.
-  - `pdf.test.ts`, "cuts a note taller than a page": times out at 60 s alone as well. It lays
-    out an 8,000-word note; the other nine tests in the file build the same sheet and pass, so
-    the time is in the text layout, not the areas. Not looked into further.
-- `npm run scoreboard`: rooms measured wrong 197, damage silent 386, turns answered 16 (better),
-  mistakes named 2, checks fed 5, rooms not measured 727, sound plans with a warning 95. Stored.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,250 passed of 4,250,
+  in 201 files (1,229 s).
+- `npm run scoreboard`: rooms measured wrong 197, damage silent 386, turns answered 16, mistakes
+  named 2, checks fed 5, rooms not measured 727, sound plans with a warning 95. Same as stored.
+
+An earlier full run, before that merge and with a load average of about 210, had 5 failures:
+three timing tests that passed when rerun alone, the scoreboard test (it ran before the new turns
+figure was stored; 19 passed alone after storing), and the PDF test that lays out an 8,000-word
+note (it timed out alone too then, and passes in the final run).
