@@ -485,6 +485,9 @@ A change that would add a problem that leaves a part out is refused, and nothing
   has `countedWith`. `grid_measure` with `what=use` on a zone, or `what=route` from or to one,
   measures its room as a whole and says so; the answer names the zone (`zone`, `fromZone`,
   `toZone`).
+- With LVL-4 (merged from `main`): a zone has no ceiling, slab, void or opening of its own. In
+  `grid_takeoff` its room's ceiling and the floor's `envelope` are the same as for the room drawn
+  without zones, and a zone used as a stair or lift opens no slab.
 
 ### 2026-11-22: slabs, roofs, ceilings and the ground (LVL-4)
 

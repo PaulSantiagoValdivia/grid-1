@@ -1133,7 +1133,7 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
       // A roof that cannot be built is left out.
     }
 
-    // The rooms' ceilings, each covering its space.
+    // The rooms' ceilings, each covering its space. A zone has none of its own (CNT-8, `roomCeiling`).
     for (const room of index.plan.rooms) {
       if (broken.has(room.id) || room.ceiling === undefined) continue
       try {

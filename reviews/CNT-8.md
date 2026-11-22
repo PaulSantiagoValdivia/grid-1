@@ -241,3 +241,49 @@ exit 0. `vitest run packages/floorplan/src packages/rules packages/cli --maxWork
 --minWorkers=1`: Test Files 186 passed (186), Tests 4286 passed | 2 skipped (4288); none failed,
 on timing or otherwise. `npm run scoreboard`: "Same as the stored figures" (turns 16, mistakes 5,
 checks fed 14; guards 735 and 95), so `current.json` is unchanged: no lab plan states `partOf`.
+
+## After merging main (b58930a, LVL-4)
+
+Main had gained LVL-4: one slab per floor from its outline, open over stairs, lifts and voids, a
+roof over every part with nothing above, room ceilings with lowered zones, `site.ground`, and
+`grid_takeoff`'s `envelope`. The merge commit resolves eight conflicted files, keeping both sides
+in each; the changes beyond them are in the follow-up commit.
+
+- `docs/plan-file.md`: both sides' rows in the text limits (a lowered zone's name, the room a
+  zone is part of) and both entries in the list of sections.
+- `docs/result-contract.md`: both skip reasons (`no_ground_level`, `part_of_room`); the changelog
+  has CNT-8's section on top, then LVL-4's.
+- `packages/rules/src/checks/types.ts`, `coverage.ts`: both skip reasons; both imports
+  (`roomZones`, `statedGround`).
+- `packages/rules/src/checks/escape.ts`: LVL-4's `atGround` argument and CNT-8's `wholeRooms` in
+  the result.
+- `packages/floorplan/src/geometry/areas.ts`: both imports (`inPolygon`, `roomZones`).
+- `packages/floorplan/src/geometry/export/ifc.ts`: LVL-4's slab per floor, with CNT-8's skip of
+  zones in the raised-room slabs and the spaces.
+- `packages/cli/src/quantities/takeoff.ts`: LVL-4's ceilings, with CNT-8's room list (no zone
+  unless asked for by name).
+
+Changed beyond the marked conflicts, so a zone has no ceiling, slab or take-off figure of its own:
+
+- `packages/floorplan/src/geometry/envelope.ts`: a zone fills no courtyard (`openToTheSky`), is
+  no void, has no sunken slab, and a stair or lift join with a zone at either end opens no slab,
+  as a zone is in no stair stack (`stairStacks`); `roomCeiling` gives no ceiling for a zone. The
+  IFC's `IfcCovering`s and `grid_takeoff`'s `lowered` read `roomCeiling`, so both follow.
+- `docs/plan-file.md` and `docs/result-contract.md`: a sentence each on zones with LVL-4.
+- New test in `packages/cli/src/quantities/__tests__/envelope.test.ts`, "zones in the slabs,
+  roofs, ceilings and take-off (CNT-8)": the lab's studio with a first floor over its
+  kitchenette, its zones stating a ceiling, a void, a sunken floor and a stair use, gives the same
+  `envelope`, totals and room lines, and the same count of IFC slabs, openings, roofs, coverings
+  and spaces, as the studio drawn as one room. Both of its cases fail without the
+  `envelope.ts` change.
+
+For the owner: a zone used as a stair or lift now opens no slab, so an open-plan room with a
+stair zone over a stair room below has a closed floor unless the plan states the stair (a stated
+stair opens its flights wherever it stands). That keeps a room with zones the same as the room
+without them; the other reading, a stair zone that opens the floor, is one line in `slabOf`.
+
+Checks after the merge and the follow-up: `npm run build`, `npm run typecheck` and `npm run lint`
+exit 0, with no type errors. `vitest run packages/floorplan/src packages/rules packages/cli
+--maxWorkers=2 --minWorkers=1`: Test Files 191 passed (191), Tests 4333 passed | 2 skipped
+(4335); none failed, on timing or otherwise. The scoreboard and the full suite were not run for
+this merge.

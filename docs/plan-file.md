@@ -383,7 +383,10 @@ walls) of the zone's own. The two overlap on purpose:
 
 - The room is the place. It is measured, counted, reached and checked as a whole. A door or a
   fixture in it is in the room, whichever zone it is in, and the 3D view, the IFC and the floor
-  slabs have the room's floor only.
+  slabs have the room's floor only. A zone's `ceiling`, `void` or floor offset is not read: the
+  ceiling, the slab and any opening in it are the room's ([Slabs, roofs, ceilings and the
+  ground](#slabs-roofs-ceilings-and-the-ground)), and a zone used as a stair or a lift opens no
+  slab of its own.
 - A zone is named and measured, and is in no total: `grid_areas` lists it with its room
   (`zoneOf`) and gives its floor to its own use in the area by use, the room schedule lists it
   under its room, and the takeoff, the estimate and the comparison of two plans count its floor
