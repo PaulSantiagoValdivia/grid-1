@@ -36,6 +36,7 @@ import type { Line, Vec2 } from './vec2'
 import { area, centroid, cross, dot, intersectLines, scale, signedArea, sub } from './vec2'
 import { tolerance, tolerancesAsStated } from './tolerances'
 import { fixedText, metresText } from './rounding'
+import { likelyId } from '../types/nearest'
 import { quoted, quotedList } from '../types/planText'
 import type { WallAxis } from './wall'
 import { wallAxis, wallFaces } from './wall'
@@ -294,9 +295,11 @@ function resolveWalls(ring: Ring, index: PlanIndex): Wall[] {
   return ring.ids.map((wallId) => {
     const wall = index.wallsById.get(wallId)
     if (!wall) {
+      // MSG-7: the wall most likely meant, from the one nearest-id helper.
+      const meant = likelyId(wallId, [...index.wallsById.keys()])
       throw new RoomOutlineError(
         'room/unclosed',
-        `${ring.Name} references wall ${quoted(wallId)}, which does not exist`,
+        `${ring.Name} references wall ${quoted(wallId)}, which is not in the plan` + (meant === null ? '' : `: did you mean ${quoted(meant)}?`),
         ring.hole
       )
     }

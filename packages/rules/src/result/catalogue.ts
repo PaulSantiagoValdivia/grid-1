@@ -11,7 +11,7 @@
  * Plain English, never anything that reads as "this plan complies".
  */
 
-import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
+import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix } from '@ongrid/floorplan/geometry'
 import { quoted } from '@ongrid/floorplan/types/floorplan'
 import { buildingKindsText, findingReadFor } from '../checks/figures'
 import { wordings as figureWordings } from '../checks/messages'
@@ -41,6 +41,8 @@ export interface Subject {
   readonly place?: string
   /** On a refusal: what the format wants there, in words. */
   readonly wants?: string
+  /** MSG-7: the changes to the part that would clear the line, as data. */
+  readonly fixes?: readonly PlanFix[]
   /** On a word Grid does not read (MSG-4): the word, quoted, or what it is when it is not repeated. */
   readonly word?: string
   /** On a word Grid does not read: the word Grid knows that was most likely meant. */
@@ -71,6 +73,10 @@ export interface CodeEntry {
 }
 
 const fixed = (text: string) => (): string => text
+/** A figure from a line's fixes (MSG-7), or null. */
+const fixOf = (s: Subject, key: 'width' | 'offset' | 'height' | 'sill'): number | null => s.fixes?.find((f) => f[key] !== undefined)?.[key] ?? null
+/** The wall most likely meant, from a line's fixes (MSG-7). */
+const meantWall = (s: Subject): string | null => s.fixes?.find((f) => f.wall !== undefined)?.wall ?? null
 const FAR = tolerance('farFromOrigin')
 const TIDY = 'grid tidy lists this fault and can make the fix it names. Otherwise correct the walls by hand.'
 const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every size is in metres.'
@@ -352,8 +358,11 @@ export const CODES = {
   },
   'opening/missing-wall': {
     says: (s) => `${s.label} is on a wall that is not in the plan`,
-    needed: fixed('the id of a wall in the plan'),
-    fix: fixed('Name a wall the plan has, letter for letter, or add the wall.')
+    needed: (s) => (meantWall(s) === null ? 'the id of a wall in the plan' : `the id of a wall in the plan, most likely ${quoted(meantWall(s)!)}`),
+    fix: (s) =>
+      meantWall(s) === null
+        ? 'Name a wall the plan has, letter for letter, or add the wall.'
+        : `Did you mean ${quoted(meantWall(s)!)}? Name it letter for letter, or add the wall.`
   },
   'opening/degenerate': {
     says: (s) => `${s.label} has no size`,
@@ -362,13 +371,26 @@ export const CODES = {
   },
   'opening/out-of-wall': {
     says: (s) => `${s.label} runs off its wall`,
-    needed: fixed("its offset and width within the wall's length"),
-    fix: fixed('Move it along the wall, or make it narrower, as the line found says.')
+    needed: (s) => {
+      const fits = [
+        fixOf(s, 'offset') === null ? null : `an offset of at most ${metresText(fixOf(s, 'offset')!)} m`,
+        fixOf(s, 'width') === null ? null : `a width of at most ${metresText(fixOf(s, 'width')!)} m at its offset`
+      ].filter((part): part is string => part !== null)
+      return fits.length === 0 ? "its offset and width within the wall's length" : fits.join(', or ')
+    },
+    fix: (s) => {
+      const fits = [
+        fixOf(s, 'offset') === null ? null : `move it to an offset of ${metresText(fixOf(s, 'offset')!)} m or less`,
+        fixOf(s, 'width') === null ? null : `make it ${metresText(fixOf(s, 'width')!)} m wide or narrower, keeping its start`
+      ].filter((part): part is string => part !== null)
+      return fits.length === 0 ? 'Move it along the wall, or make it narrower, as the line found says.' : `${fits.join(', or ').replace(/^./, (c) => c.toUpperCase())}.`
+    }
   },
   'opening/too-tall': {
     says: (s) => `${s.label} reaches above the top of its wall`,
-    needed: fixed('its sill and height together no higher than the wall'),
-    fix: fixed('Lower its height or its sill.')
+    needed: (s) =>
+      fixOf(s, 'height') === null ? 'its sill and height together no higher than the wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
+    fix: (s) => (fixOf(s, 'height') === null ? 'Lower its height or its sill.' : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, or lower its sill.`)
   },
   'opening/negative-sill': {
     says: (s) => `${s.label} has its sill below the floor`,
@@ -683,7 +705,22 @@ export const CODES = {
   },
   'room/escape-window-too-small': {
     says: (s) => wordingText(figureWordings.escapeWindowTooSmall(s.name)),
-    found: (s) => `${area(s.finding?.area)} as drawn, ${metres(s.finding?.width)} wide and ${metres(s.finding?.height)} high`,
+    // MSG-7 (lab MS-13): the measure that fails first, against what it needs; the ones that pass after.
+    found: (s) => {
+      const f = s.finding
+      const minWidth = f?.figures?.find((x) => x.key === 'escapeOpeningMinWidth')?.value
+      const minHeight = f?.figures?.find((x) => x.key === 'escapeOpeningMinHeight')?.value
+      const measures = [
+        { text: `${area(f?.area)} in area`, need: f?.minimum === undefined ? null : area(f.minimum), fails: f?.area !== undefined && f.minimum !== undefined && f.area < f.minimum },
+        { text: `${metres(f?.width)} wide`, need: minWidth === undefined ? null : metres(minWidth), fails: f?.width !== undefined && minWidth !== undefined && f.width < minWidth },
+        { text: `${metres(f?.height)} high`, need: minHeight === undefined ? null : metres(minHeight), fails: f?.height !== undefined && minHeight !== undefined && f.height < minHeight }
+      ]
+      const failing = measures.filter((m) => m.fails)
+      if (failing.length === 0) return `${area(f?.area)} as drawn, ${metres(f?.width)} wide and ${metres(f?.height)} high`
+      const passing = measures.filter((m) => !m.fails)
+      const short = failing.map((m) => `${m.text}, under the ${m.need} needed`).join(', and ')
+      return passing.length === 0 ? short : `${short}; ${passing.map((m) => m.text).join(' and ')}, which ${passing.length === 1 ? 'is' : 'are'} enough`
+    },
     needed: (s) => {
       const parts = [
         s.finding?.minimum === undefined ? null : `${area(s.finding.minimum)}`,

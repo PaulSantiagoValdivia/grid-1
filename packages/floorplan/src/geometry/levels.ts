@@ -14,6 +14,7 @@ import type { Issue } from './validate'
 import { limit, tolerance } from './tolerances'
 import { metresText } from './rounding'
 import { quoted } from '../types/planText'
+import { closestId, idEdits } from '../types/nearest'
 import { WALL_DEFAULTS } from '../types/floorplan'
 
 const issue = (entity: Issue['entity'], id: string, code: string, message: string, severity: Issue['severity'] = 'warning'): Issue => ({
@@ -33,42 +34,8 @@ function and(items: readonly string[]): string {
 
 // ── Floor ids ─────────────────────────────────────────────────────────────────────────────────
 
-/**
- * Edits (a letter added, dropped, changed or two swapped) between two ids, ignoring
- * capitalisation: the optimal string alignment distance. Stops counting past `most`.
- */
-export function idEdits(a: string, b: string, most = Infinity): number {
-  const x = a.toLowerCase()
-  const y = b.toLowerCase()
-  if (Math.abs(x.length - y.length) > most) return most + 1
-  const rows: number[][] = [Array.from({ length: y.length + 1 }, (_, j) => j)]
-  for (let i = 1; i <= x.length; i++) {
-    const row = [i]
-    for (let j = 1; j <= y.length; j++) {
-      const cost = x[i - 1] === y[j - 1] ? 0 : 1
-      let best = Math.min(rows[i - 1]![j]! + 1, row[j - 1]! + 1, rows[i - 1]![j - 1]! + cost)
-      if (i > 1 && j > 1 && x[i - 1] === y[j - 2] && x[i - 2] === y[j - 1]) best = Math.min(best, rows[i - 2]![j - 2]! + 1)
-      row.push(best)
-    }
-    rows.push(row)
-  }
-  return rows[x.length]![y.length]!
-}
-
-/** The known id with the fewest edits from `id`; the first of them in `known`'s order on a tie. */
-export function nearestFloorId(id: string, known: readonly string[]): string | null {
-  let best: string | null = null
-  let fewest = Infinity
-  for (const candidate of known) {
-    if (candidate === id) continue
-    const edits = idEdits(id, candidate)
-    if (edits < fewest) {
-      fewest = edits
-      best = candidate
-    }
-  }
-  return best
-}
+// The edit count and the closest floor id are the shared helper's (MSG-7, `types/nearest.ts`).
+export { idEdits, closestId as nearestFloorId }
 
 /**
  * How many edits make an id that the plan does not list "spelt like" another, by the shorter
@@ -135,7 +102,7 @@ export function unknownFloorIssues(plan: FloorPlan, declared: ReadonlySet<string
         issues.push(issue(entity, part.id, code, `${noun} ${quoted(part.id)} sits on floor ${quoted(floor)}, which the plan does not list`))
         continue
       }
-      const nearest = nearestFloorId(floor, listed)
+      const nearest = closestId(floor, listed)
       issues.push(
         issue(
           entity,
