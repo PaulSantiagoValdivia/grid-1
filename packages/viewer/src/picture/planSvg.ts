@@ -17,7 +17,7 @@ import {
   buildFloorPlan,
   planForFloor,
   resolveFloor,
-  validateDoorSweeps
+  validateFloorDoorSweeps
 } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import type { LabelStyle } from '../canvas2d/labelPlacement'
@@ -115,10 +115,16 @@ export function handingsOf(plan: FloorPlan): Map<string, DoorHanding> {
  * Doors whose swing runs into something (a wall, or another door), with what they say and
  * what they hit. The warnings that only say a value is missing are left out: that door has no
  * symbol, so there is nothing to point at.
+ *
+ * Only for the floor shown (QAR-7): `slice` is its `planForFloor` and `drawing` the
+ * `buildFloorPlan(slice)` the view draws, so nothing is built twice and no other floor is checked.
  */
-export function doorWarningsOf(plan: FloorPlan): Map<string, { messages: string[]; hits: Set<string> }> {
+export function doorWarningsOf(
+  slice: FloorPlan,
+  drawing: PlanDrawing
+): Map<string, { messages: string[]; hits: Set<string> }> {
   const byDoor = new Map<string, { messages: string[]; hits: Set<string> }>()
-  for (const issue of validateDoorSweeps(plan, doorHandingOf)) {
+  for (const issue of validateFloorDoorSweeps(slice, drawing, doorHandingOf)) {
     if (issue.hits.length === 0) continue
     const entry = byDoor.get(issue.id) ?? { messages: [], hits: new Set<string>() }
     if (!entry.messages.includes(issue.message)) entry.messages.push(issue.message)
@@ -215,7 +221,7 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const nodes = planScene({
     drawing,
     handings,
-    doorWarnings: warningMessages(doorWarningsOf(slice)),
+    doorWarnings: warningMessages(doorWarningsOf(slice, drawing)),
     dimensions,
     metersPerPixel: view.width / width,
     look,

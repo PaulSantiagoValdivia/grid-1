@@ -44,3 +44,5 @@ Grid has not been released yet. The first release will hold:
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.
+- The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
+  only the floor it shows.
