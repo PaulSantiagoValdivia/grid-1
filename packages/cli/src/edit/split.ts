@@ -1,0 +1,185 @@
+/**
+ * One room split in two by a new wall (WRT-3, lab WR-2): "bedroom 2 into a study and a second
+ * bathroom". The new room takes the named side of the room, the size asked for measured inside
+ * from that side's face; the room keeps its id and the rest. A door goes in the new wall unless
+ * the call says none.
+ *
+ * The way of doing it comes from the lab's edit prototype (`split-room`): rectangles square to
+ * the drawing only; the new wall runs between the centre lines of the two walls it meets, and
+ * each part lists its walls counter-clockwise from the south (C3).
+ *
+ * Pure: a survey in, a patch out.
+ */
+import { sub, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { quoted } from '../fs/projectFiles'
+import { surveyPlan, type Survey } from '../quantities/survey'
+import { applyPatch, type Direction, type Patch, type RoomChange } from './edits'
+import { freshId, usedIds } from './merge'
+import { EditRefused } from './refused'
+import { r3 } from './seat'
+
+export const OPPOSITE: Record<Direction, Direction> = { north: 'south', south: 'north', east: 'west', west: 'east' }
+const ORDER: readonly Direction[] = ['south', 'east', 'north', 'west']
+
+/** Which way a side of an outline faces, from inside the room; null at an angle. */
+export function facing(edge: { from: Vec2; to: Vec2; length: number }): Direction | null {
+  const d = sub(edge.to, edge.from)
+  const n = { x: d.y / edge.length, y: -d.x / edge.length }
+  if (n.y > 0.99) return 'north'
+  if (n.y < -0.99) return 'south'
+  if (n.x > 0.99) return 'east'
+  if (n.x < -0.99) return 'west'
+  return null
+}
+
+/** A rectangle's inside box and the walls on each of its sides, in the order its outline meets them. */
+export function rectangleSides(survey: Survey, roomId: string): { box: { x0: number; y0: number; x1: number; y1: number }; sides: Record<Direction, Wall[]> } {
+  const room = survey.byId.get(roomId)!
+  const name = quoted(room.facts.name)
+  if (room.facts.shape?.rectangle !== true || room.holes.length > 0) throw new EditRefused(`${name} is not a plain rectangle square to the drawing; this tool splits rectangles only. Write the plan again with grid_write_rooms.`)
+  const xs = room.polygon.map((p) => p.x)
+  const ys = room.polygon.map((p) => p.y)
+  const box = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }
+  const sides: Record<Direction, Wall[]> = { north: [], east: [], south: [], west: [] }
+  for (const edge of room.edges) {
+    const side = facing(edge)
+    if (side === null) throw new EditRefused(`${name} has a side at an angle; this tool handles right angles only.`)
+    if (edge.wall === null) throw new EditRefused(`The ${side} side of ${name} lies on none of its walls; grid_check says why.`)
+    if (!sides[side].includes(edge.wall)) sides[side].push(edge.wall)
+  }
+  return { box, sides }
+}
+
+export interface SplitRequest {
+  readonly side: Direction
+  /** The new room's inside size across from that side, in metres. */
+  readonly size: number
+  readonly newRoom: { readonly id: string; readonly name: string; readonly use?: string }
+  /** The room's own new name and use, if they change. */
+  readonly name?: string
+  readonly use?: string
+  readonly thickness?: number
+  readonly wallId?: string
+  /** 0 for no door. */
+  readonly doorWidth?: number
+  readonly doorFrom?: Direction
+  readonly doorDistance?: number
+}
+
+export function splitRoom(survey: Survey, roomId: string, request: SplitRequest): Patch {
+  const plan = survey.plan
+  const room = plan.rooms.find((r) => r.id === roomId)!
+  const name = quoted(survey.byId.get(roomId)!.facts.name)
+  const used = usedIds(survey)
+  if (used.has(request.newRoom.id)) throw new EditRefused(`The id ${quoted(request.newRoom.id)} is already used in the plan; pick another for the new room.`)
+  if (request.wallId !== undefined && used.has(request.wallId)) throw new EditRefused(`The id ${quoted(request.wallId)} is already used in the plan; pick another for the new wall.`)
+  const { box, sides } = rectangleSides(survey, roomId)
+  const { side, size } = request
+  const t = request.thickness ?? 0.1
+  const across = side === 'east' || side === 'west' // the new wall runs north-south
+  const span = across ? box.x1 - box.x0 : box.y1 - box.y0
+  if (size <= 0.3 || size + t >= span - 0.3) {
+    throw new EditRefused(`${name} is ${span.toFixed(2)} m inside from ${across ? 'west to east' : 'south to north'}; a new room ${size.toFixed(2)} m across from its ${side} side and a ${t.toFixed(2)} m wall leave ${(span - size - t).toFixed(2)} m for the rest. Each part needs more than 0.30 m.`)
+  }
+  const c = side === 'east' ? box.x1 - size - t / 2 : side === 'west' ? box.x0 + size + t / 2 : side === 'north' ? box.y1 - size - t / 2 : box.y0 + size + t / 2
+  const [lo, hi]: [Direction, Direction] = across ? ['south', 'north'] : ['west', 'east']
+  /** Where the new wall's line meets the centre line of the wall on that side. */
+  const meet = (on: Direction): { wall: Wall; at: [number, number] } => {
+    for (const wall of sides[on]) {
+      const axis = wallAxis(wall)
+      const k = across ? axis.dir.x : axis.dir.y
+      if (Math.abs(k) < 1e-9) continue
+      const s = ((across ? c - axis.start.x : c - axis.start.y) / k)
+      if (s < -0.02 || s > axis.length + 0.02) continue
+      const p = { x: axis.start.x + axis.dir.x * s, y: axis.start.y + axis.dir.y * s }
+      return { wall, at: [r3(p.x), r3(p.y)] }
+    }
+    throw new EditRefused(`No wall of ${name} lies where the new wall would end on its ${on} side.`)
+  }
+  const from = meet(lo)
+  const to = meet(hi)
+  const sample = sides[side][0] ?? from.wall
+  const wallId = request.wallId ?? freshId(used, `${request.newRoom.id}-${OPPOSITE[side]}`)
+  used.add(wallId)
+  const height = Math.max(...[...sides.north, ...sides.east, ...sides.south, ...sides.west].filter((w) => w.virtual !== true).map((w) => w.height), sample.height)
+  const newWall: Record<string, unknown> = { id: wallId, start: from.at, end: to.at, thickness: t, height, kind: 'interior', ...(room.floor !== undefined ? { floor: room.floor } : {}) }
+
+  // Each part's walls, counter-clockwise from the south: the side it gives up is the new wall.
+  const part = (far: Direction, keepLow: boolean): string[] => {
+    const list: string[] = []
+    for (const s of ORDER) {
+      if (s === far) {
+        list.push(wallId)
+        continue
+      }
+      for (const wall of sides[s]) {
+        if (s === lo || s === hi) {
+          const axis = wallAxis(wall)
+          const a = across ? [axis.start.x, axis.end.x] : [axis.start.y, axis.end.y]
+          const mine = keepLow ? [across ? box.x0 : box.y0, c] : [c, across ? box.x1 : box.y1]
+          if (Math.min(Math.max(...a), mine[1]!) - Math.max(Math.min(...a), mine[0]!) < 0.02) continue
+        }
+        list.push(wall.id)
+      }
+    }
+    return list
+  }
+  const lowSide = side === 'west' || side === 'south'
+  const rest = part(side, !lowSide)
+  const taken = part(OPPOSITE[side], lowSide)
+
+  const said: string[] = []
+  const guessed: string[] = []
+  const notKept: string[] = []
+  const rooms = new Map<string, RoomChange>()
+  const change: RoomChange = { boundary: rest }
+  if (request.name !== undefined) change.name = request.name
+  if (request.use !== undefined) change.use = request.use
+  rooms.set(roomId, change)
+  const addRooms: Record<string, unknown>[] = [{
+    id: request.newRoom.id,
+    name: request.newRoom.name,
+    ...(request.newRoom.use !== undefined ? { use: request.newRoom.use } : {}),
+    boundary: taken,
+    ...(room.floor !== undefined ? { floor: room.floor } : {}),
+  }]
+  const length = Math.hypot(to.at[0] - from.at[0], to.at[1] - from.at[1])
+  said.push(`New wall ${quoted(wallId)}, ${t.toFixed(2)} m thick and ${length.toFixed(2)} m long, ${size.toFixed(2)} m inside from the ${side} side of ${name}, from wall ${quoted(from.wall.id)} to wall ${quoted(to.wall.id)}.`)
+
+  const addOpenings: Record<string, unknown>[] = []
+  const doorWidth = request.doorWidth ?? 0.8
+  if (doorWidth > 0) {
+    const inside = across ? [box.y0, box.y1] : [box.x0, box.x1]
+    const start = across ? from.at[1] : from.at[0]
+    let near: number
+    if (request.doorFrom !== undefined) {
+      if (request.doorFrom !== lo && request.doorFrom !== hi) throw new EditRefused(`The new wall runs ${across ? 'north-south' : 'east-west'}: place its door from the ${lo} or ${hi}.`)
+      const d = request.doorDistance ?? 0
+      near = request.doorFrom === lo ? inside[0]! + d : inside[1]! - d - doorWidth
+    } else {
+      near = (inside[0]! + inside[1]! - doorWidth) / 2
+      guessed.push(`The door is centred in the new wall: pass door_from and door_distance to place it.`)
+    }
+    const offset = r3(near - start)
+    if (offset < 0 || offset + doorWidth > length + 1e-6) throw new EditRefused(`A ${doorWidth.toFixed(2)} m door there would run past the ends of the new ${length.toFixed(2)} m wall.`)
+    const doorId = freshId(used, `door-${request.newRoom.id}`)
+    used.add(doorId)
+    // Swing "left" opens toward the face the new wall's normal points at: west or north.
+    const opensTo = across ? 'west' : 'north'
+    const opensInto = (opensTo === side ? request.newRoom.name : request.name ?? survey.byId.get(roomId)!.facts.name)
+    addOpenings.push({ id: doorId, wall: wallId, type: 'door', offset, width: doorWidth, sill: 0, height: 2.1, hinge: 'start', swing: 'left', ...(request.doorFrom !== undefined ? { anchor: { from: request.doorFrom, room: roomId } } : {}) })
+    said.push(`New door ${quoted(doorId)}, ${doorWidth.toFixed(2)} m wide, in the new wall${request.doorFrom !== undefined ? `, ${(request.doorDistance ?? 0).toFixed(2)} m from the ${request.doorFrom} side` : ''}.`)
+    guessed.push(`Door ${quoted(doorId)} hangs from its ${lo} end and opens into ${quoted(opensInto)}: grid_change_opening changes that.`)
+  }
+
+  const patch: Patch = { walls: new Map(), openings: new Map(), removeOpenings: new Set(), rooms, said, guessed, notKept, addWalls: [newWall], addRooms, addOpenings }
+  // The rooms as the split leaves them, for their areas and their windows.
+  const after = surveyPlan(applyPatch(plan as unknown as Record<string, unknown>, patch) as unknown as Survey['plan'])
+  const area = (id: string): number => after.byId.get(id)?.facts.shape?.area ?? 0
+  const kept = request.name !== undefined ? `${name} (now ${quoted(request.name)})` : name
+  said.push(`${kept}: ${(survey.byId.get(roomId)!.facts.shape?.area ?? 0).toFixed(2)} → ${area(roomId).toFixed(2)} m²; new room ${quoted(request.newRoom.name)}: ${area(request.newRoom.id).toFixed(2)} m².`)
+  const hadWindow = (s: Survey, id: string): boolean => s.byId.get(id)?.openings.some((o) => o.type === 'window') ?? false
+  if (hadWindow(survey, roomId) && !hadWindow(after, roomId)) notKept.push(`${request.name !== undefined ? quoted(request.name) : name} has no window now: ${hadWindow(after, request.newRoom.id) ? `its window is in ${quoted(request.newRoom.name)}` : 'none is left on its side'}.`)
+  return patch
+}
+

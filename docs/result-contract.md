@@ -197,7 +197,7 @@ its text, which says the same.
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (parts that could not be drawn), `note`. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror` | `written`, `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, and `doors` (each door that now joins other rooms). |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -213,6 +213,16 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: version 1 (WRT-3)
+
+- Five changes to the plan are new tools and `grid edit` verbs: `grid_merge_rooms`,
+  `grid_split_room`, `grid_add_room`, `grid_stretch` and `grid_rename_room`.
+  `grid_change_opening` moves and places an opening (`room`, `side`, `from`, `distance`);
+  `grid_move_room_side` takes an inside size (`to`).
+- Every edit receipt adds `guessed` and `couldNotKeep`. No new message code: refusals of an
+  edit are one line, as before.
+- An opening may state `anchor` in the plan file: what Grid's edits keep its place from.
 
 ### 2026-11-21: version 1 (MSG-1)
 
