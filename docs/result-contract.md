@@ -349,6 +349,17 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: writing on the drawing, and the sketch layer (SHT-7)
+
+- The plan may hold `title`, `annotations` and `sketch`. None of them changes an area, a check or
+  a wall count. A field the format does not have on a note or a sketch item is a
+  `plan/unknown-field` line, as on any other part.
+- New code, not checked: `floor/sketch-drawn-only`, one line per floor with a sketch, naming its
+  items in `also`: the sketch is drawn and exported, and never measured or checked.
+- New code, worth a look: `plan/note-no-place`, a note in a room the plan does not have, naming
+  the note and the room in `also`. The note is not drawn.
+- `grid_view` (kind plan) takes `hide`, `colour` and `key`.
+
 ### 2026-11-22: version 1 (WRT-3)
 
 - Five changes to the plan are new tools and `grid edit` verbs: `grid_merge_rooms`,
