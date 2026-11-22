@@ -54,8 +54,9 @@ room) and LVL-9 (sections).
      AU3-2 asked for exactly this).
    - New `floor/out-of-line` (warning, `stacking.ts`, new): each floor with a room on it, set
      against the floors one level below, by their outlines as the walls draw them (`floorSpaces`):
-     where it reaches past them or sits back from them by more than `stackShift`, with the side,
-     how far and the box of each stretch, up to three. Not for a floor marked `overhang: "meant"`.
+     where it reaches past them or sits back from them by more than `stackShift` and half the
+     thickest wall along that stretch, with the side, how far and the box of each stretch, up to
+     three. Not for a floor marked `overhang: "meant"`.
 4. **Stairs and shafts** (`floorJoins.ts`, `rules/check.ts`, `rules/messages.ts`, `rules/types.ts`,
    `notes/notes.ts`): stair rooms or lift shafts on neighbouring levels that join (share at least
    half, LVL-3) but whose box is moved, both sides past the other's the same way by more than
@@ -256,8 +257,11 @@ Each is the reversible choice, taken and recorded rather than stopped on.
    shaft is said for any side that stands off, as a shaft is the same on every floor (h06b's 0.6 m).
    A stair room that shares less than half with the one below is still LVL-3's out-of-line finding,
    without a distance.
-8. **`stackShift` = 0.05 m**: walls of 0.30 and 0.25 m on one axis (faces 0.025 m apart) line up;
-   the lab's 0.30 m and 1.20 m moves do not.
+8. **`stackShift` = 0.05 m, and for outlines half the thickest wall along the stretch.** Walls of
+   different thickness on one axis line up (0.50 m under 0.30 m: faces 0.10 m apart); the lab's
+   0.30 m widening and 1.20 m move do not. The cost: a real overhang no deeper than half the wall
+   it runs along plus 5 cm (0.25 m past a 0.40 m wall) is not said. Comparing outlines on the walls'
+   axes instead would catch it, but needs an outline Grid does not draw yet.
 9. **Rooms text is unchanged.** WRT-4's `through <floor>` on a room still writes the room and its
    walls on each floor, stacked; `grid write` does not write walls through floors, and
    `describe --as rooms` reads such a wall back as a `raw wall` line (round trip checked by hand on
