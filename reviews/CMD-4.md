@@ -53,8 +53,10 @@ copy of the repository" and `docs/commands.md` "Options and exit codes".
 
 ## Checks
 
-See the report for the final run on the merged branch: type check, lint, the full suite and the
-scoreboard. The scoreboard counts do not move: the change adds tests only.
+On the branch with `main` at `ce236f72` merged (nothing newer on `main`): `npm run typecheck` 0,
+`npm run lint` 0, the full suite (`vitest run --exclude '.claude/**' --maxWorkers=2`) 382 files,
+6,204 passed and 4 skipped, and `npm run scoreboard` "Same as the stored figures" (turns 23 of
+67, checks 25 of 42, mistakes 5 of 9). No count moves: the change adds tests only.
 
 ## For the owner
 
