@@ -188,6 +188,30 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
     const problem = textProblem(site['country'], 'name')
     if (problem) return `site.country ${problem}`
   }
+  // BRF-3: the plot's boundary and the site's things, each with an id and a label.
+  if (isObject(site)) {
+    const boundary = site['boundary']
+    if (Array.isArray(boundary) && boundary.length > BOUNDARY_MAX) {
+      return `site.boundary has ${boundary.length.toLocaleString('en-US')} points; a boundary may have at most ${BOUNDARY_MAX.toLocaleString('en-US')}`
+    }
+    const things = site['things']
+    if (Array.isArray(things)) {
+      if (things.length > PARTS_MAX) return `site.things has ${things.length.toLocaleString('en-US')} entries; a plan may have at most ${PARTS_MAX.toLocaleString('en-US')} things on its site`
+      for (let i = 0; i < things.length; i++) {
+        const thing: unknown = things[i]
+        if (!isObject(thing)) continue
+        for (const [field, kind] of [['id', 'id'], ['label', 'name']] as const) {
+          const value = thing[field]
+          const problem = typeof value === 'string' ? textProblem(value, kind) : null
+          if (problem) return `site.things[${i}].${field} ${problem}`
+        }
+        const points = thing['points']
+        if (Array.isArray(points) && points.length > BOUNDARY_MAX) {
+          return `site.things[${i}].points has ${points.length.toLocaleString('en-US')} points; one of the site's things may have at most ${BOUNDARY_MAX.toLocaleString('en-US')}`
+        }
+      }
+    }
+  }
   const image = raw['referenceImage']
 
   if (isObject(image) && typeof image['path'] === 'string') {

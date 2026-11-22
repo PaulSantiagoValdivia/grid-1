@@ -176,6 +176,8 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     notChecked[i] = { ...notice, held: [...(notice.held ?? []), ...escapesHeld] }
     heldEscapes.delete(notice.floor)
   }
+  // The plan checks' notices about the whole plan (BRF-3: no distance to the boundary measured).
+  notChecked.push(...base.notChecked.filter((notice) => notice.floor === ''))
   // A plan of walls alone: no check that looks at rooms ran, and the report says so (CH-1).
   if (plan.rooms.length === 0) {
     notChecked.push({ reason: 'no_rooms', floor: '', rooms: [], openings: [], message: messages.noRooms() })

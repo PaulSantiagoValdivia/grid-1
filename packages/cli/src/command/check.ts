@@ -464,6 +464,8 @@ const PARTS: Record<CheckCoverage['looksAt'], [string, string]> = {
   floor: ['floor', 'floors'],
   room: ['room', 'rooms'],
   door: ['door or opening', 'doors and openings'],
+  // BRF-3: the edges of the plot's boundary, by number.
+  edge: ['edge of the boundary', 'edges of the boundary'],
 }
 
 /** "3 rooms", "1 floor". */

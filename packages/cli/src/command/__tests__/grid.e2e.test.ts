@@ -259,7 +259,7 @@ describe('grid check', () => {
   it('lists ceiling height and load-bearing walls among what the checks never look at', () => {
     // MSG-10: in the full report; the short one says how many there are and where. LVL-4 adds
     // the line on the ground level, which the checks set no door or window against.
-    expect(grid('check', 'two-bed-flat.json').out).toContain('what is never looked at (10).')
+    expect(grid('check', 'two-bed-flat.json').out).toContain('what is never looked at (11).')
     const run = grid('check', 'two-bed-flat.json', '--full')
     expect(run.status).toBe(0)
     const never = run.out.slice(run.out.indexOf('What these checks never look at'))
@@ -479,7 +479,9 @@ describe('the built file', () => {
     // 400 kB since VEW-7, to catch a second zod; 450 kB since WRT-3, whose edits and their tools
     // take the file just past 400 kB (400,863 bytes) with no new dependency. 500 kB since SHT-7:
     // the writing on the drawing, with HND-6, COD-2, ARE-12, CMD-13 and QAR-7 on main, made it
-    // 463,249 bytes, again with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(500_000)
+    // 463,249 bytes, again with no new dependency. 550 kB since BRF-3: main at 26729c9 (LVL-6,
+    // BRF-5) built 503,303 bytes, past the old cap, and the plot takes it to about 510,000, with no
+    // new dependency.
+    expect(statSync(bundle).size).toBeLessThan(550_000)
   })
 })

@@ -32,7 +32,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_fields` | What can be asked of the plan: the fields Grid works out for each kind of part, with their units, and the facts of the person's own the parts carry, with how many carry each and their values (see below) |
 | `grid_find` | The walls, doors, windows, openings, rooms or floors that meet every condition, by id, with only the fields asked for, and a `view` for `grid_view` that picks them out |
 | `grid_count` | The parts that meet every condition, grouped by a field or fact, each group with its count, its sums and its ids, and a `view` for `grid_view` that colours each group |
-| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; and which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall) |
+| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall); and the plot: how far the building stands from each edge of the site's boundary against the set-back the person asked for, each face's distance to the edge in front of it, and the plot coverage |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules", then the place the figures were for (the plan's `site.country`, or `country`; with none, no figure is applied); the notes the person set aside are listed under Seen |
@@ -248,6 +248,47 @@ geometry is `planSunTable` in `@ongrid/floorplan` (`src/geometry/sun.ts`).
 A zone (CNT-8) is part of its room, and the room is the place: `what=use` on a zone, and
 `what=route` from or to one, measures its room as a whole, says so on its first line, and names
 the zone asked for in the data (`zone`, `fromZone`, `toZone`).
+
+## The plot: distances to the boundary, and the coverage
+
+Read this when the person asks how far the house is from the boundary, whether it keeps the
+set-back they asked for, or how much of the plot it covers. `grid_measure` with `what=site`
+(BRF-3) answers from the site's `boundary`, `streets` and `setbacks`
+([plan-file.md](plan-file.md#the-plot-its-boundary-set-backs-and-what-is-on-it)). It takes no
+other argument. The building is measured from its outside face: the outer faces of the walls of
+every floor at or above the ground floor, as one shape seen from above.
+
+- **The plot**: its area, how many edges it has, and which are on the street.
+- **Plot coverage**: the part of the building's shape inside the boundary against the plot's area.
+- **Each edge**: the least distance from the building, with the set-back asked for that edge
+  beside it and how far short of it the building stands, or how far it reaches over the edge.
+  The set-backs are the person's own figures, under their heading; no line says a distance is
+  enough.
+- **Each face**: its way, its length and its distance to the edge of the boundary in front of
+  it, square to the face.
+
+North is read as `what=facing` reads it, and a plan that states none is answered with north as
+the top of the drawing, said first. The lab's house slid 2 m east in its 15 × 30 m plot, with 3 m
+asked from every edge (EL-16):
+
+```text
+North, as the plan states it: up the drawing (+y) (north 0).
+The plot: 450.00 m² inside a boundary of 4 edges; on the street: edge 1 (the south boundary).
+Plot coverage: 20%, the building's 90.00 m² on the 450.00 m² plot.
+The person's own figures: theirs, not from any code or standard.
+From each edge of the boundary, the least distance to the building:
+  Edge 1, on the street: 10.00 m from the south boundary; you asked for 3.00 m.
+  Edge 2: 1.00 m from the east boundary; you asked for 3.00 m: 2.00 m short.
+  Edge 3: 10.00 m from the north boundary; you asked for 3.00 m.
+  Edge 4: 5.00 m from the west boundary; you asked for 3.00 m.
+```
+
+The data holds `boundary` (`area`, `problem`, and each edge's `edge`, `from`, `to`, `length`,
+`faces`, `bearing`, `street`, `name`, `setback`, `distance`, `past`, `short`, `face` and
+`floor`), `footprint` (`area`, `floors`), `coverage` (`ratio`, `percent`, `covered`, `plot`),
+`faces` and `things`. `grid_check` gives the same shortfall as a finding,
+`plan/setback-short`. The geometry is `siteMeasures` in `@ongrid/floorplan`
+(`src/geometry/site.ts`).
 
 ## A note set aside as seen
 
