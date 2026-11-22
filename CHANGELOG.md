@@ -14,6 +14,8 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- The DXF opens in metres, in AutoCAD 2013's version, and "Baño" reads as "Baño" in every program, not as a code. A drafter can go on working in it: doors and windows are blocks that can be counted and swapped, walls are joined outlines with a fill, the sizes are real dimensions, every room has a tag with its number, name and area, and an A3 layout shows the plan at 1:100 with the text sized for it. An office names its own layers, colours, line weights, line types and scale once, in `dxf-layers.json` in the project folder (HND-1).
+
 - `grid diff` (and the tool `grid_diff`) says what a change did, by what stands where in the building rather than by ids: issues first, then room by room, then each change, with a picture in three colours. The same building under new ids reads as no change, with how many ids were renamed. It compares with a start marker set by `grid mark` (or `grid_mark_start`), kept in `plan.markers.json` beside the plan, so no git is needed, or with the last commit in the project's own `.git` (WRT-8).
 
 - The plan says where it will be built, in `site.country` (`US`, `USA`, `United States`, `Spain`…), and `grid check` reads it on its own; `--country` (or `country` for `grid_check`) names another place for one check and takes the same names. With no place stated, room sizes and escape openings are no longer checked against the US figures: the report says so on its first line, with how many lines the US figures would have given. A place Grid does not know is refused, and the report names a place only by Grid's own name for it (COD-3).
