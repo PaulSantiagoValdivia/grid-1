@@ -1,0 +1,51 @@
+name: Release (dry run)
+
+# QAR-10, RELEASING.md. Started by hand only, on any branch. It runs the release step on the
+# runner: it cuts the version, runs every gate (build, type check, lint, the label test, the
+# licence check, the data check, the full tests and the scoreboard gate), packs the tarball
+# with its provenance settings, writes release.json and stops. A failed gate fails the run and
+# nothing is packed.
+#
+# There is no publish step. Publishing waits on the owner's yes (CMD-8); RELEASING.md says
+# what the publish job will add then (the id-token permission npm provenance signs with, and
+# `npm publish --provenance`). Until then the run asks for no token and holds no secret.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to cut, such as 0.1.0 or 0.1.0-preview.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  dry-run:
+    name: Cut, check and pack ${{ inputs.version }} (nothing is published)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # The version comes in through the environment, never pasted into the script.
+      - name: Release step, as a dry run
+        env:
+          VERSION: ${{ inputs.version }}
+        run: node scripts/release.mjs "$VERSION" --dry-run
+
+      - name: What was packed
+        env:
+          VERSION: ${{ inputs.version }}
+        run: cat "dist/release/$VERSION/release.json"

@@ -148,10 +148,11 @@ function floorPicture(loaded: LoadedPlan, frames: ReadonlyMap<string, Bounds>, f
 }
 
 function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {
-  const shown = sumText(floor.rooms.map((r) => r.net), floor.net, 1)
+  const shown = sumText(floor.rooms.map((r) => r.net ?? 0), floor.net, 1)
   return {
     heading: 'Rooms / m²',
-    rows: floor.rooms.map((room, i) => ({ name: room.name, detail: withUse ? room.use : null, area: shown.parts[i]! })),
+    // MSG-2: a room that could not be measured has no area, never 0.
+    rows: floor.rooms.map((room, i) => ({ name: room.name, detail: withUse ? room.use : null, area: room.net === null ? 'not measured' : shown.parts[i]! })),
     total: { name: 'Net area', detail: null, area: shown.total },
     note: AREA_RULES.net,
   }

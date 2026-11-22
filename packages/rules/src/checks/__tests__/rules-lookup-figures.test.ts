@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
-import { RULES as PLAN_RULES } from '@ongrid/floorplan/geometry'
+import { RULES as CORE_RULES } from '@ongrid/floorplan/geometry'
 import {
   GENERAL_GUIDANCE_LABEL,
   LOOKUP_NOTICE,
@@ -12,6 +12,9 @@ import {
 } from '..'
 import { basisOf } from '../check'
 import { edit, flat, madeVirtual, twoFloorHouse, longWallStrip, withoutOpening } from '@ongrid/floorplan/test-support/plans'
+
+/** The plan checks that look at something in these plans: none has a stair room, so the stairs check (LVL-3) is not listed. */
+const PLAN_RULES = CORE_RULES.filter((rule) => rule.id !== 'stairs-line-up')
 
 const source = { url: 'https://www.boe.es/x', quote: 'sample passage: at least 30 m2', retrievedAt: '2026-11-14T10:00:00.000Z' }
 
@@ -33,9 +36,22 @@ const fixtures: [string, FloorPlan][] = [
 const sizeFindings = (plan: FloorPlan, options?: Parameters<typeof checkLocalRules>[1]) =>
   checkLocalRules(plan, options).findings.filter((f) => f.code === 'room_too_small')
 
+/** Every room a bedroom, so both figure checks look at a room and apply their figures (MSG-2). */
+const allBedrooms = (plan: FloorPlan): FloorPlan =>
+  edit(plan, (copy) => {
+    for (const room of copy.rooms) room.use = 'bedroom'
+  })
+
 describe('a report with no figures given', () => {
+  it('lists no figure of a check that looked at no room (MSG-2)', () => {
+    // The flat says no room's use: neither figure check looks at a room, so neither applied a figure.
+    const report = checkLocalRules(flat())
+    expect(report.figures).toEqual([])
+    expect(report.rules.map((r) => r.id)).toEqual(PLAN_RULES.map((r) => r.id))
+  })
+
   it.each(fixtures)('for %s is labelled as general guidance, every figure a baseline with its sources and status', (_name, plan) => {
-    const report = checkLocalRules(plan)
+    const report = checkLocalRules(allBedrooms(plan))
     expect(report.basis).toBe('general-baseline')
     expect(report.label).toBe(GENERAL_GUIDANCE_LABEL)
     expect(report.lookupNotice).toBeUndefined()
@@ -184,7 +200,8 @@ describe('a plan for a country the carried figures do not cover', () => {
     expect(report.notChecked.filter((n) => n.reason === 'no_figures_for_place').map((n) => n.message)).toEqual([
       'Escape openings were not checked: the figures here are from US model codes, and this plan is for IT'
     ])
-    expect(RULES.length).toBe(report.rules.length + 1)
+    // Not listed: the escape check, and the stairs check (LVL-3), which finds no stair room here.
+    expect(RULES.length).toBe(report.rules.length + 2)
   })
 })
 

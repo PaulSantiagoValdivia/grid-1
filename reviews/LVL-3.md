@@ -192,3 +192,17 @@ order, the drawing, the IFC (items, then stairs), the entity and thing kinds (`i
 and the viewer's look; the out-of-line findings beside `opening_too_small_to_pass`, whose check
 now runs in the per-floor pass of the stair-aware routes; the limits keep both lines. No IFC
 golden file changed. After this merge every check passed, the two timing tests included.
+
+## Merging main again (MSG-2, CMD-15, QAR-10, the README split)
+
+- README.md is main's front page. This step's sections moved to the docs pages: "Stairs that join
+  two floors" into `docs/plan-file.md` (with its line in the page's index), the two tolerance rows
+  into `docs/tolerances.md`, the stair rows of the text limits into `docs/plan-file.md`, and the
+  sheet and describe lines into `docs/commands.md`.
+- MSG-2 says what each check looked at. The new check `stairs-line-up` looks at the rooms used as a
+  stair or a lift, on every floor; every other room is skipped as "only rooms used as a stair or a
+  lift are lined up". A plan with no such room lists the check as looking at nothing, so it is not
+  among the checks run: `grid check` on the sample flat still says "Checks run (4)". Three
+  expectations changed with it: `coverage.test.ts` (cli) lists `stairs-line-up` among the
+  coverage, and `rules-lookup-figures.test.ts` leaves it out of the rules a stairless plan lists.
+- Every code row and changelog section of `docs/result-contract.md` is kept from both sides.

@@ -142,7 +142,7 @@ describe('a room\'s height', () => {
     expect(reply.text).toContain('Height 2.70 m')
   })
 
-  it('is the lowest of its walls when they differ, and says which (the rule in the README)', async () => {
+  it('is the lowest of its walls when they differ, and says which (the rule in docs/tool-server.md)', async () => {
     const reply = await ok({ plan: 'mixed.json', what: 'room', room: 'room' })
     expect(answer(reply)['height']).toMatchObject({ value: 2.4, from: 'lowest wall', walls: { low: 2.4, high: 2.7, lowest: ['w-n'] } })
     expect(reply.text).toMatch(/Height 2\.40 m, the lowest of its walls: "w-n"/)
@@ -154,8 +154,8 @@ describe('a room\'s height', () => {
     expect(reply.text).toContain('Height 2.55 m, as the plan states for the room. Its walls stand 2.40 m to 2.70 m.')
   })
 
-  it('is ruled the same way in the README, the guide an agent reads', () => {
-    const guide = readFileSync(resolve(repo, 'README.md'), 'utf8').replace(/\s+/g, ' ')
+  it('is ruled the same way in docs/tool-server.md, the guide an agent reads', () => {
+    const guide = readFileSync(resolve(repo, 'docs/tool-server.md'), 'utf8').replace(/\s+/g, ' ')
     expect(guide).toContain('A height the room states wins, whatever its walls stand')
     expect(guide).toContain('When they differ, the room is as high as the lowest of them')
   })

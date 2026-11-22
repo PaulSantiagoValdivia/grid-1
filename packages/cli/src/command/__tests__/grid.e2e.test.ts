@@ -196,9 +196,13 @@ describe('grid check', () => {
     expect(run.status).toBe(0)
     const lines = run.out.split('\n')
     expect(lines[0]).toBe(GENERAL_GUIDANCE_LABEL)
-    // LVL-3 added the plan check that stairs and lift shafts line up.
-    expect(run.out).toContain('Checks run (7):')
+    // Its rooms state no use, so the two figure checks look at no room and are not listed as run (MSG-2).
+    // The plan check that stairs line up (LVL-3) looks at no room here: it has no stair room.
+    expect(run.out).toContain('Checks run (4):')
     expect(run.out).toContain('No findings. That only means these checks found nothing')
+    expect(run.out).toContain('Looked at by at least one check: 5 of 5 rooms.')
+    expect(run.out).toContain('Rooms people live or sleep in have a minimum floor area: looked at no rooms; 0 findings.')
+    expect(run.out).toContain('not looked at, 5 rooms: no use stated: "bath", "bed1", "bed2", "kitchen", "lounge"')
     expect(run.out).toContain('What these checks never look at')
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)
   })

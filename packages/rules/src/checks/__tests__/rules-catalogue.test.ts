@@ -72,15 +72,19 @@ describe('sources', () => {
 })
 
 describe('the report', () => {
-  it('is plain data, labelled as general guidance, with every rule it applied', () => {
+  it('is plain data, labelled as general guidance; with nothing to look at it applies no rule, and says so (MSG-2)', () => {
     const report = checkLocalRules(empty())
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)
     expect(report.basis).toBe('general-baseline')
     expect(report.label).toBe('General guidance, not your local rules')
     expect(GENERAL_GUIDANCE_LABEL).toBe(report.label)
-    expect(report.rules.map((r) => r.id)).toEqual(RULES.map((r) => r.id))
+    // Every rule has its coverage; none looked at anything, so none is listed as applied.
+    expect(report.coverage.map((c) => c.ruleId)).toEqual(RULES.map((r) => r.id))
+    expect(report.coverage.map((c) => c.lookedAtCount)).toEqual(RULES.map(() => 0))
+    expect(report.rules).toEqual([])
+    expect(report.figures).toEqual([])
     expect(report.findings).toEqual([])
-    expect(report.notChecked).toEqual([])
+    expect(report.notChecked.map((n) => n.reason)).toEqual(['no_rooms'])
   })
 
   it('always says what the checks never look at: the core lines, then the figure checks own', () => {

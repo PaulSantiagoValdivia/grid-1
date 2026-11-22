@@ -51,6 +51,10 @@ function json(value: unknown): string {
  * The package.json of the package an install unpacks: the one bundled file as both commands,
  * and nothing to fetch but the canvas, which is native and optional (without it every tool
  * works except a picture). It stays private until publishing is approved (CMD-8).
+ *
+ * `publishConfig` holds the provenance settings (QAR-10): once published, from the release
+ * workflow only, npm records which commit and which run built the package, and `repository`
+ * is the repository npm compares that record with. RELEASING.md says how.
  */
 export function packageManifest(version: string): Record<string, unknown> {
   return {
@@ -68,6 +72,7 @@ export function packageManifest(version: string): Record<string, unknown> {
     homepage: REPOSITORY,
     keywords: KEYWORDS,
     optionalDependencies: { '@napi-rs/canvas': dependencies['@napi-rs/canvas'] },
+    publishConfig: { access: 'public', provenance: true },
   }
 }
 

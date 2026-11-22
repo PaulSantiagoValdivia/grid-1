@@ -94,8 +94,10 @@ describe('the front door', () => {
       expect(result.count).toBeGreaterThan(0)
       expect(result.lines.every((l) => l.kind === 'refused' || l.code === 'plan/check-failed')).toBe(true)
     }
-    // An empty object is a plan with nothing in it (MSG-4 is to say so).
-    expect(inspectPlan({})).toMatchObject({ read: true, count: 0 })
+    // An empty object is a plan with nothing in it (MSG-4 is to say so). Since MSG-2 its one line
+    // says that no check that looks at rooms ran.
+    expect(inspectPlan({})).toMatchObject({ read: true, count: 1 })
+    expect(inspectPlan({}).lines.map((l) => l.code)).toEqual(['plan/not-checked-no-rooms'])
   })
 
   it('reads a plan given as text the same as the plan itself', () => {

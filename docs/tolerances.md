@@ -1,0 +1,85 @@
+# Tolerances and limits
+
+Read this when a check asks whether a size is meant, when you need the exact figure behind a
+check, or when a survey needs looser tolerances.
+
+Every check reads one table of tolerances and limits: `TOLERANCES` in
+`packages/floorplan/src/geometry/tolerances.ts`, exported from `@ongrid/floorplan/geometry`.
+Each figure in it is Grid's own, chosen for checking a drawing. None comes from a building code
+or a standard, none cites a document, and none says what a building must be: a limit only
+decides when Grid asks whether a size is meant.
+
+A survey or a scan is less exact than a drawing. `validatePlan(plan, index, { tolerances })`, or
+`withTolerances(changes, run)` around any other call, loosens the tolerances and limits for that
+run, each to a positive number. The arithmetic guards (below a nanometre, what floating-point
+numbers can tell apart) cannot be changed.
+
+Every number in a plan must be finite: JSON reads a number too large to hold, such as `1e400`, as
+infinity, and the schema refuses it. A coordinate or size past `largest` is refused with
+`wall/too-large` or `opening/too-large`, and what rests on it is left out. No export ever holds
+"Infinity" or "NaN".
+
+Sizes far outside a building's are asked about as questions, never refused (warnings). A plan
+whose typical wall height, thickness and door width read as a building in feet, inches,
+centimetres or millimetres, and not in metres, gets one `plan/units-question` instead of a line
+per wall. Otherwise a wall, an opening or a room past a limit gets `wall/size-question`,
+`opening/size-question` or `room/size-question`, for example "Wall w1 is 27.00 m high, the
+others on its floor typically 2.70 m: is that meant?". Where the plan says it is a home (a room
+in it is used as a `bedroom` or a `living` room) the home figures apply.
+
+| Entry | Kind | Value | What it decides |
+|---|---|---|---|
+| `openingOverrun` | tolerance | 0.001 m | How far an opening may run past either end of its wall, below the floor, above its wall or into the next opening, and still fit. A refusal states the overrun and the offset that fits |
+| `gap` | tolerance | 0.02 m | A wall reaches the wall it meets when its end is within half the thicker wall plus this. The spaces check lengthens every wall by this much at both ends; the wall faults name a gap or an overrun past it, and two walls on top of each other when their bodies overlap by more than this |
+| `wallContact` | tolerance | 0.01 m | Slack past the walls' bodies when a room outline is traced: walls that touch, carry on in a row or reach a corner |
+| `strayCorner` | tolerance | 1 m | A room corner further than this from both its walls is not a corner, and the wall list is out of order |
+| `nearlyParallel` | tolerance | 0.2588 sine | Neighbouring walls closer to parallel than 15 degrees may be one straight side |
+| `sameFace` | tolerance | 0.000001 m | Two faces in a row this close are one face; further apart they are joined by a step |
+| `mitreReach` | tolerance | 4 ratio | How far a joined corner may reach along a wall, in half thicknesses of the thicker wall; sharper corners are left cut square |
+| `swingContact` | tolerance | 0.01 m | How far a wall must reach into a door's swing, or two swings overlap, to be in the way |
+| `stepPastFace` | tolerance | 0.05 m | How far past a wall's face the route check steps through a door |
+| `areaReported` | tolerance | 0.01 m² | The smallest area a message names; a room "wholly inside" another may have this much outside it |
+| `areaEqual` | tolerance | 0.000001 m² | Two areas closer than this are the same, so an area at a figure a check applies is that figure (ARE-7); a room with less has no floor |
+| `wallShare` | tolerance | 0.001 m² | Wall under a room below this is not named wall by wall |
+| `touch` | tolerance | 0.002 m | How close a wall must come to a piece of floor to be one of its walls |
+| `touchLength` | tolerance | 0.02 m | How long that contact must be |
+| `slit` | tolerance | 0.003 m | Half the width of a slit that does not join two spaces |
+| `lineInside` | tolerance | 0.05 m | The shortest stretch of a dividing line, or of a wall, inside a room that a message names |
+| `roomsWallWidest` | tolerance | 0.6 m | The widest gap between two rooms written rooms first that is still one wall between them; a wider gap that is not a room is refused |
+| `roomsTouch` | tolerance | 0.02 m | Rooms written rooms first closer than this touch with no wall between them, refused unless they are open to each other |
+| `roomsFaceStep` | tolerance | 0.002 m | Faces of rooms written rooms first further out of line than this are named as sizes that do not add up |
+| `diffLength` | tolerance | 0.001 m | Lengths closer than this are unchanged between two versions of a plan |
+| `diffMovement` | tolerance | 0.01 m | A change held to a scope that moved less than this is rounding, not an edit |
+| `diffSameLine` | tolerance | 0.01 m | A removed and an added wall this close to one line may be the same wall |
+| `diffOpeningOffset` | tolerance | 0.05 m | A removed and an added opening this close may be the same |
+| `diffWallOverlap` | tolerance | 0.9 ratio | The share of its length a removed wall must share with an added one to be the same |
+| `diffRoomAreaShare` | tolerance | 0.1 ratio | A removed and an added room whose areas differ by less than this share may be the same |
+| `diffRoomCentre` | tolerance | 0.1 m | And whose centres are this close |
+| `wallAboveStorey` | tolerance | 0.001 m | How far a wall may rise past the height its floor states; past it, `wall/above-storey` names both heights |
+| `sameLevelOverlap` | tolerance | 0.5 ratio | Two floors at one level whose walls' boxes share more than this of the smaller one stand one over the other (`plan/same-level`) |
+| `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground floor is named and is not a way out |
+| `passableWidth` | limit | 0.4 m | Grid's own size, not a code figure: a door or doorless opening narrower than this is named (`opening/too-small-to-pass`) and is not a way through |
+| `passableHeight` | limit | 1.2 m | Grid's own size, not a code figure: one lower than this is named and is not a way through |
+| `passableSill` | limit | 0.3 m | Grid's own size, not a code figure: one whose sill stands higher than this above its floor is named and is not a way through |
+| `itemIntoWall` | tolerance | 0.005 m | How far a fixture may reach into a solid wall's body and still stand against its face; past it, `item/into-wall` names the wall |
+| `itemAboveRoom` | tolerance | 0.001 m | How far a fixture may rise past the height of its room; past it, `item/too-tall` names both heights |
+| `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
+| `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
+| `stairRoomOverlap` | tolerance | 0.5 ratio | Rooms used as a stair (or a lift) on neighbouring floors that share at least this of the smaller one are one stair (or shaft); less, and they are named as out of line |
+| `stairStepLength` | limit | 0.63 m | A stair that states no number of risers gets the number that brings twice the riser plus the going nearest this |
+| `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
+| `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning |
+| `wallThinnest` | limit | 0.02 m | A thinner solid wall is questioned; a line with no substance should be virtual |
+| `wallThickest` | limit | 3 m (1.5 in a home) | A thicker wall is questioned |
+| `wallLowest` | limit | 0.1 m | A lower solid wall is questioned |
+| `wallHighest` | limit | 40 m (10 in a home) | A higher wall is questioned |
+| `wallHigherThanTypical` | limit | 4 ratio | A wall this many times higher than the typical one on its floor (with three others or more) is questioned |
+| `openingNarrowest` | limit | 0.2 m | A narrower opening is questioned; whether a door is a way through is `passableWidth` |
+| `openingLowest` | limit | 0.2 m | A lower opening is questioned |
+| `roomLargest` | limit | 50000 m² (1000 in a home) | A larger room is questioned |
+| `typicalHeightLowest` | limit | 1.8 m | The units question: the typical wall height of a building, from this… |
+| `typicalHeightHighest` | limit | 6 m | …to this |
+| `typicalThicknessLowest` | limit | 0.08 m | The typical wall thickness that agrees with a unit, from this… |
+| `typicalThicknessHighest` | limit | 1 m | …to this |
+| `typicalDoorLowest` | limit | 0.5 m | The typical door width that agrees with a unit, from this… |
+| `typicalDoorHighest` | limit | 2.5 m | …to this |
