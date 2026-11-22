@@ -445,6 +445,10 @@ function noticeCode(notice: NotChecked): string {
       return 'floor/not-checked-above-escape-storeys'
     case 'no_rooms':
       return 'plan/not-checked-no-rooms'
+    case 'not_for_building': {
+      const what = notice.ruleId === 'habitable-room-area' ? 'sizes' : 'escapes'
+      return notice.floor === '' ? `plan/not-checked-${what}-for-building` : `floor/not-checked-${what}-for-building`
+    }
   }
 }
 

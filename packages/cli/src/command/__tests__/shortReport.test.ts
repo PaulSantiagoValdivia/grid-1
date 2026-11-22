@@ -121,6 +121,24 @@ describe('a plan with a finding', () => {
   })
 })
 
+describe('a plan that says it is not a home (CNT-5)', () => {
+  it('lists the home figures it did not check as notes, and says why in the counts', async () => {
+    writeFileSync(join(dir, 'office.json'), JSON.stringify({ ...JSON.parse(FLAT), building: 'office' }))
+    const because = 'the figures were read for homes (houses and flats people live in), and the plan says this is an office'
+    const run = await grid(['check', 'office.json'])
+    expect(run.code).toBe(0)
+    const answer = await tool('grid_check').run({ plan: 'office.json' }, { project })
+    for (const text of [run.out, answer.text]) {
+      // The command gives each note's fix on its own line, the tool after the message: the note and its code are in both.
+      expect(text).toMatch(/1\. not checked, the plan: Room sizes were not checked: the figures here were read for homes \(houses and flats people live in\), and the plan says this is an office\..*\[plan\/not-checked-sizes-for-building\]/s)
+      expect(text).toMatch(/2\. not checked, the plan: Escape openings were not checked: the figures here were read for homes \(houses and flats people live in\), and the plan says this is an office\..*\[plan\/not-checked-escapes-for-building\]/s)
+      expect(text).toContain(`Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms; not looked at 6: ${because}.`)
+      expect(text).toContain(`Nothing was checked for "Bedrooms have a window or door to the outside someone can escape through": it looked at no rooms; not looked at 6: ${because}.`)
+      expect(approvalWords(text)).toEqual([])
+    }
+  })
+})
+
 describe('a note set aside as seen', () => {
   const WINDOW = 2
 

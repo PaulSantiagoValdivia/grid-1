@@ -151,6 +151,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   const next: Record<string, unknown> = { ...raw, version: '1', units: 'm' }
   delete next['floors']
   if (plan.floors !== undefined) next['floors'] = plan.floors
+  // CNT-5: a `building` line sets what kind of building it is; without one, the file's stays.
+  if (plan.building !== undefined) next['building'] = plan.building
   next['walls'] = plan.walls
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings

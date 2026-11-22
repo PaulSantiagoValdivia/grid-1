@@ -131,6 +131,12 @@ Nothing was removed.
   --minWorkers=1`, after the build: 251 of 251 files passed, 4,867 tests passed and 4 skipped,
   exit 0.
 
+- After merging `main` (56458e5, CNT-5): one conflict, the changelog for agents in
+  `docs/result-contract.md`, kept both entries, CNT-13's on top. Build, typecheck and lint
+  clean; the scoreboard "Same as the stored figures"; the affected tests rerun (floorplan
+  geometry and types, all of `packages/rules`, the tool server, quantities, the commands' tests,
+  the viewer and `scoreboard/__tests__`): 209 files, 4,257 passed, 2 skipped.
+
 ## For the owner
 
 1. **S-8's table is a kitchen run labelled "Table 2".** CNT-11 holds fixtures only, so a loose

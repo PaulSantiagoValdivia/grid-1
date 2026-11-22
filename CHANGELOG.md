@@ -32,8 +32,14 @@ Grid has not been released yet. The first release will hold:
   from and how far a person has checked it.
 - `grid tidy` lists the walls that do not meet and makes the fixes you choose.
 - Every note and pass that used a figure says which kind of building the figure was read for:
-  today, homes. A plan cannot say yet what kind of building it is, so a café or a hotel is
-  measured with a home's figures, and the report now says so.
+  today, homes.
+- A plan can say what kind of building it is (a home, an office, a shop, a school…), and a floor
+  can say otherwise for itself, such as a shop under flats. The home figures then run only where
+  it is a home, or where the plan does not say, and the report says in plain words which checks
+  did not apply to an office or a shop. Rooms have 27 uses, from office and classroom to plant
+  and parking; a plain word such as "WC" or "staff room" is read as its use, and the person's
+  own word stays the room's name. A room can say who it is for (private, shared, common or
+  commercial) and carry the firm's own room type.
 - `grid describe`, `grid draw`, `grid export` and `grid sheet` describe a plan, draw it, export
   it and lay it out as an A3 sheet in PDF.
 - `grid init` makes a folder a Grid project, where the commands read its `plan.json`.

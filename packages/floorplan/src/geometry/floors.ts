@@ -10,7 +10,7 @@
  * means no loop can forget to filter, so cross-floor bleed is impossible by
  * construction rather than by discipline.
  */
-import { DEFAULT_FLOOR_ID, type Floor } from '../types/floorplan'
+import { DEFAULT_FLOOR_ID, type BuildingType, type Floor } from '../types/floorplan'
 import type { FloorPlan } from './plan'
 
 /** The floor every entity belongs to until it says otherwise. */
@@ -59,6 +59,19 @@ export function planFloors(plan: FloorPlan): Floor[] {
 
   const all = [...registry, ...derived]
   return all.length > 0 ? all : [DEFAULT_FLOOR]
+}
+
+/**
+ * CNT-5: what kind of building a floor is: its own `building`, else the plan's, else undefined
+ * (the plan does not say). The first floor entry with the id wins, as in `planFloors`.
+ */
+export function floorBuilding(plan: Pick<FloorPlan, 'building' | 'floors'>, floorId: string): BuildingType | undefined {
+  return (plan.floors ?? []).find((floor) => floor.id === floorId)?.building ?? plan.building
+}
+
+/** CNT-5: whether a floor's kind of building is its own, not the plan's. */
+export function floorStatesBuilding(plan: Pick<FloorPlan, 'floors'>, floorId: string): boolean {
+  return (plan.floors ?? []).find((floor) => floor.id === floorId)?.building !== undefined
 }
 
 /**
