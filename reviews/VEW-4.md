@@ -142,4 +142,12 @@ an unchanged plan answers "Nothing changed." without drawing anything.
 
 ## Checks run
 
-See the end of this file, after merging the latest `main`.
+After merging `main` at 4fe29edc (COD-8), on a machine at a load average near 300:
+
+- `npm run build`: `dist/grid.mjs` 557,659 bytes (cap 600,000).
+- `npm run typecheck` and `npm run lint`: clean.
+- Full suite (`vitest run --maxWorkers=2`): the first run reached its 25-minute limit with 159
+  files passed and none failed; the other 163 files, run next, gave 1,115 tests passed and one
+  failed, `diff-size.test.ts` "diffs 1,000 entities … well inside a second" (15.9 s under load).
+  Run alone it passed (4 of 4). No other failure.
+- `npm run scoreboard`: the same as the stored figures, in 360 s.
