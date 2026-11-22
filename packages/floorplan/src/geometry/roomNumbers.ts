@@ -12,6 +12,7 @@
  * Pure: a plan in, numbers out.
  */
 
+import { planInState } from './phases'
 import { indexPlan, type FloorPlan } from './plan'
 import { floorOf, planFloors, planForFloor } from './floors'
 import { compareIds } from './order'
@@ -36,7 +37,9 @@ export function shownRoomNumber(n: Pick<RoomNumber, 'number' | 'stated'>): strin
  * (a fault validation reports) gets one number, and the first of them states it. With `floors`,
  * only those floors are numbered, from 1.
  */
-export function roomNumbers(plan: FloorPlan, floors?: readonly string[]): RoomNumber[] {
+export function roomNumbers(stated: FloorPlan, floors?: readonly string[]): RoomNumber[] {
+  // CNT-10: the rooms after the work are counted; a room to be demolished has no number.
+  const plan = planInState(stated, 'after')
   const order = planFloors(plan)
     .filter((floor) => floors === undefined || floors.includes(floor.id))
     .sort((a, b) => a.level - b.level || compareIds(a.id, b.id))

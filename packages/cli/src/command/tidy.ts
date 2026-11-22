@@ -8,7 +8,7 @@
  * every key it had is kept. Nothing here checks a building rule; the list carries the label.
  */
 import { keptDerived } from '@ongrid/floorplan/rooms'
-import { tidyPlan, wallFaults, type EditablePlan, type WallFault } from '@ongrid/floorplan/geometry'
+import { planHasPhases, planInState, tidyPlan, wallFaults, type EditablePlan, type WallFault } from '@ongrid/floorplan/geometry'
 import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import type { Project } from '../fs/projectFiles'
@@ -90,7 +90,8 @@ function shown(fault: WallFault): TidyFault {
 
 /** The faults of a plan, as read, leaving out what validation could not draw. */
 export function tidyList(loaded: LoadedPlan): TidyList {
-  return { label: GENERAL_GUIDANCE_LABEL, faults: wallFaults(loaded.plan, { broken: loaded.broken }).map(shown) }
+  // CNT-10: the walls of a plan with phases meet as they will after the work.
+  return { label: GENERAL_GUIDANCE_LABEL, faults: wallFaults(planInState(loaded.plan, 'after'), { broken: loaded.broken }).map(shown) }
 }
 
 /**
@@ -104,6 +105,11 @@ export function tidyFile(
 ): { readonly text: string | null; readonly applied: readonly TidyFault[]; readonly skipped: TidyApplied['skipped']; readonly left: readonly TidyFault[] } {
   // The lists the schema defaults to empty are given here only when the file leaves them out.
   const raw = { walls: [], rooms: [], openings: [], ...(JSON.parse(project.readText(planFile).text) as object) } as RawPlan
+  // CNT-10: a fix joins, cuts or takes out walls of the file, which knows nothing of the states a
+  // plan with phases holds, or of the shell a fit-out stands in.
+  if (planHasPhases(parseFloorPlan(raw))) {
+    throw new UsageError('grid tidy --apply does not change a plan with phases or a base plan yet: its fixes would join, cut or take out walls across what stands before and after the work, or the shell. Make the fixes with grid edit, which keeps each part\'s phase and leaves the base as it is.')
+  }
   const result = tidyPlan(raw, ids === 'all' ? undefined : ids, (plan) => parseFloorPlan(plan))
   // A plan written rooms first keeps its derived boundaries derived through Grid's own fixes (WRT-2).
   const tidied = keptDerived(raw.rooms, result.plan)

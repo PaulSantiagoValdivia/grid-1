@@ -9,12 +9,12 @@
  * among the issues. Nothing here measures or pairs anything itself.
  */
 import path from 'path'
-import { compareBuildings, type BuildingComparison } from '@ongrid/floorplan/geometry'
+import { compareBuildings, planHasPhases, planInState, type BuildingComparison } from '@ongrid/floorplan/geometry'
 import { inspectPlan } from '@ongrid/rules'
 import type { Project } from '../fs/projectFiles'
 import { loadPlan, loadPlanText, type LoadedPlan } from '../command/plan'
 import { GitUnread, lastCommitted } from './git'
-import { DEFAULT_MARKER, findMarker, GIT_VERSION, MarkerRefused, readMarkers } from './markers'
+import { DEFAULT_MARKER, findMarker, GIT_VERSION, MarkerRefused, PHASE_VERSION, readMarkers } from './markers'
 
 export const DIFF_SHOWS = ['all', 'summary', 'changes', 'issues'] as const
 export type DiffShow = (typeof DIFF_SHOWS)[number]
@@ -26,6 +26,8 @@ export const DIFF_LINES_SHOWN = 40
 export type EarlierVersion =
   | { readonly kind: 'marker'; readonly name: string; readonly at: string }
   | { readonly kind: 'git'; readonly commit: string; readonly branch: string | null }
+  /** CNT-10: the plan's own state before its work, compared with it after the work. */
+  | { readonly kind: 'phase' }
 
 export interface PlanDiffRun {
   readonly comparison: BuildingComparison
@@ -37,6 +39,7 @@ export interface PlanDiffRun {
 /** The plan file against the version `since` names: a marker, `git`, or the default. */
 export function diffSince(project: Project, planFile: string, since: string | undefined, rooms?: readonly string[]): PlanDiffRun {
   const later = loadPlan(project, planFile)
+  if (since === PHASE_VERSION) return diffByPhase(later, rooms)
   let text: string
   let version: EarlierVersion
   if (since === GIT_VERSION || (since === undefined && !readMarkers(project, planFile).some((m) => m.name === DEFAULT_MARKER))) {
@@ -62,7 +65,24 @@ export function diffSince(project: Project, planFile: string, since: string | un
   return { comparison, earlier, later, since: version }
 }
 
+/**
+ * CNT-10: a plan with phases compared with itself, before its work against after it, by the same
+ * comparison as two versions: what is to be demolished is what was removed, what is new is what
+ * was added, and a widened door is a door that changed. The checks' notes are not compared: each
+ * state is checked as the plan's own (`grid check`).
+ */
+function diffByPhase(loaded: LoadedPlan, rooms?: readonly string[]): PlanDiffRun {
+  if (!planHasPhases(loaded.plan)) {
+    throw new MarkerRefused('The plan states no phase, so it holds no work to compare: give its walls, openings and rooms a phase (existing, demolished or new), or compare with a marker or git.')
+  }
+  const before = planInState(loaded.plan, 'before')
+  const after = planInState(loaded.plan, 'after')
+  const comparison = compareBuildings(before, after, rooms === undefined ? {} : { rooms })
+  return { comparison, earlier: { ...loaded, plan: before }, later: { ...loaded, plan: after }, since: { kind: 'phase' } }
+}
+
 export function sinceWords(since: EarlierVersion): string {
+  if (since.kind === 'phase') return 'the plan as it stands before its work: what is removed is to be demolished, what is added is new'
   if (since.kind === 'marker') return `the plan at marker ${JSON.stringify(since.name)}, set ${since.at.replace('T', ' ').replace(/:\d\d(\.\d+)?Z$/, ' UTC')}`
   return `the plan as last committed${since.branch === null ? '' : ` on ${since.branch.replace(/^refs\/heads\//, '')}`} (${since.commit.slice(0, 7)})`
 }
@@ -115,7 +135,9 @@ export function diffText(run: PlanDiffRun, show: DiffShow): string {
 /** The answer as data: everything but the plans themselves. */
 export function diffData(run: PlanDiffRun, show: DiffShow): Record<string, unknown> {
   const c = run.comparison
-  const since = run.since.kind === 'marker' ? { kind: 'marker', name: run.since.name, at: run.since.at, commit: null } : { kind: 'git', name: null, at: null, commit: run.since.commit }
+  const since = run.since.kind === 'marker'
+    ? { kind: 'marker', name: run.since.name, at: run.since.at, commit: null }
+    : run.since.kind === 'phase' ? { kind: 'phase', name: null, at: null, commit: null } : { kind: 'git', name: null, at: null, commit: run.since.commit }
   return {
     since,
     verdict: c.verdict,

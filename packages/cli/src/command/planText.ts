@@ -210,5 +210,10 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
     const problem = textProblem(image['path'], 'path')
     if (problem) return `referenceImage.path ${problem}`
   }
+  // CNT-10: the base plan's path, held to a path's limit like the trace image's.
+  if (typeof raw['base'] === 'string') {
+    const problem = textProblem(raw['base'], 'path')
+    if (problem) return `base ${problem}`
+  }
   return null
 }

@@ -256,7 +256,8 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const full = checkLocalRules(plan, { ...options, leftOut: loaded.leftOut ?? [] })
   // The file's text (MSG-6), so the record names what the reader did and the words the schema
   // drops (MSG-4).
-  const result = inspectPlan(loaded.text ?? plan, options)
+  // CNT-10: a fit-out's base, which the record reads in as the command did.
+  const result = inspectPlan(loaded.text ?? plan, loaded.base === undefined ? options : { ...options, base: loaded.base.plan })
   const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage), numbers: result.lines.map((_, index) => index + 1) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }
