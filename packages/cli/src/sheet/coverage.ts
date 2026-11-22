@@ -25,6 +25,9 @@ export const SHEET_COVERAGE = {
   projectId: { shown: 'not shown', why: 'It names the project to other programs (QAR-5), not the building.' },
   walls: { shown: 'drawn' },
   openings: { shown: 'drawn' },
+  // LVL-8: an opening pattern is drawn as the plain openings it expands into, on every page that
+  // draws its walls, as every other picture and export draws them.
+  patterns: { shown: 'drawn' },
   rooms: { shown: 'drawn and tabled' },
   floors: { shown: 'a page each' },
   stairs: { shown: 'drawn' },
