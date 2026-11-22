@@ -25,10 +25,15 @@ import { indexPlan, openingsOf } from '../plan'
 import {
   isDrawnWall,
   isFiniteWall,
+  roofOver,
   SLAB_THICKNESS,
   stackFloors,
   type StoreyLevel
 } from '../elevations'
+import type { MultiPolygon } from 'polygon-clipping'
+import { planEnvelope, roomCeiling } from '../envelope'
+import { piecesAsRings, ringOf } from '../polygons'
+import { tolerance } from '../tolerances'
 import { tryRoomShape } from '../room'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
@@ -502,6 +507,8 @@ interface Storey {
   readonly elevation: number
   /** The height of its level: what spaces are extruded to. */
   readonly height: number
+  /** Its rooms' spaces, by room id, as they are written. */
+  readonly spaces: Map<string, number>
 }
 
 function writeStorey(
@@ -529,7 +536,8 @@ function writeStorey(
     placement: placementId,
     model,
     elevation: level.floorLevel,
-    height: level.clearHeight
+    height: level.clearHeight,
+    spaces: new Map()
   }
 }
 
@@ -953,82 +961,207 @@ function footprintProfile(c: Context, footprint: Footprint): number {
 type SlabKind = 'FLOOR' | 'BASESLAB' | 'ROOF'
 
 /**
- * A slab under or over a room, as an IfcSlab extruded `thickness` up from
- * `bottom` (relative to its storey). It covers the room's footprint only: slabs
- * under walls wait for a building outline, the same limit the 3D view has.
+ * How thick a ceiling is drawn. IFC has no ceiling without a body; a thin board over the room,
+ * its underside at the ceiling's height, is enough for a viewer to show it. Not a figure of the
+ * building: the plan states no ceiling build-up.
  */
+const CEILING_DEPTH = 0.02
+
+/** An outline's pieces, each extruded `thickness` up from the element's placement, as one body. */
+function piecesShape(c: Context, pieces: MultiPolygon, thickness: number): number | null {
+  const solids = piecesAsRings(pieces)
+    .filter((piece) => piece.outline.length >= 3)
+    .map((piece) => extrusion(c, footprintProfile(c, piece), thickness))
+  if (solids.length === 0) return null
+  return productShape(c, [
+    c.w.add('IFCSHAPEREPRESENTATION', ref(c.shared.bodyContext), str('Body'), str('SweptSolid'), refs(solids))
+  ])
+}
+
+/** An IfcSlab over `pieces`, extruded `thickness` up from `bottom` (relative to its storey). */
 function writeSlab(
   c: Context,
   storey: Storey,
-  room: Room,
-  footprint: Footprint,
+  key: readonly [string, string],
+  name: string,
+  pieces: MultiPolygon,
   kind: SlabKind,
   bottom: number,
-  thickness: number
-): number {
-  const slabPlacement = placement(c.w, storey.placement, [0, 0, bottom])
-  const profile = footprintProfile(c, footprint)
-  const shape = productShape(c, [
-    bodyRepresentation(c, extrusion(c, profile, thickness))
-  ])
-  const roof = kind === 'ROOF'
-
-  return c.w.add(
-    'IFCSLAB',
-    str(c.guid(roof ? 'roof' : 'slab', room.id)),
-    ref(c.owner),
-    str(`${room.name} ${roof ? 'roof' : 'floor slab'}`),
-    NULL,
-    NULL,
-    ref(slabPlacement),
-    ref(shape),
-    NULL,
-    en(kind)
-  )
+  thickness: number,
+  parent: number = storey.placement
+): { id: number; placement: number } | null {
+  if (!(thickness > 0) || pieces.length === 0) return null
+  const slabPlacement = placement(c.w, parent, [0, 0, bottom])
+  const shape = piecesShape(c, pieces, thickness)
+  if (shape === null) return null
+  const id = c.w.add('IFCSLAB', str(c.guid(key[0], key[1])), ref(c.owner), str(name), NULL, NULL, ref(slabPlacement), ref(shape), NULL, en(kind))
+  return { id, placement: slabPlacement }
 }
 
+const footprintPieces = (footprint: Footprint): MultiPolygon => [[ringOf(footprint.outline), ...footprint.holes.map(ringOf)]]
+
 /**
- * Every storey's floor slabs, and the roof over the top storey: a storey's
- * ceiling is the floor slab of the one above it. The lowest storey's slabs are
- * base slabs. Floors sharing the top or bottom level all count as it.
+ * Every storey's slab, its openings, the roof over its parts with nothing above, its parapet and
+ * its rooms' ceilings (LVL-4), from the floor's outline (`planEnvelope`):
  *
- * Written after everything else, in a containment relation of their own per
- * storey (a storey may contain elements through several), so adding slabs left
- * every earlier entity of the file as it was.
+ * - one IfcSlab per floor, the one it stands on, over the whole outline, walls and all: a base
+ *   slab on the lowest level. Each stair, lift shaft and void that opens it is an
+ *   IfcOpeningElement voiding it, as a door voids a wall. A room set below its storey (LVL-7) is
+ *   cut out of it and gets a slab of its own, lower down; a room set above it gets a slab from the
+ *   storey's floor up to its own.
+ * - an IfcRoof (a flat roof) aggregating an IfcSlab `ROOF` over every part with nothing above, on
+ *   the floor's walls, and, with a parapet stated, an IfcWall `Parapet` along its edge.
+ * - an IfcCovering `CEILING` for each room that states a ceiling, and one for each lowered zone.
+ *
+ * Written after everything else, in a containment relation of their own per storey, so the walls,
+ * openings and spaces keep the entities they always had.
  */
-function writeSlabs(building: Context, storeys: readonly Storey[]): void {
+function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey[]): void {
   if (storeys.length === 0) return
-  const levels = storeys.map((storey) => storey.model.floor.level)
-  const lowest = Math.min(...levels)
-  const highest = Math.max(...levels)
+  const floors = new Map(storeys.map((storey) => [storey.model.floor.id, { floorLevel: storey.elevation, clearHeight: storey.height }] as const))
+  let envelope: ReturnType<typeof planEnvelope>
+  try {
+    envelope = planEnvelope(plan, { elevations: { floors, roof: roofOver(floors) } })
+  } catch {
+    return
+  }
+  const byFloor = new Map(envelope.floors.map((f) => [f.floor, f] as const))
 
   for (const storey of storeys) {
     const { index, broken, floor } = storey.model
     const c = onFloor(building, floor.id)
-    const slabs: number[] = []
+    const contained: number[] = []
+    const env = byFloor.get(floor.id)
+    const roomNames = new Map(index.plan.rooms.map((room) => [room.id, room.name || room.id] as const))
 
+    try {
+      const slab = env?.slab ?? null
+      if (slab !== null) {
+        const kind: SlabKind = slab.kind === 'base' ? 'BASESLAB' : 'FLOOR'
+        const written = writeSlab(c, storey, ['floor-slab', floor.id], `${floor.name} slab`, slab.body, kind, -slab.thickness, slab.thickness)
+        if (written !== null) {
+          contained.push(written.id)
+          for (const opening of slab.openings) {
+            const shape = piecesShape(c, opening.pieces, slab.thickness + 2 * VOID_CLEARANCE)
+            if (shape === null) continue
+            const over = opening.room === null ? opening.via : roomNames.get(opening.room) ?? opening.room
+            const hole = c.w.add(
+              'IFCOPENINGELEMENT',
+              str(c.guid('slab-opening', `${opening.kind}:${opening.via}`)),
+              ref(c.owner),
+              str(`Opening over ${over}`),
+              NULL,
+              str(opening.kind === 'void' ? 'Void' : opening.kind === 'lift' ? 'Lift shaft' : 'Stair'),
+              ref(placement(c.w, written.placement, [0, 0, -VOID_CLEARANCE])),
+              ref(shape),
+              NULL
+            )
+            relate(c, 'IFCRELVOIDSELEMENT', `slab:${floor.id}:${opening.kind}:${opening.via}`, ref(written.id), ref(hole))
+          }
+        }
+        // LVL-7: a room set below its storey stands on a slab of its own, lower down.
+        for (const sunk of slab.sunken) {
+          const piece = writeSlab(c, storey, ['slab', sunk.room], `${roomNames.get(sunk.room) ?? sunk.room} floor slab`, sunk.pieces, kind, sunk.offset - slab.thickness, slab.thickness)
+          if (piece !== null) contained.push(piece.id)
+        }
+      }
+    } catch {
+      // A slab that cannot be built is left out; the rest still exports.
+    }
+
+    // LVL-7: a room set above its storey stands on a slab from the storey's floor up to its own.
     for (const room of index.plan.rooms) {
       if (broken.has(room.id)) continue
+      const offset = roomFloorOffset(room)
+      if (!(offset > tolerance('sameFloorLevel'))) continue
       try {
         const footprint = roomFootprint(storey, room)
         if (!footprint) continue
-        const base = floor.level === lowest ? 'BASESLAB' : 'FLOOR'
-        const under = slabUnder(floor)
-        // LVL-7: the slab's top is the room's floor. A raised room's slab is solid down to the
-        // storey's slab; a sunken one's is the storey's slab, lower down.
-        const top = roomFloorOffset(room)
-        const bottom = Math.min(top, 0) - under
-        slabs.push(writeSlab(c, storey, room, footprint, base, bottom, top - bottom))
-        if (floor.level === highest) {
-          slabs.push(writeSlab(c, storey, room, footprint, 'ROOF', storey.height, SLAB_THICKNESS))
-        }
+        const raised = writeSlab(c, storey, ['slab', room.id], `${room.name} floor slab`, footprintPieces(footprint), 'FLOOR', 0, offset)
+        if (raised !== null) contained.push(raised.id)
       } catch {
         // A room that cannot be built is left out.
       }
     }
 
-    if (slabs.length > 0) {
-      relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `slabs:${floor.id}`, refs(slabs), ref(storey.id))
+    try {
+      const roof = env?.roof ?? null
+      if (roof !== null) {
+        const bottom = roof.bottom - storey.elevation
+        const element = c.w.add(
+          'IFCROOF',
+          str(c.guid('roof-element', floor.id)),
+          ref(c.owner),
+          str(`${floor.name} roof`),
+          NULL,
+          NULL,
+          ref(placement(c.w, storey.placement, [0, 0, 0])),
+          NULL,
+          NULL,
+          en('FLAT_ROOF')
+        )
+        const slab = writeSlab(c, storey, ['roof-slab', floor.id], `${floor.name} roof slab`, roof.pieces, 'ROOF', bottom, roof.thickness)
+        if (slab !== null) aggregate(c, `roof:${floor.id}`, element, [slab.id])
+        contained.push(element)
+        if (roof.parapet !== null) {
+          const shape = piecesShape(c, roof.parapet.pieces, roof.parapet.height)
+          if (shape !== null) {
+            contained.push(
+              c.w.add(
+                'IFCWALL',
+                str(c.guid('parapet', floor.id)),
+                ref(c.owner),
+                str(`${floor.name} parapet`),
+                NULL,
+                str('Parapet'),
+                ref(placement(c.w, storey.placement, [0, 0, bottom + roof.thickness])),
+                ref(shape),
+                NULL
+              )
+            )
+          }
+        }
+      }
+    } catch {
+      // A roof that cannot be built is left out.
+    }
+
+    // The rooms' ceilings, each covering its space.
+    for (const room of index.plan.rooms) {
+      if (broken.has(room.id) || room.ceiling === undefined) continue
+      try {
+        const pieces = roomCeiling(room, index, storey.height) ?? []
+        const coverings: number[] = []
+        const offset = roomFloorOffset(room)
+        for (const piece of pieces) {
+          const shape = piecesShape(c, piece.pieces, CEILING_DEPTH)
+          if (shape === null) continue
+          coverings.push(
+            c.w.add(
+              'IFCCOVERING',
+              str(c.guid('ceiling', `${room.id}:${piece.zone ?? ''}`)),
+              ref(c.owner),
+              str(piece.zone === null ? `${room.name} ceiling` : `${room.name} ceiling, lowered zone ${piece.zone}`),
+              NULL,
+              NULL,
+              ref(placement(c.w, storey.placement, [0, 0, offset + piece.height])),
+              ref(shape),
+              NULL,
+              en('CEILING')
+            )
+          )
+        }
+        if (coverings.length === 0) continue
+        contained.push(...coverings)
+        const space = storey.spaces.get(room.id)
+        if (space !== undefined) relate(c, 'IFCRELCOVERSSPACES', `ceiling:${room.id}`, ref(space), refs(coverings))
+      } catch {
+        // A ceiling that cannot be built is left out.
+      }
+    }
+
+    if (contained.length > 0) {
+      relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `slabs:${floor.id}`, refs(contained), ref(storey.id))
     }
   }
 }
@@ -1175,7 +1308,10 @@ function writeStoreyContents(building: Context, storey: Storey): void {
     if (broken.has(room.id)) continue
     try {
       const space = writeSpace(c, storey, room)
-      if (space !== null) spaces.push(space)
+      if (space !== null) {
+        spaces.push(space)
+        storey.spaces.set(room.id, space)
+      }
     } catch {
       // A room that cannot be built is left out.
     }
@@ -1372,7 +1508,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     building,
     storeys.map((storey) => storey.id)
   )
-  writeSlabs(c, storeys)
+  writeSlabs(c, plan, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
   writeLeftOut(c, building, options.leftOut ?? [])

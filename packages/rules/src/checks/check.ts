@@ -7,7 +7,7 @@
  * network.
  */
 
-import { checkPlanSanity, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity, groundLevel, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { FIGURE_LIMITS, FIGURE_RULES, RULE_FIGURES, type FigureRuleId } from './catalogue'
 import { allSkipped, coverageOf, LOOKS_AT, planCheckScopes, type FloorScope } from './coverage'
@@ -64,6 +64,11 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   }
   const base = checkPlanSanity(plan)
   const floors = planFloors(plan)
+  // LVL-4: the floor at grade is the ground floor, restated against the site's ground level.
+  const ground = groundLevel(plan)
+  const atGround = new Set(
+    ground.stated ? ground.groundFloors.map((f) => f.id) : floors.filter((f) => f.level === 0).map((f) => f.id)
+  )
   const level = new Map(floors.map((f) => [f.id, f.level] as const))
   const names = new Map(plan.rooms.map((r) => [r.id, r.name || r.id] as const))
   const roomName = (id: string): string => names.get(id) ?? id
@@ -81,7 +86,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     // The plan checks' notices for this floor first, then this floor's own.
     notChecked.push(...base.notChecked.filter((notice) => notice.floor === floor.id))
     // Escape openings don't need stairs: every floor up to the third storey is checked.
-    const escapes = escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape)
+    const escapes = escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape, atGround.has(floor.id))
     findings.push(...escapes.findings)
     if (ran['escape-opening']) {
       scopes['escape-opening'].push([floor.id, escapes.scope])

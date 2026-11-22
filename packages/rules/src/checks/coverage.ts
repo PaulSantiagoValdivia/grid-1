@@ -12,7 +12,7 @@
  * Pure: a plan in, plain data out.
  */
 
-import { indexPlan, planFloors, planForFloor, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
+import { indexPlan, planFloors, planForFloor, statedGround, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import type { CheckCoverage, CoverageGroup, CoverageSkip, Rule, SkipReason } from './types'
@@ -43,6 +43,7 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
   'room-reaches-exit': 'room',
   'door-leads-somewhere': 'door',
   'stairs-line-up': 'room',
+  'openings-above-ground': 'door',
   'habitable-room-area': 'room',
   'escape-opening': 'room'
 }
@@ -124,6 +125,7 @@ export function planCheckScopes(
   const noStairs = new Set(base.notChecked.filter((n) => n.reason === 'no_stairs').map((n) => n.floor))
   const wayOutNotDrawn = new Set(base.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
   const scopes = new Map<string, [string, FloorScope][]>(base.rules.map((rule) => [rule.id, []]))
+  const ground = statedGround(plan) !== null
   const add = (rule: string, floor: string, scope: FloorScope): void => {
     scopes.get(rule)?.push([floor, scope])
   }
@@ -159,6 +161,13 @@ export function planCheckScopes(
     add('stairs-line-up', floor.id, {
       lookedAt: shafts,
       skipped: { cannot_be_drawn: cannot, use_not_covered: drawn.filter((id) => !shafts.includes(id)) }
+    })
+
+    // No door or window below the ground (LVL-4): every door, window and opening that can be
+    // drawn, when the site states its ground level; with none stated the check looks at nothing.
+    add('openings-above-ground', floor.id, {
+      lookedAt: ground ? slice.openings.filter((o) => !leftOut.openings.has(o.id)).map((o) => o.id) : [],
+      skipped: ground ? { cannot_be_drawn: slice.openings.filter((o) => leftOut.openings.has(o.id)).map((o) => o.id) } : {}
     })
 
     // Every door leads somewhere: every door and opening that can be drawn, on every floor with

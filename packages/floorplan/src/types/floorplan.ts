@@ -114,6 +114,10 @@ export const FloorSchema = z.object({
   height: finite().positive().optional(),
   // Metres: the thickness of the slab this floor stands on.
   slab: finite().nonnegative().optional(),
+  // LVL-4: metres the outside walls of this floor rise above the roof over it, where it has one
+  // (every part of the floor with nothing above it). Optional and never defaulted: unstated, the
+  // roof has no parapet (version 1).
+  parapet: finite().positive().optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -211,6 +215,39 @@ const wallList = () =>
     })
   })
 
+/** LVL-4: the most points a lowered zone of a ceiling may have. */
+export const CEILING_ZONE_MAX = BOUNDARY_MAX
+
+/**
+ * LVL-4: a part of a room's ceiling that is lower than the rest: a bulkhead over a kitchen, a
+ * strip lowered for ducts. `points` is its outline on the plan (C4), three points or more; `height`
+ * is metres from the room's floor to its underside.
+ */
+export const LoweredZoneSchema = z.object({
+  name: text('name').optional(),
+  points: z
+    .array(Vec2)
+    .min(3)
+    .superRefine((list, ctx) => {
+      if (list.length <= CEILING_ZONE_MAX) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `has ${list.length.toLocaleString('en-US')} points; a lowered zone may have at most ${CEILING_ZONE_MAX.toLocaleString('en-US')}`,
+      })
+    }),
+  height: finite().positive(),
+})
+
+/**
+ * LVL-4: a room's ceiling. It is flat, at the room's `height` (ARE-10) above its floor, or, when
+ * the room states none, as high as its storey; `lowered` are the zones under it at their own
+ * heights. Stating `ceiling` says the room has one: the IFC writes it, and a ceiling plan, lights
+ * and grilles come later.
+ */
+export const CeilingSchema = z.object({
+  lowered: parts(LoweredZoneSchema, 'lowered zones in one ceiling').optional(),
+})
+
 export const RoomSchema = z.object({
   id: text('id'),
   name: text('name'),
@@ -246,6 +283,24 @@ export const RoomSchema = z.object({
   // the openings to rooms at another level, and along a dividing line between them. Optional
   // and never defaulted: unstated, the room stands on its storey's floor (version 1).
   floorOffset: finite().optional(),
+  // LVL-4: the room is a void, open to the floor below: it has no floor, so its storey's slab is
+  // open over it and the room below rises through it. It adds no floor area and needs no door.
+  // Optional and never defaulted (version 1).
+  void: z.boolean().optional(),
+  // LVL-4: the room's ceiling (CeilingSchema): it stands at the room's `height`, with any zones
+  // lowered under it. Optional and never defaulted (version 1).
+  ceiling: CeilingSchema.optional(),
+})
+
+/**
+ * LVL-4: the site. `ground` is the level of the ground outside, in metres from the ground floor's
+ * floor level (0), the same datum as a floor's `elevation`: -0.15 for a floor 15 cm above the
+ * ground. With it stated, a door or window in an outside wall that lies below the ground is
+ * named, and the ground floor is the floor nearest it. One level for the whole site: a ground
+ * level for each wall, for a slope, comes later.
+ */
+export const SiteSchema = z.object({
+  ground: finite().optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -530,6 +585,8 @@ export const FloorPlanFieldsSchema = z.object({
   floors: parts(FloorSchema, 'floors').optional(),
   // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
   stairs: parts(StairSchema, 'stairs').optional(),
+  // LVL-4: the site, with its ground level (SiteSchema). Optional and never defaulted (version 1).
+  site: SiteSchema.optional(),
   referenceImage: ReferenceImageSchema.optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
@@ -564,6 +621,9 @@ export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
 export type Stair = z.infer<typeof StairSchema>
+export type Ceiling = z.infer<typeof CeilingSchema>
+export type LoweredZone = z.infer<typeof LoweredZoneSchema>
+export type Site = z.infer<typeof SiteSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>

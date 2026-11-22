@@ -123,6 +123,16 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ]
         }
       }
+      case 'opening_below_ground': {
+        const opening = plan.openings.find((o) => o.id === finding.openings[0])
+        const wall = opening?.wall ?? finding.openings[0] ?? ''
+        const depth = finding.belowGround === undefined ? 0 : finding.belowGround.wholly ? finding.belowGround.top : finding.belowGround.foot
+        return {
+          ...base,
+          title: wordings.belowGround(opening?.type ?? 'window', room === null ? null : roomName(room), wall, finding.belowGround?.wholly ?? false, metresText(depth)),
+          detail: [words('The ground level is the one the site states. If the ground in front of it is dug away, for a light well or an outside stair, draw that space.')]
+        }
+      }
       case 'opening_too_small_to_pass': {
         const p = finding.passage
         return {

@@ -265,7 +265,7 @@ function lengthInside(a: Vec2, b: Vec2, polygon: readonly Vec2[]): number {
 }
 
 /** Why the spaces of this floor cannot be worked out, or null when they can. */
-function farReason(walls: readonly Wall[]): string | null {
+export function farReason(walls: readonly Wall[]): string | null {
   for (const wall of walls) {
     if ([...wall.start, ...wall.end].some((v) => !Number.isFinite(v) || Math.abs(v) > FAR())) {
       return `wall ${quoted(wall.id)} lies more than ${FAR() / 1000} km from the origin`
