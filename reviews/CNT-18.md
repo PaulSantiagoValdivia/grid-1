@@ -176,6 +176,18 @@ room is measured as before.
   217 of 217 files passed, 4,261 tests passed and 4 skipped, exit 0. The full suite was not run
   again.
 
+- After merging main again (ca2db98, CNT-9: facts of the person's own, `grid_fields`,
+  `grid_find`, `grid_count`): eight conflicted files, each kept both sides (see the merge
+  commit). CNT-9 took convention C9, so the curved wall is C10 now, in the code, `AGENTS.md` and
+  this review. CNT-9's new code was taken to curves: `grid_find` and `grid_count` give a curved
+  wall's `length` along its curve (it took the chord, and threw on a whole circle), the DXF puts a
+  curved wall's facts at the middle of its curve, the IFC notes a curved wall's facts as it does a
+  straight one's, and the 2D picture draws a picked or assumed curved dividing line along its
+  curve. One test added (`grid_find` by length on the bay and the round room). Results: `npm run
+  build` clean; `npm run typecheck` clean; `npm run lint` clean; `npm run scoreboard` "Same as the
+  stored figures."; the same folders as before, two workers: 224 of 224 files passed, 4,327 tests
+  passed and 4 skipped, exit 0. The full suite was not run again.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
