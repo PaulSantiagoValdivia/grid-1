@@ -162,7 +162,24 @@ function personLine(facts: PlanFacts, names: PersonNames): string {
   const entered = into.length === 0
     ? 'no door leads in from outside'
     : `from outside, ${waysText(ways)} into ${listed(capped(into, 5))}`
-  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.${personBuilding(facts, names)}`
+  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.${personBuilding(facts, names)}${personWork(facts)}`
+}
+
+/** CNT-10: what the plan's work holds, as a sentence; every other figure is after the work. */
+function personWork(facts: PlanFacts): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string => [plural(n.walls, 'wall'), plural(n.openings, 'opening'), plural(n.rooms, 'room')].join(', ')
+  const shell = base === null ? '' : ` It is fitted out in ${JSON.stringify(base)}, whose walls and openings are existing and are not changed here.`
+  return ` It holds work: to be demolished ${parts(counts.demolished)}; new ${parts(counts.new)}; the sizes here are after the work.${shell}`
+}
+
+/** CNT-10: the same for an agent, as `WORK demolished 1 wall, …; new …; figures after the work`. */
+function agentWork(facts: PlanFacts): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string => `${n.walls} walls ${n.openings} openings ${n.rooms} rooms`
+  return ` WORK existing ${parts(counts.existing)}; demolished ${parts(counts.demolished)}; new ${parts(counts.new)}; figures after the work${base === null ? '' : `; BASE ${JSON.stringify(base)} read-only`}.`
 }
 
 /** CNT-5: what kind of building the plan says it is, and each floor that says otherwise, as a sentence. */
@@ -183,7 +200,7 @@ function agentBuilding(facts: PlanFacts): string {
 function agentLine(facts: PlanFacts): string {
   const ways = waysIn(facts)
   const into = ways.length === 0 ? 'no way in from outside' : `from outside into ${capped([...new Set(ways.map((way) => way.room))], 8).join(', ')}`
-  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}`
+  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}${agentWork(facts)}`
 }
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */

@@ -481,6 +481,43 @@ describe('the trace image a plan names (T-5)', () => {
   }, 20_000)
 })
 
+describe('the base plan a fit-out names (CNT-10)', () => {
+  /** A copy of the sample plan fitted out in the base at `path`. */
+  function fitOut(name: string, path: string): string {
+    writeFileSync(join(project, name), JSON.stringify({ ...JSON.parse(sample) as object, base: path }))
+    return name
+  }
+
+  it.each(T5_TRACE_IMAGE_PATHS)('%j makes every command refuse the plan', (path, why) => {
+    const plan = fitOut('fitted.json', path)
+    for (const [, args] of PLAN_READERS) {
+      expectCommandRefused(grid(args(plan)), path, 'base plan', why)
+    }
+    expect(tree(project)).toEqual([ROOMS, PLAN, plan].sort())
+    expectOutsideUntouched()
+  }, 120_000)
+
+  it('makes every tool refuse the plan, for each of the six', async () => {
+    const plans = T5_TRACE_IMAGE_PATHS.map(([path], i) => fitOut(`fitted-${i}.json`, path))
+    const calls = plans.flatMap((plan) => PLAN_TOOLS.map(([, call]) => call(plan)))
+    const answers = await callTools(calls)
+    answers.forEach((answer, i) => {
+      const [path, why] = T5_TRACE_IMAGE_PATHS[Math.floor(i / PLAN_TOOLS.length)]!
+      expectToolRefused(answer, path, 'base plan', why)
+    })
+    expect(tree(project)).toEqual([ROOMS, PLAN, ...plans].sort())
+    expectOutsideUntouched()
+  }, 60_000)
+
+  it('is refused through a link to a folder outside, by the command and the tool server', async () => {
+    linkFolder(outside, join(project, 'linked'))
+    const plan = fitOut('fitted.json', 'linked/victim.json')
+    expectCommandRefused(grid(['check', plan]), 'linked/victim.json', 'base plan', 'through a symbolic link')
+    const [answer] = await callTools([{ name: 'grid_check', arguments: { plan } }])
+    expectToolRefused(answer!, 'linked/victim.json', 'base plan', 'through a symbolic link')
+  }, 20_000)
+})
+
 describe('every file Grid writes lands under the project folder', () => {
   it('from a folder outside the project, with --project, by the command and the tool server', async () => {
     const work = join(base, 'elsewhere')

@@ -13,7 +13,7 @@
  *
  * The tool server's `grid_write_rooms` does the same through `writeRoomsIntoProject`.
  */
-import { expandPatterns, validatePlan, type FloorPlan, type TapedRow } from '@ongrid/floorplan/geometry'
+import { expandPatterns, planHasPhases, validatePlan, type FloorPlan, type TapedRow } from '@ongrid/floorplan/geometry'
 import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
 import { FloorPlanSchema, safeParseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
@@ -148,6 +148,13 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     // Read whole: the plan is written over, and a part the reader left out would be lost unseen.
     const loaded = loadPlan(project, planFile, { whole: true })
     before = loaded.plan
+    // CNT-10: rooms text holds no phase and no base, so writing it over such a plan would lose them.
+    if (options.replace !== true && planHasPhases(before)) {
+      throw new RoomsRefused(
+        'rooms/phases',
+        `${shownFile} holds ${before.base === undefined ? 'existing, demolished and new parts' : `a fit-out on the base plan ${JSON.stringify(before.base)}`}, which rooms text does not hold, so writing it from rooms text would lose ${before.base === undefined ? 'them' : 'it'}. Change it with the edit tools (grid edit), which keep each part's phase and leave a base as it is; or add --replace to write over it and lose ${before.base === undefined ? 'them' : 'it'}.`
+      )
+    }
     raw = JSON.parse(project.readText(planFile, PLAN_FILE_MAX_BYTES).text) as Record<string, unknown>
     const now = planRevision(before)
     if (options.replace !== true) {

@@ -35,7 +35,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
 | `grid mark [<name>] [--plan <plan.json>] [--remove]` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside it, for `grid diff` to compare with: no git needed. At most 5 (see below) |
-| `grid diff [<plan>] [--since <name>\|git] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
+| `grid diff [<plan>] [--since <name>\|git\|phase] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
 | `grid serve` | Starts the tool server on standard input and output, with the 30 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
@@ -168,7 +168,11 @@ can name and pen its own way.
 - **Walls** are closed outlines, one per solid piece between openings, with their corners joined
   as the drawing joins them, on `GRID-WALLS-EXTERIOR` or `GRID-WALLS-INTERIOR`. Each wall is
   filled by a solid hatch on `GRID-WALLS-FILL`. A dividing line is one dashed line on
-  `GRID-WALLS-VIRTUAL`.
+  `GRID-WALLS-VIRTUAL`. In a plan with phases (CNT-10) each wall goes on its phase's layer
+  instead: `GRID-WALLS-EXISTING`, `GRID-WALLS-NEW` (filled on `GRID-WALLS-FILL-NEW`) or
+  `GRID-WALLS-DEMOLISHED` (dashed, unfilled), and each opening to be demolished is its dashed
+  outline on `GRID-OPENINGS-DEMOLISHED`
+  ([existing, demolished and new](plan-file.md#existing-demolished-and-new)).
 - **Doors, windows and doorless openings are blocks**, one per kind and size, named by width and
   wall thickness in millimetres (`GRID-WINDOW-1200x200`), inserted on `GRID-DOORS`,
   `GRID-WINDOWS` or `GRID-OPENINGS` and turned along their wall, so they can be counted and
@@ -373,7 +377,9 @@ version last committed.
 
 `grid diff` compares the plan with an earlier version of itself: the marker `--since` names, or
 with `--since git` the version last committed in the project's own git folder. With neither, it
-compares with the marker `start` when the plan has one, else with the last commit. Grid reads
+compares with the marker `start` when the plan has one, else with the last commit. With
+`--since phase`, a plan with existing, demolished and new parts is compared with itself, before
+its work against after it: what is removed is to be demolished, what is added is new (CNT-10). Grid reads
 git's own files, through the same project folder rules as every other file, and runs no
 program: a `.git` folder in the project folder itself, a SHA-1 repository, the branch `HEAD`
 names. A repository whose `.git` is above the project folder is outside it, and is not read.

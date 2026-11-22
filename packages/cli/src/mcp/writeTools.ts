@@ -7,6 +7,7 @@
  * writes the file's own JSON back with only that change in it. It is refused, and nothing is
  * written, when it would leave the drawing with a problem it did not have.
  */
+import { baseRefusal, baseTouched, phasedPatch } from '../edit/phases'
 import { planInMetres } from '@ongrid/floorplan/types/units'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { keptDerived } from '@ongrid/floorplan/rooms'
@@ -278,6 +279,12 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
     if (error instanceof EditRefused) throw new ToolRefusal(`${error.message} Nothing was written.`)
     throw error
   }
+  // CNT-10: a fit-out's base is read-only; in a plan with phases, the change is the work.
+  if (loaded.base !== undefined) {
+    const touched = baseTouched(patch, loaded.base)
+    if (touched.length > 0) throw new ToolRefusal(baseRefusal(touched, loaded.base.file))
+  }
+  patch = phasedPatch(loaded.plan, patch)
   // A plan written rooms first keeps its derived boundaries derived through Grid's own edits (WRT-2).
   const after = keptDerived(loaded.plan.rooms, readingAfter(loaded.plan, patch) as unknown as Record<string, unknown>) as unknown as FloorPlan
   const oldErrors = errorsOf(loaded.plan)
@@ -313,7 +320,9 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
     .map((change) => `${change.message}.`)
   const drawingProblems = { before: validatePlan(loaded.plan).issues.length, after: validatePlan(after).issues.length }
   // The files as written, before and after (MSG-4): a field Grid does not read is kept by the change, and counted.
-  const toLookAt = { before: inspectPlan(raw).count, after: inspectPlan(next).count }
+  // CNT-10: a fit-out's files are read with its base, as the command reads them.
+  const withBase = loaded.base === undefined ? {} : { base: loaded.base.plan }
+  const toLookAt = { before: inspectPlan(raw, withBase).count, after: inspectPlan(next, withBase).count }
   const guessed = [...(patch.guessed ?? [])]
   const couldNotKeep = [...(patch.notKept ?? [])]
   // BRF-1: the brief beside the plan the change read, against the plan as it now is.

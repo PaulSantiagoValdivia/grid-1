@@ -17,6 +17,7 @@
  * cannot be worked out says why.
  */
 
+import { planInState } from './phases'
 import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import type { FloorPlan, PlanIndex, Wall } from './plan'
@@ -182,7 +183,10 @@ const asMulti = (outline: FloorShell['outline']): MultiPolygon => outline.map((p
  * Each floor's outline, the stretches of it along each wall, and the part of it no floor above
  * covers, lowest floor first.
  */
-export function planShell(plan: FloorPlan, options: ShellOptions = {}): ShellFloor[] {
+export function planShell(stated: FloorPlan, given: ShellOptions = {}): ShellFloor[] {
+  // CNT-10: the shell as it will be after the work.
+  const plan = planInState(stated, 'after')
+  const options = plan === stated ? given : {}
   const index = options.index ?? indexPlan(plan)
   const broken = options.broken ?? validatePlan(plan, index, { spaces: false }).broken
   const floors = planFloors(plan)

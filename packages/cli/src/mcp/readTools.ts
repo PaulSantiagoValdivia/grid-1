@@ -417,7 +417,7 @@ const money = (amount: number, currency: string): string =>
 const UNIT_SHOWN: Readonly<Record<QuantityUnit, string>> = { m2: 'm²', m: 'm', nr: 'nr' }
 
 /** ARE-13: the bill of quantities, priced from the person's rates or as a rate card. */
-function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Display, asCsv: boolean): Answer {
+function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Display, asCsv: boolean, change = false): Answer {
   const rules = [...new Set(estimate.lines.map((line) => line.rule))]
   const data: Record<string, unknown> = {
     label: GENERAL_GUIDANCE_LABEL,
@@ -444,13 +444,18 @@ function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Disp
   }
   if (asCsv) return { text: estimateCsv(estimate, pricing), data }
   const lines: string[] = [
-    `Quantities for a first estimate, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`,
+    change
+      ? `The plan's work as three lists, demolish, make good and new, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`
+      : `Quantities for a first estimate, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`,
     pricing === null
       ? 'Rate card: no rates given, so no cost. Each line with its key and unit, ready to fill:'
       : `Priced from ${q(pricing.file)}${pricing.label ? ` (${q(pricing.label)})` : ''}, in ${q(pricing.currency)}: the person's rates, not a price list.`,
   ]
   const shown: readonly (EstimateLine & Partial<PricedLine>)[] = pricing?.lines ?? estimate.lines
   shown.forEach((line, i) => {
+    // CNT-10: a change's lines under their list's name.
+    const list = (line as { list?: string }).list
+    if (list !== undefined && (shown[i - 1] as { list?: string } | undefined)?.list !== list) lines.push(`${list.charAt(0).toUpperCase()}${list.slice(1)}:`)
     let cost = ''
     if (pricing !== null) {
       if (line.state === 'priced' || line.state === 'alternative') {
@@ -502,6 +507,7 @@ const takeoffTool: GridTool = {
   description:
     'Use this when a builder or the person asks for quantities to price work: metres of wall (outside walls, inner walls, partitions), plaster or paint area per room less openings, ceiling areas, skirting lengths, slab and roof areas, or these as a spreadsheet. '
     + 'With for=estimate, or when the person asks what the plan will cost, how much flooring, paint or plasterboard it takes, or for a bill of quantities, it gives the figures a first estimate needs instead: floor finishes and wall faces by room use, ceilings, skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size, the slab, upper floors and the roof (assumed: the plan holds none), and the gross internal area, each line with a key, its rule and an assumed mark. '
+    + 'With for=change, for a refurbishment whose plan marks parts existing, demolished or new, it gives the work as three lists instead: demolish (walls by kind and thickness, doors and windows), make good (floor where walls stood, wall faces where they met, openings filled in, reveals of new openings in old walls) and new (walls, doors and windows, the new rooms\' floors), so taking a wall out is work to price, never a saving. '
     + `A cost comes only from the person's own rates file (rates, or ${RATES_FILE} beside the plan), which must name its currency; with none, the answer is a rate card to fill in and holds no money. Lines with no rate and rates in the wrong unit are listed apart. Grid has no prices. `
     + 'Every figure is worked out from the plan\'s walls and openings by a rule stated in the answer. '
     + 'It also gives each floor\'s slab and the roof over every part with nothing above, worked out from the outlines and marked assumed. '
@@ -510,11 +516,11 @@ const takeoffTool: GridTool = {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
     rooms: { type: 'array', description: 'Only these rooms, by id. Every room when left out. Not with for=estimate.', examples: [['kitchen', 'bath']], items: { id: true }, minItems: 1, maxItems: 200 },
-    for: { type: 'string', enum: ['estimate'], description: 'estimate for the bill of quantities of a first estimate, priced from the person\'s rates or as a rate card. The take-off by room when left out.', examples: ['estimate'] },
+    for: { type: 'string', enum: ['estimate', 'change'], description: 'estimate for the bill of quantities of a first estimate; change for a plan with existing, demolished and new parts, its work as three lists (demolish, make good, new). Each priced from the person\'s rates or as a rate card. The take-off by room when left out.', examples: ['estimate', 'change'] },
     rates: {
       type: 'string',
       maxLength: PATH_MAX,
-      description: `The person's rates file, as a path inside the project folder: JSON with a currency and a rate per line key. ${RATES_FILE} beside the plan when left out, if there is one. Only with for=estimate.`,
+      description: `The person's rates file, as a path inside the project folder: JSON with a currency and a rate per line key. ${RATES_FILE} beside the plan when left out, if there is one. Only with for=estimate or for=change.`,
       examples: [RATES_FILE, 'costs/rates-2027.json'],
     },
     units: UNITS_ARG,
@@ -543,7 +549,7 @@ const takeoffTool: GridTool = {
     rules: listSchema(STRING),
     // ARE-13, with for=estimate: the lines, and the cost from the person's rates or the rate card.
     label: STRING,
-    lines: listSchema(objectSchema({ key: STRING, what: STRING, quantity: NUMBER, unit: STRING, rule: STRING, assumed: BOOLEAN }, ['key', 'what', 'quantity', 'unit', 'rule', 'assumed'])),
+    lines: listSchema(objectSchema({ key: STRING, what: STRING, quantity: NUMBER, unit: STRING, rule: STRING, assumed: BOOLEAN, list: STRING }, ['key', 'what', 'quantity', 'unit', 'rule', 'assumed'])),
     notes: listSchema(STRING),
     rateCard: objectSchema({ label: STRING, currency: STRING, rates: { type: 'object' } }),
     cost: objectSchema({ file: STRING, label: NULLABLE_STRING, currency: STRING, total: NUMBER, complete: BOOLEAN, missing: listSchema(STRING), wrongUnit: { type: 'array' }, unused: listSchema(STRING), wholeBuilding: NULLABLE_NUMBER }),
@@ -551,8 +557,9 @@ const takeoffTool: GridTool = {
     orderProblems: listSchema(STRING),
   }, ['rules']),
   run(args, context) {
-    if (args['for'] === 'estimate') {
-      if (args['rooms'] !== undefined) throw new ToolRefusal('for=estimate takes no rooms: its walls, outside face, slab and roof belong to no one room. Pass floor for one floor.')
+    if (args['for'] === 'estimate' || args['for'] === 'change') {
+      const change = args['for'] === 'change'
+      if (args['rooms'] !== undefined) throw new ToolRefusal(`for=${change ? 'change' : 'estimate'} takes no rooms: its walls, outside face, slab and roof belong to no one room. Pass floor for one floor.`)
       const { project, file, loaded } = readPlan(context, args['plan'])
       const survey = surveyPlan(loaded.plan)
       const floor = floorArg(loaded.plan, args['floor'])
@@ -563,11 +570,15 @@ const takeoffTool: GridTool = {
         if (error instanceof RatesRefused) throw new ToolRefusal(error.message)
         throw asRefusal(error)
       }
-      const estimate = planEstimate(survey, floor === undefined ? {} : { floors: [floor] })
+      const floors = floor === undefined ? {} : { floors: [floor] }
       const units = displayFor(args['units'], args['decimal'], loaded.plan)
-      return estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv')
+      const answer = (estimate: Estimate): Answer => estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv', change)
+      // CNT-10: the work of a plan with phases, as three lists, on the same rates. Read only when
+      // asked for, so the command's file stays small.
+      if (change) return import('../quantities/change').then(({ planChange }) => answer(planChange(loaded.plan, floors)))
+      return answer(planEstimate(survey, floors))
     }
-    if (args['rates'] !== undefined) throw new ToolRefusal('rates goes with for=estimate: the take-off by room holds no cost.')
+    if (args['rates'] !== undefined) throw new ToolRefusal('rates goes with for=estimate or for=change: the take-off by room holds no cost.')
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const rooms = args['rooms'] as string[] | undefined
     for (const id of rooms ?? []) roomArg(survey.plan, id, 'rooms item')
