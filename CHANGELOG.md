@@ -14,6 +14,7 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- Walls, doors, windows, rooms and floors can carry facts of your own in `properties` (a fire rating, a department, a head count), and a room its number. They are kept through edits and `grid tidy`, listed in the schedules, and written into the IFC (a `Grid_Properties` set) and the DXF (layer `GRID-FACTS`). Three tools ask across them: `grid_fields`, `grid_find` and `grid_count`, and `grid_view` picks out or colours their answers (CNT-9).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 
 Grid has not been released yet. The first release will hold:
