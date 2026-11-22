@@ -60,7 +60,6 @@ describe('MS-4: one corridor that could not be drawn', () => {
 
 describe("W-7: E's 26 fault plans", () => {
   const FAULTS = [...plans.keys()].filter((name) => name.startsWith('E/scenarios/faults/f'))
-  // COD-3: with no place stated no figure applies; these counts were made with the US figures.
   const results: [string, GridResult][] = FAULTS.map((name) => [name, inspectPlan(planText(name), { country: 'US' })])
 
   it('are 26 plans', () => {
@@ -113,9 +112,9 @@ describe("W-7: E's 26 fault plans", () => {
   })
 })
 
+// COD-3: with no place stated no figure is applied, so the hotel states the place its figures are for.
 describe('MS-14: twelve hotel rooms with the same window', () => {
   it('are one line listing the twelve rooms, with every id kept', () => {
-    // COD-3: the escape figure is a US one, and applies only with a place: the US here.
     const result = inspectPlan(planText('C/scenarios/hotel-ground-fixed-glazing.json'), { country: 'US' })
     const findings = result.lines.filter((l) => l.kind === 'finding')
     expect(findings).toHaveLength(1)
