@@ -1,5 +1,5 @@
 /**
- * Kinds of door and window (CNT-14, C16): what each kind is drawn, checked and exported as.
+ * Kinds of door and window (CNT-14, C17): what each kind is drawn, checked and exported as.
  *
  * The plan states a kind on a door or a window (`kind`) and, when not all of it opens, the part
  * that does (`opens`). This module is the one place that says what that means:

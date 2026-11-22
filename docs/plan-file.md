@@ -22,6 +22,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
 - [Kinds of door and window, their handing and the part that opens](#kinds-of-door-and-window-their-handing-and-the-part-that-opens): `opening/wide-single-leaf`, `opening/kind-not-for-type`, `opening/part-too-large`, `floor/not-checked-door-swings`
+- [Existing, demolished and new](#existing-demolished-and-new): `plan/read-after-work`, `opening/phase-wall`, `room/phase-wall`; a fit-out on a base plan
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [A wall placed by its face](#a-wall-placed-by-its-face): a survey drawn from its own numbers, the thickness known or not
@@ -45,7 +46,7 @@ file never reaches the exports with its letters turned into question marks. A fi
 |---|---|---|
 | a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
 | an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of | 64 characters | the same |
-| the trace image's path | 1,024 characters | the same |
+| the trace image's path, the base plan's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
@@ -169,8 +170,11 @@ the edge, chosen per person:
   it, `3,81` is refused with one line that names the decimal comma. A length past Grid's largest,
   or text Grid cannot read, is refused in words, by the argument's name. A plan file that states
   `"units": "mm"` (or `cm`, `ft`, `in`) is read in that unit and written back in metres.
+- **Rooms text.** A plain number is metres; a length may carry its unit in one word, with no
+  space: `360cm`, `12ft`, `12ft6in`, `12'6"` ([rooms first](rooms-first.md)).
 - **Writing.** A plan may say how its person reads lengths, in `display`. It changes no stored
-  number:
+  number. Rooms text sets it with a `display` line (`display ft-in precision 3`), and the
+  read-back writes that line again:
 
   ```json
   "display": { "length": "ft-in", "area": "ft2", "decimal": "point", "precision": 0 }
@@ -186,8 +190,9 @@ the edge, chosen per person:
   A call's `units` and `decimal` (`--units`, `--decimal` on `grid draw`) win over the plan's
   `display`. In feet and inches a length is written `12'-6"` and a sill `48"`; in millimetres,
   `2860`. The drawing's room areas and dimensions, and the figures of `grid_areas`,
-  `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view` follow the display. The check's
-  report, the sheet, the edit answers and the exports stay in metres for now.
+  `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view`, and the sheet's figures,
+  tables and drawings, follow the display. The check's report and the edit answers are still in
+  metres. The exports stay in metres and say so in the file, as DXF, IFC and glTF expect.
 
 ## Floor levels and heights
 
@@ -738,6 +743,95 @@ the kind, the part and the handing.
 | `opening/kind-not-for-type` | A kind its type does not take, such as a window that is a `garage`, or any kind on a doorless opening. It is drawn as one with no kind |
 | `opening/part-too-large` | A part that opens wider or higher than the opening, or on a fixed window or a doorless opening. It is taken as the whole opening |
 | `floor/not-checked-door-swings` | Not checked: the doors on a floor whose kind swings or folds and that state neither `hinge` nor `swing`. Each is drawn with a "?" on a sheet and its sweep is not checked |
+
+## Existing, demolished and new
+
+A wall, a door, a window, a doorless opening and a room may state its `phase` (CNT-10): what the
+work does to it. One plan then holds the building before the work and after it.
+
+| `phase` | It stands | Drawn |
+|---|---|---|
+| `existing` | before the work, and stays | in a tone: grey in the technical look, a mid tone on screen |
+| `demolished` | before the work, and is taken out | as a dashed outline where it stood, with no fill |
+| `new` | after the work: the work builds it | filled: black in the technical look, as walls are on screen |
+
+```json
+{ "id": "wk", "start": [0, 3], "end": [5, 3], "thickness": 0.1, "kind": "interior", "phase": "demolished" }
+{ "id": "d-bath-old", "wall": "wb", "type": "door", "offset": 1, "width": 0.7, "height": 2.1, "phase": "demolished" }
+{ "id": "d-bath", "wall": "wb", "type": "door", "offset": 0.9, "width": 0.9, "height": 2.1, "phase": "new" }
+```
+
+The building before the work is its existing and demolished parts; after it, its existing and
+new parts. A part that states no phase:
+
+- in a plan that states no phase anywhere: the plan is read, drawn, measured, checked and
+  exported exactly as before;
+- an opening, in a plan that does: its wall's phase when its wall is demolished or new, so a
+  door goes with its wall and is built with it; else as below;
+- any other part of a plan that states a phase: existing, standing before and after the work;
+- a part of a plan fitted out in a base (below): new, since the plan is the work.
+
+What Grid does with each state:
+
+- **Checks and measures.** The drawing check reads each state on its own: a widened door, its
+  old opening demolished and a new one in the same place, is accepted, as is a wall rebuilt where
+  one is demolished; neither is in the other's state. What the plan holds after the work is
+  checked in full; of the state before it, only what is about a part to be demolished. An opening
+  or a room that stands when its wall does not is left out of both (`opening/phase-wall`,
+  `room/phase-wall`): a new door in a wall to be demolished, an existing room round a new wall.
+  Every area, size, schedule, take-off, description and plan check is of the building after the
+  work, and says so: `grid check` gives one line, `plan/read-after-work`, with the counts;
+  `grid_areas` a note; `grid describe` a sentence. Two rooms knocked into one are both
+  `demolished`, and the room they become is `new`.
+- **Drawing.** Each phase as the table says, through every look, with a key. Sizes are of the
+  building after the work: a demolished wall has none. The 3D view, the stills and the facades
+  show the building after the work.
+- **Exports.** The DXF puts each wall on its phase's layer, `GRID-WALLS-EXISTING`,
+  `GRID-WALLS-NEW` (its fill on `GRID-WALLS-FILL-NEW`) or `GRID-WALLS-DEMOLISHED` (dashed), and
+  each opening to be demolished, as its outline, on `GRID-OPENINGS-DEMOLISHED` (dashed); a profile
+  may rename them (`walls-existing`, `walls-new`, `walls-demolished`, `wall-fill-new`,
+  `openings-demolished`). The IFC writes every wall and opening, the demolished ones as they stood
+  before the work, and the rooms after it, each element with a property set, `Grid_Phase`, whose
+  `Phase` is `existing`, `demolished` or `new`. Room numbers count the rooms after the work.
+- **The comparison.** `grid diff --since phase` (`grid_diff` with `since: "phase"`) compares the
+  plan before its work with after it, by what stands where: what is removed is to be demolished,
+  what is added is new, and a widened door is a door whose width changed.
+- **The cost.** `grid_takeoff` with `for: "change"` gives the work as three lists: demolish
+  (walls by kind and thickness, doors and windows by size), make good (the floor where a wall
+  stood, the wall faces where it met walls that stay, each opening filled in, less what a new one
+  in the same place takes, and the reveals of new openings cut in walls that stay) and new (walls,
+  doors and windows, the new rooms' floor by use). Each line has a key a rates file prices,
+  `demolish:wall:interior:0.1`, `make_good:infill:exterior:0.3`, `new:door:0.9x2.1`; a shorter key
+  covers longer ones, so `demolish` prices every demolition line.
+- **Edits.** In a plan with phases a change is the work: what it adds is new; a door, window,
+  wall or room it takes out of what stood before stays, demolished; a door or window it changes
+  keeps its old self beside it as `<id>-before`, demolished, so widening a door is an old opening
+  and a new one. A wall or a room that stood before and that a change moves, cuts or reshapes is
+  changed in place, and the answer says so under what it could not keep. `grid write` will not
+  write rooms text over a plan with phases without `--replace` (rooms text holds no phase), and
+  `grid tidy --apply` will not change one.
+
+### A fit-out on a base plan
+
+A plan may name the plan it is fitted out in, `base`, by its path from the project folder:
+
+```json
+{ "version": "1", "base": "shell.json",
+  "walls": [{ "id": "p1", "start": [4, 0], "end": [4, 5], "thickness": 0.1, "kind": "partition" }],
+  "rooms": [{ "id": "front", "name": "Reception", "boundary": ["s1", "p1", "s3", "s4"] }] }
+```
+
+The command and the tool server read the base as they read a plan, through the project's one
+resolver: inside the project folder, never through a link out of it, never an address (CMD-15).
+The base names no base of its own. Its walls and openings, as they stand after its own work, are
+read into the plan as existing; its rooms are not, since the fit-out says what its rooms are. The
+fit-out's rooms may rest on the base's walls; its own parts that state no phase are new. A part of
+the fit-out with the id of a base wall or opening refuses the plan, naming the id.
+
+The base is read-only. It is drawn as existing, measured and checked with the fit-out, and never
+written into it: a change that would move, cut or take out a base wall or opening, or put an
+opening in a base wall, is refused, naming them, and nothing is written. To change the shell,
+change the base plan, and every fit-out on it reads the change.
 
 ## Wall faults, each with its fix
 

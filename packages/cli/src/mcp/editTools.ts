@@ -29,7 +29,7 @@ const mergeTool: GridTool = {
     'Use this when the person asks to knock two rooms into one, open them up or take out the wall between them: "knock the kitchen and living room into one". '
     + 'It takes out the stretch of wall the two rooms share, cut where the walls round them meet it, with the doors and windows in that stretch; the first room takes in the second and keeps its id, name and use unless name or use say otherwise. '
     + 'Two rooms of different uses (a kitchen and a living room) need use, the merged room\'s, or zones true, which keeps both as zones of one open-plan room, each with its id, name and use, either side of a dividing line; left out, the call is refused and asks. It answers with the area of the room it makes, and the verdict names any use the plan no longer has. '
-    + 'Do not use to make a room bigger by moving a wall (grid_move_room_side) or for rooms that share more than one wall. It replaces the plan file unless out is given. Units are metres.',
+    + 'Do not use to make a room bigger by moving a wall (grid_move_room_side) or for rooms that share more than one wall. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The room that takes in the other and keeps its id; with zones, the first zone.', examples: ['living'] },
@@ -62,7 +62,7 @@ const splitTool: GridTool = {
   description:
     'Use this when the person asks to divide a room, or take part of one for another room: "bedroom 2 into a study and a second bathroom", "a 1.4 m bathroom off the east end". '
     + 'A new wall goes across the room; the new room takes its side, size metres inside from that side\'s face, and the room keeps its id and the rest, with name and use for its own if they change. A door goes in the new wall, centred unless door_from and door_distance place it (door_width 0 for none). It answers with both areas, what it guessed and a room left with no window. '
-    + 'Rectangles square to the drawing only. Do not use to add a room outside the walls (grid_add_room). It replaces the plan file unless out is given. Units are metres.',
+    + 'Rectangles square to the drawing only. Do not use to add a room outside the walls (grid_add_room). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,
@@ -108,7 +108,7 @@ const addRoomTool: GridTool = {
   description:
     'Use this when the person asks for an extension or a new room outside the walls, against one side of a room: "a 3 x 4 m extension at the back of the living room, with an opening into it and a door to the garden". '
     + 'It builds the room\'s three walls, as thick as the wall it stands against, cuts that wall where they meet it, and makes the stretch between the rooms an inside wall. A door or window in that stretch is in the way: pass in_the_way remove or keep (kept, it joins the two rooms); left out, the call is refused naming them. opening_width puts a doorless opening between the rooms and door_width a door in the far side, both centred. '
-    + 'Sizes are inside sizes unless size is centre (to the walls\' centre lines). The door is drawn with no swing until grid_change_opening gives it one, or a kind such as sliding or folding. Do not use to make an existing room bigger (grid_move_room_side) or to divide one (grid_split_room). It replaces the plan file unless out is given. Units are metres.',
+    + 'Sizes are inside sizes unless size is centre (to the walls\' centre lines). The door is drawn with no swing until grid_change_opening gives it one, or a kind such as sliding or folding. Do not use to make an existing room bigger (grid_move_room_side) or to divide one (grid_split_room). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,
@@ -157,7 +157,7 @@ const stretchTool: GridTool = {
   description:
     'Use this when the person asks for the whole building, flat or house wider, longer or deeper: "the flat 30 cm wider", "the house 1 m longer to the north, through the kitchen". '
     + 'Everything beyond a line across the building moves out by the distance: the line is just inside the outside wall on that side, or through the middle of a room with through. Walls across the line get longer and the rooms they bound grow; every floor moves together unless floor names one. Doors and windows keep their anchor or their place in the building, so one in a wall that grows at its start does not slide. '
-    + 'Do not use for one room (grid_move_room_side). It replaces the plan file unless out is given. Units are metres.',
+    + 'Do not use for one room (grid_move_room_side). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,
@@ -210,7 +210,7 @@ const squareTool: GridTool = {
     'Use this when a plan came from a scan or a capture and its walls are a degree or two off square, or the person asks to square it up or straighten the walls: "square the scan". '
     + 'It turns each wall within about 3 degrees of the plan\'s main directions onto them, about its middle, puts the corners back where the new lines cross, and answers with how far each wall turned and moved; a wall further off is left as it is and named. '
     + 'Only the walls the plan marks scanned (its marks, source scanned) are squared unless all is true. The marks stay, so areas from those walls still carry their give or take. '
-    + 'Do not use for a plan drawn by hand, or to move one wall (grid_move_room_side). It replaces the plan file unless out is given. Units are metres and degrees.',
+    + 'Do not use for a plan drawn by hand, or to move one wall (grid_move_room_side). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm); angles are degrees.',
   args: {
     plan: PLAN_ARG,
     all: { type: 'boolean', description: 'true to square every wall, not only those marked scanned. false when left out.', examples: [true, false] },

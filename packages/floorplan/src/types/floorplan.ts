@@ -140,7 +140,19 @@
  *   length taped. They are checks, never geometry: nothing is drawn or placed from them, and
  *   every run says each one taped against drawn. Optional and never defaulted (version 1).
  *
- * C16 · Kinds of door and window (CNT-14)
+ * C16 · Phases, and a fit-out on a base plan (CNT-10, lab EL-10, CP4-4)
+ *   A wall, an opening and a room MAY state its `phase`: `existing` (it stands before the work and
+ *   stays), `demolished` (it stands before the work and is taken out) or `new` (the work builds
+ *   it). One plan then holds two states of the building: before the work (existing and
+ *   demolished parts) and after it (existing and new parts). An opening that states no phase is
+ *   in its wall's, when its wall is demolished or new. In a plan that states a phase anywhere, a
+ *   part that states none stands before and after, as an existing one does; a plan that states
+ *   none is read exactly as before. A plan MAY name a `base` plan, by its path from the project
+ *   folder: the shell it is fitted out in. The base's walls and openings, as they stand after its
+ *   own work, are read into the plan as existing and are never written back to it; the plan's own
+ *   parts that state no phase are new. Both optional and never defaulted (version 1).
+ *
+ * C17 · Kinds of door and window (CNT-14)
  *   A door or window MAY state its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that
  *   opens (`opens`). Its handing stays in the wall's terms (`hinge`, `swing`, C2): the person's
  *   terms, the room it opens into and the side it is hinged on as seen from a room, are turned
@@ -370,6 +382,17 @@ export const FloorSchema = z.object({
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
 
 /**
+ * CNT-10 (C16): what the work does to a wall, an opening or a room: it stands before and stays
+ * (`existing`), it stands before and is taken out (`demolished`), or the work builds it (`new`).
+ */
+export const PHASES = ['existing', 'demolished', 'new'] as const
+export const PhaseSchema = z.enum(PHASES)
+
+/** CNT-10: the fields that carry a phase, for whatever must place each (the sheet's `PHASE_COVERAGE`). */
+export const PHASE_FIELDS = ['walls.phase', 'openings.phase', 'rooms.phase'] as const
+export type PhaseField = (typeof PHASE_FIELDS)[number]
+
+/**
  * What a wall that does not state its thickness or height gets. A virtual wall is a
  * dividing line on the floor (an open-plan room contour, e.g. a kitchen open to the
  * dining room): it has no material, so it takes no floor and stands no height, and
@@ -581,6 +604,8 @@ export const WallSchema = z.preprocess(
       floor: text('id').pipe(z.string().min(1)).optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
+      // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+      phase: PhaseSchema.optional(),
       // HND-11 (C1, reopened): start→end is this face of the wall, not its centre line. The
       // reading moves the wall to its centre line (`withWallDefaults`), so a wall Grid read has
       // `placedBy` in its place. Optional and never defaulted (version 1).
@@ -850,6 +875,8 @@ export const RoomSchema = z.object({
   number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -878,7 +905,7 @@ export const OpeningAnchorSchema = z
   })
 
 /**
- * CNT-14 (C16): the kinds of door, and of window, a plan may state. A door with no kind is a
+ * CNT-14 (C17): the kinds of door, and of window, a plan may state. A door with no kind is a
  * single swinging leaf, as every door was before (version 1). `single` and `double` are one or
  * two hinged leaves; `sliding` slides along its wall, `pocket` into it; `folding` folds to one
  * side in panels; `roller` rolls up and `garage` lifts overhead. A window may be `single` or
@@ -921,7 +948,7 @@ export const OpeningSchema = z.object({
   // geometry/wall.ts `wallFaces`.
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
-  // CNT-14 (C16): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
+  // CNT-14 (C17): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
   // (`OpeningPartSchema`). Optional and never defaulted (version 1): a door that states no kind is
   // one swinging leaf, and the whole of an opening opens.
   kind: z.enum(OPENING_KINDS).optional(),
@@ -930,6 +957,9 @@ export const OpeningSchema = z.object({
   anchor: OpeningAnchorSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it; unstated, its wall's when that is demolished or new.
+  // Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
 })
 
 /** LVL-8: the most floors above its own that one opening pattern may be repeated on. */
@@ -946,7 +976,7 @@ export const PatternOpeningSchema = z.object({
   height: finite().positive(),
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
-  // CNT-14 (C16): its kind and the part of it that opens, carried into every opening it makes.
+  // CNT-14 (C17): its kind and the part of it that opens, carried into every opening it makes.
   kind: z.enum(OPENING_KINDS).optional(),
   opens: OpeningPartSchema.optional(),
 })
@@ -1548,6 +1578,10 @@ export const FloorPlanFieldsSchema = z.object({
   // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
   stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
+  // CNT-10 (C16): the plan this one is fitted out in, by its path from the project folder. Its
+  // walls and openings are read in as existing and never written back. Optional and never
+  // defaulted (version 1).
+  base: text('path').pipe(z.string().min(1)).optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
   items: parts(ItemSchema, 'items').optional(),
@@ -1606,6 +1640,7 @@ export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSch
 export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
+export type Phase = z.infer<typeof PhaseSchema>
 export type Wall = z.infer<typeof WallSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
 export type RoomTenure = z.infer<typeof RoomTenureSchema>

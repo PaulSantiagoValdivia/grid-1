@@ -322,10 +322,11 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
   const painted = show.paintKey ?? []
-  const keyed = show.key === true || (show.key !== false && (painted.length > 0 || drawing.notes.some((note) => note.kind === 'key')))
+  // CNT-10: a drawing of work keys its phases unless the key is turned off.
+  const keyed = show.key === true || (show.key !== false && (painted.length > 0 || drawing.notes.some((note) => note.kind === 'key') || drawing.walls.some((wall) => wall.phase !== undefined)))
   const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
   const marked = on('warnings') && faults.length > 0
-  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0, painted }) : []
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0, painted, phases: look.phases }) : []
   const writing = writingBand(title, entries, width, look.colors)
   const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors)
   const key = stackBands(writing, listed)

@@ -565,6 +565,12 @@ export const CODES = {
     needed: fixed('openings on one wall that share no part of it'),
     fix: fixed('Move one of them along the wall, or make one narrower. Until then the later one is left out.')
   },
+  'opening/phase-wall': {
+    says: (s) => `${s.label} stands when its wall does not, so it is left out`,
+    found: (s) => s.said,
+    needed: fixed('an opening that stands only while its wall does: a new opening in an existing or new wall, an existing or demolished one in an existing wall'),
+    fix: fixed('Give the opening the phase of its wall, or put it in a wall that stands when it does. A widened door is its old opening, demolished, and a new one in the same place.')
+  },
   'opening/size-question': {
     says: (s) => `${s.label} has a size that may not be meant`,
     needed: fixed('the size of a door or window in a building'),
@@ -655,6 +661,12 @@ export const CODES = {
     says: (s) => `${s.label} rests on a wall that cannot be drawn`,
     needed: fixed('walls that can be drawn'),
     fix: fixed('Correct those walls first: this line goes away with them.')
+  },
+  'room/phase-wall': {
+    says: (s) => `${s.label} stands when one of its walls does not, so it is left out`,
+    found: (s) => s.said,
+    needed: fixed('a room whose walls stand whenever it does: an existing room round existing walls, a new room round existing or new walls, a demolished room round existing or demolished walls'),
+    fix: fixed('Give the room the phase it has in the work, or name the walls that stand when it does: two rooms knocked into one are both demolished, and the room they become is new.')
   },
   'room/empty': {
     says: (s) => `${s.label} encloses no floor`,
@@ -1188,6 +1200,12 @@ export const CODES = {
     fix: fixed('Nothing to change in the plan: look up how escape from these bedrooms is set out where it will be built.')
   },
   // WRT-6 (lab WR-15): what the plan marks assumed, listed for the person to confirm.
+  'plan/read-after-work': {
+    says: (s) => `${s.label} holds work: ${s.said}. Its sizes, areas and checks are for the building as it will be after the work`,
+    found: (s) => s.said,
+    needed: fixed('nothing: the parts to be demolished are drawn dashed and checked as they stand before the work, and grid diff --since phase lists what the work does'),
+    fix: fixed('Nothing to fix. To see what the work does, compare by phase (grid diff --since phase, or grid_diff with since: phase).')
+  },
   'plan/value-assumed': {
     says: (s) => `${s.word ? `The ${s.word} of ${s.label}` : s.label} was assumed, not given or measured`,
     found: (s) => `marked assumed in the plan's marks${s.said ? `, ${s.said}` : ''}`,

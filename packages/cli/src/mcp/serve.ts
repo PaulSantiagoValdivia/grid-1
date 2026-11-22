@@ -9,14 +9,14 @@
  * Answers go out in the order the requests came in, even when a picture takes a while.
  */
 import { createInterface } from 'readline'
-import { handleLine, type ServerTool } from './protocol'
+import { handleLine, type ServerResource, type ServerTool } from './protocol'
 
-export function startToolServer(tools: readonly ServerTool[] = []): void {
+export function startToolServer(tools: readonly ServerTool[] = [], resources: readonly ServerResource[] = []): void {
   const lines = createInterface({ input: process.stdin, crlfDelay: Infinity })
   let queue: Promise<void> = Promise.resolve()
 
   lines.on('line', (line) => {
-    const out = handleLine(line, tools)
+    const out = handleLine(line, tools, resources)
     queue = queue.then(async () => {
       const answer = await out
       if (answer !== null) process.stdout.write(`${answer}\n`)

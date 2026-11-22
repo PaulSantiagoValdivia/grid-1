@@ -1,5 +1,5 @@
 /**
- * The tools of `grid serve` that write: an export file beside the plan, the live preview, the
+ * The tools of `grid serve` that write: an export file beside the plan, the
  * plan written from rooms text (WRT-2, the main way to write one), and the three changes to the
  * plan itself (an opening, one side of a room, a mirror).
  *
@@ -7,6 +7,7 @@
  * writes the file's own JSON back with only that change in it. It is refused, and nothing is
  * written, when it would leave the drawing with a problem it did not have.
  */
+import { baseRefusal, baseTouched, phasedPatch } from '../edit/phases'
 import { planInMetres } from '@ongrid/floorplan/types/units'
 import { OPENING_KINDS, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
@@ -52,8 +53,6 @@ import {
 } from './toolkit'
 
 export const EXPORT_TOOL_NAME = 'grid_export'
-export const PREVIEW_TOOL_NAME = 'grid_preview'
-export const PREVIEW_NOTE_MAX = 120
 
 const q = (text: string): string => JSON.stringify(text)
 
@@ -124,47 +123,6 @@ const exportTool: GridTool = {
 }
 
 // ---------------------------------------------------------------------------------------------
-// grid_preview
-
-const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/g
-
-const previewTool: GridTool = {
-  name: PREVIEW_TOOL_NAME,
-  title: 'Show in preview',
-  hint: 'read',
-  description:
-    'Use this when you have changed the plan, once, to point the person at the change in Grid\'s live preview, or when they ask to see a floor or a room there: the floor you changed, the view that shows it best (3d for heights and volumes, 2d for layout), and a short note in your own words saying what to look at. '
-    + 'It only moves the preview; it changes nothing in the plan. The floor and room are checked against the plan. Do not use to get a picture back (grid_view).',
-  args: {
-    plan: PLAN_ARG,
-    floor: { ...FLOOR_ARG, description: 'A floor id from the plan\'s "floors".' },
-    room: { type: 'string', id: true, description: 'A room id. The preview shows the floor that room is on.', examples: ['kitchen', 'f1-r2'] },
-    view: { type: 'string', enum: ['2d', '3d'], description: '2d for the plan view, 3d for the model.', examples: ['2d', '3d'] },
-    note: { type: 'string', maxLength: 500, description: `One short sentence for the person, in your own words, saying what to look at. Cut to ${PREVIEW_NOTE_MAX} characters.`, examples: ['The new bathroom is behind the kitchen.'] },
-  },
-  outputSchema: objectSchema({ floor: STRING, view: { type: ['string', 'null'] }, room: { type: ['string', 'null'] }, note: { type: ['string', 'null'] } }),
-  run(args, context) {
-    if (args['floor'] === undefined && args['room'] === undefined && args['view'] === undefined) {
-      throw new ToolRefusal('Pass a floor id, a room id or a view ("2d" or "3d"), and a short note.')
-    }
-    const { loaded } = readPlan(context, args['plan'])
-    const plan: FloorPlan = loaded.plan
-    let floor = floorArg(plan, args['floor'])
-    const room = args['room'] === undefined ? undefined : roomArg(plan, args['room'])
-    if (room !== undefined) {
-      const of = plan.rooms.find((r) => r.id === room)!.floor ?? 'ground'
-      if (floor !== undefined && floor !== of) throw new ToolRefusal(`That room is on floor ${q(of)}, not the floor named.`)
-      floor = of
-    }
-    const shown = floor ?? surveyPlan(plan).facts.floors[0]?.id ?? 'ground'
-    const view = (args['view'] as string | undefined) ?? null
-    const note = (args['note'] as string | undefined)?.replace(CONTROL, '').trim().slice(0, PREVIEW_NOTE_MAX) || null
-    const text = `Showing floor ${q(shown)}${room ? `, room ${q(room)}` : ''}${view ? ` in ${view}` : ''}${note ? `, with your note` : ''}.`
-    return { text, data: { floor: shown, view, room: room ?? null, note } }
-  },
-}
-
-// ---------------------------------------------------------------------------------------------
 // grid_sheet
 
 export const SHEET_TOOL_NAME = 'grid_sheet'
@@ -185,7 +143,7 @@ const sheetTool: GridTool = {
   hint: 'write-file',
   description:
     'Use this when the person wants the plan as a PDF to read, print or send: layout client for the person the house is for (a cover with the 3D model and key figures, then a page per floor with its drawing and room areas), or layout check for whoever checks the plan (every id, every room\'s use, and what grid check finds on each floor). '
-    + 'The words of a client sheet (name, headline, intro, a few paragraphs per floor) are yours to write: pass them as sheet, or Grid reads sheet.json beside the plan. Grid draws only what the plan holds: no furniture or landscape. Every page carries "General guidance, not your local rules". '
+    + 'The words of a client sheet (name, headline, intro, a few paragraphs per floor) are yours to write: pass them as sheet, or Grid reads sheet.json beside the plan. The name is the one the person gave the building, else the plan\'s; never a name from an example. Grid draws only what the plan holds: no furniture or landscape. Every page carries "General guidance, not your local rules". '
     + 'It writes the PDF into the exports folder beside the plan, replacing an earlier sheet of the same name and layout, and answers with the path and what is on each page. It never changes the plan. '
     + `${ROOM_NAMES_TRAVEL} `
     + 'Do not use for a single picture (grid_view) or a file for another program (grid_export).',
@@ -195,7 +153,7 @@ const sheetTool: GridTool = {
     sheet: {
       type: 'object',
       description: 'Client only: the words, as sheet.json holds them. sheet.json beside the plan is read when left out.',
-      examples: [{ version: '1', name: 'Solace House', headline: 'A private retreat for one', intro: ['A two-storey home for work and rest.'], floors: { ground: ['The study sits beside the entry.'] } }],
+      examples: [{ version: '1', name: 'Example House', headline: 'A private retreat for one', intro: ['A two-storey home for work and rest.'], floors: { ground: ['The study sits beside the entry.'] } }],
       schema: sheetWordsJsonSchema(),
       // The shape and limits here; the plan's floor ids in run(), where the plan is known.
       read: (value, earlier) => {
@@ -279,6 +237,12 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
     if (error instanceof EditRefused) throw new ToolRefusal(`${error.message} Nothing was written.`)
     throw error
   }
+  // CNT-10: a fit-out's base is read-only; in a plan with phases, the change is the work.
+  if (loaded.base !== undefined) {
+    const touched = baseTouched(patch, loaded.base)
+    if (touched.length > 0) throw new ToolRefusal(baseRefusal(touched, loaded.base.file))
+  }
+  patch = phasedPatch(loaded.plan, patch)
   // A plan written rooms first keeps its derived boundaries derived through Grid's own edits (WRT-2).
   const after = keptDerived(loaded.plan.rooms, readingAfter(loaded.plan, patch) as unknown as Record<string, unknown>) as unknown as FloorPlan
   const oldErrors = errorsOf(loaded.plan)
@@ -314,7 +278,9 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
     .map((change) => `${change.message}.`)
   const drawingProblems = { before: validatePlan(loaded.plan).issues.length, after: validatePlan(after).issues.length }
   // The files as written, before and after (MSG-4): a field Grid does not read is kept by the change, and counted.
-  const toLookAt = { before: inspectPlan(raw).count, after: inspectPlan(next).count }
+  // CNT-10: a fit-out's files are read with its base, as the command reads them.
+  const withBase = loaded.base === undefined ? {} : { base: loaded.base.plan }
+  const toLookAt = { before: inspectPlan(raw, withBase).count, after: inspectPlan(next, withBase).count }
   const guessed = [...(patch.guessed ?? [])]
   const couldNotKeep = [...(patch.notKept ?? [])]
   // BRF-1: the brief beside the plan the change read, against the plan as it now is.
@@ -343,7 +309,7 @@ const changeOpeningTool: GridTool = {
     'Use this when the person asks to make a door or window wider or narrower, change which room a door opens into or which side it is hinged on, make it a sliding, double, folding, pocket, roller or garage door (or a fixed, sliding or high-level window), raise or lower a sill, turn a window into a door, or take a door or window out: "bathroom door to 90 cm, opening outwards", "hinged on the left as seen from the bedroom", "make the dock door a roller door", "block the kitchen door", "a 4 m opening to the garden". '
     + 'It changes one opening in place and answers with what changed and the area verdict. A width that does not fit is refused with the free stretches of the wall, and nothing is written. '
     + 'To move it to another wall, pass room and side ("the bathroom door to its north wall"); to place it, from and distance, as rooms text does ("0.25 from west"): from a side of room, or without room from an end of its wall. Given from, it keeps that distance when walls move later (its anchor). '
-    + 'Do not use to move a wall (grid_move_room_side). Grid has no roof windows. It replaces the plan file unless out is given. Units are metres.',
+    + 'Do not use to move a wall (grid_move_room_side). Grid has no roof windows. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,
@@ -402,7 +368,7 @@ const moveSideTool: GridTool = {
   description:
     'Use this when the person asks to make a room deeper or wider by moving one of its walls, or to build out: "go out 3 m at the back, full width", "make the kitchen 1 m longer", "bring the bedroom wall in 0.5 m". '
     + 'It moves the wall on the named side of the room straight out (a positive distance) or in (negative), or to give the room an inside size (to: "the kitchen 4 m deep"); walls that end on it follow, and its doors and windows move with it. Doors and windows on the walls that grow keep their anchor or their place in the building, and a door that would end up between other rooms follows the wall where it can. It answers with every room whose area changed, what it guessed and what it could not keep. '
-    + 'Only a side square to the drawing moves: north is the top of the drawing. Do not use to add a separate room or to split one. It replaces the plan file unless out is given. Units are metres.',
+    + 'Only a side square to the drawing moves: north is the top of the drawing. Do not use to add a separate room or to split one. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,
@@ -487,7 +453,8 @@ const writeRoomsTool: GridTool = {
     + 'To change a plan, read it back with grid_describe as=rooms, change that text and pass it here: rooms text read from an older plan, or written over a plan changed some other way, is refused with the difference, and nothing is written (replace=true writes over it). Overlapping rooms and gaps that are neither wall nor room are refused, naming both rooms. '
     + 'A size may say centre or outside (8 x 10 outside: to the outside faces); inside is the default. What rooms cannot say (a free-standing wall, a room with a hole) is written raw, as one line of Grid\'s own JSON: raw wall {...}. '
     + `${ROOM_NAMES_TRAVEL} `
-    + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file. Units are metres.',
+    + 'A plain number is metres; a length may carry its unit in one word (360cm, 3600mm, 12ft, 12ft6in, 12\'6"). A display line (display ft-in, display mm, display m decimal comma) records how the person reads lengths: drawings, figures and sheets follow it, and the plan file stays in metres. '
+    + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file.',
   args: {
     plan: { ...PLAN_ARG, description: 'The plan file to write, inside the project folder, ending in .json. The project\'s own plan.json when left out.' },
     rooms: {
@@ -544,4 +511,4 @@ const writeRoomsTool: GridTool = {
   },
 }
 
-export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, previewTool, writeRoomsTool, changeOpeningTool, moveSideTool, mirrorTool]
+export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, writeRoomsTool, changeOpeningTool, moveSideTool, mirrorTool]

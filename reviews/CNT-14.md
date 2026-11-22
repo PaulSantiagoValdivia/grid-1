@@ -9,7 +9,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C16), version 1,
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C17), version 1,
    nothing defaulted:
    - `kind` on an opening: `DOOR_KINDS` (`single`, `double`, `sliding`, `pocket`, `folding`,
      `roller`, `garage`) and `WINDOW_KINDS` (`single`, `double`, `sliding`, `fixed`,
@@ -616,4 +616,67 @@ millimetres would read its taped lengths as metres.
   skipped (1,024); `packages/cli`, 92 of 92 files, 1,262 passed. The new test was added while the
   first part ran, so its file was run again alone: 21 of 21 passed. No timing test failed, so none
   was rerun.
+- `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures." Nothing stored.
+
+### Again after merging main fbe5160e (WRT-7, CNT-10, VEW-9, VEW-4)
+
+`main` moved again: the person's own units from rooms text to the sheet (WRT-7); existing,
+demolished and new parts and a fit-out on a base plan (CNT-10); a route's walked length and the
+walk-through (VEW-9); and the preview the person and the agent both point at (VEW-4).
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: every Unreleased entry, CNT-14's first, then VEW-4's, VEW-9's, CNT-10's and
+  WRT-7's.
+- `docs/result-contract.md`: every agents' changelog entry, CNT-14's at the top. The code table
+  merged on its own and keeps CNT-14's four codes beside CNT-10's three (`plan/read-after-work`,
+  `opening/phase-wall`, `room/phase-wall`); the contract test holds it to the catalogue.
+- `docs/plan-file.md`: both rows of the contents and both sections, "Kinds of door and window…"
+  and then "Existing, demolished and new", in that order in both places.
+- `packages/floorplan/src/types/floorplan.ts`: CNT-10 took C16 for phases, so CNT-14's convention
+  is now **C17** (the header, after C16; its three comments; `openingKinds.ts`; point 1 above).
+- `packages/floorplan/src/geometry/floorplan.ts`: one import line with both sides' types
+  (`OpeningKind`, `OpeningPart`, `Phase`) and CNT-10's `phases` import; a drawn opening carries
+  CNT-14's `kind`, `opens` and `height` and CNT-10's `phase`.
+- `packages/floorplan/src/geometry/export/dxfProfile.ts`: both layer categories,
+  `openings-above` (CNT-14) and `openings-demolished` (CNT-10), each with its pen.
+- `packages/viewer/src/picture/scene.ts`: CNT-10's `host` wall (for a closing wall's phase paint)
+  kept, and CNT-14's handing, kind symbol and `drawn` kept; demolished openings are still skipped
+  before either.
+- `packages/cli/src/edit/edits.ts`: the import lists, the union (CNT-14's kinds and handing,
+  CNT-10's `Room`); `OpeningChange` takes both `phase` and `kind`.
+- `packages/cli/src/mcp/editTools.ts` (`grid_add_room`), `writeTools.ts` (`grid_change_opening`),
+  `readTools.ts` (`grid_schedule`): CNT-14's wording with WRT-7's last sentence on lengths
+  ("Lengths are metres, or text with their unit", "Figures are in the units argument, else the
+  plan's display…"). Every argument and output field from both sides; the tools' order is main's.
+- `packages/cli/src/sheet/pages.ts`: an opening's row names its kind (CNT-14) and gives its size,
+  sill and the part that opens in the plan's display (WRT-7), through one `sizeText`.
+
+**Where the features meet.**
+
+- WRT-7: rooms text reads lengths through `numberOf`, so `part <w> [x <h>]` takes a unit in one
+  word (`part 36in x 2000mm`); the plan file stays in metres. A plan file in another unit already
+  scaled `opens` (`LENGTH_FIELDS`, tested in `patterns.test.ts`). `grid_change_opening` has no part
+  argument; its lengths already take text with a unit. The schedule's text and the sheet write the
+  part in the chosen units. New test: `rooms/__tests__/units.test.ts`, "reads a door's part that
+  opens (CNT-14) in its unit, and the read-back keeps it".
+- CNT-10: in a plan with phases, a change keeps an opening's old self, demolished, when its shape
+  changes. A door or window made another kind is another one, so `kind` joins `SHAPE_KEYS` in
+  `packages/cli/src/edit/phases.ts`; a door rehung (`hinge`, `swing`) is still changed in place.
+  New test: `mcp/__tests__/phases.test.ts`, "keeps a door made another kind (CNT-14) as its old
+  self, to be demolished, beside the new one". The DXF writes no kind block for an opening to be
+  demolished (its outline only), and the 2D drawing skips its symbol, as before.
+- VEW-4: `pickInModel` meets a door or window where its hole is in its wall, so a kind's frame,
+  leaves and glass change nothing it picks. VEW-9: unaffected.
+
+**Expectations changed.** None.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- The affected tests in three parts with the same options (`--exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`): `packages/floorplan`, 127 of 127 files, 3,268 passed, 1
+  skipped (3,269); `packages/cli`, 98 of 98 files, 1,349 passed, 1 skipped (1,350);
+  `packages/rules packages/viewer scoreboard/__tests__`, 104 of 104 files, 1,026 passed, 2
+  skipped (1,028). No timing test failed, so none was rerun.
 - `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures." Nothing stored.

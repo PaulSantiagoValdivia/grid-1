@@ -14,6 +14,8 @@ export interface Reply {
   readonly isError: boolean
   readonly data: Record<string, unknown> | undefined
   readonly image: boolean
+  /** VEW-9: how many pictures came back. */
+  readonly images: number
 }
 
 export interface Bench {
@@ -46,6 +48,7 @@ export function bench(plans: Record<string, unknown>, gridProject = true): Bench
         isError: out.result.isError === true,
         data: out.result.structuredContent,
         image: out.result.content.some((c) => c.type === 'image'),
+        images: out.result.content.filter((c) => c.type === 'image').length,
       }
     },
     close: () => rmSync(folder, { recursive: true, force: true }),

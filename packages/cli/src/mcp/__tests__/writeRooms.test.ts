@@ -22,6 +22,9 @@ describe('writing a plan rooms first through the tool server', () => {
   it('names rooms-first as the main way to write, and the plan file as the source of truth', () => {
     expect(INSTRUCTIONS).toContain('Write a plan rooms first, the main way to write one')
     expect(INSTRUCTIONS).toContain('The plan file is the source of truth; rooms text is a way of writing and reading it.')
+    // WRT-7: the person's units, from their words or their place, asked only when neither says.
+    expect(INSTRUCTIONS).toContain("Work in the person's units")
+    expect(INSTRUCTIONS).toContain('ask only when neither says')
   })
 
   it('writes, reads back, survives a Grid edit, and refuses the old text with the difference', async () => {

@@ -14,7 +14,9 @@ import { FIRM_HEADING, GENERAL_GUIDANCE_LABEL, buildingKindsText, confirmedFigur
 import { causeText, checkPlan, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmStandardsText, KIND_WORDS, placeText, type PlaceWords, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { readSeen, type SeenState } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
-import { describePlan, describeRooms } from '../command/describe'
+import { describePlan, describeRooms, describeWalk, walkOf } from '../command/describe'
+import { walkPictures } from '../describe/walkPictures'
+import { WALK_EYE_HEIGHT, WALK_PICTURES_MAX } from '../describe/walk'
 import { drawShowOf } from '../command/drawShow'
 import { UsageError } from '../command/options'
 import type { LoadedPlan } from '../command/plan'
@@ -44,6 +46,7 @@ import {
   type RoomHeight,
   type Thing,
 } from '../quantities/measure'
+import { WALKED_RULE } from '../quantities/walked'
 import { factsText, openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, shownNumber } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
@@ -262,7 +265,7 @@ const areasTool: GridTool = {
     'Use this when the person asks how big the plan or a room is, for the total floor area, a gross internal or gross external area, square feet, circulation or net to gross, or an area table for a spreadsheet. '
     + 'It lists every room with its inside size and net area, the totals by floor and by use, and the gross areas, each with a sentence saying what it measures, what it does not take off and what the plan cannot say. '
     + 'Pass country for the gross measure the reader there usually means (the inside face of the outer walls in the UK and most of Europe, the outside face for US homes), or gross to ask for one or both. '
-    + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart; a room Grid could not draw is named and left out of every figure. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Units are metres unless units is ft.',
+    + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart; a room Grid could not draw is named and left out of every figure. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
@@ -417,7 +420,7 @@ const money = (amount: number, currency: string): string =>
 const UNIT_SHOWN: Readonly<Record<QuantityUnit, string>> = { m2: 'm²', m: 'm', nr: 'nr' }
 
 /** ARE-13: the bill of quantities, priced from the person's rates or as a rate card. */
-function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Display, asCsv: boolean): Answer {
+function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Display, asCsv: boolean, change = false): Answer {
   const rules = [...new Set(estimate.lines.map((line) => line.rule))]
   const data: Record<string, unknown> = {
     label: GENERAL_GUIDANCE_LABEL,
@@ -444,13 +447,18 @@ function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Disp
   }
   if (asCsv) return { text: estimateCsv(estimate, pricing), data }
   const lines: string[] = [
-    `Quantities for a first estimate, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`,
+    change
+      ? `The plan's work as three lists, demolish, make good and new, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`
+      : `Quantities for a first estimate, from the drawing only. ${GENERAL_GUIDANCE_LABEL}.`,
     pricing === null
       ? 'Rate card: no rates given, so no cost. Each line with its key and unit, ready to fill:'
       : `Priced from ${q(pricing.file)}${pricing.label ? ` (${q(pricing.label)})` : ''}, in ${q(pricing.currency)}: the person's rates, not a price list.`,
   ]
   const shown: readonly (EstimateLine & Partial<PricedLine>)[] = pricing?.lines ?? estimate.lines
   shown.forEach((line, i) => {
+    // CNT-10: a change's lines under their list's name.
+    const list = (line as { list?: string }).list
+    if (list !== undefined && (shown[i - 1] as { list?: string } | undefined)?.list !== list) lines.push(`${list.charAt(0).toUpperCase()}${list.slice(1)}:`)
     let cost = ''
     if (pricing !== null) {
       if (line.state === 'priced' || line.state === 'alternative') {
@@ -502,19 +510,20 @@ const takeoffTool: GridTool = {
   description:
     'Use this when a builder or the person asks for quantities to price work: metres of wall (outside walls, inner walls, partitions), plaster or paint area per room less openings, ceiling areas, skirting lengths, slab and roof areas, or these as a spreadsheet. '
     + 'With for=estimate, or when the person asks what the plan will cost, how much flooring, paint or plasterboard it takes, or for a bill of quantities, it gives the figures a first estimate needs instead: floor finishes and wall faces by room use, ceilings, skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size, the slab, upper floors and the roof (assumed: the plan holds none), and the gross internal area, each line with a key, its rule and an assumed mark. '
+    + 'With for=change, for a refurbishment whose plan marks parts existing, demolished or new, it gives the work as three lists instead: demolish (walls by kind and thickness, doors and windows), make good (floor where walls stood, wall faces where they met, openings filled in, reveals of new openings in old walls) and new (walls, doors and windows, the new rooms\' floors), so taking a wall out is work to price, never a saving. '
     + `A cost comes only from the person's own rates file (rates, or ${RATES_FILE} beside the plan), which must name its currency; with none, the answer is a rate card to fill in and holds no money. Lines with no rate and rates in the wrong unit are listed apart. Grid has no prices. `
     + 'Every figure is worked out from the plan\'s walls and openings by a rule stated in the answer. '
     + 'It also gives each floor\'s slab and the roof over every part with nothing above, worked out from the outlines and marked assumed. '
-    + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). The plan holds no finishes. Units are metres.',
+    + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). The plan holds no finishes. Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
     rooms: { type: 'array', description: 'Only these rooms, by id. Every room when left out. Not with for=estimate.', examples: [['kitchen', 'bath']], items: { id: true }, minItems: 1, maxItems: 200 },
-    for: { type: 'string', enum: ['estimate'], description: 'estimate for the bill of quantities of a first estimate, priced from the person\'s rates or as a rate card. The take-off by room when left out.', examples: ['estimate'] },
+    for: { type: 'string', enum: ['estimate', 'change'], description: 'estimate for the bill of quantities of a first estimate; change for a plan with existing, demolished and new parts, its work as three lists (demolish, make good, new). Each priced from the person\'s rates or as a rate card. The take-off by room when left out.', examples: ['estimate', 'change'] },
     rates: {
       type: 'string',
       maxLength: PATH_MAX,
-      description: `The person's rates file, as a path inside the project folder: JSON with a currency and a rate per line key. ${RATES_FILE} beside the plan when left out, if there is one. Only with for=estimate.`,
+      description: `The person's rates file, as a path inside the project folder: JSON with a currency and a rate per line key. ${RATES_FILE} beside the plan when left out, if there is one. Only with for=estimate or for=change.`,
       examples: [RATES_FILE, 'costs/rates-2027.json'],
     },
     units: UNITS_ARG,
@@ -543,7 +552,7 @@ const takeoffTool: GridTool = {
     rules: listSchema(STRING),
     // ARE-13, with for=estimate: the lines, and the cost from the person's rates or the rate card.
     label: STRING,
-    lines: listSchema(objectSchema({ key: STRING, what: STRING, quantity: NUMBER, unit: STRING, rule: STRING, assumed: BOOLEAN }, ['key', 'what', 'quantity', 'unit', 'rule', 'assumed'])),
+    lines: listSchema(objectSchema({ key: STRING, what: STRING, quantity: NUMBER, unit: STRING, rule: STRING, assumed: BOOLEAN, list: STRING }, ['key', 'what', 'quantity', 'unit', 'rule', 'assumed'])),
     notes: listSchema(STRING),
     rateCard: objectSchema({ label: STRING, currency: STRING, rates: { type: 'object' } }),
     cost: objectSchema({ file: STRING, label: NULLABLE_STRING, currency: STRING, total: NUMBER, complete: BOOLEAN, missing: listSchema(STRING), wrongUnit: { type: 'array' }, unused: listSchema(STRING), wholeBuilding: NULLABLE_NUMBER }),
@@ -551,8 +560,9 @@ const takeoffTool: GridTool = {
     orderProblems: listSchema(STRING),
   }, ['rules']),
   run(args, context) {
-    if (args['for'] === 'estimate') {
-      if (args['rooms'] !== undefined) throw new ToolRefusal('for=estimate takes no rooms: its walls, outside face, slab and roof belong to no one room. Pass floor for one floor.')
+    if (args['for'] === 'estimate' || args['for'] === 'change') {
+      const change = args['for'] === 'change'
+      if (args['rooms'] !== undefined) throw new ToolRefusal(`for=${change ? 'change' : 'estimate'} takes no rooms: its walls, outside face, slab and roof belong to no one room. Pass floor for one floor.`)
       const { project, file, loaded } = readPlan(context, args['plan'])
       const survey = surveyPlan(loaded.plan)
       const floor = floorArg(loaded.plan, args['floor'])
@@ -563,11 +573,15 @@ const takeoffTool: GridTool = {
         if (error instanceof RatesRefused) throw new ToolRefusal(error.message)
         throw asRefusal(error)
       }
-      const estimate = planEstimate(survey, floor === undefined ? {} : { floors: [floor] })
+      const floors = floor === undefined ? {} : { floors: [floor] }
       const units = displayFor(args['units'], args['decimal'], loaded.plan)
-      return estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv')
+      const answer = (estimate: Estimate): Answer => estimateAnswer(estimate, rates === null ? null : priceEstimate(estimate, rates), units, args['format'] === 'csv', change)
+      // CNT-10: the work of a plan with phases, as three lists, on the same rates. Read only when
+      // asked for, so the command's file stays small.
+      if (change) return import('../quantities/change').then(({ planChange }) => answer(planChange(loaded.plan, floors)))
+      return answer(planEstimate(survey, floors))
     }
-    if (args['rates'] !== undefined) throw new ToolRefusal('rates goes with for=estimate: the take-off by room holds no cost.')
+    if (args['rates'] !== undefined) throw new ToolRefusal('rates goes with for=estimate or for=change: the take-off by room holds no cost.')
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const rooms = args['rooms'] as string[] | undefined
     for (const id of rooms ?? []) roomArg(survey.plan, id, 'rooms item')
@@ -654,7 +668,7 @@ const scheduleTool: GridTool = {
     'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, or how many toilets, basins, showers, baths or kitchen runs there are and where. '
     + 'It groups every door, window and doorless opening by type, kind (sliding, double, fixed… when the plan states one) and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame, so a clear width is not known. '
     + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height and floor, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size, its kind, the part that opens and its handing where the plan states them, and the rooms on its two sides. Both as text or CSV. '
-    + 'Do not use for wall or plaster quantities (grid_takeoff). Units are metres.',
+    + 'Do not use for wall or plaster quantities (grid_takeoff). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
@@ -1003,7 +1017,7 @@ const measureTool: GridTool = {
   description:
     'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
     + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door on it and the narrowest one, and with width (a body or a trolley, such as 0.7 for a wheelchair) whether that gets through, measuring each doorway\'s clear width and the way through each room clear of its fixtures, and another way when the shortest is too narrow; what=use gives a room\'s use indicators: the turning circle its free floor holds, each doorway\'s clear width, the way through between its doorways, the floor in front of and beside each fixture, and any window a fixture stands in front of, each set against the person\'s figure (width, diameter, clearance) or Grid\'s own indicator, and said to be one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so); what=sun gives "which rooms get the sun" as a table per room, of geometry and not a daylight result: each window wall\'s way and bearing, the window area against the floor area, and the room\'s depth from each window wall, square to it; what=site gives the plot: how far the building\'s outside face stands from each edge of the site\'s boundary against the set-back the person asked for ("1.00 m from the east boundary; you asked for 3.00 m"), how far each face is from the edge in front of it, and the plot coverage, the share of the plot the building covers; what=access gives the accessibility measurements, as numbers: for the rooms and routes the plan marks as needing to be accessible (accessible), or every room, each door\'s hole and clear width, each corridor at its narrowest, each room\'s turning space, and the way in from the entrance with every step on it and its height, set only against the person\'s own figures from the brief (grid_write_brief), each said as theirs, and what it did not look at. '
-    + 'It measures the room between wall faces: what=fit, what=use and what=route with width keep clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas), for what a building code asks (grid_check), or to say a plan is accessible: what=access measures, it never says so. Units are metres.',
+    + 'It measures the room between wall faces: what=fit, what=use and what=route with width keep clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas), for what a building code asks (grid_check), or to say a plan is accessible: what=access measures, it never says so. Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing', 'sun', 'site', 'use', 'access'], description: 'What to measure: room, between, wall, fit, route, narrow, facing, sun, site, use or access.', examples: ['between', 'fit', 'route', 'use', 'access'] },
@@ -1209,6 +1223,10 @@ const measureTool: GridTool = {
         `From ${name(route.from)} to ${name(route.to)}: ${steps}.`,
         route.narrowestPassage ? `Narrowest door or opening on the way: ${q(route.narrowestPassage.via)}, ${L(route.narrowestPassage.width)}.` : 'No door or opening on the way, only open sides.',
         `Widest circle in each room on the way: ${widths}.`,
+        // VEW-9: the length, and each room's share of it.
+        ...(route.length === null
+          ? ['The walked length is not given: a room on the way has no outline Grid can measure; grid_check says why.']
+          : [`Walked, ${L(route.length)}: ${route.legs.map((leg) => `${name(leg.room)} ${L(leg.length)}`).join(', ')}, and ${L(route.length - route.legs.reduce((sum, leg) => sum + leg.length, 0))} through the walls.`, WALKED_RULE]),
         EMPTY_ROOM_RULE,
       ]
       return { text: lines.join('\n'), data: { what, answer: { found: true, ...route, ...zones }, rule: EMPTY_ROOM_RULE } }
@@ -1517,7 +1535,7 @@ const viewTool: GridTool = {
     'Use this when the person asks to see the plan: "can I see it", a floor plan, a 3D view from the garden side or from above, the front of the house as an elevation, a section through the stair, "the living room from the south-west, from higher up", "a bit lower and more from the left", a view saved by name, "stand me in the kitchen looking at the garden", "can I see out sitting down", or a black and white drawing. '
     + 'kind=plan draws one floor from above with its sizes; kind=facade draws one side of the drawing (side: north, east, south or west; north is the top of the drawing) in elevation, every floor at its level, its doors and windows, the ground line heaviest and faces set back lighter; kind=3d draws the model through a camera: from a side or corner of the drawing (from), or a compass bearing from the plan\'s stated north (bearing), with tilt, distance, eye_height, lens, a room to point at and a floor cut away; kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height; kind=section cuts every floor along a line (cut) and looks to one side of it (toward), with the levels, the room heights, and what Grid takes that the plan does not state hatched and listed. '
     + 'Every 3d and eye picture comes back with its camera record (camera: target, bearing, tilt, distance, eye height, lens in mm on a 36 × 24 mm sensor, cut, floors, where it stands, and position, direction, up and field of view as the BCF format writes them). To change the view, send camera back with turn, tilt_by or changed numbers; view calls up one saved with grid_save_view. '
-    + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export), to move the person\'s live preview (grid_preview) or to save a view (grid_save_view). The model of one floor has no roof; a building of several floors is drawn with a flat roof over every part with nothing above. It has no furniture, glass or door leaves. Units are metres.',
+    + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export), to move the person\'s live preview (grid_preview) or to save a view (grid_save_view). The model of one floor has no roof; a building of several floors is drawn with a flat roof over every part with nothing above. It has no furniture, glass or door leaves. The drawing\'s figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
@@ -1736,16 +1754,19 @@ const describeTool: GridTool = {
     'Use this when the person asks what is in the plan, what the rooms are and how they connect, which side a door or window is on, or when you need to read the plan before changing it. '
     + 'It gives the plan in rooms: each room with its inside size and area, the rooms next to it, and each door and window with the side it is on, its distance from the corners and the two rooms it joins. '
     + 'length=line is one line, rooms (the default) each room, walls also every wall. for=person never shows an id; for=agent is terse and gives the ids to edit with. '
+    + 'length=walk is the long form, for "walk me through it" or "what do I see when I come in": the plan walked room by room from its way in, standing in the doorway of each room, with what is ahead, on the left, on the right and in the wall you stand in, and how far; floor walks one floor, and pictures=true adds a picture at eye height from each doorway, looking ahead (at most ' + String(WALK_PICTURES_MAX) + '). '
     + 'as=rooms reads the plan back as rooms text instead, the way plans are written: change it and pass it to grid_write_rooms, which writes it back losing nothing. Do not use for an area table (grid_areas) or a picture (grid_view). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    length: { type: 'string', enum: DESCRIBE_LENGTHS, description: 'line, rooms or walls. rooms when left out.', examples: ['rooms', 'line'] },
+    length: { type: 'string', enum: DESCRIBE_LENGTHS, description: 'line, rooms, walls or walk. rooms when left out.', examples: ['rooms', 'line', 'walk'] },
     for: { type: 'string', enum: DESCRIBE_AUDIENCES, description: 'person (names only, no ids) or agent (terse, with ids). agent when left out.', examples: ['agent', 'person'] },
     as: { type: 'string', enum: ['rooms'], description: 'rooms: the plan as rooms text, to change and write again with grid_write_rooms. Takes no length or for.', examples: ['rooms'] },
+    floor: { ...FLOOR_ARG, description: 'For length=walk: the floor to walk. Every floor when left out, a floor laid out like an earlier one said once.' },
+    pictures: { type: 'boolean', description: 'For length=walk: true to add a picture at eye height from each doorway, looking ahead, in the order of the walk. false when left out.', examples: [true, false] },
   },
-  outputSchema: objectSchema({ length: { type: ['string', 'null'] }, for: { type: ['string', 'null'] }, as: { type: ['string', 'null'] }, text: STRING }),
-  run(args, context) {
-    if (args['as'] !== undefined && (args['length'] !== undefined || args['for'] !== undefined)) {
+  outputSchema: objectSchema({ length: { type: ['string', 'null'] }, for: { type: ['string', 'null'] }, as: { type: ['string', 'null'] }, text: STRING, pictures: { type: 'array' } }, ['length', 'for', 'as', 'text']),
+  async run(args, context) {
+    if (args['as'] !== undefined && (args['length'] !== undefined || args['for'] !== undefined || args['floor'] !== undefined || args['pictures'] !== undefined)) {
       throw new ToolRefusal('as=rooms reads the plan back as rooms text, which has no length or for: leave them out.')
     }
     const { loaded } = readPlan(context, args['plan'])
@@ -1755,6 +1776,26 @@ const describeTool: GridTool = {
     }
     const length = (args['length'] as (typeof DESCRIBE_LENGTHS)[number] | undefined) ?? 'rooms'
     const audience = (args['for'] as (typeof DESCRIBE_AUDIENCES)[number] | undefined) ?? 'agent'
+    // A floor that is not there is refused first, naming the plan's floors (MS-19).
+    const floor = floorArg(loaded.plan, args['floor'])
+    if (length !== 'walk' && (args['floor'] !== undefined || args['pictures'] !== undefined)) {
+      throw new ToolRefusal(`${args['floor'] !== undefined ? 'floor' : 'pictures'} goes with length=walk only: length=${length} describes every floor and draws nothing.`)
+    }
+    if (length === 'walk') {
+      // VEW-9: the walk, and a picture from each doorway when asked, at most WALK_PICTURES_MAX.
+      const { survey, walk } = walkOf(loaded, floor)
+      const shots = args['pictures'] === true ? await walkPictures(survey, walk, WALK_PICTURES_MAX) : []
+      const names = new Map(shots.map((shot, i) => [shot.stop, `picture ${i + 1}`]))
+      const stops = walk.floors.reduce((sum, floor) => sum + floor.stops.length, 0)
+      const more = args['pictures'] === true && stops > shots.length ? `\nPictures of the first ${shots.length} doorways of ${stops}: pass floor to walk one floor at a time.` : ''
+      const text = `${describeWalk(survey, walk, audience, names).trimEnd()}${more}`
+      const pictures = shots.map((shot, i) => ({ picture: i + 1, room: shot.stop.room, floor: shot.stop.floor, eyeHeight: WALK_EYE_HEIGHT, heading: shot.stop.heading }))
+      return {
+        text,
+        data: { length, for: audience, as: null, text, pictures },
+        ...(shots.length === 0 ? {} : { images: shots.map((shot) => ({ data: shot.png, mimeType: 'image/png' as const })) }),
+      }
+    }
     const text = describePlan(loaded, length, audience)
     return { text, data: { length, for: audience, as: null, text } }
   },

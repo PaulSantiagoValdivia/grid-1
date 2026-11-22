@@ -31,6 +31,8 @@ export const MARKERS_MAX = 5
 export const DEFAULT_MARKER = 'start'
 /** The name that means the last committed version, never a marker's. */
 export const GIT_VERSION = 'git'
+/** CNT-10: the name that means the plan before its work, compared with it after: never a marker's. */
+export const PHASE_VERSION = 'phase'
 /** A marker's name: letters, digits, dot, dash and underscore, 1 to 40 of them, starting with a letter or digit. */
 export const MARKER_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$/
 /** The largest markers file Grid reads: every marker a whole plan, its text written as JSON text. */
@@ -59,6 +61,7 @@ export function markersFileOf(planFile: string): string {
 /** A marker name, checked: refused by its rule, never repeated back when it is long. */
 export function markerName(name: string): string {
   if (name === GIT_VERSION) throw new MarkerRefused(`"${GIT_VERSION}" names the last committed version, not a marker: choose another name, such as start.`)
+  if (name === PHASE_VERSION) throw new MarkerRefused(`"${PHASE_VERSION}" names the plan before its work, not a marker: choose another name, such as start.`)
   if (!MARKER_NAME.test(name)) throw new MarkerRefused('A marker name is 1 to 40 letters, digits, dots, dashes or underscores, starting with a letter or digit, such as start or before-kitchen.')
   return name
 }
