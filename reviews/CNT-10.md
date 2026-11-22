@@ -123,13 +123,26 @@ tests (`cli/src/mcp/__tests__/phases.test.ts`, `floorplan/src/geometry/__tests__
 
 ## Checks
 
-RESULTS
+Run on a laptop shared with other sessions, with `--maxWorkers=2 --minWorkers=1`.
+
+| Check | Result |
+| --- | --- |
+| `npm run build` | passes; `packages/cli/dist/grid.mjs` is **539,280 bytes**, under the 550 kB cap of `grid.e2e.test.ts` |
+| Full suite (`vitest run --exclude '.claude/**'`) | 306 files, 5,428 passed, 2 skipped, 1 failed, in 720 s. The failure was `cli/src/__tests__/tolerances.test.ts`: a tolerance literal in `edit/phases.ts`, now `tolerance('joint')`; it passes when rerun with the phase tests, the IFC export tests, the envelope and roof tests and `estimate.test.ts` (6 files, 276 tests; then 17 files, 496 passed, 1 skipped). Two small changes made during the run (the envelope and the IFC ceilings read the state after the work) are covered by those reruns. No timing failure |
+| `npm run typecheck` | passes |
+| `npm run lint` | passes |
+| `npm run check:licenses` | passes: 363 licences, none GPL, LGPL, AGPL, MPL or EPL; no new dependency |
+| `npm run scoreboard` | passes, **same as the stored figures**: 197 rooms measured wrong, 278 damage silent, 18 turns answered, 5 mistakes named, 16 checks fed, 735 rooms not measured, 95 sound plans with a warning. Nothing to store |
+
+New tests: `floorplan/src/geometry/__tests__/phases.test.ts` (11), `floorplan/src/export/__tests__/phases.test.ts` (3), `viewer/src/picture/__tests__/phases.test.ts` (4), `cli/src/mcp/__tests__/phases.test.ts` (12), a case in `coverage.test.ts`, and the base plan's block in `everyPath.e2e.test.ts` (8).
 
 ## Changed test expectations
 
 - `packages/rules/src/result/__tests__/result.test.ts`, "names thick on a wall…" and "gives each
   field and each use one line…": the fields a wall knows now end with `phase`, and the plan's
   fields list `base` after `referenceImage`, as the schema orders them.
+- `packages/floorplan/src/types/__tests__/reading.test.ts`, "thick on a wall is named…": the same list of a wall's fields, ending with `phase`.
+- `packages/cli/src/mcp/__tests__/estimate.test.ts`, "refuses a rates file that is not there…": `rates` without a `for` now says it goes with for=estimate or for=change.
 - `packages/cli/src/sheet/__tests__/coverage.test.ts`: a new case for `PHASE_COVERAGE`.
 - `packages/cli/src/command/__tests__/everyPath.e2e.test.ts`: a new block for the base plan's
   path (a new path slot written inside a plan, like the trace image).

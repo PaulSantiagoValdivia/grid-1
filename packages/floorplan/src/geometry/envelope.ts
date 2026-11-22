@@ -32,6 +32,7 @@
  * why. The cutting is done by `polygon-clipping` (MIT).
  */
 
+import { planInState } from './phases'
 import type { MultiPolygon } from 'polygon-clipping'
 import { floorOf, planFloors, planForFloor } from './floors'
 import type { BuildingElevations } from './elevations'
@@ -202,7 +203,9 @@ function openToTheSky(outline: FloorOutline | FloorOutlineUnknown, slice: FloorP
  * The slabs and roofs of the plan, floor by floor in plan order, from each floor's outline. See the
  * module's header for the rules. Never throws.
  */
-export function planEnvelope(plan: FloorPlan, options: EnvelopeOptions = {}): PlanEnvelope {
+export function planEnvelope(stated: FloorPlan, options: EnvelopeOptions = {}): PlanEnvelope {
+  // CNT-10: the slabs and roofs of the building as it will be after the work.
+  const plan = planInState(stated, 'after')
   const floors = planFloors(plan)
   const elevations = options.elevations ?? floorElevations(plan)
   const wanted = floors.filter((f) => options.floors === undefined || options.floors.includes(f.id))

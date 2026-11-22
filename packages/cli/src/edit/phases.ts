@@ -13,7 +13,7 @@
  * reshapes is changed in place, and the answer says so: the plan then no longer holds how it
  * stood. Pure: a plan and a patch in, a patch out.
  */
-import { phaseReading, planHasPhases, wallAxis, type FloorPlan, type Opening, type Wall } from '@ongrid/floorplan/geometry'
+import { phaseReading, planHasPhases, tolerance, wallAxis, type FloorPlan, type Opening, type Wall } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import { listed, type OpeningChange, type Patch } from './edits'
 
@@ -58,7 +58,8 @@ function pieceOf(piece: RawRecord, wall: Wall): boolean {
     const dy = p[1] - axis.start.y
     const along = dx * axis.dir.x + dy * axis.dir.y
     const off = Math.abs(dx * axis.dir.y - dy * axis.dir.x)
-    return off < 1e-3 && along > -1e-3 && along < axis.length + 1e-3
+    const slack = tolerance('joint')
+    return off < slack && along > -slack && along < axis.length + slack
   }
   return near(start) && near(end)
 }

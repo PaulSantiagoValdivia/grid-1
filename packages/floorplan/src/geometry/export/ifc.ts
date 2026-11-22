@@ -1750,7 +1750,7 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
 
     // The rooms' ceilings, each covering its space. A zone has none of its own (CNT-8, `roomCeiling`).
     for (const room of index.plan.rooms) {
-      if (broken.has(room.id) || room.ceiling === undefined) continue
+      if (broken.has(room.id) || room.ceiling === undefined || c.phaseOf.get(room.id) === 'demolished') continue
       try {
         const pieces = roomCeiling(room, index, storey.height, floorRoofShape(index.plan, floor.id)) ?? []
         const coverings: number[] = []
