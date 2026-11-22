@@ -86,6 +86,10 @@ All in `packages/cli/src/mcp/__tests__/scheduleMarks.test.ts` (14 tests).
 - `packages/cli/src/__tests__/ownWords.test.ts`: `readTools.ts` 306 → 309 (tool answers, English
   by design), `quantities/schedule.ts` 12 → 15 and the not-moved ratchet 1507 → 1510: the types'
   rule and the type CSV's `opens width m` and `opens height m` columns. The sheet's new words are in the message files.
+- `packages/cli/src/command/__tests__/sheet.e2e.test.ts`: the two-floor house's check PDF has 6
+  pages, not 5 (the types page). The client PDF keeps 3.
+- `packages/cli/src/mcp/__tests__/sectionView.test.ts`: the refusal of an unknown mark lists
+  `schedule` among the marks.
 - No snapshot changed: a picture not asked for schedule marks is byte for byte as before.
 
 ## For the owner
@@ -125,4 +129,15 @@ All in `packages/cli/src/mcp/__tests__/scheduleMarks.test.ts` (14 tests).
 
 ## Checks run
 
-See "Checks" below, filled in after the last run.
+On the branch, cut from `main` at e10e851b (still `main`'s tip when this was written, so the
+merge of the latest `main` had nothing to bring in):
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean.
+- `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=6 --minWorkers=1`: 6,030
+  passed, 2 skipped, 3 failed of 6,035 in 364 files. Two were the expected changes listed above
+  (the check PDF's page count, the refusal's list of marks) and are updated; the third,
+  `cameraView.test.ts` (the two-bed flat's camera view), timed out at 5 s under load and passed
+  run on its own. Those three files then passed, 43 of 43.
+- `npm run scoreboard`: 197, 277, 22, 5, 22, 735, 95. Same as stored: the scoreboard probes the
+  library and the plan format, and ARE-15 changes neither what is measured nor the format. No
+  count moved.
