@@ -6,8 +6,9 @@
  *
  * The app is the real `Canvas2D`, rendered in jsdom. The command's side is `drawFile`, the
  * function `grid draw` calls, and `drawPlan`, the one it calls in turn, at the size the command
- * draws (1200 pixels wide, as tall as the plan's shape asks). The plans are the lab's eight
- * buildings in `packages/floorplan/fixtures/`, in each of the three looks.
+ * draws (1200 pixels wide, as tall as the plan's shape asks). The plans are the buildings in
+ * `packages/floorplan/fixtures/`, in each named look as a file draws it: a file is always on
+ * light paper (`fileLookOf`), and ends with the label, which the app shows in its own frame.
  */
 import { readdirSync, readFileSync } from 'fs'
 import { resolve } from 'path'
@@ -16,7 +17,7 @@ import { cleanup, render } from '@testing-library/react'
 import { parseFloorPlan, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { Canvas2D } from '@ongrid/viewer/src/canvas2d/Canvas2D'
 import { installResizeObserver, type ResizeController } from '@ongrid/viewer/src/canvas2d/__tests__/canvas-test-utils'
-import { LOOK_NAMES, LOOKS, pictureView, type LookName } from '@ongrid/viewer/src/picture'
+import { fileLookOf, LOOK_NAMES, pictureView, type LookName } from '@ongrid/viewer/src/picture'
 import { drawFile } from '../../command/draw'
 import { drawPlan } from '../drawPlan'
 
@@ -37,7 +38,7 @@ afterEach(cleanup)
 function appDrawing(plan: FloorPlan, look: LookName): { inner: string; viewBox: string | null } {
   const { width, height } = pictureView(plan)
   resize.set(width, height)
-  const { container } = render(<Canvas2D floorPlan={plan} look={LOOKS[look]} />)
+  const { container } = render(<Canvas2D floorPlan={plan} look={fileLookOf(look)} />)
   const svg = container.querySelector('svg')
   if (!svg) throw new Error('no canvas drawn')
   return { inner: svg.innerHTML, viewBox: svg.getAttribute('viewBox') }
@@ -45,12 +46,14 @@ function appDrawing(plan: FloorPlan, look: LookName): { inner: string; viewBox: 
 
 /** The file's root and its sheet of paper: all it adds to the app's drawing. */
 const HEAD = /^<svg [^>]*><rect data-part="paper" [^>]*><\/rect>/
+// Every picture file ends with the label (MSG-3), which the app shows in its own frame instead.
+const LABEL = /<g data-part="guidance-label"[^>]*>(?:(?!<\/g>)[\s\S])*<\/g><\/svg>\n$/
 
 const CASES = BUILDINGS.flatMap((name) => LOOK_NAMES.map((look) => [name, look] as const))
 
 describe('the app and grid draw draw the same SVG', () => {
-  it('has the eight buildings to compare', () => {
-    expect(BUILDINGS).toHaveLength(8)
+  it('has the buildings to compare', () => {
+    expect(BUILDINGS.length).toBeGreaterThanOrEqual(8)
   })
 
   it.each(CASES)('for %s in the %s look', async (name, look) => {
@@ -59,10 +62,20 @@ describe('the app and grid draw draw the same SVG', () => {
 
     // Make sure there is something to compare.
     expect(app.inner.length).toBeGreaterThan(1000)
+    // A drawing with a key (the phases of a refurbishment, SHT-10's tints) sits in its own frame
+    // above the key, which the app does not draw: that frame holds the app's drawing.
+    if (file.includes('data-part="key"')) {
+      const framed = /<svg x="0" y="0" ([^>]*)>([\s\S]*)<\/svg><g data-part="key"/.exec(file)
+      expect(framed, 'the plan in its own frame above the key').not.toBeNull()
+      expect(framed![1]).toContain(`viewBox="${app.viewBox}"`)
+      expect(framed![2]).toBe(app.inner)
+      return
+    }
     const head = HEAD.exec(file)?.[0]
     expect(head, 'the file starts with its root and its paper').toBeDefined()
     expect(head).toContain(`viewBox="${app.viewBox}"`)
-    expect(file).toBe(`${head}${app.inner}</svg>\n`)
+    expect(file, 'the file ends with the label').toMatch(LABEL)
+    expect(file.replace(LABEL, '</svg>\n')).toBe(`${head}${app.inner}</svg>\n`)
   })
 
   it('through the function grid draw calls, with what went wrong, where the floor drawn has nothing to mark', async () => {
@@ -77,7 +90,7 @@ describe('the app and grid draw draw the same SVG', () => {
       // With a key under it, the plan sits in its own frame above the key.
       const drawing = file.includes('data-part="key"')
         ? /<svg x="0" y="0" [^>]*>([\s\S]*)<\/svg><g data-part="key"/.exec(file)?.[1]
-        : file.replace(HEAD, '').replace(/<\/svg>\n$/, '')
+        : file.replace(HEAD, '').replace(LABEL, '</svg>\n').replace(/<\/svg>\n$/, '')
       expect(drawing, name).toBeDefined()
       if (/data-part="(fault-mark|undrawn)/.test(drawing!)) continue
       expect(drawing, name).toBe(app.inner)
