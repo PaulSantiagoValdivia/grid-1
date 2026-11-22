@@ -278,9 +278,9 @@
 }
 
 /* ── Dimensions ─────────────────────────────────────────────────────────────
-   Defaults only. Real drafting conventions — tick marks instead of plain
-   lines, weights per layer, text rotated along the dimension — belong here
-   too, and replace all of this. */
+   The working look's: plain ends and upright numbers. The technical look (SHT-4)
+   adds a 45-degree tick at each end and turns the number along the line; the
+   screen never draws it, but its tick has a rule here like every other part. */
 
 .canvas [data-part='dimension-line'] {
   stroke: var(--plan-dimension, #6f6c63);
@@ -291,6 +291,13 @@
 .canvas [data-part='extension'] {
   stroke: var(--plan-dimension, #6f6c63);
   stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='dimension-tick'] {
+  stroke: var(--plan-dimension, #6f6c63);
+  stroke-width: 1;
+  stroke-linecap: butt;
   vector-effect: non-scaling-stroke;
 }
 

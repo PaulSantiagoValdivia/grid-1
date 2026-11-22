@@ -27,14 +27,18 @@ const attr = (tag: string, name: string): string | undefined => tag.match(new Re
 const strokeOf = (svg: string, part: string): number[] => tagsOf(svg, part).map((tag) => Number(attr(tag, 'stroke-width')))
 
 /** Parts only a look's own symbols add: everything else is the drawing both looks share. */
-const LOOK_PARTS = new Set(['wall-outlines', 'window-symbol', 'door-undecided'])
+const LOOK_PARTS = new Set(['wall-outlines', 'window-symbol', 'door-undecided', 'dimension-tick'])
 
 /** The drawing with its paint taken off and the look's own symbols left out: its geometry. */
 function geometryOf(nodes: readonly SvgChild[]): SvgChild[] {
   return nodes.flatMap((node): SvgChild[] => {
     if (typeof node === 'string') return [node]
     if (LOOK_PARTS.has(String(node.attrs['data-part']))) return []
-    const attrs = Object.fromEntries(Object.entries(node.attrs).filter(([name]) => !(PAINT_ATTRIBUTES as readonly string[]).includes(name)))
+    // SHT-4: a drafted look turns a dimension's number along its line, where every look puts it.
+    const own = node.attrs['data-part'] === 'dimension-text' ? ['transform'] : []
+    const attrs = Object.fromEntries(
+      Object.entries(node.attrs).filter(([name]) => !(PAINT_ATTRIBUTES as readonly string[]).includes(name) && !own.includes(name))
+    )
     return [{ ...node, attrs, children: geometryOf(node.children) } satisfies SvgNode]
   })
 }
@@ -180,10 +184,52 @@ describe('the technical look: its basics', () => {
     expect(undecidedDoorsOf(plan())).toEqual(['o2'])
   })
 
+  it('ends every dimension line in two 45-degree ticks and turns its number along it (SHT-4)', () => {
+    const groups: SvgNode[] = []
+    const walk = (nodes: readonly SvgChild[]): void => {
+      for (const node of nodes) {
+        if (typeof node === 'string') continue
+        if (node.attrs['data-part'] === 'dimension') groups.push(node)
+        else walk(node.children)
+      }
+    }
+    walk(planPicture(plan(), { look: 'technical', paperScale: 100 }).nodes)
+    expect(groups.length).toBeGreaterThan(10)
+    const part = (group: SvgNode, name: string): SvgNode[] => {
+      const found: SvgNode[] = []
+      const visit = (nodes: readonly SvgChild[]): void => {
+        for (const node of nodes) {
+          if (typeof node === 'string') continue
+          if (node.attrs['data-part'] === name) found.push(node)
+          else visit(node.children)
+        }
+      }
+      visit(group.children)
+      return found
+    }
+    const vector = (node: SvgNode): [number, number] => [Number(node.attrs.x2) - Number(node.attrs.x1), Number(node.attrs.y2) - Number(node.attrs.y1)]
+    for (const group of groups) {
+      const along = vector(part(group, 'dimension-line')[0]!)
+      const ticks = part(group, 'dimension-tick')
+      expect(ticks).toHaveLength(2)
+      // Each tick crosses its end of the line at 45 degrees.
+      for (const tick of ticks) {
+        const across = vector(tick)
+        const cos = (along[0] * across[0] + along[1] * across[1]) / (Math.hypot(...along) * Math.hypot(...across))
+        expect(Math.abs(cos)).toBeCloseTo(Math.SQRT1_2, 3)
+      }
+      // A number on an upright line reads from the bottom: turned a quarter, never upside down.
+      const text = part(group, 'dimension-text')[0]
+      if (text && Math.abs(along[0]) < 1e-9) expect(text.attrs.transform).toBe('rotate(-90)')
+      if (text && Math.abs(along[1]) < 1e-9) expect(text.attrs.transform).toBeUndefined()
+    }
+  })
+
   it('leaves all of it to the technical look: the working look draws the app\'s plain drawing', () => {
     const working = planToSvg(plan())
-    for (const part of ['wall-outlines', 'window-symbol', 'door-undecided']) expect(working).not.toContain(`data-part="${part}"`)
+    for (const part of ['wall-outlines', 'window-symbol', 'door-undecided', 'dimension-tick']) expect(working).not.toContain(`data-part="${part}"`)
+    expect(tagsOf(working, 'dimension-text').some((tag) => attr(tag, 'transform') !== undefined)).toBe(false)
     expect(planPicture(plan()).undecidedDoors).toEqual([])
-    expect(LOOKS.working.undecidedDoors || LOOKS.working.glass || LOOKS.working.wallOutline !== null).toBe(false)
+    expect(LOOKS.working.undecidedDoors || LOOKS.working.glass || LOOKS.working.wallOutline !== null || LOOKS.working.draftedDimensions).toBe(false)
   })
 })
