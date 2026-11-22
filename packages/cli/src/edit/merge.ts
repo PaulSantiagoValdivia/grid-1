@@ -10,6 +10,7 @@
  * Pure: a survey in, a patch out.
  */
 import { cross, dot, signedArea, sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { statedWall } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import type { Survey, SurveyRoom } from '../quantities/survey'
 import { type OpeningChange, type Patch, type RoomChange } from './edits'
@@ -78,7 +79,8 @@ export function cutWall(wall: Wall, pieces: readonly Piece[]): { change?: { star
   const axis = wallAxis(wall)
   const at = (s: number): [number, number] => [r3(axis.start.x + axis.dir.x * s), r3(axis.start.y + axis.dir.y * s)]
   if (pieces.length === 1 && pieces[0]!.id === wall.id) return { change: { start: at(pieces[0]!.lo), end: at(pieces[0]!.hi) }, add: [], remove: false }
-  const rest: Record<string, unknown> = { ...wall }
+  // As its file states it: a value the reading filled in is not written into the pieces (WRT-6).
+  const rest: Record<string, unknown> = { ...statedWall(wall) }
   for (const key of ['id', 'start', 'end']) delete rest[key]
   return { add: pieces.map((p) => ({ id: p.id, start: at(p.lo), end: at(p.hi), ...rest })), remove: true }
 }

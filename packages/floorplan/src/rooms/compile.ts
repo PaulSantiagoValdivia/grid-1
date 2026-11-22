@@ -37,13 +37,21 @@
  *
  * Pure: text in, a plan and a report out. Nothing here reads or writes a file.
  */
-import { ROOM_USES, WallKindSchema, type FloorPlan, type Opening, type Room, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
+import { ROOM_USES, WALL_DEFAULTS, WallKindSchema, type FloorPlan, type Opening, type Room, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
 import { indexPlan } from '../geometry/plan'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
 import { f2, isNumberWord, numberOf, pointOf, RoomsStop, wordsOf } from './words'
 
 type P = readonly [number, number]
+/** A wall as the text writes it into the file: no height when the text states none (WRT-6). */
+type WrittenWall = Omit<Wall, 'height' | 'unstated'> & { height?: number }
+
+/**
+ * The plan as rooms text writes it: the file's own JSON, before the reading fills anything in.
+ * A wall the text gives no height has none (WRT-6); read it with `parseFloorPlan`.
+ */
+export type WrittenPlan = Omit<FloorPlan, 'walls'> & { walls: WrittenWall[] }
 type Box = readonly [number, number, number, number]
 
 const KINDS: readonly WallKind[] = WallKindSchema.options
@@ -247,7 +255,7 @@ export interface DerivedWallFacts {
 
 export interface RoomsResult {
   /** Null when a problem stopped the writing: nothing is to be written then. */
-  readonly plan: FloorPlan | null
+  readonly plan: WrittenPlan | null
   readonly name: string | null
   readonly basedOn: string | null
   readonly problems: readonly RoomsProblem[]
@@ -282,7 +290,8 @@ interface RawWall {
   t: number
   kind: WallKind
   virtual: boolean
-  height: number
+  /** Null when the text states none: the file gets no height, and the reading fills it (WRT-6). */
+  height: number | null
   wantId: string | null
   reversed: boolean
   rooms: RoomDraft[]
@@ -303,7 +312,7 @@ interface DerivedWall {
   t: number
   kind: WallKind
   virtual: boolean
-  height: number
+  height: number | null
   base: P
   a: P
   b: P
@@ -313,7 +322,7 @@ interface DerivedWall {
   end: P
   ext: boolean
   id: string
-  json: Wall
+  json: WrittenWall
   sidesRooms: [string[], string[]]
 }
 
@@ -321,7 +330,9 @@ class Compiler {
   private readonly lines: string[]
   name: string | null = null
   basedOn: string | null = null
-  private rule = { outside: 0.3, inside: 0.1, height: 2.7, kind: 'interior' as WallKind }
+  // WRT-6 (lab AU3-6): no height until the text states one. A wall the text gives no height is
+  // written with none, and the reading gives it its floor's height or Grid's default.
+  private rule: { outside: number; inside: number; height: number | null; kind: WallKind } = { outside: 0.3, inside: 0.1, height: null, kind: 'interior' }
   private dflt = { doorH: 2.1, winSill: 0.9, winH: 1.2 }
   private tkinds = new Map<number, WallKind>()
   sizes: { basis: SizeBasis; stated: boolean } = { basis: 'inside', stated: false }
@@ -367,7 +378,7 @@ class Compiler {
     return this.cur
   }
 
-  run(): FloorPlan | null {
+  run(): WrittenPlan | null {
     let i = 0
     while (i < this.lines.length) {
       const at = i + 1
@@ -1169,7 +1180,9 @@ class Compiler {
     for (const x of fl.extover) if (x.say.t !== null) junc = Math.max(junc, x.say.t)
     junc += eps()
 
-    const height = fl.height ?? this.rule.height
+    // A floor's stated height is the height of its walls (LVL-1), so they state none of their own:
+    // the reading gives it to them, and the file says it once, on the floor (WRT-6).
+    const height = fl.height !== null ? null : this.rule.height
     const raws: RawWall[] = []
     const pt = (e: Edge, s: number, off: number): P => [e.p[0] + e.u[0] * s + e.n[0] * off, e.p[1] + e.u[1] * s + e.n[1] * off]
     for (const e of edges) {
@@ -1372,7 +1385,7 @@ class Compiler {
       if (d[0] < -tolerance('noLength') || (Math.abs(d[0]) < tolerance('noLength') && d[1] < 0)) d = [-d[0], -d[1]]
       r.d = d
       const off = cross(d, r.a)
-      const key = [Math.atan2(d[1], d[0]).toFixed(6), off.toFixed(4), r.t.toFixed(4), r.kind, r.virtual, r.height.toFixed(4)].join('|')
+      const key = [Math.atan2(d[1], d[0]).toFixed(6), off.toFixed(4), r.t.toFixed(4), r.kind, r.virtual, r.height === null ? '-' : r.height.toFixed(4)].join('|')
       const list = groups.get(key)
       if (list) list.push(r)
       else groups.set(key, [r])
@@ -1447,12 +1460,12 @@ class Compiler {
     }
     this.nameWalls(walls, edges, prefix)
     for (const w of walls) {
-      const json: Wall = {
+      const json: WrittenWall = {
         id: w.id,
         start: [r4(w.start[0]), r4(w.start[1])],
         end: [r4(w.end[0]), r4(w.end[1])],
         thickness: r4(w.t),
-        height: r4(w.height),
+        ...(w.height !== null ? { height: r4(w.height) } : {}),
         kind: w.kind,
         ...(w.virtual ? { virtual: true } : {}),
         ...(this.explicitFloors ? { floor: fl.id } : {}),
@@ -1757,8 +1770,8 @@ class Compiler {
   // ------------------------------------------------------------------------------------------
   // The plan
 
-  private emit(): FloorPlan | null {
-    const plan: { -readonly [K in keyof FloorPlan]: FloorPlan[K] } = { version: '1', units: 'm', walls: [], rooms: [], openings: [] }
+  private emit(): WrittenPlan | null {
+    const plan: { -readonly [K in keyof WrittenPlan]: WrittenPlan[K] } = { version: '1', units: 'm', walls: [], rooms: [], openings: [] }
     if (this.explicitFloors) {
       plan.floors = this.floors.map((f) => ({
         id: f.id,
@@ -1793,7 +1806,7 @@ class Compiler {
     const trueAreas = new Map<string, number>()
     for (const fl of this.floors) {
       const wallPrefix = multi ? `${fl.id}-` : ''
-      const height = fl.height ?? this.rule.height
+      const height = fl.height ?? this.rule.height ?? WALL_DEFAULTS.solid.height
       if (fl.rooms.size === 0) {
         if (fl.raw.walls.length + fl.raw.rooms.length === 0) this.warn('rooms/empty-floor', null, `Floor '${fl.id}' has no rooms.`)
       } else {
@@ -1876,7 +1889,7 @@ class Compiler {
           }
         }
       }
-      plan.walls.push(...(fl.raw.walls as Wall[]))
+      plan.walls.push(...(fl.raw.walls as WrittenWall[]))
       plan.rooms.push(...(fl.raw.rooms as Room[]))
       plan.openings.push(...(fl.raw.openings as Opening[]))
     }
@@ -1887,8 +1900,8 @@ class Compiler {
     if (this.problems.length > 0) return null
     const wallIds = new Set(plan.walls.map((w) => w.id))
     for (const o of plan.openings) if (!wallIds.has(o.wall)) this.warn('rooms/raw-wall-missing', null, `Opening '${o.id}' names wall '${o.wall}', which the plan does not have; grid check will name it too.`)
-    // What Grid itself will measure, by its own method.
-    const index = indexPlan(plan)
+    // What Grid itself will measure, by its own method. An outline reads no wall's height.
+    const index = indexPlan(plan as unknown as FloorPlan)
     for (const room of plan.rooms) {
       const truth = trueAreas.get(room.id)
       if (truth === undefined) continue
@@ -1961,7 +1974,7 @@ const SETTLE_ROUNDS = 8
 export function compileRoomsText(text: string): RoomsResult {
   let assumed = new Map<string, number>()
   let compiler: Compiler | null = null
-  let plan: FloorPlan | null = null
+  let plan: WrittenPlan | null = null
   let stopped: RoomsProblem | null = null
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
     compiler = new Compiler(text, assumed)

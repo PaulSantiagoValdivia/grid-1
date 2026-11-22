@@ -158,6 +158,9 @@ function partOf(path: readonly (string | number)[]): PartAt | null {
 }
 
 /** Walks the file and its schema side by side, noting each key the schema does not have. */
+/** WRT-6: fields the reading adds, which no file states: a file that writes one is told it is not read. */
+const READING_ONLY = new Set(['unstated'])
+
 function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], notes: ReadingNote[]): void {
   const shape = bare(schema)
   const value = preprocessed(schema, given)
@@ -168,9 +171,9 @@ function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], n
   }
   if (!(shape instanceof z.ZodObject) || !isObject(value)) return
   const fields = shape.shape as Record<string, z.ZodTypeAny>
-  const known = Object.keys(fields)
+  const known = Object.keys(fields).filter((key) => !READING_ONLY.has(key))
   for (const key of Object.keys(value)) {
-    if (Object.hasOwn(fields, key)) {
+    if (Object.hasOwn(fields, key) && !READING_ONLY.has(key)) {
       walk(fields[key]!, value[key], [...path, key], notes)
       continue
     }

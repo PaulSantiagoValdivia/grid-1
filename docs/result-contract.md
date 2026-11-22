@@ -56,7 +56,7 @@ record. It never throws: a check that fails inside Grid becomes a line
 | Field | What it holds |
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
-| `kind` | `refused`, `left-out`, `worth-a-look`, `finding` or `not-checked`. |
+| `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
 | `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
@@ -75,6 +75,8 @@ record. It never throws: a check that fails inside Grid becomes a line
    and first, what the file says that Grid does not read (below).
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
+6. `to-confirm`: a value the plan marks assumed, for the person to confirm (WRT-6). Last, so the
+   other lines keep their numbers when an agent marks what it assumed.
 
 ### A line's number
 
@@ -213,6 +215,8 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
+| `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
+| `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
 
 ### Words Grid does not read
 
@@ -343,7 +347,7 @@ its text, which says the same.
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -359,6 +363,21 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: what was given and what was assumed (WRT-6)
+
+- A new kind of line, `to-confirm`, listed last, and a new code, `plan/value-assumed`: one line
+  for each value, or whole part, the plan's `marks` say was assumed, about that part. `counts`
+  has the new kind; `count` holds these lines too. `grid check` prints them under "To confirm",
+  and `grid_check`'s text names them even past its first 12 lines.
+- `plan/mark-no-part` (`worth-a-look`): a mark that names a part the plan does not have.
+- `grid_areas` gives `sureness` (`source`, `plusMinus` in m², `percent`) on each room whose walls
+  the plan marks, on each floor and on the plan (null on the plan when no wall is marked), and its text says "from a scan, about ± 1.6%".
+  `plusMinus` and `percent` are null when a scanned wall states no tolerance.
+- A new tool, `grid_square_scan`, after `grid_rename_room`: it squares the walls marked scanned,
+  and its receipt adds `moves` and `leftAsTheyAre`.
+- A wall that states no height is described as "wall height not stated (drawn 2.7 m high)" by
+  `grid_describe`, and its rooms text (`as=rooms`) states no height for it.
 
 ### 2026-11-22: units at the edge (WRT-7)
 

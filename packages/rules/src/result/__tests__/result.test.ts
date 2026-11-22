@@ -81,6 +81,8 @@ function corpus(): [string, unknown][] {
     ['a window off its wall', edit(flat(), (copy) => void copy.openings.push(window_('far', copy.walls[0]!.id, 40)))],
     ['a wall of no length', edit(flat(), (copy) => void copy.walls.push(wall('dot', [3, 3], [3, 3])))],
     ['words Grid does not read', wordsNotRead()],
+    // WRT-6: a value the plan marks assumed, and a mark on a part it does not have.
+    ['marks', { ...flat(), marks: [{ part: 'wall', id: 's1', value: 'height', source: 'assumed' }, { part: 'room', id: 'study', source: 'given' }] }],
     ['an empty plan', {}]
   ]
 }
@@ -193,8 +195,8 @@ describe('words Grid does not read (MSG-4)', () => {
     ])
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
-    // LVL-3 added `stairs` to the plan's fields, WRT-7 `display`.
-    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, display, written')
+    // LVL-3 added `stairs` to the plan's fields, WRT-7 `display`, WRT-6 `marks`.
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, marks, display, written')
   })
 
   it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {

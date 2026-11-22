@@ -235,6 +235,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plan', call: tool('grid_rename_room', { plan: '@', room: 'lounge', name: 'Lounge' }), given: asIs },
     { arg: 'out', call: tool('grid_rename_room', { plan: PLAN, room: 'lounge', name: 'Lounge', out: '@.json' }), given: (p) => `${p}.json` },
   ],
+  // WRT-6: squaring a scan reads the plan and writes it, or another file.
+  grid_square_scan: [
+    { arg: 'plan', call: tool('grid_square_scan', { plan: '@', all: true }), given: asIs },
+    { arg: 'out', call: tool('grid_square_scan', { plan: PLAN, all: true, out: '@.json' }), given: (p) => `${p}.json` },
+  ],
 }
 
 /**

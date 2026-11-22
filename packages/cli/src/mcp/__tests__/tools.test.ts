@@ -30,10 +30,11 @@ const ORDER = [
   'grid_add_room',
   'grid_stretch',
   'grid_rename_room',
+  'grid_square_scan',
 ]
 
 const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
-const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room'])
+const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan'])
 
 interface Listed {
   name: string
@@ -76,7 +77,9 @@ describe('tools/list', () => {
     // 20 since WRT-3: one sentence of request is one call (lab WR-2), so merge, split, add a
     // room, stretch and rename each have one.
     // 21 since CMD-13: a problem report the person decides to file.
-    expect((await listed()).length).toBeLessThanOrEqual(21)
+    // 22 since WRT-6: squaring a scan is an explicit step that says how far each wall moved
+    // (lab AE-4), not a side effect of another change.
+    expect((await listed()).length).toBeLessThanOrEqual(22)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -186,6 +189,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_add_room: { room: 'extension', name: 'Garden room', use: 'living', against: 'living', side: 'south', width: 3, depth: 3, in_the_way: 'remove', opening_width: 2, out: 'extended.json' },
     grid_stretch: { side: 'east', by: 0.3, out: 'wider.json' },
     grid_rename_room: { room: 'bed2', name: 'Study', use: 'other', out: 'renamed.json' },
+    grid_square_scan: { all: true, out: 'squared.json' },
   }
 
   it('answers every tool with text and data that fit its output schema', async () => {

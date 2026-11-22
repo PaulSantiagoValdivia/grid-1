@@ -35,5 +35,8 @@ export const SHEET_COVERAGE = {
   title: { shown: 'not shown', why: 'Each page has its own title, from the sheet words.' },
   annotations: { shown: 'drawn' },
   sketch: { shown: 'drawn' },
+  // WRT-6: what is assumed is drawn in its own style by `drawPlan`, and listed to confirm by
+  // `grid check`; the sheet's checks page lists those lines with the others.
+  marks: { shown: 'drawn' },
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>

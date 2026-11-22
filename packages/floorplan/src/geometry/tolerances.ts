@@ -114,6 +114,17 @@ export const TOLERANCES = {
       '15 degrees) may be one straight side, when they touch end to end.',
     basis: own
   },
+  // WRT-6 (lab AE-4): squaring a scan.
+  squareWithin: {
+    kind: 'tolerance',
+    value: 0.0523,
+    unit: 'sine',
+    decides:
+      'When a scan is squared, a wall whose direction is closer than this (the sine of about 3 ' +
+      'degrees) to one of the plan\'s main directions is turned onto it; a wall further off is ' +
+      'left as it is and named.',
+    basis: own
+  },
   sameFace: {
     kind: 'tolerance',
     value: 1e-6,

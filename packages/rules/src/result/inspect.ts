@@ -12,8 +12,10 @@
  */
 
 import {
+  assumedValues,
   floorOf,
   itemNoun,
+  marksWithNoPart,
   planFloors,
   validateDoorSweeps,
   validatePlan,
@@ -545,8 +547,32 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(quoted(note.id)), also: [note.id, note.room], floors: names.floors, said: `room ${note.room}` }))
     }
   })
+  // WRT-6 (lab WR-15): what the plan marks assumed, for the person to confirm, and a mark that
+  // names a part the plan no longer has.
+  stage('marks', () => {
+    for (const mark of marksWithNoPart(plan)) {
+      const label = `${NOUN[mark.part]} ${quoted(mark.id)}`
+      lines.push(line('plan/mark-no-part', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(label), also: [mark.id], floors: names.floors, ...(mark.value ? { word: VALUE_WORDS[mark.value] ?? mark.value } : {}) }))
+    }
+    for (const value of assumedValues(plan)) {
+      const at = names.thingOf(value.part, value.id)
+      lines.push(
+        line('plan/value-assumed', 'to-confirm', { kind: value.part, id: value.id }, at.floor, {
+          ...blank(at.label),
+          name: at.name,
+          floorName: at.floor === null ? '' : names.floorName(at.floor),
+          floors: names.floors,
+          said: value.tolerance === null ? '' : `give or take ${value.tolerance} m`,
+          ...(value.value ? { word: VALUE_WORDS[value.value] ?? value.value } : {})
+        })
+      )
+    }
+  })
   return record(lines, true, report)
 }
+
+/** WRT-6: a marked value as a line names it. */
+const VALUE_WORDS: Readonly<Record<string, string>> = { floorOffset: 'floor offset', at: 'place', start: 'start', end: 'end', turn: 'turn' }
 
 /**
  * Reads a plan and runs every check on it. Never throws.

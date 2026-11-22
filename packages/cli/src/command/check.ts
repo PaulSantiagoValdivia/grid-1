@@ -125,6 +125,7 @@ export const KIND_WORDS: Record<LineKind, string> = {
   'worth-a-look': 'worth a look',
   finding: 'finding',
   'not-checked': 'not checked',
+  'to-confirm': 'to confirm',
 }
 
 /** How many lines of each kind, as "2 worth a look, 1 finding". */
@@ -170,6 +171,10 @@ export function checkText(result: CheckResult, floorCount: number): string {
     lines.push('', `To look at (${record.count}): ${countsText(record)}.`)
     // Numbered by place in the whole plan's record: `grid draw` marks each with its number (MSG-8).
     record.lines.forEach((line, index) => {
+      // WRT-6 (lab WR-15): what was assumed comes last, under its own heading, for the person.
+      if (line.kind === 'to-confirm' && record.lines[index - 1]?.kind !== 'to-confirm') {
+        lines.push('', `To confirm (${record.counts['to-confirm']}): what the plan marks assumed, not given or measured. Ask the person.`)
+      }
       const where = floorCount > 1 && line.floor !== null && line.thing.kind !== 'floor' ? ` on ${JSON.stringify(line.floor)}` : ''
       lines.push(
         `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`,

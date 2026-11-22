@@ -16,7 +16,7 @@ import { inspectPlan } from '@ongrid/rules'
 import { checkExportRequest, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
-import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type From, type Mirror, type Patch } from '../edit/edits'
+import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, readingAfter, type Direction, type From, type Mirror, type Patch } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
@@ -267,7 +267,7 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
     throw error
   }
   // A plan written rooms first keeps its derived boundaries derived through Grid's own edits (WRT-2).
-  const after = keptDerived(loaded.plan.rooms, applyPatch(loaded.plan as unknown as Record<string, unknown>, patch)) as unknown as FloorPlan
+  const after = keptDerived(loaded.plan.rooms, readingAfter(loaded.plan, patch) as unknown as Record<string, unknown>) as unknown as FloorPlan
   const oldErrors = errorsOf(loaded.plan)
   const newErrors = errorsOf(after)
   const known = new Set(oldErrors.map((e) => `${e.id}|${e.message}`))

@@ -14,6 +14,7 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- A plan can say where its values came from, given, measured, scanned or assumed, and how sure each is, in its `marks`. What was assumed is drawn dashed and listed under "To confirm" in `grid check`; areas from scanned walls say "from a scan, about ± x%"; `grid edit square` (`grid_square_scan`) squares a scan and says how far each wall moved. A wall that states no height is now described as "height not stated", and Grid no longer writes 2.7 m into a file that left it out (WRT-6).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 
 Grid has not been released yet. The first release will hold:
