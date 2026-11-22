@@ -174,3 +174,16 @@ and lint clean; the affected tests (the CLI's MCP with the replay, draw, sheet, 
 tests and WRT-8's versions, the floorplan geometry and types tests, the rules' result tests and
 COD-3's place test, the viewer) passed, 3,930 with 2 skipped, of 3,932 in 211 files.
 `npm run scoreboard`: same as the stored figures.
+
+After merging `main` at d058d4d (BRF-1, CNT-8, MSG-5): conflicts in `AGENTS.md`, `CHANGELOG.md`,
+`docs/plan-file.md`, `docs/result-contract.md`, `docs/tool-server.md`, `serveTools.ts` and
+`tools.test.ts`, all kept both sides, VEW-3's changelog entries at the top. BRF-1's
+`grid_write_brief` writes a file beside the plan, so it stays where BRF-1 put it, after the seen
+mark; `grid_save_view` stays last, the 30th. Main took no new plan-format letter (CNT-8's
+`partOf` is a room field, the brief its own file), so saved views keep C11. The merged bundle is
+512,435 bytes with no new dependency, so `grid.e2e`'s limit is 550 kB (a follow-up commit). Build,
+typecheck and lint clean; the affected tests (the CLI's MCP with the replay, draw, sheet, edits,
+command tests and `src/__tests__`, BRF-1's brief and CNT-8's zones tests, the floorplan geometry
+and types tests, the rules' result tests, the viewer, the scoreboard's tests) passed, 4,127 with 4
+skipped, of 4,132 in 231 files, once the limit was raised. `npm run scoreboard`: same as the stored
+figures.
