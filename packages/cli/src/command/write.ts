@@ -132,7 +132,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
       if (result.basedOn !== null && result.basedOn !== now) {
         throw new RoomsRefused(
           'rooms/stale',
-          `This rooms text was read from another version of ${shownFile} (based on ${result.basedOn}; the plan is now ${now}), so writing it would undo what changed since. ${differenceLine(before, plan)} Read the plan back again (grid describe --as rooms), make the change there and write that; or pass --replace to write over it.`
+          `This rooms text was read from another version of ${shownFile} (based on ${result.basedOn}; the plan is now ${now}), so writing it would undo what changed since. ${differenceLine(before, plan)} Read the plan back again (grid describe --as rooms), make the change there and write that; or add --replace to write over it.`
         )
       }
       const unchanged = before.written !== undefined && before.written.revision === now
@@ -140,7 +140,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
         const why = before.written === undefined ? 'was not written from rooms text' : 'was changed since Grid last wrote it from rooms text'
         throw new RoomsRefused(
           'rooms/plan-changed',
-          `${shownFile} ${why}, and writing this text over it would lose that. ${differenceLine(before, plan)} Read the plan back as rooms text (grid describe --as rooms), which keeps it, and change that; or pass --replace to write over it.`
+          `${shownFile} ${why}, and writing this text over it would lose that. ${differenceLine(before, plan)} Read the plan back as rooms text (grid describe --as rooms), which keeps it, and change that; or add --replace to write over it.`
         )
       }
     }

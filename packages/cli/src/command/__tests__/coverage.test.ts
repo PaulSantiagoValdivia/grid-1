@@ -74,7 +74,7 @@ describe('every check says what it looked at (CH-1)', () => {
     expect(result.report.figures).toEqual([])
     const text = checkText(result, 1)
     expect(text).toContain('Looked at by at least one check: 7 of 7 rooms.')
-    expect(text).toContain('  - Rooms people live or sleep in have a minimum floor area: looked at no rooms; 0 findings.')
+    expect(text).toContain('  - Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms.')
     expect(text).toContain('      not looked at, 7 rooms: the figure is for bedrooms, living rooms and dining rooms only: ')
     expect(text).toContain('      not looked at, 7 rooms: only bedrooms are checked: ')
   })

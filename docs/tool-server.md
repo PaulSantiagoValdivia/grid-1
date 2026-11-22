@@ -5,6 +5,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 [README](../README.md#installing-grid-in-an-agent).
 
 - [The tools](#the-tools)
+- [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [Protocol versions](#protocol-versions)
 
@@ -45,6 +46,17 @@ from where it stands: `bath-door joined bath and lounge; it now joins kitchen an
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
+
+## The label, and retelling a report
+
+Every answer's text starts with "General guidance, not your local rules", and its data carries
+it as `label` (MSG-3); the server adds it where it answers, so no tool can leave it out. A
+refusal is not an answer about the plan and has no label. The server's instructions tell the
+agent how to retell a report (`src/mcp/retelling.ts`): start with the label and keep it; never
+say a plan complies, is approved, meets code or has passed anything; give each figure as the
+figure used here, with its basis and its status. The plugin's skill carries the same words.
+`npm run retell` scores how well a model keeps to them (see the scoreboard's
+[README](../scoreboard/README.md#the-retelling-set)).
 
 ## Measuring from faces, and a room's height
 

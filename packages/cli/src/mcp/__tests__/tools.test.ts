@@ -158,6 +158,9 @@ describe('the tools on a two-bedroom flat', () => {
       expect(reply.isError, `${name}: ${reply.text}`).toBe(false)
       expect(reply.text.length, name).toBeGreaterThan(0)
       expect(conforms(schemas.get(name)!, reply.data), name).toEqual([])
+      // MSG-3: the label leads every answer and is in its data.
+      expect(reply.text.split('\n')[0], name).toContain('General guidance, not your local rules')
+      expect((reply.data as { label?: string }).label, name).toBe('General guidance, not your local rules')
     }
   }, 60_000)
 

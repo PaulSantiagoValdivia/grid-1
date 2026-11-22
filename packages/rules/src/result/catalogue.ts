@@ -14,6 +14,7 @@
 import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
 import { quoted } from '@ongrid/floorplan/types/floorplan'
 import { wordings as figureWordings } from '../checks/messages'
+import { figureNeededText } from '../checks/figureWords'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
 
 /** What a line's code is told about the thing, to word it. */
@@ -63,6 +64,11 @@ const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text
 function figure(finding: RuleFinding | undefined, key: AppliedFigure['key']): string | null {
   const found = finding?.figures?.find((f) => f.key === key)
   return found === undefined ? null : `${figureText(found.value)} ${found.unit}`
+}
+
+/** The figures a finding applied, by key, in the order given: what its `needed` names (MSG-3). */
+function figuresOf(finding: RuleFinding | undefined, keys: readonly AppliedFigure['key'][]): AppliedFigure[] {
+  return keys.flatMap((key) => finding?.figures?.filter((f) => f.key === key) ?? [])
 }
 
 const area = (value: number | undefined): string => (value === undefined ? 'its area as drawn' : `${figureText(value)} m²`)
@@ -519,14 +525,14 @@ export const CODES = {
       const p = s.finding?.passage
       const size = metresText(p?.passable ?? 0)
       const what = p?.short === 'sill' ? `a sill no more than ${size} m above the floor` : `at least ${size} m ${p?.short === 'height' ? 'high' : 'wide'}`
-      return `${what}: Grid's own size for a person to pass, not a code figure`
+      return `${what}: Grid's own size for a person to get through, not a code figure`
     },
-    fix: fixed('If people pass through it, draw it at its real size. If it is a vent, a hatch or a pass-through, it is not a way through: give the room a door.')
+    fix: fixed('If people go through it, draw it at its real size. If it is a vent or a serving hatch, it is not a way through: give the room a door.')
   },
   'room/too-small': {
     says: (s) => wordingText(figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
     found: (s) => `${area(s.finding?.area)} net`,
-    needed: (s) => `at least ${area(s.finding?.minimum)}`,
+    needed: (s) => figureNeededText(`at least ${area(s.finding?.minimum)}`, figuresOf(s.finding, ['habitableRoomMinArea'])),
     fix: fixed('Make the room larger, or check the use it is given.')
   },
   'room/no-escape-opening': {
@@ -544,14 +550,16 @@ export const CODES = {
         figure(s.finding, 'escapeOpeningMinWidth') === null ? null : `${figure(s.finding, 'escapeOpeningMinWidth')} wide`,
         figure(s.finding, 'escapeOpeningMinHeight') === null ? null : `${figure(s.finding, 'escapeOpeningMinHeight')} high`
       ].filter((part): part is string => part !== null)
-      return parts.length === 0 ? 'a window someone can climb through' : `at least ${parts.join(', ')}`
+      if (parts.length === 0) return 'a window someone can climb through'
+      const used = figuresOf(s.finding, ['escapeOpeningMinArea', 'escapeOpeningMinAreaGrade', 'escapeOpeningMinWidth', 'escapeOpeningMinHeight'])
+      return figureNeededText(`at least ${parts.join(', ')}`, used)
     },
     fix: fixed('Make the window larger, or add one that is.')
   },
   'room/escape-window-too-high': {
     says: (s) => wordingText(figureWordings.escapeWindowTooHigh(s.name)),
     found: (s) => `a sill ${metres(s.finding?.sill)} above the floor`,
-    needed: (s) => (s.finding?.maximum === undefined ? 'a lower sill' : `a sill at most ${metres(s.finding.maximum)} above the floor`),
+    needed: (s) => (s.finding?.maximum === undefined ? 'a lower sill' : figureNeededText(`a sill at most ${metres(s.finding.maximum)} above the floor`, figuresOf(s.finding, ['escapeOpeningMaxSill']))),
     fix: fixed("Lower the window's sill.")
   },
 

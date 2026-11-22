@@ -9,7 +9,7 @@
  */
 import { floorOf, itemFootprint, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
-import { checkPlan, countsText, KIND_WORDS, partsText, thingText } from '../command/check'
+import { checkPlan, countsText, KIND_WORDS, nothingCheckedText, partsText, thingText } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
@@ -559,7 +559,7 @@ const measureTool: GridTool = {
       const lines = [
         `From ${name(route.from)} to ${name(route.to)}: ${steps}.`,
         route.narrowestPassage ? `Narrowest door or opening on the way: ${q(route.narrowestPassage.via)}, ${L(route.narrowestPassage.width)}.` : 'No door or opening on the way, only open sides.',
-        `Widest circle in each room passed: ${widths}.`,
+        `Widest circle in each room on the way: ${widths}.`,
         EMPTY_ROOM_RULE,
       ]
       return { text: lines.join('\n'), data: { what, answer: { found: true, ...route }, rule: EMPTY_ROOM_RULE } }
@@ -846,7 +846,7 @@ const checkTool: GridTool = {
     lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
     for (const check of record.coverage) {
       const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
-      lines.push(`  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}.`)
+      lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}.`)
     }
     // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
     lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))

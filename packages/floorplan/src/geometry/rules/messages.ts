@@ -77,7 +77,7 @@ export const wordings = {
   openingTooSmall: (room: string): WordingPart[] => [
     words('An opening from '),
     name(room),
-    words(' is too small for a person to pass through, so it is not a way through')
+    words(' is too small for a person to get through, so it is not a way through')
   ]
 }
 

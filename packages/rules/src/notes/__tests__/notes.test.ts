@@ -185,7 +185,7 @@ describe('the room-size note', () => {
     expect(plain(note.title)).toBe('Back bedroom is under 6.5 m²')
     expect(names(note.title)).toEqual(['Back bedroom'])
     expect(plain(note.detail)).toBe(
-      'It measures 5.80 m². Rooms people sleep or live in need at least 6.5 m². ' +
+      'It measures 5.80 m². The figure used here for a room people sleep or live in is at least 6.5 m². ' +
         'Basis: US model codes (IBC 2024 1208.4, IRC 2024 R312.1). Found by an AI and not yet checked by a person.'
     )
     expect(note.tag).toBe('Size')
@@ -239,7 +239,7 @@ describe('the escape notes', () => {
     expect(plain(note.title)).toBe('The window of Back bedroom is too small to escape through')
     expect(names(note.title)).toEqual(['Back bedroom'])
     expect(plain(note.detail)).toBe(
-      'It opens 0.40 m² as drawn. A bedroom on this floor needs at least 0.53 m², 50.8 cm wide, 61 cm tall. ' +
+      'It opens 0.40 m² as drawn. The figures used here for a bedroom on this floor: at least 0.53 m², 50.8 cm wide, 61 cm tall. ' +
         'Basis: US model codes (IBC 2024 1031.3.1, IRC 2024 R319.2.1, IBC 2024 1031.3.2, IRC 2024 R319.2.2). ' +
         'Found by an AI and not yet checked by a person.'
     )
@@ -258,7 +258,7 @@ describe('the escape notes', () => {
     )
     expect(plain(note.title)).toBe('The window of Back bedroom is too high to escape through')
     expect(plain(note.detail)).toBe(
-      'Its sill is 1.20 m above the floor as drawn. It needs to be 1.118 m or lower. ' +
+      'Its sill is 1.20 m above the floor as drawn. The figure used here is a sill 1.118 m or lower. ' +
         'Basis: US model codes (IBC 2024 1031.3.3, IRC 2024 R319.2.3). Found by an AI and not yet checked by a person.'
     )
     expect(note.tag).toBe('Escape')
@@ -303,7 +303,7 @@ describe('a report with findings of both kinds', () => {
     const note = one(plan(), finding('room_too_small', ['bedroom'], { area: 8, minimum: 9, figures: [lookedUp] }))
     expect(plain(note.title)).toBe('Back bedroom is under 9 m²')
     expect(plain(note.detail)).toBe(
-      'It measures 8.00 m². Rooms people sleep or live in need at least 9 m². ' +
+      'It measures 8.00 m². The figure used here for a room people sleep or live in is at least 9 m². ' +
         'Basis: figures found online for this place. Found by an AI and not yet checked by a person. Source: https://example.org/rules.'
     )
   })
