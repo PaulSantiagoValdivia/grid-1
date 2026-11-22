@@ -89,7 +89,8 @@ describe('ARE-12 the room schedule', () => {
     expect(total[2]).toBe('Total, all floors')
     expect(Math.round(total[5] as number)).toBe(277)
     // Numbers are bare in the CSV, so a spreadsheet reads them as numbers.
-    for (const line of csv.slice(1, -3)) {
+    // MSG-3: row 1 is the label, row 2 the header.
+    for (const line of csv.slice(2, -3)) {
       const row = fields(line)
       expect(typeof row[0]).toBe('number')
       expect(typeof row[4]).toBe('number')
@@ -143,8 +144,9 @@ describe('ARE-12 the opening schedule', () => {
   it('is the same whatever the order of the file, and its CSV has one row per opening', () => {
     expect(openingSchedule(survey(reversed(flat)))).toEqual(openingSchedule(survey(flat)))
     const csv = openingScheduleCsv(openingSchedule(survey(flat))).trim().split('\n')
-    expect(csv).toHaveLength(1 + 13)
-    expect(fields(csv[1]!).slice(3, 6).every((v) => typeof v === 'number')).toBe(true)
+    // MSG-3: the label row, the header and 13 openings.
+    expect(csv).toHaveLength(2 + 13)
+    expect(fields(csv[2]!).slice(3, 6).every((v) => typeof v === 'number')).toBe(true)
   })
 })
 
@@ -166,7 +168,7 @@ describe('ARE-12 asked for through grid_schedule and on the check set', () => {
     expect(reply.text).toContain('"Main floor": 3 rooms')
     expect((reply.data!['rows'] as unknown[]).length).toBe(4)
     const csv = await ok({ plan: 'tiny.json', of: 'rooms', format: 'csv' })
-    expect(csv.text.split('\n')[0]).toBe('number,room id,name,use,area m2,area sq ft,height m,floor,state')
+    expect(csv.text.split('\n').slice(0, 2)).toEqual(['"General guidance, not your local rules"', 'number,room id,name,use,area m2,area sq ft,height m,floor,state'])
   })
 
   it('gives each opening once with of=openings, and refuses the grouped schedule\'s filters with it', async () => {

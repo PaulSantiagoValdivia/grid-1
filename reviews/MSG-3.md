@@ -50,6 +50,7 @@ when it retells a report.
 - The record's `needed` on `room/too-small`, `room/escape-window-too-small` and
   `room/escape-window-too-high` gives "the figure used here, at least 6.5 m² (US model codes,
   IBC 2024 1208.4; IRC 2024 R312.1, status ai-found)".
+- COD-2's "read for homes" is part of a figure's basis everywhere it is given.
 - The notes a person reads no longer say what a room "needs". They say "The figure used here
   for a room people sleep or live in is at least 6.5 m²", with the basis sentence as before.
 - "(nothing)" was not in the code any more. The nearest cases were an empty "Checks run (0):"
@@ -148,6 +149,16 @@ All of these change because the output changed on purpose, as the card asks. Non
   lead with the label.
 - `cli/src/edit/__tests__/requests.test.ts` (WRT-3, merged from main): each receipt's lines are
   read after the label, one line further down.
+- `cli/src/mcp/__tests__/schedules.test.ts` (ARE-12, merged from main): the CSVs' rows are read
+  after the label row.
+- `cli/src/command/__tests__/coverage.test.ts` (COD-2, merged from main): the figure line and the
+  sill's `needed` in the new wording, still with "read for homes".
+- `cli/src/mcp/__tests__/reportProblem.test.ts` (CMD-13, merged from main): the test's path line
+  goes first in the answer it hands the draft. `grid_check`'s answer is now longer (the label,
+  and COD-4's eight lines), and the draft cuts a long answer, so a path appended at the end was
+  cut before it could be replaced.
+- `rules/src/notes/__tests__/notes.test.ts`: the note for a bedroom with no escape opening says
+  "The check looks for a window or a door … and finds none", not "It needs …".
 - `cli/src/command/__tests__/coverage.test.ts` and `grid.e2e.test.ts`: a check that looked at
   no rooms reads `Nothing was checked for "…": it looked at no rooms.`
 - `rules/src/checks/__tests__/rounding.test.ts` and `rules/src/notes/__tests__/notes.test.ts`:
