@@ -1,0 +1,145 @@
+# MSG-5 review: notes traced to their cause
+
+Card: "Notes traced to their cause: no false notes from one broken part, follow-ons grouped."
+When a check depends on a part Grid couldn't draw, it gives no note but a "not checked because"
+line naming that part. Every follow-on issue carries the id of its cause and is filed under it.
+Identical notes become one line that lists the rooms. Lab evidence MS-4, MS-5, MS-14, W-6, W-7,
+M-9.
+
+## What changed
+
+1. **The drawing check names each issue's cause** (`packages/floorplan/src/geometry/validate.ts`,
+   `Issue.causedBy`, set where the issue is raised):
+   - `opening/broken-wall` and `room/broken-wall`: the wall (a wall the reader left out first).
+   - New `plan/no-walls` (error): the plan has no walls, but its rooms and openings name walls.
+     Every `opening/missing-wall` and room outline line then follows from it (`causedBy: "plan"`).
+   - `floor/unclaimed`: the room that could not be drawn, or that the reader left out, which lists
+     at least two of the walls round the piece.
+   - A wall that stops short or leaves a gap (`wall/short`, `wall/gap`): its rooms' outline lines
+     (`room/space-mismatch`, `room/not-enclosed`, `room/overlap`) and the walls found standing in
+     them (`wall/crosses-room`, `wall/stands-in-room`).
+   - `validatePlan` takes `leftOutParts`, what the reader left out, for the unclaimed floor.
+2. **The reader says what it left out** (`types/readParts.ts`): `PlanRead.leftOut`, each wall,
+   room and opening it left out (`part-left-out`, `id-clash`) with its id, floor and the walls it
+   names, when they can be read.
+3. **Notes held back** (`geometry/rules/held.ts`, new, pure). `planDamage` works out, floor by
+   floor, what could not be drawn: what `drawable` leaves out, what the reader left out, and
+   openings no floor holds (on a wall the plan does not have: lab M-9, which listed nothing as not
+   checked). W-6's rule: a way out or a route is held when anything on its floors could not be
+   drawn; "no door" when the room shares a wall with a room or opening that could not be drawn,
+   or an opening could be placed on no wall; a door into a space not drawn when a room that could
+   not be drawn rests on its wall, or any room on its floor could not be drawn (a room whose wall
+   list is cut short may be that space); an escape note when an opening on the room's walls could
+   not be drawn, or on no wall. `checkPlanSanity(plan, { leftOut })` holds its own; `checkLocalRules`
+   holds the escape notes. A held note goes on the floor's `cannot_be_drawn` notice, `held`, with
+   the ids it waits for. `coverage` moves those parts to skipped, reason `waits_for_part`.
+4. **The "could not be drawn" lines say so** (`rules/messages.ts`): "On "Ground floor", these
+   rooms could not be drawn, so they and what rests on them were not checked: "Corridor"", and the
+   same for doors or windows, which are now named. In the record their `found` lists the notes
+   held back in words, and `held` holds them as data (`{ code, thing, floor, also, waitsFor }`).
+5. **The record** (`packages/rules/src/result/`):
+   - `causedBy: { code, id }` on a line that follows from another, which then comes right under
+     it, whatever its kind. The cause is the first line about that part, a part left out before
+     one worth a look: the reader's, the drawing's, `plan/duplicate-id` for an id two walls share.
+     The record links one more chain itself: a plan that may not be in metres
+     (`plan/units-question`) files `plan/far-from-origin`, the size questions, `room/too-small`
+     and the escape-window findings under it, and it follows from the reader's `plan/value-left-out`
+     for a stated unit read as metres.
+   - `problems`: the lines with no cause, `not-checked` aside.
+   - Identical findings are one line (`each`): one code, one floor, the same `found`, `needed`,
+     `fix` and figures. The names go where the one name goes and the verb agrees (`PLURALS` in
+     the catalogue: "have", "are", "The windows of", "Doors from"). The report and the notes on
+     the plan keep one per room.
+6. **`grid check`** sets a follow-on under its cause with "follows from: "stub" (wall/zero-length)",
+   prints "1 problem; 2 lines follow from it." after the counts, and "held back: room "b"
+   (room/no-door), waits for "a"" under the line that holds it. Its report is given what the
+   reader left out (`LoadedPlan.leftOut`), so report and record hold back the same notes.
+   **`grid_check`** returns `problems`, `causedBy`, `each` and `held` in its schema, and says
+   "Follows from …" in its text.
+7. The contract: the fields, a section "Causes and follow-ons", `plan/no-walls` in the code table,
+   the two new wordings, the reason `waits_for_part`, and a changelog entry.
+
+## Against done_when
+
+1. *The plan with one undrawable corridor gives 0 false notes and one 'not checked because' line
+   naming the corridor (MS-4: 16 false notes).* The lab's co-living floor (D-13) draws today, since
+   ARE-1; the test lists its corridor's walls out of order so it cannot be drawn, which gave 16
+   notes before (15 "no door", 1 "no door to the outside"). Now: 0 findings, one `not-checked`
+   line, "On "Ground floor", these rooms could not be drawn, so they and what rests on them were
+   not checked: "Corridor"", holding the 16 notes, each waiting for `corridor`; 1 problem. The plan
+   as the lab wrote it still gives 0 lines. `scoreboard/__tests__/causes.test.ts`, "MS-4".
+2. *W-7's 67 lines read as about 26 problems, with their follow-ons beneath.* E's 26 fault plans
+   gave 104 lines before MSG-5 (Grid has more checks than in the lab). Now 95 lines (11 notes held
+   back, four pairs of identical notes made one, a few not-checked lines and `plan/no-walls`
+   added), read as 30 problems with 48 lines filed beneath
+   them. The empty walls list is 1 problem with 19 lines under it; the zero-length wall 1 problem
+   with 5 beneath and the not-checked line. The test checks every follow-on sits under its cause.
+   Of the 4 above the lab's 26: three walls that run past their corner because the wall they met
+   was left out (f20), and a floor slip whose cause is a wall on the other floor with no line of
+   its own (f15). Same test file, "W-7".
+3. *Twelve identical escape notes become one line listing the twelve rooms (MS-14).* The lab's
+   hotel: one `room/escape-window-too-high` line, "The windows of "Room 301", … "Room 312" are too
+   high to escape through", `each` the twelve rooms, `also` the other eleven ids. Same test file,
+   "MS-14".
+
+Smaller tests: `packages/floorplan/src/geometry/__tests__/held.test.ts` (the rule, a true note
+held while a part on its walls is broken and given again once it is fixed, a note on a room no
+broken part touches still given, the reader's parts, each `causedBy`),
+`packages/rules/src/result/__tests__/causes.test.ts` (an escape note held and its coverage, two
+identical notes in one line, the units chain) and `packages/cli/src/command/__tests__/causes.test.ts`
+(the text of `grid check` and `grid_check`).
+
+## Expected texts I changed
+
+- `packages/cli/src/command/__tests__/coverage.test.ts`, the hotel (COD-2): its twelve sill notes
+  were twelve lines; they are one line with `each` of twelve. The `needed` text it checks is the
+  same.
+- `scoreboard/__tests__/frontDoor.test.ts` and `packages/rules/src/result/__tests__/result.test.ts`:
+  `wordingOf` reads a line for several rooms back to its one room's words with the catalogue's
+  `PLURALS` before comparing. No expected wording changed.
+- No other expectation changed: no existing test pinned the old wordings of
+  `floor/not-checked-rooms-not-drawn` or `floor/not-checked-doors-not-drawn`.
+
+## For the owner
+
+1. **One line per floor, not one per held note.** The card asks for one "not checked because"
+   line naming the part. I put the held notes on the floor's existing "could not be drawn" line
+   and reworded it to say "so they and what rests on them were not checked", rather than adding a
+   second line. The notes are in `held`, and in words in `found`.
+2. **The record's order changed a little.** A line that follows from another now comes right
+   under it, even when its kind comes later (enclosed floor no room claims, worth a look, under
+   the room left out). The lines with no cause keep the kind order. `resultVersion` stays 1: I
+   read this as a refinement of order, which the contract already says may change within a kind.
+   If you read it as a change of meaning, the version should go to 2.
+3. **Held notes that are true.** W-6's caveat holds: "no door" on a room with truly no door is held
+   while a wall it shares carries a broken part. A test shows it comes back once the part is fixed.
+4. **An opening placed on no wall** (its wall is not in the plan) counts as not drawn on every
+   floor, since it could be any room's door. On a plan of several floors each floor's line names
+   it. A likelier floor could come from the wall most likely meant (MSG-7); I did not do that.
+5. **The units chain** files size findings under `plan/units-question`. They are still listed, and
+   they would mostly go away once the units are right; a real finding on a plan typed in
+   millimetres would stay after the fix.
+6. **Grouping is in the record only.** The notes drawn on the plan, the sheet's pages and the
+   report's `findings` stay one per room, so each note still has its room to sit in. `grid draw`
+   marks a grouped line on its first room only.
+7. **Plurals.** Grouped lines put the names where the one name goes and make the verb agree
+   through one table, `PLURALS`; the one-wording tests read lines back with it. The alternative was
+   a singular verb after a list ("…, "Bedroom" has no door").
+8. **Not traced**: the walls that run past their corner because the wall they meet was left out
+   (f20), and rooms on a floor slip (f15), which would need a line for the wall on the other
+   floor. Both stay problems of their own.
+
+## Checks run
+
+On top of `main` 666bb01:
+
+- `npm run build`: passes.
+- `npm run typecheck`: passes.
+- `npm run lint`: passes.
+- `npm run check:licenses`: "Checked 363 licences in package-lock.json: none is GPL, LGPL, AGPL,
+  MPL, EPL."
+- `npm run scoreboard`: "Same as the stored figures." No count moved, so `current.json` is
+  unchanged. Holding a note back still prints a new line for damage (the not-checked line names
+  the part), so "damage that passes in silence" stays 386.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 239 test files passed;
+  4,673 tests passed, 3 skipped (4,676).
