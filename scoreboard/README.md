@@ -269,6 +269,17 @@ since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, n
 rooms are compared, not 16,451. SHT-2 changes neither: the schema reads the same 1,100 of the
 1,131 lab plans before and after it.
 
+WRT-4 (a room type placed many times, a floor copied from its floor line, rooms through several
+floors) moved one count. Turns answered, 18 to 19: `repeat-floor` ("repeats a floor") now has a
+probe, rooms text that copies a floor from its floor line and gets the second floor with its own
+walls and rooms (`scoreboard/src/capabilities.ts`). The developer's "times six floors" needed only
+it and the area table. No other count moved.
+
+CNT-14 merged with WRT-4 and BRF-3 (main at 26e928e) moved two counts past main. Turns answered,
+19 to 20: main's 19 (with WRT-4's `repeat-floor`) and the homeowner's sixth turn, which CNT-14's
+`door-leaves` answers with LVL-6's `roof`. Checks the plan can feed, 20 to 22: CNT-14's
+`openable-part` feeds checks 8 and 9 beside main's. Every other count is both branches' figure.
+
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The
 reference commit ignores the argument.

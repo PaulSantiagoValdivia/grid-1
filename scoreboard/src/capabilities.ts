@@ -12,6 +12,7 @@
 import * as geometry from '@ongrid/floorplan/geometry'
 import * as exporter from '@ongrid/floorplan/export'
 import * as rules from '@ongrid/rules'
+import * as rooms from '@ongrid/floorplan/rooms'
 import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 
 export type Probe =
@@ -130,7 +131,16 @@ export const CAPABILITIES = {
     }),
   },
   'layout-help': { what: 'works out a layout (how many flats fit)', probe: none },
-  'repeat-floor': { what: 'repeats a floor', probe: none },
+  'repeat-floor': {
+    what: 'repeats a floor',
+    // WRT-4: rooms text copies a floor from its floor line ('floor f2 ... copy f1'), each floor
+    // standing in the plan with its own walls, rooms and ids.
+    probe: lib(() => {
+      const written = rooms.compileRoomsText('walls outside 0.3 inside 0.1 height 2.7\nfloor f1 "First" level 1\nroom a "Flat" living 6 x 4 at 0,0\nfloor f2 "Second" level 2 copy f1\n')
+      const plan = written.plan === null ? null : parseFloorPlan(written.plan)
+      return plan !== null && plan.floors?.length === 2 && plan.rooms.filter((room) => room.floor === 'f2').length === 1 && plan.walls.some((wall) => wall.floor === 'f2')
+    }),
+  },
   'local-rules': { what: 'checks the rules of the place named', probe: none },
   permission: { what: 'says whether a design is allowed (never: Grid gives general guidance only)', probe: none },
   // CNT-14: the part of a door or window that opens (`opens`); its glass is drawn in 3D.

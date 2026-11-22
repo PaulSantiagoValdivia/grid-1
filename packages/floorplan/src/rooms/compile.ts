@@ -16,7 +16,7 @@
  *   walltype <t> <kind>                every inside wall of that thickness gets that kind
  *   sizes inside|centre|outside        what a room's size measures to, when its line does not say
  *   doors height <h>   windows sill <s> height <h>                    defaults
- *   floor <id> "<name>" [level <n>] [height <h>] [elevation <e>] [slab <s>] [building <kind>]
+ *   floor <id> "<name>" [level <n>] [height <h>] [elevation <e>] [slab <s>] [building <kind>] [copy <floor> [with openings]]
  *   room <id> "<name>" <use|-> <width> x <depth> [inside|centre|outside] <where> [...]
  *   room <id> "<name>" <use|-> polygon x,y x,y x,y ...                 inside faces
  *       <where>: at x,y (the south-west inside corner)
@@ -24,6 +24,9 @@
  *                inside <room> corner <ne|nw|se|sw> [wall <t> [kind]]  cuts that corner out of the room
  *       then:    walls <t> [kind]  height <h>  floor <m> (its floor above or below the storey's)  first-wall <wall id>
  *                tenure <private|shared|common|commercial>  type "<the firm's own room type>"
+ *                through <floor>  the room, and so its walls, stands on every floor written after this
+ *                                 one up to that floor too, in the same place (WRT-4): a stair or lift
+ *                                 core, a shaft, a block's outside walls
  *       <use>:   one of Grid's uses, or a word that plainly means one (`USE_WORDS`): 'wc' is toilet
  *       a size may be '*': the room stretches as far as the room named after 'until'
  *   wall between <room> and <room> [<side>] [<t>] [kind|virtual] [height <h>] [id <id>] [reversed]
@@ -39,9 +42,20 @@
  *   unit <name> [setting=default ...] ... end      rooms and openings written once
  *   place <unit> as <label> <where> [mirror east-west|north-south] [gap <t>] [setting=value ...]
  *   repeat <unit> <n> <direction> of <room or unit> as <first label> [...]
+ *   repeat <unit> <n> <direction> as <first label> <where the first goes> [mirror ...] [gap <t>] [setting=value ...]
+ *          [first setting=value ...] [last setting=value ...]
+ *       one room type placed n times in a row (WRT-4): the first where the line says, each next one
+ *       on the given side of the one before; 'first' and 'last' settings hold for the two ends
+ *       only (end rooms a wall's width narrower). A numeric label counts up (301, 302, ...),
+ *       another takes a number after it (A1, A2, ...), so the ids are the same on every writing.
  *   copy <floor> [with openings]   rename <room> <new id> "<name>" [use]   remove <id>
  *   raw wall|room|opening { ...Grid's own JSON... }     a part written the Grid way
  *   raw floor { "roof": {...}, "parapet": <m> }         the floor's fields rooms text has no words for (LVL-6)
+ *
+ * An opening pattern (LVL-8) is not rooms text, in a unit or out of one: a `pattern` line is
+ * refused with where a pattern goes instead (`patternLine`). It lives in the plan file's
+ * `patterns`, naming its wall by id, and `grid write` keeps it, so the wall ids written here are
+ * what keep it placed (WRT-4: the same on every writing, and when a row grows by one).
  *
  * Pure: text in, a plan and a report out. Nothing here reads or writes a file.
  */
@@ -114,6 +128,14 @@ function signedArea(pts: readonly P[]): number {
     s += a[0] * b[1] - b[0] * a[1]
   }
   return s / 2
+}
+
+/**
+ * WRT-4 with LVL-8: why a `pattern` line (or `raw pattern`) is refused, and where a pattern goes.
+ * A unit cannot hold one either: a pattern names one wall by its id, not a unit's room side.
+ */
+function patternLine(at: number, inUnit: boolean): string {
+  return `line ${at}: an opening pattern is not rooms text${inUnit ? ', and a unit cannot hold one' : ''}. Write it in the plan file's "patterns", naming its wall by id (grid describe --as rooms gives the ids; 'id <id>' on a wall line fixes one): grid write keeps it, and its openings are placed on that wall and on the floors it names. Openings written in a unit are placed with every copy of it.`
 }
 
 function contains(poly: readonly P[], pt: P): boolean {
@@ -200,6 +222,10 @@ interface RoomDraft {
   roomType: string | null
   /** The size as written and what it measures to, for the answer. */
   size: { w: number | null; d: number | null; basis: SizeBasis } | null
+  /** WRT-4: the last floor the room rises through, when it stands on the floors after its own too. */
+  through: string | null
+  /** WRT-4: the floor whose room this one is, standing here because that one rises through. */
+  risenFrom: string | null
 }
 
 interface OpeningLine {
@@ -368,6 +394,8 @@ class Compiler {
   /** One wall per stretch between two rooms, never one long wall past several. */
   split = false
   private units = new Map<string, Unit>()
+  /** WRT-4: rooms that rise through the floors written after their own, up to `through`. */
+  private risers: Array<{ room: string; from: string; through: string; line: number; done?: boolean }> = []
   private cur: FloorDraft | null = null
   readonly problems: RoomsProblem[] = []
   readonly warnings: RoomsProblem[] = []
@@ -416,6 +444,7 @@ class Compiler {
         this.rawFloor(rawFloor[1]!, at)
         continue
       }
+      if (/^\s*raw\s+pattern\b/.test(text)) this.stop('rooms/syntax', at, patternLine(at, false))
       const raw = /^\s*raw\s+(wall|room|opening)\s+(.*)$/.exec(text)
       if (raw) {
         this.rawPart(raw[1] as 'wall' | 'room' | 'opening', raw[2]!, at)
@@ -443,6 +472,15 @@ class Compiler {
       } else {
         this.statement(t, at)
       }
+    }
+    for (const riser of this.risers) {
+      if (riser.done === true) continue
+      const after = this.floors.slice(this.floors.findIndex((f) => f.id === riser.from) + 1).map((f) => f.id)
+      this.stop(
+        'rooms/unknown-floor',
+        riser.line,
+        `line ${riser.line}: room '${riser.room}' rises through '${riser.through}', which is not a floor written after floor '${riser.from}'. ${after.length === 0 ? 'No floor is written after it.' : `Floors written after it: ${after.join(', ')}.`}`
+      )
     }
     return this.emit()
   }
@@ -515,9 +553,12 @@ class Compiler {
       case 'floor':
         this.stFloor(t, at)
         return
-      case 'room':
-        this.addRoom(this.readRoom(t, at, null), null)
+      case 'room': {
+        const room = this.readRoom(t, at, null)
+        this.addRoom(room, null)
+        if (room.through !== null) this.risers.push({ room: room.id, from: this.floor().id, through: room.through, line: at })
         return
+      }
       case 'wall':
         this.stWall(t, at)
         return
@@ -541,6 +582,8 @@ class Compiler {
       case 'remove':
         this.stRemove(t, at)
         return
+      case 'pattern':
+        return this.stop('rooms/syntax', at, patternLine(at, false))
       default:
         this.stop(
           'rooms/syntax',
@@ -569,6 +612,7 @@ class Compiler {
   private stFloor(t: string[], at: number): void {
     if (t.length < 3) this.stop('rooms/syntax', at, `line ${at}: write 'floor <id> "<name>" [level <n>] [height <m>]'.`)
     const fl = newFloor(t[1]!, t[2]!, this.floors.length === 0 ? 0 : this.floors.length)
+    let copy: string[] | null = null
     let i = 3
     while (i < t.length) {
       const w = t[i]!
@@ -583,8 +627,12 @@ class Compiler {
         if (!BUILDINGS.includes(t[i + 1]!)) this.stop('rooms/syntax', at, `line ${at}: '${t[i + 1]}' is not a kind of building Grid knows. Use one of: ${BUILDINGS.join(', ')}.`)
         fl.building = t[i + 1] as BuildingType
         i += 2
+      } else if (w === 'copy' && i + 1 < t.length) {
+        // WRT-4: 'floor l4 "Fourth floor" level 4 copy l3', the floor and its copy on one line.
+        copy = t.slice(i)
+        break
       } else {
-        this.stop('rooms/syntax', at, `line ${at}: '${w}' is not understood on a floor line. Known words: level, height, elevation, slab, building.`)
+        this.stop('rooms/syntax', at, `line ${at}: '${w}' is not understood on a floor line. Known words: level, height, elevation, slab, building, copy.`)
       }
     }
     if (this.floors.some((f) => f.id === fl.id)) this.stop('rooms/duplicate-id', at, `line ${at}: floor '${fl.id}' is already written.`)
@@ -592,6 +640,32 @@ class Compiler {
     this.explicitFloors = true
     this.floors.push(fl)
     this.cur = fl
+    this.riseInto(fl)
+    if (copy !== null) this.stCopy(copy, at)
+  }
+
+  /**
+   * WRT-4: the rooms that rise through this floor stand on it, in the same place, with what the
+   * text said about the walls between them and their outside walls.
+   */
+  private riseInto(fl: FloorDraft): void {
+    const rising = this.risers.filter((r) => r.done !== true)
+    for (const riser of rising) {
+      const src = this.floors.find((f) => f.id === riser.from)!
+      const room = src.rooms.get(riser.room)
+      if (room === undefined) continue
+      this.addRoom({ ...room, poly: [...room.poly], through: null, risenFrom: src.id }, null)
+      if (riser.through === fl.id) riser.done = true
+    }
+    const risen = new Set(rising.map((r) => `${r.from}\u0000${r.room}`))
+    const ofRisers = (from: string, key: string): boolean => key.split('\u0000').slice(0, 2).every((id) => risen.has(`${from}\u0000${id}`))
+    for (const from of new Set(rising.map((r) => r.from))) {
+      const src = this.floors.find((f) => f.id === from)!
+      for (const [k, v] of src.between) if (ofRisers(from, k)) fl.between.set(k, { ...v })
+      for (const [k, v] of src.betweenSide) if (ofRisers(from, k)) fl.betweenSide.set(k, { ...v })
+      for (const k of src.open) if (ofRisers(from, k)) fl.open.add(k)
+      for (const e of src.extover) if (risen.has(`${from}\u0000${e.room}`)) fl.extover.push({ ...e, say: { ...e.say } })
+    }
   }
 
   // ------------------------------------------------------------------------------------------
@@ -641,7 +715,7 @@ class Compiler {
       this.stop('rooms/unknown-use', at, `line ${at}: '${useWord}' is not a room use Grid knows. Use one of: ${USES.join(', ')}; or '-' for none. The room's name keeps the person's own word: "Pooja room", "Bryggers".`)
     }
     const fl = this.floor()
-    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, floorOffset: null, firstWall: null, tenure: null, roomType: null, size: null }
+    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, floorOffset: null, firstWall: null, tenure: null, roomType: null, size: null, through: null, risenFrom: null }
     const mx = ctx?.mx === true
     const my = ctx?.my === true
     let W: string | null = null
@@ -711,6 +785,10 @@ class Compiler {
       } else if (w === 'type' && i + 1 < t.length) {
         room.roomType = t[i + 1]!
         i += 2
+      } else if (w === 'through' && i + 1 < t.length) {
+        if (ctx !== null) this.stop('rooms/syntax', at, `line ${at}: 'through <floor>' is written on a room line of its own, not inside a unit.`)
+        room.through = t[i + 1]!
+        i += 2
       } else if ((w === 'walls' || w === 'wall') && i + 1 < t.length) {
         const T = numberOf(t[i + 1]!, at)
         let kind: WallKind | null = null
@@ -730,7 +808,7 @@ class Compiler {
         this.stop(
           'rooms/syntax',
           at,
-          `line ${at}: '${w}' is not understood on a room line. After the use, write a size ('3.0 x 4.4' = east-west by north-south, inside faces; add 'centre' or 'outside' to measure to the walls' centre lines or outside faces) or 'polygon x,y x,y ...', then where it goes: 'at x,y', '<north|south|east|west> of <room>' with optional 'align', 'shift', 'until', 'open', or 'inside <room> corner <ne|nw|se|sw>'. 'walls <t> [kind]' sets this room's own wall thickness; 'tenure <private|shared|common|commercial>' and 'type "<text>"' say who it is for and the firm's own room type.`
+          `line ${at}: '${w}' is not understood on a room line. After the use, write a size ('3.0 x 4.4' = east-west by north-south, inside faces; add 'centre' or 'outside' to measure to the walls' centre lines or outside faces) or 'polygon x,y x,y ...', then where it goes: 'at x,y', '<north|south|east|west> of <room>' with optional 'align', 'shift', 'until', 'open', or 'inside <room> corner <ne|nw|se|sw>'. 'walls <t> [kind]' sets this room's own wall thickness; 'through <floor>' stands it on every floor after this one up to that floor; 'tenure <private|shared|common|commercial>' and 'type "<text>"' say who it is for and the firm's own room type.`
         )
       }
     }
@@ -1022,6 +1100,7 @@ class Compiler {
       if (words[0] === 'room') this.addRoom(this.readRoom(words, line, ctx), ctx)
       else if (words[0] === 'door' || words[0] === 'window' || words[0] === 'opening') pending.push({ words, line })
       else if (words[0] === 'wall') this.stWall(words, line)
+      else if (words[0] === 'pattern') this.stop('rooms/syntax', line, patternLine(line, true))
       else this.stop('rooms/syntax', line, `line ${line}: a unit may hold room, wall, door, window and opening lines, not '${words[0]}'.`)
     }
     const rooms = [...ctx.local.values()]
@@ -1098,32 +1177,74 @@ class Compiler {
     this.placeUnit(t[1]!, t[3]!, place, params, mx, my, at)
   }
 
+  /**
+   * One room type placed n times in a row. Written 'of <room>', every placement goes on that
+   * side of the one before, the first of the room named (WRT-2). Written without it (WRT-4), the
+   * first goes where the rest of the line says and each next one on the given side of the one
+   * before. 'first' and 'last' settings hold for the two ends only.
+   */
   private stRepeat(t: string[], at: number): void {
-    if (t.length < 8 || t[4] !== 'of' || t[6] !== 'as' || !Object.hasOwn(DIRS, t[3]!)) {
-      this.stop('rooms/syntax', at, `line ${at}: write 'repeat <unit> <how many> <north|south|east|west> of <room or unit> as <first label> [...]'.`)
+    const named = t[4] === 'of' && t[6] === 'as'
+    if (t.length < (named ? 8 : 6) || !(named || t[4] === 'as') || !Object.hasOwn(DIRS, t[3]!)) {
+      this.stop(
+        'rooms/syntax',
+        at,
+        `line ${at}: write 'repeat <unit> <how many> <north|south|east|west> of <room or unit> as <first label> [...]', or 'repeat <unit> <how many> <north|south|east|west> as <first label> <where the first goes> [...] [first setting=value ...] [last setting=value ...]'.`
+      )
     }
-    const n = Math.trunc(numberOf(t[2]!, at))
+    const n = numberOf(t[2]!, at)
+    if (!Number.isInteger(n) || n < 1 || n > REPEAT_MAX) this.stop('rooms/syntax', at, `line ${at}: a unit is repeated a whole number of times, from 1 to ${REPEAT_MAX}; '${t[2]}' is not one.`)
     const d = t[3]!
-    let ref = t[5]!
-    const label = t[7]!
-    const { place, params, mx, my } = this.readPlace(t.slice(8), at)
+    let ref = named ? t[5]! : null
+    const label = named ? t[7]! : t[5]!
+    const { words, ends } = this.endSettings(t.slice(named ? 8 : 6), at)
+    const { place, params, mx, my } = this.readPlace(words, at)
+    if (named && (place.at !== undefined || place.dir !== undefined)) {
+      this.stop('rooms/syntax', at, `line ${at}: this repeat already starts ${d} of '${ref}'; say where the first goes only in the form without 'of': 'repeat <unit> <n> ${d} as ${label} at x,y'.`)
+    }
     for (let k = 0; k < n; k++) {
       const lab = /^\d+$/.test(label) ? String(Number(label) + k) : n > 1 ? `${label}${k + 1}` : label
-      this.placeUnit(t[1]!, lab, { ...place, dir: d, ref }, params, mx, my, at)
+      const settings = new Map(params)
+      if (k === 0) for (const [key, value] of ends.first) settings.set(key, value)
+      if (k === n - 1) for (const [key, value] of ends.last) settings.set(key, value)
+      const where: UnitPlace = named ? { ...place, dir: d, ref: ref! } : k === 0 ? place : { dir: d, ref: ref!, ...(place.gap === undefined ? {} : { gap: place.gap }) }
+      this.placeUnit(t[1]!, lab, where, settings, mx, my, at)
       ref = lab
     }
+  }
+
+  /** The words of a repeat line before 'first' and 'last', and the settings after each. */
+  private endSettings(t: string[], at: number): { words: string[]; ends: { first: Map<string, string>; last: Map<string, string> } } {
+    const ends = { first: new Map<string, string>(), last: new Map<string, string>() }
+    const words: string[] = []
+    let into: Map<string, string> | null = null
+    for (const w of t) {
+      if (w === 'first' || w === 'last') {
+        into = ends[w]
+        continue
+      }
+      if (into === null) {
+        words.push(w)
+        continue
+      }
+      const eq = w.indexOf('=')
+      if (eq <= 0) this.stop('rooms/syntax', at, `line ${at}: after 'first' or 'last' come settings written name=value, for that end only; found '${w}'. Write where the units go before them.`)
+      into.set(w.slice(0, eq), w.slice(eq + 1))
+    }
+    return { words, ends }
   }
 
   // ------------------------------------------------------------------------------------------
   // Floors copied, rooms renamed and removed
 
   private stCopy(t: string[], at: number): void {
-    if (t.length < 2) this.stop('rooms/syntax', at, `line ${at}: write 'copy <floor id> [with openings]'.`)
+    if (t.length < 2) this.stop('rooms/syntax', at, `line ${at}: write 'copy <floor id> [with openings]', on a line of its own or at the end of the floor line.`)
     const src = this.floors.find((f) => f.id === t[1])
     if (!src) this.stop('rooms/unknown-floor', at, `line ${at}: there is no floor '${t[1]}'. Floors so far: ${this.floors.map((f) => f.id).join(', ')}.`)
     const fl = this.floor()
     if (fl === src) this.stop('rooms/syntax', at, `line ${at}: a floor cannot copy itself. Start the new floor with a 'floor' line first.`)
-    for (const r of src.rooms.values()) this.addRoom({ ...r, poly: [...r.poly] }, null)
+    // A room that rose through to this floor is here already (WRT-4).
+    for (const r of src.rooms.values()) if (!(fl.rooms.get(r.id)?.risenFrom === (r.risenFrom ?? src.id))) this.addRoom({ ...r, poly: [...r.poly], through: null, risenFrom: r.risenFrom }, null)
     for (const [k, v] of src.inst) fl.inst.set(k, [...v])
     for (const [k, v] of src.between) fl.between.set(k, { ...v })
     for (const [k, v] of src.betweenSide) fl.betweenSide.set(k, { ...v })
@@ -2078,6 +2199,9 @@ function newFloor(id: string, name: string, level: number): FloorDraft {
     raw: { walls: [], rooms: [], openings: [] },
   }
 }
+
+/** The most times one line may repeat a unit: a corridor of rooms, not a city. */
+const REPEAT_MAX = 500
 
 /** How many times a plan whose sizes run to the walls is placed again, at most. */
 const SETTLE_ROUNDS = 8

@@ -9,7 +9,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C13), version 1,
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C14), version 1,
    nothing defaulted:
    - `kind` on an opening: `DOOR_KINDS` (`single`, `double`, `sliding`, `pocket`, `folding`,
      `roller`, `garage`) and `WINDOW_KINDS` (`single`, `double`, `sliding`, `fixed`,
@@ -463,3 +463,42 @@ wrong fails two of them.
   3 skipped (4,929), in 549 s. `packages/rules` was not in this run: the merge does not touch it.
 - `npm run scoreboard`: 197, 278, 19, 5, 18, 735, 95, "Same as the stored figures." Nothing
   stored.
+
+### Again after merging `main` 26e928e (WRT-4, BRF-3)
+
+`main` moved while the HND-1 merge was checked, so it was merged again: repeat, mirror and turn,
+and a mirrored plan recognised (WRT-4), and the plot, its set-backs and the distances to it
+(BRF-3).
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: every Unreleased entry of both sides, CNT-14's first.
+- `docs/result-contract.md`: every agents' changelog entry, CNT-14's at the top.
+- `packages/floorplan/src/types/floorplan.ts`: BRF-3 took C13 for the plot, so CNT-14's convention
+  is now C14 (the header, its three comments, `openingKinds.ts` and point 1 above).
+- `geometry/floorplan.ts`, `rules/src/result/inspect.ts`: import lists, the union of both
+  (`inspect.ts` keeps CNT-14's `checkDoorSweeps` in place of `validateDoorSweeps`, and BRF-3's
+  `siteThingsText`).
+- `scoreboard/current.json`: not hand-merged; written by the scoreboard (below).
+
+**Where the two features meet.** WRT-4's mirror (`mirrorPlan`) and the core's turn recognition
+(`diff/turn.ts`) swap a door's `swing` and keep its other fields, so a door's kind and part go
+with it. That holds for every kind: `hinge` names a jamb by the wall's end, which a mirror keeps,
+and `swing` the face, which a mirror swaps, whether the door swings, slides or rolls. Rooms
+text's `copy <floor> with openings` copies the opening lines whole, kind and part included. BRF-3
+does not touch openings. Nothing needed changing.
+
+**Expectations changed.** None.
+
+**Scoreboard** (`npm run scoreboard -- --write-current`, then `npm run scoreboard`): 197, 278,
+**20**, 5, **22**, 735, 95. Turns answered 20 is main's 19 and the homeowner's sixth turn
+(`door-leaves` with `roof`). Checks fed 22 is main's 20 and CNT-14's two (`openable-part`). The
+reason is in `scoreboard/README.md`.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1 packages/floorplan
+  packages/rules packages/cli packages/viewer scoreboard/__tests__`: 306 of 306 files passed,
+  5,378 tests passed, 4 skipped (5,382), in 874 s.
+- `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures."

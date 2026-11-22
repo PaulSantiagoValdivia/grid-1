@@ -84,6 +84,9 @@ export interface CodeEntry {
 }
 
 const fixed = (text: string) => (): string => text
+/** BRF-3: the way an edge of the plot's boundary faces, and whether it is on a street, in words. */
+const edgeWords = (b: NonNullable<RuleFinding['boundary']>): string =>
+  `which faces ${b.faces}${b.northStated ? '' : ' (with north as the top of the drawing: the plan states no north)'}${b.street ? ', on the street' : ''}`
 /** How a use reads in a sentence: "a bedroom". */
 const USE_WORDS: Readonly<Record<string, string>> = { bedroom: 'a bedroom', living: 'a living room', dining: 'a dining room' }
 /**
@@ -883,6 +886,33 @@ export const CODES = {
     needed: fixed('a door or window above the ground outside, or a light well or an outside stair in front of it'),
     fix: fixed('If the ground in front of it is dug away, as for a light well or an area, draw that space; if the ground level is not right, change site.ground.')
   },
+  // BRF-3 (lab EL-16): the building against its plot. The set-backs are the person's own figures:
+  // a line says how far short of one the building stands, and never that a distance is enough.
+  'plan/setback-short': {
+    says: (s) => s.finding?.message ?? 'The building stands nearer an edge of the plot\'s boundary than the set-back asked for',
+    found: (s) => {
+      const b = s.finding?.boundary
+      if (b === undefined) return 'the building\'s outside face nearer the boundary than the set-back asked for'
+      return `the building's outside face ${metresText(b.distance, 2, b.asked?.distance)} m from edge ${b.edge} of the plot's boundary, ${edgeWords(b)}`
+    },
+    needed: (s) => {
+      const asked = s.finding?.boundary?.asked
+      if (asked === null || asked === undefined) return 'the set-back asked for'
+      const from = asked.from === 'edge' ? 'that edge' : asked.from === 'street' ? 'the street edges' : 'every edge'
+      return `${metresText(asked.distance)} m from it, the set-back ${asked.source === 'assumed' ? 'assumed for the person, to confirm,' : 'the person asked for'} from ${from}: their own figure, not a code's`
+    },
+    fix: fixed('Move the building, or its walls on that side, away from that edge; if the set-back is not the one meant, change it in site.setbacks.')
+  },
+  'plan/over-boundary': {
+    says: (s) => s.finding?.message ?? 'The building reaches over an edge of the plot\'s boundary',
+    found: (s) => {
+      const b = s.finding?.boundary
+      if (b === undefined) return 'the building\'s outside face past the plot\'s boundary'
+      return `the building's outside face ${metresText(b.past)} m past edge ${b.edge} of the plot's boundary, ${edgeWords(b)}`
+    },
+    needed: fixed('the building inside the plot\'s boundary'),
+    fix: fixed('Move the building, or its walls on that side, back inside the boundary; if the boundary is not the plot\'s, change site.boundary.')
+  },
   'room/stair-out-of-line': {
     says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
     found: fixed('no room used as a stair on the floor below lies under half of it'),
@@ -991,7 +1021,25 @@ export const CODES = {
     says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,
     found: (s) => `${s.said} on the sketch layer (${s.names.join(', ')})`,
     needed: fixed('nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture'),
-    fix: fixed('Leave it as a sketch for the drawing. Where it is something Grid holds, such as a fixture, write it as that instead; furniture and site parts will be offered the same way when Grid holds them.')
+    fix: fixed('Leave it as a sketch for the drawing. Where it is something Grid holds, such as a fixture, or a fence, a path, a tree or a pool on the site (site.things), write it as that instead; furniture will be offered the same way when Grid holds it.')
+  },
+  // BRF-3: the site's things are drawn only, never measured or checked.
+  'plan/site-things-drawn-only': {
+    says: (s) => `The site's things are drawn only: ${s.said}, not measured or checked, and never taken as a wall, a room or a storey's height`,
+    found: (s) => `${s.said} on the site`,
+    needed: fixed('nothing: the site\'s things are for the drawing'),
+    fix: fixed('Leave them as they are. A part of the building, such as a shed with walls and a roof, is written as walls and a room instead.')
+  },
+  'plan/not-checked-boundary': {
+    says: (s) => s.said || 'No distance to the plot\'s boundary was measured: the building has no outline',
+    found: fixed('a boundary on the site, but no outline of the building to measure from'),
+    needed: fixed('walls that close the building\'s outline, on a floor at or above the ground floor'),
+    fix: fixed('Correct the lines that leave the outline unknown; the distances to the boundary are measured once it can be worked out.')
+  },
+  'plan/boundary-crosses': {
+    says: () => 'The site\'s boundary is not one closed shape, so no distance to it and no plot coverage is measured',
+    needed: fixed('the plot\'s corners in order round it, each edge meeting only the next'),
+    fix: fixed('List the corners of the plot once each, in order round it; the last edge runs back to the first point by itself.')
   },
   'plan/note-no-place': {
     says: (s) => `Note ${s.label} names a room the plan does not have, so it is not drawn`,

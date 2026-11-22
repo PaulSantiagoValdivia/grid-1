@@ -3,9 +3,9 @@
  "counts": {
   "roomsMeasuredWrong": 197,
   "damageSilent": 278,
-  "turnsAnswered": 19,
+  "turnsAnswered": 20,
   "mistakesNamed": 5,
-  "checksFed": 18,
+  "checksFed": 22,
   "roomsNotMeasured": 735,
   "soundPlansWithAlarm": 95
  },
@@ -53,12 +53,12 @@
   },
   "turns": {
    "turns": 67,
-   "answered": 19,
+   "answered": 20,
    "labAnsweredFully": 15
   },
   "checks": {
    "checks": 42,
-   "fed": 18,
+   "fed": 22,
    "labYes": 5
   },
   "capabilities": {
@@ -79,7 +79,7 @@
    "export-jpg": "no",
    "export-table": "no",
    "north": "yes",
-   "site": "no",
+   "site": "yes",
    "stairs": "yes",
    "ramps": "no",
    "roof": "yes",
@@ -111,7 +111,7 @@
    "note-reasons": "no",
    "compare-notes": "yes",
    "layout-help": "no",
-   "repeat-floor": "no",
+   "repeat-floor": "yes",
    "local-rules": "no",
    "permission": "no",
    "openable-part": "yes",

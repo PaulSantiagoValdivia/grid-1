@@ -51,6 +51,7 @@ import { el } from './svgNode'
 import type { NumberedFault } from './faults'
 import { faultMarks, undrawnRoomText } from './faults'
 import { noteNodes, sketchNodes } from './writing'
+import { siteNodes, sitePaints } from './site'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 
 /** The door-sweep warning mark's size on screen, whatever the zoom. */
@@ -312,7 +313,9 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
       // A mark of what went wrong, not a line of the drawing: in screen pixels in every look.
       'stroke-width': lengthText(LINE_PX.undrawn * mpp),
       'stroke-dasharray': LINE_PX.undrawnDash.map((value) => lengthText(value * mpp)).join(' ')
-    } as Attrs
+    } as Attrs,
+    // BRF-3: the plot and what is on it, in the look's own site colours.
+    site: sitePaints(named, line)
   }
 }
 
@@ -644,6 +647,9 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     }
     out.push(el('g', { 'data-leaving': 'true', opacity: 1 - progress, 'pointer-events': 'none' }, children, 'leaving'))
   }
+
+  // BRF-3: the site, under everything: the building covers what it stands on. Drawn only.
+  if (drawing.site !== null && drawing.site !== undefined) out.push(...siteNodes(drawing.site, paint.site, mpp))
 
   // A ghost room lies under the current rooms, like a floor that used to be there.
   for (const room of live.ghosts?.rooms ?? []) {

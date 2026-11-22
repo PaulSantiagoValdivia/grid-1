@@ -31,7 +31,7 @@ export type { NoteText } from '@ongrid/floorplan/notes'
 
 export interface PlanNote extends Omit<PlanCheckNote, 'tag'> {
   /** What the note is about: getting out, a bedroom's escape window, or a room's size. */
-  readonly tag: 'Exit' | 'Escape' | 'Size'
+  readonly tag: 'Exit' | 'Escape' | 'Size' | 'Site'
 }
 
 export interface PlanNotesView {

@@ -37,6 +37,8 @@ import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomS
 import { planMarks } from './marks'
 import type { MarkedPart, OpeningKind, OpeningPart } from '../types/floorplan'
 import { statedKind } from './openingKinds'
+import { planSite, siteExtent, type PlanSite } from './plot'
+import { siteFloors } from './site'
 
 export interface PlanWall {
   readonly id: string
@@ -227,6 +229,13 @@ export interface PlanDrawing {
   readonly north: { readonly turn: number } | null
   /** SHT-7: the box round the sketch layer, so a view frames it too; null with none. */
   readonly sketchBounds: Bounds | null
+  /**
+   * BRF-3: the plot's boundary, its street edges and the site's things, on the ground floor's
+   * plan only (`siteFloors`); null on another floor, or when the plan states none. Drawn only.
+   */
+  readonly site: PlanSite | null
+  /** BRF-3: the box round the site, so a view frames the plot too; null with no site drawn. */
+  readonly siteBounds: Bounds | null
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -403,7 +412,10 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const sketchBounds = sketch.length === 0 ? null : computeBounds(sketchExtent(sketch))
   const stated = planOrientation(plan).north
   const north = stated === null || notes.some((note) => note.kind === 'symbol' && note.symbol === 'north') ? null : { turn: (stated * Math.PI) / 180 }
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, sketch, notes, north, sketchBounds, bounds: computeBounds(extent), issues }
+  // BRF-3: the site on the ground floor's plan, and on a plan that is no slice.
+  const site = floor === null || siteFloors(wholePlan(plan).whole).includes(floor) ? planSite(plan) : null
+  const siteBounds = site === null ? null : computeBounds(siteExtent(site))
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, sketch, notes, north, sketchBounds, site, siteBounds, bounds: computeBounds(extent), issues }
 }
 
 /**

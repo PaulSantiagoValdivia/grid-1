@@ -57,7 +57,8 @@ describe('every check says what it looked at (CH-1)', () => {
     expect(result.result.coverage.map((c) => c.ruleId)).toEqual([
       // LVL-3: 'stairs-line-up' looks at the rooms used as a stair or a lift. LVL-4:
       // 'openings-above-ground' looks at the doors and windows, once the site states its ground.
-      'floor-has-exit', 'room-has-door', 'room-reaches-exit', 'door-leads-somewhere', 'stairs-line-up', 'openings-above-ground', 'habitable-room-area', 'escape-opening',
+      // BRF-3: 'site-boundary' looks at the edges of the plot, once the site states one.
+      'floor-has-exit', 'room-has-door', 'room-reaches-exit', 'door-leads-somewhere', 'stairs-line-up', 'openings-above-ground', 'site-boundary', 'habitable-room-area', 'escape-opening',
     ])
     for (const check of result.result.coverage) {
       const looked = check.lookedAt.flatMap((g) => g.ids.map((id) => key(g.floor, id)))
