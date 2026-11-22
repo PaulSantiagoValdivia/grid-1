@@ -3,7 +3,7 @@
  * listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no
  * frame, leaf or clear width.
  */
-import { compareIds, planForFloor, tolerance } from '@ongrid/floorplan/geometry'
+import { compareIds, planForFloor, roomNumbers, tolerance } from '@ongrid/floorplan/geometry'
 import type { OpeningFacts } from '../describe/facts'
 import { AREA_RULES, planAreas } from './areas'
 import { HEIGHT_RULE, roomHeight } from './measure'
@@ -67,7 +67,8 @@ export function planSchedule(
 // Both are data first. The tool's text, its CSV and the sheet's tables are written from the same
 // rows, so no part reads another's printed text (lab AB-4, AU7-1). Rows are in one order whatever
 // the order of the file: floors by level, then by id, rooms and openings by id (`compareIds`,
-// QAR-5). Room numbers count up in that order; the plan file holds none.
+// QAR-5). Room numbers count up in that order; the plan file holds none. The numbering is the
+// library's (`roomNumbers`), so the IFC file gives every room the same number (HND-2).
 
 /** A room as the room schedule lists it. */
 export interface RoomScheduleRow {
@@ -161,6 +162,7 @@ function floorOrder(survey: Survey, floors: readonly string[] | undefined): { id
 export function roomSchedule(survey: Survey, options: { floors?: readonly string[] } = {}): RoomSchedule {
   const order = floorOrder(survey, options.floors)
   const areas = planAreas(survey, { floors: order.map((f) => f.id) })
+  const numbered = roomNumbers(survey.plan, order.map((f) => f.id))
   const rows: RoomScheduleRow[] = []
   const floors: RoomScheduleTotal[] = []
   for (const floor of order) {
@@ -168,13 +170,17 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
     if (figures === undefined) continue
     const storey = planForFloor(survey.plan, floor.id)
     const places = figures.rooms.filter((room) => room.zoneOf === undefined)
-    for (const room of [...places].sort((a, b) => compareIds(a.id, b.id))) {
+    const byId = new Map(places.map((room) => [room.id, room] as const))
+    // HND-2: the library's numbers, which number no zone (CNT-8), so the IFC gives the same.
+    for (const { number, id } of numbered.filter((n) => n.floor === floor.id)) {
+      const room = byId.get(id)
+      if (room === undefined) continue
       const zones = figures.rooms
         .filter((zone) => zone.zoneOf === room.id)
         .sort((a, z) => compareIds(a.id, z.id))
         .map((zone) => ({ id: zone.id, name: zone.name, use: zone.use, area: zone.net }))
       rows.push({
-        number: rows.length + 1,
+        number,
         id: room.id,
         name: room.name,
         use: room.use,

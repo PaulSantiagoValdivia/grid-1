@@ -57,7 +57,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | Field | What it holds |
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
-| `kind` | `refused`, `left-out`, `worth-a-look`, `finding` or `not-checked`. |
+| `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
 | `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
@@ -76,6 +76,8 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
    and first, what the file says that Grid does not read (below).
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
+6. `to-confirm`: a value the plan marks assumed, for the person to confirm (WRT-6). Last, so the
+   other lines keep their numbers when an agent marks what it assumed.
 
 ### A line's number
 
@@ -248,6 +250,8 @@ label.
 | `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
+| `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
+| `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
 
 ### Words Grid does not read
 
@@ -354,6 +358,14 @@ everything on it, and the whole plan for a line about the plan that names no par
 them changes, the mark no longer holds and the line is listed with the others again, saying it
 was seen before and which part changed since.
 
+A part's content holds the plan's own `marks` that name it ([where a value came
+from](plan-file.md#where-a-value-came-from), WRT-6), so a change to one brings its note back.
+A seen mark is not one of those marks: they are in the plan, and seen marks only beside it. A
+part can have several notes of one code, one for each value the plan marks assumed
+(`plan/value-assumed`); a seen mark made while its note shared its `code`, `thing` and `also`
+with another keeps the note's `message` as well, and holds only for that note. A mark without
+one holds no more once another note joins its own, and the notes are listed as new.
+
 The marks are kept beside the plan, in `<plan>.seen.json` (`plan.seen.json` beside
 `plan.json`), read and written only through the project's resolver. No export, sheet or drawing
 reads them. A file that is there and cannot be read is said in the report, every note is then
@@ -442,7 +454,7 @@ its text, which says the same.
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -488,6 +500,24 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - With LVL-4 (merged from `main`): a zone has no ceiling, slab, void or opening of its own. In
   `grid_takeoff` its room's ceiling and the floor's `envelope` are the same as for the room drawn
   without zones, and a zone used as a stair or lift opens no slab.
+
+### 2026-11-22: what was given and what was assumed (WRT-6)
+
+- A new kind of line, `to-confirm`, listed last, and a new code, `plan/value-assumed`: one line
+  for each value, or whole part, the plan's `marks` say was assumed, about that part. `counts`
+  has the new kind; `count` holds these lines too. `grid check` prints them under "To confirm",
+  and `grid_check`'s text names them even past its first 12 lines.
+- `plan/mark-no-part` (`worth-a-look`): a mark that names a part the plan does not have.
+- `grid_areas` gives `sureness` (`source`, `plusMinus` in m², `percent`) on each room whose walls
+  the plan marks, on each floor and on the plan (null on the plan when no wall is marked), and its text says "from a scan, about ± 1.6%".
+  `plusMinus` and `percent` are null when a scanned wall states no tolerance.
+- A new tool, `grid_square_scan`, after `grid_rename_room`: it squares the walls marked scanned,
+  and its receipt adds `moves` and `leftAsTheyAre`. With `grid_mark_seen` (MSG-10), the tools are 23.
+- A `to-confirm` line can be set aside as seen like any other (MSG-10): it is then listed under
+  "Seen", not "To confirm". Each assumed value of a part is its own note, so marking one leaves
+  the others listed, and a change to the part's marks brings a seen one back.
+- A wall that states no height is described as "wall height not stated (drawn 2.7 m high)" by
+  `grid_describe`, and its rooms text (`as=rooms`) states no height for it.
 
 ### 2026-11-22: slabs, roofs, ceilings and the ground (LVL-4)
 

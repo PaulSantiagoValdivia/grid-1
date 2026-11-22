@@ -136,6 +136,10 @@ export function keyEntries(
       entries.push({ swatch: 'line', color: look.labelSoft, words: `Sketch: ${category}, drawn only` })
     }
   }
+  // WRT-6: drawn dashed in the warning colour (`paints.assumed`).
+  if ([...drawing.walls, ...drawing.rooms, ...drawing.openings, ...drawing.items].some((part) => part.assumed === true)) {
+    entries.push({ swatch: 'dash', color: look.warning, words: 'Assumed, to confirm with the person' })
+  }
   if (shown.marks) entries.push({ swatch: 'mark', color: look.warning, words: 'Something to look at, numbered as in the check' })
   return entries
 }
