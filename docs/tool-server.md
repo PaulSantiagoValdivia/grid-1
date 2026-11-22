@@ -43,6 +43,11 @@ written; otherwise only the change is written back, and keys Grid does not know 
 answer to a change also names every door or doorless opening that now joins other rooms, read
 from where it stands: `bath-door joined bath and lounge; it now joins kitchen and lounge.`
 
+Room names and ids go into every export and sheet, and travel with the plan file: never put a
+person's name in a room's name or id. Who sits where belongs in the occupancy file beside the
+plan, which no export, sheet or tool reads ([People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan)).
+`grid_write_rooms`, `grid_export`, `grid_sheet` and the server's instructions say so.
+
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
 

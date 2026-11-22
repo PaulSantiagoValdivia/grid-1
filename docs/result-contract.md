@@ -288,6 +288,13 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: people kept out of hand-over files (HND-9)
+
+- The server's instructions and the descriptions of `grid_write_rooms`, `grid_export` and
+  `grid_sheet` say that room names and ids go into every export and sheet: never put a
+  person's name in one. Who sits where belongs in `plan.occupancy.json` beside the plan, which
+  no tool reads and no export carries. No answer changes.
+
 ### 2026-11-22: what is never looked at (COD-4)
 
 - `limits` adds two lines: "Ceiling height is not checked, in any room or under a sloping

@@ -21,6 +21,7 @@ import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sh
 import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
 import type { SheetLayout } from '../sheet/pages'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
+import { ROOM_NAMES_TRAVEL } from './protocol'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { openingBetween } from './readTools'
@@ -69,6 +70,7 @@ const exportTool: GridTool = {
   description:
     'Use this when the person wants the plan as a file to open in another program: dxf for AutoCAD and other 2D CAD programs (the nearest to DWG), ifc for BIM programs such as Revit, glb or obj for 3D. '
     + 'It writes the file into the exports folder beside the plan, replacing an earlier copy of the same export, and answers with the path it wrote. It never changes the plan. '
+    + `${ROOM_NAMES_TRAVEL} `
     + 'Do not use for a picture to look at (grid_view). For a PDF to read or print, use grid_sheet; JPG is not made. The plan must be a file inside the project folder: any other path is refused.',
   args: {
     plan: { type: 'string', maxLength: PATH_MAX, required: true, description: 'The plan file, as a path inside the project folder.', examples: ['floor-plan.json', 'plan.json'] },
@@ -164,7 +166,9 @@ const sheetTool: GridTool = {
   description:
     'Use this when the person wants the plan as a PDF to read, print or send: layout client for the person the house is for (a cover with the 3D model and key figures, then a page per floor with its drawing and room areas), or layout check for whoever checks the plan (every id, every room\'s use, and what grid check finds on each floor). '
     + 'The words of a client sheet (name, headline, intro, a few paragraphs per floor) are yours to write: pass them as sheet, or Grid reads sheet.json beside the plan. Grid draws only what the plan holds: no furniture or landscape. Every page carries "General guidance, not your local rules". '
-    + 'It writes the PDF into the exports folder beside the plan, replacing an earlier sheet of the same name and layout, and answers with the path and what is on each page. It never changes the plan. Do not use for a single picture (grid_view) or a file for another program (grid_export).',
+    + 'It writes the PDF into the exports folder beside the plan, replacing an earlier sheet of the same name and layout, and answers with the path and what is on each page. It never changes the plan. '
+    + `${ROOM_NAMES_TRAVEL} `
+    + 'Do not use for a single picture (grid_view) or a file for another program (grid_export).',
   args: {
     plan: { type: 'string', maxLength: PATH_MAX, required: true, description: 'The plan file, as a path inside the project folder.', examples: ['plan.json'] },
     layout: { type: 'string', required: true, enum: ['client', 'check'], description: 'client or check.', examples: ['client', 'check'] },
@@ -399,6 +403,7 @@ const writeRoomsTool: GridTool = {
     + 'Grid works out the walls, their kinds, each room\'s boundary and each opening\'s place, and writes them into the plan file, which stays the source of truth: its walls stay there and stay editable. '
     + 'To change a plan, read it back with grid_describe as=rooms, change that text and pass it here: rooms text read from an older plan, or written over a plan changed some other way, is refused with the difference, and nothing is written (replace=true writes over it). Overlapping rooms and gaps that are neither wall nor room are refused, naming both rooms. '
     + 'A size may say centre or outside (8 x 10 outside: to the outside faces); inside is the default. What rooms cannot say (a free-standing wall, a room with a hole) is written raw, as one line of Grid\'s own JSON: raw wall {...}. '
+    + `${ROOM_NAMES_TRAVEL} `
     + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file. Units are metres.',
   args: {
     plan: { ...PLAN_ARG, description: 'The plan file to write, inside the project folder, ending in .json. The project\'s own plan.json when left out.' },

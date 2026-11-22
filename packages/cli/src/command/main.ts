@@ -1,7 +1,7 @@
 /**
  * The `grid` command, which `ongrid` runs too: `init`, `write`, `check`, `describe`, `draw`,
- * `export`, `tidy`, `serve` and `mcp`, the same server under the name an agent's host types
- * (`npx -y ongrid mcp`, CMD-9).
+ * `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an agent's
+ * host types (`npx -y ongrid mcp`, CMD-9).
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -24,6 +24,7 @@ import { CanvasMissing } from '../draw/canvas'
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { FontsMissing } from '../sheet/fonts'
+import { linkSeats, occupancyFileOf, occupancyText, OccupancyRefused, readOccupancy } from '../occupancy/occupancy'
 import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
@@ -96,6 +97,11 @@ const COMMANDS = {
     summary: 'Lists the faults where walls meet, each with the fix Grid offers. With --apply, makes the fixes chosen on the plan file.',
     options: TIDY_OPTIONS,
   },
+  occupancy: {
+    usage: 'grid occupancy [<plan.json>] [--project <folder>]',
+    summary: 'Lists who sits where, from the occupancy file beside the plan (plan.occupancy.json), by room. No export carries it.',
+    options: PROJECT_OPTION,
+  },
   serve: {
     usage: 'grid serve [--project <folder>]',
     summary: "Starts Grid's tool server on standard input and output, for an agent's host to talk to.",
@@ -130,7 +136,7 @@ const OVERVIEW = [
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
   '',
   `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
-  `write writes ${PROJECT_PLAN}, and check, describe, draw, export, sheet and tidy read it when no plan file is named, and export`,
+  `write writes ${PROJECT_PLAN}, and check, describe, draw, export, sheet, tidy and occupancy read it when no plan file is named, and export`,
   'writes into exports/. grid init never replaces a file: it refuses a folder that already holds',
   `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
@@ -299,6 +305,17 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     return EXIT_OK
   }
 
+  if (name === 'occupancy') {
+    const project = openProject(projectOption, io.cwd)
+    const loaded = loadPlan(project, planFile)
+    const read = readOccupancy(project, planFile)
+    if (read === null) {
+      throw new OccupancyRefused(`There is no ${project.shown(project.resolve(occupancyFileOf(planFile)))}: who sits where is kept in that file, beside the plan and apart from it.`)
+    }
+    io.stdout(occupancyText(project.shown(read.file), linkSeats(loaded.plan, read.occupancy)))
+    return EXIT_OK
+  }
+
   if (name === 'sheet') {
     const request = { layout: textOf(parsed, '--layout'), sheet: textOf(parsed, '--sheet'), out: textOf(parsed, '--out') }
     const layout = checkSheetRequest(request)
@@ -368,7 +385,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }
