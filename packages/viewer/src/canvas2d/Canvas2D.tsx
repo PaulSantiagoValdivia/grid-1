@@ -7,6 +7,7 @@ import {
   boundsWithGhosts,
   buildDimensions,
   buildFloorPlan,
+  floorAbove,
   ghostsOf,
   planForFloor,
   resolveFloor,
@@ -178,6 +179,8 @@ export function Canvas2D({
   const plan = useMemo(() => planForFloor(source, floorId), [source, floorId])
 
   const drawing = useMemo(() => buildFloorPlan(plan), [plan])
+  // SHT-11: the outline of the floor above, dashed, as the picture draws it.
+  const above = useMemo(() => floorAbove(plan), [plan])
 
   // Which way each door opens, where the plan says so. A door that
   // doesn't say draws as a plain gap.
@@ -568,6 +571,7 @@ export function Canvas2D({
     metersPerPixel,
     look,
     labels,
+    above,
     live: {
       leaving: leaving !== null && prevDrawing ? { drawing: prevDrawing, ids: removing, progress: leaving } : null,
       ghosts,

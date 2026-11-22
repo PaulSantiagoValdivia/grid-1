@@ -5,7 +5,7 @@
   "damageSilent": 278,
   "turnsAnswered": 16,
   "mistakesNamed": 5,
-  "checksFed": 12,
+  "checksFed": 14,
   "roomsNotMeasured": 735,
   "soundPlansWithAlarm": 95
  },
@@ -58,7 +58,7 @@
   },
   "checks": {
    "checks": 42,
-   "fed": 11,
+   "fed": 14,
    "labYes": 5
   },
   "capabilities": {
@@ -78,7 +78,7 @@
    "export-dwg": "no",
    "export-jpg": "no",
    "export-table": "no",
-   "north": "no",
+   "north": "yes",
    "site": "no",
    "stairs": "yes",
    "ramps": "no",
@@ -86,7 +86,7 @@
    "fixtures": "no",
    "furniture": "no",
    "door-leaves": "no",
-   "clear-width": "no",
+   "clear-width": "yes",
    "threshold": "no",
    "fire-rating": "no",
    "occupancy": "no",
@@ -100,8 +100,8 @@
    "route-length": "no",
    "take-offs": "no",
    "opening-schedule": "no",
-   "clearance": "no",
-   "turning-space": "no",
+   "clearance": "yes",
+   "turning-space": "yes",
    "inside-view": "no",
    "drawing-key": "no",
    "drawing-style": "no",
