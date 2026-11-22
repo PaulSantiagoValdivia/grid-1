@@ -38,6 +38,7 @@ import { floorJoins } from './floorJoins'
 import { cornerFills, inPolygon, polygonArea, strip, union } from './polygons'
 import { roomZones } from './zones'
 import { planFlats } from './flats'
+import { planBuildings } from './buildings'
 import { statedOutline } from './massing'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
@@ -85,7 +86,7 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
     name: 'Gross external area',
     measures: 'Gross external area is the floor inside the outside face of the walls, every wall counted.',
     notTakenOff: 'Outer walls, inner walls and floor no room claims are not taken off.',
-    cannotSay: 'The plan cannot say which walls are shared with a neighbour, so a shared wall counts in full, and a wall standing apart counts too.',
+    cannotSay: 'A wall shared with a neighbour, or with common parts the plan does not draw, counts to its middle once the plan marks it separating; any other wall counts in full, a wall standing apart too.',
   },
   headroom: {
     measure: 'headroom',
@@ -227,8 +228,22 @@ export interface FlatAreaFigure {
   readonly leftOut: readonly string[]
 }
 
+/** CNT-6 (C23): a building's figures, the sum of its own floors' among the floors given. */
+export interface BuildingAreaFigure {
+  readonly id: string
+  readonly name: string
+  /** Its floors among those given, in plan order. */
+  readonly floors: readonly string[]
+  readonly net: number
+  /** Null when a floor of it has none. */
+  readonly grossInternal: number | null
+  readonly grossExternal: number | null
+}
+
 export interface PlanAreaFigures {
   readonly floors: readonly FloorAreaFigures[]
+  /** CNT-6: each building the plan names with a floor among those given, in plan order. Empty with none. */
+  readonly buildings: readonly BuildingAreaFigure[]
   /** CNT-4: each flat of the plan's flats list with a room on the floors given, in plan order. Empty with none. */
   readonly flats: readonly FlatAreaFigure[]
   /** CNT-4: the net area of the rooms in no flat (the common parts, on a plan that lists flats); the whole net with none. */
@@ -283,12 +298,14 @@ function outerStretches(sides: WallSides | undefined, length: number): (readonly
   if (sides === undefined) return []
   if (sides.stated === 'exterior') return [[0, length]]
   const list = sides.stretches
-  const outer = (i: number): boolean | null => (i < 0 || i >= list.length ? null : list[i]!.worked === 'exterior')
+  // CNT-6: a party wall, or one to the common parts, bounds the floor as an outside wall does.
+  const bounds = (worked: WallSides['stretches'][number]['worked']): boolean => worked === 'exterior' || worked === 'separating'
+  const outer = (i: number): boolean | null => (i < 0 || i >= list.length ? null : bounds(list[i]!.worked))
   const out: [number, number][] = []
   list.forEach((stretch, i) => {
     const before = outer(i - 1)
     const after = outer(i + 1)
-    const faces = stretch.worked === 'exterior' || (stretch.worked === 'detached' && before !== false && after !== false && (before === true || after === true))
+    const faces = bounds(stretch.worked) || (stretch.worked === 'detached' && before !== false && after !== false && (before === true || after === true))
     if (!faces) return
     const last = out[out.length - 1]
     if (last !== undefined && stretch.from - last[1] <= tolerance('noLength')) last[1] = stretch.to
@@ -471,16 +488,76 @@ function floorFigures(
   }
   const inside = insideFace(walls, spaces, sides())
   const known = typeof inside === 'number'
+  // CNT-6 (C23): a separating wall with more of the building beyond it counts to its middle.
+  const beyond = pastMiddle(walls, spaces, sides())
+  const gross = Math.max(0, spaces.outlineArea - beyond)
   return {
     ...base,
-    grossExternal: spaces.outlineArea,
+    grossExternal: gross,
     grossInternal: known ? Math.max(0, inside - outsideRooms) : null,
-    walls: spaces.wallArea,
-    outerWalls: known ? Math.max(0, spaces.outlineArea - inside) : null,
+    walls: Math.max(0, spaces.wallArea - beyond),
+    outerWalls: known ? Math.max(0, gross - inside) : null,
     unclaimed: spaces.unclaimedArea,
     offSpace,
     why: known ? null : inside,
     massing: false,
+  }
+}
+
+/**
+ * CNT-6 (C23): the floor of the outline past the middle of every stretch of separating wall with a
+ * room on one side only (`separating` in `exposure.ts`): the half of a party wall, or of a wall to
+ * the common parts, that belongs to what lies beyond it. At a wall's ends the cut runs on past its
+ * middle line to the face of the wall it meets, so the corner is cut on the same line. 0 when no
+ * such stretch is drawn, or the cut cannot be made.
+ */
+function pastMiddle(walls: readonly Wall[], spaces: FloorSpaces, sides: ReadonlyMap<string, WallSides>): number {
+  const solid = runsOf(walls).filter((r) => r.wall.virtual !== true)
+  const reach = Math.max(0, ...solid.map((r) => r.wall.thickness / 2)) + tolerance('gap')
+  const bands: Polygon[] = []
+  for (const run of solid) {
+    const wallSides = sides.get(run.wall.id)
+    if (wallSides === undefined) continue
+    const whole = run.wall.arc === undefined ? run.length : wallLength(run.wall)
+    const scale = run.to - run.from === 0 ? 1 : run.length / (run.to - run.from)
+    const list = wallSides.stretches
+    const cut = (i: number): boolean => list[i]?.worked === 'separating'
+    // An end of the wall where no other wall carries straight on: the cut runs on to the face of
+    // the wall it meets there.
+    const end = (point: Vec2): boolean =>
+      !solid.some((other) => {
+        if (other.wall === run.wall) return false
+        const across = Math.abs(other.dir.x * run.dir.y - other.dir.y * run.dir.x)
+        const ends = [other.start, { x: other.start.x + other.dir.x * other.length, y: other.start.y + other.dir.y * other.length }]
+        return across <= tolerance('joint') && ends.some((p) => Math.hypot(p.x - point.x, p.y - point.y) <= tolerance('joint'))
+      })
+    list.forEach((stretch, i) => {
+      // A stretch with no room on either face inside a corner goes with the separating one beside it.
+      const beside = stretch.worked === 'detached' && (cut(i - 1) || cut(i + 1))
+      if (stretch.worked !== 'separating' && !beside) return
+      const a = Math.max(stretch.from, run.from)
+      const b = Math.min(stretch.to, run.to)
+      if (!(b - a > tolerance('noLength'))) return
+      // The face with no room on it: the normal points at the left face.
+      const one = stretch.worked === 'separating' ? stretch : (cut(i - 1) ? list[i - 1] : list[i + 1])!
+      const away = one.left.length === 0 ? 1 : -1
+      const startPoint = run.start
+      const endPoint = { x: run.start.x + run.dir.x * run.length, y: run.start.y + run.dir.y * run.length }
+      const from = (a - run.from) * scale - (a <= tolerance('noLength') && end(startPoint) ? reach : 0)
+      const to = (b - run.from) * scale + (b >= whole - tolerance('noLength') && end(endPoint) ? reach : 0)
+      const normal = { x: -run.dir.y * away, y: run.dir.x * away }
+      const depth = run.wall.thickness / 2 + tolerance('gap')
+      const at = (along: number, out: number): [number, number] => [run.start.x + run.dir.x * along + normal.x * out, run.start.y + run.dir.y * along + normal.y * out]
+      bands.push([[at(from, 0), at(to, 0), at(to, depth), at(from, depth)]])
+    })
+  }
+  if (bands.length === 0) return 0
+  try {
+    const outline: MultiPolygon = spaces.outline.map((rings) => rings.map((ring) => ring.map((p): [number, number] => [p.x, p.y])))
+    const cut = polygonClipping.intersection(outline, union(bands))
+    return sum(cut.map(polygonArea))
+  } catch {
+    return 0
   }
 }
 
@@ -620,6 +697,7 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
 
   return {
     floors,
+    buildings: buildingFigures(plan, floors),
     flats,
     notInFlats,
     net: total('net', floors, (f) => f.net),
@@ -634,6 +712,27 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
 }
 
 const rooms = (floors: readonly FloorAreaFigures[]): RoomAreaFigure[] => floors.flatMap((f) => f.rooms)
+
+/** CNT-6: each building's figures, the sums of its own floors'. */
+function buildingFigures(plan: FloorPlan, floors: readonly FloorAreaFigures[]): BuildingAreaFigure[] {
+  const byFloor = new Map(floors.map((f) => [f.floor, f] as const))
+  const grossOf = (list: readonly FloorAreaFigures[], pick: (f: FloorAreaFigures) => number | null): number | null => {
+    const values = list.map(pick)
+    return values.every((v): v is number => v !== null) ? sum(values) : null
+  }
+  return planBuildings(plan).flatMap((building) => {
+    const own = building.floors.flatMap((id) => (byFloor.has(id) ? [byFloor.get(id)!] : []))
+    if (own.length === 0) return []
+    return [{
+      id: building.id,
+      name: building.name,
+      floors: own.map((f) => f.floor),
+      net: sum(own.map((f) => f.net)),
+      grossInternal: grossOf(own, (f) => f.grossInternal),
+      grossExternal: grossOf(own, (f) => f.grossExternal),
+    }]
+  })
+}
 
 /** CNT-4: each flat's figures, from the flats list and the rooms as the floors count them. */
 function flatFigures(plan: FloorPlan, floors: readonly FloorAreaFigures[]): FlatAreaFigure[] {

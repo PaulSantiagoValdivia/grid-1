@@ -688,6 +688,18 @@ function planSceneIn(input: SceneInput): SvgNode[] {
 
   // BRF-3: the site, under everything: the building covers what it stands on. Drawn only.
   if (drawing.site !== null && drawing.site !== undefined) out.push(...siteNodes(drawing.site, paint.site, mpp))
+  // CNT-6 (C23): the context round the plan, dashed under everything: drawn only, never measured.
+  const context = drawing.context ?? []
+  if (context.length > 0) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'context', 'pointer-events': 'none', 'aria-hidden': 'true' },
+        context.map((shape) => el('path', { 'data-part': 'context-shape', 'data-context': shape.id, d: virtualPath([...shape.points, shape.points[0]!]), ...paint.above }, [], shape.id)),
+        'context'
+      )
+    )
+  }
 
   // A ghost room lies under the current rooms, like a floor that used to be there.
   for (const room of live.ghosts?.rooms ?? []) {

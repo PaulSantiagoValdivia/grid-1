@@ -505,6 +505,12 @@ export const CODES = {
     variant: { says: (s) => (s.also[0] === undefined ? 'one' : '') }
   },
   'flat/zone-without-room': {},
+  // --- Buildings (CNT-6) ----------------------------------------------------------------------
+  // The buildings list's own faults, as the flats list's: the building is read without what it
+  // names wrongly. The found is the check's own sentence, with the ids.
+  'building/duplicate-id': {},
+  'building/unknown-floor': {},
+  'building/floor-in-two': {},
 
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},
@@ -574,9 +580,11 @@ export const CODES = {
   },
   'opening/door-out-above-ground': {
     values: (s): Values => ({
-      wording: grouped(s, planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
+      // CNT-6: on a floor above the ground only by what it states lies below it, no height is said.
+      wording: s.finding !== undefined && s.finding.elevation === undefined && s.finding.said !== undefined ? s.finding.said : grouped(s, planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
       height: num(metresText(s.finding?.elevation ?? 0))
-    })
+    }),
+    variant: { found: (s) => (s.finding !== undefined && s.finding.elevation === undefined ? 'below' : '') }
   },
   'opening/below-ground': {
     values: (s): Values => {

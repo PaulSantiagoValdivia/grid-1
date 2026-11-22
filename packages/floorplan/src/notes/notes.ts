@@ -124,7 +124,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
       case 'door_to_outside_above_ground':
         return {
           ...base,
-          title: wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation ?? 0)),
+          title: finding.elevation === undefined ? [words(finding.message)] : wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation)),
           detail: [words('It is not counted as a way out. If it opens onto a balcony, a terrace or an outside stair, draw that as a room.')]
         }
       case 'stair_out_of_line':

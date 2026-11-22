@@ -32,6 +32,7 @@ import {
   type Wall,
 } from '@ongrid/floorplan/geometry'
 import type { Survey, SurveyRoom } from './survey'
+import { english, said } from '@ongrid/floorplan/messages'
 
 export const TAKEOFF_RULES = {
   walls: 'Wall length is the length of each solid wall along its centre line, each wall counted once; gross is with openings, net takes off the width of every opening in it.',
@@ -121,7 +122,8 @@ export interface Takeoff {
   readonly rules: readonly string[]
 }
 
-const KINDS: readonly Wall['kind'][] = ['exterior', 'interior', 'partition']
+// CNT-6: a separating wall (a party wall, or one to the common parts) is taken off as its own kind.
+const KINDS: readonly Wall['kind'][] = ['exterior', 'separating', 'interior', 'partition']
 
 /** One room's take-off; `ceiling` gives its stated ceiling height and lowered zones (none stated when left out). */
 export function roomTakeoff(
@@ -186,6 +188,8 @@ function assumptions(env: FloorEnvelope, thicknessStated: boolean): string[] {
     if (!thicknessStated) out.push(`the slab is ${SLAB_THICKNESS.toFixed(2)} m thick: the floor states no slab thickness`)
     if (env.slab.openings.some((o) => o.kind === 'stair-room')) out.push('the opening over a stair room is the floor it shares with the stair room below: the plan states no stair there')
   }
+  // CNT-6 (lab AC-7): no roof, because the plan states more of the building above the floor.
+  if (env.above !== undefined) out.push(english(said('takeoff.assumed.noRoofAbove', { above: said(`takeoff.assumed.above.${env.above}`) })))
   if (env.roof !== null && env.roof.shape === null) out.push('the roof is flat, over every part with nothing above, with no overhang and no fall: the plan states no roof')
   // LVL-6: the floor states its roof's shape and slope, but not where it ends or what it is made of.
   if (env.roof !== null && env.roof.shape !== null) out.push(`the roof is the ${env.roof.shape} roof the floor states, over every part with nothing above, with no overhang: the plan states its shape and slope, not its build-up`)

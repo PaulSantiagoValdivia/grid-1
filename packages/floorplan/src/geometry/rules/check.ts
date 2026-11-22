@@ -21,7 +21,7 @@ import { floorJoins } from '../floorJoins'
 import { flatOfRoom, planFlats } from '../flats'
 import { indexPlan } from '../plan'
 import type { Vec2 } from '../vec2'
-import { english, said, withSentence, type MessageKey } from '../../messages/say'
+import { english, name, said, withSentence, type MessageKey } from '../../messages/say'
 import { messages, saids, shiftedBoxSaid, shiftedHowSaid, shiftWays } from './messages'
 import { siteMeasures } from '../site'
 import { boundaryEdgeSaid } from '../plot'
@@ -489,6 +489,12 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
       const height = metresText(standsAt(floor.id))
       for (const { room, opening } of graph.exits) {
         if (!openingIds.has(opening)) continue
+        // CNT-6: a floor above the ground only by what it states lies below it has no height to say.
+        if (!(standsAt(floor.id) > limit('outsideDoorAboveGround'))) {
+          const sentence = said('check.doorOutAboveGround.below', { room: name(roomName(room)) })
+          findings.push(withSentence({ code: 'door_to_outside_above_ground', ruleId: RULE_OF.door_to_outside_above_ground, floor: floor.id, rooms: [room], openings: [opening], message: english(sentence) } as RuleFinding, sentence))
+          continue
+        }
         findings.push({
           code: 'door_to_outside_above_ground',
           ruleId: RULE_OF.door_to_outside_above_ground,

@@ -13,7 +13,7 @@
  * are in no figure.
  */
 import { MEASURES, floorOf, floorRoofShape, headroomBands, planMarks, roomHeadroom, wallSureness, type GrossMeasure, type HeadroomBand, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
-import { FLAT_AREA_RULE, planAreaFigures, type FlatAreaFigure } from '@ongrid/floorplan/geometry/areas'
+import { FLAT_AREA_RULE, planAreaFigures, type FlatAreaFigure, type PlanAreaFigures } from '@ongrid/floorplan/geometry/areas'
 import type { MarkSource } from '@ongrid/floorplan/types/floorplan'
 import type { Survey, SurveyRoom } from './survey'
 import { FIXTURE_RULES, planFixtures } from './fixtures'
@@ -126,6 +126,8 @@ export interface PlanAreas {
   readonly flats: readonly FlatAreas[]
   /** CNT-4: the net area of the rooms in no flat: the common parts. Null when the plan lists no flats. */
   readonly notInFlats: number | null
+  /** CNT-6: each building the plan names, its own floors' figures; empty with none. */
+  readonly buildings: PlanAreaFigures['buildings']
   readonly net: number
   readonly grossInternal: number | null
   readonly grossExternal: number | null
@@ -363,6 +365,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     floors,
     flats,
     notInFlats: hasFlats ? figures.notInFlats : null,
+    buildings: figures.buildings,
     net,
     grossInternal,
     grossExternal: figures.grossExternal.area,

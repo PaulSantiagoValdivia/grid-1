@@ -149,6 +149,11 @@ export interface FloorEnvelope {
   readonly roofKnown: boolean
   /** Why the floor has no slab or roof, in a sentence; null when it has what its outline gives. */
   readonly why: string | null
+  /**
+   * CNT-6 (C23): what the plan states lies above the floor, when it is more of the building (a
+   * common part or a neighbour): the floor then has no roof.
+   */
+  readonly above?: 'common' | 'neighbour'
 }
 
 export interface PlanEnvelope {
@@ -256,7 +261,14 @@ export function planEnvelope(stated: FloorPlan, options: EnvelopeOptions = {}): 
       return { floor: floor.id, outline: [], outlineArea: 0, slab: null, roof: null, roofKnown: true, why: 'its walls close no floor, so it has no outline for a slab or a roof' }
     }
     const storey = elevations.floors.get(floor.id) ?? { floorLevel: 0, clearHeight: 0 }
-    const slab = slabOf(plan, floor, own, storey.floorLevel, levelOf(floor) === lowest, sliceOf(floor.id), shafts ? joinsOnce : null, isZone)
+    // CNT-6 (C23, lab AC-7): a floor with more of the building below it stands on a floor slab,
+    // not on the ground, whatever its level.
+    const onGround = floor.below === undefined || floor.below === 'ground'
+    const slab = slabOf(plan, floor, own, storey.floorLevel, levelOf(floor) === lowest && onGround, sliceOf(floor.id), shafts ? joinsOnce : null, isZone)
+    // CNT-6: and one with more of the building above it has no roof.
+    if (floor.above !== undefined && floor.above !== 'outside') {
+      return { floor: floor.id, outline: own.pieces, outlineArea: own.area, slab, roof: null, roofKnown: true, why: null, above: floor.above }
+    }
 
     // The roof: the outline less every floor on the next level up.
     const next = levels.find((level) => level > levelOf(floor))

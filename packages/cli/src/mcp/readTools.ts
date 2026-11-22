@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, kindWords, limit, planFloors, planOrientation, planStoreys, tolerance, viewSetting, wallPointAt, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
+import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, kindWords, limit, planFloors, planOrientation, planStoreys, buildingHeights, tolerance, viewSetting, wallPointAt, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
 import { CameraRefused, cameraFor, eyeCamera, lensProblem, settingOfCamera, type CameraAsk } from '../draw/cameraAsk'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, isFirmLine, type ResultLine } from '@ongrid/rules'
@@ -325,7 +325,9 @@ const areasTool: GridTool = {
     // CNT-4, only on a plan that lists flats: each flat's net area from the list, and the rooms in no flat.
     flats: listSchema(objectSchema({ id: STRING, name: STRING, type: { type: ['string', 'null'] }, net: NUMBER, floors: listSchema(STRING), rooms: listSchema(STRING) }, ['id', 'name', 'net'])),
     notInFlats: NULLABLE_NUMBER,
-  }), ['flats', 'notInFlats']),
+    // CNT-6, only on a plan that names buildings: each building's own floors' figures and its height.
+    buildings: listSchema(objectSchema({ id: STRING, name: STRING, floors: listSchema(STRING), net: NUMBER, grossInternal: NULLABLE_NUMBER, grossExternal: NULLABLE_NUMBER, height: NULLABLE_NUMBER }, ['id', 'name', 'floors', 'net'])),
+  }), ['flats', 'notInFlats', 'buildings']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const outside = (args['outside_rooms'] as string[] | undefined) ?? []
@@ -336,12 +338,14 @@ const areasTool: GridTool = {
     const asked = args['gross'] as 'internal' | 'external' | 'both' | undefined
     const gross = asked === undefined ? undefined : asked === 'both' ? 'both' : asked === 'internal' ? 'grossInternal' : 'grossExternal'
     const storeys = planStoreys(survey.plan)
+    const heights = new Map(buildingHeights(survey.plan, storeys).map((b) => [b.id, b.height?.height ?? null] as const))
     const areas = planAreas(survey, {
       outside: new Set(outside),
       ...(floor === undefined ? {} : { floors: [floor] }),
       ...(country === undefined ? {} : { country }),
       ...(gross === undefined ? {} : { gross }),
     })
+    const buildings = areas.buildings.map((b) => ({ ...b, height: heights.get(b.id) ?? null }))
     const data = {
       floors: areas.floors,
       net: areas.net,
@@ -363,6 +367,8 @@ const areasTool: GridTool = {
       storeys: { above: storeys.above, below: storeys.below, storeys: storeys.storeys, empty: storeys.empty },
       // CNT-4: only on a plan that lists flats, so every other answer is as it was.
       ...(areas.notInFlats === null ? {} : { flats: areas.flats, notInFlats: areas.notInFlats }),
+      // CNT-6: only on a plan that names buildings, so every other answer is as it was.
+      ...(buildings.length === 0 ? {} : { buildings }),
     }
     if (args['format'] === 'csv') {
       const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.zoneOf !== undefined ? 'zone' : r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
@@ -408,6 +414,14 @@ const areasTool: GridTool = {
         lines.push(`  ${q(flat.name)} (${type}${flat.rooms.length} room${flat.rooms.length === 1 ? '' : 's'}): ${areaText(flat.net, units)}${floors}${doubt}`)
       }
       lines.push(`  In no flat: ${areaText(areas.notInFlats, units)}.`)
+    }
+    // CNT-6: each building the plan names, from its own floors.
+    if (buildings.length > 0) {
+      lines.push('Buildings, as the plan names them:')
+      for (const b of buildings) {
+        const gross = areas.reader.gross.map((m) => `${m === 'grossInternal' ? 'gross internal' : 'gross external'} ${b[m] === null ? 'not known' : areaText(b[m]!, units)}`)
+        lines.push(`  ${q(b.name)} (${b.floors.length} floor${b.floors.length === 1 ? '' : 's'}): net ${areaText(b.net, units)}, ${gross.join(', ')}${b.height === null ? '' : `, ${lengthText(b.height, units)} high`}.`)
+      }
     }
     const uses = Object.entries(areas.byUse)
     if (uses.length > 1) lines.push(`Net by use: ${uses.map(([use, area]) => `${use} ${areaText(area, units)}`).join(', ')}.`)
