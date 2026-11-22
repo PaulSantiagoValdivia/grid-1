@@ -202,6 +202,8 @@ export function isFloorSlice(plan: FloorPlan): boolean {
 export function floorHasGeometry(plan: FloorPlan, floorId: string): boolean {
   return (
     plan.walls.some((wall) => floorOf(wall) === floorId) ||
-    plan.rooms.some((room) => floorOf(room) === floorId)
+    plan.rooms.some((room) => floorOf(room) === floorId) ||
+    // BRF-4 (C15): a floor's stated outline is something drawn on it, before any wall.
+    (plan.floors?.some((floor) => floor.id === floorId && floor.outline !== undefined) ?? false)
   )
 }

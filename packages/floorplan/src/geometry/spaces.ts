@@ -35,6 +35,7 @@ import { indexPlan, roomWallIds } from './plan'
 import { quoted } from '../types/planText'
 import { roomNesting, tryRoomPolygon } from './room'
 import { roomZones } from './zones'
+import { statedOutline } from './massing'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
 import { TOLERANCES, tolerance } from './tolerances'
@@ -153,6 +154,11 @@ export interface FloorSpaces {
   /** The pieces of unclaimed floor of at least `areaReported`, largest first. */
   readonly unclaimed: readonly FloorPiece[]
   readonly mismatches: readonly RoomMismatch[]
+  /**
+   * BRF-4 (C15): how much of what the walls enclose lies outside the outline the floor states,
+   * m²; null when it states none. The outline and the walls are joined either way.
+   */
+  readonly pastOutline: number | null
 }
 
 /** Why a floor's spaces were not worked out. */
@@ -303,7 +309,7 @@ interface DrawnRoom {
 }
 
 /** The walls joined, with every point rounded to `grid` metres (0: as drawn): steps 1 to 3 above. */
-function joinWalls(walls: readonly Wall[], grid: number, reach: number) {
+function joinWalls(walls: readonly Wall[], grid: number, reach: number, outline: Polygon | null = null) {
   const steps = grid === 0 ? 0 : Math.round(1 / grid)
   const snap = grid === 0 ? (v: number) => v : (v: number) => Math.round(v * steps) / steps
   const lineHalf = Math.max(LINE_HALF_WIDTH, 5 * grid, reach * TOLERANCES.farNoise.value)
@@ -314,14 +320,24 @@ function joinWalls(walls: readonly Wall[], grid: number, reach: number) {
   const fills = cornerFills(solidShapes, lineHalf, snap).map((polygon) => ({ polygon, box: boxOfRings(polygon) }))
   const solid = union([...solidShapes.map((s) => s.body), ...fills.map((f) => f.polygon)])
   const frame = lineShapes.length === 0 ? solid : union([...solid, ...lineShapes.map((s) => s.body)])
-  const filled = union(frame.map((polygon) => [polygon[0]!]))
-  return { snap, shapes, solidShapes, lineShapes, fills, solid, frame, filled }
+  const walled = union(frame.map((polygon) => [polygon[0]!]))
+  // BRF-4 (C15): the floor's stated outline joins what the walls enclose; floor inside it that no
+  // wall encloses is floor too, and what the walls reach past it is measured apart.
+  const stated = outline === null ? null : [outline[0]!.map(([x, y]): Pair => [snap(x), snap(y)])]
+  const filled = stated === null ? walled : union([...walled, stated])
+  return { snap, shapes, solidShapes, lineShapes, fills, solid, frame, filled, walled, stated }
+}
+
+/** How far the walls' own outline reaches past a stated outline, m²; null with no outline stated. */
+function pastOutline(walled: MultiPolygon, stated: Polygon | null): number | null {
+  if (stated === null) return null
+  return walled.length === 0 ? 0 : multiArea(polygonClipping.difference(walled, stated))
 }
 
 /** The whole comparison, with every point rounded to `grid` metres (0: as drawn). */
-function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoom[], grid: number, reach: number): FloorSpaces {
-  const { snap, shapes, solidShapes, lineShapes, fills, solid, frame, filled } = joinWalls(walls, grid, reach)
-  const faces = filled.length === 0 ? [] : polygonClipping.difference(filled, frame)
+function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoom[], grid: number, reach: number, outline: Polygon | null = null): FloorSpaces {
+  const { snap, shapes, solidShapes, lineShapes, fills, solid, frame, filled, walled, stated } = joinWalls(walls, grid, reach, outline)
+  const faces = filled.length === 0 ? [] : frame.length === 0 ? filled : polygonClipping.difference(filled, frame)
   const outlineArea = multiArea(filled)
 
   const drawn = rooms.map((r) => {
@@ -458,7 +474,8 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
     unclaimedArea,
     spaces,
     unclaimed,
-    mismatches
+    mismatches,
+    pastOutline: pastOutline(walled, stated)
   }
 }
 
@@ -473,10 +490,17 @@ function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>)
   )
 }
 
-const reachOf = (walls: readonly Wall[]): number => {
+const reachOf = (walls: readonly Wall[], outline: Polygon | null = null): number => {
   let reach = 0
   for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
+  for (const [x, y] of outline?.[0] ?? []) reach = Math.max(reach, Math.abs(x), Math.abs(y))
   return reach
+}
+
+/** BRF-4: why a stated outline is too far out to join, or null. */
+export function outlineFarReason(floor: string, outline: Polygon | null): string | null {
+  if (outline === null) return null
+  return outline[0]!.some(([x, y]) => Math.abs(x) > FAR() || Math.abs(y) > FAR()) ? `the outline of floor ${quoted(floor)} lies more than ${FAR() / 1000} km from the origin` : null
 }
 
 /**
@@ -487,12 +511,13 @@ const reachOf = (walls: readonly Wall[]): number => {
  */
 export function floorOutline(plan: FloorPlan, floor: string, options: SpacesOptions = {}): Vec2[][] | null {
   const walls = floorWalls(plan, floor, options.broken ?? new Set<string>())
-  if (walls.length === 0) return []
-  if (farReason(walls)) return null
-  const reach = reachOf(walls)
+  const outline = statedOutline(plan, floor)
+  if (walls.length === 0 && outline === null) return []
+  if (farReason(walls) || outlineFarReason(floor, outline)) return null
+  const reach = reachOf(walls, outline)
   for (const grid of GRIDS) {
     try {
-      return joinWalls(walls, grid, reach).filled.map((polygon) => polygon[0]!.slice(0, -1).map(([x, y]) => ({ x, y })))
+      return joinWalls(walls, grid, reach, outline).filled.map((polygon) => polygon[0]!.slice(0, -1).map(([x, y]) => ({ x, y })))
     } catch {
       // Tried again on a coarser grid.
     }
@@ -512,7 +537,8 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
   // CNT-8: a zone is set against no space, and a line that only zones list divides none.
   const zones = roomZones(index)
   const walls = floorWalls(plan, floor, broken).filter((wall) => !zones.lines.has(wall.id))
-  const far = farReason(walls)
+  const outline = statedOutline(plan, floor)
+  const far = farReason(walls) ?? outlineFarReason(floor, outline)
   if (far) return { floor, reason: far }
 
   const nesting = roomNesting(index)
@@ -528,11 +554,11 @@ export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptio
     rooms.push(host ? { room, outline, region: host.region, area: host.area } : { room, outline, area: Math.abs(signedArea(outline)) })
   }
 
-  const reach = reachOf(walls)
+  const reach = reachOf(walls, outline)
   let failure: unknown = null
   for (const grid of GRIDS) {
     try {
-      return compare(floor, walls, rooms, grid, reach)
+      return compare(floor, walls, rooms, grid, reach, outline)
     } catch (error) {
       failure = error
     }
