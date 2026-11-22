@@ -8,5 +8,5 @@ import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 
 export const RETELLING_RULE =
   `When you retell what Grid said, start with its label, "${GENERAL_GUIDANCE_LABEL}", and keep it. `
-  + 'Never tell the person a plan complies, is compliant, is approved, meets code or has passed anything: say what the checks found and what they did not check, which is general guidance and not the local rules. '
+  + 'Never give a verdict on the plan, such as that it is allowed, signed off or up to code: say what the checks found and what they did not check, which is general guidance and not the local rules. '
   + 'Give a figure as the figure used here, with its basis (the document, edition and clause, or where it was looked up) and its status, such as found by an AI and not yet checked by a person.'

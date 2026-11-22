@@ -78,8 +78,9 @@ when it retells a report.
 ### The agent is told
 
 - `packages/cli/src/mcp/retelling.ts`, `RETELLING_RULE`: start with the label and keep it.
-  Never say a plan complies, is compliant, is approved, meets code or has passed anything. Give
-  each figure as the figure used here, with its basis and status. The tool server's
+  Never give a verdict on the plan, such as that it is allowed, signed off or up to code. Give
+  each figure as the figure used here, with its basis and status. The rule does not spell out
+  the forbidden words, because the skill is held never to contain them (`listing.test.ts`). The tool server's
   `INSTRUCTIONS` and the plugin's `SKILL.md` carry it word for word. The skill's step 4 now
   says "tell the person what it finds" instead of "pass on what it finds".
 
@@ -145,6 +146,8 @@ All of these change because the output changed on purpose, as the card asks. Non
   The label is now added by `describePlan`, and the e2e tests hold it there.
 - `cli/src/command/__tests__/paths.e2e.test.ts`: the export answers through the tool server
   lead with the label.
+- `cli/src/edit/__tests__/requests.test.ts` (WRT-3, merged from main): each receipt's lines are
+  read after the label, one line further down.
 - `cli/src/command/__tests__/coverage.test.ts` and `grid.e2e.test.ts`: a check that looked at
   no rooms reads `Nothing was checked for "…": it looked at no rooms.`
 - `rules/src/checks/__tests__/rounding.test.ts` and `rules/src/notes/__tests__/notes.test.ts`:
@@ -156,8 +159,8 @@ All of these change because the output changed on purpose, as the card asks. Non
 New tests: `floorplan/src/export/__tests__/label.test.ts` (one per file type: DXF, IFC, GLB and
 OBJ, for a plan and an empty plan); `cli/src/__tests__/label.test.ts` (the SVG of every fixture
 from `grid draw`, the PNG, and the rule in the instructions and the skill);
-`cli/src/mcp/__tests__/tools.test.ts` (every one of the 15 tools leads with the label and
-carries it in its data); `scoreboard/__tests__/approvalWords.test.ts`; and
+`cli/src/mcp/__tests__/tools.test.ts` (every tool leads with the label and carries it in its
+data); `scoreboard/__tests__/approvalWords.test.ts`; and
 `scoreboard/__tests__/retell.test.ts`.
 
 ## For the owner
