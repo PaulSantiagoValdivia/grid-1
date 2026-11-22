@@ -173,6 +173,7 @@ label.
 | `opening/swing-without-hinge` | {thing} says which way it opens but not which side it hangs on | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
+| `opening/door-hits-item` | {thing} hits {the fixtures, by kind and id} when it opens | floor clear of fixtures where its leaf swings |
 | `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
 | `opening/crosses-wall` | {thing} runs into a wall that meets its wall | an opening within the clear run of its wall, between the walls that meet it |
 | `opening/fills-wall` | {thing} is as long as its wall | some wall left beside an opening |
@@ -212,6 +213,8 @@ label.
 | `item/outside-rooms` | {thing} stands in no room | its middle inside a room on its floor |
 | `item/into-wall` | {thing} runs into a wall | its footprint clear of the walls, against their faces at most |
 | `item/too-tall` | {thing} is taller than the room it stands in | a fixture no higher than its room |
+| `item/blocks-doorway` | {thing} stands in front of the doorway of {opening}, an indicator | the floor in front of a doorway clear of fixtures, within Grid's own approach depth |
+| `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
@@ -238,6 +241,10 @@ label.
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
+| `plan/not-checked-sizes-for-building` | Room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
+| `plan/not-checked-escapes-for-building` | Escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
+| `floor/not-checked-sizes-for-building` | On "{floor}", room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
+| `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 
@@ -247,7 +254,10 @@ A plan with a field Grid does not know, or a room use it does not know, is still
 that field, and with that room's use not stated. Each is a line worth a look, about the part it
 is on, with the nearest word Grid knows when one was most likely meant: `thick` on a wall gives
 `plan/unknown-field`, whose `found` and `fix` name `thickness` ("Did you mean "thickness"?"). A
-use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line. A plan with no
+use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line; and a word that
+plainly means a use is read as it (CNT-5, `USE_WORDS` in the plan format), so `WC` is `toilet` and
+gives no line. No word is read as `bedroom`, `living` or `dining`, the uses the figure checks look
+at: `lounge` gives a line that suggests `living`. A plan with no
 walls, rooms or openings, `{}` among them, gives `plan/empty`. A field name or a use that breaks
 the text rule (MSG-9) is never repeated: the line says it is not. The fields each part has are
 read from the format itself (`readingNotes` in `@ongrid/floorplan/types/reading`), so a field
@@ -271,6 +281,7 @@ checks first, then the figure checks, whether it ran or not:
 | `skippedCount` | How many parts that is. |
 | `findings` | How many findings it gave. |
 | `readFor` | Only on a figure check that looked at something: the kinds of building its figures were read for, as `["homes"]` (COD-2). |
+| `uses`, `buildings` | Only on a figure check: the room uses it looks at, as `["bedroom"]`, and the kinds of building it runs in, as `["home"]` (CNT-5). It runs too where the plan does not say what kind of building it is. |
 | `wholeRooms` | Only on a figure check that looked at a room with zones (CNT-8): each such room as `{ floor, room, use, zone }`, the use the check applied to the room as a whole, and the zone it read that use from (`null` for the room's own). |
 
 A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
@@ -279,6 +290,7 @@ found in them. A `reason` is one of:
 
 | Reason | Why |
 |---|---|
+| `not_for_building` | the figures were read for homes (houses and flats people live in), and the plan says this is {an office}: the plan, or that floor, is a kind of building the check does not run in (CNT-5) |
 | `no_figures_for_place` | no figures for the place the plan is for: the ones here are from US model codes |
 | `no_rooms` | no rooms on the floor |
 | `cannot_be_drawn` | could not be drawn |
@@ -463,6 +475,71 @@ A change that would add a problem that leaves a part out is refused, and nothing
   zone used as kitchen, which the plan before had."
 - `grid_areas` adds `zoneOf` on a zone, and its CSV says `zone` in the `counted` column; the room
   schedule adds `zones` on a room with zones, and a zone is no row of its own.
+
+### 2026-11-22: use indicators round the fixtures (CNT-13)
+
+- A fixture is an obstacle to a door's swing: `opening/door-hits-item` (worth a look) names the
+  door, has the fixtures' ids in `also`, and words each by its label, kind and id:
+  `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens`. A wall in the way is still
+  `opening/door-blocked`.
+- New codes, worth a look, about a fixture (`thing.kind` `item`) with the opening's id in
+  `also`: `item/blocks-doorway`, a fixture within `useApproachDepth` (0.3 m) in front of a
+  doorway's hole, and `item/blocks-window`, one higher than a window's sill in front of it. Each
+  `found` says what was measured, with what depth, and that it is an indicator, not a rule. A
+  plan without fixtures gets none of them.
+- `grid_measure` takes `what=use` (with `room`, and optionally `width`, `diameter` and the new
+  `clearance`): `answer.indicators` lists each indicator as `{ code, about, measured, figure:
+  { value, from: "person" | "grid" }, under, at?, detail? }`, with `code` one of
+  `use/turning-space`, `use/doorway-clear-width`, `use/passage-width`, `use/space-by-fixture`
+  and `use/window-blocked`. Each text line starts `Indicator,`.
+- `what=route` takes `width`, a body or a trolley: `answer` holds `through`, `width`, `figure`,
+  `way` (the way it gets through by, or null), `shortest` (the way with the fewest rooms,
+  measured: each room's `width` with `at`, `beside` and `atDoorway`, each step's `clear` width
+  and `narrowedBy`) and `narrower` (what on it is narrower than `width`). Without `width`, the
+  route answer is as before.
+
+### 2026-11-22: stairs counted once, and the drawing's symbols (SHT-11)
+
+- `grid_areas`: rooms used as a stair that lie one over the other on neighbouring floors are one
+  stair, counted once, on the floor it rises from. Each stair room over it keeps its own `net`
+  and gains `countedWith` (`floor`, `room`: the lowest stair room); it is in no net total, area by
+  use or circulation figure. Each floor gains `overStairs`, their area. A note names the stair and
+  the floors over it, the text says "counted once with …" on each such room, and the CSV's
+  `counted` column says `with the stair below`. The net rule's sentence says so. A plan with no
+  stair rooms stacked so is unchanged. `grid sheet`'s area table prints "counted below" for them.
+- `grid_takeoff` with `for=estimate`: the `floor:<use>` lines leave those stair rooms out as the
+  net area does, so `floor:stair` counts the stair once; the `floor` rule's sentence says so. The
+  wall faces, skirting and ceilings still count every room.
+- `grid_view` (kind plan) and `grid draw` take `above` in `hide`: the dashed outline of the floor
+  above. No code is added and no check changes.
+
+### 2026-11-22: what kind of building it is, and more room uses (CNT-5)
+
+- A plan may say what kind of building it is (`building`: `home`, `office`, `shop`, `food`,
+  `hotel`, `school`, `health`, `sport`, `assembly`, `industry`, `warehouse`, `parking` or
+  `other`), and a floor may say otherwise for itself (`floors[].building`). Unstated, nothing
+  changes.
+- The figure checks (room size, escape openings) run only where the building, or its floor, is
+  a home, or where the plan does not say. Elsewhere their rooms are skipped as
+  `not_for_building`, and one line says so: about the plan (`plan/not-checked-sizes-for-building`,
+  `plan/not-checked-escapes-for-building`) when the plan's own kind is the reason on every
+  floor, else about each floor (`floor/not-checked-sizes-for-building`,
+  `floor/not-checked-escapes-for-building`). New codes and a new reason, all `not-checked`;
+  `resultVersion` stays.
+- `coverage` adds `uses` and `buildings` on each figure check: the room uses it looks at and the
+  kinds of building it runs in.
+- Room uses run to 27: `toilet`, `utility`, `study`, `office`, `meeting`, `reception`, `retail`,
+  `classroom`, `treatment`, `waiting`, `sport`, `changing`, `staff`, `worship`, `assembly`,
+  `plant` and `parking` join the ten (LVL-3 added `lift`), and `other` is listed last. A drawing
+  coloured by use (SHT-7) gives each its own pale fill. A word that plainly means a use
+  (`WC`, `staff room`, `warehouse`, `bryggers`) is read as it and gives no `plan/unknown-use`
+  line; no word is read as `bedroom`, `living` or `dining`. The tools' `use` arguments take the
+  new uses.
+- A room may say who it is for (`tenure`: `private`, `shared`, `common` or `commercial`) and carry
+  the firm's own room type (`roomType`). No check reads either yet.
+- A note or sheet line that used a figure, on a floor the plan says is a home, ends "and the plan
+  says this is a home" instead of COD-2's "the plan does not say what kind of building it is, so
+  Grid applied them as they are", which stays where the plan does not say.
 
 ### 2026-11-22: a short report, and notes set aside as seen (MSG-10)
 

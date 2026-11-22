@@ -25,7 +25,7 @@ export type QuantityUnit = 'm2' | 'm' | 'nr'
 
 /** The rule of each kind of line, one sentence each, in Grid's words. */
 export const ESTIMATE_RULES = {
-  floor: 'Net floor area of the rooms of this use, between their wall faces as grid_areas measures it; the plan holds no finishes, so which finish goes down is the person\'s, by the key they price.',
+  floor: 'Net floor area of the rooms of this use, between their wall faces as grid_areas measures it, so a stair room over a stair room below is counted once, on the floor the stair rises from; the plan holds no finishes, so which finish goes down is the person\'s, by the key they price.',
   ceiling: 'Assumed: a flat ceiling the size of the floor below it in every room, because the plan holds no ceilings.',
   wallFinish: 'Each inside side of the rooms of this use times the height of the wall it is on, less every door, window and opening in it at its full size; both faces of an inside wall are counted, dividing lines are not.',
   skirting: 'Each room\'s inside perimeter less the width of every door and doorless opening on it; dividing lines take none.',
@@ -93,6 +93,10 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
     if (line.quantity > tolerance('areaEqual')) lines.push(line)
   }
 
+  const areas = planAreas(survey, options.floors === undefined ? {} : { floors: options.floors })
+  // SHT-11: a stair room over a stair room below has its floor counted there, as in the net area.
+  const overStair = new Set(areas.floors.flatMap((f) => f.rooms.filter((room) => room.countedWith !== undefined).map((room) => `${f.floor}\u0000${room.id}`)))
+
   // Rooms: floor and wall faces by use, ceilings and skirting.
   const floorByUse = new Map<string, number>()
   const wallByUse = new Map<string, number>()
@@ -108,7 +112,7 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
     }
     const t = roomTakeoff(room)
     const use = room.facts.use ?? NO_USE
-    floorByUse.set(use, (floorByUse.get(use) ?? 0) + t.floorArea)
+    if (!overStair.has(`${room.facts.floor}\u0000${room.facts.id}`)) floorByUse.set(use, (floorByUse.get(use) ?? 0) + t.floorArea)
     wallByUse.set(use, (wallByUse.get(use) ?? 0) + t.wallFace)
     ceiling += t.ceiling
     skirting += t.skirting
@@ -183,7 +187,6 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
   if (lowest !== undefined && onFloor(lowest.floor) && shellKnown(lowest)) {
     add({ key: 'slab', what: `Lowest floor slab (${floorName(survey, lowest.floor)})`, quantity: lowest.area, unit: 'm2', rule: ESTIMATE_RULES.slab, assumed: true, floors: [{ floor: lowest.floor, quantity: lowest.area }] })
   }
-  const areas = planAreas(survey, options.floors === undefined ? {} : { floors: options.floors })
   const upper: { floor: string; quantity: number }[] = []
   for (const shell of built.slice(1)) {
     if (!onFloor(shell.floor)) continue

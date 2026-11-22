@@ -4,14 +4,15 @@ walltype 0.15 interior
 windows sill 0.9 height 1.5
 wall between store and wc1 0.15
 
-# Grid has no word for reception, office, meeting room or toilet: '-' means no use stated
-room reception   "Reception"              -       4.79 x 2.79   at 0.15,0.15
-room store       "Store"                  storage 3.865 x 2.79  east of reception
-room open-office "Open office (12 desks)" -       * x 5.79      north of reception until store
-room wc1         "WC (accessible)"        -       2.365 x 2.29  east of store
-room wc2         "WC"                     -       2.29 x 2.29   east of wc1
-room kitchenette "Kitchenette"            kitchen * x 2.88      north of wc1 until wc2
-room meeting     "Meeting room (8)"       -       4.775 x *     north of kitchenette until open-office
+# CNT-5: the plan says it is an office, and every room says what it is for
+building office
+room reception   "Reception"              reception 4.79 x 2.79   at 0.15,0.15
+room store       "Store"                  storage   3.865 x 2.79  east of reception
+room open-office "Open office (12 desks)" office    * x 5.79      north of reception until store
+room wc1         "WC (accessible)"        toilet    2.365 x 2.29  east of store
+room wc2         "WC"                     toilet    2.29 x 2.29   east of wc1
+room kitchenette "Kitchenette"            kitchen   * x 2.88      north of wc1 until wc2
+room meeting     "Meeting room (8)"       meeting   4.775 x *     north of kitchenette until open-office
 
 door entrance in reception south, 1.35 from west, 1.0 wide, opens in, hinged west
 door d-office  between reception and open-office, 1.85 from west, 0.9 wide, opens into open-office, hinged west

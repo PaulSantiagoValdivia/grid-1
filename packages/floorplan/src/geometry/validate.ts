@@ -36,6 +36,7 @@ import { levelIssues, unknownFloorIssues } from './levels'
 import { buildingKind } from './plausible'
 import { planStairs } from './stairs'
 import { itemIssues } from './items'
+import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
 import { roomZones } from './zones'
 
@@ -1017,6 +1018,8 @@ export function validatePlan(
   validatePlausibility(plan, index, broken, issues)
   // CNT-12: after the rooms, which a fixture is matched to, and the walls it may run into.
   issues.push(...itemIssues(plan, index, broken))
+  // CNT-13: a fixture standing in front of a doorway, or of a window higher than its sill.
+  issues.push(...itemUseIssues(plan, index, broken))
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
   if (options.spaces !== false) validateStairs(plan, broken, issues)

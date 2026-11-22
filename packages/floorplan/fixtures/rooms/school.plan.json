@@ -1,6 +1,7 @@
 {
   "version": "1",
   "units": "m",
+  "building": "school",
   "walls": [
     {"id": "ext-south", "start": [0.0, 0.0], "end": [41.7, 0.0], "thickness": 0.3, "height": 3.0, "kind": "exterior"},
     {"id": "w-c1-c2", "start": [7.425, 0.0], "end": [7.425, 7.725], "thickness": 0.15, "height": 3.0, "kind": "interior"},
@@ -19,14 +20,14 @@
     {"id": "ext-east-2", "start": [17.6, 9.95], "end": [17.6, 14.1], "thickness": 0.3, "height": 3.0, "kind": "exterior"}
   ],
   "rooms": [
-    {"id": "c1", "name": "Reception", "boundary": ["ext-south", "w-c1-c2", "w-corr-south", "ext-west-1"]},
-    {"id": "c2", "name": "Year 1", "boundary": ["ext-south", "w-c2-c3", "w-corr-south", "w-c1-c2"]},
-    {"id": "c3", "name": "Year 2 base", "boundary": ["ext-south", "w-hall-west", "w-corr-south", "w-c2-c3"]},
+    {"id": "c1", "name": "Reception", "use": "classroom", "boundary": ["ext-south", "w-c1-c2", "w-corr-south", "ext-west-1"]},
+    {"id": "c2", "name": "Year 1", "use": "classroom", "boundary": ["ext-south", "w-c2-c3", "w-corr-south", "w-c1-c2"]},
+    {"id": "c3", "name": "Year 2 base", "use": "classroom", "boundary": ["ext-south", "w-hall-west", "w-corr-south", "w-c2-c3"]},
     {"id": "corr", "name": "Corridor", "use": "corridor", "boundary": ["w-corr-south", "w-hall-west", "ext-north-2", "w-corr-north", "ext-west-1"]},
-    {"id": "hall", "name": "Hall", "boundary": ["ext-south", "ext-east-1", "ext-north-3", "ext-west-2", "w-hall-west"]},
+    {"id": "hall", "name": "Hall", "use": "assembly", "boundary": ["ext-south", "ext-east-1", "ext-north-3", "ext-west-2", "w-hall-west"]},
     {"id": "wc", "name": "Pupil toilets", "use": "bathroom", "boundary": ["w-corr-north", "w-wc-store", "ext-north-1", "ext-west-1"]},
     {"id": "store", "name": "Store", "use": "storage", "boundary": ["w-corr-north", "w-store-staff", "ext-north-1", "w-wc-store"]},
-    {"id": "staff", "name": "Staff room", "boundary": ["w-corr-north", "ext-east-2", "ext-north-1", "w-store-staff"]}
+    {"id": "staff", "name": "Staff room", "use": "staff", "boundary": ["w-corr-north", "ext-east-2", "ext-north-1", "w-store-staff"]}
   ],
   "openings": [
     {"id": "d-main", "wall": "ext-west-1", "type": "door", "offset": 4.7, "width": 1.2, "sill": 0.0, "height": 2.1, "swing": "left", "hinge": "start"},

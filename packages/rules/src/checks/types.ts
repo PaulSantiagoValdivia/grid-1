@@ -16,7 +16,7 @@ import type {
   RuleFinding as PlanRuleFinding,
   RulesReport as PlanRulesReport
 } from '@ongrid/floorplan/geometry'
-import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
+import type { BuildingType, RoomUse } from '@ongrid/floorplan/types/floorplan'
 import type { BuildingKind, FigureKey, FigureUnit, VerificationStatus } from './figures'
 
 export { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from '@ongrid/floorplan/geometry'
@@ -135,11 +135,20 @@ export type NotCheckedReason =
   | 'above_escape_storeys'
   /** MSG-2 (lab CH-1): the plan has no rooms, so no check that looks at rooms ran. About the whole plan. */
   | 'no_rooms'
+  /**
+   * CNT-5 (lab EL-2): the plan says the building, or this floor of it, is a kind the check's
+   * figures were not read for (an office, a shop), so the check did not run there. About the
+   * whole plan when the plan's own kind is the reason and no floor states one of its own;
+   * otherwise about one floor, whose rooms it names.
+   */
+  | 'not_for_building'
 
 export interface NotChecked extends Omit<PlanNotChecked, 'reason'> {
   readonly reason: NotCheckedReason
-  /** Only on `no_figures_for_place`: the check that did not run. Optional, like `through`. */
+  /** Only on `no_figures_for_place` and `not_for_building`: the check that did not run. Optional, like `through`. */
   readonly ruleId?: string
+  /** Only on `not_for_building`: the kind of building the plan says it, or the floor, is. */
+  readonly building?: BuildingType
 }
 
 /**
@@ -162,6 +171,8 @@ export type SkipReason =
   | 'use_not_covered'
   /** CNT-8: a zone of another room, which the check looks at as a whole, with the zone's use. */
   | 'part_of_room'
+  /** CNT-5: the plan says the building, or its floor, is a kind the check's figures were not read for. */
+  | 'not_for_building'
 
 /** Parts of one floor, by id. `floor` is empty for parts of the whole plan. */
 export interface CoverageGroup {
@@ -200,6 +211,13 @@ export interface CheckCoverage {
    * with no finding still says it. Left out for a check that uses no figure, or did not run.
    */
   readonly readFor?: readonly BuildingKind[]
+  /**
+   * CNT-5: on a check that applies figures, the room uses it looks at and the kinds of building
+   * it runs in (it runs too where the plan does not say). Left out for a check that reads every
+   * room and every building.
+   */
+  readonly uses?: readonly RoomUse[]
+  readonly buildings?: readonly BuildingType[]
   /**
    * CNT-8, only on a figure check that looked at a room with zones: each such room, by floor and
    * id, with the use the check applied to it as a whole, and the zone it read that use from
