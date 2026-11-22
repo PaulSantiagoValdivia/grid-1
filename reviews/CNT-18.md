@@ -198,6 +198,26 @@ room is measured as before.
   tests, 4 skipped. The one failure was the bundle's size budget: 501,415 bytes against 500,000.
   The budget is now 550,000 (see "For the owner").
 
+- After merging main at 8b599e9 (VEW-3's camera and saved views, LVL-8's facades and opening
+  patterns, BRF-5 and the rest): eleven conflicted files, each kept both sides (see the merge
+  commit). VEW-3 holds C11 and LVL-8 C12, so the curved wall is C13 now, in the code, `AGENTS.md`
+  and this review. Main's new code was taken to curves: a facade (`facade.ts`) sees a curved wall
+  by the straight pieces of the floor's outline, each standing for the wall (the outline's edges
+  are straightened to `facadeOnFace`, so a piece may bow off its edge by the edge's sagitta), and
+  shows its openings only on the stretches beside them; an opening pattern (`patterns.ts`) on a
+  curved wall spreads along its length along the curve and repeats onto a curved wall on the same
+  circle on the floors above; the sun table (`sun.ts`) measures a curved wall's depth from the
+  middle of the part that faces that way; the IFC measures a curved wall at its own height, as
+  LVL-6's roof cuts only straight walls (`wallTopProfile` gives a curved wall no top). Two tests
+  added (a round building's four facades, with its door on the north one only; a pattern of three
+  windows along the bay). The bundle is 528,823 bytes, under the 550,000 budget, so the budget was
+  not raised again; the test's comment names both features. Results: `npm run build` clean;
+  `npm run typecheck` clean; `npm run lint` clean; `npm run scoreboard` "Same as the stored
+  figures."; all of `packages/floorplan/src`, `packages/rules/src/result`, the CLI's `mcp`,
+  `quantities`, `edit`, `describe`, `command/__tests__` and `sheet`, the viewer and
+  `scoreboard/__tests__`, two workers: 255 of 255 files passed, 4,638 tests passed and 4
+  skipped, exit 0. The full suite was not run again.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -266,3 +286,7 @@ room is measured as before.
 - **The bundle's size budget** was raised from 500 kB to 550 kB: with curved walls and `main`
   at d058d4d the built file is 501,415 bytes, with no new dependency. If you'd rather hold 500 kB,
   something has to come out of the bundle; nothing here does that.
+12. **LVL-8's facades and a curved wall.** A facade draws a curved wall as the flat faces of the
+    floor's outline, one per straightened edge, with a line between them: the curve reads as
+    facets, each within 1 cm of it. A sloped roof (LVL-6) does not cut a curved wall's top: it
+    stands at its own height under the roof in 3D, in the IFC and on the facade.
