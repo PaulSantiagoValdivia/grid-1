@@ -5,8 +5,8 @@
  * and font written in. Its elements are the ones the app's 2D view draws. For PNG, see
  * `drawPlan` in the `ongrid` package.
  */
-export { planToSvg, planPicture, pictureView, pictureToSvg, lookOf, undecidedDoorsOf, fullHeight, DEFAULT_WIDTH } from './planSvg'
-export type { PictureOptions, Picture, PictureShow } from './planSvg'
+export { planToSvg, planPicture, pictureView, pictureToSvg, lookOf, fileLookOf, undecidedDoorsOf, fullHeight, DEFAULT_WIDTH } from './planSvg'
+export type { PictureOptions, Picture, PictureFileOptions, PictureShow } from './planSvg'
 export type { FaultLine, PictureKey } from './faults'
 export {
   LIGHT_LOOK,
@@ -18,10 +18,21 @@ export {
   TECHNICAL_LOOK,
   DARK_WORKING_LOOK,
   PAPER_PENS,
+  ELEVATION_PX,
   PAPER_SCALES,
   lineMetres,
   paperScaleOf,
-  penSetFor
+  penSetFor,
+  fileLook,
+  detailShown
 } from './look'
+export { CONTRAST_LEAST, contrastRatio, lookPairs, relativeLuminance } from './contrast'
+export type { ColourPair } from './contrast'
 export type { PlanLook, Look, LookName, PaperScale } from './look'
 export type { LabelStyle } from '../canvas2d/labelPlacement'
+export { facadePicture, facadeScene, facadeToSvg, facadeCaption } from './facade'
+export type { FacadePicture, FacadePictureOptions } from './facade'
+export { comparisonPicture, COMPARISON_COLORS, COMPARISON_LOOK, UNCHANGED_COLORS } from './comparison'
+export type { ComparisonPictureOptions } from './comparison'
+export { sectionPicture } from './section'
+export type { SectionPicture, SectionPictureOptions } from './section'

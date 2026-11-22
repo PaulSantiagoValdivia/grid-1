@@ -40,20 +40,22 @@ function pageCount(file: string): number {
 describe('grid sheet (VEW-7)', () => {
   it.each(['client', 'check'])('writes the expected pages, the same twice (%s)', (layout) => {
     // A cover or a summary, then one page per floor: the house has two floors and short words.
-    // The check set ends with the room schedule and the door and window schedule (ARE-12).
+    // The check set ends with the room schedule and the door and window schedule (ARE-12), then
+    // the door and window types (ARE-15).
     const file = join(dir, 'exports', `two-floor-house-${layout}.pdf`)
     const counts = [1, 2].map(() => {
       expect(grid(['sheet', 'two-floor-house.json', '--layout', layout]).status).toBe(0)
       return pageCount(file)
     })
-    expect(counts).toEqual(layout === 'check' ? [5, 5] : [3, 3])
+    expect(counts).toEqual(layout === 'check' ? [6, 6] : [3, 3])
   })
 
   it('writes a client sheet into exports/ beside the plan', () => {
     const run = grid(['sheet', 'two-floor-house.json', '--layout', 'client'])
     expect(run.err).toBe('')
     expect(run.status).toBe(0)
-    expect(run.out).toMatch(/Wrote exports\/two-floor-house-client\.pdf/)
+    // QAR-4: the command prints the path as the system writes it, `exports\…` on Windows.
+    expect(run.out).toContain(`Wrote ${join('exports', 'two-floor-house-client.pdf')}`)
     expect(readFileSync(join(dir, 'exports', 'two-floor-house-client.pdf')).subarray(0, 5).toString('latin1')).toBe('%PDF-')
   })
   it('writes a check sheet to --out', () => {

@@ -17,14 +17,16 @@
  * known here the moment it is added. Pure: the file as parsed JSON in, plain data out. A field
  * name or a use is text from the file: one that breaks the text rule of MSG-9 is never repeated.
  */
+import { said, sayValue, withSentence, type Said } from '../messages/say'
 import { z } from 'zod'
-import { FloorPlanSchema, ROOM_USES, readUse, type RoomUse } from './floorplan'
+import { FloorPlanSchema, ROOM_USES, foldUseWord, readUse, withRunFromEnds, type RoomUse } from './floorplan'
 import { textProblem } from './planText'
+import { likelyMeant } from './nearest'
 
 /** A part of the plan a note is about, by where it is in the file. */
 export interface PartAt {
   /** The list it is in. */
-  readonly list: 'walls' | 'rooms' | 'openings' | 'floors' | 'items'
+  readonly list: 'walls' | 'rooms' | 'openings' | 'floors' | 'items' | 'stairs' | 'patterns'
   readonly index: number
 }
 
@@ -48,8 +50,9 @@ export type ReadingNote =
       readonly kind: 'unknown-use'
       /** The use as written, or null when it is not text or breaks the text rule. */
       readonly use: string | null
-      /** What it was when it is not text: `a number`, `a list`. */
+      /** What it was when it is not text: `a number`, `a list`. In English; MSG-11: `said` holds it by key, not enumerable. */
       readonly notText: string | null
+      readonly said?: Said
       readonly part: PartAt
       /** The use Grid knows that was most likely meant, or null. */
       readonly nearest: RoomUse | null
@@ -59,91 +62,36 @@ export type ReadingNote =
 // ---------------------------------------------------------------------------------------------
 // Nearest word
 
-/** A word with its capitals, spaces, dashes and underscores taken out: `Clear_Width` is `clearwidth`. */
-function fold(word: string): string {
-  return word.toLowerCase().replace(/[^a-z0-9]/g, '')
-}
-
 /**
- * Whether `a` becomes `b` by one letter added, one taken out, or two side by side swapped. A
- * letter replaced is not counted: `roofs` is not a slip for `rooms`, and agents rarely mistype a
- * letter. They shorten a word (`thick`), or change its capitals or joins (`Thickness`,
- * `floor_offset`), and those are found before this.
- */
-function oneSlip(a: string, b: string): boolean {
-  if (a === b) return false
-  if (a.length === b.length) {
-    const at = [...a].findIndex((c, i) => c !== b[i])
-    return a[at] === b[at + 1] && a[at + 1] === b[at] && a.slice(at + 2) === b.slice(at + 2)
-  }
-  const [short, long] = a.length < b.length ? [a, b] : [b, a]
-  if (long.length - short.length !== 1) return false
-  for (let i = 0; i < long.length; i++) if (long.slice(0, i) + long.slice(i + 1) === short) return true
-  return false
-}
-
-/**
- * The word in `known` most likely meant by `word`, or null. In order: the same word in other
- * capitals or joins; a known word that starts with it (`thick` for `thickness`), the shortest
- * first; a known word one slip away (`heigth`, `floors`). Nothing else: a wrong guess sends the
- * agent the wrong way, and no guess still names the word.
+ * The word in `known` most likely meant by `word`, or null (`likelyMeant` in `nearest.ts`, the
+ * one helper the drawing check and the tool server use too). A replaced letter is not a slip
+ * here: `roofs` is not offered `rooms`.
  */
 export function nearestWord<T extends string>(word: string, known: readonly T[]): T | null {
-  const f = fold(word)
-  if (f === '') return null
-  const folded = known.map((k) => [k, fold(k)] as const)
-  const same = folded.find(([, k]) => k === f)
-  if (same) return same[0]
-  if (f.length >= 3) {
-    const longer = folded.filter(([, k]) => k.startsWith(f)).sort((a, b) => a[1].length - b[1].length)[0]
-    if (longer) return longer[0]
-  }
-  if (f.length >= 4) {
-    const slip = folded.find(([, k]) => oneSlip(f, k))
-    if (slip) return slip[0]
-  }
-  return null
+  return likelyMeant(word, known)
 }
 
 /**
- * Words agents write for a room use that mean one Grid knows (lab AU3-3). Only a suggestion:
- * a use is never read as another word. A use with no match here and no near spelling is told
- * to use "other".
+ * Words agents write for a room use that mean one Grid knows (lab AU3-3), but that Grid does not
+ * read as it (CNT-5): the words for the uses the figure checks look at, which a room takes only
+ * by its author's own choice, and words that mean two things. Only a suggestion: a word that
+ * plainly means a use is read as it (`USE_WORDS` in the schema), and never reaches this table.
+ * A use with no match here and no near spelling is told to use "other".
  */
 const USE_MEANS: Readonly<Record<string, RoomUse>> = {
   bed: 'bedroom',
   lounge: 'living',
   sitting: 'living',
-  livingroom: 'living',
+  living: 'living',
   family: 'living',
-  diningroom: 'dining',
-  kitchenette: 'kitchen',
-  toilet: 'bathroom',
-  wc: 'bathroom',
-  restroom: 'bathroom',
-  washroom: 'bathroom',
-  lavatory: 'bathroom',
-  shower: 'bathroom',
-  ensuite: 'bathroom',
+  dining: 'dining',
   hall: 'corridor',
-  hallway: 'corridor',
-  landing: 'corridor',
-  lobby: 'corridor',
-  passage: 'corridor',
-  stairs: 'stair',
-  staircase: 'stair',
-  stairwell: 'stair',
-  store: 'storage',
-  closet: 'storage',
-  cupboard: 'storage',
-  pantry: 'storage',
-  larder: 'storage',
-  wardrobe: 'storage',
 }
 
 /** The use Grid knows that a use it does not know most likely meant, or null. */
 export function nearestUse(use: string): RoomUse | null {
-  return (Object.hasOwn(USE_MEANS, fold(use)) ? USE_MEANS[fold(use)] : undefined) ?? nearestWord(use, ROOM_USES)
+  const folded = foldUseWord(use)
+  return (Object.hasOwn(USE_MEANS, folded) ? USE_MEANS[folded] : undefined) ?? nearestWord(use, ROOM_USES)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -161,11 +109,28 @@ function bare(schema: z.ZodTypeAny): z.ZodTypeAny {
   }
 }
 
+/**
+ * The value as the schema reads it where the schema reads a field in another form: a straight
+ * stair's `start` and `end` (LVL-3) are its walking line `run`, so they are known. Only that one
+ * reading: the others fill in defaults, which would hide a misspelt field's meaning.
+ */
+function preprocessed(schema: z.ZodTypeAny, value: unknown): unknown {
+  for (;;) {
+    if (schema instanceof z.ZodEffects) {
+      const effect = schema._def.effect
+      if (effect.type === 'preprocess' && effect.transform === withRunFromEnds) return withRunFromEnds(value)
+      schema = schema.innerType()
+    } else if (schema instanceof z.ZodOptional || schema instanceof z.ZodNullable) schema = schema.unwrap()
+    else if (schema instanceof z.ZodDefault) schema = schema.removeDefault()
+    else return value
+  }
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-const LISTS = new Set(['walls', 'rooms', 'openings', 'floors', 'items'])
+const LISTS = new Set(['walls', 'rooms', 'openings', 'floors', 'items', 'stairs', 'patterns'])
 
 function where(path: readonly (string | number)[]): string {
   return path.reduce<string>((text, key) => (typeof key === 'number' ? `${text}[${key}]` : text ? `${text}.${key}` : key), '')
@@ -176,9 +141,13 @@ function partOf(path: readonly (string | number)[]): PartAt | null {
   return typeof list === 'string' && LISTS.has(list) && typeof index === 'number' ? { list: list as PartAt['list'], index } : null
 }
 
+/** WRT-6, HND-11, CNT-15: fields the reading adds, which no file states: a file that writes one is told it is not read. */
+const READING_ONLY = new Set(['unstated', 'placedBy', 'typed'])
+
 /** Walks the file and its schema side by side, noting each key the schema does not have. */
-function walk(schema: z.ZodTypeAny, value: unknown, path: (string | number)[], notes: ReadingNote[]): void {
+function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], notes: ReadingNote[]): void {
   const shape = bare(schema)
+  const value = preprocessed(schema, given)
   if (shape instanceof z.ZodArray) {
     if (!Array.isArray(value)) return
     value.forEach((item, i) => walk(shape.element as z.ZodTypeAny, item, [...path, i], notes))
@@ -186,9 +155,9 @@ function walk(schema: z.ZodTypeAny, value: unknown, path: (string | number)[], n
   }
   if (!(shape instanceof z.ZodObject) || !isObject(value)) return
   const fields = shape.shape as Record<string, z.ZodTypeAny>
-  const known = Object.keys(fields)
+  const known = Object.keys(fields).filter((key) => !READING_ONLY.has(key))
   for (const key of Object.keys(value)) {
-    if (Object.hasOwn(fields, key)) {
+    if (Object.hasOwn(fields, key) && !READING_ONLY.has(key)) {
       walk(fields[key]!, value[key], [...path, key], notes)
       continue
     }
@@ -205,11 +174,12 @@ function walk(schema: z.ZodTypeAny, value: unknown, path: (string | number)[], n
   }
 }
 
-function typeName(value: unknown): string {
+function typeName(value: unknown): Said | string {
   if (value === null) return 'null'
-  if (Array.isArray(value)) return 'a list'
-  if (typeof value === 'object') return 'an object'
-  return typeof value === 'boolean' ? 'true or false' : `a ${typeof value}`
+  if (Array.isArray(value)) return said('read.type.array')
+  if (typeof value === 'object') return said('read.type.object')
+  if (typeof value === 'boolean') return said('read.type.boolean')
+  return typeof value === 'number' ? said('read.type.number') : said('read.wants.a', { type: typeof value })
 }
 
 /**
@@ -229,16 +199,20 @@ export function readingNotes(raw: unknown): ReadingNote[] {
       const use = readUse(room['use'])
       if (typeof use === 'string' && (ROOM_USES as readonly string[]).includes(use)) return
       const text = typeof use === 'string' && textProblem(use, 'name') === null ? use : null
-      notes.push({
+      const what = typeof use === 'string' ? null : typeName(use)
+      const note: ReadingNote = {
         kind: 'unknown-use',
         use: text,
-        notText: typeof use === 'string' ? null : typeName(use),
+        notText: what === null ? null : sayValue('en', what),
         part: { list: 'rooms', index },
         nearest: text === null ? null : nearestUse(text),
-      })
+      }
+      notes.push(what === null || typeof what === 'string' ? note : withSentence(note, what))
     })
   }
   const none = (key: string): boolean => !Array.isArray(raw[key]) || (raw[key] as unknown[]).length === 0
-  if (none('walls') && none('rooms') && none('openings') && none('items')) notes.push({ kind: 'empty' })
+  // BRF-4 (C17): a floor that states its outline is massing, not nothing.
+  const outlined = Array.isArray(raw['floors']) && (raw['floors'] as unknown[]).some((floor) => isObject(floor) && floor['outline'] !== undefined && floor['outline'] !== null)
+  if (none('walls') && none('rooms') && none('openings') && none('items') && !outlined) notes.push({ kind: 'empty' })
   return notes
 }

@@ -47,33 +47,49 @@ contract; `src/result/catalogue.ts` holds the one wording of every code.
   Every report lists what the checks never look at, and no message says a plan complies or
   is approved.
 - **Read for homes only.** Every figure here was read for homes (houses and flats), and records
-  it as `readFor` beside its document, edition, clause and status. A plan cannot say yet what
-  kind of building it is, so the figures are applied to any plan, a café's seating or a hotel's
-  rooms as well; every note and every pass that used a figure says which kind of building it
-  was read for (COD-2). Running a figure only in its kind of building waits on the plan stating
-  its building type.
+  it as `readFor` beside its document, edition, clause and status. A plan may say what kind of
+  building it is, and a floor may say otherwise (CNT-5). A figure check runs only where the
+  plan, or that floor, is a home (`READ_FOR_BUILDINGS`, `RULE_BUILDINGS`), or where the plan
+  does not say; elsewhere it skips the rooms and says why. Where the plan does not say, the
+  figures are applied to any plan, a café's seating or a hotel's rooms as well, and every note
+  and every pass that used a figure says which kind of building it was read for (COD-2).
 - **Not checked by a person yet.** Each figure carries a status. Today every figure is
   `ai-found`: read by an AI, with no person having opened the source. Reports and notes
   show the status next to the figure.
 - **Not advice.** The local authority and a licensed professional decide.
 - **Not affiliated** with, or endorsed by, the publishers of the documents named. Their
   names are used only to say where a figure was read.
+- **Only where the place is stated.** A figure from a US model code is applied only when the
+  plan or the caller says the plan is for the US. With no place stated, none is.
 
 ## Where the plan will be built
 
 ```ts
 import { checkLocalRules, figuresFromSheet, planNotes } from '@ongrid/rules'
 
-checkLocalRules(plan)                                   // no place stated
-checkLocalRules(plan, { country: 'ES' })                // a two-letter country code
+checkLocalRules(plan)                                   // the place the plan states, site.country
+checkLocalRules(plan, { country: 'Spain' })             // another place, for this check
 checkLocalRules(plan, { country: 'ES', figures })       // with figures looked up for the place
+checkLocalRules(plan, { withoutPlace: 'us-figures' })   // with no place stated, the US figures, as before COD-3
 ```
 
-- With no country stated, or `US`, the two figure checks run on the carried figures, and
-  every finding names them as its basis.
-- With another country stated, a carried figure is not that place's rule, so it is not
-  applied. A check runs only on figures that were looked up for the place, and the report
-  says which checks did not run.
+The place picks the figures (COD-3, `src/checks/place.ts`). It is the plan's own
+`site.country`, or the `country` a caller gives in its place: a country's name or its two- or
+three-letter code on Grid's list (`@ongrid/floorplan/types/places`), so `US`, `usa` and
+`United States` are one place. A `country` not on the list throws `PlaceRefused`, whose message
+names the argument and never the text. The report's `place` says which place was used and
+where it came from, by Grid's name for it.
+
+- With the US, the two figure checks run on the carried figures, and every finding names them
+  as its basis.
+- With another place, a carried figure is not that place's rule, so it is not applied. A check
+  runs only on figures that were looked up for the place, and the report says which checks did
+  not run, naming the place from the list.
+- With no place stated, no figure is applied (lab W-12): neither figure check runs, their
+  coverage gives the reason `no_place`, and the report's `withoutPlace.usLines` counts the lines
+  the US figures would have given. `WITHOUT_PLACE` is the one switch back: `us-figures` applies
+  the US figures to a plan that states no place, and the report's place is then `assumed`. Who
+  the figure checks are for is the owner's decision (COD-1).
 - A looked-up figure is always marked `ai-found`, and the report adds a line saying some
   figures were found online and have not been checked.
 
@@ -88,6 +104,7 @@ reads and writes files, so it is a separate entry: `@ongrid/rules/store`.
 | `src/checks/catalogue.ts` | The two rules, the figures each one uses, and what the checks leave out |
 | `src/checks/size.ts`, `escape.ts` | The two checks |
 | `src/checks/check.ts` | The full check: the core's plan checks and these, in one report |
+| `src/checks/place.ts` | The place a check is for: the caller's, the plan's, or none (COD-3) |
 | `src/notes` | The report as notes a person reads on the plan |
 | `src/sheet` | The build location and the rules sheet a lookup produces, as schemas |
 | `src/lookup` | The prompt of a rules lookup. Running a lookup is not part of this package yet |
@@ -119,8 +136,9 @@ holds text from the source.
    number. Describe the rule in your own words. Never paste a sentence, a table, a
    definition or an image from a code or a standard, and never collect rules in bulk from
    one publisher's site.
-3. **Say who it applies to.** Building type, thresholds and exceptions go in `appliesTo`.
-   A rule that only holds for some buildings or places must only run there, and say so.
+3. **Say who it applies to.** Building type, thresholds and exceptions go in `appliesTo`, and
+   the kind of building it was read for in `readFor`, which decides where it runs. A rule that
+   only holds for some buildings or places must only run there, and say so.
 4. **Add the figure** to `figures.ts` with all its provenance fields, and name it in
    `RULE_FIGURES` under the rule that uses it. A new edition is a new entry: keep the
    edition with the clause number, because numbers move between editions.

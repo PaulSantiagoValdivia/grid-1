@@ -6,7 +6,7 @@
  * hole through the wall, a wall by its body), then put through the picture's own framing. A box
  * is `x`, `y` from the top-left corner of the image, and `width`, `height`, all in pixels.
  */
-import { buildFloorPlan, planForFloor, resolveFloor, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
+import { buildFloorPlan, curveFault, openingChord, planForFloor, resolveFloor, wallPolygon, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
 import type { Picture } from '@ongrid/viewer/src/picture'
 
 export type PartKind = 'room' | 'door' | 'window' | 'opening' | 'wall'
@@ -63,6 +63,13 @@ export function partBounds(plan: FloorPlan, floor: string | undefined): PartBoun
   for (const opening of slice.openings) {
     const wall = walls.get(opening.wall)
     if (!wall) continue
+    // CNT-18: an opening in a curved wall is its chord's strip, a curved wall its stations' box.
+    if (wall.arc !== undefined) {
+      if (curveFault(wall) !== null) continue
+      const hole = openingChord(wall, opening.offset, opening.offset + opening.width)
+      parts.push({ id: opening.id, kind: opening.type, bounds: boundsOf(strip(hole.start, hole.end, Math.max(wall.thickness, 0))) })
+      continue
+    }
     const [sx, sy] = wall.start
     const [ex, ey] = wall.end
     const length = Math.hypot(ex - sx, ey - sy)
@@ -73,6 +80,11 @@ export function partBounds(plan: FloorPlan, floor: string | undefined): PartBoun
     parts.push({ id: opening.id, kind: opening.type, bounds: boundsOf(strip(a, b, Math.max(wall.thickness, 0))) })
   }
   for (const wall of slice.walls) {
+    if (wall.arc !== undefined) {
+      if (curveFault(wall) !== null) continue
+      parts.push({ id: wall.id, kind: 'wall', bounds: boundsOf(wallPolygon(wall.virtual === true ? { ...wall, thickness: 0 } : wall)) })
+      continue
+    }
     const a = { x: wall.start[0], y: wall.start[1] }
     const b = { x: wall.end[0], y: wall.end[1] }
     parts.push({ id: wall.id, kind: 'wall', bounds: boundsOf(strip(a, b, wall.virtual === true ? 0 : wall.thickness)) })

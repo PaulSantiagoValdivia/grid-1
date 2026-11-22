@@ -7,7 +7,7 @@
  * anything is listed, the second plan is tried as the first one moved, mirrored or turned a
  * quarter: a flipped flat is said to be flipped, not listed as twenty moved walls (Y-4, Y-5).
  */
-import { tolerance, wallAxis, type FloorPlan, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { curveFault, tolerance, wallAxis, wallLength, wallPath, wallPointAt, type FloorPlan, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { planAreas, type PlanAreas } from './areas'
 import { sideNames, type Survey } from './survey'
 
@@ -31,10 +31,12 @@ export function optionRow(label: string, survey: Survey): OptionRow {
   const areas: PlanAreas = planAreas(survey)
   const byUse: Record<string, number> = {}
   for (const floor of areas.floors) for (const [use, value] of Object.entries(floor.byUse)) byUse[use] = (byUse[use] ?? 0) + value
+  // CNT-8: a zone is part of a room, not a room of its own.
+  const rooms = survey.rooms.filter((room) => room.facts.zoneOf === undefined)
   return {
     label,
-    rooms: survey.rooms.length,
-    bedrooms: survey.rooms.filter((room) => room.facts.use === 'bedroom').length,
+    rooms: rooms.length,
+    bedrooms: rooms.filter((room) => room.facts.use === 'bedroom').length,
     net: areas.net,
     grossInternal: areas.grossInternal,
     grossExternal: areas.grossExternal,
@@ -123,8 +125,10 @@ type Transform = (p: Vec2) => Vec2
 interface Box { minX: number; minY: number; maxX: number; maxY: number }
 
 function boxOf(plan: FloorPlan): Box {
-  const xs = plan.walls.flatMap((w) => [w.start[0], w.end[0]])
-  const ys = plan.walls.flatMap((w) => [w.start[1], w.end[1]])
+  // A curve bows out past its ends (CNT-18).
+  const points = plan.walls.flatMap((w): Vec2[] => (w.arc !== undefined && curveFault(w) === null ? wallPath(w) : [pt(w.start), pt(w.end)]))
+  const xs = points.map((p) => p.x)
+  const ys = points.map((p) => p.y)
   return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) }
 }
 
@@ -155,7 +159,22 @@ function samePlace(a: Wall, b: Wall, map: Transform): boolean {
   const s = map(pt(a.start))
   const e = map(pt(a.end))
   const ends = (close(s, pt(b.start)) && close(e, pt(b.end))) || (close(s, pt(b.end)) && close(e, pt(b.start)))
-  return ends && (a.virtual === true) === (b.virtual === true)
+  return ends && (a.virtual === true) === (b.virtual === true) && sameCurve(a, b, map)
+}
+
+/** CNT-18: both straight, or both curved through the same middle round the same centre. */
+function sameCurve(a: Wall, b: Wall, map: Transform): boolean {
+  if (a.arc === undefined || b.arc === undefined) return a.arc === b.arc
+  const middle = (w: Wall): Vec2 | null => (curveFault(w) === null ? wallPointAt(w, wallLength(w) / 2) : null)
+  const [ma, mb] = [middle(a), middle(b)]
+  if (ma === null || mb === null) return false
+  return close(map(pt(a.arc.centre)), pt(b.arc.centre)) && close(map(ma), mb)
+}
+
+/** A wall's length along its axis, curved or not; 0 for one that cannot be built. */
+function lengthOf(wall: Wall): number {
+  if (wall.arc !== undefined) return curveFault(wall) === null ? wallLength(wall) : 0
+  return wallAxis(wall).length
 }
 
 /**
@@ -199,8 +218,9 @@ function openingAt(plan: FloorPlan, id: string): Vec2 | null {
   const o = plan.openings.find((x) => x.id === id)
   const wall = o && plan.walls.find((w) => w.id === o.wall)
   if (!o || !wall) return null
-  const axis = wallAxis(wall)
   const along = o.offset + o.width / 2
+  if (wall.arc !== undefined) return curveFault(wall) === null ? wallPointAt(wall, along) : null
+  const axis = wallAxis(wall)
   return { x: axis.start.x + axis.dir.x * along, y: axis.start.y + axis.dir.y * along }
 }
 
@@ -242,7 +262,7 @@ function wallRooms(survey: Survey, wall: Wall): string[] {
 }
 
 function wallDelta(survey: Survey, wall: Wall): WallDelta {
-  const length = wallAxis(wall).length
+  const length = lengthOf(wall)
   return {
     id: wall.id,
     kind: wall.kind,
@@ -306,6 +326,9 @@ function roomDeltas(a: Survey, b: Survey): RoomDelta[] {
 
 const sum = (values: readonly number[]): number => values.reduce((x, y) => x + y, 0)
 
+/** The uses a plan's rooms and zones state, each once, in plan order. */
+const usesOf = (s: Survey): string[] => [...new Set(s.rooms.flatMap((r) => (r.facts.use === undefined ? [] : [r.facts.use])))]
+
 function areaWord(value: number): string {
   return `${value.toFixed(2)} m²`
 }
@@ -344,8 +367,10 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
   }
 
   const rooms = roomDeltas(a, b)
-  const netBefore = sum(a.rooms.map((r) => r.facts.shape?.area ?? 0))
-  const netAfter = sum(b.rooms.map((r) => r.facts.shape?.area ?? 0))
+  // A zone's floor is its room's (CNT-8): counted once.
+  const netOf = (s: Survey): number => sum(s.rooms.filter((r) => r.facts.zoneOf === undefined && r.facts.outdoor === undefined).map((r) => r.facts.shape?.area ?? 0))
+  const netBefore = netOf(a)
+  const netAfter = netOf(b)
   const inverse = (wall: Wall): boolean => !a.plan.walls.some((other) => sameWall(other, wall, map))
   const missing = likeness ? [] : wallsMissing(a.plan, b.plan, map)
   const added = likeness ? [] : b.plan.walls.filter(inverse)
@@ -357,7 +382,7 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
     const mid = (w: Wall): Vec2 => ({ x: (w.start[0] + w.end[0]) / 2, y: (w.start[1] + w.end[1]) / 2 })
     const from = map(mid(wall))
     const to = mid(same)
-    wallsChanged.push({ id: wall.id, kind: same.kind, lengthBefore: wallAxis(wall).length, lengthAfter: wallAxis(same).length, moved: Math.hypot(to.x - from.x, to.y - from.y) })
+    wallsChanged.push({ id: wall.id, kind: same.kind, lengthBefore: lengthOf(wall), lengthAfter: lengthOf(same), moved: Math.hypot(to.x - from.x, to.y - from.y) })
   }
   const changedIds = new Set(wallsChanged.map((w) => w.id))
   const wallsOut = missing.filter((wall) => !changedIds.has(wall.id)).map((wall) => wallDelta(a, wall))
@@ -385,6 +410,8 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
         changes.push(`now opens into ${intoB === null ? 'a side not said' : JSON.stringify(intoB)}${intoA(a, pair.a)}`)
       }
       if (hingeA !== ob.hinge && swingA === ob.swing) changes.push('hung from the other side')
+      // CNT-14: a door or window of another kind.
+      if ((oa.kind ?? null) !== (ob.kind ?? null)) changes.push(ob.kind === undefined ? `no kind stated now (was ${oa.kind})` : `now ${ob.kind}${oa.kind === undefined ? '' : ` (was ${oa.kind})`}`)
       if (changes.length > 0) openingsChanged.push({ id: pair.b, type: ob.type, changes })
     }
   }
@@ -407,6 +434,9 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
     if (openingsOut.length + openingsNew.length + openingsChanged.length > 0) parts.push(`openings: ${openingsOut.length} out, ${openingsNew.length} new, ${openingsChanged.length} changed`)
     verdict = `${before} → ${after}: ${parts.join('; ')}.`
   }
+  // CNT-8 (lab AB-9): a use no room or zone has any more is named, never lost in silence.
+  const lost = usesOf(a).filter((use) => !usesOf(b).includes(use))
+  if (lost.length > 0) verdict += ` ${after.charAt(0).toUpperCase()}${after.slice(1)} has no room or zone used as ${lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} or ${lost[lost.length - 1]}`}, which ${before} had.`
   verdict = verdict.charAt(0).toUpperCase() + verdict.slice(1)
   return { likeness, shift, rooms, netBefore, netAfter, wallsOut, wallsNew, wallsChanged, wallsResized: resized, openingsOut, openingsNew, openingsChanged, verdict }
 }

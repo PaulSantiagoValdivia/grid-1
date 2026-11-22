@@ -55,8 +55,22 @@ export function wallProps(before: Wall, after: Wall, epsilon: number): PropChang
     exact('kind', before.kind, after.kind),
     // Unstated and `false` are the same wall.
     exact('virtual', before.virtual === true, after.virtual === true),
-    exact('floor', floorOf(before), floorOf(after))
+    exact('floor', floorOf(before), floorOf(after)),
+    arcProp(before, after, epsilon)
   ])
+}
+
+/**
+ * CNT-18: a wall's curve as a property, its `arc` written as JSON, null on the side that is
+ * straight. The sweep is compared in degrees within the same tolerance as a length.
+ */
+function arcProp(before: Wall, after: Wall, epsilon: number): PropChange | null {
+  const value = (wall: Wall): [number, number, number] | null => (wall.arc === undefined ? null : [wall.arc.centre[0], wall.arc.centre[1], wall.arc.sweep])
+  const [a, b] = [value(before), value(after)]
+  if (a === null && b === null) return null
+  if (a !== null && b !== null && a.every((v, i) => near(v, b[i]!, epsilon))) return null
+  const text = (v: readonly number[] | null): string | null => (v === null ? null : JSON.stringify({ centre: [v[0], v[1]], sweep: v[2] }))
+  return { key: 'arc', before: text(a), after: text(b) }
 }
 
 /** A number a part may leave unstated: stated or taken out is a change, null on the unstated side. */
@@ -77,19 +91,40 @@ function holesProp(before: Room, after: Room): PropChange | null {
   return { key: 'holes', before: before.holes === undefined ? null : a, after: after.holes === undefined ? null : b }
 }
 
+/**
+ * Whether two wall lists go round the same ring (WRT-8, lab U-4): the same walls in the same
+ * cyclic order, from any wall and either way round. A room whose list starts at another wall is
+ * the same outline; walls in another order are not.
+ */
+export function sameRing(a: readonly string[], b: readonly string[]): boolean {
+  const n = a.length
+  if (n !== b.length) return false
+  if (n === 0) return true
+  for (const step of [1, -1]) {
+    for (let start = 0; start < n; start++) {
+      if (b[start] !== a[0]) continue
+      let all = true
+      for (let i = 0; i < n && all; i++) all = a[i] === b[(((start + step * i) % n) + n) % n]
+      if (all) return true
+    }
+  }
+  return false
+}
+
 export function roomProps(before: Room, after: Room, epsilon: number): PropChange[] {
-  const sameBoundary =
-    before.boundary.length === after.boundary.length &&
-    before.boundary.every((id, i) => id === after.boundary[i])
+  const sameBoundary = sameRing(before.boundary, after.boundary)
   return present([
     exact('name', before.name, after.name),
-    // C3 gives the order meaning, so the same walls in another order are a change.
+    // C3 gives the order meaning: the same walls in another order are a change. The same ring
+    // from another wall, or the other way round, is the same outline (WRT-8, lab U-4).
     sameBoundary ? null : { key: 'boundary', before: [...before.boundary], after: [...after.boundary] },
     // ARE-6. No holes stated and an empty list are the same room.
     holesProp(before, after),
     exact('floor', floorOf(before), floorOf(after)),
     // ARE-5. Unstated and `false` are the same room.
     exact('inside', before.inside === true, after.inside === true),
+    // CNT-8. Unstated, read as '', is a room of its own.
+    exact('partOf', before.partOf ?? '', after.partOf ?? ''),
     // ARE-10. Unstated is not a height: the room follows its walls.
     optionalNumber('height', before.height, after.height, epsilon),
     // LVL-7. Unstated is the storey's own floor, so 0 and unstated are the same room.

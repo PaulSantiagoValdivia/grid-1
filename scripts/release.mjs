@@ -3,9 +3,10 @@
  * QAR-10: the release step. One run cuts a version and stops before publishing:
  *
  *   1. checks the version against the rule in RELEASING.md;
- *   2. writes it: CHANGELOG.md's "Unreleased" becomes the release's section, the changelog for
- *      agents in docs/result-contract.md gets the release's heading, and every package.json and
- *      the lock file get the version;
+ *   2. writes it: the fragments in `changes/` go into both changelogs and are deleted
+ *      (`release/fragments.mjs`), CHANGELOG.md's "Unreleased" becomes the release's section, the
+ *      changelog for agents in docs/result-contract.md gets the release's heading, and every
+ *      package.json and the lock file get the version;
  *   3. runs every gate in `release/gates.mjs`, in order, on what it wrote; the first that fails
  *      stops the release by name;
  *   4. packs the package (`packages/cli/pack.mjs`) and checks the tarball: the version, still
@@ -13,8 +14,8 @@
  *   5. writes `release.json` beside the tarball: the commit it was built from, the tarball's
  *      integrity, the gates passed, and the publish command that waits on the owner's yes.
  *
- * Nothing is published, pushed or tagged. With --dry-run every file it wrote in step 2 is put
- * back at the end, and copies of the two changelogs go beside the tarball to read. A failed
+ * Nothing is published, pushed or tagged. With --dry-run every file it wrote or deleted in step 2
+ * is put back at the end, and copies of the two changelogs go beside the tarball to read. A failed
  * gate puts them back too, so a release is all or nothing.
  *
  * Usage: node scripts/release.mjs <version> [--dry-run] [--date YYYY-MM-DD] [--out <folder>] [--max-workers <n>]
@@ -26,6 +27,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
+import { fragmentNames, readFragments, withAgentEntries, withPeopleEntries } from './release/fragments.mjs'
 import { GATES } from './release/gates.mjs'
 import {
   lastRelease,
@@ -183,12 +185,23 @@ export function release(options) {
     throw new Refused(`${out} holds files that are not a release: name an empty folder.`)
   }
 
-  // 2. What the release writes: both changelogs and every version, all or nothing.
+  // 2. What the release writes: the fragments into both changelogs, and every version, all or
+  // nothing. The fragments are deleted, and put back with the rest when nothing is kept.
+  const names = existsSync(join(root, 'changes')) ? fragmentNames(readdirSync(join(root, 'changes'))) : []
+  /** @type {Map<string, string>} */
+  const removed = new Map(names.map((name) => [`changes/${name}`, read(`changes/${name}`)]))
+  /** @type {import('./release/fragments.mjs').Fragment[]} */
+  let fragments
+  try {
+    fragments = readFragments(names.map((name) => [name, /** @type {string} */ (removed.get(`changes/${name}`))]))
+  } catch (error) {
+    throw new Refused(error instanceof Error ? error.message : String(error))
+  }
   const cut = { version, date, resultVersion, planFormat }
   /** @type {Map<string, string>} */
   const written = new Map([
-    ['CHANGELOG.md', releaseChangelog(changelog, cut)],
-    ['docs/result-contract.md', releaseAgentChangelog(contract, cut)],
+    ['CHANGELOG.md', releaseChangelog(withPeopleEntries(changelog, fragments), cut)],
+    ['docs/result-contract.md', releaseAgentChangelog(withAgentEntries(contract, fragments), cut)],
     ...files.map((path) => /** @type {[string, string]} */ ([path, withVersion(read(path), version, false)])),
     ['package-lock.json', withVersion(read('package-lock.json'), version, true)],
   ])
@@ -197,7 +210,9 @@ export function release(options) {
   let keep = false
   try {
     for (const [path, text] of written) writeFileSync(join(root, path), text)
+    for (const path of removed.keys()) rmSync(join(root, path))
     log(`Cut ${version} (${date}): CHANGELOG.md, the changelog for agents and ${files.length} package.json files, with the lock file.`)
+    log(removed.size === 0 ? 'No fragments in changes/.' : `Combined and deleted ${removed.size} fragment${removed.size === 1 ? '' : 's'}: ${[...removed.keys()].join(', ')}.`)
 
     // 3. The gates, in order. The first that fails stops the release.
     const steps = options.steps ?? gateSteps(root, GATES, undefined)
@@ -257,7 +272,7 @@ export function release(options) {
     log("Stopped before publishing: publishing waits on the owner's yes (CMD-8). Nothing was published.")
     return record
   } finally {
-    if (!keep) for (const [path, text] of originals) writeFileSync(join(root, path), text)
+    if (!keep) for (const [path, text] of [...originals, ...removed]) writeFileSync(join(root, path), text)
   }
 }
 

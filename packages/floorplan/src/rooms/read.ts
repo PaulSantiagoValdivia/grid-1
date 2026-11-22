@@ -13,12 +13,14 @@
  *
  * Pure: a plan in, text out.
  */
-import type { FloorPlan, Opening, Room, Wall } from '../types/floorplan'
+import { heightByDefault, safeParseFloorPlan, statedWall, type FloorPlan, type Opening, type Room, type Wall } from '../types/floorplan'
 import { indexPlan } from '../geometry/plan'
 import { planFloors } from '../geometry/floors'
+import { english, said } from '../messages/say'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
-import { compileRoomsText, type RoomsResult } from './compile'
+import { doorKindOf, kindFits, sweepsFloor, swingNeeds } from '../geometry/openingKinds'
+import { compileRoomsText, RAW_FLOOR_KEYS, type RoomsResult } from './compile'
 import { planRevision } from './stamp'
 import { metres } from './words'
 
@@ -52,7 +54,15 @@ function mostCommon<T>(values: readonly T[], fallback: T): T {
   return best
 }
 
-const rawLine = (kind: 'wall' | 'room' | 'opening', part: unknown): string => `raw ${kind} ${JSON.stringify(part)}`
+// A wall is written as its file states it: a value the reading filled in is left out (WRT-6).
+// CNT-15: a raw line keeps the values a part's type gave it, so it is read the same with no types to
+// read them from; writing it again leaves to the type what it gives the same (`carryFacts`).
+const rawLine = (kind: 'wall' | 'room' | 'opening', part: unknown): string => `raw ${kind} ${JSON.stringify(kind === 'wall' ? statedWall({ ...(part as Wall), typed: undefined }) : { ...(part as Record<string, unknown>), typed: undefined })}`
+
+/** The read-back as rooms text writes it again, read as Grid reads a plan file (WRT-6). */
+type ReadBack = Omit<RoomsResult, 'plan'> & { readonly plan: FloorPlan | null }
+
+
 
 /** What the read-back found, beside its text. */
 export interface RoomsReading {
@@ -84,14 +94,15 @@ function samePoint(a: readonly [number, number], b: readonly [number, number]): 
   return sameNumber(a[0], b[0]) && sameNumber(a[1], b[1])
 }
 
-function wallDiffers(a: Wall, b: Wall): string | null {
+function wallDiffers(a: Wall, b: Wall, statesNone: (wall: Wall) => boolean): string | null {
   if (!samePoint(a.start, b.start) || !samePoint(a.end, b.end)) return 'stands elsewhere'
   if (!sameNumber(a.thickness, b.thickness)) return 'has another thickness'
   if (!sameNumber(a.height, b.height)) return 'has another height'
+  if (statesNone(a) !== statesNone(b)) return 'states no height in one only'
   if (a.kind !== b.kind) return 'is of another kind'
   if ((a.virtual === true) !== (b.virtual === true)) return 'is solid in one and a dividing line in the other'
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
-  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor'])
+  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', 'unstated', ...FACTS_CARRIED])
 }
 
 function roomDiffers(a: Room, b: Room): string | null {
@@ -101,8 +112,14 @@ function roomDiffers(a: Room, b: Room): string | null {
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
   if ((a.inside === true) !== (b.inside === true)) return 'sits inside another room in one only'
   if (!sameNumber(a.height, b.height)) return 'has another height'
-  return otherKeys(a, b, ['id', 'name', 'use', 'boundary', 'floor', 'inside', 'height'])
+  return otherKeys(a, b, ['id', 'name', 'use', 'boundary', 'floor', 'inside', 'height', ...FACTS_CARRIED, 'number'])
 }
+
+/**
+ * CNT-9: the facts of the person's own, and a room's stated number, are kept by id when the text
+ * is written again (`carryFacts`), so they are no difference here: the read-back stays rooms first.
+ */
+const FACTS_CARRIED = ['properties'] as const
 
 /**
  * Any other key of a part, as the schema reads it: a key rooms text does not write (one a later
@@ -127,7 +144,9 @@ function openingDiffers(a: Opening, b: Opening): string | null {
   if (!sameNumber(a.offset, b.offset) || !sameNumber(a.width, b.width)) return 'stands elsewhere along its wall'
   if (!sameNumber(a.sill, b.sill) || !sameNumber(a.height, b.height)) return 'has another sill or height'
   if (a.hinge !== b.hinge || a.swing !== b.swing) return 'hangs or swings another way'
-  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing'])
+  if (a.kind !== b.kind) return 'is of another kind'
+  if (!sameNumber(a.opens?.width ?? 0, b.opens?.width ?? 0) || !sameNumber(a.opens?.height ?? 0, b.opens?.height ?? 0)) return 'opens in another part'
+  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing', 'kind', 'opens', ...FACTS_CARRIED])
 }
 
 interface Difference {
@@ -158,7 +177,7 @@ function floorDifferences(original: FloorPlan, written: FloorPlan, floor: string
   const writtenWallFloor = new Map(written.walls.map((w) => [w.id, floorOf(w)]))
   const openingsOn = (plan: FloorPlan, walls: Map<string, string>): Opening[] => plan.openings.filter((o) => (walls.get(o.wall) ?? 'ground') === floor)
   return [
-    ...differences('wall', on(original.walls), on(written.walls), wallDiffers),
+    ...differences('wall', on(original.walls), on(written.walls), (a, b) => wallDiffers(a, b, (w) => heightByDefault(w === a ? original : written, w))),
     ...differences('room', on(original.rooms), on(written.rooms), roomDiffers),
     ...differences('opening', openingsOn(original, wallFloor), openingsOn(written, writtenWallFloor), openingDiffers),
   ]
@@ -170,7 +189,8 @@ function floorsDiffer(original: FloorPlan, written: FloorPlan): boolean {
   if (a.length !== b.length) return true
   return a.some((f, i) => {
     const g = b[i]!
-    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab)
+    // LVL-4's parapet and LVL-6's roof are not rooms text: a floor that states one is given in Grid's own terms.
+    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab) || f.building !== g.building || !sameNumber(f.parapet, g.parapet) || JSON.stringify(f.roof) !== JSON.stringify(g.roof)
   })
 }
 
@@ -180,7 +200,8 @@ function floorsDiffer(original: FloorPlan, written: FloorPlan): boolean {
 interface Rule {
   outside: number
   inside: number
-  height: number
+  /** Null when no wall states a height, nor its floor (WRT-6). */
+  height: number | null
   kind: Wall['kind']
   types: Map<number, Wall['kind']>
   doorH: number
@@ -190,6 +211,7 @@ interface Rule {
 
 function ruleOf(plan: FloorPlan): Rule {
   const solid = plan.walls.filter((w) => w.virtual !== true)
+  const stated = solid.filter((w) => !heightByDefault(plan, w))
   const outsideWalls = solid.filter((w) => w.kind === 'exterior')
   const insideWalls = solid.filter((w) => w.kind !== 'exterior')
   const inside = mostCommon(insideWalls.map((w) => w.thickness), 0.1)
@@ -204,7 +226,8 @@ function ruleOf(plan: FloorPlan): Rule {
   return {
     outside: mostCommon(outsideWalls.map((w) => w.thickness), 0.3),
     inside,
-    height: mostCommon(solid.map((w) => w.height), 2.7),
+    // WRT-6: only the heights something states. With none, the text states none either.
+    height: stated.length === 0 ? null : mostCommon(stated.map((w) => w.height), stated[0]!.height),
     kind: kind === 'exterior' ? 'interior' : kind,
     types,
     doorH: mostCommon(doors.map((o) => o.height), 2.1),
@@ -260,7 +283,11 @@ function roomLine(room: Room, poly: P[], local: string): string {
   const where = rect ? `${metres(w)} x ${metres(d)} at ${metres(x0)},${metres(y0)}` : `polygon ${poly.map((p) => `${metres(p[0])},${metres(p[1])}`).join(' ')}`
   const height = room.height !== undefined ? ` height ${metres(room.height)}` : ''
   const step = room.floorOffset !== undefined ? ` floor ${metres(room.floorOffset)}` : ''
-  return `room ${local} ${quote(room.name)} ${use} ${where}${height}${step}`
+  const tenure = room.tenure !== undefined ? ` tenure ${room.tenure}` : ''
+  const type = room.roomType !== undefined ? ` type ${quote(room.roomType)}` : ''
+  // CNT-7 (C26): `outdoor: true` has no word of its own, so such a room's floor is given raw.
+  const outdoor = typeof room.outdoor === 'string' ? ` outdoor ${room.outdoor}${room.roofed === undefined ? '' : room.roofed ? ' roofed' : ' unroofed'}` : ''
+  return `room ${local} ${quote(room.name)} ${use} ${where}${height}${step}${tenure}${type}${outdoor}`
 }
 
 /** The rooms on the two sides of an opening's middle: [left, right] of its wall. */
@@ -338,14 +365,26 @@ function openingLine(o: Opening, wall: Wall, plan: FloorPlan, polys: Map<string,
     if (!sameNumber(o.sill, 0)) line += `, sill ${metres(o.sill)}`
     if (!sameNumber(o.height, rule.doorH)) line += `, height ${metres(o.height)}`
   }
+  // CNT-14: its kind and the part that opens. A kind its type does not take cannot be written.
+  if (o.kind !== undefined) {
+    if (!kindFits(o.type, o.kind)) return null
+    line += `, ${o.kind}`
+  }
+  if (o.opens !== undefined) line += `, part ${metres(o.opens.width)}${o.opens.height !== undefined ? ` x ${metres(o.opens.height)}` : ''}`
   if (o.type === 'door') {
-    if (o.swing === undefined && o.hinge === undefined) line += ', no-swing'
-    else if (o.swing === undefined || o.hinge === undefined) return null
+    const kind = doorKindOf(o.kind)
+    // A pair needs only the face it opens to; a door that slides, rolls or lifts, neither.
+    const needs = swingNeeds(kind)
+    const into = o.swing === undefined ? undefined : o.swing === 'left' ? left : right
+    const hingeDir: P = o.hinge === 'start' ? [-dir[0], -dir[1]] : dir
+    if (!sweepsFloor(kind)) {
+      if (into !== undefined) line += into === null ? ', opens out' : `, opens into ${local.get(into) ?? into}`
+      if (o.hinge !== undefined) line += `, hinged ${compassOf(hingeDir, DIRS)}`
+    } else if (o.swing === undefined && o.hinge === undefined) line += ', no-swing'
+    else if (o.swing === undefined || (needs.hinge && o.hinge === undefined)) return null
     else {
-      const into = o.swing === 'left' ? left : right
-      line += into === null ? ', opens out' : `, opens into ${local.get(into) ?? into}`
-      const hingeDir: P = o.hinge === 'start' ? [-dir[0], -dir[1]] : dir
-      line += `, hinged ${compassOf(hingeDir, DIRS)}`
+      line += into === null || into === undefined ? ', opens out' : `, opens into ${local.get(into) ?? into}`
+      if (o.hinge !== undefined) line += `, hinged ${compassOf(hingeDir, DIRS)}`
     }
   }
   return line
@@ -456,7 +495,11 @@ function headerLines(plan: FloorPlan, rule: Rule, name: string | undefined): str
   const lines: string[] = []
   if (name !== undefined) lines.push(`plan ${quote(name)}`)
   lines.push(`based on ${planRevision(plan)}`)
-  lines.push(`walls outside ${metres(rule.outside)} inside ${metres(rule.inside)}${rule.kind !== 'interior' ? ` ${rule.kind}` : ''} height ${metres(rule.height)}`)
+  if (plan.building !== undefined) lines.push(`building ${plan.building}`)
+  // WRT-7: how the person reads lengths, so writing the text again keeps it.
+  const shown = plan.display
+  if (shown !== undefined) lines.push(['display', shown.length, ...(shown.area !== undefined ? ['area', shown.area] : []), ...(shown.decimal !== undefined ? ['decimal', shown.decimal] : []), ...(shown.precision !== undefined ? ['precision', String(shown.precision)] : [])].join(' '))
+  lines.push(`walls outside ${metres(rule.outside)} inside ${metres(rule.inside)}${rule.kind !== 'interior' ? ` ${rule.kind}` : ''}${rule.height === null ? '' : ` height ${metres(rule.height)}`}`)
   for (const [t, k] of [...rule.types].sort((a, b) => a[0] - b[0])) lines.push(`walltype ${metres(t)} ${k}`)
   if (!sameNumber(rule.doorH, 2.1)) lines.push(`doors height ${metres(rule.doorH)}`)
   if (!sameNumber(rule.winSill, 0.9) || !sameNumber(rule.winH, 1.2)) lines.push(`windows sill ${metres(rule.winSill)} height ${metres(rule.winH)}`)
@@ -471,6 +514,7 @@ function floorLine(plan: FloorPlan, floor: string): string | null {
     ...(f.height !== undefined ? [`height ${metres(f.height)}`] : []),
     ...(f.elevation !== undefined ? [`elevation ${metres(f.elevation)}`] : []),
     ...(f.slab !== undefined ? [`slab ${metres(f.slab)}`] : []),
+    ...(f.building !== undefined ? [`building ${f.building}`] : []),
   ]
   return `floor ${f.id} ${quote(f.name)} ${extra.join(' ')}`
 }
@@ -481,6 +525,11 @@ function textOf(plan: FloorPlan, rule: Rule, name: string | undefined, floors: r
     lines.push('')
     const fl = floorLine(plan, d.id)
     if (fl !== null) lines.push(fl)
+    // LVL-6: the floor's roof and parapet, which rooms text has no words for, as the plan holds
+    // them; BRF-4: its outline and the homes and parking spaces it states.
+    const f = (plan.floors ?? []).find((x) => x.id === d.id)
+    const extra = f === undefined ? {} : Object.fromEntries(RAW_FLOOR_KEYS.flatMap((key) => (f[key as keyof typeof f] === undefined ? [] : [[key, f[key as keyof typeof f]]])))
+    if (Object.keys(extra).length > 0) lines.push(`raw floor ${JSON.stringify(extra)}`)
     if (raw.has(d.id)) {
       lines.push(`# Written in Grid's own terms: rooms text does not give back this floor's walls as they are.`)
       for (const w of plan.walls.filter((x) => floorOf(x) === d.id)) lines.push(rawLine('wall', w))
@@ -501,7 +550,7 @@ function textOf(plan: FloorPlan, rule: Rule, name: string | undefined, floors: r
 }
 
 /** Says what the writing should say about each wall it worked out, to give back the plan's own. */
-function reconcileWalls(original: FloorPlan, written: RoomsResult, drafts: FloorDraft[]): boolean {
+function reconcileWalls(original: FloorPlan, written: ReadBack, drafts: FloorDraft[]): boolean {
   const plan = written.plan
   if (plan === null) return false
   let said = false
@@ -523,7 +572,8 @@ function reconcileWalls(original: FloorPlan, written: RoomsResult, drafts: Floor
         const words = draft.walls.get(handle) ?? []
         const before = words.join(' ')
         if (same.id !== w.id) sayWords(handle, words, 'id', same.id)
-        if (!sameNumber(same.height, w.height)) sayWords(handle, words, 'height', metres(same.height))
+        // A height the plan leaves to Grid's default is not said: rooms text would state it (WRT-6).
+        if ((!sameNumber(same.height, w.height) || heightByDefault(plan, w)) && !heightByDefault(original, same)) sayWords(handle, words, 'height', metres(same.height))
         if (same.kind !== w.kind && w.virtual !== true) sayWords(handle, words, same.kind)
         if (samePoint(same.start, w.end) && !samePoint(same.start, w.start) && !words.includes('reversed')) words.push('reversed')
         if (words.join(' ') !== before) {
@@ -540,7 +590,7 @@ function reconcileWalls(original: FloorPlan, written: RoomsResult, drafts: Floor
       const words = draft.walls.get(handle) ?? []
       if (words.includes('id')) continue
       sayWords(handle, words, 'id', covering[0]!.id)
-      if (!sameNumber(covering[0]!.height, w.height)) sayWords(handle, words, 'height', metres(covering[0]!.height))
+      if ((!sameNumber(covering[0]!.height, w.height) || heightByDefault(plan, w)) && !heightByDefault(original, covering[0]!)) sayWords(handle, words, 'height', metres(covering[0]!.height))
       if (covering[0]!.kind !== w.kind) sayWords(handle, words, covering[0]!.kind)
       draft.walls.set(handle, words)
       said = true
@@ -567,7 +617,7 @@ function onWall(whole: Wall, start: P, end: P, thickness: number): boolean {
 }
 
 /** Each room's boundary started at the wall the plan starts it at. */
-function reconcileRooms(original: FloorPlan, written: RoomsResult, drafts: FloorDraft[], local: Map<string, string>): boolean {
+function reconcileRooms(original: FloorPlan, written: ReadBack, drafts: FloorDraft[], local: Map<string, string>): boolean {
   const plan = written.plan
   if (plan === null) return false
   let said = false
@@ -611,9 +661,19 @@ export function readRoomsText(plan: FloorPlan, options: ReadOptions = {}): Rooms
   if (plan.walls.length + plan.rooms.length + plan.openings.length === 0) {
     return { text: textOf(plan, rule, options.name, drafts, raw), rawFloors: [], rawOpenings: [], changes: [] }
   }
+  // CNT-18: rooms text writes straight walls. A floor with a curved wall is given in Grid's own
+  // terms, which keep the curve, whatever was asked for, so writing it again loses nothing.
+  for (const wall of plan.walls) {
+    const floor = floorOf(wall)
+    if (wall.arc === undefined || raw.has(floor) || !floors.includes(floor)) continue
+    raw.add(floor)
+    why.set(floor, english(said('describe.rooms.curved', { wall: quote(wall.id) })))
+  }
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
     const text = textOf(plan, rule, options.name, drafts, raw)
-    const written = compileRoomsText(text)
+    const compiled = compileRoomsText(text)
+    // Read as a plan file is read, so a wall it gives no height reads as the plan's do (WRT-6).
+    const written: ReadBack = { ...compiled, plan: compiled.plan === null ? null : safeParseFloorPlan(compiled.plan) }
     if (written.plan === null) {
       // A floor the writing refuses is given in Grid's own terms.
       const at = written.problems[0]?.line ?? null

@@ -23,8 +23,8 @@
 
 export type ToleranceKind = 'tolerance' | 'limit' | 'arithmetic'
 
-/** What an entry is in. A `ratio` and a `sine` have no unit. */
-export type ToleranceUnit = 'm' | 'm²' | 'radian' | 'sine' | 'ratio'
+/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit; `mm` is a lens's focal length (VEW-3). */
+export type ToleranceUnit = 'm' | 'm²' | 'mm' | 'degree' | 'radian' | 'sine' | 'ratio' | 'count'
 
 /** The kinds of building a limit can depend on, as the plan says it (`buildingKind`). */
 export type BuildingKind = 'any' | 'home'
@@ -64,9 +64,52 @@ export const TOLERANCES = {
     unit: 'm',
     decides:
       'How far an opening may run past either end of its wall, below the floor, above the top of ' +
-      'its wall or into the next opening on its wall, and still fit. A wall whose ends were ' +
+      'its wall or into the next opening on its wall, and still fit; also how far it may run into ' +
+      'the body of a wall that meets its wall, or a wall end into it, before that is named ' +
+      '(MSG-16). A wall whose ends were ' +
       'rounded to the millimetre is up to this much shorter than intended. A refusal states the ' +
       'overrun and the offset that fits.',
+    basis: own
+  },
+
+  // ── Curved walls (CNT-18) ─────────────────────────────────────────────────────────────────
+  arcEnds: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'How far a curved wall\'s end may lie from where its sweep takes its start round its centre, ' +
+      'and how far the two ends may differ in their distance from the centre, and still be one ' +
+      'arc; further, `wall/arc-ends-apart` names the wall and where its end should be.',
+    basis: own
+  },
+  arcSagitta: {
+    kind: 'tolerance',
+    value: 0.001,
+    unit: 'm',
+    decides:
+      'How far the straight pieces a curved wall is traced, checked and drawn with may stand off ' +
+      'its curve at their middle. Smaller pieces are taken where this alone would leave too few ' +
+      '(`arcStep`).',
+    basis: own
+  },
+  arcStep: {
+    kind: 'tolerance',
+    value: 0.03,
+    unit: 'radian',
+    decides:
+      'The most a curved wall turns through along one of its straight pieces, so that a small ' +
+      'round room measures within a few hundredths of a percent of its true area: a straight ' +
+      'piece cuts off a sliver of the curve, and the sliver shrinks with the square of this.',
+    basis: own
+  },
+  arcPiecesMost: {
+    kind: 'limit',
+    value: 1000,
+    unit: 'count',
+    decides:
+      'The most straight pieces one curved wall is traced with; a curve longer than these pieces ' +
+      'can follow within `arcSagitta` is traced with this many, a little further off it.',
     basis: own
   },
 
@@ -114,6 +157,17 @@ export const TOLERANCES = {
       '15 degrees) may be one straight side, when they touch end to end.',
     basis: own
   },
+  // WRT-6 (lab AE-4): squaring a scan.
+  squareWithin: {
+    kind: 'tolerance',
+    value: 0.0523,
+    unit: 'sine',
+    decides:
+      'When a scan is squared, a wall whose direction is closer than this (the sine of about 3 ' +
+      'degrees) to one of the plan\'s main directions is turned onto it; a wall further off is ' +
+      'left as it is and named.',
+    basis: own
+  },
   sameFace: {
     kind: 'tolerance',
     value: 1e-6,
@@ -131,7 +185,8 @@ export const TOLERANCES = {
       'How far a joined corner may reach along a wall from the point where the walls meet, in ' +
       'half thicknesses of the thicker wall. Walls meeting at so sharp an angle that their faces ' +
       'cross further out than this are left cut square there, as a drawing would bevel them, ' +
-      'instead of ending in a long spike.',
+      'instead of ending in a long spike. Such a meeting is not tested against the openings of ' +
+      'either wall either (MSG-16).',
     basis: own
   },
   swingContact: {
@@ -215,6 +270,28 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Dimensions (SHT-4) ────────────────────────────────────────────────────────────────────
+  squareCorner: {
+    kind: 'tolerance',
+    value: 0.0175,
+    unit: 'sine',
+    decides:
+      'Two directions within this of a right angle (the sine of about 1 degree) are square. A ' +
+      'room whose four corners are square is dimensioned by its width and depth, any other room ' +
+      'side by side; a wall this close to one of the plan\'s two main directions is dimensioned ' +
+      'in the chains outside the plan.',
+    basis: own
+  },
+  chainPoint: {
+    kind: 'tolerance',
+    value: 0.001,
+    unit: 'm',
+    decides:
+      'Two points of a chain of dimensions outside the plan closer than this along it are one ' +
+      'point, so no dimension in a chain is shorter than this.',
+    basis: own
+  },
+
   // ── Writing a plan rooms first (rooms/, WRT-2) ────────────────────────────────────────────
   roomsWallWidest: {
     kind: 'tolerance',
@@ -241,6 +318,41 @@ export const TOLERANCES = {
     decides:
       'Two faces of rooms written rooms first that run side by side further out of line than this ' +
       'are named as sizes that do not add up.',
+    basis: own
+  },
+
+  // ── Reading a phone room scan (scan/, HND-12) ─────────────────────────────────────────────
+  scanFaceTurn: {
+    kind: 'tolerance',
+    value: 0.0872,
+    unit: 'sine',
+    decides:
+      'Two scanned wall faces, or an edge of a scanned floor outline and a face, whose directions ' +
+      'differ by less than this (the sine of 5 degrees) may be the two faces of one wall, or the ' +
+      'same face.',
+    basis: own
+  },
+  scanFaceReach: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides: 'An edge of a scanned floor outline this close to a scanned wall face, along its length, lies on that face.',
+    basis: own
+  },
+  scanCornerGap: {
+    kind: 'tolerance',
+    value: 0.15,
+    unit: 'm',
+    decides:
+      'In a scan that gives no floor outline, the end of one wall face this close to the end of ' +
+      'another meets it at a corner of the room.',
+    basis: own
+  },
+  scanOnFloor: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides: 'A scanned door or opening whose bottom is this close to the floor stands on it: its sill is 0.',
     basis: own
   },
 
@@ -294,6 +406,97 @@ export const TOLERANCES = {
     decides: 'And a removed room and an added one whose centres are closer than this may be the same.',
     basis: own
   },
+  diffPlace: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'When two versions are compared by what stands where (WRT-8): two walls whose ends are this ' +
+      'close, either way round, once the drawing is moved to its new origin, stand in the same ' +
+      'place, and so do two openings whose middles are this close. An opening has stayed where it ' +
+      'was in its room when it moved along its wall by less than this beyond the room itself.',
+    basis: own
+  },
+
+  // ── The brief beside the plan (BRF-1) ─────────────────────────────────────────────────────
+  briefAbout: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'ratio',
+    decides:
+      'A size the person asked for as a figure, not as at least or at most, is met when the drawn ' +
+      'size is within this share of it, above or below: asked 4.5 m², 4.3 to 4.7 m² is met.',
+    basis: own
+  },
+  nameSize: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'ratio',
+    decides:
+      'A size written in a room\'s name (12 m², 6 tatami) and the size drawn differ when they are ' +
+      'further apart than this share of the size named: a room named 6 mats that holds 5.8 does.',
+    basis: own
+  },
+
+  // ── A first layout from the brief (BRF-6) ─────────────────────────────────────────────────
+  layoutHall: {
+    kind: 'limit',
+    value: 1.1,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. How wide the hall a first layout adds is, when the ' +
+      'brief names no corridor.',
+    basis: own
+  },
+  layoutRooms: {
+    kind: 'limit',
+    value: 10,
+    unit: 'count',
+    decides:
+      'The most rooms a first layout places: every way of sharing them between its two rows is tried.',
+    basis: own
+  },
+  layoutRowOrders: {
+    kind: 'limit',
+    value: 6,
+    unit: 'count',
+    decides:
+      'The most rooms in a row of a first layout whose every order is tried; a longer row keeps the brief\'s order.',
+    basis: own
+  },
+
+  // ── A survey drawn from its own numbers (HND-11) ──────────────────────────────────────────
+  tapedAgree: {
+    kind: 'tolerance',
+    value: 0.01,
+    unit: 'm',
+    decides:
+      'A length taped on site and the same length drawn agree when they are no further apart ' +
+      'than this, unless the taped length states its own; further apart, the taped length is ' +
+      'named with both figures (`room/taped-differs`).',
+    basis: own
+  },
+
+  // ── The plot (BRF-3) ──────────────────────────────────────────────────────────────────────
+  setbackShort: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'The building stands short of a set-back the person asked for when its outside face is more ' +
+      'than this nearer the boundary than the figure they gave: a distance that rounds to the ' +
+      'figure at the centimetre is not named.',
+    basis: own
+  },
+  pastBoundary: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'The building stands over an edge of the plot\'s boundary when its outside face reaches more ' +
+      'than this past the edge, out of the plot. Less is the edge drawn on the face.',
+    basis: own
+  },
 
   // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
   wallAboveStorey: {
@@ -319,8 +522,39 @@ export const TOLERANCES = {
     value: 2,
     unit: 'm',
     decides:
-      'A door to the outside on a floor standing higher than this above the ground floor opens in ' +
-      'mid-air: it is named, and it is not a way out. Lower, a few steps outside can reach the ground.',
+      'A door to the outside on a floor standing higher than this above the ground (the level the ' +
+      'site states, else the ground floor\'s) opens in mid-air: it is named, and it is not a way out. ' +
+      'Lower, a few steps outside can reach the ground.',
+    basis: own
+  },
+
+  openingBelowGround: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'A door or window in an outside wall whose foot lies less than this under the ground level the ' +
+      'site states stands at the ground; further down, it is named as lying below the ground.',
+    basis: own
+  },
+
+  // ── Headroom under a sloped roof (LVL-6) ──────────────────────────────────────────────────
+  headroomLow: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      "Grid's own size, not a code figure. The lower headroom band: a room's floor with at least " +
+      'this much height over it, to its ceiling or the roof above it, is reported as one area.',
+    basis: own
+  },
+  headroomFull: {
+    kind: 'limit',
+    value: 2.2,
+    unit: 'm',
+    decides:
+      "Grid's own size, not a code figure. The upper headroom band: a room's floor with at least " +
+      'this much height over it is reported as a second area.',
     basis: own
   },
 
@@ -331,7 +565,7 @@ export const TOLERANCES = {
     unit: 'm',
     decides:
       'Grid\'s own size, not a code figure. A door or a doorless opening narrower than this is ' +
-      'too narrow for a person to pass: it is named, and no route, way out or door to another ' +
+      'too narrow for a person to get through: it is named, and no route, way out or door to another ' +
       'room is read through it.',
     basis: own
   },
@@ -341,7 +575,7 @@ export const TOLERANCES = {
     unit: 'm',
     decides:
       'Grid\'s own size, not a code figure. A door or a doorless opening lower than this is too ' +
-      'low for a person to pass, even stooping: it is named and is not a way through.',
+      'low for a person to get through, even stooping: it is named and is not a way through.',
     basis: own
   },
   passableSill: {
@@ -374,6 +608,86 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Use indicators round the fixtures (CNT-13) ────────────────────────────────────────────
+  // Measured on the plan, never a rule: each answer says what it measured and the width it set
+  // it against, the person's own or one of these, named as Grid's own indicator.
+  useOpenLeaf: {
+    kind: 'limit',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. What an open door leaf and its stop are taken to stand ' +
+      'in its doorway: the clear width a door leaves is the hole in its wall less this. A doorless ' +
+      'opening leaves its whole hole.',
+    basis: own
+  },
+  useApproachDepth: {
+    kind: 'limit',
+    value: 0.3,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. How far in front of a doorway or a window a fixture ' +
+      'counts as standing in it: one within this of the hole, across its width, narrows the ' +
+      'doorway (`item/blocks-doorway`), or blocks the window when it stands higher than the sill ' +
+      '(`item/blocks-window`).',
+    basis: own
+  },
+  useDoorwayClear: {
+    kind: 'limit',
+    value: 0.8,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The clear width a doorway is set against, as Grid\'s ' +
+      'own indicator, when the person gives none.',
+    basis: own
+  },
+  usePassageWidth: {
+    kind: 'limit',
+    value: 0.9,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The width of the way through a room, between its ' +
+      'doorways and clear of its fixtures, is set against this, as Grid\'s own indicator, when the ' +
+      'person gives no body or trolley width.',
+    basis: own
+  },
+  useTurningCircle: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The turning circle tried in a room\'s free floor, as ' +
+      'Grid\'s own indicator, when the person gives none.',
+    basis: own
+  },
+  useClearSpace: {
+    kind: 'limit',
+    value: 0.6,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The clear floor in front of and beside a fixture is set ' +
+      'against this, as Grid\'s own indicator, when the person gives none.',
+    basis: own
+  },
+  useRaster: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'm',
+    decides:
+      'The step of the grid of points the way through a room is measured on: the widest body that ' +
+      'gets from one doorway to another is found to within about this much.',
+    basis: own
+  },
+  useRasterCells: {
+    kind: 'limit',
+    value: 250000,
+    unit: 'count',
+    decides:
+      'The most points the way through one room is measured on. A room that would take more is ' +
+      'measured on a coarser grid, and the answer gives the step it used.',
+    basis: own
+  },
+
   // ── A step inside a floor (LVL-7) ─────────────────────────────────────────────────────────
   sameFloorLevel: {
     kind: 'tolerance',
@@ -394,6 +708,206 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Stairs and lifts (LVL-3) ──────────────────────────────────────────────────────────────
+  stairRoomOverlap: {
+    kind: 'tolerance',
+    value: 0.5,
+    unit: 'ratio',
+    decides:
+      'Two rooms used as a stair (or as a lift) on neighbouring floors are one stair (or one shaft) ' +
+      'when they share at least this of the smaller one, and the way-out check goes up and down ' +
+      'it. Stair rooms on both floors that share less are named as out of line. The lab found ' +
+      'every sound pair at or above this and every planted fault below it (AU3-1).',
+    basis: own
+  },
+  stackShift: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'How far a floor, a stair room or a lift shaft may stand off the one below it and still line ' +
+      'up with it (LVL-5, lab WR-9): a floor whose outline reaches past the floor below, or sits ' +
+      'back from it, by more than this and half the thickest wall that stretch runs along is said ' +
+      'not to line up (walls of different thickness on one axis have their faces apart by up to ' +
+      'that), and so is a stair room or a shaft moved by more than this from the one it lies ' +
+      'over, unless the plan marks it as meant.',
+    basis: own
+  },
+  stairStepLength: {
+    kind: 'limit',
+    value: 0.63,
+    unit: 'm',
+    decides:
+      'How a stair that states no number of risers is laid out: Grid takes the number that brings ' +
+      'twice the riser plus the going nearest this length, the stride of a person on a stair. It ' +
+      'only lays the stair out; it judges no riser and no going.',
+    basis: own
+  },
+
+  // ── The plan as drawn (SHT-11) ────────────────────────────────────────────────────────────
+  planCutHeight: {
+    kind: 'limit',
+    value: 1.2,
+    unit: 'm',
+    decides:
+      'How high above a floor its plan is cut. A stair that climbs from the floor is drawn solid ' +
+      'up to where its flight reaches this height, with a break line across it there, and dashed ' +
+      'above. It only draws the plan; it judges nothing.',
+    basis: own
+  },
+  sectionGroundRun: {
+    kind: 'limit',
+    value: 1,
+    unit: 'm',
+    decides:
+      'How far the ground line of a section runs past the building on each side (LVL-9). It only ' +
+      'draws the section; it judges nothing.',
+    basis: own
+  },
+  elevationMarkOffset: {
+    kind: 'limit',
+    value: 1.2,
+    unit: 'm',
+    decides:
+      'How far outside the drawing and its dimensions an elevation mark stands on a plan (LVL-9). ' +
+      'It only draws the mark; it judges nothing.',
+    basis: own
+  },
+  aboveSameEdge: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'm',
+    decides:
+      'A stretch of the outline of the floor above that lies within this of the outline of the ' +
+      'floor drawn, along it, is the same wall face seen twice, and is not drawn dashed as what ' +
+      'lies above.',
+    basis: own
+  },
+
+  // ── Kinds of door and window (CNT-14) ─────────────────────────────────────────────────────
+  wideSingleLeaf: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'A door at least this wide that states no kind is taken as one swinging leaf, as every door ' +
+      'without one is, and is asked about (`opening/wide-single-leaf`): a leaf this wide is rare, ' +
+      'and the door may be a pair, a sliding, folding, roller or garage door. It only asks.',
+    basis: own
+  },
+  foldingPanel: {
+    kind: 'limit',
+    value: 0.6,
+    unit: 'm',
+    decides:
+      'The widest panel a folding door is drawn and checked with: it folds in as many panels as ' +
+      'this needs, two at least, and sweeps a strip as deep as one panel on the face it opens to.',
+    basis: own
+  },
+  frameFace: {
+    kind: 'limit',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'How wide the frame round a door or window, and round each part of a window that opens, is ' +
+      'drawn in 3D, and each side\'s frame on a plan drawn in detail (SHT-10). The plan holds no ' +
+      'frame: it only draws the model and the plan.',
+    basis: own
+  },
+  frameDepth: {
+    kind: 'limit',
+    value: 0.07,
+    unit: 'm',
+    decides:
+      'How deep a window\'s frame is drawn in 3D and on a plan drawn in detail (SHT-10), in the ' +
+      'middle of its wall (no deeper than the wall). A door\'s frame lines the whole depth of its ' +
+      'wall. It only draws the model and the plan.',
+    basis: own
+  },
+  leafThickness: {
+    kind: 'limit',
+    value: 0.04,
+    unit: 'm',
+    decides:
+      'How thick a door leaf or panel is drawn in 3D, hung from the face of the wall it opens ' +
+      'toward. It only draws the model.',
+    basis: own
+  },
+  glassThickness: {
+    kind: 'limit',
+    value: 0.02,
+    unit: 'm',
+    decides:
+      'How thick a window\'s glass is drawn in 3D, in the middle of its frame, and how far apart its ' +
+      'two panes are drawn on a plan drawn in detail (SHT-10). It only draws the model and the plan.',
+    basis: own
+  },
+  sillProjection: {
+    kind: 'limit',
+    value: 0.03,
+    unit: 'm',
+    decides:
+      'How far a window\'s sill stands out from each face of its wall, and past each side of its ' +
+      'hole, on a plan drawn in detail (SHT-10). The plan holds no sill: it only draws the plan.',
+    basis: own
+  },
+  // ── Facades and opening patterns (LVL-8) ──────────────────────────────────────────────────
+  facadeFacing: {
+    kind: 'tolerance',
+    value: 0.0175,
+    unit: 'sine',
+    decides:
+      'A face of the building is drawn on a facade when it turns at least this much toward the ' +
+      'side the facade is seen from (about one degree): a face edge-on to it, or turned away, is ' +
+      'not seen.',
+    basis: own
+  },
+  facadeOnFace: {
+    kind: 'tolerance',
+    value: 0.01,
+    unit: 'm',
+    decides:
+      'A wall whose outside face lies within this of a stretch of the floor\'s outline is the wall ' +
+      'that stretch of the facade shows, with its height and its openings.',
+    basis: own
+  },
+  facadeSameDepth: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'Faces of a facade that stand within this of each other, front to back, are drawn as one ' +
+      'plane, with one line weight; a face set back further is drawn lighter.',
+    basis: own
+  },
+
+  // ── Columns and structural grids (CNT-16) ─────────────────────────────────────────────────
+  columnRoundPieces: {
+    kind: 'limit',
+    value: 32,
+    unit: 'count',
+    decides:
+      'How many straight sides a round column is drawn and exported with, and cut to its room ' +
+      'with; its own area, and what it takes off a room it stands wholly in, is the true circle\'s.',
+    basis: own
+  },
+  gridLinesMost: {
+    kind: 'limit',
+    value: 100,
+    unit: 'count',
+    decides: 'The most lines one set of a structural grid may have; a set with more is refused.',
+    basis: own
+  },
+  gridOverrun: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'How far a structural grid\'s lines are drawn past the outermost line across them, where ' +
+      'their names are written and their spacing is dimensioned.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',
@@ -409,7 +923,40 @@ export const TOLERANCES = {
     kind: 'limit',
     value: 500,
     unit: 'm',
-    decides: 'A plan reaching further than this from the origin gets a warning: most likely a scale or unit error.',
+    decides:
+      'A plan reaching further than this from its origin gets a warning: most likely a scale or ' +
+      'unit error. The origin is the site\'s, where the plan states one (HND-11), else (0, 0).',
+    basis: own
+  },
+  // VEW-3: a camera an agent sets. Past these a view call, or a saved view, is refused.
+  cameraTilt: {
+    kind: 'limit',
+    value: 89,
+    unit: 'degree',
+    decides:
+      'How far a camera may look down at, or up to, what it is pointed at, from level. Looking ' +
+      'straight down or up, a picture has no up, so a camera turned further is refused.',
+    basis: own
+  },
+  cameraClosest: {
+    kind: 'limit',
+    value: 0.1,
+    unit: 'm',
+    decides: 'The least distance from a camera to what it is pointed at. Closer, the picture shows nothing of it.',
+    basis: own
+  },
+  lensShortest: {
+    kind: 'limit',
+    value: 8,
+    unit: 'mm',
+    decides: 'The shortest focal length a camera may have, on a 36 by 24 mm sensor: about 132 degrees across. Shorter is refused.',
+    basis: own
+  },
+  lensLongest: {
+    kind: 'limit',
+    value: 800,
+    unit: 'mm',
+    decides: 'The longest focal length a camera may have, on a 36 by 24 mm sensor: under 3 degrees across. Longer is refused.',
     basis: own
   },
 
@@ -601,6 +1148,15 @@ export const TOLERANCES = {
       'lengths that agree to this are the same when a read-back is checked by writing it again.',
     basis: own
   },
+  scanWritten: {
+    kind: 'arithmetic',
+    value: 1e-6,
+    unit: 'm',
+    decides:
+      'A plan written from a phone room scan (HND-12) holds its walls to a micrometre, so each ' +
+      'room keeps the area the scan gives it to far better than a thousandth of a per cent.',
+    basis: own
+  },
   lineHalfWidth: {
     kind: 'arithmetic',
     value: 1e-9,
@@ -630,6 +1186,15 @@ export const TOLERANCES = {
     value: 1e-15,
     unit: 'ratio',
     decides: 'A slope below this is none when a segment is clipped.',
+    basis: own
+  },
+  shellGrid: {
+    kind: 'arithmetic',
+    value: 1e-6,
+    unit: 'm',
+    decides:
+      'The corners of a slab, a roof and a parapet are drawn and exported rounded to this grid: the ' +
+      'join of the walls leaves each corner of an outline a hair off square, and this puts it square.',
     basis: own
   },
   joinGrids: {

@@ -2,7 +2,8 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseFloorPlan, type FloorPlan } from '../../types/floorplan'
-import { MEASURES, planAreaFigures, usualGross, type FloorAreaFigures, type Measure } from '../areas'
+import { MEASURES, planAreaFigures, usualGross, type FloorAreaFigures } from '../areas'
+import { edit, madeVirtual, stairRoomHouse } from '../../test-support/plans'
 
 /**
  * ARE-9: net, gross internal and gross external area from the spaces, each saying what it
@@ -27,9 +28,11 @@ function twoFloors(plan: FloorPlan): FloorPlan {
   })
 }
 
+const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0)
+
 /** Gross external, less what the floor is made of: 0 to the last digits on every floor. */
-const externalGap = (f: FloorAreaFigures): number => f.grossExternal! - (f.net + f.outsideRooms + f.walls! + f.unclaimed! - f.offSpace!)
-const internalGap = (f: FloorAreaFigures): number => f.grossInternal! + f.outsideRooms - (f.net + f.outsideRooms + (f.walls! - f.outerWalls!) + f.unclaimed! - f.offSpace!)
+const externalGap = (f: FloorAreaFigures): number => f.grossExternal! - (f.net + f.overStairs + f.outsideRooms + f.walls! + f.unclaimed! - f.offSpace!)
+const internalGap = (f: FloorAreaFigures): number => f.grossInternal! + f.outsideRooms - (f.net + f.overStairs + f.outsideRooms + (f.walls! - f.outerWalls!) + f.unclaimed! - f.offSpace!)
 
 describe('ARE-9 the lab flat (AR-6): net, gross internal and gross external, each with what it measures', () => {
   const areas = planAreaFigures(fixture('two-bed-flat.json'))
@@ -55,7 +58,10 @@ describe('ARE-9 the lab flat (AR-6): net, gross internal and gross external, eac
 describe('ARE-9 per floor, net plus walls plus unclaimed floor is the gross', () => {
   it.each(fixtureNames)('%s: within 1e-6 m², on every floor, and the rooms match the spaces', (name) => {
     const plan = fixture(name)
-    for (const areas of [planAreaFigures(plan), planAreaFigures(twoFloors(plan))]) {
+    // A fixture of one floor is also stacked on itself; one of several floors (CNT-9's stand-in
+    // for S-10) already is, and `twoFloors` would put its upper walls on the ground floor.
+    const stacked = (plan.floors?.length ?? 0) > 1 ? [] : [twoFloors(plan)]
+    for (const areas of [plan, ...stacked].map((p) => planAreaFigures(p))) {
       for (const f of areas.floors) {
         expect(Math.abs(f.offSpace!)).toBeLessThan(1e-6)
         expect(Math.abs(f.grossExternal! - (f.net + f.walls! + f.unclaimed!))).toBeLessThan(1e-6)
@@ -91,7 +97,7 @@ describe('ARE-9 per-use and per-floor figures add up to the totals (AC-9)', () =
   it('adds the floors up to each total', () => {
     expect(areas.floors).toHaveLength(2)
     for (const [measure, pick] of [['net', (f: FloorAreaFigures) => f.net], ['grossInternal', (f: FloorAreaFigures) => f.grossInternal!], ['grossExternal', (f: FloorAreaFigures) => f.grossExternal!]] as const) {
-      expect(areas[measure as Measure].area).toBeCloseTo(areas.floors.reduce((s, f) => s + pick(f), 0), 9)
+      expect(areas[measure].area).toBeCloseTo(areas.floors.reduce((s, f) => s + pick(f), 0), 9)
     }
   })
 
@@ -160,7 +166,7 @@ describe('ARE-8 the measures table', () => {
     const section = readFileSync(join(ROOT, 'docs', 'areas.md'), 'utf8')
     const rows = section
       .split('\n')
-      .filter((line) => /^\| (Net|Gross)/.test(line))
+      .filter((line) => /^\| (Net|Gross|Area by headroom|Outdoor area)/.test(line))
       .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()))
     expect(rows).toEqual(Object.values(MEASURES).map((m) => [m.name, m.measures, m.notTakenOff, m.cannotSay]))
   })
@@ -185,5 +191,79 @@ describe('ARE-8 the measures table', () => {
     const found = files.filter((file) => file !== records && pattern.test(readFileSync(file, 'utf8'))).map((file) => relative(ROOT, file))
     expect(files.length).toBeGreaterThan(100)
     expect(found).toEqual([])
+  })
+})
+
+describe('SHT-11, lab DR-5: a stair drawn as a room on floor after floor is counted once', () => {
+  // The three-floor house with a 1.85 × 3.8 m stair room on each floor, one over the other, as
+  // the lab's townhouse draws its stair (`stairRoomHouse`).
+  const STAIR = 1.85 * 3.8
+
+  it('counts the stair on the floor it rises from, and the rooms over it in no net figure', () => {
+    const areas = planAreaFigures(stairRoomHouse())
+    expect(areas.byUse['stair']).toBeCloseTo(STAIR, 9)
+    const [ground, first, second] = areas.floors
+    expect(ground!.byUse['stair']).toBeCloseTo(STAIR, 9)
+    expect(first!.byUse['stair']).toBeUndefined()
+    expect(second!.byUse['stair']).toBeUndefined()
+    expect(ground!.overStairs).toBe(0)
+    expect(first!.overStairs).toBeCloseTo(STAIR, 9)
+    expect(second!.overStairs).toBeCloseTo(STAIR, 9)
+    // The rooms over it keep their own area, and name the stair room they are counted with.
+    const over = first!.rooms.find((room) => room.id === 'first-stair')!
+    expect(over.area).toBeCloseTo(STAIR, 9)
+    expect(over.countedWith).toEqual({ floor: 'ground', room: 'ground-stair' })
+    expect(second!.rooms.find((room) => room.id === 'second-stair')!.countedWith).toEqual({ floor: 'ground', room: 'ground-stair' })
+    expect(ground!.rooms.find((room) => room.id === 'ground-stair')!.countedWith).toBeUndefined()
+    // The net total is less the two rooms over the stair; the gross figures are as they were.
+    expect(areas.net.area).toBeCloseTo(sum(areas.floors.map((f) => sum(f.rooms.map((room) => room.area)))) - 2 * STAIR, 9)
+    for (const f of areas.floors) expect(Math.abs(externalGap(f))).toBeLessThan(1e-6)
+    expect(areas.notes.some((note) => note.startsWith('"Stair" on "Ground floor" is a stair that rises through 2 stair rooms over it ("First floor", "Second floor")'))).toBe(true)
+  })
+
+  it('counts stair rooms that do not line up on every floor, as before', () => {
+    const areas = planAreaFigures(stairRoomHouse({ shifted: true }))
+    // The first floor's stair room is moved: no floor's stair lies over another's.
+    expect(areas.floors.map((f) => f.overStairs)).toEqual([0, 0, 0])
+    expect(areas.floors.every((f) => f.byUse['stair']! > 0)).toBe(true)
+  })
+
+  it('counts a lift shaft on every floor it serves', () => {
+    const areas = planAreaFigures(stairRoomHouse({ use: 'lift' }))
+    expect(areas.floors.map((f) => f.overStairs)).toEqual([0, 0, 0])
+    expect(areas.byUse['lift']).toBeCloseTo(3 * STAIR, 9)
+  })
+
+  it('leaves a floor asked for alone with its stair room counted on the floor below', () => {
+    const first = planAreaFigures(stairRoomHouse(), { floors: ['first'] }).floors[0]!
+    expect(first.overStairs).toBeCloseTo(STAIR, 9)
+    expect(first.byUse['stair']).toBeUndefined()
+  })
+
+  it('stacks no zone (CNT-8): a stair zone of an open room is counted once, in its room', () => {
+    // The second floor is one open room, its partition a dividing line its two parts list: the
+    // hall and the stair are zones of it. The stair zone lies over the first floor's stair room.
+    const zoned = edit(madeVirtual(stairRoomHouse(), 'second-x'), (copy) => {
+      copy.walls.find((w) => w.id === 'second-x')!.thickness = 0
+      copy.rooms.push({ id: 'second-open', name: 'Open room', floor: 'second', boundary: ['second-s1', 'second-s2', 'second-e', 'second-n2', 'second-n1', 'second-w'] })
+      for (const room of copy.rooms) if (room.id === 'second-main' || room.id === 'second-stair') room.partOf = 'second-open'
+    })
+    const areas = planAreaFigures(zoned)
+    const [ground, first, second] = areas.floors
+    const zone = second!.rooms.find((room) => room.id === 'second-stair')!
+    expect(zone.zoneOf).toBe('second-open')
+    expect(zone.countedWith).toBeUndefined()
+    expect(second!.overStairs).toBe(0)
+    // The first floor's stair room is still counted with the ground floor's.
+    expect(first!.rooms.find((room) => room.id === 'first-stair')!.countedWith).toEqual({ floor: 'ground', room: 'ground-stair' })
+    expect(first!.overStairs).toBeCloseTo(STAIR, 9)
+    // The open room is the second floor's net; its stair zone's floor goes to the stair, once.
+    expect(second!.net).toBeCloseTo(second!.rooms.find((room) => room.id === 'second-open')!.area, 9)
+    expect(second!.byUse['stair']).toBeCloseTo(zone.area, 9)
+    expect(ground!.byUse['stair']).toBeCloseTo(STAIR, 9)
+    for (const f of areas.floors) {
+      expect(sum(Object.values(f.byUse))).toBeCloseTo(f.net, 9)
+      expect(Math.abs(externalGap(f))).toBeLessThan(1e-6)
+    }
   })
 })

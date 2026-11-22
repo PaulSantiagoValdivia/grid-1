@@ -7,10 +7,13 @@
  * nothing.
  */
 
+import { en } from '../../messages/en'
+import type { Said } from '../../messages/say'
+
 export const RULES_REPORT_SCHEMA_VERSION = 1 as const
 
 /** The label every report carries. */
-export const GENERAL_GUIDANCE_LABEL = 'General guidance, not your local rules' as const
+export const GENERAL_GUIDANCE_LABEL = en.label
 
 /** One place a rule's figure was read: the document, its edition and the clause number. */
 export interface RuleCitation {
@@ -52,10 +55,49 @@ export type FindingCode =
   /** LVL-1: a door or opening to the outside on a floor standing above the ground; never a way out. */
   | 'door_to_outside_above_ground'
   /**
+   * CNT-6 (lab EL-4): a door, a doorless opening or an open side between rooms of two different
+   * flats (CNT-4), or a door through a wall the plan says has a neighbour beyond it. Never a route:
+   * a home is not left through another. Its rooms are the room, then the other home's room.
+   */
+  | 'door_between_homes'
+  /**
+   * CNT-6 (lab R-10): a flat none of whose doors opens onto a room in no flat, a common part the
+   * plan does not draw, a space not drawn or the outside. Its rooms are the flat's.
+   */
+  | 'flat_without_front_door'
+  /**
+   * LVL-3: rooms used as a stair on two neighbouring levels, none lying over one on the other, so
+   * they join nothing. On the upper floor; its rooms are the upper level's, then the lower's.
+   */
+  | 'stair_out_of_line'
+  /** LVL-3: the same for rooms used as a lift: the shaft is out of line. */
+  | 'lift_out_of_line'
+  /**
+   * LVL-5 (lab WR-9): a room used as a stair that lies over one on the floor below, enough to join
+   * it, but moved from it by more than `stackShift`, and not marked `overhang: "meant"`. On the
+   * upper floor; its rooms are the upper room, then the lower.
+   */
+  | 'stair_shifted'
+  /** LVL-5: the same for a lift shaft. */
+  | 'lift_shifted'
+  /**
    * MSG-18: a door or doorless opening no person fits through, by Grid's own sizes (not code
    * figures): too narrow, too low, or with its sill above the floor. It is not a way through.
    */
   | 'opening_too_small_to_pass'
+  /**
+   * LVL-4: a door, window or doorless opening in an outside wall that lies below the ground level
+   * the site states (lab VE-7), wholly or in part. Only when the plan states the ground.
+   */
+  | 'opening_below_ground'
+  /**
+   * BRF-3 (lab EL-16): the building stands nearer an edge of the plot's boundary than the set-back
+   * the person asked for from it: their figure, never a code's. On the floor whose outline comes
+   * nearest the edge.
+   */
+  | 'setback_short'
+  /** BRF-3: the building's outside face reaches past an edge of the plot's boundary, out of the plot. */
+  | 'over_boundary'
 
 /** One way through from a room: the room on its other side, and the opening or virtual wall. */
 export interface RouteStep {
@@ -72,10 +114,17 @@ export interface RuleFinding {
   /** One line of plain English, built from a fixed template. */
   readonly message: string
   /**
+   * MSG-11: the sentence by its key and values, where the record cannot word it again from its
+   * other fields (a part below the ground, a stair out of line). Not enumerable (`withSentence`).
+   */
+  readonly said?: Said
+  /**
    * Only on `no_route_to_exit`: every way through the room, by the room beyond it, then by id.
    * Optional, so the report stays at schema version 1.
    */
   readonly through?: readonly RouteStep[]
+  /** CNT-6: only on `flat_without_front_door`, the flat's id (CNT-4). */
+  readonly flat?: string
   /**
    * Only on `door_to_outside_above_ground`: how far the floor stands above the ground, in m, as
    * the message says it. Optional, like `through` (MSG-1: the notes word it from this).
@@ -92,10 +141,53 @@ export interface RuleFinding {
     readonly drawn: number
     readonly passable: number
   }
+  /**
+   * Only on `opening_below_ground`: how far its foot and its top lie under the ground, in m (its
+   * top's depth is 0 or less when it reaches above the ground), and whether it lies wholly below.
+   * Optional, like `through`.
+   */
+  readonly belowGround?: {
+    readonly foot: number
+    readonly top: number
+    readonly wholly: boolean
+  }
+  /**
+   * Only on `setback_short` and `over_boundary` (BRF-3): the edge of the boundary by number, the way
+   * it faces and whether it is on a street; the least distance from the building's outside face to
+   * it, in m, and how far past it the building reaches (0 when it does not); and the set-back the
+   * person asked for from it, with where it was asked for and who gave it, or null. `northStated`
+   * is false when the way is read with north as the top of the drawing. Optional, like `through`.
+   */
+  readonly boundary?: {
+    readonly edge: number
+    readonly faces: string
+    readonly street: boolean
+    readonly name: string
+    readonly distance: number
+    readonly past: number
+    readonly asked: { readonly distance: number; readonly from: 'edge' | 'street' | 'all'; readonly source: 'given' | 'assumed' | null } | null
+    readonly northStated: boolean
+  }
+  /**
+   * Only on `stair_shifted` and `lift_shifted` (LVL-5): how far the upper room is moved from the
+   * one below, east (+x) and north (+y) of the drawing, in m; for a shaft not moved as a whole,
+   * each side that stands off the one below's (east or north positive); and the box of each on the
+   * plan. Optional, like `through`.
+   */
+  readonly shift?: {
+    readonly east: number
+    readonly north: number
+    readonly sides: readonly { readonly side: 'north' | 'east' | 'south' | 'west'; readonly by: number }[]
+    readonly upper: { readonly min: readonly [number, number]; readonly max: readonly [number, number] }
+    readonly lower: { readonly min: readonly [number, number]; readonly max: readonly [number, number] }
+  }
 }
 
 export type NotCheckedReason =
-  /** Not the ground floor: with no stairs in the plan, it cannot reach an exit. */
+  /**
+   * Not the ground floor, and no stair joins it to the ground floor (LVL-3): no stair the plan
+   * states, and no room used as a stair lying over one on the floor below.
+   */
   | 'no_stairs'
   /** The plan validation rejects it, so it was left out of the routes. */
   | 'cannot_be_drawn'
@@ -104,6 +196,16 @@ export type NotCheckedReason =
    * does. Whether that space is a way out cannot be told, so the routes were not checked.
    */
   | 'way_out_not_drawn'
+  /**
+   * CNT-6 (lab R-10): the same, where every way on from the floor is onto the building's common
+   * parts that are not drawn: a flat's front door onto a landing, a stand's open side onto the aisle.
+   */
+  | 'way_out_through_common_parts'
+  /**
+   * BRF-3: the site states a boundary, but the building's outline could not be worked out, so no
+   * distance to it was measured and no set-back compared.
+   */
+  | 'boundary_not_measured'
 
 export interface NotChecked {
   readonly reason: NotCheckedReason
@@ -112,6 +214,28 @@ export interface NotChecked {
   readonly rooms: readonly string[]
   readonly openings: readonly string[]
   readonly message: string
+  /**
+   * MSG-11: the sentence by its key and values, where the record cannot word it again from its
+   * other fields (BRF-3: why no distance to the boundary was measured). Not enumerable (`withSentence`).
+   */
+  readonly said?: Said
+  /**
+   * MSG-5, only on `cannot_be_drawn`: the findings a check did not give because they rest on a
+   * part that could not be drawn (`rules/held.ts`), each with the parts it waits for. Each comes
+   * back once those parts are drawn, if it still holds. Optional, like `through`.
+   */
+  readonly held?: readonly HeldFinding[]
+  /**
+   * LVL-5, only on `cannot_be_drawn`: the type of each of `openings`, in order, so a window is
+   * worded as what it is, never as a door. Optional, like `through`.
+   */
+  readonly openingKinds?: readonly ('door' | 'window' | 'opening')[]
+}
+
+/** MSG-5: a finding held back, and the rooms and openings that could not be drawn that it waits for, by id. */
+export interface HeldFinding<Finding = RuleFinding> {
+  readonly finding: Finding
+  readonly waitsFor: readonly string[]
 }
 
 export interface RulesReport {

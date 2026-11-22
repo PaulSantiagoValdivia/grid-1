@@ -7,6 +7,7 @@
  */
 import { limit, metresText, passageText, planCheckWordings as wordings, planFloors, type RuleFinding, type RulesReport, type WordingPart } from '../geometry'
 import type { FloorPlan } from '../types/floorplan'
+import { english, said } from '../messages/say'
 
 /** A run of text; `name` marks a room or floor name as the plan writes it. */
 export type NoteText = WordingPart
@@ -21,8 +22,8 @@ export interface PlanNote {
   readonly floorName: string | null
   readonly title: readonly NoteText[]
   readonly detail: readonly NoteText[]
-  /** What the note is about. Every check so far is about getting out. */
-  readonly tag: 'Exit'
+  /** What the note is about: getting out, or the building against its plot (BRF-3). */
+  readonly tag: 'Exit' | 'Site'
 }
 
 export interface PlanNotesView {
@@ -54,9 +55,11 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
   const doors = new Set(plan.openings.filter((o) => o.type === 'door').map((o) => o.id))
   const roomName = (id: string): string => roomNames.get(id) ?? id
   const floorName = (id: string): string => floorNames.get(id) ?? id
+  const flatNames = new Map((plan.flats ?? []).map((f) => [f.id, f.name ?? f.id] as const))
+  const flatName = (id: string): string => flatNames.get(id) ?? id
 
   // A floor whose only door out leads to a space not drawn words its cut-off rooms the longer way.
-  const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
+  const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn' || n.reason === 'way_out_through_common_parts').map((n) => n.floor))
 
   const noteOf = (finding: RuleFinding): PlanNote => {
     const room = finding.rooms[0] ?? null
@@ -66,7 +69,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
       floor: finding.floor,
       room: finding.code === 'no_exit' ? null : room,
       floorName: finding.code !== 'no_exit' && floors.length > 1 ? floorName(finding.floor) : null,
-      tag: 'Exit' as const
+      tag: finding.code === 'setback_short' || finding.code === 'over_boundary' ? ('Site' as const) : ('Exit' as const)
     }
     switch (finding.code) {
       case 'no_route_to_exit': {
@@ -102,11 +105,76 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           title: wordings.doorToUndrawnSpace(roomName(room!)),
           detail: [words("If that space is a shared landing or a stair, draw it as a room, or mark the wall as exterior if the door leads outside.")]
         }
+      // CNT-6 (lab EL-4, R-10): homes kept apart, and a flat's front door.
+      case 'door_between_homes': {
+        const other = finding.rooms[1]
+        const open = finding.openings[0] !== undefined && !plan.openings.some((o) => o.id === finding.openings[0])
+        return {
+          ...base,
+          title: wordings.betweenHomes(roomName(room!), other === undefined ? null : roomName(other), open),
+          detail: [words(english(said('check.detail.betweenHomes')))]
+        }
+      }
+      case 'flat_without_front_door':
+        return {
+          ...base,
+          title: wordings.flatWithoutFrontDoor(flatName(finding.flat ?? '')),
+          detail: [words(english(said('check.detail.flatWithoutFrontDoor')))]
+        }
       case 'door_to_outside_above_ground':
         return {
           ...base,
-          title: wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation ?? 0)),
+          title: finding.elevation === undefined ? [words(finding.message)] : wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation)),
           detail: [words('It is not counted as a way out. If it opens onto a balcony, a terrace or an outside stair, draw that as a room.')]
+        }
+      case 'stair_out_of_line':
+      case 'lift_out_of_line': {
+        const stair = finding.code === 'stair_out_of_line'
+        return {
+          ...base,
+          title: [words(stair ? 'The stair ' : 'The lift shaft '), name(roomName(room!)), words(' does not line up with the floor below')],
+          detail: [
+            words(
+              stair
+                ? 'It lies over no stair room on the floor below, so the way out is not followed down it. Move it over the stair below, or state the stair in the plan\'s stairs.'
+                : 'It lies over no lift shaft on the floor below. Move it over the shaft below.'
+            )
+          ]
+        }
+      }
+      case 'stair_shifted':
+      case 'lift_shifted': {
+        // LVL-5: the finding's own sentence says where and by how much.
+        return {
+          ...base,
+          title: [words(finding.message)],
+          detail: [words('If it is meant, mark the room with overhang "meant". Otherwise move it back over the one below.')]
+        }
+      }
+      case 'opening_below_ground': {
+        const opening = plan.openings.find((o) => o.id === finding.openings[0])
+        const wall = opening?.wall ?? finding.openings[0] ?? ''
+        const depth = finding.belowGround === undefined ? 0 : finding.belowGround.wholly ? finding.belowGround.top : finding.belowGround.foot
+        return {
+          ...base,
+          title: wordings.belowGround(opening?.type ?? 'window', room === null ? null : roomName(room), wall, finding.belowGround?.wholly ?? false, metresText(depth)),
+          detail: [words('The ground level is the one the site states. If the ground in front of it is dug away, for a light well or an outside stair, draw that space.')]
+        }
+      }
+      case 'setback_short':
+      case 'over_boundary':
+        // BRF-3: the distance and the set-back, as the finding words them; the figures are the person's.
+        return {
+          ...base,
+          room: null,
+          floorName: null,
+          title: [words(finding.message)],
+          detail: [
+            words(
+              (finding.boundary?.northStated === false ? 'The ways are read with north as the top of the drawing: the plan states no north. ' : '') +
+                "Measured from the building's outside face, every floor at or above the ground floor, to the edge of the plot's boundary. The set-back is your own figure, not a code's."
+            )
+          ]
         }
       case 'opening_too_small_to_pass': {
         const p = finding.passage

@@ -6,10 +6,13 @@
  * stands at the same height in both.
  */
 
-import { DEFAULT_FLOOR, planFloors, planForFloor } from './floors'
+import { DEFAULT_FLOOR, planFloors, storeySlice } from './floors'
 import type { Floor, FloorPlan, Wall } from './plan'
 import { indexPlan } from './plan'
 import { validatePlan } from './validate'
+import { wallPeak } from './roofs'
+import { buildingOfFloor } from './buildings'
+import { outdoorOnlyWalls } from './outdoor'
 
 /** What a storey with no drawn wall counts as: the plan's default wall height. */
 export const DEFAULT_STOREY_HEIGHT = 2.7
@@ -135,7 +138,8 @@ export const isFiniteWall = (wall: Wall): boolean =>
   isFinitePoint(wall.start) &&
   isFinitePoint(wall.end) &&
   Number.isFinite(wall.thickness) &&
-  Number.isFinite(wall.height)
+  Number.isFinite(wall.height) &&
+  (wall.arc === undefined || (isFinitePoint(wall.arc.centre) && Number.isFinite(wall.arc.sweep)))
 
 /**
  * Whether the views draw a wall, so it counts toward its storey's height: not
@@ -155,14 +159,19 @@ export interface BuildingElevations {
   readonly roof: { readonly bottom: number; readonly top: number }
 }
 
-/** The tallest wall a floor draws, or 0 when it draws none or cannot be analysed. */
+/** The tallest wall a floor draws, as its roof cuts it (LVL-6), or 0 when it draws none or cannot be analysed. */
 function tallestDrawnWall(plan: FloorPlan, floor: Floor): number {
   try {
-    const slice = planForFloor(plan, floor.id)
-    const broken = new Set(validatePlan(slice, indexPlan(slice), { spaces: false }).broken)
+    // LVL-5: a wall through floors counts toward the floor it rises through, with its own height.
+    const slice = storeySlice(plan, floor.id)
+    const index = indexPlan(slice)
+    const broken = new Set(validatePlan(slice, index, { spaces: false }).broken)
+    // CNT-7 (C26): a fence or a parapet round outdoor space is no part of the building's storey.
+    const open = outdoorOnlyWalls(index)
     let tallest = 0
     for (const wall of slice.walls) {
-      if (isDrawnWall(wall, broken) && wall.height > tallest) tallest = wall.height
+      // LVL-6: a wall the floor's roof cuts is as tall as the roof leaves it.
+      if (isDrawnWall(wall, broken) && !open.has(wall.id)) tallest = Math.max(tallest, wallPeak(slice, wall))
     }
     return tallest
   } catch {
@@ -187,11 +196,28 @@ function floorsOf(plan: FloorPlan): Floor[] {
  */
 export function floorElevations(plan: FloorPlan): BuildingElevations {
   const floors = floorsOf(plan)
-  const byFloor = stackFloors(
-    floors.map((floor) => ({ floor, tallest: tallestDrawnWall(plan, floor) })),
-    SLAB_THICKNESS
-  )
+  const entries = floors.map((floor) => ({ floor, tallest: tallestDrawnWall(plan, floor) }))
+  // CNT-6 (C23): each building the plan names stacks its own floors; the floors no building names
+  // are stacked together, as every floor was before.
+  const building = buildingOfFloorSafe(plan)
+  const groups = new Map<string, FloorToStack[]>()
+  for (const entry of entries) {
+    const key = building.get(entry.floor.id) ?? ''
+    groups.set(key, [...(groups.get(key) ?? []), entry])
+  }
+  const byFloor = new Map<string, StoreyLevel>()
+  for (const group of groups.values()) for (const [id, level] of stackFloors(group, SLAB_THICKNESS)) byFloor.set(id, level)
   return { floors: byFloor, roof: roofOver(byFloor) }
+}
+
+/** The building each floor is in (CNT-6), or none when the list cannot be read. */
+function buildingOfFloorSafe(plan: FloorPlan): ReadonlyMap<string, string> {
+  if ((plan.buildings ?? []).length === 0) return new Map()
+  try {
+    return buildingOfFloor(plan)
+  } catch {
+    return new Map()
+  }
 }
 
 /** The roof slab over the highest storey top of the stack, or over one default storey when there is none. */

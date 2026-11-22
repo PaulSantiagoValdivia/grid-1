@@ -11,16 +11,20 @@ import {
   cross,
   dot,
   floorOf,
+  floorRoofShape,
   fromTuple,
   itemFootprint,
   planForFloor,
   pointAlong,
   poleOfInaccessibility,
+  roomHeadroom,
   roomWallIds,
   spotsInside,
   sub,
   tolerance,
+  curveFault,
   wallAxis,
+  wallLength,
   wallSlicePolygon,
   type FloorPlan,
   type Item,
@@ -32,6 +36,7 @@ import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { floorGraph } from '@ongrid/floorplan/geometry/rules/graph'
 import { compassOf, type Compass } from '../describe/facts'
 import type { Survey, SurveyRoom } from './survey'
+import { walkedLength, type WalkedLeg } from './walked'
 
 export const EMPTY_ROOM_RULE =
   'Measured in the empty room between wall faces: the fixtures the plan holds, furniture, radiators, door leaves and the space a person needs round them are not taken off.'
@@ -130,11 +135,20 @@ export interface Route {
   /** The narrowest door or opening on the way, and the room with the narrowest widest circle. */
   readonly narrowestPassage: { readonly via: string; readonly width: number } | null
   readonly narrowestRoom: { readonly room: string; readonly widestCircle: number } | null
+  /** VEW-9: how far it is walked (`WALKED_RULE`), in metres; null when a room on it has no outline. */
+  readonly length: number | null
+  /** Each room's share of the length, in order; the holes through the walls are the rest. */
+  readonly legs: readonly WalkedLeg[]
 }
 
-/** The way with the fewest rooms between two rooms of one floor, or to any way out ('outside'). */
-export function routeBetween(survey: Survey, from: string, to: string): Route | null {
-  const floor = survey.byId.get(from)!.facts.floor
+/** The way out of every room, as a step past the last room of a route to `outside`. */
+export const OUTSIDE = '\u0000outside'
+
+/**
+ * The ways from room to room on one floor: for each room, the rooms (or `OUTSIDE`) a door, a
+ * doorless opening or a dividing line (`via`) leads to, as the way-out check reads them.
+ */
+export function wayGraph(survey: Survey, floor: string): { next: Map<string, Array<{ room: string; via: string }>>; openings: Map<string, Opening> } {
   const { storey, leftOut } = drawable(planForFloor(survey.plan, floor))
   const graph = floorGraph(storey, leftOut.rooms)
   const openings = new Map(storey.openings.map((o) => [o.id, o]))
@@ -147,8 +161,15 @@ export function routeBetween(survey: Survey, from: string, to: string): Route | 
     join(l.rooms[0], l.rooms[1], l.via)
     join(l.rooms[1], l.rooms[0], l.via)
   }
-  const OUT = '\u0000outside'
-  for (const exit of graph.exits) join(exit.room, OUT, exit.opening)
+  for (const exit of graph.exits) join(exit.room, OUTSIDE, exit.opening)
+  return { next, openings }
+}
+
+/** The way with the fewest rooms between two rooms of one floor, or to any way out ('outside'). */
+export function routeBetween(survey: Survey, from: string, to: string): Route | null {
+  const floor = survey.byId.get(from)!.facts.floor
+  const { next, openings } = wayGraph(survey, floor)
+  const OUT = OUTSIDE
   const goal = to === 'outside' ? OUT : to
 
   const back = new Map<string, { room: string; via: string }>()
@@ -193,7 +214,8 @@ export function routeBetween(survey: Survey, from: string, to: string): Route | 
     const circle = 2 * poleOfInaccessibility(room.polygon, undefined, room.holes).distance
     if (narrowestRoom === null || circle < narrowestRoom.widestCircle) narrowestRoom = { room: id, widestCircle: circle }
   }
-  return { from, to, rooms, steps, narrowestPassage, narrowestRoom }
+  const walked = walkedLength(survey, rooms, steps.map((s) => s.via), goal === OUT)
+  return { from, to, rooms, steps, narrowestPassage, narrowestRoom, length: walked?.length ?? null, legs: walked?.legs ?? [] }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -203,16 +225,18 @@ export const FACES_RULE =
   'Measured between faces, as a tape would be: a wall by its faces, a door or window by the edges of its hole in the wall, a room by its inside outline. Centre lines are used only for a wall\'s own length.'
 
 export const HEIGHT_RULE =
-  'A room is as high as the plan states for it. When it states none, the room is as high as the lowest solid wall round it, since a level ceiling rests on all of them; dividing lines stand no height and are left out.'
+  'A room is as high as the plan states for it. When it states none, the room is as high as the lowest solid wall round it, since a level ceiling rests on all of them; dividing lines stand no height and are left out. Under a roof its floor states, a room that states no height is as high as the roof over it, given from its lowest to its highest.'
 
 /** A room's height and where it comes from. */
 export interface RoomHeight {
   /** In metres; null when the plan states none and no solid wall bounds the room. */
   readonly value: number | null
   /** `room`: the room states it; `walls`: its solid walls agree; `lowest wall`: they differ and the lowest wins. */
-  readonly from: 'room' | 'walls' | 'lowest wall' | null
+  readonly from: 'room' | 'walls' | 'lowest wall' | 'roof' | null
   /** The solid walls round the room: the lowest and highest height, and the walls at the lowest, by id. Null when there are none. */
   readonly walls: { readonly low: number; readonly high: number; readonly lowest: readonly string[] } | null
+  /** LVL-6, only under a roof the floor states: the lowest and highest height over the room's floor. */
+  readonly roof?: { readonly lowest: number; readonly highest: number }
 }
 
 /**
@@ -234,6 +258,10 @@ export function roomHeight(plan: FloorPlan, roomId: string): RoomHeight {
     walls = { low, high, lowest: solid.filter((w) => w.height - low < tolerance('joint')).map((w) => w.id) }
   }
   if (room?.height !== undefined) return { value: room.height, from: 'room', walls }
+  // LVL-6: under a roof the floor states, the ceiling is the roof: the room is as high as the
+  // roof over it, from its lowest to its highest, and its walls (cut to the roof) do not bound it.
+  const under = room !== undefined && floorRoofShape(plan, floorOf(room)) !== null ? roomHeadroom(plan, room) : null
+  if (under !== null) return { value: under.highest, from: 'roof', walls, roof: { lowest: under.lowest, highest: under.highest } }
   if (walls === null) return { value: null, from: null, walls }
   return { value: walls.low, from: walls.high - walls.low < tolerance('joint') ? 'walls' : 'lowest wall', walls }
 }
@@ -260,7 +288,7 @@ export function wallLengths(survey: Survey, wall: Wall): WallLengths {
   return {
     id: wall.id,
     floor: floorOf(wall),
-    length: Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]),
+    length: lengthOf(wall),
     thickness: wall.virtual === true ? 0 : wall.thickness,
     height: wall.height,
     virtual: wall.virtual === true,
@@ -277,15 +305,25 @@ export interface Thing {
   readonly shape: readonly Vec2[]
 }
 
-/** A wall's footprint: its faces, or its line when it is a dividing line. */
+/** A wall's length along its axis: along its curve for a curved wall (CNT-18), 0 for one that cannot be built. */
+function lengthOf(wall: Wall): number {
+  if (wall.arc !== undefined) return curveFault(wall) === null ? wallLength(wall) : 0
+  return Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
+}
+
+/**
+ * A wall's footprint: its faces, or its line when it is a dividing line. A curved wall's is its
+ * faces along the curve (CNT-18); a curved dividing line's, the curve itself as a band of no width.
+ */
 function wallShape(wall: Wall, from: number, to: number): Vec2[] {
+  if (wall.arc !== undefined) return wallSlicePolygon(wall.virtual === true ? { ...wall, thickness: 0 } : wall, from, to)
   const axis = wallAxis(wall)
   if (wall.virtual === true) return [pointAlong(axis, from), pointAlong(axis, to)]
   return wallSlicePolygon(wall, from, to)
 }
 
 export function wallThing(wall: Wall): Thing {
-  const length = Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
+  const length = lengthOf(wall)
   const shape = length < tolerance('noLength') ? [fromTuple(wall.start)] : wallShape(wall, 0, length)
   return { kind: 'wall', id: wall.id, floor: floorOf(wall), shape }
 }

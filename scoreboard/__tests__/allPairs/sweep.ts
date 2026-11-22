@@ -228,7 +228,8 @@ function narrowestWidth(polygon: readonly Vec2[]): number {
 }
 
 function warning(code: SweepCode, id: string, hits: readonly string[] = []): DoorSweepIssue {
-  return { code, entity: 'opening', id, message: MESSAGES[code], severity: 'warning', hits }
+  // MSG-11: the oracle compares messages only; `said` is not enumerable, so equality ignores it.
+  return { code, entity: 'opening', id, message: MESSAGES[code], severity: 'warning', hits } as DoorSweepIssue
 }
 
 /**

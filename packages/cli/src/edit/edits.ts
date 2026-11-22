@@ -10,7 +10,9 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { dot, sub, tolerance, wallAxis, type FloorPlan, type Opening, type OpeningAnchor, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { planHasTypes, cameraRecord, compassBearing, doorKindOf, dot, drawingBearing, handingFromRooms, kindFits, kindWords, planOrientation, statedKind, storedView, sub, swingNeeds, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type HandSide, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { english, name, said as sentence } from '@ongrid/floorplan/messages'
+import { DOOR_KINDS, FloorPlanSchema, WINDOW_KINDS, statedOpening, statedWall, wallWithEnds, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { EditRefused } from './refused'
@@ -22,19 +24,53 @@ type Pair = [number, number]
 type RawRecord = Record<string, unknown>
 
 /** A change to one opening. `null` takes a key out. */
-export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall']: Opening[K] }> & { anchor?: OpeningAnchor | null }
+export type OpeningChange = Partial<{ [K in 'offset' | 'type' | 'hinge' | 'swing' | 'wall' | 'phase']: Opening[K] }> & {
+  /** CNT-15: null takes the opening's own size out, so its door or window type's is read. */
+  width?: number | null
+  height?: number | null
+  sill?: number | null
+  anchor?: OpeningAnchor | null
+  kind?: OpeningKind | null
+  opens?: Opening['opens'] | null
+  /** CNT-15: the door or window type it takes; null takes it out. */
+  doorType?: string | null
+  windowType?: string | null
+}
 
-/** A change to one room. `null` takes a key out. */
-export type RoomChange = { boundary?: string[]; name?: string; use?: string | null }
+/** A change to one room. `null` takes a key out. `partOf` makes it a zone of that room (CNT-8). */
+export type RoomChange = {
+  boundary?: string[]
+  name?: string
+  use?: string | null
+  partOf?: string | null
+  properties?: Readonly<Record<string, string | number | boolean>>
+  /** CNT-10: a room taken out of a plan with phases stays, to be demolished. */
+  phase?: Room['phase']
+  /** CNT-15: its finishes, by surface; null takes them all out. */
+  finishes?: Readonly<Record<string, string>> | null
+}
 
 /** What a change does, by id. */
 export interface Patch {
-  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind'] }>
+  /**
+   * Walls changed, by id: their centre line's new ends, as Grid reads the plan, and their kind.
+   * HND-11: `mirrored` turns a wall placed by its face over to its other face, as a mirror does.
+   * CNT-18: `arc`, a curved wall's new centre and sweep.
+   */
+  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind'] | null; mirrored?: boolean; arc?: { centre: Pair; sweep: number }; phase?: Wall['phase']; wallType?: string | null; thickness?: null; height?: null }>
   readonly openings: ReadonlyMap<string, OpeningChange>
   readonly removeOpenings: ReadonlySet<string>
   readonly rooms: ReadonlyMap<string, RoomChange>
+  /** CNT-3: the plan's own fields set (`north`, `site`). `null` takes a key out. Left out by a change that sets none. */
+  readonly plan?: Readonly<Record<string, unknown>>
   /** CNT-12: fixtures moved or turned, by id. Left out by a change that moves none. */
   readonly items?: ReadonlyMap<string, { at: Pair; turn: number }>
+  /**
+   * WRT-4 with LVL-8: the opening patterns, by id, whose door swings the other way (a mirror), as
+   * each plain door's does. A pattern is otherwise kept as the file has it: its wall keeps its id,
+   * start and end, so its places along the wall and its floors hold through a mirror or a turn.
+   */
+  readonly swingPatterns?: ReadonlySet<string>
   /** One line per thing changed, in Grid's words. */
   readonly said: readonly string[]
   /** Walls taken out; walls added go where the first one taken out was, or at the end. */
@@ -62,6 +98,21 @@ export function listed(names: readonly string[], max = 3): string {
   return shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`
 }
 
+/** CNT-18: the edits that change straight walls only, by the key of the words that name them (`edit.curved.doing.*`). */
+export type CurvedEdit = 'placeOpening' | 'moveSide' | 'addRoom' | 'mergeRooms' | 'splitRoom' | 'squareScan' | 'stretch'
+
+/**
+ * CNT-18: Grid's edits change straight walls only. An edit that would move, cut or measure a curved
+ * wall along a side of a room is refused, naming the wall, before anything is changed. MSG-11:
+ * the words are keys of the message files, said in English as the edits' answers are.
+ */
+export function refuseCurved(walls: Iterable<{ readonly id: string; readonly arc?: unknown } | null | undefined>, doing: CurvedEdit): void {
+  for (const wall of walls) {
+    if (wall === null || wall === undefined || wall.arc === undefined) continue
+    throw new EditRefused(english(sentence('edit.curved.refused', { wall: name(wall.id), doing: sentence(`edit.curved.doing.${doing}`) })))
+  }
+}
+
 export function emptyPatch(said: string[]): Patch {
   return { walls: new Map(), openings: new Map(), removeOpenings: new Set(), rooms: new Map(), said }
 }
@@ -76,6 +127,27 @@ function merged(record: RawRecord, change: Readonly<Record<string, unknown>>): R
   return next
 }
 
+/**
+ * The plan as Grid reads it after the patch (WRT-6). A wall the patch adds is written as its file
+ * will hold it, which may leave out its height; here it is read as the file will be, its floor's
+ * height or the default filled in, so the checks and the answer measure what the plan will be.
+ */
+export function readingAfter(plan: FloorPlan, patch: Patch): FloorPlan {
+  const read = (wall: RawRecord): RawRecord => {
+    const parsed = FloorPlanSchema.safeParse({ version: '1', walls: [wall], ...(plan.floors !== undefined ? { floors: plan.floors } : {}) })
+    return parsed.success ? (parsed.data.walls[0] as unknown as RawRecord) : wall
+  }
+  const reading = patch.addWalls === undefined ? patch : { ...patch, addWalls: patch.addWalls.map(read) }
+  const applied = applyPatch(plan as unknown as RawRecord, reading) as unknown as FloorPlan
+  // CNT-15 (C24): with named types, a part takes what its type gives as the file will be read, so
+  // the plan is read again from what each part states: a changed type reaches every part of it.
+  if (!planHasTypes(plan) && !(isRecordLike(patch.plan) && patch.plan['types'] !== undefined)) return applied
+  const again = FloorPlanSchema.safeParse({ ...applied, walls: applied.walls.map(statedWall), openings: applied.openings.map(statedOpening) })
+  return again.success ? again.data : applied
+}
+
+const isRecordLike = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
 /** Applies a patch to a plan's JSON, the file's own or Grid's reading of it, without changing anything else. */
 export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
   const list = (key: string): RawRecord[] => (Array.isArray(raw[key]) ? (raw[key] as RawRecord[]) : [])
@@ -89,7 +161,15 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
       continue
     }
     const change = patch.walls.get(wall['id'] as string)
-    walls.push(change ? merged(wall, change) : wall)
+    if (!change) {
+      walls.push(wall)
+      continue
+    }
+    // HND-11: the ends are centre points; a wall its file places by its face keeps that face.
+    const { start, end, mirrored, ...rest } = change
+    // CNT-18: a curved wall's face is written round its new arc.
+    const moved = start !== undefined || end !== undefined || mirrored === true ? wallWithEnds(wall, { start, end, arc: rest.arc }, mirrored === true) : wall
+    walls.push(merged(moved, rest))
   }
   if (!placed) walls.push(...(patch.addWalls ?? []))
   const openings = list('openings')
@@ -103,6 +183,9 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
         delete next['hinge']
         delete next['swing']
       }
+      // CNT-14: nor does a kind its new type does not take, or a part that opens on a doorless opening.
+      if (typeof next['kind'] === 'string' && !kindFits(next['type'] as Opening['type'], next['kind'])) delete next['kind']
+      if (next['type'] === 'opening') delete next['opens']
       return next
     })
   openings.push(...(patch.addOpenings ?? []))
@@ -123,12 +206,25 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
           return change ? { ...item, ...change } : item
         }),
       }
-  return { ...raw, walls, openings, rooms, ...items }
+  // LVL-8: a pattern's door swings the other way with every plain door's; a plan with no patterns keeps no key.
+  const swing = patch.swingPatterns
+  const patterns = swing === undefined || swing.size === 0 || !Array.isArray(raw['patterns'])
+    ? {}
+    : {
+        patterns: list('patterns').map((pattern) => {
+          const opening = pattern['opening'] as RawRecord | undefined
+          const side = opening?.['swing']
+          if (!swing.has(pattern['id'] as string) || (side !== 'left' && side !== 'right')) return pattern
+          return { ...pattern, opening: { ...opening, swing: side === 'left' ? 'right' : 'left' } }
+        }),
+      }
+  const top = (patch.plan === undefined ? raw : merged(raw, patch.plan)) as T
+  return { ...top, walls, openings, rooms, ...items, ...patterns }
 }
 
 /** The free stretches of a wall, measured from its start, between the other openings in it. */
 function freeStretches(plan: FloorPlan, wall: Wall, skip: string): Array<[number, number]> {
-  const length = wallAxis(wall).length
+  const length = wallLength(wall)
   const taken = plan.openings
     .filter((o) => o.wall === wall.id && o.id !== skip)
     .map((o): [number, number] => [o.offset, o.offset + o.width])
@@ -170,6 +266,12 @@ export interface OpeningChangeRequest {
   readonly from?: From
   /** WRT-3: metres from that end or face to its nearer edge. */
   readonly distance?: number
+  /** CNT-14: its kind (`DOOR_KINDS`, `WINDOW_KINDS`), or null to take it out. */
+  readonly kind?: OpeningKind | null
+  /** CNT-14: the side a door is hinged on, as seen from `seenFrom`, else from the room it opens into. */
+  readonly hinged?: HandSide
+  /** CNT-14: the room, or "outside", `hinged` is seen from. */
+  readonly seenFrom?: string
 }
 
 const sideName = (side: unknown): string | null => (typeof side === 'object' && side !== null && 'room' in side ? (side as { room: string }).room : side === 'outside' ? 'outside' : null)
@@ -189,6 +291,7 @@ function wallOnSide(survey: Survey, roomId: string, side: Direction): { wall: Wa
   if (walls.length > 1) throw new EditRefused(`The ${side} side of ${name} is ${walls.length} walls (${walls.map((w) => quoted(w.id)).join(', ')}); name the opening's place on one with from and distance after moving it there by hand.`)
   const wall = walls[0]!
   if (wall.virtual === true) throw new EditRefused(`The ${side} side of ${name} is a dividing line, not a wall: it takes no door or window.`)
+  refuseCurved([wall], 'placeOpening')
   const axis = wallAxis(wall)
   const along = edges.flatMap((edge) => [dot(sub(edge.from, axis.start), axis.dir), dot(sub(edge.to, axis.start), axis.dir)])
   return { wall, lo: Math.min(...along), hi: Math.max(...along) }
@@ -216,9 +319,16 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
   const width = request.width ?? opening.width
   const height = request.height ?? (request.type === 'door' && opening.type !== 'door' ? 2.1 : opening.height)
   const sill = request.sill ?? (type === 'door' ? 0 : opening.sill)
-  if (type !== 'door' && (request.opensInto !== undefined || request.hinge !== undefined)) {
+  if (type !== 'door' && (request.opensInto !== undefined || request.hinge !== undefined || request.hinged !== undefined)) {
     throw new EditRefused(`Only a door opens into a room or hangs from a side; this would be a ${type}.`)
   }
+  if (request.hinge !== undefined && request.hinged !== undefined) throw new EditRefused('Give hinge (an end of its wall) or hinged (left or right, as seen from a room), not both.')
+  if (request.seenFrom !== undefined && request.hinged === undefined) throw new EditRefused('seen_from says where hinged is seen from: pass hinged as well.')
+  // CNT-14: the kind it will be, which its type must take.
+  if (request.kind != null && !kindFits(type, request.kind)) {
+    throw new EditRefused(`A ${type === 'opening' ? 'doorless opening has no kind' : `${type} cannot be ${request.kind}: a ${type} is ${(type === 'door' ? DOOR_KINDS : WINDOW_KINDS).join(', ')}`}.`)
+  }
+  const kindAfter = request.kind === undefined ? statedKind(type, opening.kind) : request.kind
 
   // Which wall it is on after the change, and where along it.
   const guessed: string[] = []
@@ -228,8 +338,13 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
   if (sill + height > onto.height + tolerance('noLength')) {
     throw new EditRefused(`A sill of ${sill.toFixed(2)} m and a height of ${height.toFixed(2)} m reach above the ${onto.height.toFixed(2)} m wall.`)
   }
-  const axis = wallAxis(onto)
-  const length = axis.length
+  // CNT-18: on a curved wall an opening is placed along the curve, from its start or its end;
+  // a side of the drawing or of a room is no way to measure along a curve.
+  if (onto.arc !== undefined && request.from !== undefined && request.from !== 'start' && request.from !== 'end') {
+    throw new EditRefused(english(sentence('edit.curved.along', { wall: name(onto.id), from: request.from })))
+  }
+  const axis = onto.arc === undefined ? wallAxis(onto) : null
+  const length = wallLength(onto)
   const keep = request.keep ?? 'centre'
   let offset: number
   let anchor: OpeningAnchor | undefined
@@ -238,23 +353,24 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
     const from = request.from
     if (request.room !== undefined) {
       const compass = from as Direction
-      if (Math.abs(dot(axis.dir, COMPASS[compass])) < 0.3) {
-        const runs = Math.abs(axis.dir.x) > Math.abs(axis.dir.y) ? 'east-west' : 'north-south'
+      const along = axis!
+      if (Math.abs(dot(along.dir, COMPASS[compass])) < 0.3) {
+        const runs = Math.abs(along.dir.x) > Math.abs(along.dir.y) ? 'east-west' : 'north-south'
         throw new EditRefused(`Wall ${quoted(onto.id)} runs ${runs}, so a place along it is measured from ${runs === 'east-west' ? 'east or west' : 'north or south'}, not from ${compass}.`)
       }
       const near = moving ? (target!.lo + target!.hi) / 2 : opening.offset + opening.width / 2
       const face = roomFaceAlong(survey, request.room, onto, compass, near)
       if (face === null) throw new EditRefused(`Room ${quoted(survey.byId.get(request.room)!.facts.name)} has no side along wall ${quoted(onto.id)} to measure from.`)
-      const high = dot(axis.dir, COMPASS[compass]) > 0
+      const high = dot(along.dir, COMPASS[compass]) > 0
       const distance = request.distance ?? (moving ? null : high ? face - (opening.offset + opening.width) : opening.offset - face)
       if (distance === null) throw new EditRefused('Moving it to another wall needs distance: metres from that side of the room to its nearer edge.')
       offset = high ? face - distance - width : face + distance
       anchor = { from: compass, room: request.room }
       placedText = `${distance.toFixed(2)} m from the ${compass} side of ${quoted(survey.byId.get(request.room)!.facts.name)}`
     } else {
-      const compassEnd = from === 'start' || from === 'end' ? from : Math.abs(dot(axis.dir, COMPASS[from])) < 0.3 ? null : dot(axis.dir, COMPASS[from]) > 0 ? 'end' : 'start'
+      const compassEnd = from === 'start' || from === 'end' ? from : Math.abs(dot(axis!.dir, COMPASS[from])) < 0.3 ? null : dot(axis!.dir, COMPASS[from]) > 0 ? 'end' : 'start'
       if (compassEnd === null) {
-        const runs = Math.abs(axis.dir.x) > Math.abs(axis.dir.y) ? 'east-west' : 'north-south'
+        const runs = Math.abs(axis!.dir.x) > Math.abs(axis!.dir.y) ? 'east-west' : 'north-south'
         throw new EditRefused(`Wall ${quoted(onto.id)} runs ${runs}: its ends are to the ${runs === 'east-west' ? 'east and west' : 'north and south'}, not the ${from}.`)
       }
       const distance = request.distance ?? (compassEnd === 'start' ? opening.offset : length - opening.offset - opening.width)
@@ -334,12 +450,28 @@ export function changeOpening(survey: Survey, id: string, request: OpeningChange
     }
     const swing = at === 0 ? 'left' : 'right'
     change.swing = swing
-    if (opening.hinge === undefined && request.hinge === undefined) change.hinge = 'start'
+    // One leaf or a folding door needs the end it hangs from; a pair, or a door that slides, rolls or lifts, does not.
+    if (opening.hinge === undefined && request.hinge === undefined && request.hinged === undefined && swingNeeds(doorKindOf(kindAfter)).hinge) change.hinge = 'start'
     if (swing !== opening.swing) said.push(`${label} now opens into ${request.opensInto === 'outside' ? 'the outside' : quoted(survey.facts.rooms.get(request.opensInto)?.name ?? request.opensInto)}.`)
   }
   if (request.hinge !== undefined && request.hinge !== opening.hinge) {
     change.hinge = request.hinge
     said.push(`${label} now hangs from the end nearer the wall's ${request.hinge}.`)
+  }
+  if (request.hinged !== undefined) {
+    // CNT-14: left or right as seen from a room, turned into the wall's terms where the door will be.
+    const placed: Opening = { ...opening, ...(moving ? { wall: onto.id } : {}), offset: change.offset ?? opening.offset, width, ...(change.swing !== undefined ? { swing: change.swing } : {}) }
+    const after: FloorPlan = { ...plan, openings: plan.openings.map((o) => (o.id === id ? placed : o)) }
+    const handing = handingFromRooms(after, placed, { hinged: request.hinged, ...(request.seenFrom !== undefined ? { seenFrom: request.seenFrom } : request.opensInto !== undefined ? { seenFrom: request.opensInto } : {}) })
+    if ('refused' in handing) throw new EditRefused(handing.refused)
+    if (handing.hinge !== undefined && handing.hinge !== opening.hinge) change.hinge = handing.hinge
+    const from = request.seenFrom ?? request.opensInto
+    const where = from === undefined ? 'the room it opens into' : from === 'outside' ? 'the outside' : quoted(survey.facts.rooms.get(from)?.name ?? from)
+    said.push(`${label} is hinged on the ${request.hinged} as seen from ${where}.`)
+  }
+  if (request.kind !== undefined && request.kind !== (opening.kind ?? null)) {
+    change.kind = request.kind
+    said.push(request.kind === null ? `${label} states no kind now: ${type === 'door' ? 'one swinging leaf' : 'drawn as before'}.` : `${label} is now a ${kindWords(type === 'door' ? 'door' : 'window', request.kind)}.`)
   }
   if (said.length === 0) throw new EditRefused(`That is how ${label} is already: nothing to change.`)
   const patch: Patch = { ...emptyPatch(said), guessed }
@@ -375,6 +507,7 @@ export function moveRoomSide(survey: Survey, roomId: string, side: Direction, by
   if (walls.length > 1) throw new EditRefused(`The ${side} side of ${name} is made of ${walls.length} walls; move one wall at a time is not offered yet.`)
   const wall = walls[0]!
   if (wall.virtual === true) throw new EditRefused(`The ${side} side of ${name} is a dividing line, not a wall.`)
+  refuseCurved([wall], 'moveSide')
   const v = { x: out.x * by, y: out.y * by }
   const plan: FloorPlan = survey.plan
   const floor = wall.floor ?? 'ground'
@@ -398,6 +531,7 @@ export function moveRoomSide(survey: Survey, roomId: string, side: Direction, by
     if (onAxis(s) && !onAxis(e)) change.start = moved(s)
     if (onAxis(e) && !onAxis(s)) change.end = moved(e)
     if (!change.start && !change.end) continue
+    refuseCurved([other], 'moveSide')
     const ns = change.start ? pt(change.start) : s
     const ne = change.end ? pt(change.end) : e
     const oldAxis = wallAxis(other)
@@ -443,9 +577,16 @@ const MIRRORED: Record<string, string> = { north: 'south', south: 'north', east:
 
 /**
  * The whole plan mirrored about the middle of its walls' box: left to right swaps east and
- * west. Every door keeps opening into the same room, every room keeps its size, and each
+ * west. A curved wall's centre is mirrored too, and its sweep turns the other way (CNT-18). Every door keeps opening into the same room, every room keeps its size, and each
  * room's walls are listed the other way round, so they still run counter-clockwise (C3). An
  * anchor kept from a side of the drawing turns with it.
+ *
+ * CNT-3: the north the plan states is mirrored too, to minus itself, so the swap is the real
+ * one: left to right, what faced east faces west, and top to bottom, what faced north faces
+ * south, whichever way the drawing is turned. The site's origin, its boundary and its things
+ * (BRF-3) are mirrored with the walls. The
+ * y direction is kept: the result is a new design, still drawn as the plan says its y runs, and
+ * the front stays the part it names, which is mirrored with the rest.
  */
 export function mirrorPlan(survey: Survey, how: Mirror): Patch {
   const plan = survey.plan
@@ -455,7 +596,10 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     how === 'left-right'
       ? [r3(Math.min(...xs) + Math.max(...xs) - p[0]), p[1]]
       : [p[0], r3(Math.min(...ys) + Math.max(...ys) - p[1])]
-  const walls = new Map(plan.walls.map((w) => [w.id, { start: flip(w.start), end: flip(w.end) }]))
+  // CNT-18: a curved wall's centre is mirrored with it, and it turns the other way round it.
+  const walls = new Map(
+    plan.walls.map((w) => [w.id, { start: flip(w.start), end: flip(w.end), mirrored: true, ...(w.arc === undefined ? {} : { arc: { centre: flip(w.arc.centre), sweep: -w.arc.sweep } }) }])
+  )
   const turns = (side: string): boolean => (how === 'left-right' ? side === 'east' || side === 'west' : side === 'north' || side === 'south')
   const openings = new Map<string, OpeningChange>()
   for (const o of plan.openings) {
@@ -464,6 +608,8 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     if (o.anchor !== undefined && turns(o.anchor.from)) change.anchor = { ...o.anchor, from: MIRRORED[o.anchor.from] as From }
     if (Object.keys(change).length > 0) openings.set(o.id, change)
   }
+  // LVL-8: a pattern's door swings the other way too; its places along its wall stay, as a plain opening's offset does.
+  const swingPatterns = new Set((plan.patterns ?? []).filter((p) => p.opening.swing !== undefined).map((p) => p.id))
   const rooms = new Map(plan.rooms.map((room) => [room.id, { boundary: [...room.boundary].reverse() }]))
   // CNT-12: a fixture's middle is mirrored, and its front faces the mirrored way: left to right
   // turns it to minus its turn, top to bottom to a half turn less it.
@@ -472,12 +618,121 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     const mirrored = how === 'left-right' ? -turn : 180 - turn
     return [item.id, { at: flip(item.at), turn: r3(((mirrored % 360) + 360) % 360) }]
   }))
+  const top: Record<string, unknown> = {}
+  if (plan.north !== undefined) top['north'] = wrapDegrees(r3(-plan.north))
+  // BRF-3: the plot's boundary and the site's things are mirrored with the walls. Each edge keeps
+  // its number, so the streets and set-backs still name the same edges.
+  const site = plan.site
+  if (site !== undefined && plan.walls.length > 0 && (site.origin !== undefined || site.boundary !== undefined || site.things !== undefined)) {
+    top['site'] = {
+      ...site,
+      ...(site.origin === undefined ? {} : { origin: flip(site.origin) }),
+      ...(site.boundary === undefined ? {} : { boundary: site.boundary.map(flip) }),
+      ...(site.things === undefined ? {} : { things: site.things.map((thing) => ({ ...thing, ...(thing.points === undefined ? {} : { points: thing.points.map(flip) }), ...(thing.at === undefined ? {} : { at: flip(thing.at) }) })) }),
+    }
+  }
+  // BRF-4 (C17): a floor's outline is mirrored with the walls it holds.
+  const floors = movedOutlines(plan, flip)
+  if (floors !== null) top['floors'] = floors
+  // VEW-3: each saved view is mirrored with the building, so it still frames what it framed.
+  const views = mirroredViews(plan, how, flip, top['north'] as number | undefined)
+  if (views !== null) top['views'] = views
+  const north = plan.north === undefined ? '' : ` The plan's north is mirrored with it: ${wrapDegrees(r3(plan.north))}° → ${top['north'] as number}° counter-clockwise from the top of the drawing.`
   return {
     walls,
     openings,
     removeOpenings: new Set(),
     rooms,
     ...(items.size === 0 ? {} : { items }),
-    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.`],
+    ...(swingPatterns.size === 0 ? {} : { swingPatterns }),
+    ...(Object.keys(top).length === 0 ? {} : { plan: top }),
+    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${views === null ? '' : ` The ${views.length === 1 ? 'saved view is' : `${views.length} saved views are`} mirrored with it.`}${patternsFollow(plan)}`],
   }
+}
+
+/** LVL-8: one sentence when the plan has opening patterns: they stay patterns and their openings follow their walls. */
+function patternsFollow(plan: FloorPlan): string {
+  const n = plan.patterns?.length ?? 0
+  return n === 0 ? '' : ` ${n === 1 ? 'Its opening pattern stays a pattern' : `Its ${n} opening patterns stay patterns`}, and the openings ${n === 1 ? 'it places follow its wall' : 'they place follow their walls'}.`
+}
+
+/** WRT-4: the turns `grid_mirror` makes, in degrees counter-clockwise on the drawing as Grid draws it (y up). */
+export const TURNS = [90, 180, 270] as const
+export type Turn = (typeof TURNS)[number]
+
+const TURN_WORDS: Record<Turn, string> = { 90: 'a quarter counter-clockwise (90°)', 180: 'half round (180°)', 270: 'a quarter clockwise (270°, or -90°)' }
+
+/**
+ * WRT-4: the whole plan turned a quarter or half round about the middle of its walls' box,
+ * counter-clockwise as Grid draws it, y up, as a stated north is measured. Every room keeps its
+ * size and its walls in the same order, every door its swing and the room it opens into; an
+ * anchor kept from a side of the drawing turns with it, a fixture turns with the plan, and the
+ * site's origin turns with the walls. The stated north is kept: the building turns on its site,
+ * so what faced south faces another way, as `grid_mirror`'s mirror is a new design too. The y
+ * direction is kept, so on a page whose y runs down the plan turns the other way.
+ */
+export function turnPlanBy(survey: Survey, turn: Turn): Patch {
+  const plan = survey.plan
+  const xs = plan.walls.flatMap((w) => [w.start[0], w.end[0]])
+  const ys = plan.walls.flatMap((w) => [w.start[1], w.end[1]])
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2
+  const [cos, sin] = turn === 90 ? [0, 1] : turn === 180 ? [-1, 0] : [0, -1]
+  const map = (p: readonly [number, number]): Pair => {
+    const x = p[0] - cx
+    const y = p[1] - cy
+    return [r3(cx + cos * x - sin * y), r3(cy + sin * x + cos * y)]
+  }
+  const sides = ['north', 'west', 'south', 'east'] as const
+  const turned = (side: string): string => {
+    const k = sides.indexOf(side as (typeof sides)[number])
+    return k < 0 ? side : sides[(k + turn / 90) % 4]!
+  }
+  // CNT-18: a curved wall's centre turns with its ends; a turn keeps its sweep.
+  const walls = new Map(plan.walls.map((w) => [w.id, { start: map(w.start), end: map(w.end), ...(w.arc === undefined ? {} : { arc: { centre: map(w.arc.centre), sweep: w.arc.sweep } }) }]))
+  const openings = new Map<string, OpeningChange>()
+  for (const o of plan.openings) if (o.anchor !== undefined && turned(o.anchor.from) !== o.anchor.from) openings.set(o.id, { anchor: { ...o.anchor, from: turned(o.anchor.from) as From } })
+  const items = new Map((plan.items ?? []).map((item) => [item.id, { at: map(item.at), turn: r3((((item.turn ?? 0) + turn) % 360 + 360) % 360) }]))
+  const top: Record<string, unknown> = {}
+  if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: map(plan.site.origin) }
+  // BRF-4 (C17): a floor's outline turns with the walls it holds.
+  const floors = movedOutlines(plan, map)
+  if (floors !== null) top['floors'] = floors
+  const north = plan.north === undefined ? '' : ` The plan's north is kept at ${wrapDegrees(r3(plan.north))}°, so the building faces new ways: what faced south now faces ${turn === 90 ? 'east' : turn === 180 ? 'north' : 'west'}.`
+  const down = plan.yAxis === 'down' ? ' The plan says its y runs down the page, so on that page it turned the other way.' : ''
+  return {
+    walls,
+    openings,
+    removeOpenings: new Set(),
+    rooms: new Map(),
+    ...(items.size === 0 ? {} : { items }),
+    ...(Object.keys(top).length === 0 ? {} : { plan: top }),
+    said: [`Turned the plan ${TURN_WORDS[turn]} about the middle of its walls: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${down}${patternsFollow(plan)}`],
+  }
+}
+
+/** BRF-4: the floors with every stated outline moved as `move` moves a point; null when no floor states one, or no wall moves. */
+function movedOutlines(plan: FloorPlan, move: (p: readonly [number, number]) => Pair): FloorPlan['floors'] | null {
+  if (plan.walls.length === 0 || !(plan.floors ?? []).some((floor) => floor.outline !== undefined)) return null
+  return plan.floors!.map((floor) => (floor.outline === undefined ? floor : { ...floor, outline: floor.outline.map(move) }))
+}
+
+/** VEW-3: the plan's saved views, mirrored: what each is pointed at, and the side it stands on. Null when it has none. */
+function mirroredViews(plan: FloorPlan, how: Mirror, flip: (p: readonly [number, number]) => Pair, north: number | undefined): StoredView[] | null {
+  const views = plan.views ?? []
+  if (views.length === 0) return null
+  const before = planOrientation(plan)
+  const after = { ...plan, ...(north !== undefined ? { north } : {}) } as FloorPlan
+  return views.map((view) => {
+    const setting = viewSetting(view)
+    const onDrawing = drawingBearing(setting.bearing, before, setting.north ?? null)
+    const [x, y] = flip([setting.target.point[0], setting.target.point[1]])
+    const record = cameraRecord(after, {
+      ...setting,
+      target: { ...setting.target, point: [x, y, setting.target.point[2]] },
+      bearing: compassBearing(how === 'left-right' ? -onDrawing : 180 - onDrawing, planOrientation(after)),
+      north: planOrientation(after).north,
+    })
+    return storedView(view.name, record)
+  })
 }

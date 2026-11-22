@@ -13,10 +13,12 @@
  *
  * The tool server's `grid_write_rooms` does the same through `writeRoomsIntoProject`.
  */
-import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
-import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import { expandPatterns, planHasPhases, validatePlan, type FloorPlan, type TapedRow } from '@ongrid/floorplan/geometry'
+import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
+import { FloorPlanSchema, safeParseFloorPlan, statedOpening, statedWall } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
+import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
+import { TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan } from '../quantities/survey'
@@ -32,7 +34,15 @@ export const WRITE_OPTIONS: OptionSpecs = {
   },
   '--replace': {
     takesValue: false,
-    help: 'Write over a plan that was not written from this rooms text, or was changed since. Grid refuses that otherwise, with the difference.',
+    help: 'Write over a plan that was not written from this rooms text or scan, or was changed since. Grid refuses that otherwise, with the difference.',
+  },
+  '--scan': {
+    takesValue: true,
+    help: 'Write the plan from a phone room scan in the project (Apple\'s room model, as JSON) in place of rooms text. The scan is kept beside the plan as <plan>.scan.json.',
+  },
+  '--layout': {
+    takesValue: true,
+    help: 'In place of a rooms file: a first layout from the brief beside the plan. tidy: a rectangle; sizes: every size kept.',
   },
   '--json': { takesValue: false, help: 'Print the answer as JSON.' },
   ...PROJECT_OPTION,
@@ -57,17 +67,36 @@ export interface WriteDone {
   /** The comparison with the plan before, or null when there was none. */
   readonly verdict: string | null
   readonly drawingProblems: { readonly before: number; readonly after: number }
+  /** BRF-1: the brief beside the plan, line by line against the plan written. */
+  readonly brief: BriefData
+  /** BRF-1: one line when this is the plan's first write and no brief is kept beside it; never a refusal. */
+  readonly reminder: string | null
+  /** HND-11: each length taped on site the file keeps, against the plan written. */
+  readonly taped: readonly TapedRow[]
   readonly lines: readonly string[]
 }
 
-function oneLine(text: string): string {
+/**
+ * WRT-4 with LVL-8: one line on the opening patterns `grid write` keeps: how many, and the first
+ * thing the walls just written keep a pattern from placing that the plan before did not.
+ */
+function patternsKept(before: FloorPlan, after: FloorPlan): string {
+  const n = after.patterns?.length ?? 0
+  const known = new Set(expandPatterns(before).issues.map((issue) => issue.message))
+  const fresh = expandPatterns(after).issues.filter((issue) => !known.has(issue.message))
+  const kept = `Kept the plan's ${n === 1 ? 'opening pattern' : `${n} opening patterns`} as the file has ${n === 1 ? 'it' : 'them'}: rooms text does not write ${n === 1 ? 'it' : 'them'}.`
+  if (fresh.length === 0) return kept
+  return `${kept} With the walls written now: ${fresh[0]!.message}${fresh.length > 1 ? ` (and ${fresh.length - 1} more)` : ''}.`
+}
+
+export function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
 const STARTER_REVISION = planRevision(FloorPlanSchema.parse(starterPlan))
 
 /** A plan that holds nothing yet, or is still the starter plan `grid init` wrote. */
-function nothingToLose(plan: FloorPlan): boolean {
+export function nothingToLose(plan: FloorPlan): boolean {
   if (plan.walls.length + plan.rooms.length + plan.openings.length === 0) return true
   return planRevision(plan) === STARTER_REVISION
 }
@@ -88,7 +117,7 @@ export function readRoomsFile(project: Project, file: string): string {
 }
 
 /** What writing would change, in a sentence, for a refusal. */
-function differenceLine(before: FloorPlan, after: FloorPlan): string {
+export function differenceLine(before: FloorPlan, after: FloorPlan): string {
   return comparePlans(surveyPlan(before), surveyPlan(after), ['the plan now', 'the plan this text writes']).verdict
 }
 
@@ -116,7 +145,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     const first = parsed.error.issues[0]
     throw new RoomsRefused('rooms/schema', `The rooms text was not written: the plan it makes does not fit the plan's format at ${first?.path.join('.') ?? 'its top'} (${first?.message ?? 'invalid'}).`)
   }
-  const plan = parsed.data
+  let plan = parsed.data
 
   // The plan now, if there is one, and whether writing over it would lose a change.
   let before: FloorPlan | null = null
@@ -127,13 +156,20 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     // Read whole: the plan is written over, and a part the reader left out would be lost unseen.
     const loaded = loadPlan(project, planFile, { whole: true })
     before = loaded.plan
+    // CNT-10: rooms text holds no phase and no base, so writing it over such a plan would lose them.
+    if (options.replace !== true && planHasPhases(before)) {
+      throw new RoomsRefused(
+        'rooms/phases',
+        `${shownFile} holds ${before.base === undefined ? 'existing, demolished and new parts' : `a fit-out on the base plan ${JSON.stringify(before.base)}`}, which rooms text does not hold, so writing it from rooms text would lose ${before.base === undefined ? 'them' : 'it'}. Change it with the edit tools (grid edit), which keep each part's phase and leave a base as it is; or add --replace to write over it and lose ${before.base === undefined ? 'them' : 'it'}.`
+      )
+    }
     raw = JSON.parse(project.readText(planFile, PLAN_FILE_MAX_BYTES).text) as Record<string, unknown>
     const now = planRevision(before)
     if (options.replace !== true) {
       if (result.basedOn !== null && result.basedOn !== now) {
         throw new RoomsRefused(
           'rooms/stale',
-          `This rooms text was read from another version of ${shownFile} (based on ${result.basedOn}; the plan is now ${now}), so writing it would undo what changed since. ${differenceLine(before, plan)} Read the plan back again (grid describe --as rooms), make the change there and write that; or pass --replace to write over it.`
+          `This rooms text was read from another version of ${shownFile} (based on ${result.basedOn}; the plan is now ${now}), so writing it would undo what changed since. ${differenceLine(before, plan)} Read the plan back again (grid describe --as rooms), make the change there and write that; or add --replace to write over it.`
         )
       }
       const unchanged = before.written !== undefined && before.written.revision === now
@@ -141,29 +177,61 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
         const why = before.written === undefined ? 'was not written from rooms text' : 'was changed since Grid last wrote it from rooms text'
         throw new RoomsRefused(
           'rooms/plan-changed',
-          `${shownFile} ${why}, and writing this text over it would lose that. ${differenceLine(before, plan)} Read the plan back as rooms text (grid describe --as rooms), which keeps it, and change that; or pass --replace to write over it.`
+          `${shownFile} ${why}, and writing this text over it would lose that. ${differenceLine(before, plan)} Read the plan back as rooms text (grid describe --as rooms), which keeps it, and change that; or add --replace to write over it.`
         )
       }
     }
   }
 
+  // CNT-9: the facts of the person's own and the rooms' numbers stay with their parts, by id.
+  const carried = before === null ? null : carryFacts(before, plan)
+  if (carried !== null) plan = carried.plan
   // Everything the rooms text does not hold stays as the file has it: its id, its picture.
   const next: Record<string, unknown> = { ...raw, version: '1', units: 'm' }
   delete next['floors']
   if (plan.floors !== undefined) next['floors'] = plan.floors
-  next['walls'] = plan.walls
+  // CNT-5: a `building` line sets what kind of building it is; without one, the file's stays.
+  if (plan.building !== undefined) next['building'] = plan.building
+  // WRT-7: a `display` line sets how the person reads lengths; without one, the file's stays.
+  if (plan.display !== undefined) next['display'] = plan.display
+  // WRT-6: a height the text did not state stays out of the file; the reading fills it again.
+  next['walls'] = plan.walls.map(statedWall)
   next['rooms'] = plan.rooms
-  next['openings'] = plan.openings
+  // CNT-15: a value an opening's type gives stays out of the file, as a wall's does.
+  next['openings'] = plan.openings.map(statedOpening)
+  // CNT-4: the flats a text places (a unit that is a flat type) replace the file's; a text that
+  // places none keeps the file's, as it keeps its opening patterns.
+  if (plan.flats !== undefined) {
+    next['flatTypes'] = plan.flatTypes ?? []
+    next['flats'] = plan.flats
+  }
   next['written'] = stampFor(plan)
+  // BRF-1: whether this is the plan's first write, before it is written.
+  const first = before === null || nothingToLose(before)
   const written = project.relative(project.writeFile(planFile, `${JSON.stringify(next, null, 2)}\n`))
+  const brief = briefAnswer(project, planFile, plan)
+  const reminder = first ? briefReminder(project, planFile) : null
+  // HND-11 (lab WR-14): the taped lengths the file keeps, against the plan as written.
+  const taped = tapedRows(safeParseFloorPlan(next) ?? plan)
 
   const verdict = before === null || nothingToLose(before) ? null : comparePlans(surveyPlan(before), surveyPlan(plan), ['the plan before', 'the plan now']).verdict
-  const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(plan).issues.length }
+  // WRT-4 with LVL-8: the file's opening patterns are kept and name their walls by id, so the plan
+  // written is counted with them, and what the new walls keep from being placed is said here.
+  const patterns = before?.patterns ?? []
+  const kept: FloorPlan = patterns.length === 0 ? plan : { ...plan, patterns }
+  const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(kept).issues.length }
   const lines = [
     `Wrote ${written} from rooms text: the walls, their kinds, the room boundaries and the openings' places are worked out by Grid.`,
     ...roomsAnswer(result, options.brief !== true || result.rooms.length <= ROOMS_LISTED_MAX),
     ...(verdict === null ? [] : [verdict]),
+    ...(carried === null || carried.kept === 0 ? [] : [`Facts of your own and room numbers kept by id on ${carried.kept} part${carried.kept === 1 ? '' : 's'}.`]),
+    ...(carried === null || carried.lost.length === 0 ? [] : [`Not in the text, so their facts and numbers are gone with them: ${carried.lost.slice(0, 10).join(', ')}${carried.lost.length > 10 ? ` and ${carried.lost.length - 10} more` : ''}.`]),
+    ...(before === null || patterns.length === 0 ? [] : [patternsKept(before, kept)]),
+    ...(plan.flats !== undefined || (before?.flats ?? []).length === 0 ? [] : [`Kept the plan's ${before!.flats!.length === 1 ? 'flat' : `${before!.flats!.length} flats`} as the file has ${before!.flats!.length === 1 ? 'it' : 'them'}: this rooms text places no flat type. grid check names a room a flat lists that the text no longer has.`]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
+    ...brief.text,
+    ...(reminder === null ? [] : [reminder]),
+    ...tapedTable(taped, { max: TAPED_ROWS_IN_AN_EDIT }),
   ]
-  return { written, result, plan, verdict, drawingProblems, lines }
+  return { written, result, plan, verdict, drawingProblems, brief: brief.data, reminder, taped, lines }
 }

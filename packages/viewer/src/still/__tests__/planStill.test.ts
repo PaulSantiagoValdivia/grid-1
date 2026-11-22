@@ -54,7 +54,7 @@ describe('planStill', () => {
     expect(hex(image, 0, 0)).toBe(DARK_COLORS_3D.background)
   })
 
-  it('takes every wall and slab from the scene the app builds', () => {
+  it('takes every wall, slab and door and window part from the scene the app builds', () => {
     const still = stillScene(flat, { colors: LIGHT_COLORS_3D, width: 300, height: 200 })
     try {
       const meshes: THREE.Mesh[] = []
@@ -62,7 +62,12 @@ describe('planStill', () => {
         if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh)
       })
       const model = buildScene(flat)
-      expect(meshes.length).toBe(model.walls.length + model.slabs.length)
+      // LVL-4: and the slab the floor stands on, from its outline. One floor alone has no roof drawn.
+      expect(model.shell!.slab).toHaveLength(1)
+      // CNT-14: and every box of each door's and window's frame, leaves and glass.
+      const parts = model.openings.reduce((sum, opening) => sum + opening.parts.length, 0)
+      expect(parts).toBeGreaterThan(0)
+      expect(meshes.length).toBe(model.walls.length + model.slabs.length + model.shell!.slab.length + parts)
       // Its lights are the app's, read from the scene rather than written down twice.
       const lights = still.scene.children.filter((object) => (object as THREE.Light).isLight)
       expect(lights.map((light) => light.type).sort()).toEqual(['DirectionalLight', 'HemisphereLight'])

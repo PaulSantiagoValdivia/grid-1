@@ -4,6 +4,8 @@ import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { cameraRecord, storedView } from '@ongrid/floorplan/geometry'
+import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { twoBedFlat } from '../../draw/__tests__/twoBedFlat'
 import { GRID_TOOLS } from '../../mcp/serveTools'
 
@@ -210,6 +212,18 @@ describe('grid draw --out: writing a picture', () => {
     expect(size('two.png')).toEqual([width * 2, height * 2])
   })
 
+  it('draws a view saved with the plan with --view, by its name in any capitals (VEW-3)', () => {
+    const plan = parseFloorPlan(JSON.parse(readFileSync(sample, 'utf8')))
+    const view = storedView('Garden corner', cameraRecord(plan, { target: { room: 'lounge', point: [7, 5, 1.3] }, bearing: 200, tilt: 25, distance: 12, focalLength: 35, cut: null }))
+    writeFileSync(join(dir, 'viewed.json'), JSON.stringify({ ...JSON.parse(readFileSync(sample, 'utf8')), views: [view] }))
+    const run = grid('draw', 'viewed.json', '--view', 'garden CORNER', '--out', 'view.png')
+    expect([run.status, run.err, run.out]).toEqual([0, '', 'Wrote view.png\n'])
+    const bytes = readFileSync(join(dir, 'view.png'))
+    expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1200, 800])
+    expectRefusal(grid('draw', 'viewed.json', '--view', 'Street'), 2, '--view names no view saved with this plan. Its views: "Garden corner".')
+    expectRefusal(grid('draw', 'viewed.json', '--view', 'Garden corner', '--floor', 'ground', '--out', 'v.png'), 2, '--view draws the floors its camera was saved with')
+  })
+
   it('writes a 3D still as a PNG with --3d, twice as large with --scale 2', () => {
     const one = grid('draw', 'two-bed-flat.json', '--3d', '--out', 'model.png')
     const two = grid('draw', 'two-bed-flat.json', '--3d', '--scale', '2', '--out', 'model-2.png')
@@ -225,6 +239,26 @@ describe('grid draw --out: writing a picture', () => {
     expect(filesIn(dir)).toEqual(['model-2.png', 'model.png', 'two-bed-flat.json'])
   })
 
+  it('writes a section along a line with --section, and says on standard error what it took (LVL-9)', () => {
+    const run = grid('draw', 'two-bed-flat.json', '--section', '2,-1:2,9', '--toward', 'right', '--out', 'section.svg')
+    expect(run.status).toBe(0)
+    expect(run.out).toBe('Wrote section.svg\n')
+    expect(run.err).toMatch(/^The section hatched \d+ parts? and listed \d+ things? that the plan does not state: each is listed under the drawing\.\n$/)
+    const svg = readFileSync(join(dir, 'section.svg'), 'utf8')
+    expect(svg).toContain('aria-label="Section A–A through')
+    expect(svg).toContain('data-part="section-cut"')
+    expect(svg).toContain('data-part="section-ground"')
+    expect(svg).toContain('Cut from (2.00, -1.00) to (2.00, 9.00), looking to the right of the line.')
+  })
+
+  it('marks a floor plan with --marks', () => {
+    const run = grid('draw', 'two-bed-flat.json', '--marks', 'levels,elevations,section', '--section', '2,-1:2,9', '--out', 'marked.svg')
+    expect([run.status, run.err]).toEqual([0, ''])
+    const svg = readFileSync(join(dir, 'marked.svg'), 'utf8')
+    expect(svg).toContain('aria-label="Floor plan with')
+    for (const part of ['section-mark', 'elevation-mark', 'level-mark']) expect(svg).toContain(`data-part="${part}"`)
+  })
+
   it('refuses a folder that does not exist, and writes nothing', () => {
     expectRefusal(grid('draw', 'two-bed-flat.json', '--out', join('missing', 'plan.svg')), 1, 'does not exist')
     expect(filesIn(dir)).toEqual(['two-bed-flat.json'])
@@ -233,23 +267,34 @@ describe('grid draw --out: writing a picture', () => {
 
 describe('grid check', () => {
   it('prints the report with its label first, and says no plan meets any rule', () => {
-    const run = grid('check', 'two-bed-flat.json')
+    // COD-3: the US stated, so the figure checks run and say what they could not look at.
+    const run = grid('check', 'two-bed-flat.json', '--country', 'US')
     expect(run.err).toBe('')
     expect(run.status).toBe(0)
     const lines = run.out.split('\n')
     expect(lines[0]).toBe(GENERAL_GUIDANCE_LABEL)
     // Its rooms state no use, so the two figure checks look at no room and are not listed as run (MSG-2).
-    expect(run.out).toContain('Checks run (4):')
+    // The plan check that stairs line up (LVL-3) looks at no room here: it has no stair room.
+    // MSG-10: the short report counts them; --full lists them, part by part.
+    expect(run.out).toContain('Checks run: 4. --full lists the checks')
     expect(run.out).toContain('No findings. That only means these checks found nothing')
     expect(run.out).toContain('Looked at by at least one check: 5 of 5 rooms.')
-    expect(run.out).toContain('Rooms people live or sleep in have a minimum floor area: looked at no rooms; 0 findings.')
-    expect(run.out).toContain('not looked at, 5 rooms: no use stated: "bath", "bed1", "bed2", "kitchen", "lounge"')
-    expect(run.out).toContain('What these checks never look at')
+    expect(run.out).toContain('Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms; not looked at 5: no use stated.')
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)
+    const full = grid('check', 'two-bed-flat.json', '--full', '--country', 'US')
+    expect(full.out.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
+    expect(full.out).toContain('Checks run (4):')
+    expect(full.out).toContain('Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms.')
+    expect(full.out).toContain('not looked at, 5 rooms: no use stated: "bath", "bed1", "bed2", "kitchen", "lounge"')
+    expect(full.out).toContain('What these checks never look at')
+    expect(full.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)
   })
 
   it('lists ceiling height and load-bearing walls among what the checks never look at', () => {
-    const run = grid('check', 'two-bed-flat.json')
+    // MSG-10: in the full report; the short one says how many there are and where. LVL-4 adds
+    // the line on the ground level, which the checks set no door or window against.
+    expect(grid('check', 'two-bed-flat.json').out).toContain('what is never looked at (11).')
+    const run = grid('check', 'two-bed-flat.json', '--full')
     expect(run.status).toBe(0)
     const never = run.out.slice(run.out.indexOf('What these checks never look at'))
     expect(never).toMatch(/^ {2}- Ceiling height is not checked\b/m)
@@ -376,13 +421,29 @@ describe('options: each command refuses what it does not take, by name', () => {
     [['draw', 'two-bed-flat.json', '--3d', '--scale', '5'], '--scale takes a number above 0 and up to 4 with --3d'],
     [['draw', 'two-bed-flat.json', '--3d', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['export', 'two-bed-flat.json', '--format', 'ifc', '--floor', 'ground'], '--floor does not apply to IFC'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2'], '--section takes the line to cut along as x1,y1:x2,y2'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:1,2'], '--section needs two different points'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--toward', 'north'], '--toward takes left or right'],
+    [['draw', 'two-bed-flat.json', '--toward', 'left'], '--toward says which way a section looks: add --section'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--floor', 'ground'], '--floor is for a floor plan; a section cuts every floor'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--hide', 'title'], '--hide is for a floor plan'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--units', 'cm'], '--units is for a floor plan'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--marks', 'levels'], 'add section to --marks'],
+    [['draw', 'two-bed-flat.json', '--3d', '--section', '1,2:9,2'], '--section is for a drawing, not the 3D model'],
+    [['draw', 'two-bed-flat.json', '--view', 'Garden corner', '--section', '1,2:9,2'], '--section is for a drawing, not a saved view of the 3D model: leave --section or --view out.'],
+    [['draw', 'two-bed-flat.json', '--view', 'Garden corner', '--marks', 'levels'], '--marks is for a drawing, not a saved view of the 3D model: leave --marks or --view out.'],
+    [['draw', 'two-bed-flat.json', '--facade', 'south', '--section', '1,2:9,2'], '--facade draws one side of the building and --section a cut through it: give one of them.'],
+    [['draw', 'two-bed-flat.json', '--facade', 'south', '--marks', 'levels'], '--marks is for a floor plan, not a facade: leave --marks or --facade out.'],
+    [['draw', 'two-bed-flat.json', '--marks', 'section'], '--marks section draws the line of a section on the plan: add --section'],
+    [['draw', 'two-bed-flat.json', '--marks', 'levels,levels'], '--marks names levels twice'],
+    [['draw', 'two-bed-flat.json', '--marks', 'grid'], '--marks "grid" is not a mark Grid draws on a plan'],
     [['export', 'two-bed-flat.json', '--format', 'dxf', '--out', 'plan.obj'], 'does not end in .dxf'],
     [['export', 'two-bed-flat.json'], 'export needs --format'],
     [['export', 'two-bed-flat.json', '--format', 'pdf'], '--format "pdf" is not one Grid writes'],
     [['check', 'two-bed-flat.json', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['draw', 'two-bed-flat.json', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['export', 'two-bed-flat.json', '--format', 'obj', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
-    [['check', 'two-bed-flat.json', '--country', 'Spain'], '--country takes a two-letter country code'],
+    [['check', 'two-bed-flat.json', '--country', 'the moon'], '--country names no place Grid knows'],
     [['check'], 'check needs a plan file'],
     [['check', 'two-bed-flat.json', 'other.json'], 'check takes one plan file'],
     [['serve', 'two-bed-flat.json'], 'serve takes no arguments'],
@@ -436,7 +497,10 @@ describe('grid serve', () => {
 })
 
 describe('speed', () => {
-  it('answers grid check on the sample flat in under half a second (median of 7)', () => {
+  // QAR-4: a new process starts about three times slower on a Windows runner, with its virus
+  // scanner, so the budget there is a second and a half.
+  const budget = process.platform === 'win32' ? 1500 : 500
+  it(`answers grid check on the sample flat in under ${budget} ms (median of 7)`, () => {
     const times: number[] = []
     for (let i = 0; i < 7; i++) {
       const start = performance.now()
@@ -444,7 +508,7 @@ describe('speed', () => {
       times.push(performance.now() - start)
     }
     times.sort((a, b) => a - b)
-    expect(times[3]).toBeLessThan(500)
+    expect(times[3]).toBeLessThan(budget)
   }, 30_000)
 })
 
@@ -465,7 +529,28 @@ describe('the built file', () => {
     // 400 kB since VEW-7, to catch a second zod; 450 kB since WRT-3, whose edits and their tools
     // take the file just past 400 kB (400,863 bytes) with no new dependency. 500 kB since SHT-7:
     // the writing on the drawing, with HND-6, COD-2, ARE-12, CMD-13 and QAR-7 on main, made it
-    // 463,249 bytes, again with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(500_000)
+    // 463,249 bytes, again with no new dependency. 550 kB since VEW-3: the camera and saved
+    // views, with BRF-1's brief and CNT-8's zones from main, made it 512,435 bytes, again with no
+    // new dependency. WRT-4's repeats, floor copies, rooms through floors, the quarter turn and the
+    // comparison's mirror test take it to 525,055 bytes, under the same cap, with no new dependency;
+    // merged with LVL-8's facades and opening patterns and HND-1's DXF from main, 532,807 bytes,
+    // still under it, so the cap stays.
+    // BRF-3's plot adds about 7,000 more. 600 kB since CNT-17: its accessibility measurements,
+    // merged with BRF-3 and WRT-4 from main, make it 555,889 bytes, again with no new dependency.
+    // CNT-18's curved walls add about 20,000 more, under the same cap.
+    // VEW-4's preview tools, record, 3D pick and page server add about 17,000 bytes (the page
+    // itself is a chunk of its own); merged with COD-8 and HND-11, 559,890 bytes, under the same cap.
+    // 650 kB since HND-12: its phone room scan (the reader, the face pairing and the evidence
+    // beside the plan, about 34,000 bytes), merged with WRT-7, CNT-10 and VEW-9 from main, makes it
+    // 607,030 bytes, again with no new dependency. BRF-6's first layout from the brief adds about
+    // 11,800 more, also with no new dependency.
+    // CNT-18 merged with WRT-7, CNT-10, VEW-9 and VEW-4 from main: 578,078 bytes; with BRF-4 and
+    // HND-12 too, 623,324 bytes; with CNT-4, LVL-5 and BRF-6 too, 643,587 bytes, under the same cap.
+    // 655 kB since CNT-18 merged with MSG-11: main was 648,688 bytes, and the curved walls with
+    // their words as keys of the message files make it 653,972, again with no new dependency.
+    // 700 kB since CNT-14 merged with CNT-18: its kinds of door and window (the symbols, the parts
+    // in 3D and the IFC, the handing) with MSG-11's languages made 655,506 bytes, and with the
+    // curved walls too (main was 653,972 bytes) 660,801, again with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(700_000)
   })
 })

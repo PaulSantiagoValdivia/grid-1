@@ -14,6 +14,9 @@
  */
 
 import type { RuleCitation } from '@ongrid/floorplan/geometry'
+import { english, joined, said, sayValue, type Said, type Value } from '@ongrid/floorplan/messages'
+import type { BuildingType } from '@ongrid/floorplan/types/floorplan'
+import { countryOf } from '@ongrid/floorplan/types/places'
 import type { AppliedFigure, RuleFigures } from './types'
 
 export const FIGURE_KEYS = [
@@ -57,28 +60,56 @@ export interface Verification {
 
 /**
  * The kind of building a figure was read for (COD-2). Every figure here was read for homes.
- * Until a plan can say what kind of building it is (CNT-5), a figure is applied to any plan,
- * so every note and every pass that used one says which kind of building it was meant for.
+ * CNT-5: a figure check runs only where the plan says the building (or that floor of it) is one
+ * of the kinds its figures were read for (`READ_FOR_BUILDINGS`), or where the plan does not say.
  */
 export const BUILDING_KINDS = ['homes'] as const
 export type BuildingKind = (typeof BUILDING_KINDS)[number]
 
-/** How a reader is told what a kind of building is, in our own words. */
-const BUILDING_KIND_TEXT: Record<BuildingKind, string> = {
-  homes: 'homes (houses and flats people live in)'
+
+/**
+ * CNT-5: the kinds of building a plan may state (`BuildingType` in the plan format) that each
+ * kind a figure was read for covers. A hotel is not a home here: its rooms are for guests, and
+ * the figures were read for homes.
+ */
+export const READ_FOR_BUILDINGS: Readonly<Record<BuildingKind, readonly BuildingType[]>> = {
+  homes: ['home']
 }
 
-/** "homes (houses and flats people live in)", or several kinds joined. */
+/** Whether figures read for these kinds apply to a building of this kind: always when it is not stated. */
+export function readForCovers(kinds: readonly BuildingKind[], building: BuildingType | undefined): boolean {
+  return building === undefined || kinds.some((kind) => READ_FOR_BUILDINGS[kind].includes(building))
+}
+
+/** MSG-11: "homes (houses and flats people live in)", or several kinds joined, by key (`check.kind.*`). */
+export function buildingKindsSaid(kinds: readonly BuildingKind[]): Value {
+  return joined([...new Set(kinds)].map((kind) => said(`check.kind.${kind}`)), 'join.and')
+}
+
+/** "homes (houses and flats people live in)", or several kinds joined, in English. */
 export function buildingKindsText(kinds: readonly BuildingKind[]): string {
-  return [...new Set(kinds)].map((kind) => BUILDING_KIND_TEXT[kind]).join(' and ')
+  return sayValue('en', buildingKindsSaid(kinds))
+}
+
+/** MSG-11: a kind of building as a sentence names it, with its article: "an office". */
+export function buildingTypeSaid(type: BuildingType | undefined): Said {
+  return said(type === undefined ? 'check.building.unknown' : `check.building.${type}`)
 }
 
 /**
  * The sentence every note that used a figure carries (COD-2): which kind of building its figures
- * were read for, and that Grid cannot yet tell whether the plan is one. No full stop at the end.
+ * were read for, and that Grid cannot tell whether the plan is one, when the plan does not say
+ * (`stated` undefined). CNT-5: where the plan says what the building is, the figures ran because
+ * it is that kind, and the sentence says so. No full stop at the end.
  */
-export function readForSentence(kinds: readonly BuildingKind[]): string {
-  return `This check's figures were read for ${buildingKindsText(kinds)}; the plan does not say what kind of building it is, so Grid applied them as they are`
+export function readForSaid(kinds: readonly BuildingKind[], stated?: BuildingType): Said {
+  return stated === undefined
+    ? said('check.readFor.unstated', { kinds: buildingKindsSaid(kinds) })
+    : said('check.readFor.stated', { kinds: buildingKindsSaid(kinds), building: buildingTypeSaid(stated) })
+}
+
+export function readForSentence(kinds: readonly BuildingKind[], stated?: BuildingType): string {
+  return english(readForSaid(kinds, stated))
 }
 
 export interface Provenance {
@@ -260,9 +291,13 @@ export function isPlausible(key: FigureKey, value: number): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value >= spec.min && value <= spec.max
 }
 
-/** Whether the baselines apply where the plan will be built. No country stated means yes. */
+/**
+ * Whether the baselines apply for a country: the US, however Grid's list lets it be written (`US`,
+ * `usa`, `United States`; COD-3, lab CH-3). No country here means yes: whether a plan that states
+ * no place gets a figure at all is the full check's decision (`placeFor`, `WITHOUT_PLACE`).
+ */
 export function baselineApplies(country: string | undefined): boolean {
-  return country === undefined || country.trim() === '' || country.trim().toUpperCase() === 'US'
+  return country === undefined || country.trim() === '' || countryOf(country)?.code === 'US'
 }
 
 /**
@@ -312,4 +347,60 @@ export function findingReadFor(finding: {
   const kinds = (finding.figures ?? []).map((figure) => figure.readFor)
   if (kinds.length === 0 && finding.code === 'no_escape_opening') kinds.push(ESCAPE_TOP_LEVEL.provenance.readFor)
   return [...new Set(kinds)]
+}
+
+/**
+ * CNT-17: the statuses that say a named person has checked a figure against its source. Only a
+ * figure with one of them, and each check in `verifiedBy` by a person, is confirmed. `ai-found`,
+ * `human-entered` and `disputed` never are.
+ */
+export const CONFIRMED_STATUSES: readonly VerificationStatus[] = ['checked-once', 'checked-twice']
+
+/** Whether a named person has confirmed the figure against its source (CNT-17). An AI is never the one who verified it. */
+export function isConfirmed(provenance: Pick<Provenance, 'status' | 'verifiedBy'>): boolean {
+  return (
+    CONFIRMED_STATUSES.includes(provenance.status) &&
+    provenance.verifiedBy.length > 0 &&
+    provenance.verifiedBy.every((check) => check.by.trim() !== '' && !/\bAI\b/.test(check.by))
+  )
+}
+
+/** A figure a named person has confirmed, as a comparison names it: its value, its source and who checked it. */
+export interface ConfirmedFigure {
+  readonly key: FigureKey
+  readonly value: number
+  readonly unit: FigureUnit
+  readonly status: VerificationStatus
+  readonly jurisdiction: string
+  readonly readFor: BuildingKind
+  readonly citations: readonly RuleCitation[]
+  readonly verifiedBy: readonly Verification[]
+}
+
+/**
+ * CNT-17: the figure for `key`, only when a named person has confirmed it (`isConfirmed`), the
+ * place is stated and is one its figures are for (`baselineApplies`: a plan that states no place
+ * gets no figure, COD-3), and the building is a kind it was read for (`readForCovers`). Null
+ * otherwise, and then nothing is compared with it. `specs` is the table read, `FIGURES` but in a test.
+ */
+export function confirmedFigure(
+  key: FigureKey,
+  where: { readonly country?: string; readonly building?: BuildingType },
+  specs: Readonly<Record<FigureKey, FigureSpec>> = FIGURES
+): ConfirmedFigure | null {
+  const spec = specs[key]
+  const country = where.country?.trim() ?? ''
+  if (!isConfirmed(spec.provenance) || country === '' || !baselineApplies(country)) return null
+  if (!readForCovers([spec.provenance.readFor], where.building)) return null
+  const { jurisdiction, readFor, citations, verifiedBy, status } = spec.provenance
+  return {
+    key,
+    value: spec.baseline,
+    unit: spec.unit,
+    status,
+    jurisdiction,
+    readFor,
+    citations: citations.map(({ document, edition, clause }) => ({ document, edition, clause })),
+    verifiedBy
+  }
 }

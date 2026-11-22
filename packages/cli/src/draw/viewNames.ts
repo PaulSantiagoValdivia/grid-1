@@ -16,5 +16,15 @@ export function namedLook(look: LookName): 'working' | 'technical' | 'dark' {
   return look === 'light' ? 'working' : look === 'mono' ? 'technical' : look
 }
 
+/**
+ * SHT-10: the look a picture handed to an agent or written to a file is drawn in: always on light
+ * paper, so `dark`, the screen's theme, draws the working look. The preview page's own drawing,
+ * which the page shows on its screen, keeps `namedLook`.
+ */
+export function pictureLook(look: LookName): 'working' | 'technical' {
+  const named = namedLook(look)
+  return named === 'dark' ? 'working' : named
+}
+
 export const SIDES = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'above'] as const
 export type Side = (typeof SIDES)[number]

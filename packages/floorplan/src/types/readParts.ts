@@ -3,14 +3,15 @@
  *
  * `parseFloorPlan` is all or nothing: one negative offset, one number written as text or one
  * `null` refuses the whole plan with a position such as `openings.3.offset` (lab MS-6). This
- * reader checks each wall, room, opening, floor and fixture with the schema's own rules, keeps
+ * reader checks each wall, room, opening, floor, fixture and opening pattern (LVL-8) with the schema's own rules, keeps
  * what is sound, and says what it did with the rest, part by part:
  *
  * - **read as meant**: a number written as text (`"2.5"`, `"0.9 m"`), `"true"` for true, a word
  *   that differs from one the format knows only in its capitals or spaces (`"Exterior"`,
  *   `"Door"`), and a number where an id goes. The value is read and the line says so.
  * - **value left out**: a value the format cannot read in a field that may be left out. The
- *   field's default is used, or the field is read as not stated, and the line says which. A
+ *   field's default is used, or the field is read as not stated, and the line says which. One
+ *   fact of the person's own (CNT-9) is left out on its own, and the part keeps the others. A
  *   size stated where the field has a default is not: the default would change what is drawn,
  *   so the part is left out (`STATED_SIZES`).
  * - **part left out**: a value the part cannot do without (a wall's start, an opening's type)
@@ -33,9 +34,12 @@
  */
 import { z } from 'zod'
 import {
+  DEFAULT_FLOOR_ID,
   FloorPlanSchema,
   FloorSchema,
+  withTypes,
   ItemSchema,
+  OpeningPatternSchema,
   OpeningSchema,
   RoomSchema,
   WallSchema,
@@ -44,8 +48,10 @@ import {
 } from './floorplan'
 import type { JsonPath, TextMark } from './jsonText'
 import { quoted, textProblem } from './planText'
+import { planInMetres } from './units'
+import { name, num, said, sayValue, type MessageKey, type Value } from '../messages/say'
 
-export type PartList = 'walls' | 'rooms' | 'openings' | 'floors' | 'items'
+export type PartList = 'walls' | 'rooms' | 'openings' | 'floors' | 'items' | 'patterns'
 
 /** The part a fault is about: where it is in the file, and its id when it can be read. */
 export interface PartRef {
@@ -56,27 +62,46 @@ export interface PartRef {
   readonly id: string | null
 }
 
-interface ValueFault {
+interface ValueFault<T> {
   /** The part it is in; null for the plan's own fields (`units`, `referenceImage`). */
   readonly part: PartRef | null
   /** Where the value is, from the top of the file. */
   readonly path: JsonPath
-  /** What is there, in words: `-0.3`, `null`, `missing`, `NaN, which JSON does not hold as a number`. */
-  readonly found: string
+  /** What is there, in words (MSG-11: by key and values): `-0.3`, `null`, `missing`, `NaN, which JSON does not hold as a number`. */
+  readonly found: T
   /** What the format takes there, in words: `a number of at least 0`. */
-  readonly wants: string
+  readonly wants: T
 }
 
-export type ReadFault =
-  | (ValueFault & { readonly kind: 'read-as-meant'; /** The value read, in words. */ readonly read: string })
-  | (ValueFault & {
+/**
+ * What the reader did with a part or value. Its words are in English (`found`, `wants`, `read`,
+ * `used`); MSG-11: `words` holds the same by key and values (`T` = `Value`), to say them in any
+ * language. `words` is not enumerable, so a fault reads and compares as it did.
+ */
+export type ReadFault<T = string> = (
+  | (ValueFault<T> & { readonly kind: 'read-as-meant'; /** The value read, in words. */ readonly read: T })
+  | (ValueFault<T> & {
       readonly kind: 'value-left-out'
       /** The default used, in words; null when the field is read as not stated. */
-      readonly used: string | null
+      readonly used: T | null
     })
-  | (ValueFault & { readonly kind: 'part-left-out'; readonly part: PartRef })
+  | (ValueFault<T> & { readonly kind: 'part-left-out'; readonly part: PartRef })
   /** A part with the id of a part of another kind, or of the same kind but not two walls. It is left out; `kept` is read. */
   | { readonly kind: 'id-clash'; readonly part: PartRef & { readonly id: string }; readonly kept: PartRef & { readonly id: string } }
+) & { readonly words?: ReadFault<Value> }
+
+/**
+ * MSG-5: a wall, room or opening the reader left out, as the checks need it to hold back what
+ * rests on it: a door it held, a room beside it. Each value only when it can be read.
+ */
+export interface LeftOutPart {
+  readonly kind: 'wall' | 'room' | 'opening'
+  readonly id: string | null
+  /** The floor of a wall or a room as written, the default floor when it states none; null for an opening. */
+  readonly floor: string | null
+  /** The walls it names: a room's boundary, an opening's wall. Empty for a wall. */
+  readonly walls: readonly string[]
+}
 
 export type PlanRead =
   | {
@@ -85,6 +110,8 @@ export type PlanRead =
       readonly faults: readonly ReadFault[]
       /** The ids of the walls left out, for `validatePlan` to name them on the rooms and openings that rest on them. */
       readonly leftOutWalls: ReadonlySet<string>
+      /** MSG-5: every wall, room and opening left out (`part-left-out`, `id-clash`), in file order. */
+      readonly leftOut: readonly LeftOutPart[]
     }
   | {
       readonly plan: null
@@ -92,25 +119,30 @@ export type PlanRead =
       readonly refusal: { readonly kind: 'not-an-object' } | { readonly kind: 'schema'; readonly issues: readonly PlanSchemaIssue[] }
     }
 
-const LISTS: readonly PartList[] = ['walls', 'rooms', 'openings', 'floors', 'items']
+const LISTS: readonly PartList[] = ['walls', 'rooms', 'openings', 'floors', 'items', 'patterns']
 const SCHEMAS: Record<PartList, z.ZodTypeAny> = {
   walls: WallSchema,
   rooms: RoomSchema,
   openings: OpeningSchema,
   floors: FloorSchema,
-  items: ItemSchema
+  items: ItemSchema,
+  // LVL-8: an opening pattern that cannot be read is left out on its own.
+  patterns: OpeningPatternSchema
 }
 /**
  * The sizes with a default. A size stated there that cannot be read (out of range, NaN, a
  * decimal comma, a word) is a statement, not a gap: the default would change what is drawn and
  * measured (a wall stated -0.3 thick drawn 0.2 thick), so the part is left out instead. Only
  * `null`, which states nothing, takes the default. A floor's `level` is not one of them: it only
- * orders the floors, and leaving a floor out would leave out everything on it.
+ * orders the floors, and leaving a floor out would leave out everything on it. Nor is a wall's
+ * `arc` (CNT-18): it has no default, so one that cannot be read is read as not stated, as a hinge
+ * is, and the line says so; the wall is drawn straight. HND-11: a wall's
+ * `face` is one too: read as its centre line, the wall would stand half its thickness off.
  */
-const STATED_SIZES: Partial<Record<PartList, readonly string[]>> = { walls: ['thickness', 'height'], openings: ['sill'] }
+const STATED_SIZES: Partial<Record<PartList, readonly string[]>> = { walls: ['thickness', 'height', 'face'], openings: ['sill'] }
 
 /** The order ids are kept in: walls first, because rooms and openings name them. */
-const ID_ORDER: readonly PartList[] = ['walls', 'rooms', 'openings', 'items']
+const ID_ORDER: readonly PartList[] = ['walls', 'rooms', 'openings', 'items', 'patterns']
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const sameKeys = (a: JsonPath, b: JsonPath): boolean => a.length === b.length && a.every((key, i) => key === b[i])
@@ -123,69 +155,74 @@ export function readableId(value: unknown): string | null {
 // ---------------------------------------------------------------------------------------------
 // Words for what is found and what is wanted
 
-const TYPE_WORDS: Record<string, string> = {
-  number: 'a number',
-  string: 'a text',
-  boolean: 'true or false',
-  array: 'a list',
-  object: 'an object',
-  null: 'null',
-  nan: 'NaN'
+/** The kinds of value the format names, each by its words (MSG-11: `read.type.*`). */
+const TYPE_WORDS: Record<string, MessageKey> = {
+  number: 'read.type.number',
+  string: 'read.type.string',
+  boolean: 'read.type.boolean',
+  array: 'read.type.array',
+  object: 'read.type.object',
+  null: 'read.type.null',
+  nan: 'read.type.nan'
 }
 
+/** A number as JSON wrote it: never with the language's decimal mark, since it is the file's own text. */
+const asWritten = (value: number | string): string => String(value)
+
 /** What a value is, in words, never repeating text that breaks the text rule. */
-function valueText(value: unknown, mark: TextMark | undefined): string {
-  if (mark?.what === 'not-a-number') return `${mark.token}, which JSON does not hold as a number`
-  if (mark?.what === 'decimal-comma') return `${mark.token}, written with a decimal comma`
-  if (value === undefined) return 'missing'
+function valueText(value: unknown, mark: TextMark | undefined): Value {
+  if (mark?.what === 'not-a-number') return said('read.found.notANumber', { token: mark.token })
+  if (mark?.what === 'decimal-comma') return said('read.found.decimalComma', { token: mark.token })
+  if (value === undefined) return said('read.found.missing')
   if (value === null) return 'null'
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (typeof value === 'number' || typeof value === 'boolean') return asWritten(String(value))
   if (typeof value === 'string') {
-    if (value === '') return 'an empty text'
-    return textProblem(value, 'id') === null ? `the text ${quoted(value)}` : 'a text'
+    if (value === '') return said('read.found.emptyText')
+    return textProblem(value, 'id') === null ? said('read.found.text', { text: name(value) }) : said('read.type.string')
   }
-  if (Array.isArray(value)) return `a list of ${value.length}`
-  return 'an object'
+  if (Array.isArray(value)) return said('read.found.list', { count: value.length })
+  return said('read.type.object')
 }
 
 /** What the format takes where a number is too small or too large, or a list too short or long. */
-function rangeText(issue: PlanSchemaIssue & { code: 'too_small' | 'too_big' }): string {
+function rangeText(issue: PlanSchemaIssue & { code: 'too_small' | 'too_big' }): Value {
   const small = issue.code === 'too_small'
   const bound = small ? issue.minimum : issue.maximum
   const value = typeof bound === 'bigint' ? bound.toString() : String(bound)
-  if (issue.type === 'number') return `a number ${small ? (issue.inclusive ? 'of at least' : 'more than') : issue.inclusive ? 'of at most' : 'less than'} ${value}`
-  if (issue.type === 'array' && issue.exact) return `a list of ${value}`
+  if (issue.type === 'number') return said(small ? (issue.inclusive ? 'read.wants.atLeast' : 'read.wants.moreThan') : issue.inclusive ? 'read.wants.atMost' : 'read.wants.lessThan', { value: num(value) })
+  if (issue.type === 'array' && issue.exact) return said('read.found.list', { count: num(value) })
   const unit = issue.type === 'string' ? 'characters' : 'items'
-  return `${small ? 'at least' : 'at most'} ${value} ${unit}`
+  return said(`read.wants.${small ? 'least' : 'most'}.${unit}` as MessageKey, { value: num(value) })
 }
 
 /** What the format takes at the place of a schema problem, in words. */
-export function wantedText(issue: PlanSchemaIssue): string {
+export function wantedText(issue: PlanSchemaIssue): Value {
   switch (issue.code) {
     case 'invalid_type':
-      return TYPE_WORDS[issue.expected] ?? `a ${issue.expected}`
+      return Object.hasOwn(TYPE_WORDS, issue.expected) ? said(TYPE_WORDS[issue.expected]!) : said('read.wants.a', { type: issue.expected })
     case 'invalid_enum_value':
-      return `one of ${issue.options.map((o) => JSON.stringify(o)).join(', ')}`
+      return said('read.wants.oneOf', { options: issue.options.map((o) => JSON.stringify(o)).join(', ') })
     case 'invalid_literal':
       return JSON.stringify(issue.expected)
     case 'too_small':
     case 'too_big':
       return rangeText(issue)
     case 'not_finite':
-      return 'a finite number'
+      return said('read.wants.finite')
     default:
-      return 'what the plan format sets out'
+      return said('read.wants.format')
   }
 }
 
 /** What was found at the place of a schema problem, in words. */
-function foundText(issue: PlanSchemaIssue, value: unknown, mark: TextMark | undefined): string {
+function foundText(issue: PlanSchemaIssue, value: unknown, mark: TextMark | undefined): Value {
   if (mark !== undefined) return valueText(value, mark)
-  // A text-rule problem says what is wrong with the text without repeating it (MSG-9).
-  if (issue.code === 'custom') return `${typeof value === 'string' ? 'a text' : Array.isArray(value) ? 'a list' : 'a value'} that ${issue.message}`
+  // A text-rule problem says what is wrong with the text without repeating it (MSG-9). The
+  // schema's own sentence stays as the schema words it, in English (`planText.ts`).
+  if (issue.code === 'custom') return said(typeof value === 'string' ? 'read.found.textThat' : Array.isArray(value) ? 'read.found.listThat' : 'read.found.valueThat', { problem: issue.message })
   // `[4, 6, 3, 3]` where a point goes: most likely `4,6` and `3,3` with a decimal comma.
   if (issue.code === 'too_big' && issue.type === 'array' && Array.isArray(value) && value.length === 4 && value.every((v) => Number.isInteger(v))) {
-    return `a list of 4 numbers, ${value.join(', ')}: a decimal comma splits each number of a point in two`
+    return said('read.found.splitPoint', { numbers: value.join(', ') })
   }
   return valueText(value, undefined)
 }
@@ -261,16 +298,16 @@ function setAt(root: Record<string, unknown>, path: JsonPath, value: unknown): v
  * One part, read as far as it can be: the part as it is kept (or null when it is left out), and
  * what was done to it. A value left out is told the default used once the part is read.
  */
-function readPart(list: PartList, index: number, raw: unknown, marks: readonly TextMark[]): { part: Record<string, unknown> | null; faults: ReadFault[] } {
+function readPart(list: PartList, index: number, raw: unknown, marks: readonly TextMark[]): { part: Record<string, unknown> | null; faults: ReadFault<Value>[] } {
   const schema = SCHEMAS[list]
   const ref: PartRef = { list, index, id: isObject(raw) ? readableId(raw['id']) : null }
   if (!isObject(raw)) {
-    return { part: null, faults: [{ kind: 'part-left-out', part: ref, path: [list, index], found: valueText(raw, undefined), wants: 'an object' }] }
+    return { part: null, faults: [{ kind: 'part-left-out', part: ref, path: [list, index], found: valueText(raw, undefined), wants: said('read.type.object') }] }
   }
   const part: Record<string, unknown> = { ...raw }
-  let faults: ReadFault[] = []
+  let faults: ReadFault<Value>[] = []
   // A value left out, in its place among the faults, until the default it leaves is known.
-  const pending = new Map<ReadFault, string>()
+  const pending = new Map<ReadFault<Value>, string>()
   const tried = new Set<string>()
   // Each turn reads one value as meant or leaves one field out, so a part cannot take more
   // turns than it has values; the bound only stops a schema that never settles.
@@ -299,6 +336,15 @@ function readPart(list: PartList, index: number, raw: unknown, marks: readonly T
     }
     // A value read as meant that still does not fit is said once, as what is done with it.
     const others = faults.filter((f) => f.kind !== 'read-as-meant' || !sameKeys(f.path, path))
+    // CNT-9: one fact the format cannot read is left out on its own; the part keeps its others.
+    const fact = issue.path[1]
+    if (field === 'properties' && typeof fact === 'string' && isObject(part['properties']) && Object.hasOwn(part['properties'], fact)) {
+      const facts = { ...(part['properties'] as Record<string, unknown>) }
+      delete facts[fact]
+      part['properties'] = facts
+      faults = [...others, { kind: 'value-left-out', ...said, used: null }]
+      continue
+    }
     // A field the part can do without: left out, and its default used. Never the id, and never a
     // number out of range where the field has a default.
     const stated = typeof field === 'string' && (STATED_SIZES[list] ?? []).includes(field) && (value !== null || mark !== undefined)
@@ -308,7 +354,7 @@ function readPart(list: PartList, index: number, raw: unknown, marks: readonly T
       const again = schema.safeParse(without)
       if (again.success || !again.error.issues.some((i) => i.path[0] === field)) {
         delete part[field]
-        const fault: ReadFault = { kind: 'value-left-out', ...said, used: null }
+        const fault: ReadFault<Value> = { kind: 'value-left-out', ...said, used: null }
         faults = [...others, fault]
         pending.set(fault, field)
         continue
@@ -316,7 +362,7 @@ function readPart(list: PartList, index: number, raw: unknown, marks: readonly T
     }
     return { part: null, faults: [{ kind: 'part-left-out', ...said }] }
   }
-  return { part: null, faults: [{ kind: 'part-left-out', part: ref, path: [list, index], found: 'a part Grid could not read', wants: 'what the plan format sets out' }] }
+  return { part: null, faults: [{ kind: 'part-left-out', part: ref, path: [list, index], found: said('read.found.unreadable'), wants: said('read.wants.format') }] }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -326,7 +372,7 @@ function readPart(list: PartList, index: number, raw: unknown, marks: readonly T
 type Positions = Record<PartList, number[]>
 
 /** The plan's own fields, once its parts are read: read as meant, left out, or refused. */
-function readTop(work: Record<string, unknown>, faults: ReadFault[], marks: readonly TextMark[]): { plan: FloorPlan } | { issues: PlanSchemaIssue[] } {
+function readTop(work: Record<string, unknown>, faults: ReadFault<Value>[], marks: readonly TextMark[]): { plan: FloorPlan } | { issues: PlanSchemaIssue[] } {
   const tried = new Set<string>()
   for (let turn = 0; turn < 16; turn++) {
     const parsed = FloorPlanSchema.safeParse(work)
@@ -359,6 +405,19 @@ function readTop(work: Record<string, unknown>, faults: ReadFault[], marks: read
         continue
       }
     }
+    // COD-3: a place Grid does not know is left out alone; the rest of the site is kept. BRF-3:
+    // so is any other field of the site, and one street, set-back or thing of its lists.
+    const site = work['site']
+    if (field === 'site' && issue.path.length >= 2 && typeof site === 'object' && site !== null && !Array.isArray(site)) {
+      const rest = { ...(site as Record<string, unknown>) }
+      const [, key, at] = issue.path
+      const list = typeof key === 'string' ? rest[key] : undefined
+      if ((key === 'streets' || key === 'setbacks' || key === 'things') && typeof at === 'number' && Array.isArray(list)) rest[key] = list.filter((_, i) => i !== at)
+      else delete rest[String(key)]
+      work['site'] = rest
+      faults.push({ kind: 'value-left-out', ...said, used: null })
+      continue
+    }
     // `units` keeps its default, metres; `projectId` and `referenceImage` are read as not stated.
     delete work[field]
     const used = FloorPlanSchema.safeParse(work)
@@ -369,7 +428,7 @@ function readTop(work: Record<string, unknown>, faults: ReadFault[], marks: read
 }
 
 /** One id on two parts, but not two walls: the first is kept, in the order walls, rooms, openings, items. */
-function readClashes(plan: FloorPlan, positions: Positions, faults: ReadFault[]): FloorPlan {
+function readClashes(plan: FloorPlan, positions: Positions, faults: ReadFault<Value>[]): FloorPlan {
   const out = { ...plan } as Record<string, unknown>
   const first = new Map<string, PartRef & { id: string }>()
   for (const list of ID_ORDER) {
@@ -396,9 +455,16 @@ function readClashes(plan: FloorPlan, positions: Positions, faults: ReadFault[])
  * Reads a plan part by part. `raw` is the file as JSON; `marks` are the values its text held
  * that JSON does not (`readPlanText`), at their places. Never throws.
  */
-export function readPlanParts(raw: unknown, marks: readonly TextMark[] = []): PlanRead {
-  if (!isObject(raw)) return { plan: null, refusal: { kind: 'not-an-object' } }
-  const faults: ReadFault[] = []
+export function readPlanParts(given: unknown, marks: readonly TextMark[] = []): PlanRead {
+  if (!isObject(given)) return { plan: null, refusal: { kind: 'not-an-object' } }
+  const faults: ReadFault<Value>[] = []
+  // WRT-7: a file that states its lengths in another unit is read in that unit, and in metres from here on.
+  const converted = planInMetres(given)
+  // CNT-15 (C24): every part filled from its type first, so a part read alone is read as it is meant.
+  const raw = withTypes(converted.raw) as Record<string, unknown>
+  if (converted.from !== null) {
+    faults.push({ kind: 'read-as-meant', part: null, path: ['units'], found: JSON.stringify(given['units']), wants: said('read.wants.metres'), read: said('read.read.converted', { unit: said(`read.unit.${converted.from}` as MessageKey) }) })
+  }
   const positions = Object.fromEntries(LISTS.map((list) => [list, [] as number[]])) as Positions
   const work: Record<string, unknown> = { ...raw }
   const whole = FloorPlanSchema.safeParse(raw)
@@ -430,5 +496,36 @@ export function readPlanParts(raw: unknown, marks: readonly TextMark[] = []): Pl
     if (fault.part === null || fault.part.list !== 'walls' || fault.part.id === null) continue
     if (fault.kind === 'part-left-out' || fault.kind === 'id-clash') leftOutWalls.add(fault.part.id)
   }
-  return { plan, faults, leftOutWalls }
+  const inWords = faults.map(inEnglish)
+  return { plan, faults: inWords, leftOutWalls, leftOut: leftOutParts(raw, inWords) }
+}
+
+/** A fault's words in English, with the same by key and values as its `words` (MSG-11). */
+function inEnglish(fault: ReadFault<Value>): ReadFault {
+  const text = (value: Value): string => sayValue('en', value)
+  let out: ReadFault
+  if (fault.kind === 'id-clash') out = { ...fault }
+  else if (fault.kind === 'read-as-meant') out = { ...fault, found: text(fault.found), wants: text(fault.wants), read: text(fault.read) }
+  else if (fault.kind === 'value-left-out') out = { ...fault, found: text(fault.found), wants: text(fault.wants), used: fault.used === null ? null : text(fault.used) }
+  else out = { ...fault, found: text(fault.found), wants: text(fault.wants) }
+  return Object.defineProperty(out, 'words', { value: fault, enumerable: false })
+}
+
+const LEFT_OUT_KINDS: Partial<Record<PartList, LeftOutPart['kind']>> = { walls: 'wall', rooms: 'room', openings: 'opening' }
+
+/** MSG-5: the walls, rooms and openings the reader left out, each with what can be read of it. */
+function leftOutParts(raw: Record<string, unknown>, faults: readonly ReadFault[]): LeftOutPart[] {
+  const parts: LeftOutPart[] = []
+  for (const fault of faults) {
+    if (fault.kind !== 'part-left-out' && fault.kind !== 'id-clash') continue
+    const kind = LEFT_OUT_KINDS[fault.part.list]
+    if (kind === undefined) continue
+    const list = raw[fault.part.list]
+    const item = Array.isArray(list) && isObject(list[fault.part.index]) ? (list[fault.part.index] as Record<string, unknown>) : {}
+    const floor = kind === 'opening' ? null : item['floor'] === undefined ? DEFAULT_FLOOR_ID : readableId(item['floor'])
+    const named = kind === 'room' ? (Array.isArray(item['boundary']) ? (item['boundary'] as unknown[]) : []) : kind === 'opening' ? [item['wall']] : []
+    const walls = named.flatMap((id) => readableId(id) ?? [])
+    parts.push({ kind, id: fault.part.id, floor, walls })
+  }
+  return parts
 }

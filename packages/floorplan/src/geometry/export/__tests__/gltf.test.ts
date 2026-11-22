@@ -21,6 +21,10 @@ import { emptyPlan, parseGlb, readAccessor, readMeshes, rotated, samplePlan } fr
  * straight off the triangles in the exported Y-up frame.
  */
 
+/** CNT-14: the doors' and windows' parts, as the exporters name them, after the stairs. */
+const openingNames = (scene: ReturnType<typeof buildScene>): string[] =>
+  scene.openings.flatMap((o) => (['frame', 'leaf', 'glass'] as const).filter((part) => o.parts.some((p) => p.part === part)).map((part) => `${part}_${o.id}`))
+
 describe('the container', () => {
   it('exports an empty scene as a valid GLB with no geometry', () => {
     const bytes = toGlb(buildScene(emptyPlan()))
@@ -75,7 +79,8 @@ describe('determinism', () => {
     const glb = parseGlb(toGlb(buildScene(samplePlan())))
     const text = JSON.stringify(glb.json)
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/)
-    expect(Object.keys(glb.json.asset).sort()).toEqual(['generator', 'version'])
+    // MSG-3: `extras` holds the label, and nothing that changes from run to run.
+    expect(Object.keys(glb.json.asset).sort()).toEqual(['extras', 'generator', 'version'])
     expect(glb.json.asset.generator).toBe('Grid')
   })
 })
@@ -92,23 +97,30 @@ describe('nodes', () => {
 
     const glb = parseGlb(toGlb(scene))
     const meshes = readMeshes(glb)
-    expect(meshes).toHaveLength(8)
+    // LVL-4: and the floor's slab and its roof, last. CNT-14: the doors' and windows' parts before them.
+    const parts = openingNames(scene)
+    expect(parts.length).toBeGreaterThan(0)
+    expect(meshes).toHaveLength(10 + parts.length)
     expect(meshes.filter((m) => m.name.startsWith('wall_'))).toHaveLength(5)
     expect(meshes.filter((m) => m.name.startsWith('floor_'))).toHaveLength(3)
     expect(meshes.map((m) => m.name)).toEqual([
       ...scene.walls.map((w) => `wall_${w.id}`),
-      ...scene.slabs.map((s) => `floor_${s.roomId}`)
+      ...scene.slabs.map((s) => `floor_${s.roomId}`),
+      ...parts,
+      'slab_ground',
+      'roof_ground'
     ])
     for (const node of glb.json.nodes!) {
       expect(glb.json.meshes![node.mesh!]!.primitives).toHaveLength(1)
     }
-    expect(glb.json.meshes).toHaveLength(8)
+    expect(glb.json.meshes).toHaveLength(10 + parts.length)
   })
 
   it('names nodes with letters, digits, underscore, dot and dash only, and uniquely', () => {
     const glb = parseGlb(toGlb(buildScene(samplePlan())))
     const names = readMeshes(glb).map((m) => m.name)
-    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1'])
+    // CNT-14: the door's, the doorless opening's (none) and the window's parts.
+    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', 'frame_o1', 'leaf_o1', 'frame_o2', 'glass_o2', 'frame_o3', 'leaf_o3', 'slab_ground', 'roof_ground'])
     for (const name of names) expect(name).toMatch(/^[A-Za-z0-9_.-]+$/)
     expect(new Set(names).size).toBe(names.length)
   })
@@ -124,8 +136,9 @@ describe('nodes', () => {
 
     // parseGlb throws if the JSON is not well formed.
     const names = readMeshes(parseGlb(toGlb(buildScene(plan)))).map((m) => m.name)
-    expect(names).toHaveLength(4)
-    expect(new Set(names).size).toBe(4)
+    // The four walls, and the slab and roof their outline carries (LVL-4).
+    expect(names).toHaveLength(6)
+    expect(new Set(names).size).toBe(6)
     for (const name of names) expect(name).toMatch(/^[A-Za-z0-9_.-]+$/)
     expect(names.slice(0, 2)).toEqual(['wall_a_b', 'wall_a_b_2'])
   })
@@ -219,7 +232,8 @@ describe('accessors', () => {
     // disagree with the data in the last digit, and a validator checks it.
     const glb = parseGlb(toGlb(buildScene(samplePlan())))
     const positions = glb.json.meshes!.map((m) => m.primitives[0]!.attributes.POSITION!)
-    expect(positions).toHaveLength(5)
+    // Seven, and since CNT-14 the six of the doors' and window's parts.
+    expect(positions).toHaveLength(13)
     for (const index of positions) {
       const rows = readAccessor(glb, index)
       const accessor = glb.json.accessors![index]!
@@ -453,11 +467,13 @@ describe('the same model as the OBJ export', () => {
 describe('material and shading', () => {
   const glb = () => parseGlb(toGlb(buildScene(samplePlan())))
 
-  it('gives every primitive the same plain grey material with no metallic response', () => {
+  it('gives every primitive the same plain grey material with no metallic response, the glass aside (CNT-14)', () => {
     const doc = glb().json
-    expect(doc.materials).toHaveLength(1)
-    for (const mesh of doc.meshes!) {
-      for (const primitive of mesh.primitives) expect(primitive.material).toBe(0)
+    // CNT-14: a second material, the glass, for the window's glass only.
+    expect(doc.materials).toHaveLength(2)
+    for (const [i, mesh] of doc.meshes!.entries()) {
+      const glass = readMeshes(glb())[i]!.name.startsWith('glass_')
+      for (const primitive of mesh.primitives) expect(primitive.material).toBe(glass ? 1 : 0)
     }
     const pbr = doc.materials![0]!.pbrMetallicRoughness!
     expect(pbr.metallicFactor).toBe(0)
@@ -506,7 +522,7 @@ describe('a plan that is not sound', () => {
     const names = readMeshes(parseGlb(toGlb(scene))).map((m) => m.name)
     expect(names).not.toContain('wall_bad')
     expect(names).not.toContain('wall_virt')
-    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1'])
+    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', ...openingNames(scene), 'slab_ground', 'roof_ground'])
   })
 
   it('writes only finite positions', () => {

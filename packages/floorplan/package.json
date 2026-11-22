@@ -9,13 +9,24 @@
     "./geometry/*": "./src/geometry/*.ts",
     "./types/floorplan": "./src/types/floorplan.ts",
     "./types/reading": "./src/types/reading.ts",
+    "./types/nearest": "./src/types/nearest.ts",
     "./types/jsonText": "./src/types/jsonText.ts",
     "./types/readParts": "./src/types/readParts.ts",
     "./types/sheet": "./src/types/sheet.ts",
+    "./types/units": "./src/types/units.ts",
+    "./types/places": "./src/types/places.ts",
     "./export": "./src/export/planExport.ts",
     "./notes": "./src/notes/notes.ts",
+    "./messages": "./src/messages/index.ts",
     "./rooms": "./src/rooms/index.ts",
-    "./test-support/plans": "./src/test-support/plans.ts"
+    "./scan": "./src/scan/index.ts",
+    "./test-support/plans": "./src/test-support/plans.ts",
+    "./test-support/facts": "./src/test-support/facts.ts",
+    "./test-support/phases": "./src/test-support/phases.ts",
+    "./test-support/lab": "./src/test-support/lab.ts",
+    "./test-support/roomScan": "./src/test-support/roomScan.ts",
+    "./test-support/through": "./src/test-support/through.ts",
+    "./test-support/columns": "./src/test-support/columns.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

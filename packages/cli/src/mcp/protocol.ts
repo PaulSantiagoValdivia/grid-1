@@ -3,7 +3,8 @@
  *
  * This runs inside the tool server an agent's host starts, so it imports nothing: no SDK, no
  * files, no network. The tools are handed in by the caller (`serveTools.ts`), and reach the
- * disk only through the project's resolver.
+ * disk only through the project's resolver. So is the one resource, the preview page (VEW-4), an
+ * MCP App: with it the server says it offers resources and the MCP Apps extension.
  *
  * Limits (T-3): a request line of more than `LINE_MAX_BYTES` is refused unread, and so is a
  * request id of more than `REQUEST_ID_MAX` characters. Neither is ever repeated in the answer.
@@ -16,6 +17,7 @@
  * lines. A version Grid does not speak is refused with the ones it does (-32022), and so is a
  * method it does not know: a client of neither era learns what to send.
  */
+import { RETELLING_RULE } from './retelling'
 
 export const SERVER_NAME = 'grid'
 /** The longest request line the server reads: 1 MiB. */
@@ -57,14 +59,27 @@ export const ROOM_NAMES_TRAVEL =
 
 /**
  * What the server tells an agent's host before any tool (WRT-1, WRT-2): rooms-first is the main
- * way to write a plan, and the plan file, not the rooms text, is the source of truth.
+ * way to write a plan, and the plan file, not the rooms text, is the source of truth. BRF-1: the
+ * brief comes first, from the person's words.
  */
+/**
+ * WRT-7: the person's units come from their words or their place, asked only when neither says,
+ * and are recorded in the plan's `display`, which every drawing, figure and sheet follows. The plan
+ * file stays in metres.
+ */
+export const UNITS_RULE =
+  'Work in the person\'s units: settle them with the brief, from their words (12 ft, 1,800 sq ft, 4 m) or their place, and ask only when neither says. '
+  + 'Record them with a display line in the rooms text (display ft-in, display m): Grid\'s drawings, figures and sheets follow it, and the plan file stays in metres. A length may carry its unit in one word (360cm, 12ft, 12\'6").'
+
 export const INSTRUCTIONS =
   'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. '
+  + 'Before the first room, keep what the person asked for with grid_write_brief, from their own words, each wish given or assumed; every change then says which lines are met and which missed. '
+  + `${UNITS_RULE} `
   + 'Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls. '
   + 'The plan file is the source of truth; rooms text is a way of writing and reading it. To change a plan, read it back with grid_describe as=rooms, change the text and write it with grid_write_rooms. Each room\'s boundary is derived: never edit it by hand. '
   + `${ROOM_NAMES_TRAVEL} `
-  + 'Every report carries the label General guidance, not your local rules.'
+  + 'Every report carries the label General guidance, not your local rules. '
+  + RETELLING_RULE
 
 type Id = string | number | null
 
@@ -74,6 +89,7 @@ export interface ToolAnswer {
   readonly isError?: boolean
   readonly data?: Record<string, unknown>
   readonly image?: { readonly data: Uint8Array; readonly mimeType: string }
+  readonly images?: readonly { readonly data: Uint8Array; readonly mimeType: string }[]
 }
 
 /** A tool the server offers, handed in by whoever starts the server. */
@@ -85,6 +101,37 @@ export interface ServerTool {
    * says what the request itself named: the protocol version, for a 2026-07-28 client (CMD-13).
    */
   call(args: unknown, request?: CallRequest): ToolAnswer | Promise<ToolAnswer>
+}
+
+/**
+ * VEW-4: a resource the server offers, handed in like the tools: the preview page, an MCP App.
+ * `read` gives its text and the `_meta` its content carries.
+ */
+export interface ServerResource {
+  /** The resource as `resources/list` shows it: uri, name, title, description and mimeType. */
+  readonly definition: { readonly uri: string; readonly mimeType: string } & Record<string, unknown>
+  read(): Promise<{ readonly text: string; readonly _meta?: Record<string, unknown> }>
+}
+
+/** The MCP Apps standard's extension, for a host that shows a tool's answers in a page of its own. */
+const APPS_EXTENSION = 'io.modelcontextprotocol/ui'
+/** MCP's error for a resource it does not have. */
+const RESOURCE_NOT_FOUND = -32002
+
+/** What the server can do: tools, and with a resource handed in, resources and the MCP Apps extension. */
+function capabilitiesOf(resources: readonly ServerResource[]): Record<string, unknown> {
+  if (resources.length === 0) return { tools: {} }
+  const mimeTypes = [...new Set(resources.map((resource) => resource.definition.mimeType))]
+  return { tools: {}, resources: {}, extensions: { [APPS_EXTENSION]: { mimeTypes } } }
+}
+
+/** `resources/list` and `resources/read`, the same in both eras. */
+async function readResource(id: Id, params: Record<string, unknown>, resources: readonly ServerResource[], wrap: (result: Record<string, unknown>) => Record<string, unknown>): Promise<string> {
+  const resource = resources.find((r) => r.definition.uri === params['uri'])
+  // The uri sent is text from the client: it is not repeated back.
+  if (!resource) return fail(id, RESOURCE_NOT_FOUND, `Resource not found. Grid offers ${listOf(resources.map((r) => r.definition.uri))}.`)
+  const read = await resource.read()
+  return reply(id, wrap({ contents: [{ uri: resource.definition.uri, mimeType: resource.definition.mimeType, text: read.text, ...(read._meta ? { _meta: read._meta } : {}) }] }))
 }
 
 /** What one request names about itself. The server keeps nothing between requests. */
@@ -109,6 +156,7 @@ function base64(bytes: Uint8Array): string {
 function toolResult(answer: ToolAnswer): Record<string, unknown> {
   const content: Array<Record<string, unknown>> = [{ type: 'text', text: answer.text }]
   if (answer.image) content.push({ type: 'image', data: base64(answer.image.data), mimeType: answer.image.mimeType })
+  for (const image of answer.images ?? []) content.push({ type: 'image', data: base64(image.data), mimeType: image.mimeType })
   if (answer.isError === true) return { content, isError: true }
   return answer.data === undefined ? { content } : { content, structuredContent: answer.data }
 }
@@ -137,7 +185,7 @@ function complete(result: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** One request of a 2026-07-28 client, which names its version in its own `_meta`. */
-function perRequest(id: Id, method: unknown, params: Record<string, unknown>, tools: readonly ServerTool[]): string | Promise<string> {
+function perRequest(id: Id, method: unknown, params: Record<string, unknown>, tools: readonly ServerTool[], resources: readonly ServerResource[]): string | Promise<string> {
   const meta = isObject(params['_meta']) ? params['_meta'] : {}
   const asked = meta[META_VERSION]
   if (typeof asked !== 'string') {
@@ -161,7 +209,7 @@ function perRequest(id: Id, method: unknown, params: Record<string, unknown>, to
     case 'server/discover':
       return reply(id, complete({
         supportedVersions: [...PER_REQUEST_VERSIONS],
-        capabilities: { tools: {} },
+        capabilities: capabilitiesOf(resources),
         instructions: INSTRUCTIONS,
         ttlMs: CACHE_MS,
         cacheScope: 'public',
@@ -174,6 +222,12 @@ function perRequest(id: Id, method: unknown, params: Record<string, unknown>, to
       // The version is one Grid speaks, checked above: it may be repeated.
       return runTool(id, tool, params['arguments'], complete, { protocolVersion: asked })
     }
+    case 'resources/list':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return reply(id, complete({ resources: resources.map((r) => r.definition), ttlMs: CACHE_MS, cacheScope: 'public' }))
+    case 'resources/read':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return readResource(id, params, resources, complete)
     default:
       // initialize and ping are gone from this revision; anything else Grid does not offer.
       return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
@@ -190,7 +244,7 @@ function byteLength(line: string): number {
  * One JSON-RPC line in, one line out, or null when nothing should be sent. A tool call that
  * draws a picture answers later, so a call may give a promise of its line.
  */
-export function handleLine(line: string, tools: readonly ServerTool[] = []): string | null | Promise<string> {
+export function handleLine(line: string, tools: readonly ServerTool[] = [], resources: readonly ServerResource[] = []): string | null | Promise<string> {
   if (byteLength(line) > LINE_MAX_BYTES) {
     return fail(null, -32600, `Request refused unread: the line is longer than ${LINE_MAX_BYTES} bytes (1 MiB), the most Grid's tool server reads.`)
   }
@@ -220,7 +274,7 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
 
   // A request that names its version, or asks what the server speaks, is of the 2026-07-28 era.
   if (message['method'] === 'server/discover' || (isObject(params['_meta']) && params['_meta'][META_VERSION] !== undefined)) {
-    return perRequest(id, message['method'], params, tools)
+    return perRequest(id, message['method'], params, tools, resources)
   }
 
   switch (message['method']) {
@@ -229,7 +283,7 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
       const known = (PROTOCOL_VERSIONS as readonly unknown[]).includes(asked)
       return reply(id, {
         protocolVersion: known ? asked : LATEST_PROTOCOL_VERSION,
-        capabilities: { tools: {} },
+        capabilities: capabilitiesOf(resources),
         serverInfo: SERVER_INFO,
       })
     }
@@ -242,6 +296,12 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
       if (!tool) return fail(id, -32602, 'Unknown tool')
       return runTool(id, tool, params['arguments'])
     }
+    case 'resources/list':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return reply(id, { resources: resources.map((r) => r.definition) })
+    case 'resources/read':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return readResource(id, params, resources, (result) => result)
     default:
       return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
   }

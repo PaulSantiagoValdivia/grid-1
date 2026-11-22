@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../../plan'
 import { buildFloorPlan } from '../../floorplan'
-import { DXF_LAYERS, toDxf } from '../dxf'
+import { DXF_LAYERS, DXF_ROOM_TAG, toDxf } from '../dxf'
 import { parseFloorPlan } from '../../../types/floorplan'
+import { attributesOf, modelEntities, readDxf, valueOf as fieldOf, worldShapes } from './dxf-reader'
 
 /**
  * DXF export.
@@ -10,7 +11,8 @@ import { parseFloorPlan } from '../../../types/floorplan'
  * A DXF is a flat list of (group code, value) pairs, two lines each. Parsing it
  * back into pairs is both how these assertions read the file and the cheapest
  * proof that it is well formed at all — an odd line count means a value was
- * written without its code, which no reader recovers from.
+ * written without its code, which no reader recovers from. HND-1: the structure as a whole is
+ * checked in `dxf.structure.test.ts`; `dxf-reader.ts` reads it into its parts.
  */
 
 /** A 4×4 room with a door, one interior partition and one virtual divider. */
@@ -76,13 +78,14 @@ describe('the file a reader actually sees', () => {
     expect(structural[structural.length - 1]).toBe('EOF')
   })
 
-  it('declares the version it claims to be', () => {
-    // R12. Its minimal valid form really is this small; R2000+ additionally
-    // wants CLASSES, BLOCK_RECORD and an OBJECTS dictionary, and a file missing
-    // those is not something to hand an architect and hope.
-    const dxf = dxfOf(samplePlan())
-    expect(dxf).toContain('$ACADVER')
-    expect(valuesOf(dxf, 1)).toContain('AC1009')
+  it('declares the version it claims to be, and that it is in metres (HND-1, lab EX-1)', () => {
+    // AutoCAD 2013's: UTF-8 text and a units field, where R12 (AC1009) had neither. A version
+    // that new is a whole document, so it has every section, not only a header and entities.
+    const doc = readDxf(dxfOf(samplePlan()))
+    expect(doc.header.get('$ACADVER')).toEqual([{ code: 1, value: 'AC1027' }])
+    expect(doc.header.get('$INSUNITS')).toEqual([{ code: 70, value: '6' }])
+    expect(doc.header.get('$MEASUREMENT')).toEqual([{ code: 70, value: '1' }])
+    expect(doc.sections).toEqual(['HEADER', 'CLASSES', 'TABLES', 'BLOCKS', 'ENTITIES', 'OBJECTS'])
   })
 
   it('uses CRLF, the line ending the format is written with', () => {
@@ -94,108 +97,112 @@ describe('layers', () => {
   it('declares every layer any entity puts itself on', () => {
     // The invariant that matters: an entity on an undeclared layer either fails
     // to import or lands somewhere invisible, and the drawing looks empty.
-    const dxf = dxfOf(samplePlan())
-    const all = pairs(dxf)
-
-    // The last table is the layer table; the line types come before it.
-    const tableEnd = all.findLastIndex((p) => p.code === 0 && p.value === 'ENDTAB')
-    const declared = new Set(
-      all.slice(0, tableEnd).filter((p) => p.code === 2).map((p) => p.value)
-    )
-    const used = new Set(all.slice(tableEnd).filter((p) => p.code === 8).map((p) => p.value))
+    const doc = readDxf(dxfOf(samplePlan()))
+    const declared = new Set(doc.tables.get('LAYER')!.records.map((r) => fieldOf(r, 2)))
+    const used = new Set([...doc.entities, ...doc.blocks.flatMap((b) => b.entities)].map((e) => e.layer))
 
     expect(used.size).toBeGreaterThan(0)
     for (const layer of used) expect(declared).toContain(layer)
   })
 
-  it('separates walls, rooms, openings and labels', () => {
+  it('separates walls, their fill, rooms, doors, tags, dimensions and labels', () => {
+    // HND-1: a door is a block on the doors layer; the doorless openings have a layer of their own.
     const used = new Set(valuesOf(dxfOf(samplePlan()), 8))
 
-    expect(used).toContain(DXF_LAYERS.wallExterior)
-    expect(used).toContain(DXF_LAYERS.rooms)
-    expect(used).toContain(DXF_LAYERS.openings)
-    expect(used).toContain(DXF_LAYERS.labels)
+    for (const layer of [DXF_LAYERS.wallExterior, DXF_LAYERS.wallFill, DXF_LAYERS.rooms, DXF_LAYERS.doors, DXF_LAYERS.roomTags, DXF_LAYERS.dimensions, DXF_LAYERS.labels]) {
+      expect(used).toContain(layer)
+    }
+  })
+
+  it('lists only the layers something is drawn on', () => {
+    const declared = readDxf(dxfOf(samplePlan())).tables.get('LAYER')!.records.map((r) => fieldOf(r, 2))
+    expect(declared).not.toContain(DXF_LAYERS.windows)
+    expect(declared).not.toContain(DXF_LAYERS.doorSwings)
+    expect(declared[0]).toBe('0')
   })
 })
 
 describe('coordinates (C4)', () => {
-  const xs = (dxf: string): number[] => valuesOf(dxf, 10).map(Number)
-  const ys = (dxf: string): number[] => valuesOf(dxf, 20).map(Number)
+  /** The corners of the wall outlines, in model space. */
+  const wallPoints = (dxf: string) =>
+    worldShapes(dxf).filter((s) => s.layer === DXF_LAYERS.wallExterior || s.layer === DXF_LAYERS.wallInterior).flatMap((s) => s.points)
 
   it('writes meters, unscaled', () => {
-    const dxf = dxfOf(samplePlan())
+    const xs = wallPoints(dxfOf(samplePlan())).map((p) => p.x)
 
     // The plan spans x 0..4. Wall thickness pushes the outer face to 4.1.
-    expect(Math.max(...xs(dxf))).toBeCloseTo(4.1, 6)
-    expect(Math.min(...xs(dxf))).toBeCloseTo(-0.1, 6)
+    expect(Math.max(...xs)).toBeCloseTo(4.1, 6)
+    expect(Math.min(...xs)).toBeCloseTo(-0.1, 6)
   })
 
   it('does not flip Y', () => {
     // A mirrored basis passes every length and area test and still exports the
     // plan upside down. +Y forward in the plan is +Y up in the DXF (C4).
-    const dxf = dxfOf(samplePlan())
+    const ys = wallPoints(dxfOf(samplePlan())).map((p) => p.y)
 
-    expect(Math.max(...ys(dxf))).toBeCloseTo(3.1, 6)
-    expect(ys(dxf).every((y) => y >= -0.2)).toBe(true)
+    expect(Math.max(...ys)).toBeCloseTo(3.1, 6)
+    expect(ys.every((y) => y >= -0.2)).toBe(true)
   })
 
-  it('reports an extent that matches what it drew', () => {
-    const plan = samplePlan()
-    const dxf = toDxf(buildFloorPlan(plan))
-    const all = pairs(dxf)
+  it('reports an extent round everything it drew in the model', () => {
+    // HND-1: the dimensions outside the walls and the label above them are drawn too.
+    const dxf = toDxf(buildFloorPlan(samplePlan()))
+    const doc = readDxf(dxf)
+    const [min, max] = (['$EXTMIN', '$EXTMAX'] as const).map((name) => {
+      const at = doc.header.get(name)!
+      return { x: Number(at[0]!.value), y: Number(at[1]!.value) }
+    }) as [{ x: number; y: number }, { x: number; y: number }]
+    const points = worldShapes(dxf).flatMap((s) => s.points)
 
-    const extMin = all.findIndex((p) => p.code === 9 && p.value === '$EXTMIN')
-    const extMax = all.findIndex((p) => p.code === 9 && p.value === '$EXTMAX')
-
-    expect(Number(all[extMin + 1]!.value)).toBeCloseTo(Math.min(...xs(dxf)), 6)
-    expect(Number(all[extMax + 1]!.value)).toBeCloseTo(Math.max(...xs(dxf)), 6)
+    expect(points.length).toBeGreaterThan(20)
+    for (const p of points) {
+      expect(p.x).toBeGreaterThanOrEqual(min.x - 1e-6)
+      expect(p.y).toBeGreaterThanOrEqual(min.y - 1e-6)
+      expect(p.x).toBeLessThanOrEqual(max.x + 1e-6)
+      expect(p.y).toBeLessThanOrEqual(max.y + 1e-6)
+    }
+    expect(min.x).toBeLessThan(-0.1)
+    expect(max.y).toBeGreaterThan(3.1)
   })
 })
 
 describe('shapes', () => {
   it('closes wall and room outlines', () => {
     // An open outline hatches and fills wrong in every CAD tool downstream.
-    // Scoped to ENTITIES on purpose: code 70 is also the layer table's flags
-    // and its entry count, so reading it across the whole file would compare
-    // the wrong thing and pass or fail for reasons unrelated to any outline.
-    const all = pairs(dxfOf(samplePlan()))
-    const entities = all.slice(all.findIndex((p) => p.code === 2 && p.value === 'ENTITIES'))
-    const closed = entities.filter((p) => p.code === 70).map((p) => p.value)
+    const outlines = modelEntities(dxfOf(samplePlan()), 'LWPOLYLINE').filter((e) => e.layer !== DXF_LAYERS.fixtures)
 
-    expect(closed.length).toBeGreaterThan(0)
-    expect(closed.every((flag) => flag.trim() === '1')).toBe(true)
+    expect(outlines.length).toBeGreaterThan(0)
+    expect(outlines.every((e) => fieldOf(e, 70) === '1')).toBe(true)
   })
 
-  it('draws the room name and its area', () => {
-    const texts = valuesOf(dxfOf(samplePlan()), 1)
+  it('fills each wall with a solid hatch bounded by its outlines (HND-1)', () => {
+    const dxf = dxfOf(samplePlan())
+    const hatches = modelEntities(dxf, 'HATCH')
+    const walls = modelEntities(dxf, 'LWPOLYLINE').filter((e) => e.layer === DXF_LAYERS.wallExterior)
 
-    expect(texts.some((t) => t.includes('Living room'))).toBe(true)
-    expect(texts.some((t) => /\d+\.\d+ m2/.test(t))).toBe(true)
+    expect(hatches).toHaveLength(4)
+    expect(hatches.every((h) => h.layer === DXF_LAYERS.wallFill && fieldOf(h, 2) === 'SOLID')).toBe(true)
+    // One loop per outline: the door's wall is two pieces, either side of the door.
+    expect(hatches.reduce((sum, h) => sum + Number(fieldOf(h, 91)), 0)).toBe(walls.length)
+    expect(walls).toHaveLength(5)
   })
 
-  it('marks the opening left in the wall', () => {
+  it('tags the room with its name and its area', () => {
+    const [tag] = attributesOf(dxfOf(samplePlan()), DXF_ROOM_TAG.block)
+
+    expect(tag?.[DXF_ROOM_TAG.name]).toBe('Living room')
+    expect(tag?.[DXF_ROOM_TAG.area]).toMatch(/^\d+\.\d+ m²$/)
+  })
+
+  it('marks the opening left in the wall with a block', () => {
     const withDoor = dxfOf(samplePlan())
     const plan = samplePlan()
     plan.openings = []
 
-    expect(valuesOf(withDoor, 8).filter((l) => l === DXF_LAYERS.openings).length).toBeGreaterThan(
-      valuesOf(dxfOf(plan), 8).filter((l) => l === DXF_LAYERS.openings).length
-    )
+    expect(modelEntities(withDoor, 'INSERT').filter((e) => e.layer === DXF_LAYERS.doors)).toHaveLength(1)
+    expect(modelEntities(dxfOf(plan), 'INSERT').filter((e) => e.layer === DXF_LAYERS.doors)).toHaveLength(0)
   })
 })
-
-/** Each TEXT entity as its own list of pairs, up to the next entity. */
-function textEntities(dxf: string): Pair[][] {
-  const all = pairs(dxf)
-  const out: Pair[][] = []
-  for (let i = 0; i < all.length; i++) {
-    if (all[i]!.code !== 0 || all[i]!.value !== 'TEXT') continue
-    let end = i + 1
-    while (end < all.length && all[end]!.code !== 0) end++
-    out.push(all.slice(i + 1, end))
-  }
-  return out
-}
 
 const withName = (name: string): FloorPlan => {
   const plan = samplePlan()
@@ -203,33 +210,30 @@ const withName = (name: string): FloorPlan => {
   return plan
 }
 
-/** What a CAD reader sees for a room name: the text value of its first label. */
-const nameValue = (name: string): string => textEntities(dxfOf(withName(name)))[0]!.find((p) => p.code === 1)!.value
+/** What a CAD reader sees for a room name: the value of the name in its tag (HND-1). */
+const nameValue = (name: string): string => attributesOf(dxfOf(withName(name)), DXF_ROOM_TAG.block)[0]![DXF_ROOM_TAG.name]!
 
 describe('text a CAD tool has to read back', () => {
-  // R12 is an ASCII format. Anything outside ASCII is read through a code page,
-  // so a name saved as UTF-8 comes out as mojibake (an n with a tilde as two
-  // stray characters). Spanish
-  // and German names are the normal case here, not the edge.
-  it('writes only ASCII, whatever the room is called', () => {
-    // Written as escapes, so this file stays ASCII too: Spanish, German, French,
-    // Japanese, and an emoji (a surrogate pair).
-    const names = [
-      'Ba\u00f1o',
-      'K\u00fcche',
-      'Salle \u00e0 manger',
-      '\u5bdd\u5ba4',
-      'Cocina \ud83c\udf73'
-    ]
+  // HND-1 (lab EX-1): from AutoCAD 2007's version on, a DXF's text is UTF-8, so a name is
+  // written as it is. Before, the file was R12, plain ASCII with `\U+00F1` codes that three of
+  // the lab's four readers showed as codes. Spanish and German names are the normal case here,
+  // not the edge.
+  it('writes every name as it is, in UTF-8', () => {
+    // Spanish, German, French, Japanese, and an emoji (a surrogate pair).
+    const names = ['Ba\u00f1o', 'K\u00fcche', 'Salle \u00e0 manger', '\u5bdd\u5ba4', 'Cocina \ud83c\udf73']
 
     for (const name of names) {
-      expect(dxfOf(withName(name))).toMatch(/^[\x00-\x7f]*$/)
+      expect(nameValue(name)).toBe(name)
+      expect(Buffer.from(dxfOf(withName(name)), 'utf8').includes(Buffer.from(name, 'utf8'))).toBe(true)
     }
   })
 
-  it('escapes an accented letter as \\U+XXXX, which CAD tools decode', () => {
-    expect(nameValue('Ba\u00f1o')).toBe('Ba\\U+00F1o')
-    expect(nameValue('K\u00fcche')).toBe('K\\U+00FCche')
+  // Pinned (Z-6), changed on purpose by HND-1 for EX-1: it was "escapes an accented letter as
+  // \U+XXXX, which CAD tools decode", and three of the lab's four readers did not.
+  it('writes an accented letter as itself, which every reader shows', () => {
+    expect(nameValue('Ba\u00f1o')).toBe('Ba\u00f1o')
+    expect(nameValue('K\u00fcche')).toBe('K\u00fcche')
+    expect(dxfOf(withName('Ba\u00f1o'))).not.toContain('\\U+00F1')
   })
 
   it('declares the code page the file is written in', () => {
@@ -248,28 +252,32 @@ describe('text a CAD tool has to read back', () => {
     expect(value).not.toContain('\\U+0041')
   })
 
-  it('replaces what R12 cannot hold, instead of splitting it', () => {
+  it('keeps a character made of two units whole, and replaces half of one', () => {
     // An emoji is one character made of two UTF-16 units; slicing by units can
     // cut it in half and leave a lone surrogate that no encoder can write.
-    expect(nameValue('Cocina \ud83c\udf73')).toBe('Cocina ?')
+    expect(nameValue('Cocina \ud83c\udf73')).toBe('Cocina \ud83c\udf73')
     expect(nameValue('a\ud83cb')).toBe('a?b')
   })
 
-  it('caps a value at 250 bytes of what is written, not 250 characters', () => {
-    // An n with a tilde is one character but seven bytes once escaped: a name well under 250
-    // characters is still over R12's 255-byte limit.
-    const value = nameValue('\u00f1'.repeat(100))
-
-    expect(value.length).toBeLessThanOrEqual(250)
-    expect(value.length).toBeGreaterThan(200)
+  it('caps a value at 250 characters', () => {
+    // AutoCAD's single-line text holds 256 characters; the letters are no longer seven bytes each.
+    expect([...nameValue('\u00f1'.repeat(300))]).toHaveLength(250)
+    expect(nameValue('\u00f1'.repeat(100))).toBe('\u00f1'.repeat(100))
   })
 
   it('never cuts an escape in half when it hits the cap', () => {
-    for (const length of [34, 35, 36, 37, 100]) {
-      const value = nameValue(`a${'\u00f1'.repeat(length)}`)
+    for (const length of [34, 35, 36, 37, 300]) {
+      const value = nameValue(`a${'\\'.repeat(length)}`)
 
-      expect(value).toMatch(/^(?:[ -\[\]-~]|\\U\+[0-9A-F]{4})*$/)
+      expect(value).toMatch(/^a(?:\\U\+005C)*$/)
     }
+  })
+
+  it('keeps the codes a CAD program reads in text from reading as codes', () => {
+    // A caret starts a control character in the file, and `%%d` is a degree sign in AutoCAD.
+    expect(nameValue('A^J')).toBe('A^ J')
+    expect(nameValue('50%%d')).toBe('50%%%%%%d')
+    expect(nameValue('100%')).toBe('100%')
   })
 })
 
@@ -277,10 +285,13 @@ describe('labels sit where the 2D plan draws them', () => {
   // The canvas centres each label on the room (text-anchor: middle). A TEXT
   // without a horizontal alignment starts at its point and runs to the right,
   // so in a narrow room the name crosses the wall into the next one.
-  it('centres every text on its point', () => {
-    const texts = textEntities(dxfOf(samplePlan()))
+  /** The model's texts and the tags' attributes: what is placed on the plan. */
+  const placed = (dxf: string): Pair[][] => [...modelEntities(dxf, 'TEXT'), ...modelEntities(dxf, 'ATTRIB')].map((e) => [...e.pairs])
 
-    expect(texts.length).toBeGreaterThan(0)
+  it('centres every label and tag on its point', () => {
+    const texts = placed(dxfOf(samplePlan()))
+
+    expect(texts.length).toBe(4)
     for (const text of texts) {
       expect(text.find((p) => p.code === 72)?.value.trim()).toBe('1')
     }
@@ -289,7 +300,7 @@ describe('labels sit where the 2D plan draws them', () => {
   it('repeats the point as the alignment point, the one a reader uses', () => {
     // With a non-left alignment a reader ignores 10/20 and places the text at
     // 11/21/31, so the two have to agree.
-    for (const text of textEntities(dxfOf(samplePlan()))) {
+    for (const text of placed(dxfOf(samplePlan()))) {
       const at = (codes: readonly number[]): number[] =>
         codes.map((c) => Number(text.find((p) => p.code === c)?.value))
 
@@ -385,28 +396,49 @@ function swingPlan(handing: Record<string, string>, theta = 0, type: 'door' | 'w
 }
 
 describe('door swings (door-swing-export)', () => {
-  it('lists the door-swing layer in the layer table', () => {
+  it('lists the door-swing layer in the layer table when a door has a swing', () => {
     expect(DXF_LAYERS.doorSwings).toBe('GRID-DOOR-SWINGS')
-    expect(valuesOf(dxfOf(samplePlan()), 2)).toContain('GRID-DOOR-SWINGS')
+    expect(valuesOf(dxfOf(swingPlan({ hinge: 'start', swing: 'left' })), 2)).toContain('GRID-DOOR-SWINGS')
   })
 
   it('draws the open leaf and a quarter arc for a door hung from its start jamb opening left', () => {
-    const swing = entitiesOf(dxfOf(swingPlan({ hinge: 'start', swing: 'left' }))).filter(
-      (e) => e.layer === DXF_LAYERS.doorSwings
-    )
-    expect(swing.map((e) => e.type)).toEqual(['LINE', 'ARC'])
+    // HND-1: inside the door's block, placed where its insert puts it.
+    const swing = worldShapes(dxfOf(swingPlan({ hinge: 'start', swing: 'left' }))).filter((s) => s.layer === DXF_LAYERS.doorSwings)
+    expect(swing.map((s) => s.type)).toEqual(['LINE', 'ARC'])
     const [leaf, arc] = swing as [(typeof swing)[number], (typeof swing)[number]]
 
     // Hung from the left face of the 0.2 m wall, y = 0.1, not from its axis (SHT-2).
-    expect([num(leaf, 10), num(leaf, 20), num(leaf, 11), num(leaf, 21)]).toEqual([1, 0.1, 1, 1])
-    expect([num(arc, 10), num(arc, 20), num(arc, 40), num(arc, 50), num(arc, 51)]).toEqual([1, 0.1, 0.9, 0, 90])
+    expect([leaf.points[0]!.x, leaf.points[0]!.y, leaf.points[1]!.x, leaf.points[1]!.y]).toEqual([1, 0.1, 1, 1])
+    expect([arc.arc!.center.x, arc.arc!.center.y, arc.arc!.radius, arc.arc!.start, arc.arc!.end]).toEqual([1, 0.1, 0.9, 0, 90])
   })
 
   it('still marks the opening line across the gap', () => {
-    const lines = entitiesOf(dxfOf(swingPlan({ hinge: 'start', swing: 'left' }))).filter(
-      (e) => e.layer === DXF_LAYERS.openings
-    )
+    const lines = worldShapes(dxfOf(swingPlan({ hinge: 'start', swing: 'left' }))).filter((s) => s.layer === DXF_LAYERS.doors)
     expect(lines).toHaveLength(1)
+    expect(lines[0]!.points).toEqual([{ x: 1, y: 0 }, { x: 1.9, y: 0 }])
+  })
+
+  it('is one block per size and hand, however many doors use it (HND-1)', () => {
+    // Four doors of one size: two hung from the start jamb, two from the end, opening either way.
+    // A door hung from its end jamb is the other hand's block turned half round.
+    const plan = swingPlan({ hinge: 'start', swing: 'left' })
+    const door = plan.openings[0]!
+    plan.walls[0]!.end = [9, 0]
+    plan.openings = [
+      door,
+      { ...door, id: 'o2', offset: 3, hinge: 'end', swing: 'right' },
+      { ...door, id: 'o3', offset: 5, hinge: 'start', swing: 'right' },
+      { ...door, id: 'o4', offset: 7, hinge: 'end', swing: 'left' }
+    ]
+    const dxf = dxfOf(plan)
+    const inserts = modelEntities(dxf, 'INSERT').filter((e) => e.layer === DXF_LAYERS.doors)
+    expect(inserts.map((e) => [fieldOf(e, 2), Number(fieldOf(e, 50) ?? 0)])).toEqual([
+      ['GRID-DOOR-900x200-L', 0],
+      ['GRID-DOOR-900x200-L', 180],
+      ['GRID-DOOR-900x200-R', 0],
+      ['GRID-DOOR-900x200-R', 180]
+    ])
+    expect(readDxf(dxf).blocks.map((b) => b.name).filter((name) => name.startsWith('GRID-DOOR'))).toEqual(['GRID-DOOR-900x200-L', 'GRID-DOOR-900x200-R'])
   })
 
   it.each([
@@ -437,31 +469,32 @@ describe('door swings (door-swing-export)', () => {
   )
   it.each(cases)('at %d°, hinge %s, swing %s: the arc and the leaf are on the face the swing names', (deg, hinge, side) => {
     const theta = (deg * Math.PI) / 180
-    const swing = entitiesOf(dxfOf(swingPlan({ hinge, swing: side }, theta))).filter(
-      (e) => e.layer === DXF_LAYERS.doorSwings
-    )
-    const leaf = swing.find((e) => e.type === 'LINE')!
-    const arc = swing.find((e) => e.type === 'ARC')!
+    const swing = worldShapes(dxfOf(swingPlan({ hinge, swing: side }, theta))).filter((s) => s.layer === DXF_LAYERS.doorSwings)
+    const leaf = swing.find((s) => s.type === 'LINE')!
+    const arc = swing.find((s) => s.type === 'ARC')!.arc!
     const normal = { x: -Math.sin(theta), y: Math.cos(theta) }
     const facing = side === 'left' ? 1 : -1
 
-    const sweep = (((num(arc, 51) - num(arc, 50)) % 360) + 360) % 360
-    expect(sweep).toBeCloseTo(90, 6)
-    expect(num(arc, 40)).toBeCloseTo(0.9, 6)
+    const sweep = (((arc.end - arc.start) % 360) + 360) % 360
+    expect(sweep).toBeCloseTo(90, 5)
+    expect(arc.radius).toBeCloseTo(0.9, 6)
 
-    const mid = ((num(arc, 50) + 45) * Math.PI) / 180
+    const mid = ((arc.start + 45) * Math.PI) / 180
     const midDir = { x: Math.cos(mid), y: Math.sin(mid) }
     expect(Math.sign(midDir.x * normal.x + midDir.y * normal.y)).toBe(facing)
 
-    const tip = { x: num(leaf, 11) - num(leaf, 10), y: num(leaf, 21) - num(leaf, 20) }
+    const [from, to] = leaf.points as [{ x: number; y: number }, { x: number; y: number }]
+    const tip = { x: to.x - from.x, y: to.y - from.y }
     expect(Math.sign(tip.x * normal.x + tip.y * normal.y)).toBe(facing)
     // The leaf starts at the hinge jamb, which is the arc's centre.
-    expect(num(leaf, 10)).toBeCloseTo(num(arc, 10), 6)
-    expect(num(leaf, 20)).toBeCloseTo(num(arc, 20), 6)
+    expect(from.x).toBeCloseTo(arc.center.x, 6)
+    expect(from.y).toBeCloseTo(arc.center.y, 6)
     // The hinge jamb, on the face the door opens to: half the 0.2 m wall off the axis (SHT-2).
+    // HND-1: placed by the block's insert, so to 5 places: the insert's point and the block's
+    // own lines are each written to 6.
     const hingeAt = hinge === 'start' ? 1.0 : 1.9
-    expect(num(arc, 10)).toBeCloseTo(hingeAt * Math.cos(theta) + normal.x * 0.1 * facing, 6)
-    expect(num(arc, 20)).toBeCloseTo(hingeAt * Math.sin(theta) + normal.y * 0.1 * facing, 6)
+    expect(arc.center.x).toBeCloseTo(hingeAt * Math.cos(theta) + normal.x * 0.1 * facing, 5)
+    expect(arc.center.y).toBeCloseTo(hingeAt * Math.sin(theta) + normal.y * 0.1 * facing, 5)
   })
 })
 
@@ -497,17 +530,18 @@ describe('a dividing line (ARE-2)', () => {
     const entities = entitiesOf(dxf)
     const line = entities.filter((e) => e.layer === DXF_LAYERS.wallVirtual)
     const rooms = entities.filter((e) => e.layer === DXF_LAYERS.rooms)
-    const vertices = (start: number): string[] => {
-      const out: string[] = []
-      for (let i = start + 1; i < entities.length && entities[i]!.type === 'VERTEX'; i++) {
-        out.push(`${num(entities[i]!, 10)},${num(entities[i]!, 20)}`)
-      }
-      return out
+    const vertices = (e: (typeof entities)[number]): string[] => {
+      const ys = e.pairs.filter((p) => p.code === 20).map((p) => Number(p.value))
+      return e.pairs.filter((p) => p.code === 10).map((p, i) => `${Number(p.value)},${ys[i]}`)
     }
+    // HND-1: the line types and layers, without the handles, which the structure test checks.
+    const doc = readDxf(dxf)
+    const records = (table: string): string[] =>
+      doc.tables.get(table)!.records.map((r) => r.pairs.filter((p) => ![5, 330, 100].includes(p.code)).map((p) => `${p.code} ${p.value}`).join(' | '))
     expect({
       line: line.map((e) => ({ type: e.type, from: [num(e, 10), num(e, 20)], to: [num(e, 11), num(e, 21)] })),
-      rooms: rooms.filter((e) => e.type === 'POLYLINE').map((e) => vertices(entities.indexOf(e))),
-      tables: tables.map((p) => `${p.code} ${p.value}`)
+      rooms: rooms.filter((e) => e.type === 'LWPOLYLINE').map(vertices),
+      tables: { LTYPE: records('LTYPE'), LAYER: records('LAYER') }
     }).toMatchSnapshot()
   })
 
@@ -520,19 +554,17 @@ describe('a dividing line (ARE-2)', () => {
   })
 
   it('declares every line type a layer names', () => {
-    const declared = new Set<string>()
-    const named = new Set<string>()
-    for (let i = 0; i < tables.length; i++) {
-      if (tables[i]!.code === 0 && tables[i]!.value === 'LTYPE') declared.add(tables[i + 1]!.value)
-      if (tables[i]!.code === 6) named.add(tables[i]!.value)
-    }
-    expect([...named].sort()).toEqual(['CONTINUOUS', 'DASHED'])
+    // HND-1: `Continuous` as AutoCAD spells it, beside `ByBlock` and `ByLayer`.
+    const doc = readDxf(dxf)
+    const declared = new Set(doc.tables.get('LTYPE')!.records.map((r) => fieldOf(r, 2)))
+    const named = new Set(doc.tables.get('LAYER')!.records.map((r) => fieldOf(r, 6)))
+    expect([...named].sort()).toEqual(['Continuous', 'DASHED'])
     for (const type of named) expect(declared).toContain(type)
   })
 
   it('keeps solid walls and their outlines on continuous layers', () => {
     const layerType = (name: string): string | undefined => tables[tables.findIndex((p) => p.code === 2 && p.value === name) + 3]?.value
-    expect(layerType(DXF_LAYERS.wallExterior)).toBe('CONTINUOUS')
-    expect(layerType(DXF_LAYERS.rooms)).toBe('CONTINUOUS')
+    expect(layerType(DXF_LAYERS.wallExterior)).toBe('Continuous')
+    expect(layerType(DXF_LAYERS.rooms)).toBe('Continuous')
   })
 })

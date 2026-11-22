@@ -50,7 +50,9 @@ function holdToAllPairs(plan: FloorPlan, tally: Tally): void {
     }
     tally.floors++
     for (const swingOf of [asWritten, everyDoor(plan)]) {
-      const indexed = validateFloorDoorSweeps(slice, drawing, swingOf)
+      // CNT-14: the question about a wide door with no kind is about the door alone, not a pair:
+      // the old code never asked it.
+      const indexed = validateFloorDoorSweeps(slice, drawing, swingOf).filter((issue) => issue.code !== 'opening/wide-single-leaf')
       expect(indexed).toEqual(allPairsFloorDoorSweeps(slice, drawing, swingOf))
       for (const issue of indexed) tally.findings[issue.code] = (tally.findings[issue.code] ?? 0) + 1
     }

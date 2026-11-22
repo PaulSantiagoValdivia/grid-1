@@ -14,8 +14,8 @@
  * puts it (`forSkia`).
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import type { PictureOptions } from '@ongrid/viewer/src/picture'
-import { fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
+import type { FacadePictureOptions, Picture, PictureOptions } from '@ongrid/viewer/src/picture'
+import { facadePicture, fileLookOf, fullHeight, pictureToSvg, planPicture } from '@ongrid/viewer/src/picture'
 import { loadCanvas } from './canvas'
 import { forSkia } from './skiaText'
 
@@ -29,6 +29,8 @@ export interface DrawOptions extends PictureOptions {
    * the same drawing.
    */
   readonly scale?: number
+  /** MSG-3: the label in the top-left corner. On by default; off where the page carries it (a sheet). */
+  readonly label?: boolean
 }
 
 /**
@@ -41,7 +43,8 @@ export interface DrawOptions extends PictureOptions {
  *
  * Every other option is `planToSvg`'s: `floor` (the lowest by default), `width` (1200 px by
  * default), `height` (follows the plan's shape by default), `look` (`working`, the default,
- * `technical` or `dark`, or your own colours), `paperScale` (the technical look's 1:N) and
+ * or `technical`, or your own colours; SHT-10: a file is always on light paper, so `dark`, or
+ * colours of your own on dark paper, draw the working look), `paperScale` (the technical look's 1:N) and
  * `showDimensions` (on by default) and `faults` (the result record's lines, to mark what went
  * wrong on the drawing and list it under it; none by default).
  *
@@ -57,10 +60,33 @@ export function drawPlan(plan: FloorPlan, options: DrawOptions & { format: 'svg'
 export function drawPlan(plan: FloorPlan, options: DrawOptions & { format: 'png' }): Promise<Uint8Array>
 export function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string | Uint8Array>
 export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string | Uint8Array> {
-  const { format, scale = 1, ...pictureOptions } = options
-  const picture = planPicture(plan, pictureOptions)
-  if (format === 'svg') return pictureToSvg(picture)
+  const { format, scale = 1, label = true, ...pictureOptions } = options
+  // SHT-10: a file is drawn on light paper, whatever the screen's theme.
+  const picture = planPicture(plan, { ...pictureOptions, look: fileLookOf(pictureOptions.look) })
+  if (format === 'svg') return pictureToSvg(picture, 1, { label })
   if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
+  return pictureToPng(picture, { scale, label })
+}
+
+/**
+ * LVL-8: one facade of a plan, as SVG or PNG: the side of the drawing (`side`, north its top),
+ * every floor at its level, in the look's elevation line weights, with the label (MSG-3). The
+ * geometry is the core's (`planFacade`); the viewer draws it (`facadePicture`).
+ */
+export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg'; label?: boolean }): Promise<string>
+export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'png'; scale?: number; label?: boolean }): Promise<Uint8Array>
+export function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg' | 'png'; scale?: number; label?: boolean }): Promise<string | Uint8Array>
+export async function drawFacade(plan: FloorPlan, options: FacadePictureOptions & { format: 'svg' | 'png'; scale?: number; label?: boolean }): Promise<string | Uint8Array> {
+  const { format, scale = 1, label = true, ...pictureOptions } = options
+  const picture = facadePicture(plan, { ...pictureOptions, look: fileLookOf(pictureOptions.look) })
+  if (format === 'svg') return pictureToSvg(picture, 1, { label })
+  if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
+  return pictureToPng(picture, { scale, label })
+}
+
+/** A picture the viewer laid out, as a PNG's bytes: a plan's (`drawPlan`), or a comparison's (WRT-8). */
+export async function pictureToPng(picture: Picture, options: { readonly scale?: number; readonly label?: boolean } = {}): Promise<Uint8Array> {
+  const { scale = 1, label = true } = options
   if (!(scale > 0) || !Number.isFinite(scale)) throw new RangeError(`The scale must be a number above 0: got ${scale}`)
 
   const width = Math.round(picture.width * scale)
@@ -75,7 +101,7 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   const installed = (family: string): boolean => GlobalFonts.has(family)
   const nodes = forSkia(picture.nodes, installed)
   const key = picture.key && { ...picture.key, nodes: forSkia(picture.key.nodes, installed) }
-  const image = await loadImage(Buffer.from(pictureToSvg({ ...picture, nodes, key }, scale)))
+  const image = await loadImage(Buffer.from(pictureToSvg({ ...picture, nodes, key }, scale, { label })))
 
   const canvas = createCanvas(width, height)
   const context = canvas.getContext('2d')

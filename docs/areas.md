@@ -1,25 +1,61 @@
 # Measuring areas
 
-Read this to know what an area figure measures, which gross area comes first where, and how the
-room and opening schedules are made.
+Read this to know what an area figure measures, which gross area comes first where, how the
+room and opening schedules are made, and how the quantities for a first estimate are measured
+and priced from your own rates.
 
-Grid gives three areas, per floor and per use, from the spaces the walls enclose. Each is
+Grid gives three areas, per floor and per use, from the spaces the walls enclose, and lists
+outdoor space apart. Each is
 described in Grid's own words by what it measures, and no figure is said to follow a published
 standard: a standard's rule would come in only as a figure record, with its document, edition,
 clause, place, day read and status, and none is carried yet.
 
 | Measure | What it measures | Not taken off | What the plan cannot say |
 |---|---|---|---|
-| Net area | Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it. | Nothing inside a room is taken off: fixed units, a column drawn without walls and floor under a low ceiling all count. | The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside. |
-| Gross internal area | Gross internal area is the floor inside the inside face of the walls that face outside, with the inner walls and partitions counted. | Inner walls, partitions, stairs and floor no room claims are not taken off. | Which walls face outside is worked out from the rooms beside them; the plan cannot say whether floor no room claims, such as a courtyard or a light well, is covered, so it counts. |
-| Gross external area | Gross external area is the floor inside the outside face of the walls, every wall counted. | Outer walls, inner walls and floor no room claims are not taken off. | The plan cannot say which walls are shared with a neighbour, so a shared wall counts in full, and a wall standing apart counts too. |
+| Net area | Net area is the floor inside each room, measured to the faces of its walls, less any hole in it, any room drawn inside it and the floor the columns standing in it cover; a stair drawn as a room on floor after floor counts once, on the floor it rises from. | Nothing else inside a room is taken off: fixed units, a column drawn as a short wall rather than as a column, and floor under a low ceiling all count. | The plan cannot say which rooms the reader counts: a store drawn as a room counts unless it is named as outside, and a balcony, a terrace or a garden counts unless it is marked as outdoor space. |
+| Gross internal area | Gross internal area is the floor inside the inside face of the walls that face outside, with the inner walls and partitions counted. | Inner walls, partitions, stairs and floor no room claims are not taken off. | Which walls face outside is worked out from the rooms beside them, an outdoor space being the outside; floor no room claims, such as a courtyard or a light well not drawn as outdoor space, may be covered or not, so it counts. |
+| Gross external area | Gross external area is the floor inside the outside face of the walls, every wall counted. | Outer walls, inner walls and floor no room claims are not taken off. | A wall shared with a neighbour, or with common parts the plan does not draw, counts to its middle once the plan marks it separating; any other wall counts in full, a wall standing apart too. |
+| Area by headroom | Area by headroom is the floor of each room with at least 1.5 m, and with at least 2.2 m, of height over it, from the room's floor to its ceiling or to the underside of the roof its floor states, whichever is lower. | It is measured on the room's whole floor: nothing standing in the room is taken off, a column neither, and floor under a lowered zone of the ceiling counts by that zone's height. | The plan cannot say how deep the roof is built up or where a low slope is boxed in, so the height is taken to the roof's underside as stated, from its eaves on the outside walls' lines. |
+| Outdoor area | Outdoor area is the floor of each room the plan marks as outdoor space, roofed or open, measured to the faces of its walls and edges as a room is. | It is in no net, gross internal or gross external figure, and nor is a wall that bounds outdoor space and no room, such as a fence or a parapet. | The plan cannot say how much of an outdoor space a local rule counts, such as part of a balcony: Grid counts none of it unless the caller states such a rule, with where it comes from. |
 
-On every floor the gross external area is the net area, plus the rooms named outside, the walls
-and the floor no room claims, to a millionth of a square metre. Where rooms overlap, or run over
+On every floor the gross external area is the net area, plus the floor under columns, the rooms
+named outside, the walls and the floor no room claims, to a millionth of a square metre. Where rooms overlap, or run over
 walls or outside them, the answer says how much floor that is, and the sum takes it off. The
 gross internal area leaves out the walls that face outside, stretch by stretch, as Grid works
 them out from the rooms beside them, with the corners between them; a floor with no such wall
 has none. A room Grid could not draw is named and left out of every figure.
+
+Under a sloped roof (LVL-6) a room's floor is also given by headroom band: how much of it has at
+least 1.5 m (`headroomLow`) and at least 2.2 m (`headroomFull`) of height over it, Grid's own
+figures, not a code figure ([tolerances.md](tolerances.md)). The height is measured from the room's
+floor to the lower of its ceiling (its own `height`, else its storey's, with any lowered zone) and
+the underside of the roof its floor states ([plan-file.md](plan-file.md#sloped-roofs-and-ceilings)).
+`grid_areas` gives the bands for each room on such a floor, with its lowest and highest height,
+and adds them up per floor and in all; a floor that states no roof gets none, since its ceilings
+are level. In the library: `roomHeadroom(plan, room)`. No band is checked against a figure: the
+bands are reported, and nothing says a room is high enough.
+
+A column the plan states (CNT-16, [plan-file.md](plan-file.md#columns-and-a-structural-grid))
+comes off the net area of the room it stands in: the smallest room on its floor whose floor holds
+its middle, zones aside. What it takes off is the floor it covers inside that room's outline, so a
+column built into a wall takes off only the part that stands in the room; a round column's is
+its true circle's. Each room in `grid_areas` lists its columns and the floor they cover
+(`columns`), each floor says how much its columns take (`columns`), and a note says it in words;
+the gross figures still hold that floor. An open office of 90.09 m² with three columns 0.37 m
+square measures 89.68 m² (lab EL-6). A column that rises through floors comes off each floor it
+stands on. A column drawn as a short wall is not a column, and its room keeps that floor.
+
+A stair is counted once (SHT-11, lab DR-5). Where rooms used as a stair lie one over the other
+on neighbouring floors, joined as the way-out check joins them (they share at least half of the
+smaller one), they are one stair, and its floor is counted on the floor it rises from: the
+lowest of them. The stair rooms over it keep their own area in the room list, marked with the
+room they are counted with (`countedWith`), and are in no net figure, no area by use and no
+circulation figure; the answer says so in a note. The gross areas still hold them, so on every
+floor the gross external area is the net area plus those stair rooms (`overStairs`), the rooms
+named outside, the walls and the floor no room claims. The same holds when only some floors are
+asked for: a floor's stair room over the stair below is counted on the floor below. A stair the
+plan states (`stairs`) adds no floor of its own: its flights stand in rooms already measured. A
+lift shaft drawn on every floor is still counted on every floor.
 
 Which gross area comes first follows the country the plan will be built in: the inside face of
 the outer walls in the UK and most of Europe, the outside face for homes in the US. With no
@@ -27,6 +63,53 @@ country, or one Grid has no usual measure for, both are given; either or both ca
 In the library: `planAreaFigures(plan, options)`, `MEASURES` and `usualGross(country)`. The
 `grid_areas` tool ([tool-server.md](tool-server.md)) prints each figure with its rule, takes
 `country` and `gross`, and marks each figure's state ([result-contract.md](result-contract.md)).
+
+A flat's area (CNT-4, lab EL-1) is read from the plan's own list of flats
+([plan-file.md](plan-file.md#flats-and-flat-types)), never from the rooms' names: the net area of
+the rooms the plan lists for it, each counted as the net counts it, so a zone is in its room, a
+room named outside is in no flat's figure, and a stair counts once, on the floor it rises from. A
+duplex has its area floor by floor and in all. The rooms in no flat, the common parts, are given
+apart, so the flats and the common parts add up to the net. `grid_areas` gives both on a plan
+that lists flats; on the lab's four-flat floor that is 68.27 m² for each one-bedroom flat, 99.23 m²
+for each two-bedroom flat and 84.49 m² in no flat. No figure to the middle of a party wall is
+given. In the library: `planAreaFigures(plan).flats` and `notInFlats`.
+
+A floor may state its outline before any wall (BRF-4,
+[plan-file.md](plan-file.md#a-floor-outline-before-the-walls)). On a floor with walls the outline is
+joined with what they enclose, and floor inside it that no wall encloses is floor no room claims,
+in both gross figures. A floor with an outline and no walls is massing: its gross external area
+is the area inside its outline, and it has no net area and no gross internal area, since there is
+no inside face of walls to measure to; the answer names the massing floors. `grid_areas` also
+counts the storeys, by level, from the floors that hold an outline or walls that close one.
+
+## Outdoor space
+
+A room the plan marks as outdoor space (CNT-7, [plan-file.md](plan-file.md#outdoor-space-roofed-or-open)),
+a garden, a courtyard, a terrace, a balcony, a light well, a porch, a carport or another, roofed
+or open, is measured as a room is and listed apart: it is in no net area, no area by use, no
+flat's area and no gross figure, and the answer gives the outdoor area on each floor, by kind and
+roofed or open (`outdoor`), with a note. To the building an outdoor space is the outside: the
+gross figures are measured to the building's walls alone, so a wall between a room and an
+outdoor space faces outside, and a wall that bounds outdoor space and no room (a fence, a
+parapet round a terrace, the plot's edge drawn as a line, a porch's posts) is in no figure. An
+outdoor space inside the walls, a courtyard or a light well, is taken off both gross figures.
+The lab's house of 76.34 m² drawn with its gardens round it as rooms totals 436.34 m² net and
+450 m² gross; with the gardens, the driveway and the side passages marked outdoor it is 76.34 m²
+net, 78.96 m² gross internal and 90.00 m² gross external, and 360.00 m² of outdoor space listed
+apart (lab EL-8).
+
+No share of an outdoor space is counted by Grid. A local rule may count part of a balcony or a
+terrace; in the library the caller can state one per kind, its share and the rule in words with
+where it comes from (`planAreaFigures(plan, { outdoorWeights })`), and the weighted figure is then
+given beside the outdoor area (`outdoor.weighted`), never in the net or a gross figure. Grid holds
+no such rule of its own.
+
+The site's things (BRF-3: fences, gates, paths, paving, trees and pools) are in no area: they are
+never rooms. The plot coverage, the building's shape seen from above against the plot's area, is
+not one of these figures: `grid_measure` with `what=site` gives it, from the outside face of every
+floor at or above the ground floor ([tool-server.md](tool-server.md#the-plot-distances-to-the-boundary-and-the-coverage)).
+A floor area ratio the person gives is measured there too, by the gross measure they name: the
+figure's name and what it measures are said with it.
 
 ## Schedules
 
@@ -36,20 +119,155 @@ another's printed text.
 
 - **The room schedule** (`grid_schedule` with `of=rooms`): one row per room, with its number,
   name, use, net area, height and floor, then each floor's total, named by its floor, and the
-  total of all floors. The plan holds no room numbers: Grid numbers the rooms 1, 2, 3… floor by
-  floor from the lowest, then by id, so the schedule is the same whatever the order of the file.
+  total of all floors. Grid numbers the rooms 1, 2, 3… floor by floor from the lowest, then by
+  id, so the schedule is the same whatever the order of the file. A room that states its number
+  in the plan (CNT-9) is given that number, and the rooms that state one come first on their
+  floor, in its order; each row carries the room's facts of the person's own, and the CSV has a
+  column for each ([Facts of your own](plan-file.md#facts-of-your-own-and-room-numbers)).
   The height follows the rule in [tool-server.md](tool-server.md) (a height the room states, or
   the lowest solid wall round it). A room Grid could not draw is listed with no area, and the
   totals say they leave it out.
+- **The flat schedule** (`grid_schedule` with `of=flats`, CNT-4): one row per flat the plan lists,
+  numbered in id order, with its type, whether it is mirrored, its floors, its rooms, its
+  bedrooms and its area as above, then all flats and the rooms in no flat, and the unit mix by
+  type: for each flat type the plan states, how many flats of it, how many of those mirrored, the
+  bedrooms of each when they all have as many (ARE-15), their share of the flats, their area and
+  the area of one on average. On such a plan the room schedule
+  gives each room's flat, and its CSV a `flat` column. `grid sheet --layout check` ends with the
+  flat schedule and the mix.
 - **The opening schedule** (`grid_schedule` with `of=openings`): every door, window and doorless
   opening once, numbered by floor, then doors, doorless openings and windows, each by id, with
   its size (the hole in the wall) and what lies on its two sides: a room's name, `outside`,
   `nothing drawn` or `a room left out`. A door between two rooms is one row, not one for each
-  room. Without `of`, `grid_schedule` groups the openings by type and size, as before.
+  room. Each row carries the opening's facts of the person's own, a fire rating say, and the CSV
+  has a column for each. Without `of`, `grid_schedule` groups the openings by type and size, as
+  before.
+- **The door schedule and the window schedule** (`grid_schedule` with `of=doors` or `of=windows`,
+  ARE-15): the doors, or the windows, grouped into types, one row per type with its count and
+  the marks of its openings, as a supplier orders them. A door or window of one of the plan's
+  named types (CNT-15, [named types](plan-file.md#named-wall-door-and-window-types-and-finishes))
+  is that type: a row of its own, first, in the order the plan lists its types, with
+  `basis: named`, its key `door-type:<id>`, its `name`, `material` and `glazed`; one that states
+  a size of its own is a type apart (`door-type:D90:1x2.1`). The others are grouped by the kind
+  the plan states (CNT-14) and the size of the hole in the wall, and the part that opens when the
+  plan states one, with `basis: kind-and-size`; their key is the one the estimate and the IFC
+  use, `door:0.9x2.1`, `door:sliding:2.2x2.1` (with `:opens:0.9x2.1` for a stated part). A
+  window type lists its sills. The CSV has `name` and `material` columns when a row is a named
+  type.
+- **The finishes schedule** (`grid_schedule` with `of=finishes`, CNT-15): the finishes plan, one
+  row per room with its floor, wall, ceiling and skirting finish and the quantity of each, then
+  each zone that names a finish of its own, after its room, and each finish's total. See
+  [finishes and wall types](#finishes-and-wall-types).
+
+### Marks
+
+Every row of the room and opening schedules has a mark, and `grid_view` with `marks schedule`
+(`grid draw --marks schedule`, and every floor page of `grid sheet --layout check`) draws it
+beside its part, so the drawing and the schedules point at each other (ARE-15):
+
+- a room's mark is its number in the room schedule of every floor: the number it states, else
+  Grid's;
+- an opening's mark is its type's letter, `D` for a door, `W` for a window and `O` for a doorless
+  opening, and its place among the openings of that type in the opening schedule of every floor:
+  `D1`, `D2`… `W1`…. Marks are codes, the same in every language.
+
+A mark belongs to its part's id, and is the same when one floor is asked for. An edit that keeps
+the parts' ids keeps their marks: a room grown or shrunk, a door's kind or handing changed. A
+part added by an edit, a room split say, takes its place in id order, so the marks after it in
+that order move up by one. A room's stated number (CNT-9) holds whatever is added.
 
 With `format=csv`, numbers are bare (a dot for decimals, no units in the cell, never a negative
 zero), so a spreadsheet reads them as numbers; the units are in the column names. A row that
 cannot be written, a missing name or an area that is not a number, stops the schedule with an
 error naming the row; it is never left out in silence. `grid sheet --layout check` ends with
-both schedules as tables.
+both schedules as tables, the opening schedule by mark, and the door and window types.
 
+
+## Finishes and wall types
+
+A room or a zone may name its floor, wall, ceiling and skirting finishes, and a wall its named type
+(CNT-15, [the plan file](plan-file.md#named-wall-door-and-window-types-and-finishes)). The
+finishes plan, the take-off and the estimate measure them from the same rows
+(`packages/cli/src/quantities/finishes.ts`), so a finishes plan and a flooring order agree:
+
+- a room's finish covers the room, less each of its zones that names its own finish for that
+  surface: that part is the zone's. A kitchen kept as a zone of an open-plan room keeps its tiled
+  floor by its own area (lab AC-4);
+- the floor and the ceiling are the net area, the walls the inside wall face less openings, the
+  skirting the inside perimeter less doorways, as `grid_takeoff` measures each room;
+- a surface no room or zone names a finish for is listed as not stated, never given one, and
+  never read from the room's use.
+
+`grid_takeoff` gives, on a plan that names any, `wallTypes` (each named wall type's walls: how
+many, their gross and net length, their face on one side, the type's material and whether it is
+glazed) and `finishes` (each finish's total by surface, with the rooms and zones it covers).
+`grid_schedule of=finishes` gives them room by room.
+
+## Quantities for a first estimate
+
+`grid_takeoff` with `for=estimate` (ARE-13) turns the plan into the lines a first estimate
+needs. Each line has a key, a quantity in m², m or nr, its rule in one sentence and an
+`assumed` mark. They are built on the measuring above: the rooms' take-off, the gross internal
+area, each opening once as the schedule counts it, and each floor's outline.
+
+| Key | Line | Assumed |
+|---|---|---|
+| `floor:finish:<name>` | CNT-15: the floor of the rooms and zones that name this finish (a zone's is its part of its room), each by its net area | no |
+| `floor:<use>` | Floor finish: the net area of the rooms of that use that name no floor finish, so a stair is counted once, on the floor it rises from. The person decides which finish a use gets, by the key they price | no |
+| `ceiling:finish:<name>`, `wall_finish:finish:<name>`, `skirting:finish:<name>` | CNT-15: the ceilings, inside wall faces and skirting of the rooms and zones that name this finish | no |
+| `ceiling` | Ceilings: a flat ceiling as big as the floor below it | yes |
+| `wall_finish:<use>` | Inside wall faces of the rooms of that use, at the height of each wall, less every door, window and opening at full size; both faces of an inside wall count | no |
+| `skirting` | Each room's inside perimeter less the width of its doors and doorless openings | no |
+| `reveals` | Round each door and window, its sides and head, and its sill when it has one, times its wall's thickness | no |
+| `wall-type:<id>:<thickness>` | CNT-15: the walls of one of the plan's named types at one thickness, by the type, so a party wall is never priced as a partition (lab AC-5) | no |
+| `wall:<kind>:<thickness>` | The other walls, by the kind the plan states and their thickness: centre-line length times height, less openings | no |
+| `external_finish` | The outer edge of each floor's outline, corners in, times the height of the wall it runs along, less openings | no |
+| `door-type:<id>`, `window-type:<id>` | CNT-15: the doors and windows of one of the plan's named types, each counted once | no |
+| `door:<w>x<h>`, `window:<w>x<h>` | The other doors and windows, by the size of their hole in the wall, each counted once | no |
+| `slab` | A slab under the lowest floor's outline | yes |
+| `upper_floor` | Each upper floor's gross internal area, less the footprint of every stair the plan states arriving on it | yes |
+| `roof` | A flat roof over every part of a floor's outline that no floor above covers, so a single-storey part has its roof | yes |
+| `gross_internal` | The gross internal area, for a rate for the whole building: an alternative to the other lines, never added to them | no |
+
+The plan holds no slab, floor structure, roof or ceiling yet, so those lines are worked out from
+the outlines and say so. A floor that is part of a larger building cannot say what is above or
+below it, so it gets a slab and a roof like any other. A room Grid could not draw is left out
+of the room lines, and the answer names it.
+
+A cost comes only from the person's own rates, in a file of their own beside the plan:
+`rates.json`, or the file passed as `rates`, inside the project folder. Grid has no prices.
+
+```json
+{
+  "label": "Where these rates come from",
+  "currency": "EUR",
+  "rates": {
+    "floor": { "rate": 40, "unit": "m2" },
+    "floor:bathroom": { "rate": 85, "unit": "m2", "waste": 0.1 },
+    "wall:exterior": { "rate": 120, "unit": "m2" },
+    "door": { "rate": 350, "unit": "nr" }
+  },
+  "orders": {
+    "Plasterboard": { "for": ["wall_finish", "ceiling"], "covers": 2.88, "waste": 0.1, "pack": "sheets of 1.2 x 2.4 m" },
+    "Paint": { "for": ["wall_finish", "ceiling"], "covers": 50, "coats": 2, "pack": "tins of 5 l" }
+  }
+}
+```
+
+- A rates file that names no currency is refused, and so is a rate below 0 or in a unit other
+  than `m2`, `m`, `nr`, `ft2` or `ft`. A field Grid does not read is refused by name.
+- A rate prices the lines whose key it is, or begins with followed by a colon: `wall:exterior`
+  prices every outside wall thickness, `door` every door size, and an exact key wins over a
+  shorter one. A rate per ft² or ft is turned into one per m² or m.
+- A rate's `waste` is a share added to the quantity before it is priced.
+- A line with no rate, or with a rate left `null`, is listed and never filled. A rate in another
+  unit than its line's is not used, and is listed apart from the lines with no rate. A rate that
+  prices no line of the plan is named, so a mistyped key shows.
+- The total adds up the priced lines only, and says when it is not the whole cost.
+- An order says which lines it is for, how much one pack covers in their unit, the coats and
+  the waste; Grid gives the whole packs needed. Every figure in it is the person's.
+
+With no rates file the answer holds no money: it is a rate card, every line with its key and
+unit, and the data's `rateCard` is a rates file ready to fill in. With `format=csv` the bill is
+one row per line with its rule and assumed mark, then the total and the orders; amounts are
+values, not formulas.

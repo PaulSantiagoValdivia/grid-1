@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { floorBuilding, floorStatesBuilding } from '../../geometry/floors'
 import {
+  BUILDING_TYPES,
   DEFAULT_FLOOR_ID,
   EMPTY_FLOOR_PLAN,
   FloorPlanSchema,
@@ -191,14 +193,17 @@ describe('a room’s use', () => {
     expect(JSON.stringify(parsed.rooms)).toBe(JSON.stringify(v1Plan.rooms))
   })
 
-  it('keeps each of the nine values', () => {
+  it('keeps each of the 27 values (CNT-5: past homes)', () => {
     for (const use of ROOM_USES) {
       const parsed = parseFloorPlan(withUse(use))
       expect(parsed.rooms[0]!.use).toBe(use)
       expect(JSON.parse(JSON.stringify(parsed)).rooms[0].use).toBe(use)
     }
     expect([...ROOM_USES]).toEqual([
-      'bedroom', 'living', 'dining', 'kitchen', 'bathroom', 'corridor', 'stair', 'storage', 'other'
+      // LVL-3 added `lift`; CNT-5 the uses past homes.
+      'bedroom', 'living', 'dining', 'kitchen', 'bathroom', 'toilet', 'utility', 'study',
+      'office', 'meeting', 'reception', 'retail', 'classroom', 'treatment', 'waiting', 'sport', 'changing', 'staff', 'worship', 'assembly',
+      'corridor', 'stair', 'lift', 'storage', 'plant', 'parking', 'other'
     ])
   })
 
@@ -221,6 +226,38 @@ describe('a room’s use', () => {
  * becomes `it`. Each title starts with its lab entry ID.
  */
 /** A dividing line (ARE-2): a virtual wall has no material, so 0 is what it may state and gets. */
+describe('what kind of building it is (CNT-5)', () => {
+  const base = { version: '1', units: 'm', walls: [], rooms: [], openings: [] }
+
+  it('is absent from an old plan, which round-trips with no key added', () => {
+    const parsed = parseFloorPlan(v1Plan)
+    expect('building' in parsed).toBe(false)
+    expect(parsed.floors?.some((f) => 'building' in f) ?? false).toBe(false)
+  })
+
+  it('is on the plan, and a floor may say otherwise for itself: the shop under the flats', () => {
+    const plan = parseFloorPlan({
+      ...base,
+      building: 'home',
+      floors: [{ id: 'ground', name: 'Ground floor', level: 0, building: 'shop' }, { id: 'L1', name: 'Floor 1', level: 1 }],
+    })
+    expect(plan.building).toBe('home')
+    expect(floorBuilding(plan, 'ground')).toBe('shop')
+    expect(floorBuilding(plan, 'L1')).toBe('home')
+    expect(floorStatesBuilding(plan, 'ground')).toBe(true)
+    expect(floorStatesBuilding(plan, 'L1')).toBe(false)
+    expect(floorBuilding({ ...plan, building: undefined }, 'L1')).toBeUndefined()
+  })
+
+  it('takes only the kinds it knows, and a room only the tenures it knows', () => {
+    expect(BUILDING_TYPES).toContain('office')
+    expect(() => parseFloorPlan({ ...base, building: 'mall' })).toThrow()
+    expect(() => parseFloorPlan({ ...base, rooms: [{ id: 'r', name: 'R', boundary: [], tenure: 'mine' }] })).toThrow()
+    const room = parseFloorPlan({ ...base, rooms: [{ id: 'r', name: 'Shop 1', boundary: [], use: 'retail', tenure: 'commercial', roomType: 'Unit A' }] }).rooms[0]!
+    expect(room).toMatchObject({ use: 'retail', tenure: 'commercial', roomType: 'Unit A' })
+  })
+})
+
 describe('a virtual wall', () => {
   const line = (extra: object = {}) => ({ id: 'v', start: [0, 0], end: [1, 0], virtual: true, ...extra })
   const problems = (raw: unknown) => FloorPlanSchema.safeParse(raw).error?.issues.map((i) => `${i.path.join('.')}: ${i.message}`)

@@ -7,7 +7,10 @@ import type { PictureShow } from '@ongrid/viewer/src/picture/planSvg'
 import { UsageError } from './options'
 
 /** SHT-7: what `--hide` may name. */
-export const HIDE_PARTS = ['title', 'key', 'notes', 'sketch', 'dimensions', 'areas', 'swings', 'warnings'] as const
+export const HIDE_PARTS = ['title', 'key', 'notes', 'sketch', 'dimensions', 'areas', 'swings', 'warnings', 'above'] as const
+
+/** SHT-7: the ways `--colour` colours rooms: by use, and SHT-10's by floor finish. */
+export const COLOUR_BY = ['use', 'finish'] as const
 
 /** SHT-7: what a drawing shows, from `--hide`, `--colour` and `--key`. */
 export interface DrawShow {
@@ -25,11 +28,12 @@ export function drawShowOf(request: { readonly hide?: string; readonly colour?: 
     hidden.add(word)
   }
   if (request.hide !== undefined && hidden.size === 0) throw new UsageError(`--hide needs the parts to leave off: ${HIDE_PARTS.join(', ')}, joined by commas.`)
-  if (request.colour !== undefined && request.colour !== 'use') throw new UsageError(`--colour ${JSON.stringify(request.colour)} is not a way Grid colours rooms: use use.`)
+  // SHT-10: `finish` tints each room by its floor finish.
+  if (request.colour !== undefined && !(COLOUR_BY as readonly string[]).includes(request.colour)) throw new UsageError(`--colour ${JSON.stringify(request.colour)} is not a way Grid colours rooms: use ${COLOUR_BY.join(' or ')}.`)
   if (request.key && hidden.has('key')) throw new UsageError('--key adds a key and --hide key leaves it off: give one of them.')
   const show: PictureShow = {
     ...(request.key ? { key: true } : {}),
-    ...(request.colour === 'use' ? { colourBy: 'use' as const } : {}),
+    ...(request.colour === 'use' || request.colour === 'finish' ? { colourBy: request.colour } : {}),
     ...Object.fromEntries([...hidden].filter((part) => part !== 'dimensions').map((part) => [part, false])),
   }
   return { showDimensions: !hidden.has('dimensions'), show }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { FloorPlan, Opening, Room, Wall } from '@ongrid/floorplan/geometry'
 import { ESCAPE_TOP_LEVEL, FIGURES, RULES, checkLocalRules } from '..'
 import { messages } from '../messages'
+import { inspectPlan } from '../../result'
 
 /**
  * The bedroom escape-opening rule (US model codes: IBC 2024 1031, IRC 2024 R319).
@@ -11,7 +12,7 @@ import { messages } from '../messages'
  * (`b-w0`, running +X, so the room is on its left side). With `interiorBottom` a hall is drawn
  * on the other side of that wall: since MSG-13 an inside wall is one with rooms on both sides,
  * worked out from the outlines, and a wall that only says `interior` with nothing behind it
- * faces outside.
+ * faces outside. The plan states its place, the US (COD-3).
  */
 function bedroom(
   openings: Omit<Opening, 'wall'>[],
@@ -43,9 +44,11 @@ function bedroom(
       }))
     : []
   const hall = { id: 'h', name: 'Hall', boundary: ['h-w0', 'h-w1', 'b-w0', 'h-w3'], floor: 'f', use: 'corridor' } as Room
+  // COD-3: the plan states its place, so the US figures apply.
   return {
     version: '1',
     units: 'm',
+    site: { country: 'US' },
     floors: [{ id: 'f', name: 'Floor', level }],
     walls: [...walls, ...hallWalls],
     rooms: interiorBottom ? [room, hall] : [room],
@@ -215,7 +218,7 @@ describe('figures looked up for another country', () => {
     const report = checkLocalRules(bedroom([]), { country: 'ES' })
     expect(report.findings.filter((f) => ESCAPE.includes(f.code))).toEqual([])
     expect(report.notChecked.map((n) => n.message)).toContain(
-      'Escape openings were not checked: the figures here are from US model codes, and this plan is for ES'
+      'Escape openings were not checked: the figures here are from US model codes, and this plan is for Spain'
     )
   })
 })
@@ -304,18 +307,39 @@ describe('order in the report', () => {
   })
 })
 
-/**
- * Known failures from the lab (entry Z-4), as expected failures. Each states the right
- * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
- * `it`. Each title starts with its lab entry ID.
- */
-describe('known failures (expected to fail until fixed)', () => {
-  // Lab CH-3: "USA" is read as another country, so the US escape rule is skipped in silence.
+describe('the place, read through Grid\'s list (COD-3, lab CH-3)', () => {
+  // Lab CH-3: "USA" was read as another country, so the US escape rule was skipped in silence.
   // rules-figures.test.ts 'is false for any other country' lists ES, GB, DE, IT and Spain,
-  // never USA, so a fix need not change it.
-  it.fails('CH-3 "USA" is read as the same place as "US", or refused', () => {
+  // never USA, and still holds.
+  it('CH-3 "USA" is read as the same place as "US", or refused', () => {
     const plan = bedroom([])
     const codes = (country: string) => checkLocalRules(plan, { country }).findings.map((f) => f.code)
-    expect(codes('USA')).toEqual(codes('US'))
+    expect(codes('US')).toContain('no_escape_opening')
+    for (const country of ['USA', 'United States', ' united states ', 'u.s.a.', 'United States of America']) expect(codes(country), country).toEqual(codes('US'))
+    expect(() => codes('the moon')).toThrow(/^country names no place Grid knows/)
+  })
+})
+
+describe('the escape window line in the record (MSG-7, lab MS-13)', () => {
+  it('names the measure that fails, 0.60 m high against 0.61 m, before the area that passes', () => {
+    const plan = bedroom([win('o1', 1.0, 0.6, 0.9)], { level: 1 })
+    const [finding] = escapes(plan)
+    const line = inspectPlan(plan).lines.find((l) => l.code === 'room/escape-window-too-small')!
+    expect(line.found).toBe('0.6 m high, under the 0.61 m needed; 0.6 m² in area and 1 m wide, which are enough')
+    // The figures, their sources and their status are the check's own, as before.
+    expect(line.figures).toEqual(finding!.figures)
+    expect(inspectPlan(plan).label).toBe('General guidance, not your local rules')
+  })
+})
+
+describe('CNT-14: the part of a window that opens', () => {
+  it('measures a window by the part that opens when the plan states one', () => {
+    // 1.0 × 1.2 m passes as a whole; a 0.4 m wide casement in it does not.
+    expect(escapes(bedroom([{ ...win('o1', 1.0, 1.2, 0.9), opens: { width: 0.4 } }])).map((f) => [f.code, f.width, f.height])).toEqual([['escape_window_too_small', 0.4, 1.2]])
+    expect(escapes(bedroom([{ ...win('o1', 1.0, 1.2, 0.9), opens: { width: 0.8, height: 1.0 } }]))).toEqual([])
+  })
+
+  it('takes a fixed window as opening nothing', () => {
+    expect(escapes(bedroom([{ ...win('o1', 1.0, 1.2, 0.9), kind: 'fixed' }])).map((f) => [f.code, f.area])).toEqual([['escape_window_too_small', 0]])
   })
 })

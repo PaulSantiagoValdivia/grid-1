@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseFloorPlan, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import { validatePlan } from '@ongrid/floorplan/geometry'
+import { roomNumbers, toIfc, validatePlan } from '@ongrid/floorplan/geometry'
 import { openingSchedule, openingScheduleCsv, roomSchedule, roomScheduleCsv, ScheduleRowError } from '../../quantities/schedule'
 import { surveyPlan } from '../../quantities/survey'
 import { sheetPages } from '../../sheet/pages'
@@ -89,7 +89,8 @@ describe('ARE-12 the room schedule', () => {
     expect(total[2]).toBe('Total, all floors')
     expect(Math.round(total[5] as number)).toBe(277)
     // Numbers are bare in the CSV, so a spreadsheet reads them as numbers.
-    for (const line of csv.slice(1, -3)) {
+    // MSG-3: row 1 is the label, row 2 the header.
+    for (const line of csv.slice(2, -3)) {
       const row = fields(line)
       expect(typeof row[0]).toBe('number')
       expect(typeof row[4]).toBe('number')
@@ -115,6 +116,25 @@ describe('ARE-12 the room schedule', () => {
     expect(ghost.state).toBe('not-looked-at')
     expect(s.total.state.leftOut.map((r) => r.id)).toEqual(['ghost'])
     expect(roomScheduleCsv(s)).toContain(',ghost,Box room,,,,')
+  })
+
+  it('HND-2 numbers every room as the library does, and the IFC file gives each the same number', () => {
+    for (const plan of [flat, tiny, reversed(tiny)]) {
+      const parsed = parseFloorPlan(plan)
+      const rows = roomSchedule(survey(plan)).rows.map((r) => [r.floor, r.id, r.number])
+      expect(rows).toEqual(roomNumbers(parsed).map((n) => [n.floor, n.id, n.number]))
+      // In the IFC a space's Name is its number and Grid_Space holds its room id (HND-2).
+      const ifc = toIfc(parsed)
+      const spaces = [...ifc.matchAll(/^#\d+=IFCSPACE\('[^']+',#\d+,'(\d+)',/gm)].map((m) => Number(m[1]))
+      const ids = [...ifc.matchAll(/^#\d+=IFCPROPERTYSINGLEVALUE\('Id',\$,IFCIDENTIFIER\('([^']*)'\),\$\);$/gm)].map((m) => m[1])
+      expect(spaces.map((n, i) => [ids[i], n])).toEqual(rows.map(([, id, n]) => [id, n]))
+    }
+  })
+
+  it('HND-2 numbers only the floors asked for, from 1, as before', () => {
+    const s = roomSchedule(survey(tiny), { floors: [tiny.floors![1]!.id] })
+    expect(s.rows.map((r) => r.number)).toEqual(s.rows.map((_, i) => i + 1))
+    expect(s.rows.map((r) => [r.floor, r.id, r.number])).toEqual(roomNumbers(parseFloorPlan(tiny), [tiny.floors![1]!.id]).map((n) => [n.floor, n.id, n.number]))
   })
 })
 
@@ -143,8 +163,9 @@ describe('ARE-12 the opening schedule', () => {
   it('is the same whatever the order of the file, and its CSV has one row per opening', () => {
     expect(openingSchedule(survey(reversed(flat)))).toEqual(openingSchedule(survey(flat)))
     const csv = openingScheduleCsv(openingSchedule(survey(flat))).trim().split('\n')
-    expect(csv).toHaveLength(1 + 13)
-    expect(fields(csv[1]!).slice(3, 6).every((v) => typeof v === 'number')).toBe(true)
+    // MSG-3: the label row, the header and 13 openings.
+    expect(csv).toHaveLength(2 + 13)
+    expect(fields(csv[2]!).slice(4, 7).every((v) => typeof v === 'number')).toBe(true)
   })
 })
 
@@ -166,7 +187,7 @@ describe('ARE-12 asked for through grid_schedule and on the check set', () => {
     expect(reply.text).toContain('"Main floor": 3 rooms')
     expect((reply.data!['rows'] as unknown[]).length).toBe(4)
     const csv = await ok({ plan: 'tiny.json', of: 'rooms', format: 'csv' })
-    expect(csv.text.split('\n')[0]).toBe('number,room id,name,use,area m2,area sq ft,height m,floor,state')
+    expect(csv.text.split('\n').slice(0, 2)).toEqual(['"General guidance, not your local rules"', 'number,room id,name,use,area m2,area sq ft,height m,floor,state'])
   })
 
   it('gives each opening once with of=openings, and refuses the grouped schedule\'s filters with it', async () => {

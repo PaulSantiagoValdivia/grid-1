@@ -57,7 +57,8 @@ describe('grid write', () => {
     const ran = await grid(dir, 'write', 'plan.rooms')
     expect(ran.err).toBe('')
     expect(ran.status).toBe(0)
-    expect(ran.out).toMatch(/^Wrote plan\.json from rooms text/)
+    // MSG-3: the label first, then what was written.
+    expect(ran.out).toMatch(/^General guidance, not your local rules\nWrote plan\.json from rooms text/)
     expect(ran.out).toContain('1 floor, 6 rooms; 9 walls and their kinds worked out; 13 openings placed')
     expect(ran.out).toContain('Sizes are to the inside faces unless a room says otherwise (the default).')
     const plan = planOf(dir)
@@ -149,5 +150,38 @@ describe('grid write', () => {
     expect((await grid(dir, 'write', 'plan.json')).err).toContain('write reads rooms text, not a plan')
     expect((await grid(dir, 'write', 'plan.rooms', '--floor', 'x')).status).toBe(2)
     expect((await grid(dir, 'describe', '--as', 'rooms', '--for', 'agent')).err).toContain('--as rooms reads the plan back as rooms text, which has no --for')
+  })
+
+  it('reminds the first write over the starter plan that no brief is kept, in one line, and writes it (BRF-1)', async () => {
+    const dir = await project()
+    const first = await grid(dir, 'write', 'plan.rooms')
+    expect(first.status).toBe(0)
+    expect(first.err).toBe('')
+    expect(first.out.split('\n').filter((line) => line.startsWith('No brief is kept beside this plan ("plan.brief.json")'))).toHaveLength(1)
+    expect(planOf(dir).written).toMatchObject({ from: 'rooms' })
+    const again = await grid(dir, 'write', 'plan.rooms')
+    expect(again.out).not.toContain('No brief is kept')
+  })
+
+  it('says each line of the brief beside the plan after the write, and after an edit (BRF-1)', async () => {
+    const dir = await project()
+    writeFileSync(join(dir, 'plan.brief.json'), JSON.stringify({ version: '1', rooms: [{ name: 'Bathroom', area: 4.5, level: 'must', source: 'given', quote: 'a bathroom of 4.5' }] }))
+    const ran = await grid(dir, 'write', 'plan.rooms')
+    expect(ran.status).toBe(0)
+    expect(ran.out).not.toContain('No brief is kept')
+    expect(ran.out).toMatch(/(met|missed) \(must\): "Bathroom" area asked 4\.5, drawn \d+\.\d\d m²\./)
+    const edit = await grid(dir, 'edit', 'rename', '--room', 'bed1', '--name', 'Main bedroom')
+    expect(edit.status).toBe(0)
+    expect(edit.out).toMatch(/"Bathroom" area asked 4\.5, drawn \d+\.\d\d m²\./)
+  })
+
+  it('keeps a wall height the text did not state out of the plan file, so the check names no field of its own (found with BRF-6)', async () => {
+    const dir = await project()
+    writeFileSync(join(dir, 'bare.rooms'), 'room a "A" - 3 x 3\nroom b "B" - 3 x 3 east of a\n')
+    expect((await grid(dir, 'write', 'bare.rooms')).status).toBe(0)
+    const walls = (JSON.parse(readFileSync(join(dir, 'plan.json'), 'utf8')) as { walls: Array<Record<string, unknown>> }).walls
+    expect(walls.filter((w) => 'unstated' in w || 'height' in w)).toEqual([])
+    const check = await grid(dir, 'check', '--json')
+    expect(check.out).not.toContain('plan/unknown-field')
   })
 })

@@ -2,10 +2,10 @@
  "what": "The counts the build must not fall below. Update them in the commit that moves them, and say why.",
  "counts": {
   "roomsMeasuredWrong": 197,
-  "damageSilent": 386,
-  "turnsAnswered": 16,
-  "mistakesNamed": 2,
-  "checksFed": 5,
+  "damageSilent": 277,
+  "turnsAnswered": 23,
+  "mistakesNamed": 5,
+  "checksFed": 25,
   "roomsNotMeasured": 735,
   "soundPlansWithAlarm": 95
  },
@@ -33,9 +33,9 @@
   },
   "damage": {
    "plans": 3000,
-   "caught: names the damaged part": 2386,
-   "silent: result changed, nothing said": 386,
-   "caught vaguely: names something else": 139,
+   "caught: names the damaged part": 2494,
+   "silent: result changed, nothing said": 277,
+   "caught vaguely: names something else": 140,
    "no effect at all": 89
   },
   "damage:lab": {
@@ -44,7 +44,7 @@
    "refused: schema names the place": 506,
    "no effect at all": 117,
    "caught vaguely: names something else": 305,
-   "plansWhoseOutcomeDiffersNow": 927
+   "plansWhoseOutcomeDiffersNow": 1036
   },
   "sound": {
    "plans": 442,
@@ -53,12 +53,12 @@
   },
   "turns": {
    "turns": 67,
-   "answered": 16,
+   "answered": 23,
    "labAnsweredFully": 15
   },
   "checks": {
    "checks": 42,
-   "fed": 5,
+   "fed": 25,
    "labYes": 5
   },
   "capabilities": {
@@ -78,30 +78,30 @@
    "export-dwg": "no",
    "export-jpg": "no",
    "export-table": "no",
-   "north": "no",
-   "site": "no",
-   "stairs": "no",
+   "north": "yes",
+   "site": "yes",
+   "stairs": "yes",
    "ramps": "no",
-   "roof": "no",
+   "roof": "yes",
    "fixtures": "no",
    "furniture": "no",
-   "door-leaves": "no",
-   "clear-width": "no",
+   "door-leaves": "yes",
+   "clear-width": "yes",
    "threshold": "no",
    "fire-rating": "no",
    "occupancy": "no",
    "existing-new": "no",
-   "outdoor-space": "no",
-   "flats": "no",
-   "ceiling-height": "no",
+   "outdoor-space": "yes",
+   "flats": "yes",
+   "ceiling-height": "yes",
    "gross-area": "yes",
    "area-table": "yes",
    "room-width": "no",
    "route-length": "no",
    "take-offs": "no",
    "opening-schedule": "no",
-   "clearance": "no",
-   "turning-space": "no",
+   "clearance": "yes",
+   "turning-space": "yes",
    "inside-view": "no",
    "drawing-key": "no",
    "drawing-style": "no",
@@ -109,32 +109,32 @@
    "imperial-units": "no",
    "marks-on-plan": "no",
    "note-reasons": "no",
-   "compare-notes": "no",
+   "compare-notes": "yes",
    "layout-help": "no",
-   "repeat-floor": "no",
+   "repeat-floor": "yes",
    "local-rules": "no",
    "permission": "no",
-   "openable-part": "no",
+   "openable-part": "yes",
    "services": "no",
    "exit-side": "no",
-   "lift": "no",
+   "lift": "yes",
    "parking": "no",
    "materials": "no",
    "shading": "no",
-   "accessible-mark": "no"
+   "accessible-mark": "yes"
   },
   "mistakes": {
    "mistakes": 9,
-   "named": 2,
+   "named": 5,
    "mistake 1": "not named",
-   "mistake 2": "not named",
+   "mistake 2": "named",
    "mistake 3": "not named",
-   "mistake 4": "not named",
+   "mistake 4": "named",
    "mistake 5": "not named",
    "mistake 6": "named",
    "mistake 7": "named",
    "mistake 8": "not named",
-   "mistake 9": "not named"
+   "mistake 9": "named"
   }
  }
 }

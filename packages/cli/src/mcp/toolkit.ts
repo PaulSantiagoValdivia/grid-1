@@ -7,12 +7,25 @@
  * what it takes. It never repeats the value it was sent: that is text from the agent, and may
  * be anything (MS-19, T-3).
  */
-import { planFloors, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { GENERAL_GUIDANCE_LABEL, planFloors, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { LengthRefused, readLength } from '@ongrid/floorplan/types/units'
+import { likelyId } from '@ongrid/floorplan/types/nearest'
 import { PATH_MAX, PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { PROJECT_FILE, projectPlanFile } from '../command/init'
 import { UsageError } from '../command/options'
 import { loadPlan, PlanRefused, type LoadedPlan, type LoadOptions } from '../command/plan'
 import { ID_MAX as PLAN_ID_MAX, UNSAFE_TEXT } from '../command/planText'
+
+/** WRT-7: the decimal mark the call's lengths are typed with. */
+export const DECIMAL_IN_ARG: ArgSpec = {
+  type: 'string',
+  enum: ['point', 'comma'],
+  description: 'The decimal mark of the lengths typed as text in this call: point (3.81) or comma (3,81). point when left out.',
+  examples: ['comma'],
+}
+
+/** The longest text a length argument may be, such as 12' 6 1/2" (WRT-7). */
+export const LENGTH_TEXT_MAX = 40
 
 /** The longest id an argument may hold: a floor, room, opening or wall id, as long as a plan file may hold. */
 export const ID_MAX = PLAN_ID_MAX
@@ -45,6 +58,11 @@ export type ArgSpec =
       readonly examples: readonly number[]
       readonly minimum: number
       readonly maximum: number
+      /**
+       * WRT-7: a length. It also takes text with its unit (`"12'6\""`, `"900 mm"`), and a decimal
+       * comma when the call's `decimal`, read before it, is `comma`. It is checked in metres.
+       */
+      readonly length?: boolean
       readonly required?: boolean
     }
   | {
@@ -89,6 +107,8 @@ export interface Answer {
   readonly text: string
   readonly data: Record<string, unknown>
   readonly image?: AnswerImage
+  /** VEW-9: more pictures, after `image`, in order: the walk-through's, one per doorway. */
+  readonly images?: readonly AnswerImage[]
 }
 
 export type Hint = 'read' | 'write-file' | 'change-plan'
@@ -101,6 +121,11 @@ export interface GridTool {
   readonly hint: Hint
   readonly args: ArgSpecs
   readonly outputSchema: Record<string, unknown>
+  /**
+   * VEW-4: the MCP App that shows this tool's answers, and who may call it: `model` (the agent)
+   * and `app` (the page), both when left out. A host that shows no MCP App ignores it.
+   */
+  readonly ui?: { readonly resourceUri: string; readonly visibility?: readonly ('model' | 'app')[] }
   run(args: Record<string, unknown>, context: ToolContext): Answer | Promise<Answer>
 }
 
@@ -133,7 +158,36 @@ function argSchema(spec: ArgSpec): Record<string, unknown> {
     return { ...array, items: item }
   }
   if (rest.type === 'object') return { ...rest.schema, description: rest.description, examples: rest.examples }
+  if (rest.type === 'number' && rest.length === true) {
+    const { length: _length, ...number } = rest
+    void _length
+    return { ...number, type: ['number', 'string'], maxLength: LENGTH_TEXT_MAX, description: `${rest.description} A number is metres; text may give its unit, as 12'6", 900 mm or 381 cm.` }
+  }
   return rest
+}
+
+/**
+ * MSG-3: every answer leads with the label "General guidance, not your local rules" and carries
+ * it as `label` in its data. Done here, once, so no tool can leave it out. A refusal is not an
+ * answer about the plan and is left as it is.
+ */
+export function labelled(answer: Answer): Answer {
+  // A first line that holds it already (a CSV cell, a comment in rooms text) is left as it is.
+  const first = answer.text.split('\n', 1)[0]!
+  const text = first.includes(GENERAL_GUIDANCE_LABEL) ? answer.text : `${GENERAL_GUIDANCE_LABEL}\n${answer.text}`
+  return { ...answer, text, data: { label: GENERAL_GUIDANCE_LABEL, ...answer.data } }
+}
+
+/** The output schema with the label every answer carries (MSG-3). */
+function labelledSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema['properties'] as Record<string, unknown> | undefined
+  if (properties === undefined) return schema
+  const required = (schema['required'] as readonly string[] | undefined) ?? []
+  return {
+    ...schema,
+    properties: { label: { type: 'string', const: GENERAL_GUIDANCE_LABEL }, ...properties },
+    required: required.includes('label') ? [...required] : ['label', ...required],
+  }
 }
 
 /** The tool as `tools/list` shows it. */
@@ -149,8 +203,10 @@ export function toolDefinition(tool: GridTool): Record<string, unknown> & { name
       ...(required.length > 0 ? { required } : {}),
       additionalProperties: false,
     },
-    outputSchema: tool.outputSchema,
+    outputSchema: labelledSchema(tool.outputSchema),
     annotations: { title: tool.title, ...HINTS[tool.hint] },
+    // VEW-4: the MCP Apps standard's link to the page, and the older key hosts still read.
+    ...(tool.ui === undefined ? {} : { _meta: { ui: { resourceUri: tool.ui.resourceUri, ...(tool.ui.visibility ? { visibility: [...tool.ui.visibility] } : {}) }, 'ui/resourceUri': tool.ui.resourceUri } }),
   }
 }
 
@@ -180,7 +236,17 @@ function checkOne(name: string, spec: ArgSpec, value: unknown, earlier: Readonly
       return value
     }
     case 'number': {
+      if (spec.length === true && typeof value === 'string') {
+        if (value.length > LENGTH_TEXT_MAX) throw new ToolRefusal(`${name} is longer than ${LENGTH_TEXT_MAX} characters.`)
+        try {
+          value = readLength(value, earlier['decimal'] === 'comma' ? 'comma' : 'point')
+        } catch (error) {
+          if (error instanceof LengthRefused) throw new ToolRefusal(`${name} ${error.message}.`)
+          throw error
+        }
+      }
       if (typeof value !== 'number' || !Number.isFinite(value) || value < spec.minimum || value > spec.maximum) {
+        if (spec.length === true && typeof value === 'number' && Number.isFinite(value)) throw new ToolRefusal(`${name} is ${value.toFixed(3)} m: it takes a length from ${spec.minimum} to ${spec.maximum} m.`)
         throw new ToolRefusal(`${name} takes a number from ${spec.minimum} to ${spec.maximum}.`)
       }
       return value
@@ -217,7 +283,9 @@ export function readArgs(tool: GridTool, raw: unknown): Record<string, unknown> 
     throw new ToolRefusal(`${tool.name} takes ${names.length > 0 ? listOf(names) : 'no arguments'}, not ${shown}.`)
   }
   const args: Record<string, unknown> = {}
-  for (const [name, spec] of Object.entries(tool.args)) {
+  // The decimal mark first: a length typed with a comma is read by it (WRT-7).
+  const order = Object.entries(tool.args).sort(([a], [b]) => (a === 'decimal' ? -1 : b === 'decimal' ? 1 : 0))
+  for (const [name, spec] of order) {
     const value = given[name]
     if (value === undefined || value === null) {
       if (spec.required) throw new ToolRefusal(`Pass ${name}: ${spec.description.split('. ')[0]!.replace(/\.$/, '')}.`)
@@ -284,35 +352,16 @@ export function floorArg(plan: FloorPlan, floor: unknown): string | undefined {
   throw new ToolRefusal(`That floor is not in this plan. Its floors: ${floorList(plan)}.`)
 }
 
-/** How many letters must change to turn one text into the other, ignoring case. */
-function editDistance(a: string, b: string): number {
-  const x = a.toLowerCase()
-  const y = b.toLowerCase()
-  let row = Array.from({ length: y.length + 1 }, (_, j) => j)
-  for (let i = 1; i <= x.length; i++) {
-    const next = [i]
-    for (let j = 1; j <= y.length; j++) next[j] = Math.min(row[j]! + 1, next[j - 1]! + 1, row[j - 1]! + (x[i - 1] === y[j - 1] ? 0 : 1))
-    row = next
-  }
-  return row[y.length]!
-}
-
 /**
- * The known id nearest the one sent, as a sentence for a refusal (ARE-10); the plan's first
- * wins a tie. Only the known id is quoted: the one sent is text from the agent (MS-19).
+ * The known id most likely meant by the one sent, as a sentence for a refusal (ARE-10), from
+ * Grid's one nearest-id helper (MSG-7, `likelyId`); the plan's first wins a tie, and an id that
+ * is not near any gives no sentence. Only the known id is quoted: the one sent is text from the
+ * agent (MS-19).
  */
 export function nearestIdText(sent: unknown, known: readonly string[]): string {
-  if (typeof sent !== 'string' || known.length === 0) return ''
-  let best = known[0]!
-  let score = editDistance(sent, best)
-  for (const id of known.slice(1)) {
-    const d = editDistance(sent, id)
-    if (d < score) {
-      best = id
-      score = d
-    }
-  }
-  return ` The nearest known id is ${quoted(best)}.`
+  if (typeof sent !== 'string') return ''
+  const best = likelyId(sent, known)
+  return best === null ? '' : ` The nearest known id is ${quoted(best)}.`
 }
 
 /** A room the call named, checked against the plan, with the nearest id and the rooms it has when it is not there. */
@@ -336,7 +385,10 @@ export function openingArg(plan: FloorPlan, opening: unknown): string {
 /** A wall the call named, checked against the plan, with the nearest wall id when it is not there. */
 export function wallArg(plan: FloorPlan, wall: unknown): string {
   if (plan.walls.some((w) => w.id === wall)) return wall as string
-  throw new ToolRefusal(`The wall named is not in this plan.${nearestIdText(wall, plan.walls.map((w) => w.id)) || ' It has no walls.'}`)
+  const ids = plan.walls.map((w) => w.id)
+  // No near id: its walls, so the agent can choose (MSG-7).
+  const listed = ids.length === 0 ? ' It has no walls.' : ` Its walls: ${ids.slice(0, 40).map(quoted).join(', ')}${ids.length > 40 ? ` and ${ids.length - 40} more` : ''}.`
+  throw new ToolRefusal(`The wall named is not in this plan.${nearestIdText(wall, ids) || listed}`)
 }
 
 /** What a measure between two things may name: a wall, an opening or a room. */

@@ -7,6 +7,13 @@
  *   Grows symmetrically from the axis: thickness/2 on each side of the start→end line.
  *   The wall axis IS the reference line.
  *
+ *   Reopened by HND-11 (lab WR-14): a wall MAY say its start→end line is one of its faces,
+ *   `face: "left"` or `"right"` as you walk from start to end, so a survey taped to the inside
+ *   faces is drawn from its own numbers, and a thickness guessed later, or left out, grows away
+ *   from the room. The reading moves the line half the thickness to the wall's centre (the
+ *   derived layer), so every reader still reads C1, and says so in `placedBy`; `statedWall`
+ *   writes the face line back. Optional and never defaulted (version 1).
+ *
  * C2 · Opening position
  *   `offset` is the distance from wall.start to the NEAR edge of the opening,
  *   measured along the wall axis.
@@ -51,11 +58,239 @@
  *   room an item is in is found from the outlines (the smallest room on its floor that holds its
  *   middle), never named. This version holds fixed fixtures only (`ITEM_KINDS`); loose furniture,
  *   points and seats are later, in the same shape.
+ *
+ * C7 · North, front and where the building is (CNT-3)
+ *   C4 names the sides of the drawing (+Y is called north, as rooms text and the edits do); the
+ *   plan MAY also state its real north. `north` is the way north lies on the drawing, in degrees
+ *   counter-clockwise from +Y, as a north symbol's `turn` is: 0 north is up the drawing, 90 it
+ *   points to -X, -90 to +X. `yAxis` says which way +Y runs on the drawing as the building is
+ *   seen from above, with +X to the right: `up` is C4, `down` says the coordinates are the
+ *   building's mirror image (as a screen or an image's pixels run). `front` names the part whose
+ *   outside face is the front: a wall, or an opening (the front door) by its wall. `site` says
+ *   where the building sits: `origin`, a point of the plan, and where that point is on the earth
+ *   (`latitude` and `longitude` in degrees, `elevation` in metres); it places nothing without
+ *   `origin`. LVL-4 adds `site.ground`, the ground's level from the ground floor's (no `origin`
+ *   needed). All four are optional and
+ *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
+ *   north, and its y runs up (C4).
+ *
+ * C8 · Where a value came from (WRT-6, lab WR-15, AE-4, AU3-6)
+ *   A value may say where it came from: given by the person, measured, scanned or assumed, and
+ *   how sure it is (`tolerance`, metres). It says so in the plan's `marks`, one list beside the
+ *   parts, by part, id and value: no number becomes an object and no part changes shape.
+ *   A value a wall leaves out stays not stated: the reading fills its thickness, height and kind
+ *   for the geometry (the derived layer: a height from the wall's floor, else `WALL_DEFAULTS`)
+ *   and says which in `unstated`, which is never written back (`statedWall`). Version 1.
+ *
+ * C9 · Facts of the person's own (CNT-9)
+ *   A wall, an opening, a room and a floor MAY carry facts of the person's own in `properties`:
+ *   a name and a value, text, a number or true or false (a fire rating, a department, a head
+ *   count). They sit in that one object, never as loose fields, so a misspelt field of the
+ *   format is still named (MSG-4). A room MAY state its room number in `number`. Grid checks
+ *   nothing against a fact. Optional and never defaulted (version 1).
+ *
+ * C10 · The place (COD-3)
+ *   `site.country` names the country the building will be built in, by a name or a code on
+ *   Grid's list (`places.ts`); any other text is refused, naming the field and never the text.
+ *   It picks the figures the checks apply (`@ongrid/rules`); a plan that states no place gets
+ *   no figure applied, and its report says so. Optional and never defaulted (version 1).
+ *
+ * C11 · Saved views (VEW-3, lab SE-4, SE-7, S-16)
+ *   A plan MAY keep named views in `views`: each a camera, by what it is pointed at (`target`: a
+ *   point, and the room it is in), the compass bearing to the camera from the north the plan
+ *   states (`bearingFrom: 'north'`, with that `north`) or from the top of the drawing (`'plan
+ *   up'`), its tilt, distance and lens (focal length in millimetres on a sensor), the floor shown
+ *   cut away and the floors drawn; and the same camera as the open BCF format writes one:
+ *   `position`, `direction`, `up`, `fieldOfView` (vertical, degrees) and `aspectRatio`, in plan
+ *   metres with z up from the ground floor's floor level. Grid writes both and reads the setting
+ *   (`geometry/camera.ts`). Optional and never defaulted (version 1).
+ *
+ * C12 · Opening patterns (LVL-8)
+ *   A facade's rhythm may be stated once, in the plan's `patterns`: one opening (its type, width,
+ *   height, sill and door fields), a wall, a `count` or a `spacing` (or both), the `margins` kept
+ *   clear at the wall's start and end (measured along its axis, as C2's offset is), and the
+ *   `floors` above it is repeated on, onto the wall in the same line on each. A pattern is never an
+ *   opening: it is expanded into plain openings (`expandPatterns` in the geometry core), with ids
+ *   `<pattern>-<floor>-<n>`, before anything is drawn, measured, checked or exported, so every
+ *   exporter and check reads plain openings only. The file keeps the pattern, not its openings.
+ *   Optional and never defaulted (version 1).
+ *
+ * C13 · The plot (BRF-3, lab EL-16)
+ *   `site.boundary` is the plot's outline, its corners in plan metres in order round it (either
+ *   way round); edge n runs from point n to point n + 1, the last back to the first. `streets`
+ *   names the edges on a street by number, and `setbacks` the set-backs the person asked for,
+ *   from every edge, the street edges or one edge: the person's own figures, never a code's.
+ *   `things` are the site's own fences, gates, paths, paving, trees and pools: never walls,
+ *   rooms or fixtures, so they add no wall, area, note or storey height. The site is the ground:
+ *   it is drawn on the ground floor's plan, and the building is measured to it from its outside
+ *   face, every floor at or above the ground floor seen from above. All four are optional and
+ *   never defaulted (version 1).
+ *
+ * C14 · What needs to be accessible (CNT-17, lab EL-15, C-14, J-15)
+ *   A plan MAY say which rooms and routes need to be accessible, in `accessible`: `rooms`, by id,
+ *   and `routes`, each `to` a room and `from` a room or, unstated, from the entrance. It is a
+ *   mark of what is needed, never a finding: Grid measures the marked rooms and the ways to them
+ *   (`grid_measure what=access`) and holds no figure they are checked against. Ids the mark names
+ *   that are no room are said and not measured, never refused. Optional and never defaulted
+ *   (version 1).
+ *
+ * C15 · Taped lengths (HND-11, lab WR-14)
+ *   A plan MAY keep what was taped on site, beside the drawing, in `taped`: a room's side along
+ *   one of its walls, or the distance between two of its corners (a diagonal), each with the
+ *   length taped. They are checks, never geometry: nothing is drawn or placed from them, and
+ *   every run says each one taped against drawn. Optional and never defaulted (version 1).
+ *
+ * C16 · Phases, and a fit-out on a base plan (CNT-10, lab EL-10, CP4-4)
+ *   A wall, an opening and a room MAY state its `phase`: `existing` (it stands before the work and
+ *   stays), `demolished` (it stands before the work and is taken out) or `new` (the work builds
+ *   it). One plan then holds two states of the building: before the work (existing and
+ *   demolished parts) and after it (existing and new parts). An opening that states no phase is
+ *   in its wall's, when its wall is demolished or new. In a plan that states a phase anywhere, a
+ *   part that states none stands before and after, as an existing one does; a plan that states
+ *   none is read exactly as before. A plan MAY name a `base` plan, by its path from the project
+ *   folder: the shell it is fitted out in. The base's walls and openings, as they stand after its
+ *   own work, are read into the plan as existing and are never written back to it; the plan's own
+ *   parts that state no phase are new. Both optional and never defaulted (version 1).
+ *
+ * C17 · Floor outlines (BRF-4, lab FD-1)
+ *   A floor MAY state its `outline`: its outside face, its corners in plan metres in order round
+ *   it, either way round, as `site.boundary` is written (C13). It is the one shape a floor's slab
+ *   covers, its roof is cut from and its gross external area is measured to: joined with what
+ *   the floor's walls enclose, so a floor with walls and no outline reads exactly as before. A
+ *   floor with an outline and no walls is massing: its level, height (C5) and kind of building
+ *   (`building`, CNT-5) give its gross area and its storey, and nothing inside it is checked.
+ *   Floor inside the outline that no room claims is floor no room claims. A floor MAY also state
+ *   how many `homes` it holds and how many `parking` spaces: the agent's proposal, which Grid
+ *   counts against the person's own limits and never brings a figure for. All three are optional
+ *   and never defaulted (version 1).
+ *
+ * C18 · Flats (CNT-4, lab EL-1, WR-6, AR-7, CP3-6)
+ *   A plan MAY say which rooms make each flat (a dwelling, a unit), in `flats`: each with an id, a
+ *   name, the `type` it is, by id, and its `rooms`, by id, on one floor or several (a duplex). A
+ *   flat type is stated once, in `flatTypes` (an id and a name), and placed many times: a flat
+ *   that is its type's mirror image says so (`mirrored`). A flat is a named group of rooms, never
+ *   a room: it adds no floor and closes no outline, and a room is in one flat at most. The areas
+ *   per flat, the mix by type, the flat's outline on the drawing and the IFC's zones are worked
+ *   out from the list (`geometry/flats.ts`), never from the rooms' names. Ids a flat names that
+ *   are no room or no type are named and left out of its figures, never refused. Both optional
+ *   and never defaulted (version 1).
+ *
+ * C19 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
+ *   C5 put every wall on one floor. Reopened: a wall MAY state `through`, the highest floor it rises
+ *   through. It stands on its own `floor` and on every floor above it up to that one, in order of
+ *   `level`: one wall, shared by those floors, so one edit moves it on all of them, and a room on
+ *   any of them may list it. Its `height` is how high it stands above the `through` floor's level,
+ *   as a wall of that floor; below that it runs up through each floor and slab between. An opening
+ *   in it states its sill and height from the wall's own floor, as always (C2), and may reach as
+ *   high as the wall does: a stair window through two storeys is one window. Each floor's slice
+ *   holds the part of the wall and of its openings on that floor (`planForFloor`); the 3D view,
+ *   the exports and the sections draw it once, whole.
+ *   A floor whose outline does not lie over the floor below it, and a stair or lift room that does
+ *   not lie over the one below, are said, unless the floor or room states `overhang: "meant"`.
+ *   All optional and never defaulted (version 1): a plan that states none reads as before.
+ *
+ * C20 · Kinds of door and window (CNT-14)
+ *   A door or window MAY state its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that
+ *   opens (`opens`). Its handing stays in the wall's terms (`hinge`, `swing`, C2): the person's
+ *   terms, the room it opens into and the side it is hinged on as seen from a room, are turned
+ *   into them when written (`handingFromRooms`). For a door that slides, rolls or lifts, `hinge`
+ *   names the end it opens toward and `swing` the face it runs on. A door with no kind is a single
+ *   swinging leaf. Optional and never defaulted (version 1).
+ *
+ * C21 · A curved wall (CNT-18)
+ *   A wall MAY be an arc of a circle: `arc.centre` is the circle's middle and `arc.sweep` the
+ *   angle the wall turns through from `start` to `end` round it, in degrees, counter-clockwise
+ *   positive as `turn` and `north` are; 360 (or -360) is a whole circle, whose `start` and `end`
+ *   are one point. The radius is the distance from the centre to `start`, and `end` must lie on
+ *   the circle where the sweep takes `start` (`wall/arc-ends-apart`). C1 holds about the curve:
+ *   the wall grows thickness/2 on each side of it, `left` is the side on the left going from
+ *   `start` to `end`. C2 holds along the curve: an opening's `offset` and `width` are measured
+ *   along it, and its hole is straight between its two edges, as a door's leaf is. Optional and
+ *   never defaulted, so a plan with no curved wall reads exactly as before (version 1).
+ *
+ * C23 · A plan that is part of a larger building (CNT-6, lab EL-4, R-10, S-3, EL-17, AC-7)
+ *   A wall MAY be `separating`: a party wall, or a wall between a home and the building's common
+ *   parts. A door through it into another home is refused as a route; one into a common part is a
+ *   front door. A wall MAY state what lies `beyond` it where no room is drawn on one side, along
+ *   whatever stretch of it has a room on one side only (MSG-13): `outside`, a `common` part of the
+ *   building that is not drawn, or a `neighbour`, another home or property. A separating wall
+ *   with nothing drawn beyond it and no `beyond` stated is read as one to a common part. A virtual
+ *   wall with a room on one side only is an open edge, never a door: its `beyond` says where it
+ *   leads, and unstated it leads where the drawing says (the outside, or floor no room claims).
+ *   A floor MAY state what lies `above` it (`outside`, `common`, `neighbour`) and `below` it
+ *   (`ground`, `outside`, `common`, `neighbour`): a floor with more of the building above it has
+ *   no roof, and one with more of it below has no ground slab and is not a ground floor.
+ *   A plan MAY name several `buildings`, each an id, a name and the floors that are its own, each
+ *   floor in one building at most; each building stacks its own floors and has its own areas and
+ *   height. A plan MAY draw `context`: shapes round it (a neighbour's house, the hall a stand stands
+ *   in), each an outline on a floor, with a name and a height. A context shape is never a wall, a
+ *   room or a part of any building: it is drawn and is in no measure, check or count. All optional
+ *   and never defaulted (version 1): a plan that states none reads exactly as before.
+ *
+ * C24 · Named wall, door and window types, and room finishes (CNT-15)
+ *   A plan MAY hold a short list of named types in `types`: `walls` (each a name, and any of a
+ *   thickness, a height rule, a kind, whether it is glazed and a material), `doors` and `windows`
+ *   (a name, and any of a width, a height, a window's sill, a kind (C20), the part that opens, whether
+ *   it is glazed and a material). A wall names its type in `wallType`, a door in `doorType` and a
+ *   window in `windowType`, by id. A value the part states itself wins over its type's: the type
+ *   fills only what the part leaves out, and the reading records which in `typed`, which is never
+ *   written back (`statedWall`, `statedOpening`), so one change to a type changes every part that
+ *   takes it. A type's height is metres, or `floor`: as high as a wall on its floor that states none
+ *   (C5, LVL-6). `types.defaults` names the type a wall of each kind, a door or a window takes when
+ *   it names none: the template an office keeps. A dividing line takes no type. A room or a zone
+ *   (CNT-8) MAY name its `finishes`: floor, walls, ceiling and skirting, by the person's own names;
+ *   a zone's finish is its part of its room. Grid checks no finish and no material. An id a part
+ *   names that no type has is said and read as no type, never refused. Optional and never
+ *   defaulted: a plan with none reads exactly as before (version 1).
+ *
+ * C25 · Columns and a structural grid (CNT-16, lab EL-6)
+ *   A plan MAY hold `columns`: each a thing of its own, never a wall, a room or a fixture. A column
+ *   is `square` or `round`; `width` is a square column's side along its own x and a round one's
+ *   diameter, and `depth` a square column's side along its own y (unstated, as wide: a square; a
+ *   round column states none). `at` is its middle on the plan and `turn` turns a square column
+ *   counter-clockwise about it, in degrees. It stands on its `floor` (C5) and MAY rise `through`
+ *   floors above it as a wall does (C19): one column, shared by those floors. `height` is how high
+ *   it stands above the floor it rises through; unstated, it rises to that floor's storey height.
+ *   The room a column stands in is found from the outlines (the smallest room on its floor whose
+ *   floor holds its middle, zones aside), never named, and the floor it covers there is taken off
+ *   that room's area.
+ *   A plan MAY hold `grids`: each a named structural grid, its lines set out from `origin` and
+ *   turned by `turn` (degrees, counter-clockwise): `x` lines, which run along the grid's y, each
+ *   `spacing` metres past the one before it, and `y` lines, which run along its x. A set's
+ *   `names` name its lines in order, one each; unstated, x lines are numbered 1, 2, 3 and y lines
+ *   lettered A, B, C. A grid is drawn on the `floors` it names (unstated, every floor) with its
+ *   names and the spacing between its lines, and is in no measure or check. All optional and
+ *   never defaulted (version 1): a plan that states none reads exactly as before.
+ *
+ * C26 · Outdoor space, roofed or open (CNT-7, lab EL-8, EL-18, R-8)
+ *   A room MAY be an outdoor space: `outdoor` names its kind (`OUTDOOR_KINDS`: a garden, a
+ *   courtyard, a terrace, a balcony, a light well, a porch, a carport, or `other`; `true` is one of
+ *   no named kind), and `roofed` says whether a roof covers it. Unstated, a porch and a carport are
+ *   roofed and every other kind is open (`outdoorRoofed`); `roofed` on a room that is not outdoor
+ *   is read as nothing. An outdoor space is drawn and measured as a room, and to the building it is
+ *   the outside: it is in no net, gross internal or gross external area but listed apart, weighted
+ *   only by an area rule the caller states; it needs no door and no route; a wall between it and a
+ *   room faces outside; and a wall that bounds outdoor space and no room (a fence, a parapet, the
+ *   plot's edge drawn as a line) is no part of the building: it adds no area and sets no storey
+ *   height. A route may pass through it: a door onto it is a way out when the space leads on to the
+ *   outside. An outdoor space on the lowest level stands on the ground, with no slab, and only a
+ *   roofed one has a roof. Its `use`, when stated, is kept, and no check reads it. Optional and
+ *   never defaulted: a plan with none reads exactly as before (version 1).
  */
 import { z } from 'zod'
-import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
+import { limit } from '../geometry/tolerances'
+import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
+import { factKey } from './facts'
+import { placeProblem } from './places'
+import { roofFrame, roofTop } from './roofFrame'
+import { en } from '../messages/en'
+import { LANGUAGES } from '../messages/languages'
+import { roomUseOfLabel } from '../messages/uses'
+import { english, said } from '../messages/say'
+import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
+export * from './facts'
 
 /**
  * The error `parseFloorPlan` throws and one problem it lists. Callers take them from here and
@@ -72,6 +307,13 @@ export type { ZodIssue as PlanSchemaIssue } from 'zod'
 const text = (kind: TextKind) =>
   z.string().superRefine((value, ctx) => {
     const problem = textProblem(value, kind)
+    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
+  })
+
+/** COD-3: a place, by a name or a code on Grid's list. A refusal names the field and the rule, never the text. */
+const placeText = () =>
+  z.string().superRefine((value, ctx) => {
+    const problem = textProblem(value, 'name') ?? placeProblem(value)
     if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
   })
 
@@ -97,8 +339,136 @@ const finite = (): z.ZodNumber =>
 // Coordinate pair [x, y] in meters (floor plan space, see C4)
 const Vec2 = z.tuple([finite(), finite()])
 
+/**
+ * CNT-9 (C9): facts of the person's own, by name: text (one line, at most a name's length), a
+ * finite number, or true or false. A name is one line and not blank; two names one part carries
+ * may not differ only in capitals, spaces, dashes or underscores (`factKey`), and a part carries
+ * at most `PROPERTIES_MAX`. A fact the schema refuses is left out on its own, not with the others
+ * (`readParts.ts`). Grid checks nothing against a fact.
+ */
+export const PropertiesSchema = z
+  .record(
+    text('name').pipe(z.string().refine((name) => name.trim().length > 0, { message: 'is blank: a fact needs a name' })),
+    z.union([text('name').pipe(z.string().min(1)), finite(), z.boolean()]),
+  )
+  .superRefine((facts, ctx) => {
+    const names = Object.keys(facts)
+    if (names.length > PROPERTIES_MAX) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `has ${names.length.toLocaleString('en-US')} facts; one part may carry at most ${PROPERTIES_MAX}` })
+      return
+    }
+    const seen = new Map<string, string>()
+    for (const name of names) {
+      const key = factKey(name)
+      const first = seen.get(key)
+      if (first === undefined) seen.set(key, name)
+      else ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'names the same fact as another name on this part, in other capitals or spaces' })
+    }
+  })
+
 /** C5: the floor an entity belongs to when it does not name one. */
 export const DEFAULT_FLOOR_ID = 'ground'
+
+/**
+ * CNT-5: what kind of building the plan is, or a floor of it is (`Floor.building`). A figure
+ * check runs only in the kinds of building its figures were read for (`packages/rules`). One
+ * kind for each, in Grid's own words (`BUILDING_TYPE_TEXT`); a building of mixed use says so
+ * floor by floor.
+ */
+export const BUILDING_TYPES = [
+  'home',
+  'office',
+  'shop',
+  'food',
+  'hotel',
+  'school',
+  'health',
+  'sport',
+  'assembly',
+  'industry',
+  'warehouse',
+  'parking',
+  'other',
+] as const
+
+export const BuildingTypeSchema = z.enum(BUILDING_TYPES)
+
+export type BuildingType = z.infer<typeof BuildingTypeSchema>
+
+/** Each kind of building as a sentence names it, with its article: "this plan is an office" (MSG-11: `check.building.*`, in English). */
+export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = Object.fromEntries(
+  BUILDING_TYPES.map((type) => [type, en[`check.building.${type}`]])
+) as Record<BuildingType, string>
+
+/** The four sides of the drawing: north is +Y (C4). */
+export const COMPASS_SIDES = ['north', 'east', 'south', 'west'] as const
+
+/** LVL-6: the shapes a roof over a floor can take. */
+export const ROOF_SHAPES = ['flat', 'mono-pitch', 'gable', 'hip'] as const
+
+/** LVL-6: the two ways a gable's ridge can run, along the sides of the drawing (C4). */
+export const RIDGE_RUNS = ['east-west', 'north-south'] as const
+
+/**
+ * LVL-6: a window in the roof's slope. `at` is its middle on the plan (C4); `width` runs along the
+ * slope's eaves and `length` up the slope, both measured on the slope, as a rooflight's size is
+ * given. It lies in one plane of the roof, wholly inside the roof.
+ */
+export const RooflightSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  at: Vec2,
+  width: finite().positive(),
+  length: finite().positive(),
+})
+
+/**
+ * LVL-6: the roof over a floor, as planes its walls and rooms are cut to. Heights are metres
+ * above the floor's level, to the roof's underside (the ceiling under it), measured on the lines
+ * of the floor's outside walls: the roof's eaves lie along the sides of the smallest rectangle
+ * that holds those lines, turned to the floor's longest outside wall.
+ *
+ * - `flat`: the underside is level at `eaves`.
+ * - `mono-pitch`: one plane, from `eaves` on the side opposite `highSide`, rising to that side.
+ * - `gable`: two planes from `eaves` on the two sides along `ridgeRuns` (unstated, along the
+ *   rectangle's longer sides), meeting at the ridge over the middle.
+ * - `hip`: four planes from `eaves` on all four sides, at one pitch.
+ *
+ * A sloped roof states its `pitch` in degrees, or its `ridge`, the underside's height at the top
+ * (the high side of a mono-pitch roof), never both. `rooflights` are its windows. `dormers` are
+ * not drawn yet: a roof that lists any is drawn without them, and the check says so.
+ */
+export const RoofSchema = z
+  .object({
+    shape: z.enum(ROOF_SHAPES),
+    eaves: finite().positive(),
+    pitch: finite().gt(0).lt(90).optional(),
+    ridge: finite().positive().optional(),
+    ridgeRuns: z.enum(RIDGE_RUNS).optional(),
+    highSide: z.enum(COMPASS_SIDES).optional(),
+    rooflights: parts(RooflightSchema, 'rooflights in one roof').optional(),
+    dormers: z.array(z.unknown()).optional(),
+  })
+  .superRefine((roof, ctx) => {
+    const add = (path: string, message: string): void => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message })
+    const sloped = roof.shape !== 'flat'
+    if (!sloped && (roof.pitch !== undefined || roof.ridge !== undefined)) add(roof.pitch !== undefined ? 'pitch' : 'ridge', 'belongs to a sloped roof: a flat roof states only its eaves, the height of its underside')
+    if (sloped && (roof.pitch === undefined) === (roof.ridge === undefined)) add('pitch', 'needs the pitch in degrees or the ridge height in metres, one of the two: either gives the slope')
+    if (roof.ridge !== undefined && !(roof.ridge > roof.eaves)) add('ridge', 'must be higher than the eaves: the roof rises from its eaves to its ridge')
+    if (roof.ridgeRuns !== undefined && roof.shape !== 'gable') add('ridgeRuns', 'belongs to a gable roof: only a gable says which way its ridge runs')
+    if (roof.shape === 'mono-pitch' && roof.highSide === undefined) add('highSide', 'is needed on a mono-pitch roof: the side of the drawing it rises to, north, east, south or west')
+    if (roof.highSide !== undefined && roof.shape !== 'mono-pitch') add('highSide', 'belongs to a mono-pitch roof: only it has one high side')
+  })
+
+/**
+ * LVL-5 (C19): the one word `overhang` takes, on a floor or on a room used as a stair or a lift:
+ * it does not line up with the floor below on purpose.
+ */
+export const OVERHANG_MEANT = ['meant'] as const
+
+/** CNT-6 (C23): what lies above a floor: the open air (it has a roof), or more of the building. */
+export const ABOVE_FLOOR = ['outside', 'common', 'neighbour'] as const
+/** CNT-6 (C23): what lies below a floor: the ground, the open air, or more of the building. */
+export const BELOW_FLOOR = ['ground', 'outside', 'common', 'neighbour'] as const
 
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
@@ -114,9 +484,67 @@ export const FloorSchema = z.object({
   height: finite().positive().optional(),
   // Metres: the thickness of the slab this floor stands on.
   slab: finite().nonnegative().optional(),
+  // LVL-4: metres the outside walls of this floor rise above the roof over it, where it has one
+  // (every part of the floor with nothing above it). Optional and never defaulted: unstated, the
+  // roof has no parapet (version 1).
+  parapet: finite().positive().optional(),
+  // LVL-6: the roof over this floor (RoofSchema): flat, mono-pitch, gable or hip, which its walls
+  // and rooms are cut to. Optional and never defaulted: unstated, the roof is flat on the floor's
+  // walls, as LVL-4 made it (version 1).
+  roof: RoofSchema.optional(),
+  // CNT-5: what kind of building this floor is, when it is not the plan's (`FloorPlan.building`):
+  // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
+  // floor is the plan's kind (version 1).
+  building: BuildingTypeSchema.optional(),
+  // LVL-5 (C19): the floor's outline overhangs or sits back from the floor below it on purpose, so
+  // Grid does not say it does not line up. Optional and never defaulted (version 1).
+  overhang: z.enum(OVERHANG_MEANT).optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
+  // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
+  // last point on the first closes it. Joined with what the walls enclose for the slab, the roof
+  // and the gross external area. Optional and never defaulted (version 1).
+  outline: z
+    .array(Vec2)
+    .min(3)
+    .max(BOUNDARY_MAX)
+    .superRefine((points, ctx) => {
+      const open = boundaryEdgeCount(points) === points.length ? points : points.slice(0, -1)
+      const problem = ringProblem(open.map(([x, y]) => ({ x, y })))
+      if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
+    })
+    .optional(),
+  // BRF-4 (C17): how many homes the floor holds, and how many parking spaces: the agent's
+  // proposal, counted against the person's own limits. Optional and never defaulted (version 1).
+  homes: z.number().int().min(0).max(PARTS_MAX).optional(),
+  parking: z.number().int().min(0).max(PARTS_MAX).optional(),
+  // CNT-6 (C23): what lies above and below the floor, when the plan is part of a larger building.
+  // Optional and never defaulted: unstated, the floor's roof and slab are worked out as before.
+  above: z.enum(ABOVE_FLOOR).optional(),
+  below: z.enum(BELOW_FLOOR).optional(),
 })
 
-export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
+// CNT-6 (C23): `separating` is a party wall, or a wall between a home and the common parts.
+export const WallKindSchema = z.enum(['exterior', 'interior', 'partition', 'separating'])
+
+/**
+ * CNT-6 (C23): what lies past a wall's side with no room drawn on it, or past an open edge:
+ * the outside, a common part of the building that is not drawn (a landing, a stair, a hall's
+ * aisle), or a neighbour (another home or property). Words of the plan's own, never inferred.
+ */
+export const BEYOND_WALL = ['outside', 'common', 'neighbour'] as const
+export const BeyondWallSchema = z.enum(BEYOND_WALL)
+
+/**
+ * CNT-10 (C16): what the work does to a wall, an opening or a room: it stands before and stays
+ * (`existing`), it stands before and is taken out (`demolished`), or the work builds it (`new`).
+ */
+export const PHASES = ['existing', 'demolished', 'new'] as const
+export const PhaseSchema = z.enum(PHASES)
+
+/** CNT-10: the fields that carry a phase, for whatever must place each (the sheet's `PHASE_COVERAGE`). */
+export const PHASE_FIELDS = ['walls.phase', 'openings.phase', 'rooms.phase'] as const
+export type PhaseField = (typeof PHASE_FIELDS)[number]
 
 /**
  * What a wall that does not state its thickness or height gets. A virtual wall is a
@@ -129,17 +557,267 @@ export const WALL_DEFAULTS = {
   virtual: { thickness: 0, height: 0 },
 } as const
 
-/** Fills the thickness and height a wall leaves out, by whether it is virtual. */
+/**
+ * WRT-6 (lab AU3-6): what a solid wall may leave out, which the reading fills (`WALL_DEFAULTS`,
+ * or its floor's stated height) and records in `unstated`, so a value left out stays "not
+ * stated" for everything that reads the plan back or writes it again.
+ */
+export const UNSTATED_WALL_VALUES = ['thickness', 'height', 'kind'] as const
+export type UnstatedWallValue = (typeof UNSTATED_WALL_VALUES)[number]
+
+/**
+ * Set by `withFloorHeights` on a wall whose height it took from the wall's floor, so that
+ * `withWallDefaults` records the height as not stated. A symbol, so no file can write it.
+ */
+const HEIGHT_FROM_FLOOR = Symbol('height from the floor')
+
+/**
+ * CNT-15 (C24): set by `withTypes` on a wall or an opening, the values it took from its type, so
+ * that its schema records them in `typed`. A symbol, so no file can write it, and a part read
+ * twice is filled once.
+ */
+const FROM_TYPE = Symbol('values from its type')
+
+/** CNT-15: the values of a wall, a door or a window that its type may fill, and `typed` may name. */
+export const TYPED_VALUES = ['wallType', 'doorType', 'windowType', 'thickness', 'height', 'kind', 'width', 'sill', 'opens'] as const
+export type TypedValue = (typeof TYPED_VALUES)[number]
+
+/**
+ * Fills the thickness and height a wall leaves out, by whether it is virtual, and records what a
+ * solid wall left out in `unstated` (WRT-6). A file's own `unstated` is not read: it is the
+ * reading's, and `readingNotes` names it as a field Grid does not know.
+ */
 function withWallDefaults(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
-  const wall = raw as Record<string, unknown>
-  const defaults = wall.virtual === true ? WALL_DEFAULTS.virtual : WALL_DEFAULTS.solid
-  return {
+  const wall: Record<string, unknown> = { ...(raw as Record<string, unknown>) }
+  delete wall.unstated
+  // CNT-15 (C24): what the wall's type filled in (`withTypes`), as the reading's own `typed`.
+  delete wall.typed
+  const typed = (raw as Record<symbol, unknown>)[FROM_TYPE]
+  if (Array.isArray(typed) && typed.length > 0) wall.typed = typed
+  const virtual = wall.virtual === true
+  const defaults = virtual ? WALL_DEFAULTS.virtual : WALL_DEFAULTS.solid
+  const left: UnstatedWallValue[] = []
+  if (!virtual) {
+    if (wall.thickness === undefined) left.push('thickness')
+    if (wall.height === undefined || (raw as Record<symbol, unknown>)[HEIGHT_FROM_FLOOR] === true) left.push('height')
+    if (wall.kind === undefined) left.push('kind')
+  }
+  const filled: Record<string, unknown> = {
     ...wall,
     thickness: wall.thickness === undefined ? defaults.thickness : wall.thickness,
     height: wall.height === undefined ? defaults.height : wall.height,
+    ...(left.length > 0 ? { unstated: left } : {}),
   }
+  // HND-11: a wall placed by its face stands, in the reading, on its centre line, and says which
+  // face its file gave (`placedBy`). A face, a thickness or an end that cannot be read is left
+  // for the schema to name, as it is.
+  const face = filled['face']
+  const thickness = virtual ? 0 : filled['thickness']
+  if (isFace(face) && isEndPair(filled['start']) && isEndPair(filled['end']) && typeof thickness === 'number' && Number.isFinite(thickness) && thickness >= 0) {
+    const [start, end] = centreFromFace(filled['start'], filled['end'], face, thickness, arcOf(filled))
+    delete filled['face']
+    return { ...filled, start, end, placedBy: face }
+  }
+  return filled
 }
+
+/**
+ * HND-11 (C1, reopened): which face of a wall its start→end line is, as you walk from its start
+ * to its end. The wall's body lies on the other side of the line.
+ */
+export const WALL_FACES = ['left', 'right'] as const
+export type WallFace = (typeof WALL_FACES)[number]
+
+type Pair = readonly [number, number]
+
+const isFace = (value: unknown): value is WallFace => value === 'left' || value === 'right'
+const isEndPair = (value: unknown): value is Pair =>
+  Array.isArray(value) && value.length === 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])
+
+/** A written number without the arithmetic's last digits: a face moved there and back reads as it was stated. */
+const written = (value: number): number => {
+  const clean = Number(value.toPrecision(15))
+  return Object.is(clean, -0) ? 0 : clean
+}
+
+/**
+ * The line `start`→`end` moved `by` metres to its left (to its right when negative), or null for
+ * a line of no length, which has no left.
+ */
+function shiftedLine(start: Pair, end: Pair, by: number): [[number, number], [number, number]] | null {
+  const dx = end[0] - start[0]
+  const dy = end[1] - start[1]
+  const length = Math.hypot(dx, dy)
+  if (!(length > 0) || !Number.isFinite(length)) return null
+  const nx = (-dy / length) * by
+  const ny = (dx / length) * by
+  return [
+    [start[0] + nx, start[1] + ny],
+    [end[0] + nx, end[1] + ny],
+  ]
+}
+
+/** CNT-18 (C21): a curved wall's arc, as a file states it, when it can be read. */
+export interface WallCurveOf {
+  readonly centre: Pair
+  readonly sweep: number
+}
+
+/** CNT-18: a wall's `arc`, as its file states it or as Grid reads it, or undefined when it has none it can read. */
+function arcOf(wall: Readonly<Record<string, unknown>>): WallCurveOf | undefined {
+  const arc = wall['arc']
+  if (typeof arc !== 'object' || arc === null || Array.isArray(arc)) return undefined
+  const { centre, sweep } = arc as Record<string, unknown>
+  return isEndPair(centre) && typeof sweep === 'number' && Number.isFinite(sweep) && sweep !== 0 ? { centre, sweep } : undefined
+}
+
+/**
+ * CNT-18: the curve `start`→`end` round `arc.centre` moved `by` metres to its left (to its right
+ * when negative): each end along its own radius, since a curve's faces are circles round the same
+ * centre. Going counter-clockwise the left is toward the centre. Null when an end is on the
+ * centre or the move would take it through the centre.
+ */
+function shiftedArc(start: Pair, end: Pair, by: number, arc: WallCurveOf): [[number, number], [number, number]] | null {
+  const at = (p: Pair): [number, number] | null => {
+    const r = Math.hypot(p[0] - arc.centre[0], p[1] - arc.centre[1])
+    const to = r - Math.sign(arc.sweep) * by
+    if (!(r > 0) || !(to > 0)) return null
+    return [arc.centre[0] + ((p[0] - arc.centre[0]) * to) / r, arc.centre[1] + ((p[1] - arc.centre[1]) * to) / r]
+  }
+  const s = at(start)
+  const e = at(end)
+  return s === null || e === null ? null : [s, e]
+}
+
+/** A wall's line moved to its left: along its radius for a curve, square to it for a straight line. */
+function shifted(start: Pair, end: Pair, by: number, arc: WallCurveOf | undefined): [[number, number], [number, number]] | null {
+  return arc === undefined ? shiftedLine(start, end, by) : shiftedArc(start, end, by, arc)
+}
+
+/**
+ * HND-11: a wall's centre line from the face its file gives: half the thickness away from that
+ * face, into the wall's body. A left face has the body on its right. A line of no length is
+ * returned as it is.
+ */
+export function centreFromFace(start: Pair, end: Pair, face: WallFace, thickness: number, arc?: WallCurveOf): [[number, number], [number, number]] {
+  return shifted(start, end, (face === 'left' ? -1 : 1) * (thickness / 2), arc) ?? [[start[0], start[1]], [end[0], end[1]]]
+}
+
+/** HND-11: the face line a file gives a wall placed by its face, from the wall's centre line. */
+export function faceFromCentre(start: Pair, end: Pair, face: WallFace, thickness: number, arc?: WallCurveOf): [[number, number], [number, number]] {
+  const [s, e] = shifted(start, end, (face === 'left' ? 1 : -1) * (thickness / 2), arc) ?? [[start[0], start[1]], [end[0], end[1]]]
+  return [
+    [written(s[0]), written(s[1])],
+    [written(e[0]), written(e[1])],
+  ]
+}
+
+const otherFace = (face: WallFace): WallFace => (face === 'left' ? 'right' : 'left')
+
+/** The thickness a wall's line is moved by: none for a dividing line, else the one stated or the default. */
+function movingThickness(wall: Readonly<Record<string, unknown>>): number {
+  if (wall['virtual'] === true) return 0
+  const stated = wall['thickness']
+  const value = typeof stated === 'number' ? stated : typeof stated === 'string' ? Number.parseFloat(stated) : Number.NaN
+  return Number.isFinite(value) && value > 0 ? value : WALL_DEFAULTS.solid.thickness
+}
+
+/**
+ * HND-11: a wall, as a file states it or as Grid reads it, with its centre line's ends moved to
+ * `ends` (either may be left out), and turned over left to right when `mirrored`. A wall its file
+ * places by its face (`face`) keeps that face, and the line written is the face's; one Grid read
+ * so (`placedBy`) keeps saying so. Every change that moves a wall end goes through here, so no
+ * centre point ever lands in a file as a face.
+ */
+export function wallWithEnds<T extends Record<string, unknown>>(wall: T, ends: { readonly start?: Pair | undefined; readonly end?: Pair | undefined; readonly arc?: WallCurveOf | undefined }, mirrored = false): T {
+  const face = wall['face']
+  if (isFace(face) && isEndPair(wall['start']) && isEndPair(wall['end'])) {
+    const thickness = movingThickness(wall)
+    // CNT-18: a curved wall's face is found from its arc as it was, and written from its new one.
+    const before = arcOf(wall)
+    const [s, e] = centreFromFace(wall['start'], wall['end'], face, thickness, before)
+    const now = mirrored ? otherFace(face) : face
+    const [start, end] = faceFromCentre(ends.start ?? s, ends.end ?? e, now, thickness, ends.arc ?? before)
+    return { ...wall, start, end, face: now }
+  }
+  const placed = wall['placedBy']
+  const moved: Record<string, unknown> = { ...wall }
+  if (ends.start !== undefined) moved['start'] = [...ends.start]
+  if (ends.end !== undefined) moved['end'] = [...ends.end]
+  if (isFace(placed) && mirrored) moved['placedBy'] = otherFace(placed)
+  return moved as T
+}
+
+/**
+ * A wall as its file states it (WRT-6): without the values the reading filled in and without
+ * `unstated`, for whatever writes a wall back, so a default never lands in a file that stated
+ * none. HND-11: a wall Grid read from its face (`placedBy`) is given back by that face, with
+ * `face`, as its file gave it. CNT-15 (C24): without the values its type filled in (`typed`), so a
+ * change to the type still reaches it. A wall that left nothing out is returned as it is.
+ */
+export function statedWall<T extends { readonly unstated?: readonly UnstatedWallValue[]; readonly placedBy?: WallFace | undefined; readonly typed?: readonly TypedValue[] | undefined }>(wall: T): Omit<T, 'unstated' | 'placedBy' | 'typed'> {
+  if (wall.unstated === undefined && wall.placedBy === undefined && wall.typed === undefined) return wall
+  const { unstated, placedBy, typed, ...rest } = wall
+  const left: readonly string[] = [...(unstated ?? []), ...(typed ?? [])]
+  const out: Record<string, unknown> = { ...rest }
+  if (placedBy !== undefined && isEndPair(out['start']) && isEndPair(out['end'])) {
+    const [start, end] = faceFromCentre(out['start'], out['end'], placedBy, movingThickness(out))
+    const ordered: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(out)) {
+      ordered[key] = key === 'start' ? start : key === 'end' ? end : value
+      if (key === 'end') ordered['face'] = placedBy
+    }
+    for (const key of left) delete ordered[key]
+    return ordered as Omit<T, 'unstated' | 'placedBy' | 'typed'>
+  }
+  for (const key of left) delete out[key]
+  return out as Omit<T, 'unstated' | 'placedBy' | 'typed'>
+}
+
+/**
+ * CNT-15 (C24): an opening as its file states it: without the values its door or window type
+ * filled in (`typed`), for whatever writes an opening back. One that took nothing is returned as it is.
+ */
+export function statedOpening<T extends { readonly typed?: readonly TypedValue[] | undefined }>(opening: T): Omit<T, 'typed'> {
+  if (opening.typed === undefined) return opening
+  const { typed, ...rest } = opening
+  const out: Record<string, unknown> = { ...rest }
+  for (const key of typed) delete out[key]
+  return out as Omit<T, 'typed'>
+}
+
+/** Whether a wall's height was left out of its file, so the reading filled it (WRT-6). */
+export function heightStated(wall: { readonly unstated?: readonly UnstatedWallValue[] }): boolean {
+  return !(wall.unstated ?? []).includes('height')
+}
+
+/**
+ * WRT-6 (lab AU3-6): whether a solid wall's height is stated by nothing, not by the wall and not
+ * by its floor, so the reading gave it Grid's default (`WALL_DEFAULTS`). A height its floor
+ * states is stated, once, on the floor. A dividing line has no height to state.
+ */
+export function heightByDefault(
+  plan: { readonly floors?: readonly { readonly id: string; readonly height?: number | undefined }[] | undefined },
+  wall: { readonly virtual?: boolean | undefined; readonly floor?: string | undefined; readonly through?: string | undefined; readonly unstated?: readonly UnstatedWallValue[] | undefined },
+): boolean {
+  if (wall.virtual === true || heightStated(wall)) return false
+  // LVL-5: a wall through floors takes its height from the floor it rises through.
+  const floor = wall.through ?? wall.floor ?? DEFAULT_FLOOR_ID
+  return (plan.floors ?? []).find((f) => f.id === floor)?.height === undefined
+}
+
+/**
+ * CNT-18 (C21): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
+ * and never more than a whole turn.
+ */
+export const WallArcSchema = z.object({
+  centre: Vec2,
+  sweep: finite().refine((value) => value !== 0 && Math.abs(value) <= 360, {
+    // MSG-11: its words are a key of the message files, said in English as the schema's are.
+    message: english(said('read.arc.sweep')),
+  }),
+})
 
 export const WallSchema = z.preprocess(
   withWallDefaults,
@@ -159,6 +837,34 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
+      // LVL-5 (C19): the highest floor the wall rises through, from its own floor: it is one wall
+      // on each floor between, and its height is measured from this floor's level. Optional and
+      // never defaulted: unstated, the wall stands on its own floor only (version 1).
+      through: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-18 (C21): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
+      // Optional and never defaulted: unstated, the wall is straight (version 1).
+      arc: WallArcSchema.optional(),
+      // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+      properties: PropertiesSchema.optional(),
+      // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+      phase: PhaseSchema.optional(),
+      // CNT-6 (C23): what lies past its side with no room drawn on it, along every stretch with a
+      // room on one side only. Optional and never defaulted (version 1).
+      beyond: BeyondWallSchema.optional(),
+      // HND-11 (C1, reopened): start→end is this face of the wall, not its centre line. The
+      // reading moves the wall to its centre line (`withWallDefaults`), so a wall Grid read has
+      // `placedBy` in its place. Optional and never defaulted (version 1).
+      face: z.enum(WALL_FACES).optional(),
+      // HND-11: the face its file placed it by. Grid's reading only, written back as `face`.
+      placedBy: z.enum(WALL_FACES).optional(),
+      // WRT-6: what the file left out and the reading filled in (`withWallDefaults`). Grid's
+      // reading only: never in a file, and written back by `statedWall` without those values.
+      unstated: z.array(z.enum(UNSTATED_WALL_VALUES)).optional(),
+      // CNT-15 (C24): the wall type it takes, by id in `types.walls`: it fills what the wall leaves
+      // out. Optional and never defaulted (version 1); `types.defaults` may give one in the reading.
+      wallType: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-15: what its type filled in (`withTypes`). Grid's reading only, never written back.
+      typed: z.array(z.enum(TYPED_VALUES)).optional(),
     })
     .superRefine((wall, ctx) => {
       // A solid wall needs some thickness and height; a dividing line may have none.
@@ -173,30 +879,163 @@ export const WallSchema = z.preprocess(
 )
 
 // What a room is for. Explicit, like `Wall.kind`: nothing infers it from the
-// room's name, shape or area.
+// room's name, shape or area. CNT-5: the list reaches past homes, in groups: rooms of a home,
+// rooms people work, buy, learn, are treated or train in, rooms for moving between floors and
+// rooms, and rooms for services. `assembly` is a room people gather in: a hall, an auditorium,
+// a function room. The person's own word for a room is its name ("Pooja room",
+// "Bryggers"); its use is the one of these it is.
 export const ROOM_USES = [
   'bedroom',
   'living',
   'dining',
   'kitchen',
   'bathroom',
+  'toilet',
+  'utility',
+  'study',
+  'office',
+  'meeting',
+  'reception',
+  'retail',
+  'classroom',
+  'treatment',
+  'waiting',
+  'sport',
+  'changing',
+  'staff',
+  'worship',
+  'assembly',
   'corridor',
   'stair',
+  // LVL-3: a lift shaft, drawn as a room on every floor it serves. The drawing checks line the
+  // shafts up from floor to floor; a lift is never taken as a way out.
+  'lift',
   'storage',
+  'plant',
+  'parking',
   'other',
 ] as const
 
 export const RoomUseSchema = z.enum(ROOM_USES)
 
 /**
- * A use as Grid reads it (MSG-4): whatever its capitals, so `Bedroom` is `bedroom`. Anything
- * else is left as it is, for the schema to read as unstated and `readingNotes` to name.
+ * CNT-5: words people and agents write for a room's use that plainly mean one of `ROOM_USES`,
+ * local words among them (`bryggers`, Danish for a utility room; `pooja`, a prayer room), folded
+ * as `foldUseWord` folds them. A use written as one of these words is read as its use; the word
+ * stays the room's name, which is where the person's own word belongs.
+ *
+ * No word here is read as `bedroom`, `living` or `dining`: the figure checks look at rooms of
+ * those uses (`packages/rules`), so a room comes under them only by its author's own choice of
+ * use, never by a word Grid read for them. `bed` or `lounge` stays a suggestion (`nearestUse`).
+ * Nor does a word that means two things (`hall`, `studio`) read as either.
+ */
+export const USE_WORDS: Readonly<Record<string, RoomUse>> = {
+  wc: 'toilet',
+  loo: 'toilet',
+  lavatory: 'toilet',
+  restroom: 'toilet',
+  washroom: 'toilet',
+  shower: 'bathroom',
+  showers: 'bathroom',
+  ensuite: 'bathroom',
+  kitchenette: 'kitchen',
+  laundry: 'utility',
+  scullery: 'utility',
+  bryggers: 'utility',
+  offices: 'office',
+  workspace: 'office',
+  boardroom: 'meeting',
+  conference: 'meeting',
+  shop: 'retail',
+  sales: 'retail',
+  servery: 'retail',
+  teaching: 'classroom',
+  consulting: 'treatment',
+  consultation: 'treatment',
+  examination: 'treatment',
+  gym: 'sport',
+  fitness: 'sport',
+  locker: 'changing',
+  lockers: 'changing',
+  staffroom: 'staff',
+  prayer: 'worship',
+  pooja: 'worship',
+  puja: 'worship',
+  chapel: 'worship',
+  hallway: 'corridor',
+  passage: 'corridor',
+  landing: 'corridor',
+  lobby: 'corridor',
+  circulation: 'corridor',
+  stairs: 'stair',
+  staircase: 'stair',
+  stairwell: 'stair',
+  elevator: 'lift',
+  store: 'storage',
+  stockroom: 'storage',
+  warehouse: 'storage',
+  closet: 'storage',
+  cupboard: 'storage',
+  pantry: 'storage',
+  larder: 'storage',
+  wardrobe: 'storage',
+  plantroom: 'plant',
+  boiler: 'plant',
+  garage: 'parking',
+  carpark: 'parking',
+}
+
+/**
+ * A use word as `USE_WORDS` holds it: lower case, letters and digits only, and a last "room"
+ * taken off, so `Pooja room`, `staff_room` and `Plant-room` are `pooja`, `staff` and `plant`.
+ */
+export function foldUseWord(word: string): string {
+  const folded = word.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return folded.length > 4 && folded.endsWith('room') ? folded.slice(0, -4) : folded
+}
+
+/**
+ * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; the
+ * use's label in a language Grid writes (MSG-11, `USE_LABELS`), so `dormitorio` is `bedroom`;
+ * and a word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is
+ * `staff`. Anything else is left as it is, for the schema to read as unstated and
+ * `readingNotes` to name.
  */
 export function readUse(value: unknown): unknown {
   if (typeof value !== 'string') return value
   const lower = value.toLowerCase()
-  return (ROOM_USES as readonly string[]).includes(lower) ? lower : value
+  if ((ROOM_USES as readonly string[]).includes(lower)) return lower
+  const labelled = roomUseOfLabel(value)
+  if (labelled !== null) return labelled
+  const folded = foldUseWord(value)
+  if ((ROOM_USES as readonly string[]).includes(folded) && !FIGURE_READ_USES.includes(folded)) return folded
+  return Object.hasOwn(USE_WORDS, folded) ? USE_WORDS[folded] : value
 }
+
+/** The uses no word is read as (`USE_WORDS`): written as they are, or not at all. */
+const FIGURE_READ_USES: readonly string[] = ['bedroom', 'living', 'dining']
+
+/**
+ * CNT-5: who a room is for. `private`: one household's or one tenant's own (a flat's bedroom, an
+ * office let to one firm). `shared`: shared by some households or tenants and not others (a
+ * kitchen shared by four student rooms). `common`: the building's, for everyone in it (the
+ * stair, the entrance lobby, the bin store). `commercial`: let or run as a business (a shop).
+ * Optional and never defaulted; no check reads it yet.
+ */
+export const ROOM_TENURES = ['private', 'shared', 'common', 'commercial'] as const
+
+export const RoomTenureSchema = z.enum(ROOM_TENURES)
+
+/**
+ * CNT-7 (C26): the kinds of outdoor space a room may be. `other` is one of no kind on the list (a
+ * driveway, a side passage); a room that states `outdoor: true` is read as one too.
+ */
+export const OUTDOOR_KINDS = ['garden', 'courtyard', 'terrace', 'balcony', 'light-well', 'porch', 'carport', 'other'] as const
+
+export const OutdoorKindSchema = z.enum(OUTDOOR_KINDS)
+
+/** CNT-7 (C26): the kinds a roof usually covers, so one that does not state `roofed` is roofed. */
+export const ROOFED_BY_KIND: ReadonlySet<OutdoorKind> = new Set<OutdoorKind>(['porch', 'carport'])
 
 /** A list of wall ids round a room or one of its holes, at most `BOUNDARY_MAX` long (MSG-9). */
 const wallList = () =>
@@ -207,6 +1046,56 @@ const wallList = () =>
       message: `lists ${list.length.toLocaleString('en-US')} walls; a room may list at most ${BOUNDARY_MAX.toLocaleString('en-US')}`,
     })
   })
+
+/** LVL-4: the most points a lowered zone of a ceiling may have. */
+export const CEILING_ZONE_MAX = BOUNDARY_MAX
+
+/**
+ * LVL-4: a part of a room's ceiling that is lower than the rest: a bulkhead over a kitchen, a
+ * strip lowered for ducts. `points` is its outline on the plan (C4), three points or more; `height`
+ * is metres from the room's floor to its underside.
+ */
+export const LoweredZoneSchema = z.object({
+  name: text('name').optional(),
+  points: z
+    .array(Vec2)
+    .min(3)
+    .superRefine((list, ctx) => {
+      if (list.length <= CEILING_ZONE_MAX) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `has ${list.length.toLocaleString('en-US')} points; a lowered zone may have at most ${CEILING_ZONE_MAX.toLocaleString('en-US')}`,
+      })
+    }),
+  height: finite().positive(),
+})
+
+/**
+ * LVL-4: a room's ceiling. It is flat, at the room's `height` (ARE-10) above its floor, or, when
+ * the room states none, as high as its storey; `lowered` are the zones under it at their own
+ * heights. Stating `ceiling` says the room has one: the IFC writes it, and a ceiling plan, lights
+ * and grilles come later.
+ */
+export const CeilingSchema = z.object({
+  lowered: parts(LoweredZoneSchema, 'lowered zones in one ceiling').optional(),
+})
+
+/**
+ * CNT-15 (C24): the four finishes a room or a zone may name, each by the person's own name for it
+ * ("Oak boards", "Porcelain tile"): the floor, the walls' inside faces, the ceiling and the
+ * skirting. Grid checks none of them; it measures each and groups the quantities by name.
+ */
+export const FINISH_SURFACES = ['floor', 'walls', 'ceiling', 'skirting'] as const
+export type FinishSurface = (typeof FINISH_SURFACES)[number]
+
+const finishName = () => text('name').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the finish out instead' }))
+
+export const FinishesSchema = z.object({
+  floor: finishName().optional(),
+  walls: finishName().optional(),
+  ceiling: finishName().optional(),
+  skirting: finishName().optional(),
+})
 
 export const RoomSchema = z.object({
   id: text('id'),
@@ -219,8 +1108,9 @@ export const RoomSchema = z.object({
   // room, so the hole's walls are not floor either. Optional and never defaulted, so a plan
   // written before ARE-6 reads with no key added (version 1).
   holes: parts(wallList(), 'holes in one room').optional(),
-  // C5: unstated means the ground floor. Every wall in `boundary` must be on this
-  // same floor — a cross-floor boundary is a validation error.
+  // C5: unstated means the ground floor. Every wall in `boundary` must stand on this
+  // same floor — a cross-floor boundary is a validation error. LVL-5 (C19): a wall that rises
+  // through floors stands on each of them.
   floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
   // unknown value is read as unstated instead of rejecting the whole plan: `use`
@@ -233,6 +1123,12 @@ export const RoomSchema = z.object({
   // walls, is taken off that room, so every square metre is counted once. Optional and never
   // defaulted, so a plan written before ARE-5 reads with no key added (version 1).
   inside: z.boolean().optional(),
+  // CNT-8: the room is a zone of another room on its floor, the one with this id: where you
+  // sleep, cook or sit in an open-plan room. The zone is drawn and measured, and lies inside its
+  // room on purpose: the room is measured, counted and checked as a whole, and the zone is
+  // counted in no total (`geometry/zones.ts`). Optional and never defaulted, so a plan written
+  // before CNT-8 reads with no key added (version 1).
+  partOf: text('id').pipe(z.string().min(1)).optional(),
   // ARE-10: the room's height, floor to ceiling, in metres. Optional and never defaulted, so
   // a plan written before it reads with no key added (version 1). Unstated, the room is as
   // high as the lowest solid wall round it (`roomHeight` in the command's measuring).
@@ -243,12 +1139,41 @@ export const RoomSchema = z.object({
   // the openings to rooms at another level, and along a dividing line between them. Optional
   // and never defaulted: unstated, the room stands on its storey's floor (version 1).
   floorOffset: finite().optional(),
+  // LVL-4: the room is a void, open to the floor below: it has no floor, so its storey's slab is
+  // open over it and the room below rises through it. It adds no floor area and needs no door.
+  // Optional and never defaulted (version 1).
+  void: z.boolean().optional(),
+  // LVL-4: the room's ceiling (CeilingSchema): it stands at the room's `height`, with any zones
+  // lowered under it. Optional and never defaulted (version 1).
+  ceiling: CeilingSchema.optional(),
+  // CNT-5: who the room is for (`ROOM_TENURES`). Optional and never defaulted (version 1).
+  tenure: RoomTenureSchema.optional(),
+  // LVL-5 (C19): a room used as a stair or a lift that does not lie over the one below on
+  // purpose, so Grid does not say it is shifted. Optional and never defaulted (version 1).
+  overhang: z.enum(OVERHANG_MEANT).optional(),
+  // CNT-5: the firm's own type for the room, as its room data sheets name it ("B2 double
+  // bedroom", "Consult A"), beside the fixed `use`. Grid keeps it and reads nothing from it.
+  // Optional and never defaulted (version 1).
+  roomType: text('name').optional(),
+  // CNT-9 (C9): the room's number as the person states it, text: "101", "G.04", "B-12a". The
+  // schedules give it in place of the number Grid counts, and the IFC space takes it as its name.
+  // Optional and never defaulted (version 1).
+  number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
+  // CNT-15 (C24): its floor, wall, ceiling and skirting finishes, by the person's own names. A
+  // zone's are its part of its room. Optional and never defaulted (version 1).
+  finishes: FinishesSchema.optional(),
+  // CNT-7 (C26): the room is an outdoor space of this kind (`true`: of no named kind), and whether
+  // a roof covers it. Both optional and never defaulted (version 1); `roofed` is read only with
+  // `outdoor`.
+  outdoor: z.union([OutdoorKindSchema, z.literal(true)]).optional(),
+  roofed: z.boolean().optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
-
-/** The four sides of the drawing: north is +Y (C4). */
-export const COMPASS_SIDES = ['north', 'east', 'south', 'west'] as const
 
 /** What an opening's anchor measures from: an end of its wall, or a side of the drawing. */
 export const ANCHOR_FROM = ['start', 'end', ...COMPASS_SIDES] as const
@@ -273,7 +1198,46 @@ export const OpeningAnchorSchema = z
     }
   })
 
-export const OpeningSchema = z.object({
+/**
+ * CNT-14 (C20): the kinds of door, and of window, a plan may state. A door with no kind is a
+ * single swinging leaf, as every door was before (version 1). `single` and `double` are one or
+ * two hinged leaves; `sliding` slides along its wall, `pocket` into it; `folding` folds to one
+ * side in panels; `roller` rolls up and `garage` lifts overhead. A window may be `single` or
+ * `double` (one or two hinged casements), `sliding`, `fixed` (nothing opens) or `high-level` (set
+ * high in its wall, above the plan's cut). A window with no kind is drawn and measured as before.
+ */
+export const DOOR_KINDS = ['single', 'double', 'sliding', 'pocket', 'folding', 'roller', 'garage'] as const
+export const WINDOW_KINDS = ['single', 'double', 'sliding', 'fixed', 'high-level'] as const
+export const OPENING_KINDS = ['single', 'double', 'sliding', 'pocket', 'folding', 'roller', 'garage', 'fixed', 'high-level'] as const
+export type DoorKind = (typeof DOOR_KINDS)[number]
+export type WindowKind = (typeof WINDOW_KINDS)[number]
+export type OpeningKind = (typeof OPENING_KINDS)[number]
+
+/**
+ * CNT-14: the part of a door or window that opens, when it is not the whole of it: a door's leaf
+ * beside a fixed panel, the main leaf of a pair, a window's casement. `width` is along the wall and
+ * `height` from its foot; unstated, the height is the opening's. It is at the end the door hangs
+ * from (`hinge`), else at the wall's start end. Unstated, the whole opening opens (version 1).
+ */
+export const OpeningPartSchema = z.object({
+  width: finite().positive(),
+  height: finite().positive().optional(),
+})
+
+/** CNT-15 (C24): an opening's own `typed` from what `withTypes` marked; a file's own is not read. */
+function withOpeningTyped(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const typed = (raw as Record<symbol, unknown>)[FROM_TYPE]
+  const record = raw as Record<string, unknown>
+  if (!Object.hasOwn(record, 'typed') && !(Array.isArray(typed) && typed.length > 0)) return raw
+  const opening: Record<string, unknown> = { ...record }
+  delete opening.typed
+  if (Array.isArray(typed) && typed.length > 0) opening.typed = typed
+  return opening
+}
+
+/** An opening's fields, as an object. Read an opening with `OpeningSchema`, which also records `typed`. */
+export const OpeningFieldsSchema = z.object({
   id: text('id'),
   wall: text('id'),
   type: OpeningTypeSchema,
@@ -291,9 +1255,79 @@ export const OpeningSchema = z.object({
   // geometry/wall.ts `wallFaces`.
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
+  // CNT-14 (C20): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
+  // (`OpeningPartSchema`). Optional and never defaulted (version 1): a door that states no kind is
+  // one swinging leaf, and the whole of an opening opens.
+  kind: z.enum(OPENING_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
   // WRT-3: what its place is kept from when an edit changes its wall (OpeningAnchorSchema).
   anchor: OpeningAnchorSchema.optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
+  // CNT-10 (C16): what the work does to it; unstated, its wall's when that is demolished or new.
+  // Optional and never defaulted (version 1).
+  phase: PhaseSchema.optional(),
+  // CNT-15 (C24): a door's type, by id in `types.doors`, and a window's, by id in `types.windows`:
+  // each fills what the opening leaves out. Optional and never defaulted (version 1).
+  doorType: text('id').pipe(z.string().min(1)).optional(),
+  windowType: text('id').pipe(z.string().min(1)).optional(),
+  // CNT-15: what its type filled in (`withTypes`). Grid's reading only, never written back.
+  typed: z.array(z.enum(TYPED_VALUES)).optional(),
 })
+
+export const OpeningSchema = z.preprocess(withOpeningTyped, OpeningFieldsSchema)
+
+/** LVL-8: the most floors above its own that one opening pattern may be repeated on. */
+export const PATTERN_FLOORS_MAX = 200
+
+/**
+ * LVL-8 (C12): the one opening a pattern repeats: an opening without its id, wall and place, which
+ * the pattern gives each copy.
+ */
+export const PatternOpeningSchema = z.object({
+  type: OpeningTypeSchema,
+  width: finite().positive(),
+  sill: finite().nonnegative().default(0),
+  height: finite().positive(),
+  hinge: z.enum(['start', 'end']).optional(),
+  swing: z.enum(['left', 'right']).optional(),
+  // CNT-14 (C20): its kind and the part of it that opens, carried into every opening it makes.
+  kind: z.enum(OPENING_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
+  // CNT-15 (C24): its door or window type, carried into every opening it makes; the type fills
+  // what the pattern's opening leaves out.
+  doorType: text('id').pipe(z.string().min(1)).optional(),
+  windowType: text('id').pipe(z.string().min(1)).optional(),
+})
+
+/**
+ * LVL-8 (C12): a facade's rhythm, stated once. On `wall`, between `margins.start` metres from its
+ * start and `margins.end` from its end (each 0 when unstated), along its axis:
+ *
+ * - `count` alone: that many openings, spread evenly, the first at the start margin and the last
+ *   at the end margin (one alone sits in the middle);
+ * - `spacing` alone: an opening every `spacing` metres, centre to centre, from the start margin,
+ *   as many as fit before the end margin;
+ * - both: `count` openings `spacing` apart, from the start margin.
+ *
+ * `floors` names the floors above to repeat it on: on each, the openings stand where they stand on
+ * this wall, on the wall in the same line. Optional and never defaulted (version 1).
+ */
+export const OpeningPatternSchema = z
+  .object({
+    id: text('id'),
+    wall: text('id'),
+    opening: PatternOpeningSchema,
+    count: z.number().int().positive().max(PARTS_MAX).optional(),
+    spacing: finite().positive().optional(),
+    margins: z.object({ start: finite().nonnegative().optional(), end: finite().nonnegative().optional() }).optional(),
+    floors: z.array(text('id').pipe(z.string().min(1))).max(PATTERN_FLOORS_MAX).optional(),
+  })
+  .superRefine((pattern, ctx) => {
+    if (pattern.count === undefined && pattern.spacing === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['count'], message: 'needs a count, a spacing or both: how many openings, or how far apart' })
+    }
+  })
 
 export const ReferenceImageSchema = z.object({
   // Path relative to the project directory
@@ -305,6 +1339,56 @@ export const ReferenceImageSchema = z.object({
   // showing the previous picture until a reload.
   updatedAt: finite().optional(),
 })
+
+/** LVL-3: the most points a stair's walking line may have: a foot, a head and the turns between. */
+export const STAIR_RUN_MAX = 64
+
+/**
+ * LVL-3 (decided in LVL-2): a stair is a designed object, stated once across the two floors it
+ * joins. The plan says what is meant (where it starts and ends, how wide it is, and the line a
+ * person walks up it) and Grid works out the rest: the rise from the floors' levels (LVL-1), the
+ * number of risers, their height, the going and the pitch (`planStairs` in the geometry core),
+ * and which room it leaves from and arrives in, which joins the two floors for the way-out check.
+ * Optional and never defaulted, so a plan written before LVL-3 reads with no key added (version 1).
+ */
+/**
+ * A straight stair said by its two ends, `start` and `end`, as the lab's agents first wrote one
+ * (lab H-1, h01a), is read as the walking line `[start, end]`. Only when it states no `run`.
+ */
+export function withRunFromEnds(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const stair = raw as Record<string, unknown>
+  if (stair.run !== undefined || stair.start === undefined || stair.end === undefined) return raw
+  const { start, end, ...rest } = stair
+  return { ...rest, run: [start, end] }
+}
+
+export const StairSchema = z.preprocess(withRunFromEnds, z.object({
+  id: text('id'),
+  name: text('name').optional(),
+  // The floor the walking line starts on and the floor it ends on. Either may be the higher.
+  from: text('id').pipe(z.string().min(1)),
+  to: text('id').pipe(z.string().min(1)),
+  // Metres: the width of the flight, measured across the walking line, which runs down its middle.
+  width: finite().positive(),
+  // The walking line, in plan coordinates (C4): from the edge of the stair on `from` (the middle
+  // of its first riser there) to its edge on `to`. A straight flight has two points; each point
+  // between is a turn, with a square landing as wide as the flight centred on it. A straight
+  // stair may say its two points as `start` and `end` instead (`withRunFromEnds`).
+  run: z
+    .array(Vec2)
+    .min(2)
+    .superRefine((list, ctx) => {
+      if (list.length <= STAIR_RUN_MAX) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `has ${list.length.toLocaleString('en-US')} points; a stair's walking line may have at most ${STAIR_RUN_MAX}`,
+      })
+    }),
+  // How many risers, when the design has chosen. Unstated, Grid works it out from the rise and
+  // the walking line's length. Optional and never defaulted.
+  risers: z.number().int().positive().optional(),
+}))
 
 /**
  * CNT-12: the kinds an item may be in this version. CNT-11 decided fixtures now, because the
@@ -429,40 +1513,663 @@ export const SketchItemSchema = z
     }
   })
 
+/** CNT-3 (C7): which way +Y runs on the drawing, with +X to the right. `up` is C4. */
+export const Y_AXES = ['up', 'down'] as const
+export type YAxis = (typeof Y_AXES)[number]
+
+/**
+ * CNT-3 (C7): the front of the building: the outside face of a wall, or of the wall an opening
+ * (the front door) is in. Exactly one of the two.
+ */
+export const FrontSchema = z
+  .object({
+    wall: text('id').pipe(z.string().min(1)).optional(),
+    opening: text('id').pipe(z.string().min(1)).optional(),
+  })
+  .superRefine((front, ctx) => {
+    if ((front.wall === undefined) === (front.opening === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['wall'], message: 'names the front by one part: wall, a wall\'s id, or opening, an opening\'s id' })
+    }
+  })
+
+/**
+ * BRF-3 (C13): what the site holds on the ground: fences, gates, paths, paving, trees and pools.
+ * Each kind is the site's own, never a wall, a room or a fixture: it adds no wall, no area, no
+ * note and no storey height, and is drawn in its own style on the ground floor's plan.
+ */
+export const SITE_THING_KINDS = ['fence', 'gate', 'path', 'paving', 'tree', 'pool'] as const
+export type SiteThingKind = (typeof SITE_THING_KINDS)[number]
+
+/**
+ * BRF-3 (C13): one thing on the site. A `fence` is a line through `points` (two or more), a
+ * `gate` the line between its two posts (two points), a `path` a line (two or more) with its
+ * `width`, `paving` and a `pool` a closed shape (three or more points), and a `tree` its trunk
+ * `at` a point, with the `canopy` across its crown if known. `height` (a fence's, a gate's, a
+ * tree's) is drawn only: it is never a storey's or a roof's. `label` is the person's word for it.
+ */
+export const SiteThingSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)),
+    kind: z.enum(SITE_THING_KINDS),
+    points: z.array(Vec2).max(BOUNDARY_MAX).optional(),
+    at: Vec2.optional(),
+    width: finite().positive().optional(),
+    canopy: finite().positive().optional(),
+    height: finite().positive().optional(),
+    label: text('name').optional(),
+  })
+  .superRefine((thing, ctx) => {
+    const need = (ok: boolean, message: string, path: string): void => {
+      if (!ok) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `a ${thing.kind} needs ${message}`, path: [path] })
+    }
+    const points = thing.points?.length ?? 0
+    if (thing.kind === 'fence') need(points >= 2, 'points, two or more, along its line', 'points')
+    if (thing.kind === 'gate') need(points === 2, 'points, its two posts', 'points')
+    if (thing.kind === 'path') {
+      need(points >= 2, 'points, two or more, along its middle', 'points')
+      need(thing.width !== undefined, 'its width', 'width')
+    }
+    if (thing.kind === 'paving' || thing.kind === 'pool') need(points >= 3, 'points, three or more, round its edge', 'points')
+    if (thing.kind === 'tree') need(thing.at !== undefined, 'at, where its trunk stands', 'at')
+  })
+
+/** BRF-3: who a set-back is from, in WRT-6's words (`MARK_SOURCES`): `given` by the person, or `assumed`, for them to confirm. */
+export const SETBACK_SOURCES = ['given', 'assumed'] as const
+
+/**
+ * BRF-3 (C13): a set-back the person asked for: how far the building is to stand `from` the
+ * boundary: `all` its edges, the `street` edges, or one edge by its number. A figure of the
+ * person's own, never a code's: Grid compares the drawing with it and applies no figure of its
+ * own. `source` says whether the person gave it or it was assumed for them to confirm.
+ */
+export const SetbackSchema = z.object({
+  from: z.union([z.enum(['all', 'street']), z.number().int().min(1)]),
+  distance: finite().min(0),
+  source: z.enum(SETBACK_SOURCES).optional(),
+})
+
+/**
+ * BRF-3: how many edges a boundary has: one per point, the last running back to the first. A
+ * last point written on the first again closes the shape and adds no edge.
+ */
+export function boundaryEdgeCount(points: readonly (readonly [number, number])[]): number {
+  const first = points[0]
+  const last = points.at(-1)
+  const closed = points.length > 1 && first !== undefined && last !== undefined && first[0] === last[0] && first[1] === last[1]
+  return closed ? points.length - 1 : points.length
+}
+
+/**
+ * CNT-3 (C7): where the building sits. `origin` is a point of the plan, in metres; `latitude` and
+ * `longitude` (degrees, north and east positive, given together) and `elevation` (metres above
+ * sea level) say where that point is on the earth. Each is optional, and a field Grid does not
+ * hold is named (MSG-4); nothing is placed on the earth until `origin` is stated.
+ *
+ * HND-11 (lab MS-12): a plan may keep survey or map coordinates as they are and state, as
+ * `origin`, a point near the building: the far-from-origin check measures from it, and every export
+ * writes the geometry from it, near zero, with the origin as its offset.
+ *
+ * LVL-4: `ground` is the level of the ground outside, in metres from the ground floor's floor
+ * level (0), the same datum as a floor's `elevation` (not `site.elevation`, which is above sea
+ * level): -0.15 for a floor 15 cm above the ground. It needs no `origin`. With it stated, a door
+ * or window in an outside wall that lies below the ground is named, and the ground floor is the
+ * floor nearest it. One level for the whole site: a ground level for each wall, for a slope,
+ * comes later.
+ *
+ * BRF-3 (C13): `boundary`, `streets`, `setbacks` and `things`, the plot and what is on it.
+ * A fault in one street, set-back or thing leaves that one out alone (`readParts.ts`).
+ */
+export const SiteSchema = z
+  .object({
+    origin: Vec2.optional(),
+    latitude: finite().min(-90).max(90).optional(),
+    longitude: finite().min(-180).max(180).optional(),
+    elevation: finite().optional(),
+    ground: finite().optional(),
+    // COD-3: the country the building will be built in, by its name or its two- or three-letter
+    // code (ISO 3166-1), as Grid's list (`places.ts`) has it. It picks the figures the checks
+    // apply; with none stated, no figure is applied. Kept as written; a report names the place
+    // from the list, never from this text.
+    country: placeText().optional(),
+    // BRF-3 (C13): the plot's boundary, its corners in plan metres, in order round it; edge 1
+    // runs from the first point to the second, and the last edge back to the first point.
+    boundary: z.array(Vec2).min(3).max(BOUNDARY_MAX).optional(),
+    // BRF-3: the edges of the boundary that are on a street, by number.
+    streets: z.array(z.number().int().min(1)).max(BOUNDARY_MAX).optional(),
+    // BRF-3: the set-backs the person asked for, their own figures.
+    setbacks: z.array(SetbackSchema).max(BOUNDARY_MAX).optional(),
+    // BRF-3: the site's own things: fences, gates, paths, paving, trees and pools.
+    things: z.array(SiteThingSchema).max(PARTS_MAX).optional(),
+  })
+  .superRefine((site, ctx) => {
+    const say = (path: (string | number)[], message: string): void => ctx.addIssue({ code: z.ZodIssueCode.custom, path, message })
+    if ((site.latitude === undefined) !== (site.longitude === undefined)) {
+      say([site.latitude === undefined ? 'latitude' : 'longitude'], 'needs latitude and longitude together: one alone places nothing')
+    }
+    const edges = site.boundary === undefined ? 0 : boundaryEdgeCount(site.boundary)
+    if (site.boundary !== undefined && edges < 3) say(['boundary'], 'has fewer than three corners once its last point, which closes it, is set aside')
+    const edgeProblem = (edge: number): string | null =>
+      site.boundary === undefined ? 'names an edge, but the site states no boundary' : edge > edges ? `names edge ${edge}, but the boundary has ${edges} edges` : null
+    const streets = new Set<number>()
+    site.streets?.forEach((edge, i) => {
+      const problem = edgeProblem(edge)
+      if (problem !== null) say(['streets', i], problem)
+      else if (streets.has(edge)) say(['streets', i], `names edge ${edge} twice`)
+      else streets.add(edge)
+    })
+    const asked = new Set<string>()
+    site.setbacks?.forEach((setback, i) => {
+      const key = String(setback.from)
+      const problem = typeof setback.from === 'number' ? edgeProblem(setback.from) : setback.from === 'street' && streets.size === 0 ? 'is from the street, but the site names no street edge' : site.boundary === undefined ? 'is from the boundary, but the site states no boundary' : null
+      if (problem !== null) say(['setbacks', i, 'from'], problem)
+      else if (asked.has(key)) say(['setbacks', i, 'from'], `asks a second set-back from ${typeof setback.from === 'number' ? `edge ${key}` : key === 'all' ? 'every edge' : 'the street'}: give one`)
+      else asked.add(key)
+    })
+    const ids = new Set<string>()
+    site.things?.forEach((thing, i) => {
+      if (ids.has(thing.id)) say(['things', i, 'id'], 'is the id of another of the site\'s things: give each its own')
+      ids.add(thing.id)
+    })
+  })
+
+/**
+ * WRT-6 (lab WR-15, AE-4): where a value came from. `given` by the person, `measured` (taped or
+ * lasered), `scanned` (from a capture of the building) or `assumed` by whoever wrote the plan.
+ */
+export const MARK_SOURCES = ['given', 'measured', 'scanned', 'assumed'] as const
+export type MarkSource = (typeof MARK_SOURCES)[number]
+
+/** WRT-6: the parts a mark can be on, and the values of each it can name. */
+export const MARKED_VALUES = {
+  wall: ['start', 'end', 'thickness', 'height', 'kind'],
+  room: ['name', 'use', 'height', 'floorOffset'],
+  opening: ['type', 'offset', 'width', 'height', 'sill', 'hinge', 'swing'],
+  floor: ['name', 'level', 'elevation', 'height', 'slab'],
+  item: ['kind', 'at', 'size', 'height', 'turn'],
+} as const satisfies Record<string, readonly string[]>
+export type MarkedPart = keyof typeof MARKED_VALUES
+export const MARKED_PARTS = Object.keys(MARKED_VALUES) as MarkedPart[]
+
+/** The values a mark's tolerance can be on: lengths. A word (a kind, a use, a name) has none. */
+export const MARKED_LENGTHS: ReadonlySet<string> = new Set(['start', 'end', 'thickness', 'height', 'floorOffset', 'offset', 'width', 'sill', 'elevation', 'slab', 'at', 'size'])
+
+/**
+ * WRT-6: a mark on one value of one part, or on the part as a whole (no `value`): where it came
+ * from and, where that matters, how sure it is. `tolerance` is in metres, give or take, on each
+ * length the mark covers: a scanned wall within 0.02 m. A mark on a value wins over a mark on its
+ * part. The marks are one list beside the parts, so no part and no number changes shape: a plan
+ * with none reads exactly as before. Optional and never defaulted (version 1).
+ */
+export const MarkSchema = z
+  .object({
+    part: z.enum(MARKED_PARTS as [MarkedPart, ...MarkedPart[]]),
+    id: text('id').pipe(z.string().min(1)),
+    value: text('id').pipe(z.string().min(1)).optional(),
+    source: z.enum(MARK_SOURCES),
+    tolerance: finite().positive().optional(),
+  })
+  .superRefine((mark, ctx) => {
+    const values: readonly string[] = MARKED_VALUES[mark.part]
+    if (mark.value !== undefined && !values.includes(mark.value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['value'], message: `names a value a ${mark.part} mark cannot be on: one of ${values.join(', ')}, or none for the whole ${mark.part}` })
+    }
+    if (mark.tolerance !== undefined && mark.value !== undefined && !MARKED_LENGTHS.has(mark.value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tolerance'], message: `is on ${mark.value}, which is not a length: a tolerance is in metres, on a length` })
+    }
+  })
+
+/** C11: a point in plan metres, z up from the ground floor's floor level. */
+const Vec3 = z.tuple([finite(), finite(), finite()])
+
+/** VEW-3 (C11): what a saved view's bearing is read from. */
+export const VIEW_BEARING_FROM = ['north', 'plan up'] as const
+
+/**
+ * VEW-3 (C11): a named view, saved with the plan. The setting (`target` to `cut`) is what Grid
+ * reads; `floors` and the BCF camera (`position` to `aspectRatio`) are what it worked out, for
+ * other programs. Optional and never defaulted (version 1).
+ */
+export const ViewSchema = z
+  .object({
+    name: text('name').pipe(z.string().min(1)),
+    target: z.object({
+      room: text('id').pipe(z.string().min(1)).optional(),
+      point: Vec3,
+    }),
+    bearing: finite().min(0).lt(360),
+    bearingFrom: z.enum(VIEW_BEARING_FROM),
+    north: finite().optional(),
+    tilt: finite(),
+    distance: finite(),
+    lens: z.object({
+      focalLength: finite(),
+      sensor: z.object({ width: finite().positive(), height: finite().positive() }),
+    }),
+    cut: text('id').pipe(z.string().min(1)).optional(),
+    floors: parts(text('id'), 'floors').optional(),
+    position: Vec3,
+    direction: Vec3,
+    up: Vec3,
+    fieldOfView: finite().positive().lt(180),
+    aspectRatio: finite().positive(),
+  })
+  .superRefine((view, ctx) => {
+    const most = limit('cameraTilt')
+    if (Math.abs(view.tilt) > most) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tilt'], message: `is more than ${most} degrees from level: a camera looking straight down or up has no up` })
+    if (!(view.distance >= limit('cameraClosest'))) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['distance'], message: `is less than ${limit('cameraClosest')} m, the least distance a camera may stand from what it is pointed at` })
+    const [shortest, longest] = [limit('lensShortest'), limit('lensLongest')]
+    if (!(view.lens.focalLength >= shortest && view.lens.focalLength <= longest)) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lens', 'focalLength'], message: `takes a focal length from ${shortest} to ${longest} mm` })
+    if (view.bearingFrom === 'north' && view.north === undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['north'], message: 'is needed when the bearing is from north: the north it was read from' })
+  })
+
+/**
+ * HND-11 (C15, lab WR-14): a length taped on site, kept beside the drawing as a check. `room` is
+ * the room it was taped in; then either `wall`, the room's side along that wall (its inside face,
+ * corner to corner), or `from` and `to`, two corners of the room, each named by the two walls
+ * that meet there (a diagonal, or any corner to corner). `length` is the length taped, in
+ * metres; `tolerance`, how far the drawing may be from it and still agree (unstated,
+ * `tapedAgree`). `id` is optional, for the person's own reference. Nothing is drawn or placed
+ * from it: every run says it taped against drawn.
+ */
+export const TapedSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)).optional(),
+    room: text('id').pipe(z.string().min(1)),
+    wall: text('id').pipe(z.string().min(1)).optional(),
+    from: z.tuple([text('id').pipe(z.string().min(1)), text('id').pipe(z.string().min(1))]).optional(),
+    to: z.tuple([text('id').pipe(z.string().min(1)), text('id').pipe(z.string().min(1))]).optional(),
+    length: finite().positive(),
+    tolerance: finite().positive().optional(),
+  })
+  .superRefine((taped, ctx) => {
+    const corners = taped.from !== undefined || taped.to !== undefined
+    if (taped.wall !== undefined && corners) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['wall'], message: 'names a side and corners at once: give wall, or from and to' })
+    } else if (taped.wall === undefined && !corners) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['wall'], message: 'says neither what was taped along nor between: give wall, the side along that wall, or from and to, two corners' })
+    } else if (corners && (taped.from === undefined || taped.to === undefined)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [taped.from === undefined ? 'from' : 'to'], message: 'needs both corners, from and to, each named by the two walls that meet there' })
+    }
+  })
+
+/**
+ * CNT-17 (C14): a route that needs to be accessible: `to` a room, by id, and `from` a room or,
+ * unstated, from the entrance (the front door the plan names, else its doors to the outside on
+ * the ground floor).
+ */
+export const AccessibleRouteSchema = z.object({
+  from: text('id').pipe(z.string().min(1)).optional(),
+  to: text('id').pipe(z.string().min(1)),
+})
+
+/**
+ * CNT-17 (C14): the rooms and routes that need to be accessible. A mark of what is needed, never
+ * a finding. Optional and never defaulted (version 1).
+ */
+export const AccessibleSchema = z.object({
+  rooms: parts(text('id').pipe(z.string().min(1)), 'rooms').optional(),
+  routes: parts(AccessibleRouteSchema, 'routes').optional(),
+})
+
+/**
+ * CNT-4 (C18): a kind of flat, stated once and placed many times: an id the flats name in their
+ * `type`, and a name to read it by ("One bedroom"). Optional and never defaulted (version 1).
+ */
+export const FlatTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+})
+
+/**
+ * CNT-4 (C18): a flat (a dwelling, a unit): an id, a name, the type it is (an id in `flatTypes`),
+ * its rooms by id (on one floor or several: a duplex), and whether it is its type's mirror image.
+ * A group of rooms, never a room. Optional and never defaulted (version 1).
+ */
+export const FlatSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  type: text('id').pipe(z.string().min(1)).optional(),
+  rooms: parts(text('id').pipe(z.string().min(1)), 'rooms').pipe(z.array(z.string()).min(1, { message: 'A flat lists at least one room' })),
+  mirrored: z.boolean().optional(),
+})
+
+/** CNT-15 (C24): the one word a wall type's height may be instead of metres: as high as a wall on its floor that states none. */
+export const WALL_TYPE_HEIGHTS = ['floor'] as const
+
+/** CNT-15: a material, by the person's own name for it ("Brick", "Glass", "Limestone"). */
+const materialName = () => text('name').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the material out instead' }))
+
+/**
+ * CNT-15 (C24): a named wall type. It fills what a wall that names it leaves out: its thickness,
+ * its height (metres, or `floor`: as high as a wall on its floor that states none) and its kind.
+ * `glazed` says the wall is glass (a glazed partition, a curtain wall); `material` is what it is
+ * made of, which the IFC writes, as one layer. Layered build-ups are not held.
+ */
+export const WallTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').pipe(z.string().min(1)),
+  thickness: finite().positive().optional(),
+  height: z.union([finite().positive(), z.enum(WALL_TYPE_HEIGHTS)]).optional(),
+  kind: WallKindSchema.optional(),
+  glazed: z.boolean().optional(),
+  material: materialName().optional(),
+})
+
+/**
+ * CNT-15 (C24): a named door type. It fills what a door that names it leaves out: its width and
+ * height (the hole in the wall, as a door states them), its kind (C20) and the part that opens.
+ */
+export const DoorTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').pipe(z.string().min(1)),
+  width: finite().positive().optional(),
+  height: finite().positive().optional(),
+  kind: z.enum(DOOR_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
+  glazed: z.boolean().optional(),
+  material: materialName().optional(),
+})
+
+/** CNT-15 (C24): a named window type: a door type's fields, a window's kinds, and its sill. */
+export const WindowTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').pipe(z.string().min(1)),
+  width: finite().positive().optional(),
+  height: finite().positive().optional(),
+  sill: finite().nonnegative().optional(),
+  kind: z.enum(WINDOW_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
+  glazed: z.boolean().optional(),
+  material: materialName().optional(),
+})
+
+const typeId = () => text('id').pipe(z.string().min(1))
+
+/**
+ * CNT-15 (C24): the types a part takes when it names none: a wall by its kind (unstated, the
+ * kind a wall reads as, interior), a door and a window. The template an office keeps.
+ */
+export const TypeDefaultsSchema = z.object({
+  walls: z.object(Object.fromEntries(WallKindSchema.options.map((kind) => [kind, typeId().optional()])) as Record<WallKind, z.ZodOptional<ReturnType<typeof typeId>>>).optional(),
+  door: typeId().optional(),
+  window: typeId().optional(),
+})
+
+/** CNT-15 (C24): the plan's named types, and the defaults. */
+export const PartTypesSchema = z.object({
+  walls: parts(WallTypeSchema, 'wall types').optional(),
+  doors: parts(DoorTypeSchema, 'door types').optional(),
+  windows: parts(WindowTypeSchema, 'window types').optional(),
+  defaults: TypeDefaultsSchema.optional(),
+})
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** CNT-15: the types of one list that the schema reads, by id; the first of an id wins, as `validatePlan` says. */
+function typesById<T extends { id: string }>(list: unknown, schema: z.ZodType<T>): Map<string, T> {
+  const out = new Map<string, T>()
+  if (!Array.isArray(list)) return out
+  for (const entry of list) {
+    const read = schema.safeParse(entry)
+    if (read.success && !out.has(read.data.id)) out.set(read.data.id, read.data)
+  }
+  return out
+}
+
+/**
+ * CNT-15 (C24): each wall, door and window filled from its type, done on the file as read before
+ * anything else, so every reader sees a wall's thickness and a door's size wherever they came from.
+ * A value the part states is kept; what the type filled is marked (`FROM_TYPE`), and the part's
+ * schema records it in `typed`. A part that names no type takes the default for it, and its type's
+ * id is then filled too. A type that cannot be read, or an id no type has, fills nothing, and
+ * `validatePlan` says so. A dividing line takes no type. An opening pattern's opening is filled the
+ * same way, so every opening it makes is.
+ */
+export function withTypes(raw: unknown): unknown {
+  if (!isRecord(raw) || !isRecord(raw['types'])) return raw
+  const types = raw['types']
+  const walls = typesById(types['walls'], WallTypeSchema)
+  const doors = typesById(types['doors'], DoorTypeSchema)
+  const windows = typesById(types['windows'], WindowTypeSchema)
+  const read = TypeDefaultsSchema.safeParse(types['defaults'])
+  const defaults = read.success ? read.data : {}
+  if (walls.size === 0 && doors.size === 0 && windows.size === 0) return raw
+  const out: Record<string, unknown> = { ...raw }
+  if (Array.isArray(raw['walls']) && walls.size > 0) {
+    out['walls'] = raw['walls'].map((wall) => {
+      if (!isRecord(wall) || (wall as Record<symbol, unknown>)[FROM_TYPE] !== undefined || wall['virtual'] === true) return wall
+      const named = typeof wall['wallType'] === 'string' ? wall['wallType'] : undefined
+      const kind = typeof wall['kind'] === 'string' && (WallKindSchema.options as readonly string[]).includes(wall['kind']) ? (wall['kind'] as WallKind) : 'interior'
+      const id = named ?? defaults.walls?.[kind]
+      const type = id === undefined ? undefined : walls.get(id)
+      if (type === undefined) return wall
+      const filled: TypedValue[] = []
+      const next: Record<string | symbol, unknown> = { ...wall }
+      const fill = (key: TypedValue, value: unknown): void => {
+        if (value === undefined || wall[key] !== undefined) return
+        next[key] = value
+        filled.push(key)
+      }
+      fill('wallType', type.id)
+      fill('thickness', type.thickness)
+      fill('height', typeof type.height === 'number' ? type.height : undefined)
+      fill('kind', type.kind)
+      next[FROM_TYPE] = filled
+      return next
+    })
+  }
+  const fillOpening = (opening: Record<string, unknown>, mark: boolean): Record<string, unknown> => {
+    const door = opening['type'] === 'door'
+    const window = opening['type'] === 'window'
+    if (!door && !window) return opening
+    const field = door ? 'doorType' : 'windowType'
+    const named = typeof opening[field] === 'string' ? (opening[field] as string) : undefined
+    const id = named ?? (door ? defaults.door : defaults.window)
+    const type = id === undefined ? undefined : door ? doors.get(id) : windows.get(id)
+    if (type === undefined) return opening
+    const filled: TypedValue[] = []
+    const next: Record<string | symbol, unknown> = { ...opening }
+    const fill = (key: TypedValue, value: unknown): void => {
+      if (value === undefined || opening[key] !== undefined) return
+      next[key] = value
+      filled.push(key)
+    }
+    fill(field, type.id)
+    fill('width', type.width)
+    fill('height', type.height)
+    if ('sill' in type) fill('sill', type.sill)
+    fill('kind', type.kind)
+    fill('opens', type.opens)
+    if (mark) next[FROM_TYPE] = filled
+    return next
+  }
+  if (Array.isArray(raw['openings']) && (doors.size > 0 || windows.size > 0)) {
+    out['openings'] = raw['openings'].map((opening) => (!isRecord(opening) || (opening as Record<symbol, unknown>)[FROM_TYPE] !== undefined ? opening : fillOpening(opening, true)))
+  }
+  if (Array.isArray(raw['patterns']) && (doors.size > 0 || windows.size > 0)) {
+    out['patterns'] = raw['patterns'].map((pattern) => (!isRecord(pattern) || !isRecord(pattern['opening']) ? pattern : { ...pattern, opening: fillOpening(pattern['opening'], false) }))
+  }
+  return out
+}
+
+/**
+ * CNT-6 (C23): a building of the plan: an id, a name, and the floors that are its own, by id. A
+ * floor is in one building at most; a floor no building names is in none. A named group of
+ * floors, never a floor: each building stacks its own floors and has its own areas and height
+ * (`geometry/buildings.ts`). Ids that are no floor are named and left out, never refused.
+ */
+export const PlanBuildingSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  floors: parts(text('id').pipe(z.string().min(1)), 'floors').pipe(z.array(z.string()).min(1, { message: english(said('read.building.floors')) })),
+})
+
+/**
+ * CNT-6 (C23): a shape drawn round the plan for context: a neighbour's house, the hall a stand
+ * stands in. Its outline's corners in plan metres, in order round it, either way round, on a floor
+ * (unstated, the ground floor), with a name and a height. Drawn only: it is never a wall or a room,
+ * and is in no measure, check or count.
+ */
+export const ContextShapeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  floor: text('id').pipe(z.string().min(1)).optional(),
+  points: z
+    .array(Vec2)
+    .min(3)
+    .max(BOUNDARY_MAX)
+    .superRefine((points, ctx) => {
+      const open = boundaryEdgeCount(points) === points.length ? points : points.slice(0, -1)
+      const problem = ringProblem(open.map(([x, y]) => ({ x, y })))
+      if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
+    }),
+  height: finite().positive().optional(),
+})
+
+/** CNT-16 (C25): the shapes a column may be. */
+export const COLUMN_SHAPES = ['square', 'round'] as const
+export type ColumnShape = (typeof COLUMN_SHAPES)[number]
+
+/**
+ * CNT-16 (C25): a column, a thing of its own: never a wall, a room or a fixture. `width` is a
+ * square column's side along its own x and a round one's diameter; `depth` a square column's side
+ * along its own y (unstated, as wide). `at` is its middle, `turn` turns a square one about it in
+ * degrees, counter-clockwise. It stands on `floor` (C5: unstated, the ground floor) and may rise
+ * `through` floors above it, as a wall does (C19). `height` is how high it stands above the floor
+ * it rises through; unstated, it is that floor's storey height. `label` is what the drawing and
+ * an export call it.
+ */
+export const ColumnSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)),
+    shape: z.enum(COLUMN_SHAPES),
+    width: finite().positive(),
+    depth: finite().positive().optional(),
+    at: Vec2,
+    turn: finite().optional(),
+    height: finite().positive().optional(),
+    floor: text('id').pipe(z.string().min(1)).optional(),
+    through: text('id').pipe(z.string().min(1)).optional(),
+    label: text('name').optional(),
+  })
+  .superRefine((column, ctx) => {
+    if (column.shape === 'round' && column.depth !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['depth'], message: english(said('read.column.roundDepth')) })
+    }
+  })
+
+/**
+ * CNT-16 (C25): one set of a structural grid's lines: the `spacing` from each line to the next, in
+ * metres, and their `names`, one per line, in order. A set with no spacing is one line. At most
+ * `gridLinesMost` lines.
+ */
+export const GridLinesSchema = z
+  .object({
+    spacing: z.array(finite().positive()),
+    names: z.array(text('name').pipe(z.string().refine((value) => value.trim().length > 0, { message: english(said('read.grid.blankName')) }))).optional(),
+  })
+  .superRefine((set, ctx) => {
+    if (set.spacing.length + 1 > limit('gridLinesMost')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['spacing'], message: english(said('read.grid.tooMany', { most: limit('gridLinesMost') })) })
+    }
+    if (set.names !== undefined && set.names.length !== set.spacing.length + 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['names'], message: english(said('read.grid.namesCount', { lines: set.spacing.length + 1, names: set.names.length })) })
+    }
+  })
+
+/**
+ * CNT-16 (C25): a named structural grid. Its lines are set out from `origin`, turned by `turn`
+ * (degrees, counter-clockwise): the `x` lines run along the grid's y, the first through `origin`,
+ * and the `y` lines along its x. Unnamed, x lines are numbered 1, 2, 3 and y lines lettered A, B,
+ * C. Drawn on the `floors` it names (unstated, every floor); in no measure or check. No two of its
+ * lines share a name.
+ */
+export const StructuralGridSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)),
+    name: text('name').optional(),
+    origin: Vec2,
+    turn: finite().optional(),
+    floors: parts(text('id').pipe(z.string().min(1)), 'floors').optional(),
+    x: GridLinesSchema,
+    y: GridLinesSchema,
+  })
+  .superRefine((grid, ctx) => {
+    const names = [...(grid.x.names ?? []), ...(grid.y.names ?? [])].map((value) => value.trim())
+    const twice = names.find((value, i) => names.indexOf(value) !== i)
+    if (twice !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: english(said('read.grid.sameName')) })
+  })
+
 /**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
- * as read, before the wall's own default (2.7 m) fills the gap, because after that a wall that
- * said 2.7 cannot be told from one that said nothing (lab AU3-6). A floor that states no
- * height, or a plan with no floor list, leaves every wall as it was.
+ * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
+ * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
+ * stated 2.7 can still be told from one that said nothing. A floor that states no height, or a
+ * plan with no floor list, leaves every wall as it was.
+ *
+ * LVL-6: on a floor that states its `roof`, such a wall rises to the roof instead: it takes the
+ * roof's top (its ridge, or a flat roof's eaves), and the roof cuts it to its slope. A gable drawn
+ * with no height is then the gable's shape. Its height is recorded as not stated all the same.
  */
 function withFloorHeights(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
   const plan = raw as Record<string, unknown>
   if (!Array.isArray(plan.floors) || !Array.isArray(plan.walls)) return raw
   const heights = new Map<string, number>()
+  const roofs = new Map<string, Roof>()
+  const seen = new Set<string>()
   for (const floor of plan.floors as unknown[]) {
     if (typeof floor !== 'object' || floor === null) continue
-    const { id, height } = floor as Record<string, unknown>
+    const { id, height, roof } = floor as Record<string, unknown>
     // The first entry wins, as in `planFloors`; a height the schema refuses is left to refuse.
-    if (typeof id !== 'string' || heights.has(id)) continue
+    if (typeof id !== 'string' || seen.has(id)) continue
+    seen.add(id)
     if (typeof height === 'number' && Number.isFinite(height) && height > 0) heights.set(id, height)
+    if (roof !== undefined) {
+      const read = RoofSchema.safeParse(roof)
+      if (read.success) roofs.set(id, read.data)
+    }
   }
-  if (heights.size === 0) return raw
+  if (heights.size === 0 && roofs.size === 0) return raw
+  const floorOfRaw = (w: Record<string, unknown>): string => (typeof w.floor === 'string' ? w.floor : DEFAULT_FLOOR_ID)
+  // LVL-5: a wall through floors stands as a wall of the floor it rises through.
+  const heightFloorOfRaw = (w: Record<string, unknown>): string => (typeof w.through === 'string' && seen.has(w.through) ? w.through : floorOfRaw(w))
+  const tops = new Map<string, number>()
+  for (const [id, roof] of roofs) {
+    const lines = (plan.walls as unknown[]).flatMap((wall) => {
+      if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return []
+      const w = wall as Record<string, unknown>
+      if (w.virtual === true || floorOfRaw(w) !== id || !isPair(w.start) || !isPair(w.end)) return []
+      // HND-11: a wall placed by its face frames the roof on its centre line, as it is read.
+      const [start, end] = isFace(w.face) ? centreFromFace(w.start, w.end, w.face, movingThickness(w), arcOf(w)) : [w.start, w.end]
+      return [{ start, end, outside: w.kind === 'exterior' }]
+    })
+    const outside = lines.filter((l) => l.outside)
+    const frame = roofFrame(outside.length > 0 ? outside : lines)
+    if (frame !== null) tops.set(id, roofTop(roof, frame))
+  }
   const walls = (plan.walls as unknown[]).map((wall) => {
     if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return wall
     const w = wall as Record<string, unknown>
     if (w.height !== undefined || w.virtual === true) return wall
-    const floor = typeof w.floor === 'string' ? w.floor : DEFAULT_FLOOR_ID
-    const height = heights.get(floor)
-    return height === undefined ? wall : { ...w, height }
+    const floor = heightFloorOfRaw(w)
+    const height = tops.get(floor) ?? heights.get(floor)
+    return height === undefined ? wall : { ...w, height, [HEIGHT_FROM_FLOOR]: true }
   })
   return { ...plan, walls }
 }
+
+const isPair = (value: unknown): value is [number, number] =>
+  Array.isArray(value) && value.length === 2 && value.every((v) => typeof v === 'number' && Number.isFinite(v))
 
 /** The plan's fields, as an object. Read a plan with `FloorPlanSchema`, which also applies `withFloorHeights`. */
 export const FloorPlanFieldsSchema = z.object({
   version: z.literal('1').default('1'),
   units: z.literal('m').default('m'),
+  // CNT-5: what kind of building the plan is (`BUILDING_TYPES`). A floor may say otherwise for
+  // itself (`Floor.building`). Optional and never defaulted: unstated, the plan does not say,
+  // and the figure checks run as they did before CNT-5 (version 1).
+  building: BuildingTypeSchema.optional(),
   // QAR-5: the project's own id, which the IFC builds every element's identity from (with the
   // element's kind, floor and id), so a re-export of the project is recognised as the same
   // model whatever the file is called. `grid init` writes it. Keep it, and the parts' ids,
@@ -471,11 +2178,20 @@ export const FloorPlanFieldsSchema = z.object({
   walls: parts(WallSchema, 'walls').default([]),
   rooms: parts(RoomSchema, 'rooms').default([]),
   openings: parts(OpeningSchema, 'openings').default([]),
+  // LVL-8 (C12): opening patterns, each expanded into plain openings before anything reads the
+  // plan (`expandPatterns`). Optional and never defaulted (version 1).
+  patterns: parts(OpeningPatternSchema, 'opening patterns').optional(),
   // C5: names and orders the floors. Advisory — a floor named only by a wall or
   // room still counts as a floor of the plan, so geometry can never become
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
   floors: parts(FloorSchema, 'floors').optional(),
+  // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
+  stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
+  // CNT-10 (C16): the plan this one is fitted out in, by its path from the project folder. Its
+  // walls and openings are read in as existing and never written back. Optional and never
+  // defaulted (version 1).
+  base: text('path').pipe(z.string().min(1)).optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
   items: parts(ItemSchema, 'items').optional(),
@@ -484,10 +2200,61 @@ export const FloorPlanFieldsSchema = z.object({
   title: text('name').optional(),
   annotations: parts(AnnotationSchema, 'annotations').optional(),
   sketch: parts(SketchItemSchema, 'sketch items').optional(),
+  // CNT-3 (C7): the plan's real north (degrees counter-clockwise from +Y), which way its y runs,
+  // its front and where it sits; LVL-4 adds the site's ground level (`site.ground`). Optional
+  // and never defaulted (version 1).
+  north: finite().optional(),
+  yAxis: z.enum(Y_AXES).optional(),
+  front: FrontSchema.optional(),
+  site: SiteSchema.optional(),
+  // WRT-6 (C8): where values came from, given, measured, scanned or assumed, and how sure each is
+  // (`MarkSchema`). Optional and never defaulted (version 1).
+  marks: parts(MarkSchema, 'marks').optional(),
+  // VEW-3 (C11): named views, each a camera saved with the plan (`ViewSchema`). Optional and never
+  // defaulted (version 1).
+  views: parts(ViewSchema, 'views').optional(),
+  // CNT-17 (C14): the rooms and routes that need to be accessible (`AccessibleSchema`). Optional
+  // and never defaulted (version 1).
+  accessible: AccessibleSchema.optional(),
+  // HND-11 (C15): lengths taped on site, kept as checks beside the drawing (`TapedSchema`).
+  // Optional and never defaulted (version 1).
+  taped: parts(TapedSchema, 'taped lengths').optional(),
+  // CNT-4 (C18): the flat types, each stated once (`FlatTypeSchema`), and the flats, each a group
+  // of rooms by id (`FlatSchema`). Optional and never defaulted (version 1).
+  flatTypes: parts(FlatTypeSchema, 'flat types').optional(),
+  flats: parts(FlatSchema, 'flats').optional(),
+  // CNT-6 (C23): the plan's buildings, each a named group of its own floors (`PlanBuildingSchema`),
+  // and shapes drawn round it for context, in no measure (`ContextShapeSchema`). Optional and
+  // never defaulted (version 1).
+  buildings: parts(PlanBuildingSchema, 'buildings').optional(),
+  context: parts(ContextShapeSchema, 'context shapes').optional(),
+  // CNT-15 (C24): the named wall, door and window types the parts name, and the defaults
+  // (`PartTypesSchema`). Optional and never defaulted (version 1).
+  types: PartTypesSchema.optional(),
+  // CNT-16 (C25): the columns, each a thing of its own (`ColumnSchema`), and the structural grids,
+  // each its named lines (`StructuralGridSchema`). Optional and never defaulted (version 1).
+  columns: parts(ColumnSchema, 'columns').optional(),
+  grids: parts(StructuralGridSchema, 'structural grids').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
   // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  // WRT-7: how the person reads lengths and areas: the unit, the area unit, the decimal mark and
+  // the precision (`types/units.ts`). It never changes a stored number: the file is in metres.
+  // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  // MSG-11: `language` is the language Grid writes its words in for this plan (`en`, `es`); a
+  // language with a decimal comma writes one unless `decimal` says otherwise. With a language,
+  // `length` may be left out: then lengths are in metres.
+  display: z
+    .object({
+      length: z.enum(['m', 'cm', 'mm', 'ft-in']).optional(),
+      language: z.enum(LANGUAGES).optional(),
+      area: z.enum(['m2', 'ft2']).optional(),
+      decimal: z.enum(['point', 'comma']).optional(),
+      precision: z.number().int().min(0).max(5).optional(),
+    })
+    .optional()
+    .catch(undefined),
   written: z
     .object({
       from: z.literal('rooms'),
@@ -498,21 +2265,57 @@ export const FloorPlanFieldsSchema = z.object({
     .catch(undefined),
 })
 
-export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSchema)
+// CNT-15: the types fill first, so a wall's type height is stated before its floor's is taken.
+export const FloorPlanSchema = z.preprocess((raw) => withFloorHeights(withTypes(raw)), FloorPlanFieldsSchema)
 
 export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
+export type Phase = z.infer<typeof PhaseSchema>
 export type Wall = z.infer<typeof WallSchema>
+export type WallArc = z.infer<typeof WallArcSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
+export type RoomTenure = z.infer<typeof RoomTenureSchema>
+export type OutdoorKind = z.infer<typeof OutdoorKindSchema>
 export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
+export type OpeningPattern = z.infer<typeof OpeningPatternSchema>
+export type PatternOpening = z.infer<typeof PatternOpeningSchema>
+export type Stair = z.infer<typeof StairSchema>
+export type Ceiling = z.infer<typeof CeilingSchema>
+export type Roof = z.infer<typeof RoofSchema>
+export type Rooflight = z.infer<typeof RooflightSchema>
+export type RoofShape = (typeof ROOF_SHAPES)[number]
+export type LoweredZone = z.infer<typeof LoweredZoneSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
+export type OpeningPart = z.infer<typeof OpeningPartSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type Annotation = z.infer<typeof AnnotationSchema>
 export type SketchItem = z.infer<typeof SketchItemSchema>
+export type Front = z.infer<typeof FrontSchema>
+export type Site = z.infer<typeof SiteSchema>
+export type SiteThing = z.infer<typeof SiteThingSchema>
+export type Setback = z.infer<typeof SetbackSchema>
+export type Mark = z.infer<typeof MarkSchema>
+export type View = z.infer<typeof ViewSchema>
+export type Accessible = z.infer<typeof AccessibleSchema>
+export type AccessibleRoute = z.infer<typeof AccessibleRouteSchema>
+export type Taped = z.infer<typeof TapedSchema>
+export type FlatType = z.infer<typeof FlatTypeSchema>
+export type Flat = z.infer<typeof FlatSchema>
+export type PlanBuilding = z.infer<typeof PlanBuildingSchema>
+export type ContextShape = z.infer<typeof ContextShapeSchema>
+export type Column = z.infer<typeof ColumnSchema>
+export type StructuralGrid = z.infer<typeof StructuralGridSchema>
+export type GridLines = z.infer<typeof GridLinesSchema>
+export type BeyondWall = (typeof BEYOND_WALL)[number]
+export type WallType = z.infer<typeof WallTypeSchema>
+export type DoorType = z.infer<typeof DoorTypeSchema>
+export type WindowType = z.infer<typeof WindowTypeSchema>
+export type PartTypes = z.infer<typeof PartTypesSchema>
+export type Finishes = z.infer<typeof FinishesSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

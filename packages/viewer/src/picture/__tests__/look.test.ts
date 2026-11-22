@@ -36,6 +36,9 @@ const TOKEN_OF: Record<Exclude<keyof PlanLook, 'font'>, string> = {
   room: '--plan-room',
   wall: '--plan-wall',
   wallExterior: '--plan-wall-exterior',
+  // SHT-10: the inside walls' and the partitions' fills.
+  wallInside: '--plan-wall-inside',
+  wallPartition: '--plan-wall-partition',
   virtual: '--plan-virtual',
   window: '--plan-window',
   label: '--plan-label',
@@ -67,6 +70,12 @@ describe('the picture look', () => {
     expect(number(at('opening').get('stroke-width'))).toBe(LINE_PX.opening)
     expect(number(at('jamb').get('stroke-width'))).toBe(LINE_PX.jamb)
     expect(number(at('step').get('stroke-width'))).toBe(LINE_PX.step)
+    expect(number(at('stair-line').get('stroke-width'))).toBe(LINE_PX.stair)
+    // SHT-11: a lift's cross and a stair's break line, and the outline of the floor above, dashed.
+    expect(number(at('lift-cross').get('stroke-width'))).toBe(LINE_PX.stair)
+    expect(number(at('above-line').get('stroke-width'))).toBe(LINE_PX.above)
+    expect(at('above-line').get('stroke-dasharray')).toBe(LINE_PX.aboveDash.join(' '))
+    expect(rule(".canvas [data-part='stair'] [data-above='true']").get('stroke-dasharray')).toBe(LINE_PX.aboveDash.join(' '))
     expect(number(at('fixture-ring').get('stroke-width'))).toBe(LINE_PX.fixture)
     expect(number(at('fixture-line').get('stroke-width'))).toBe(LINE_PX.fixture)
     expect(number(at('door-leaf').get('stroke-width'))).toBe(LINE_PX.doorLeaf)
@@ -99,7 +108,7 @@ describe('the picture look', () => {
   })
 
   it('draws every line in plan.css at a fixed screen width, which the picture turns into metres', () => {
-    for (const part of ['virtual', 'opening', 'jamb', 'door-leaf', 'door-arc', 'dimension-line', 'extension', 'label-leader', 'undrawn-room']) {
+    for (const part of ['virtual', 'opening', 'jamb', 'door-leaf', 'door-arc', 'dimension-line', 'extension', 'label-leader', 'undrawn-room', 'lift-cross', 'above-line']) {
       expect(rule(`.canvas [data-part='${part}']`).get('vector-effect'), part).toBe('non-scaling-stroke')
     }
   })

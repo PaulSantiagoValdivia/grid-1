@@ -39,7 +39,10 @@ export interface PlanNote {
   readonly at: Vec2 | null
   /** The room it is in, when placed by room: a view puts it under that room's name. */
   readonly room: string | null
-  /** A symbol's turn, in radians counter-clockwise. */
+  /**
+   * A symbol's turn, in radians counter-clockwise. A north symbol that states none takes the
+   * plan's north (CNT-3), and points up the drawing when the plan states none either.
+   */
   readonly turn: number
 }
 
@@ -102,7 +105,8 @@ export function planNotes(plan: FloorPlan, labelAt: (room: string) => Vec2 | und
         symbol: note.symbol ?? null,
         at,
         room: note.room ?? null,
-        turn: (note.turn ?? 0) * RADIANS
+        // CNT-3: a north symbol that states no turn points to the north the plan states.
+        turn: (note.turn ?? (note.kind === 'symbol' && note.symbol === 'north' ? (plan.north ?? 0) : 0)) * RADIANS
       }
     ]
   })

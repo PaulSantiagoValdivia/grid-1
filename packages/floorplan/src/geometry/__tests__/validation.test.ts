@@ -459,19 +459,15 @@ describe('floor ids that differ only by case or spacing', () => {
   })
 })
 
-/**
- * Known failures from the lab (entry Z-4), as expected failures. Each states the right
- * behaviour and fails today; when its fix lands, vitest reports it, and `it.fails` becomes
- * `it`. Each title starts with its lab entry ID.
- */
-describe('known failures (expected to fail until fixed)', () => {
+/** Known failures from the lab (entry Z-4) that MSG-16 fixed. */
+describe('lab failures fixed by MSG-16', () => {
   type P = [number, number]
   const RECT: P[] = [[0, 0], [5, 0], [5, 4], [0, 4]]
   const planOf = (raw: unknown): FloorPlan => parseFloorPlan(raw)
   const issuesOf = (plan: FloorPlan) => validatePlan(plan).issues
   const divider = { id: 'v', start: [2.5, 0] as P, end: [2.5, 4] as P, virtual: true, height: 2.7 }
 
-  it.fails('MS-8 a door on a virtual wall is reported', () => {
+  it('MS-8 a door on a virtual wall is reported', () => {
     const { walls, room } = outline(RECT)
     const plan = planOf({
       walls: [...walls, divider],
@@ -482,7 +478,6 @@ describe('known failures (expected to fail until fixed)', () => {
     // room that does not match its space; that line is not what this probe asks for.
     expect(issuesOf(plan).some((i) => i.entity === 'opening' && i.id === 'd')).toBe(true)
   })
-
 })
 
 /** Known failures from the lab (entry Z-4) that MSG-6 fixed. */
@@ -516,6 +511,19 @@ describe('lab failures fixed by LVL-1', () => {
     const found = validatePlan(plan).issues.filter((i) => /frist/.test(i.message))
     expect(found.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['wall/unknown-floor', 'wall', 'w1', 'error']])
     expect(found[0]!.message).toContain('spelt like floor "first"')
+  })
+
+  // Lab MS-10's other half: it passed before LVL-1, as a warning on the wall. LVL-1 made it an
+  // error, as it is without a floors list.
+  it('MS-10 a misspelt floor is reported when the plan lists its floors', () => {
+    const { walls, room } = outline(RECT)
+    const plan = parseFloorPlan({
+      floors: [{ id: 'ground', name: 'Ground', level: 0 }, { id: 'first', name: 'First', level: 1 }],
+      walls: walls.map((w, i) => (i === 0 ? { ...w, floor: 'frist' } : w)),
+      rooms: [room]
+    })
+    const found = validatePlan(plan).issues.filter((i) => /frist/.test(i.message))
+    expect(found.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['wall/unknown-floor', 'wall', 'w1', 'error']])
   })
 })
 
@@ -605,14 +613,15 @@ describe('lab failures fixed by MSG-15', () => {
     expect(issues.map((i) => [i.code, i.id, i.severity])).toEqual([['opening/out-of-wall', 'd', 'error']])
     expect(issues[0]!.message).toBe(
       'Opening "d" runs from 4.01 to 4.91 m on wall "w", which is 4.8996 m long: it runs 10 mm past ' +
-        'the end of the wall, more than the 1 mm Grid allows. An offset from 0.00 to 3.9996 m fits.'
+        'the end of the wall, more than the 1 mm Grid allows. An offset from 0.00 to 3.9996 m fits; at its ' +
+        'offset of 4.01 m, a width up to 0.8896 m fits.'
     )
   })
 
   it('MS-16 says so when the opening is wider than its wall', () => {
     const wall = { id: 'w', start: [0, 0], end: [0.8, 0], thickness: 0.2, height: 2.7 }
     const plan = planOf({ walls: [wall], openings: [{ id: 'd', wall: 'w', type: 'door', offset: 0, width: 0.9, height: 2.1 }] })
-    expect(issuesOf(plan)[0]!.message).toMatch(/runs 100 mm past the end of the wall, more than the 1 mm Grid allows\. It is 100 mm wider than the wall is long\.$/)
+    expect(issuesOf(plan)[0]!.message).toMatch(/runs 100 mm past the end of the wall, more than the 1 mm Grid allows\. It is 100 mm wider than the wall is long; at its offset of 0\.00 m, a width up to 0\.80 m fits\.$/)
   })
 
   it('MS-16 draws a door that runs a hair past its wall within the wall', () => {

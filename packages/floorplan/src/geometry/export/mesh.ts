@@ -15,9 +15,11 @@
  */
 
 import type { Vec2 } from '../vec2'
-import type { SceneSlab, SceneWall, Vec3 } from '../scene3d'
+import type { SceneColumn, SceneOpening, SceneSlab, SceneSolid, SceneStair, SceneWall, Vec3, WallBasis, WallElevation } from '../scene3d'
+import type { OpeningPartKind } from '../openingParts'
 import { alongFace } from '../scene3d'
 import { triangulate } from '../triangulate'
+import { planeAt } from '../roofs'
 
 export type Face = readonly [number, number, number]
 
@@ -71,7 +73,25 @@ function storable(mesh: Mesh): Mesh | null {
 }
 
 export function wallMesh(wall: SceneWall): Mesh | null {
-  const { elevation, basis } = wall
+  // CNT-18: a curved wall is its straight pieces, one mesh of them.
+  if (wall.pieces !== undefined) return joined(wall.pieces.map((piece) => elevationMesh(piece.elevation, piece.basis)))
+  return elevationMesh(wall.elevation, wall.basis)
+}
+
+/** Meshes one after the other as one: each face's points moved past the points before it. */
+function joined(meshes: readonly (Mesh | null)[]): Mesh | null {
+  const points: Vec3[] = []
+  const faces: Face[] = []
+  for (const mesh of meshes) {
+    if (mesh === null) continue
+    const base = points.length
+    points.push(...mesh.points)
+    for (const [a, b, c] of mesh.faces) faces.push([base + a, base + b, base + c])
+  }
+  return faces.length === 0 ? null : storable({ points, faces })
+}
+
+function elevationMesh(elevation: WallElevation, basis: WallBasis): Mesh | null {
   const { vertices, triangles, rings } = triangulate(elevation.outline, elevation.holes)
   if (triangles.length === 0) return null
 
@@ -139,4 +159,88 @@ export function floorMesh(floor: SceneSlab): Mesh | null {
     }
   }
   return storable({ points, faces })
+}
+
+/**
+ * A stair (LVL-3) as one mesh: every tread and landing a closed block, its top facing up, its
+ * bottom down, and a band of faces round its sides. Blocks that touch keep their own faces, so
+ * the mesh is a set of solids, not one skin.
+ */
+export function stairMesh(stair: SceneStair): Mesh | null {
+  return blocksMesh(stair.blocks)
+}
+
+/** CNT-16: a column as one closed solid, its footprint from its foot to its top. */
+export function columnMesh(column: SceneColumn): Mesh | null {
+  return blocksMesh([column])
+}
+
+/** Upright blocks, each its outline (counter-clockwise) solid from its bottom to its top, as one mesh of closed solids. */
+function blocksMesh(blocks: readonly { readonly outline: readonly Vec2[]; readonly bottom: number; readonly top: number }[]): Mesh | null {
+  const points: Vec3[] = []
+  const faces: Face[] = []
+  for (const block of blocks) {
+    const { vertices, triangles } = triangulate(block.outline)
+    if (triangles.length === 0) continue
+    const top = points.length
+    for (const v of vertices) points.push({ x: v.x, y: v.y, z: block.top })
+    const bottom = points.length
+    for (const v of vertices) points.push({ x: v.x, y: v.y, z: block.bottom })
+    for (const [a, b, c] of triangles) faces.push([top + a, top + b, top + c], [bottom + a, bottom + c, bottom + b])
+    // The outline winds counter-clockwise, so its outside lies to the right of each edge.
+    const n = block.outline.length
+    const side = points.length
+    for (const p of block.outline) points.push({ x: p.x, y: p.y, z: block.bottom }, { x: p.x, y: p.y, z: block.top })
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n
+      const [p0, p1, q0, q1] = [side + 2 * i, side + 2 * i + 1, side + 2 * j, side + 2 * j + 1]
+      faces.push([p0, q0, q1], [p0, q1, p1])
+    }
+  }
+  return faces.length === 0 ? null : storable({ points, faces })
+}
+
+/**
+ * CNT-14: the boxes of one part of a door or window (its frame, its leaves or its glass) as one
+ * mesh, each a closed block like a stair's tread. Null when it has none of that part.
+ */
+export function openingPartMesh(opening: SceneOpening, part: OpeningPartKind): Mesh | null {
+  return blocksMesh(opening.parts.filter((p) => p.part === part && p.top > p.bottom))
+}
+
+/** The parts of a door or window, in the order the exports write them. */
+export const OPENING_PART_KINDS: readonly OpeningPartKind[] = ['frame', 'leaf', 'glass']
+
+/**
+ * Flat solids of the shell (LVL-4: a slab, a roof, a parapet) as one mesh: every piece a closed
+ * prism from its bottom to its top, open through its holes, its top facing up, its bottom down, and
+ * a band of faces round every ring of its edge, out of the solid. A piece of a sloped roof (LVL-6)
+ * is the same prism with every point raised by its plane's height there, so it lies on the slope.
+ */
+export function shellMesh(solids: readonly SceneSolid[]): Mesh | null {
+  const points: Vec3[] = []
+  const faces: Face[] = []
+  for (const solid of solids) {
+    if (!(solid.top > solid.bottom)) continue
+    for (const piece of solid.pieces) {
+      const { vertices, triangles, rings } = triangulate(piece.outline, piece.holes)
+      if (triangles.length === 0) continue
+      const lift = (v: Vec2): number => (piece.rise === undefined ? 0 : planeAt(piece.rise, v))
+      const top = points.length
+      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.top + lift(v) })
+      const bottom = points.length
+      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.bottom + lift(v) })
+      for (const [a, b, c] of triangles) faces.push([top + a, top + b, top + c], [bottom + a, bottom + c, bottom + b])
+      // Outer rings wind counter-clockwise and holes clockwise: the solid lies on the left of every
+      // edge, so its outside is on the right.
+      for (const ring of rings) {
+        for (let i = 0; i < ring.length; i++) {
+          const p = ring[i]!
+          const q = ring[(i + 1) % ring.length]!
+          faces.push([bottom + p, bottom + q, top + q], [bottom + p, top + q, top + p])
+        }
+      }
+    }
+  }
+  return faces.length === 0 ? null : storable({ points, faces })
 }

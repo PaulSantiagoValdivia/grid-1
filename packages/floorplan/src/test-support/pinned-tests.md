@@ -16,9 +16,16 @@ entry whose fix may change it.
 | reads %s as not stated and keeps the rest of the room (a room's `use`) | `packages/floorplan/src/types/__tests__/floorplan.test.ts` | MS-1 |
 | catches a collision between two different kinds of entity | `packages/floorplan/src/geometry/__tests__/validation.test.ts` | MS-9 |
 | agrees with the area: width × depth is the room area | `packages/floorplan/src/geometry/__tests__/dimensions.test.ts` | DR-2 (true only for rectangles) |
-| escapes an accented letter as \U+XXXX, which CAD tools decode | `packages/floorplan/src/geometry/export/__tests__/dxf.test.ts` | EX-1 |
 | exports one floor for the 2D and 3D formats, the one the user is looking at | `packages/floorplan/src/export/__tests__/planExport.test.ts` | EX-4 |
 | is false for any other country | `packages/rules/src/checks/__tests__/rules-figures.test.ts` | CH-3 |
+
+Z-6 also named `rejects a non-integer level` (floorplan.test.ts, VE-3). LVL-1 changed it on
+purpose to `accepts a half level`, so it left this list (see below).
+
+Z-6 also named `escapes an accented letter as \U+XXXX, which CAD tools decode` (dxf.test.ts,
+EX-1). HND-1 changed it on purpose to `writes an accented letter as itself, which every reader
+shows`: the DXF is now AutoCAD 2013's version, whose text is UTF-8, so "Baño" is stored as those
+four letters. It left this list.
 
 The IFC export pins the same level rule as elevations: `ignores gaps in the level numbering:
 levels are an order, not positions` in `packages/floorplan/src/geometry/export/__tests__/ifc.test.ts`
@@ -45,10 +52,10 @@ settle them:
   (`types/readParts.ts`): a plan read from a file has the clash left out before `validatePlan`
   sees it, so only the room is left out and the rooms on the wall are measured. The pinned test
   still holds for a plan built in code, and is as it was.
-- **CH-3.** The probe `CH-3 "USA" is read as the same place as "US", or refused`
-  (rules-escape.test.ts) and `is false for any other country` agree today, because the pinned
-  test lists ES, GB, DE, IT and Spain and never USA. A fix that reads more spellings of the US
-  must keep those five false.
+- **CH-3.** COD-3 fixed the probe `CH-3 "USA" is read as the same place as "US", or refused`
+  (rules-escape.test.ts): every place is read through Grid's list, so USA and United States are
+  the US, and `the moon` is refused. The pinned `is false for any other country` lists ES, GB,
+  DE, IT and Spain and never USA, and stays as it was: all five are still false.
 - **EX-4.** The probes `EX-4 floors named "Level 1" and "level-1" get different file names` and
   `EX-4 a project named in a non-Latin script keeps a name of its own` (planExport.test.ts)
   need a different way of turning names into file names. `uses the project name, and the floor
@@ -65,10 +72,8 @@ test fails, and `it.fails` becomes `it`.
 
 | Lab entry | Where |
 | --- | --- |
-| MS-8 | `geometry/__tests__/validation.test.ts` |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
-| CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
 
 Paths without a package are under `packages/floorplan/src/`.
 
@@ -88,6 +93,22 @@ Paths without a package are under `packages/floorplan/src/`.
 | MS-15 | MSG-12 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-12"; the plans behind MS-2, MS-15, MS-17, W-10 and L-6 in `geometry/__tests__/wallFaults.test.ts` |
 | MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
 | CH-6 (the size half) | MSG-18 | `packages/rules/src/checks/__tests__/rules-check.test.ts`, "lab failures fixed by MSG-18"; the lab's three cases in `geometry/__tests__/passable.test.ts` |
+| MS-8 | MSG-16 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-16"; the corner, junction and dividing-line cases in `geometry/__tests__/openingPlaces.test.ts`, the lab's own MS-8 and CP4-11 plans in `scoreboard/__tests__/openingPlaces.test.ts` |
+| CH-3 | COD-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts`, "the place, read through Grid's list" |
+| S-8 (a door swing that hits a table names the table) | CNT-13 | `geometry/__tests__/useIndicators.test.ts`, "a door swing that hits a fixture names it (S-8)"; the line in `packages/rules/src/result/__tests__/useLines.test.ts`. The table is a kitchen run labelled "Table 2": tables are furniture, which the plan does not hold yet (CNT-11) |
+
+## Probes that never failed
+
+Z-4 wrote 28 probes; 23 failed in the lab and 5 passed. The five that passed are in the suite
+as normal tests, so that all 28 are there.
+
+| Probe | Where |
+| --- | --- |
+| control: a rectangle measures between its inner faces | `geometry/__tests__/conventions.test.ts`, "lab failures fixed by ARE-1" |
+| AR-14 the L room measures the same turned by 1, 45 and 180 degrees | the same block; before ARE-1 it read the same wrong figure at every turn |
+| AR-14 the L room measures the same with two walls drawn from their other end | the same block, for the same reason |
+| MS-10 a misspelt floor is reported when the plan lists its floors | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; a warning before LVL-1, an error now |
+| SC-2 checks 400 rooms in under a second | `geometry/__tests__/sweep.test.ts`; skipped on a machine running more work than it has cores |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
@@ -166,21 +187,48 @@ and the new `opening_too_small_to_pass` on the hole) instead of only that `no_ex
 half of CH-6, what lies beyond an opening (a window into the next room, a door into a walled
 courtyard), is MSG-17's and has no `it.fails`. No other expected figure changed (`reviews/MSG-18.md`).
 
+HND-2 fixed no expected failure: the lab's EX-2 (IFC rooms carry a name and nothing else) had no
+`it.fails`. It wrote the four IFC golden files again on purpose: each room's space is named by its
+number with the room's name as its long name, and walls, spaces, slabs, doors, windows and
+doorless openings gain base quantities, wall types, door and window styles and Grid's own property
+sets, so entity numbers move; no wall, opening, space or slab moved or changed shape. In
+`ifc.test.ts` the space helpers read a room's name from the long name; `leaves an undecided door
+untyped and unturned` is now `types an undecided door by its size with no handing, and leaves it
+unturned`, and `writes no door style for a plan with no stated swing` now expects one style with no
+handing; the material tests expect one material per stated kind (`Interior wall`) and layer sets
+named after kind and thickness. See `reviews/HND-2.md`.
+
+CNT-14 fixed no expected failure: the lab's EL-5 (every door one leaf, a 3.5 m dock door a 3.5 m
+arc) had no `it.fails`; `scoreboard/__tests__/doorKinds.test.ts` now holds the lab's 176 doors to
+it. It wrote the four IFC golden files again on purpose: each door and window is filled with its
+frame, leaves and glass (one solid each, the glass styled) instead of one thin box, and the door
+and window styles' description says how Grid groups them now; no wall, void, space or slab moved.
+In `ifc.test.ts`, `gives the filler a thin leaf, centred in the wall, over the void` is now `CNT-14
+fills the void with a frame and a leaf`, and the door-swing cases read every solid of the filler
+and check the leaf hangs from the face it opens to. See `reviews/CNT-14.md`.
+
 ## Kinds of test the suite does not have yet
 
 From the lab's entry Z-7. None of these is built here.
 
 - **An independent area referee.** Started here: `test-support/referee.ts`, the table in
-  `room-areas.test.ts` and the generated rooms in `room-shapes.test.ts`. It does not yet
-  measure virtual walls, angled rooms or whole plans.
+  `room-areas.test.ts` (each plan turned by 1, 45 and 180 degrees about a point away from the
+  origin) and the generated rooms in `room-shapes.test.ts`. It does not yet measure virtual
+  walls, angled rooms or whole plans.
 - **Generated room plans.** `room-shapes.test.ts` builds 300 rooms shaped L, T, U, Z and
   cross from a fixed seed and checks their areas. There are none yet for validation or for
   whole plans (MS-20).
-- **Timing guards.** The plan comparison has one. The door-swing check has one that runs only
-  when asked (QAR-7, SC-2): `GRID_TIMING=1` runs `scoreboard/__tests__/doorSweeps.test.ts` on a
-  5,000-room floor, whose drawing takes minutes to build. Nothing times `buildFloorPlan` itself.
+- **Timing guards.** The plan comparison has one. The door-swing check has two: the lab's SC-2
+  probe (400 rooms under a second, about a third of a second in the lab), skipped on a machine
+  whose load is above its core count, in `geometry/__tests__/sweep.test.ts` (QAR-3); and one that
+  runs only when asked (QAR-7, SC-2): `GRID_TIMING=1` runs `scoreboard/__tests__/doorSweeps.test.ts`
+  on a 5,000-room floor, whose drawing takes minutes to build. Nothing times `buildFloorPlan`
+  itself. The large files of SC-3 have no guard.
 - **Pictures and real readers.** Nothing compares what the 2D or 3D view draws, and exported
   files are compared with Grid's own output and four golden IFC files, never opened by the
-  programs people use (SE-8, SE-9, DR-3, EX-1).
+  programs people use (SE-8, SE-9, DR-3, EX-1). Every IFC the repository's plans give is checked
+  for its references, relationships, room data, quantities and materials by
+  `geometry/export/__tests__/ifc.structure.test.ts` (HND-2), which stands in for the lab's
+  IfcOpenShell checker but is not it.
 - **An agent or a person in the loop.** Six entries can only be checked by watching someone
   use Grid (MS-13, WR-2, WR-10, WR-11, PE-1, PE-2).

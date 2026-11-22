@@ -1,0 +1,219 @@
+/**
+ * VEW-3 (lab SE-4, SE-7, S-16): a camera an agent can set, saved as a named view.
+ *
+ * 1. A view call with a bearing, a tilt, an eye height and a target room returns the picture and
+ *    its camera record, and "lower and more from the left" is one call (SE-4), on three of the
+ *    lab's buildings: the bench's two-bed flat, the two-storey house and the odd house.
+ * 2. A view saved by name and called up again gives the same record, byte for byte.
+ * 3. A camera outside every room says so (S-16).
+ */
+import { readFileSync } from 'fs'
+import { join, resolve } from 'path'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { bench, type Bench } from './replay/harness'
+
+const fixture = (path: string): unknown => JSON.parse(readFileSync(resolve(__dirname, path), 'utf8'))
+
+/** The three buildings, each with a room on its ground floor to point the camera at. */
+const BUILDINGS = [
+  { name: 'the two-bed flat', file: 'flat.json', plan: fixture('../../../fixtures/two-bed-flat.json'), room: 'lounge', floors: 1 },
+  { name: 'the two-storey house', file: 'house.json', plan: fixture('../../../../floorplan/fixtures/rooms/two-storey.plan.json'), room: 'g-living', floors: 2 },
+  { name: 'the odd house', file: 'odd.json', plan: fixture('../../../../floorplan/fixtures/rooms/odd-house.plan.json'), room: 'g-kitchen', floors: 2 },
+] as const
+
+type Point = [number, number, number]
+interface Camera {
+  target: { room: string | null; point: Point }
+  bearing: number
+  bearingFrom: string
+  north: number | null
+  tilt: number
+  distance: number
+  eyeHeight: number
+  floor: string
+  lens: { focalLength: number; sensor: { width: number; height: number } }
+  cut: string | null
+  floors: string[]
+  standingIn: { room: string | null; name: string | null; floor: string | null; words: string }
+  position: Point
+  direction: Point
+  up: Point
+  fieldOfView: number
+  aspectRatio: number
+}
+
+const cameraOf = (reply: { data: Record<string, unknown> | undefined }): Camera => reply.data!['camera'] as Camera
+
+let b: Bench
+beforeAll(() => {
+  b = bench(Object.fromEntries(BUILDINGS.map((building) => [building.file, building.plan])))
+})
+afterAll(() => b.close())
+
+async function ok(name: string, args: Record<string, unknown>) {
+  const reply = await b.call(name, args)
+  expect(reply.isError, reply.text).toBe(false)
+  return reply
+}
+
+describe('a view call with a bearing, a tilt, an eye height and a target room (SE-4)', () => {
+  for (const building of BUILDINGS) {
+    describe(building.name, () => {
+      it('returns the picture and the camera record it was taken with', async () => {
+        const reply = await ok('grid_view', { plan: building.file, kind: '3d', room: building.room, bearing: 200, tilt: 25, eye_height: 6 })
+        expect(reply.image).toBe(true)
+        const camera = cameraOf(reply)
+        expect(camera.target.room).toBe(building.room)
+        expect(camera.bearing).toBe(200)
+        expect(camera.bearingFrom).toBe('plan up')
+        expect(camera.tilt).toBe(25)
+        expect(camera.eyeHeight).toBe(6)
+        expect(camera.floor).toBe('ground')
+        // The camera stands back along its bearing until it is 6 m up, looking 25 degrees down at the room.
+        expect(camera.distance).toBeCloseTo((camera.position[2] - camera.target.point[2]) / Math.sin((25 * Math.PI) / 180), 4)
+        expect(camera.lens.sensor).toEqual({ width: 36, height: 24 })
+        expect(camera.fieldOfView).toBe(45)
+        // On a house of two floors the room is seen with its floor cut away.
+        expect(camera.cut).toBe(building.floors > 1 ? 'ground' : null)
+        expect(camera.floors).toEqual(['ground'])
+        expect(reply.text).toContain('from bearing 200°')
+        expect(reply.text).toContain('clockwise from the top of the drawing, as the plan states no north')
+        expect(reply.text).toContain('the eye 6.00 m above floor "ground"')
+      })
+
+      it('makes "lower and more from the left" one call, from the last camera record', async () => {
+        const first = cameraOf(await ok('grid_view', { plan: building.file, kind: '3d', room: building.room, bearing: 200, tilt: 25, eye_height: 6 }))
+        const reply = await ok('grid_view', { plan: building.file, kind: '3d', camera: first, turn: 20, tilt_by: -10 })
+        expect(reply.image).toBe(true)
+        const next = cameraOf(reply)
+        expect(next.target).toEqual(first.target)
+        expect(next.distance).toBe(first.distance)
+        expect(next.bearing).toBe(220)
+        expect(next.tilt).toBe(15)
+        // Lower,
+        expect(next.position[2]).toBeLessThan(first.position[2])
+        expect(next.eyeHeight).toBeLessThan(first.eyeHeight)
+        // and further to the left of where the first camera stood, as it looked.
+        const left = [-first.direction[1], first.direction[0]]
+        expect((next.position[0] - first.position[0]) * left[0]! + (next.position[1] - first.position[1]) * left[1]!).toBeGreaterThan(0)
+        // Sending the record back with the numbers changed is the same one call, and the same camera.
+        const resent = cameraOf(await ok('grid_view', { plan: building.file, kind: '3d', camera: { ...first, bearing: first.bearing + 20, tilt: first.tilt - 10 } }))
+        expect(JSON.stringify(resent)).toBe(JSON.stringify(next))
+      })
+    })
+  }
+
+  it('reads a bearing from the north the plan states, and a named corner from the drawing', async () => {
+    b.write('north.json', { ...(BUILDINGS[0].plan as Record<string, unknown>), north: 90 })
+    const compass = cameraOf(await ok('grid_view', { plan: 'north.json', kind: '3d', room: 'lounge', bearing: 90, tilt: 20 }))
+    expect(compass.bearingFrom).toBe('north')
+    expect(compass.north).toBe(90)
+    // North points to -x, so east, bearing 90, is up the drawing: the camera stands north of the room on the drawing.
+    expect(compass.position[1]).toBeGreaterThan(compass.target.point[1])
+    expect(Math.abs(compass.position[0] - compass.target.point[0])).toBeLessThan(1e-6)
+    const corner = cameraOf(await ok('grid_view', { plan: 'north.json', kind: '3d', room: 'lounge', from: 'south-east', tilt: 20 }))
+    // The south-east corner of the drawing is +x, -y of the room, whatever north the plan states.
+    expect(corner.position[0]).toBeGreaterThan(corner.target.point[0])
+    expect(corner.position[1]).toBeLessThan(corner.target.point[1])
+    expect(corner.bearing).toBe(225)
+  })
+
+  it('gives every picture its record, the eye view and the default 3d view too', async () => {
+    const eye = await ok('grid_view', { plan: 'flat.json', kind: 'eye', room: 'lounge', eye_height: 1.2 })
+    const camera = cameraOf(eye)
+    expect(camera.tilt).toBe(0)
+    expect(camera.eyeHeight).toBe(1.2)
+    expect(camera.lens.focalLength).toBe(18)
+    expect(camera.fieldOfView).toBeCloseTo(67.38, 2)
+    const whole = cameraOf(await ok('grid_view', { plan: 'house.json', kind: '3d' }))
+    expect(whole.target.room).toBeNull()
+    expect(whole.bearing).toBe(135)
+    expect(whole.tilt).toBe(30)
+    expect(whole.cut).toBeNull()
+    expect(whole.floors).toEqual(['ground', 'first'])
+  })
+
+  it('refuses a camera it cannot set, saying why', async () => {
+    const refused = async (args: Record<string, unknown>, why: RegExp) => {
+      const reply = await b.call('grid_view', { plan: 'flat.json', kind: '3d', ...args })
+      expect(reply.isError, reply.text).toBe(true)
+      expect(reply.text).toMatch(why)
+    }
+    await refused({ bearing: 10, from: 'south' }, /bearing or from, not both/)
+    await refused({ tilt: 80, tilt_by: 15 }, /at most 89 degrees from level/)
+    await refused({ room: 'lounge', tilt: -10, eye_height: 6 }, /cannot look up at it from there/)
+    await refused({ view: 'nowhere' }, /no view saved under that name\. It has no saved views/)
+    await refused({ camera: { bearing: 1 } }, /camera\.target takes an object/)
+    await refused({ lens: 2 }, /lens takes a number from 8 to 800/)
+  })
+})
+
+describe('a view saved by name (SE-7)', () => {
+  for (const building of BUILDINGS) {
+    it(`is called up again as the same record, byte for byte, on ${building.name}`, async () => {
+      const taken = await ok('grid_view', { plan: building.file, kind: '3d', room: building.room, bearing: 160, tilt: 35, distance: 18, lens: 35 })
+      const camera = cameraOf(taken)
+      const saved = await ok('grid_save_view', { plan: building.file, name: 'Garden corner', camera })
+      expect(saved.text).toContain('Saved the view "Garden corner" with the plan')
+      expect(JSON.stringify(saved.data!['camera'])).toBe(JSON.stringify(camera))
+      const called = await ok('grid_view', { plan: building.file, kind: '3d', view: 'garden corner' })
+      expect(called.image).toBe(true)
+      expect(called.data!['view']).toBe('Garden corner')
+      expect(JSON.stringify(cameraOf(called))).toBe(JSON.stringify(camera))
+
+      // The file holds the setting and the BCF camera, in a form other programs can open.
+      const file = JSON.parse(readFileSync(join(b.folder, building.file), 'utf8')) as { views: Record<string, unknown>[] }
+      expect(file.views).toHaveLength(1)
+      const stored = file.views[0]!
+      expect(stored).toMatchObject({ name: 'Garden corner', target: { room: building.room }, bearing: 160, bearingFrom: 'plan up', tilt: 35, distance: 18, lens: { focalLength: 35, sensor: { width: 36, height: 24 } } })
+      expect(stored['position']).toEqual(camera.position)
+      expect(stored['direction']).toEqual(camera.direction)
+      expect(stored['up']).toEqual(camera.up)
+      expect(stored['fieldOfView']).toBe(camera.fieldOfView)
+      expect(stored['aspectRatio']).toBe(1.5)
+      // Everything else in the file is as it was.
+      const before = building.plan as Record<string, unknown>
+      expect(Object.keys(file).filter((key) => key !== 'views')).toEqual(Object.keys(before))
+    })
+  }
+
+  it('refuses a second view of the same name unless asked to replace it, and takes one out', async () => {
+    const camera = cameraOf(await ok('grid_view', { plan: 'flat.json', kind: '3d', from: 'north' }))
+    const again = await b.call('grid_save_view', { plan: 'flat.json', name: 'GARDEN CORNER', camera })
+    expect(again.isError).toBe(true)
+    expect(again.text).toMatch(/already has a view saved as "Garden corner"/)
+    await ok('grid_save_view', { plan: 'flat.json', name: 'Garden corner', camera, replace: true })
+    expect(JSON.stringify(cameraOf(await ok('grid_view', { plan: 'flat.json', kind: '3d', view: 'Garden corner' })))).toBe(JSON.stringify(camera))
+    const gone = await ok('grid_save_view', { plan: 'flat.json', name: 'Garden corner', remove: true })
+    expect(gone.text).toContain('Took the view "Garden corner" out of the plan')
+    expect('views' in (JSON.parse(readFileSync(join(b.folder, 'flat.json'), 'utf8')) as object)).toBe(false)
+  })
+
+  it('is mirrored with the plan, so it frames what it framed', async () => {
+    const camera = cameraOf(await ok('grid_view', { plan: 'odd.json', kind: '3d', room: 'g-kitchen', bearing: 120, tilt: 30 }))
+    await ok('grid_save_view', { plan: 'odd.json', name: 'Kitchen', camera, replace: true })
+    await ok('grid_mirror', { plan: 'odd.json', how: 'left-right', out: 'odd-mirrored.json' })
+    const mirrored = cameraOf(await ok('grid_view', { plan: 'odd-mirrored.json', kind: '3d', view: 'Kitchen' }))
+    expect(mirrored.target.room).toBe('g-kitchen')
+    expect(mirrored.bearing).toBe(240)
+    expect(mirrored.tilt).toBe(30)
+    expect(mirrored.distance).toBe(camera.distance)
+  })
+})
+
+describe('a camera outside every room (S-16)', () => {
+  it('says "outside any room", and one in a room says which', async () => {
+    const outside = await ok('grid_view', { plan: 'flat.json', kind: '3d', room: 'lounge', bearing: 200, tilt: 20 })
+    expect(cameraOf(outside).standingIn).toEqual({ room: null, name: null, floor: null, words: 'outside any room' })
+    expect(outside.text).toContain('It stands outside any room.')
+
+    const eye = await ok('grid_view', { plan: 'flat.json', kind: 'eye', room: 'lounge' })
+    expect(cameraOf(eye).standingIn).toMatchObject({ room: 'lounge', name: 'Living room', floor: 'ground' })
+    expect(eye.text).toContain('It stands in "Living room".')
+
+    // The eye view's camera walked back out through the wall: now outside, and it says so.
+    const back = await ok('grid_view', { plan: 'flat.json', kind: '3d', camera: cameraOf(eye), distance: 30 })
+    expect(cameraOf(back).standingIn.words).toBe('outside any room')
+    expect(back.text).toContain('It stands outside any room.')
+  })
+})

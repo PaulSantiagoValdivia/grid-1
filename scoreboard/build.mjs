@@ -8,13 +8,19 @@ import { fileURLToPath } from 'node:url'
 
 const here = (/** @type {string} */ path) => fileURLToPath(new URL(path, import.meta.url))
 
-await build({
-  entryPoints: [here('./src/main.ts')],
-  outfile: here('./dist/scoreboard.mjs'),
-  bundle: true,
-  platform: 'node',
-  format: 'esm',
-  target: 'node22',
-  legalComments: 'eof',
-  logLevel: 'warning',
-})
+// `dist/retell.mjs` is the MSG-3 retelling run (`npm run retell`), which the owner runs.
+for (const [entry, out] of [
+  ['./src/main.ts', './dist/scoreboard.mjs'],
+  ['./src/retellMain.ts', './dist/retell.mjs'],
+]) {
+  await build({
+    entryPoints: [here(entry)],
+    outfile: here(out),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node22',
+    legalComments: 'eof',
+    logLevel: 'warning',
+  })
+}

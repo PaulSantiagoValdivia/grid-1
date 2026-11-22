@@ -6,25 +6,28 @@
  *   opening in it with the room on its other side and its distance to the two inside
  *   corners of that side of the room.
  * - `walls`: the rooms, then every wall with its openings, each with the rooms on its two
- *   sides. The agent's form leaves openings and neighbours out of its room lines, to stay
+ *   sides.
+ * - `walk` (VEW-9): the plan walked room by room from its way in, standing in each doorway;
+ *   `walk.ts` works it out and words it, and `describePlan` sends it there. The agent's form leaves openings and neighbours out of its room lines, to stay
  *   short: every opening under its wall names the rooms it joins.
  *
  * The person's form names rooms and floors by their names and never prints an id: ids are
  * the plan's own handles, which an agent needs to edit it and a person never does. The
  * agent's form is terse and carries every id.
  *
- * What the plan cannot say (north, the kind of building, how floors connect, which rooms
- * make a flat) is said as such. A floor laid out like an earlier one is said once. Wall and
+ * What the plan cannot say (north when it states none, the kind of building, how floors
+ * connect, which rooms make a flat) is said as such. A floor laid out like an earlier one is said once. Wall and
  * sill heights are one line: the usual height and the exceptions.
  *
- * The cards check nothing, and say so with the label "General guidance, not your local
- * rules", as every report of Grid's does wherever it mentions checks. No line says a plan
+ * The cards check nothing, and say so. `describePlan` puts the label "General guidance, not
+ * your local rules" first, as every report of Grid's does (MSG-3). No line says a plan
  * complies.
  */
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { decimalFor, DEFAULT_LANGUAGE, joined, name, num, say, sayValue, labelOfUse, type Language, type MessageKey, type SayOptions, type Values } from '@ongrid/floorplan/messages'
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
-export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls'] as const
+export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls', 'walk'] as const
 export type DescribeLength = (typeof DESCRIBE_LENGTHS)[number]
 
 export const DESCRIBE_AUDIENCES = ['person', 'agent'] as const
@@ -45,32 +48,79 @@ function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`
 }
 
-/** `a, b and c`. */
-function listed(items: readonly string[]): string {
-  if (items.length <= 1) return items.join('')
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+/**
+ * MSG-11: the language the person's form is written in, and its decimal mark. The agent's form
+ * is a terse format of codes, ids and figures with a point, as its KEY line spells it, and
+ * stays as it is in every language: the agent retells it in the person's language.
+ */
+export interface Words {
+  readonly language: Language
+  readonly options: SayOptions
+}
+
+const ENGLISH: Words = { language: DEFAULT_LANGUAGE, options: {} }
+
+/** A key said in the card's language. */
+function t(w: Words, key: MessageKey, values?: Values): string {
+  return say(w.language, key, values, w.options)
+}
+
+/** A key with a count, `.one` or `.many` by it. */
+function countOf(w: Words, key: string, count: number, values: Values = {}): string {
+  return t(w, `${key}.${count === 1 ? 'one' : 'many'}` as MessageKey, { count, ...values })
+}
+
+/** A length in metres as the person reads it, with the language's decimal mark. */
+function fig(w: Words, value: number): string {
+  return sayValue(w.language, num(m(value)), w.options)
+}
+
+/** An area in square metres, one decimal, with the language's decimal mark. */
+function area(w: Words, value: number): string {
+  return sayValue(w.language, num(m2(value)), w.options)
+}
+
+const cap = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+
+/** `a, b and c`, with the language's words. */
+function listed(w: Words, items: readonly string[]): string {
+  return sayValue(w.language, joined(items, 'join.comma', 'join.and'), w.options)
+}
+
+/** "3 rooms", or "2 rooms and 3 zones" on a floor with zones (CNT-8), for the agent's form. */
+function roomCount(floor: FloorFacts): string {
+  const zones = floor.rooms.filter((room) => room.zoneOf !== undefined).length
+  const rooms = plural(floor.rooms.length - zones, 'room')
+  return zones === 0 ? rooms : `${rooms} and ${plural(zones, 'zone')}`
+}
+
+/** The same in the person's language. */
+function roomCountSaid(w: Words, floor: FloorFacts): string {
+  const zones = floor.rooms.filter((room) => room.zoneOf !== undefined).length
+  const rooms = countOf(w, 'describe.count.room', floor.rooms.length - zones)
+  return zones === 0 ? rooms : t(w, 'describe.roomsAndZones', { rooms, zones: countOf(w, 'describe.count.zone', zones) })
 }
 
 /** At most `most` items, and how many more. */
-function capped(items: readonly string[], most: number): string[] {
-  return items.length <= most ? [...items] : [...items.slice(0, most - 1), `${items.length - most + 1} more`]
+function capped(w: Words, items: readonly string[], most: number): string[] {
+  return items.length <= most ? [...items] : [...items.slice(0, most - 1), t(w, 'describe.more', { count: items.length - most + 1 })]
 }
 
 const isSide = (side: OpeningSide | Beyond): side is OpeningSide => typeof side !== 'string'
 
 /** Names for a person: a room by its name, numbered when two on a floor share it. */
-class PersonNames {
+export class PersonNames {
   private readonly rooms = new Map<string, string>()
   private readonly floors = new Map<string, string>()
 
-  constructor(facts: PlanFacts) {
+  constructor(facts: PlanFacts, private readonly w: Words) {
     facts.floors.forEach((floor, i) => {
-      this.floors.set(floor.id, floor.name ?? `Unnamed floor ${i + 1}`)
+      this.floors.set(floor.id, floor.name ?? t(w, 'describe.floor.unnamed', { n: i + 1 }))
       const seen = new Map<string, number>()
       const total = new Map<string, number>()
       for (const room of floor.rooms) total.set(room.name.trim(), (total.get(room.name.trim()) ?? 0) + 1)
       for (const room of floor.rooms) {
-        const name = room.name.trim() || 'Unnamed room'
+        const name = room.name.trim() || t(w, 'describe.room.unnamed')
         const n = (seen.get(name) ?? 0) + 1
         seen.set(name, n)
         this.rooms.set(room.id, (total.get(room.name.trim()) ?? 0) > 1 ? `${name} (${n})` : name)
@@ -79,11 +129,11 @@ class PersonNames {
   }
 
   room(id: string): string {
-    return this.rooms.get(id) ?? 'a room'
+    return this.rooms.get(id) ?? t(this.w, 'describe.room.some')
   }
 
   floor(id: string): string {
-    return this.floors.get(id) ?? 'a floor'
+    return this.floors.get(id) ?? t(this.w, 'describe.floor.some')
   }
 }
 
@@ -106,18 +156,17 @@ function waysIn(facts: PlanFacts): Way[] {
   return ways
 }
 
-function usesText(facts: PlanFacts): string {
+function usesText(facts: PlanFacts, w: Words): string {
   const rooms = [...facts.rooms.values()]
-  const count = (use: string): number => rooms.filter((room) => room.use === use).length
   const unsaid = rooms.filter((room) => room.use === undefined).length
   const parts: string[] = []
-  const bedrooms = count('bedroom')
-  const bathrooms = count('bathroom')
-  if (bedrooms > 0) parts.push(plural(bedrooms, 'bedroom'))
-  if (bathrooms > 0) parts.push(plural(bathrooms, 'bathroom'))
-  if (unsaid === rooms.length && rooms.length > 0) parts.push(rooms.length === 1 ? 'it does not say what it is for' : 'none says what it is for')
-  else if (unsaid > 0) parts.push(`${unsaid} do not say what they are for`)
-  return parts.length > 0 ? ` (${parts.join(', ')})` : ''
+  for (const use of ['bedroom', 'bathroom'] as const satisfies readonly RoomUse[]) {
+    const count = rooms.filter((room) => room.use === use).length
+    if (count > 0) parts.push(countOf(w, 'describe.uses', count, { use: labelOfUse(w.language, use) }))
+  }
+  if (unsaid === rooms.length && rooms.length > 0) parts.push(t(w, rooms.length === 1 ? 'describe.uses.unsaid.one' : 'describe.uses.unsaid.all'))
+  else if (unsaid > 0) parts.push(t(w, 'describe.uses.unsaid.some', { count: unsaid }))
+  return parts.length > 0 ? ` (${parts.join(t(w, 'join.comma'))})` : ''
 }
 
 /** The floors that repeat an earlier one, by the floor they repeat. */
@@ -137,61 +186,161 @@ function totalArea(facts: PlanFacts): number {
 }
 
 /** `a door leads`, `3 doors lead`, `2 doors and 1 doorless opening lead`. */
-function waysText(ways: readonly Way[]): string {
+function waysText(ways: readonly Way[], w: Words): string {
   const doors = ways.filter((way) => way.opening.type === 'door').length
   const gaps = ways.length - doors
-  if (ways.length === 1) return doors === 1 ? 'a door leads' : 'a doorless opening leads'
-  const parts = [...(doors > 0 ? [plural(doors, 'door')] : []), ...(gaps > 0 ? [plural(gaps, 'doorless opening')] : [])]
-  return `${parts.join(' and ')} lead`
+  if (ways.length === 1) return t(w, doors === 1 ? 'describe.ways.door' : 'describe.ways.gap')
+  const parts = [...(doors > 0 ? [countOf(w, 'describe.count.door', doors)] : []), ...(gaps > 0 ? [countOf(w, 'describe.count.gap', gaps)] : [])]
+  return t(w, 'describe.ways.many', { ways: parts.join(t(w, 'join.and')) })
 }
 
-function personLine(facts: PlanFacts, names: PersonNames): string {
+function personLine(facts: PlanFacts, names: PersonNames, w: Words): string {
   const floors = facts.floors.length
   const repeats = [...repeatGroups(facts)].map(([of, group]) =>
-    `${listed(group.map((floor) => names.floor(floor.id)))} ${group.length === 1 ? 'is' : 'are'} laid out like ${names.floor(of)}`)
-  const floorText = floors === 1 ? 'one floor' : `${floors} floors${repeats.length > 0 ? ` (${repeats.join('; ')})` : ''}`
+    countOf(w, 'describe.repeat', group.length, { floors: listed(w, group.map((floor) => names.floor(floor.id))), of: names.floor(of) }))
+  const floorText = floors === 1 ? t(w, 'describe.floors.one') : t(w, 'describe.floors.many', { count: floors, repeats: repeats.length > 0 ? ` (${repeats.join(t(w, 'join.semicolon'))})` : '' })
   const ways = waysIn(facts)
   const into = [...new Set(ways.map((way) => names.room(way.room)))]
   const entered = into.length === 0
-    ? 'no door leads in from outside'
-    : `from outside, ${waysText(ways)} into ${listed(capped(into, 5))}`
-  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.`
+    ? t(w, 'describe.entered.none')
+    : t(w, 'describe.entered', { ways: waysText(ways, w), rooms: listed(w, capped(w, into, 5)) })
+  const line = t(w, 'describe.line', { floors: floorText, rooms: countOf(w, 'describe.count.room', facts.rooms.size), uses: usesText(facts, w), area: area(w, totalArea(facts)), entered })
+  return `${line}${personBuilding(facts, names, w)}${personWork(facts, w)}`
+}
+
+/** CNT-10: what the plan's work holds, as a sentence; every other figure is after the work. */
+function personWork(facts: PlanFacts, w: Words): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string =>
+    [countOf(w, 'describe.count.wall', n.walls), countOf(w, 'describe.count.opening', n.openings), countOf(w, 'describe.count.room', n.rooms)].join(t(w, 'join.comma'))
+  const shell = base === null ? '' : ` ${t(w, 'describe.work.base', { base: name(base) })}`
+  return ` ${t(w, 'describe.work', { demolished: parts(counts.demolished), new: parts(counts.new) })}${shell}`
+}
+
+/** CNT-10: the same for an agent, as `WORK demolished 1 wall, …; new …; figures after the work`. */
+function agentWork(facts: PlanFacts): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string => `${n.walls} walls ${n.openings} openings ${n.rooms} rooms`
+  return ` WORK existing ${parts(counts.existing)}; demolished ${parts(counts.demolished)}; new ${parts(counts.new)}; figures after the work${base === null ? '' : `; BASE ${JSON.stringify(base)} read-only`}.`
+}
+
+/** CNT-5: what kind of building the plan says it is, and each floor that says otherwise, as a sentence. */
+function personBuilding(facts: PlanFacts, names: PersonNames, w: Words): string {
+  const { plan, floors } = facts.building
+  const kind = (building: string): string => t(w, `describe.kind.${building}` as MessageKey)
+  const own = floors.map((f) => t(w, 'describe.building.floor', { floor: names.floor(f.floor), kind: kind(f.building) }))
+  if (plan === undefined) return own.length === 0 ? '' : ` ${t(w, 'describe.building.floors', { floors: listed(w, own) })}`
+  return ` ${t(w, 'describe.building.plan', { kind: kind(plan), floors: own.length === 0 ? '' : t(w, 'describe.building.and', { floors: listed(w, own) }) })}`
+}
+
+/** CNT-5: the same for an agent, as `BUILDING home; ground shop`. */
+function agentBuilding(facts: PlanFacts): string {
+  const { plan, floors } = facts.building
+  if (plan === undefined && floors.length === 0) return ''
+  return ` BUILDING ${[...(plan === undefined ? [] : [plan]), ...floors.map((f) => `${f.floor} ${f.building}`)].join('; ')}.`
 }
 
 function agentLine(facts: PlanFacts): string {
   const ways = waysIn(facts)
-  const into = ways.length === 0 ? 'no way in from outside' : `from outside into ${capped([...new Set(ways.map((way) => way.room))], 8).join(', ')}`
-  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.`
+  const into = ways.length === 0 ? 'no way in from outside' : `from outside into ${capped(ENGLISH, [...new Set(ways.map((way) => way.room))], 8).join(', ')}`
+  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts, ENGLISH)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}${agentWork(facts)}`
 }
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */
-function unsaid(facts: PlanFacts): { person: string[]; agent: string[] } {
-  const person = ['where north is', 'what kind of building it is']
-  const agent = ['north', 'kind of building']
+function unsaid(facts: PlanFacts, names: PersonNames, w: Words): { person: string[]; agent: string[] } {
+  // CNT-3: a plan that states its north says so in its own lines.
+  // CNT-5: a plan may say what kind of building it is; one that says it for every floor is not asked.
+  const said = facts.building.plan !== undefined || (facts.floors.length > 0 && facts.floors.every((f) => facts.building.floors.some((b) => b.floor === f.id)))
+  const person = [...(facts.northStated ? [] : [t(w, 'describe.unsaid.north')]), ...(said ? [] : [t(w, 'describe.unsaid.kind')])]
+  const agent = [...(facts.northStated ? [] : ['north']), ...(said ? [] : ['kind of building'])]
   if (facts.floors.length > 1) {
-    const stairs = facts.stairRooms > 0 ? plural(facts.stairRooms, 'room') : ''
-    person.push(`how its floors connect (it holds no stairs or lifts${stairs ? `, only ${stairs} marked as a stair` : ''})`)
-    person.push('which rooms make up each flat or home')
-    agent.push(`how floors connect (no stairs or lifts${stairs ? `; ${stairs} with use stair` : ''})`, 'which rooms make each flat')
+    // Floors no stair joins (LVL-3): a stair the plan states, or stair rooms one over the other.
+    const { unjoined } = facts.connections
+    if (unjoined.length > 0) {
+      const stairs = facts.stairRooms > 0 ? plural(facts.stairRooms, 'room') : ''
+      const all = unjoined.length === facts.floors.length
+      const one = !all && unjoined.length === 1
+      const marked = facts.stairRooms > 0 ? t(w, 'describe.unsaid.stairs', { rooms: countOf(w, 'describe.count.room', facts.stairRooms) }) : ''
+      person.push(t(w, all ? 'describe.unsaid.connect.all' : one ? 'describe.unsaid.connect.one' : 'describe.unsaid.connect.some', { floors: listed(w, unjoined.map((id) => names.floor(id))), stairs: marked }))
+      agent.push(`how floors connect (no stair joins ${unjoined.join(' ')}${stairs ? `; ${stairs} with use stair` : ''})`)
+    }
+    // CNT-4: a plan that lists its flats says which rooms make each.
+    if (!facts.flatsListed) {
+      person.push(t(w, 'describe.unsaid.flats'))
+      agent.push('which rooms make each flat')
+    }
   }
   return { person, agent }
 }
 
-/** How a person can tell an opening apart: by its type and the rooms it joins. */
-function personOpening(opening: OpeningFacts, names: PersonNames): string {
-  const rooms = opening.sides.filter(isSide).map((side) => names.room(side.room))
-  const what = opening.type === 'opening' ? 'opening' : opening.type
-  if (rooms.length === 2) return `the ${what} between ${rooms[0]} and ${rooms[1]}`
-  if (rooms.length === 1) {
-    const past = opening.sides.find((side): side is Beyond => !isSide(side))
-    if (opening.type === 'window') return `the ${rooms[0]} window${past === 'outside' ? '' : ` to ${past}`}`
-    return past === 'outside' ? `the ${what} from outside into ${rooms[0]}` : `the ${what} from ${rooms[0]} to ${past}`
+/** Pairs of floors, lower first, joined into runs: ground to first and first to second is one run. */
+function runs(pairs: readonly (readonly [string, string])[]): string[][] {
+  const out: string[][] = []
+  for (const [a, b] of pairs) {
+    const run = out.find((r) => r[r.length - 1] === a)
+    if (run) run.push(b)
+    else out.push([a, b])
   }
-  return `a ${what} with no room on either side`
+  return out
+}
+
+/** The stairs and shafts that join the floors (LVL-3), or nothing in a plan with none. */
+function personStairs(facts: PlanFacts, names: PersonNames, w: Words): string[] {
+  const { stairs, stairRooms, lifts, outOfLine } = facts.connections
+  const span = (run: readonly string[]): Values => ({ from: names.floor(run[0]!), to: names.floor(run[run.length - 1]!) })
+  const parts = [
+    ...stairs.map((stair) => t(w, 'describe.stairs.stair', {
+      name: JSON.stringify(stair.name),
+      lower: names.floor(stair.lower),
+      upper: names.floor(stair.upper),
+      risers: stair.risers,
+      rise: fig(w, stair.riserHeight),
+      going: fig(w, stair.going),
+      width: fig(w, stair.width),
+    })),
+    ...runs(stairRooms).map((run) => t(w, 'describe.stairs.rooms', span(run))),
+    ...runs(lifts).map((run) => t(w, 'describe.stairs.lift', span(run))),
+    ...outOfLine.map((out) => t(w, out.kind === 'stair' ? 'describe.stairs.apart.stair' : 'describe.stairs.apart.lift', { a: names.floor(out.floors[0]), b: names.floor(out.floors[1]) })),
+  ]
+  return parts.length === 0 ? [] : [t(w, 'describe.stairs', { parts: parts.join(t(w, 'join.semicolon')) })]
+}
+
+function agentStairs(facts: PlanFacts): string[] {
+  const { stairs, stairRooms, lifts, outOfLine } = facts.connections
+  const parts = [
+    ...stairs.map((stair) => `${stair.id} ${stair.lower}->${stair.upper} ${stair.risers}x${m(stair.riserHeight)} going ${m(stair.going)} width ${m(stair.width)}`),
+    ...runs(stairRooms).map((run) => `stair rooms ${run.join('->')}`),
+    ...runs(lifts).map((run) => `lift ${run.join('->')}`),
+    ...outOfLine.map((out) => `${out.kind} rooms out of line ${out.floors[0]}->${out.floors[1]}`),
+  ]
+  return parts.length === 0 ? [] : [`STAIRS ${parts.join('; ')}`]
+}
+
+/** How a person can tell an opening apart: by its type and the rooms it joins. */
+function personOpening(opening: OpeningFacts, names: PersonNames, w: Words): string {
+  const rooms = opening.sides.filter(isSide).map((side) => names.room(side.room))
+  const the = t(w, `describe.the.${opening.type}`)
+  if (rooms.length === 2) return t(w, 'describe.op.between', { the, a: rooms[0]!, b: rooms[1]! })
+  if (rooms.length === 1) {
+    const past = opening.sides.find((side): side is Beyond => !isSide(side))!
+    const to = t(w, 'describe.to', { there: beyondText(past, w) })
+    if (opening.type === 'window') return t(w, 'describe.op.window', { room: rooms[0]!, to: past === 'outside' ? '' : to })
+    return past === 'outside' ? t(w, 'describe.op.in', { the, room: rooms[0]! }) : t(w, 'describe.op.out', { the, room: rooms[0]!, to })
+  }
+  return t(w, 'describe.op.alone', { a: t(w, `describe.a.${opening.type}`) })
+}
+
+const BEYOND_KEY: Record<Beyond, MessageKey> = { outside: 'describe.beyond.outside', 'nothing drawn': 'describe.beyond.nothing', 'a room left out': 'describe.beyond.left' }
+
+/** What is past a side with no room on it, in words. */
+function beyondText(beyond: Beyond, w: Words): string {
+  return t(w, BEYOND_KEY[beyond])
 }
 
 /** Exceptions by floor and height, counted: for when there are too many to name. */
-function counted(list: readonly HeightException[], what: string, floorName: (id: string) => string): string[] {
+function counted(list: readonly HeightException[], what: 'wall' | 'window' | 'door', floorName: (id: string) => string, w: Words): string[] {
   const groups = new Map<string, { floor: string; value: number; count: number }>()
   for (const item of list) {
     const key = `${item.floor}\u0000${item.value}`
@@ -199,32 +348,41 @@ function counted(list: readonly HeightException[], what: string, floorName: (id:
     group.count++
     groups.set(key, group)
   }
-  return [...groups.values()].map((group) => `${plural(group.count, what)} on ${floorName(group.floor)} at ${m(group.value)} m`)
+  return [...groups.values()].map((group) => t(w, 'describe.heights.counted', { things: countOf(w, `describe.count.${what}`, group.count), floor: floorName(group.floor), value: fig(w, group.value) }))
 }
 
-function personHeights(facts: PlanFacts, names: PersonNames): string {
+function personHeights(facts: PlanFacts, names: PersonNames, w: Words): string {
   const { heights } = facts
   const floorName = (id: string): string => names.floor(id)
   const opening = (exception: HeightException): string => {
     const found = facts.openings.get(exception.id)
-    return `${found ? personOpening(found, names) : 'one'} at ${m(exception.value)} m`
+    return t(w, 'describe.heights.at', { what: found ? personOpening(found, names, w) : t(w, 'describe.heights.one'), value: fig(w, exception.value) })
   }
-  const openings = (list: readonly HeightException[], what: string): string => {
+  const except = (items: readonly string[]): string => t(w, 'describe.heights.except', { items: listed(w, items) })
+  const openings = (list: readonly HeightException[], what: 'window' | 'door'): string => {
     if (list.length === 0) return ''
-    return `, except ${listed(list.length <= 4 ? list.map(opening) : capped(counted(list, what, floorName), 4))}`
+    return except(list.length <= 4 ? list.map(opening) : capped(w, counted(list, what, floorName, w), 4))
   }
   const parts: string[] = []
   if (heights.wall !== null) {
     // Walls have no names a person knows, so their exceptions are counted.
     const odd = [
-      ...heights.floorWalls.map((floor) => `${m(floor.value)} m on ${names.floor(floor.floor)}`),
-      ...counted(heights.walls, 'wall', floorName),
+      ...heights.floorWalls.map((floor) => t(w, 'describe.heights.floor', { value: fig(w, floor.value), floor: names.floor(floor.floor) })),
+      ...counted(heights.walls, 'wall', floorName, w),
     ]
-    parts.push(`walls ${m(heights.wall)} m high${odd.length > 0 ? `, except ${listed(capped(odd, 4))}` : ''}`)
+    parts.push(t(w, 'describe.heights.walls', { value: fig(w, heights.wall), except: odd.length > 0 ? except(capped(w, odd, 4)) : '' }))
   }
-  if (heights.windowSill !== null) parts.push(`window sills ${m(heights.windowSill)} m${openings(heights.windowSills, 'window')}`)
-  parts.push(`door sills at the floor${openings(heights.doorSills, 'door')}`)
-  return `Heights: ${parts.join('; ')}.`
+  // WRT-6 (lab AU3-6): a height nothing states is said so, never as a figure the person gave.
+  const { notStated } = heights
+  if (notStated.count > 0) {
+    const drawn = fig(w, notStated.drawn)
+    parts.push(heights.wall === null
+      ? t(w, 'describe.heights.unstated.all', { drawn })
+      : t(w, 'describe.heights.unstated.some', { walls: countOf(w, 'describe.count.wall', notStated.count), drawn }))
+  }
+  if (heights.windowSill !== null) parts.push(t(w, 'describe.heights.windows', { value: fig(w, heights.windowSill), except: openings(heights.windowSills, 'window') }))
+  parts.push(t(w, 'describe.heights.doors', { except: openings(heights.doorSills, 'door') }))
+  return t(w, 'describe.heights', { parts: parts.join(t(w, 'join.semicolon')) })
 }
 
 function agentHeights(facts: PlanFacts): string {
@@ -242,6 +400,7 @@ function agentHeights(facts: PlanFacts): string {
     const floors = heights.floorWalls.map((floor) => `, ${floor.floor} ${m(floor.value)}`).join('')
     parts.push(`walls ${m(heights.wall)}${floors}${except(heights.walls)}`)
   }
+  if (heights.notStated.count > 0) parts.push(`${heights.wall === null ? 'walls' : `${heights.notStated.count} walls`} not stated, drawn ${m(heights.notStated.drawn)}`)
   if (heights.windowSill !== null) parts.push(`window sills ${m(heights.windowSill)}${except(heights.windowSills)}`)
   parts.push(`door sills 0${except(heights.doorSills)}`)
   return `HEIGHTS ${parts.join('; ')}`
@@ -292,21 +451,32 @@ function nextOnly(floor: FloorFacts, room: RoomFacts): string[] {
   return room.neighbours.filter((id) => !joined.has(id))
 }
 
-function personRoom(floor: FloorFacts, room: RoomFacts, names: PersonNames): string[] {
+/** A point on the drawing, `x, y`; `x; y` with a decimal comma, so the comma is not read as a separator. */
+function point(w: Words, x: number, y: number): string {
+  return t(w, decimalFor(w.language, w.options.decimal) === 'comma' ? 'describe.point.comma' : 'describe.point', { x: fig(w, x), y: fig(w, y) })
+}
+
+function personRoom(floor: FloorFacts, room: RoomFacts, names: PersonNames, w: Words): string[] {
   const name = names.room(room.id)
-  if (room.shape === null) return [`${name}: can't be measured, so nothing is said about it; grid check says why.`]
+  if (room.shape === null) return [t(w, 'describe.room.unmeasured', { room: name })]
   const { shape } = room
-  const size = shape.rectangle ? `${m(shape.across)} × ${m(shape.up)}` : `not a rectangle, ${m(shape.across)} × ${m(shape.up)} at its widest`
+  const across = `${fig(w, shape.across)} × ${fig(w, shape.up)}`
+  const size = shape.rectangle ? across : t(w, 'describe.room.odd', { size: across })
   const next = nextOnly(floor, room)
-  const lines = [`${name}: ${size}, ${m2(shape.area)} m², at ${m(shape.at.x)}, ${m(shape.at.y)}.${next.length > 0 ? ` Next to ${listed(next.map((id) => names.room(id)))}.` : ''}`]
+  // CNT-8: a zone is named as part of its room, and its floor is in its room's.
+  const of = room.zoneOf === undefined ? (room.outdoor === undefined ? '' : t(w, 'describe.room.outdoor', { kind: t(w, `outdoor.kind.${room.outdoor}`) })) : t(w, 'describe.room.zoneOf', { room: names.room(room.zoneOf) })
+  const lines = [`${t(w, 'describe.room', { room: `${name}${of}`, size, area: area(w, shape.area), at: point(w, shape.at.x, shape.at.y) })}${next.length > 0 ? t(w, 'describe.room.next', { rooms: listed(w, next.map((id) => names.room(id))) }) : ''}`]
   const { openings, open } = roomOpenings(floor, room.id)
-  for (const side of open) lines.push(`  Open to ${names.room(side.other)}, with no wall between.`)
+  for (const side of open) lines.push(`  ${t(w, 'describe.room.open', { room: names.room(side.other) })}`)
   for (const { opening, here, there } of openings) {
-    const what = opening.type === 'window' ? 'Window' : opening.type === 'door' ? 'Door' : 'Opening'
-    const to = isSide(there) ? ` to ${names.room(there.room)}` : opening.type === 'window' && there === 'outside' ? '' : ` to ${there}`
+    const to = isSide(there)
+      ? t(w, 'describe.to', { there: names.room(there.room) })
+      : opening.type === 'window' && there === 'outside' ? '' : t(w, 'describe.to', { there: beyondText(there, w) })
     const gaps = inOrder(here)
-    const corners = gaps === null ? '' : `, ${m(gaps[0].distance)} from ${gaps[0].toward} corner, ${m(gaps[1].distance)} from ${gaps[1].toward}`
-    lines.push(`  ${what} ${m(opening.width)}${to}, ${here.face} side${corners}.`)
+    const corners = gaps === null
+      ? ''
+      : t(w, 'describe.room.corners', { d1: fig(w, gaps[0].distance), c1: t(w, `describe.c.${gaps[0].toward}`), d2: fig(w, gaps[1].distance), c2: t(w, `describe.c.${gaps[1].toward}`) })
+    lines.push(`  ${t(w, 'describe.room.opening', { what: cap(t(w, `describe.word.${opening.type}`)), width: fig(w, opening.width), to, face: t(w, `describe.c.${here.face}`), corners })}`)
   }
   return lines
 }
@@ -315,7 +485,7 @@ function agentRoomHead(room: RoomFacts): string {
   const use = room.use ?? '-'
   if (room.shape === null) return `${room.id} ${JSON.stringify(room.name)} ${use} LEFT OUT (grid check says why)`
   const { shape } = room
-  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}`
+  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}${room.zoneOf === undefined ? '' : ` zone-of:${room.zoneOf}`}${room.outdoor === undefined ? '' : ` outdoor:${room.outdoor}`}`
 }
 
 function agentRoom(floor: FloorFacts, room: RoomFacts): string {
@@ -334,7 +504,7 @@ function agentRoom(floor: FloorFacts, room: RoomFacts): string {
   return `${agentRoomHead(room)}${next.length > 0 ? ` | next ${next.join(' ')}` : ''}${items.length > 0 ? ` | ${items.join('; ')}` : ''}`
 }
 
-const KIND_LETTER = { exterior: 'x', interior: 'i', partition: 'p' } as const
+const KIND_LETTER = { exterior: 'x', interior: 'i', partition: 'p', separating: 's' } as const
 
 /** Gaps add up to the side's length less the opening's width: the shorter side is the closer reference. */
 function stretch(side: OpeningSide): number {
@@ -358,10 +528,15 @@ function agentWallOpening(opening: OpeningFacts): string {
   return `${head} ${first.room}${gaps}${shown}`
 }
 
+/** Degrees as a description says them: whole, or to a tenth. */
+const degrees = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1))
+
 function agentWalls(floor: FloorFacts): string[] {
   return floor.walls.map((wall) => {
-    const height = wall.virtual || wall.height === floor.wallHeight ? '' : ` h${m(wall.height)}`
-    const head = ` ${wall.id} ${m(wall.start.x)},${m(wall.start.y)}>${m(wall.end.x)},${m(wall.end.y)} ${wall.virtual ? 'v' : `${m(wall.thickness)} ${KIND_LETTER[wall.kind]}`}${height}`
+    const height = wall.virtual || wall.height === floor.wallHeight ? '' : wall.heightNotStated ? ' h?' : ` h${m(wall.height)}`
+    // CNT-18: a curved wall says its centre and sweep after its ends.
+    const arc = wall.curve === undefined ? '' : ` arc(${m(wall.curve.centre.x)},${m(wall.curve.centre.y)} ${degrees(wall.curve.sweep)}°)`
+    const head = ` ${wall.id} ${m(wall.start.x)},${m(wall.start.y)}>${m(wall.end.x)},${m(wall.end.y)}${arc} ${wall.virtual ? 'v' : `${m(wall.thickness)} ${KIND_LETTER[wall.kind]}`}${height}`
     const openings = floor.openings.filter((o) => o.wall === wall.id).map(agentWallOpening)
     const open = floor.openSides.find((side) => side.wall === wall.id)
     const joins = open ? ` | ${open.rooms[0]}|${open.rooms[1]}` : ''
@@ -369,62 +544,108 @@ function agentWalls(floor: FloorFacts): string[] {
   })
 }
 
-function personSide(side: OpeningSide | Beyond, names: PersonNames): string {
-  return isSide(side) ? names.room(side.room) : side
+function personSide(side: OpeningSide | Beyond, names: PersonNames, w: Words): string {
+  return isSide(side) ? names.room(side.room) : beyondText(side, w)
 }
 
-function personWalls(floor: FloorFacts, names: PersonNames): string[] {
-  const at = (x: number, y: number): string => `${m(x)}, ${m(y)}`
+function personWalls(floor: FloorFacts, names: PersonNames, w: Words): string[] {
   return floor.walls.map((wall) => {
+    const height = wall.height === floor.wallHeight ? '' : wall.heightNotStated ? t(w, 'describe.wall.unstated') : t(w, 'describe.wall.height', { value: fig(w, wall.height) })
     const what = wall.virtual
-      ? 'a line on the floor, no wall'
-      : `${wall.kind} wall, ${m(wall.thickness)} thick${wall.height === floor.wallHeight ? '' : `, ${m(wall.height)} high`}`
+      ? t(w, 'describe.wall.virtual')
+      : t(w, 'describe.wall.solid', { kind: t(w, `describe.wall.${wall.kind}`), thickness: fig(w, wall.thickness), height })
     const open = floor.openSides.find((side) => side.wall === wall.id)
-    const joins = open ? `; ${names.room(open.rooms[0])} on one side, ${names.room(open.rooms[1])} on the other` : ''
+    const joins = open ? t(w, 'describe.wall.joins', { a: names.room(open.rooms[0]), b: names.room(open.rooms[1]) }) : ''
     const openings = floor.openings
       .filter((o) => o.wall === wall.id)
-      .map((opening) => `${opening.type} ${m(opening.width)} at ${m(opening.offset)} (${personSide(opening.sides[0], names)} | ${personSide(opening.sides[1], names)})`)
-    return `  From ${at(wall.start.x, wall.start.y)} to ${at(wall.end.x, wall.end.y)}: ${what}${joins}.${openings.length > 0 ? ` Along it from its start: ${openings.join('; ')}.` : ''}`
+      .map((opening) => t(w, 'describe.wall.opening', {
+        what: t(w, `describe.word.${opening.type}`),
+        width: fig(w, opening.width),
+        offset: fig(w, opening.offset),
+        a: personSide(opening.sides[0], names, w),
+        b: personSide(opening.sides[1], names, w),
+      }))
+    const along = openings.length > 0 ? t(w, 'describe.wall.openings', { openings: openings.join(t(w, 'join.semicolon')) }) : ''
+    // CNT-18: a curved wall's centre, the way it turns and how far, and its length along the curve.
+    const curve = wall.curve === undefined
+      ? ''
+      : t(w, 'describe.wall.curve', {
+          sweep: sayValue(w.language, num(degrees(Math.abs(wall.curve.sweep))), w.options),
+          way: t(w, wall.curve.sweep > 0 ? 'describe.wall.anticlockwise' : 'describe.wall.clockwise'),
+          centre: point(w, wall.curve.centre.x, wall.curve.centre.y),
+          radius: fig(w, wall.curve.radius),
+          length: fig(w, wall.curve.length),
+        })
+    return `  ${t(w, 'describe.wall', { start: point(w, wall.start.x, wall.start.y), end: point(w, wall.end.x, wall.end.y), curve, what, joins, openings: along })}`
   })
 }
 
-const PERSON_KEY = 'Metres, inside the walls: a size is across by up the drawing, a position the lower-left inside corner. Directions are on the drawing, north at the top.'
 const AGENT_KEY_ROOMS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2 | next: across a wall, no way through | opening: id d/o/w(door/opening/window) or v(virtual wall) width >other side(none=outside window, OUT=outside, NONE=nothing drawn, LEFT=left out) side of this room, gaps to its corners'
-const AGENT_KEY_WALLS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2. wall: id start>end thickness x/i/p/v(exterior/interior/partition/virtual) h=not the floor\'s usual | opening: id d/o/w offset+width room gaps to its side\'s corners(start end first)|other(none=outside, NONE=nothing drawn, LEFT=left out)'
+const AGENT_KEY_WALLS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2. wall: id start>end thickness x/i/p/s/v(exterior/interior/partition/separating/virtual) h=not the floor\'s usual | opening: id d/o/w offset+width room gaps to its side\'s corners(start end first)|other(none=outside, NONE=nothing drawn, LEFT=left out)'
 
-const PERSON_CLOSE = `This describes the plan and checks nothing: grid check runs the checks. ${GENERAL_GUIDANCE_LABEL}.`
-const AGENT_CLOSE = `CHECKS none here: grid check. ${GENERAL_GUIDANCE_LABEL}.`
+// The label leads every description (`describePlan`, MSG-3), so the close need not repeat it
+// (the person's is `describe.close`).
+const AGENT_CLOSE = 'CHECKS none here: grid check.'
 
-function personFloorHead(floor: FloorFacts, names: PersonNames): string {
-  const left = floor.leftOut.length > 0 ? ` ${plural(floor.leftOut.length, 'part')} can't be drawn and ${floor.leftOut.length === 1 ? 'is' : 'are'} left out.` : ''
-  return `${names.floor(floor.id)}: ${plural(floor.rooms.length, 'room')}, ${m2(floor.area)} m².${left}`
+function personFloorHead(floor: FloorFacts, names: PersonNames, w: Words): string {
+  const left = floor.leftOut.length > 0 ? countOf(w, 'describe.floor.left', floor.leftOut.length, { parts: countOf(w, 'describe.count.part', floor.leftOut.length) }) : ''
+  return `${t(w, 'describe.floor', { floor: names.floor(floor.id), rooms: roomCountSaid(w, floor), area: area(w, floor.area) })}${left}`
 }
 
 function agentFloorHead(floor: FloorFacts): string {
   const left = floor.leftOut.length > 0 ? `; left out ${floor.leftOut.join(' ')}` : ''
-  return `FLOOR ${floor.id} ${floor.name === null ? '(no name)' : JSON.stringify(floor.name)} level ${floor.level}: ${plural(floor.rooms.length, 'room')}, ${m(floor.area)} m2${left}`
+  return `FLOOR ${floor.id} ${floor.name === null ? '(no name)' : JSON.stringify(floor.name)} level ${floor.level}: ${roomCount(floor)}, ${m(floor.area)} m2${left}`
 }
 
-function personCard(facts: PlanFacts, withWalls: boolean): string[] {
-  const names = new PersonNames(facts)
-  const lines = [personLine(facts, names), PERSON_KEY, `Not in the plan: ${listed(unsaid(facts).person)}.`, personHeights(facts, names)]
+/** CNT-16: a floor's columns, in one line, each by its size and place and the room it stands in; nothing on a floor with none. */
+function personColumns(floor: FloorFacts, names: PersonNames, w: Words): string[] {
+  const columns = floor.columns ?? []
+  if (columns.length === 0) return []
+  const each = columns.map((c) => {
+    const label = c.label === null ? '' : t(w, 'describe.column.label', { label: c.label })
+    const room = c.room === null ? '' : t(w, 'describe.column.in', { room: names.room(c.room) })
+    const at = point(w, c.at.x, c.at.y)
+    return c.depth === null
+      ? t(w, 'describe.column.round', { label, width: fig(w, c.width), at, room })
+      : t(w, 'describe.column.square', { label, width: fig(w, c.width), depth: fig(w, c.depth), at, room })
+  })
+  return [`  ${t(w, 'describe.columns', { count: columns.length, columns: listed(w, each) })}`]
+}
+
+/** CNT-16: the agent's form of a floor's columns: `COLUMNS id sq<w>x<d>|rd<d> @x,y room`. */
+function agentColumns(floor: FloorFacts): string[] {
+  const columns = floor.columns ?? []
+  if (columns.length === 0) return []
+  return [`COLUMNS ${columns.map((c) => `${c.id} ${c.depth === null ? `rd${m(c.width)}` : `sq${m(c.width)}x${m(c.depth)}`} @${m(c.at.x)},${m(c.at.y)} ${c.room ?? '-'}`).join('; ')}`]
+}
+
+function personCard(facts: PlanFacts, withWalls: boolean, w: Words): string[] {
+  const names = new PersonNames(facts, w)
+  const lines = [
+    personLine(facts, names, w),
+    t(w, 'describe.key'),
+    t(w, 'describe.unsaid', { items: listed(w, unsaid(facts, names, w).person) }),
+    personHeights(facts, names, w),
+    ...personStairs(facts, names, w),
+  ]
   const groups = repeatGroups(facts)
   for (const floor of facts.floors) {
     if (floor.repeats !== null) {
       const group = groups.get(floor.repeats.of)!
-      if (group[0] === floor) lines.push('', `${listed(group.map((f) => names.floor(f.id)))}: laid out like ${names.floor(floor.repeats.of)}.`)
+      if (group[0] === floor) lines.push('', t(w, 'describe.floor.repeat', { floors: listed(w, group.map((f) => names.floor(f.id))), of: names.floor(floor.repeats.of) }))
       continue
     }
-    lines.push('', personFloorHead(floor, names))
-    for (const room of floor.rooms) lines.push(...personRoom(floor, room, names))
-    if (withWalls && floor.walls.length > 0) lines.push(`Walls of ${names.floor(floor.id)}:`, ...personWalls(floor, names))
+    lines.push('', personFloorHead(floor, names, w))
+    for (const room of floor.rooms) lines.push(...personRoom(floor, room, names, w))
+    lines.push(...personColumns(floor, names, w))
+    if (withWalls && floor.walls.length > 0) lines.push(t(w, 'describe.walls', { floor: names.floor(floor.id) }), ...personWalls(floor, names, w))
   }
-  lines.push('', PERSON_CLOSE)
+  lines.push('', t(w, 'describe.close'))
   return lines
 }
 
 function agentCard(facts: PlanFacts, withWalls: boolean): string[] {
-  const lines = [agentLine(facts), withWalls ? AGENT_KEY_WALLS : AGENT_KEY_ROOMS, `NOT IN PLAN ${unsaid(facts).agent.join('; ')}`, agentHeights(facts)]
+  const lines = [agentLine(facts), withWalls ? AGENT_KEY_WALLS : AGENT_KEY_ROOMS, `NOT IN PLAN ${unsaid(facts, new PersonNames(facts, ENGLISH), ENGLISH).agent.join('; ')}`, agentHeights(facts), ...agentStairs(facts)]
   const groups = repeatGroups(facts)
   for (const floor of facts.floors) {
     const repeat = floor.repeats
@@ -438,15 +659,16 @@ function agentCard(facts: PlanFacts, withWalls: boolean): string[] {
     }
     lines.push(`${agentFloorHead(floor)}${repeat !== null ? `; laid out as ${repeat.of}, other ids` : ''}`)
     for (const room of floor.rooms) lines.push(withWalls ? agentRoomHead(room) : agentRoom(floor, room))
+    lines.push(...agentColumns(floor))
     if (withWalls) lines.push(...agentWalls(floor))
   }
   lines.push(AGENT_CLOSE)
   return lines
 }
 
-/** The description, ending in a new line. */
-export function describeText(facts: PlanFacts, length: DescribeLength, audience: DescribeAudience): string {
-  if (length === 'line') return `${audience === 'person' ? personLine(facts, new PersonNames(facts)) : agentLine(facts)}\n`
-  const lines = audience === 'person' ? personCard(facts, length === 'walls') : agentCard(facts, length === 'walls')
+/** The description, ending in a new line. `words` is the person's language (MSG-11); English when left out. */
+export function describeText(facts: PlanFacts, length: DescribeLength, audience: DescribeAudience, words: Words = ENGLISH): string {
+  if (length === 'line') return `${audience === 'person' ? personLine(facts, new PersonNames(facts, words), words) : agentLine(facts)}\n`
+  const lines = audience === 'person' ? personCard(facts, length === 'walls', words) : agentCard(facts, length === 'walls')
   return `${lines.join('\n')}\n`
 }

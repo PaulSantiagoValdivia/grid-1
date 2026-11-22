@@ -8,31 +8,42 @@
  *
  * Pure: no DOM, no React. For PNG, see `drawPlan` in the `ongrid` package.
  */
+import { statedDisplay, type Display } from '@ongrid/floorplan/types/units'
+import { say, type Language } from '@ongrid/floorplan/messages'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import type { Bounds, Dimension, PlanDrawing } from '@ongrid/floorplan/geometry'
+import type { Bounds, Dimension, DrawingMarks, DrawingMarksAsked, PlanDrawing } from '@ongrid/floorplan/geometry'
 import {
   boundsWithDimensions,
   buildDimensions,
   buildFloorPlan,
+  computeBounds,
+  drawingMarks,
+  limit,
+  marksExtent,
+  floorAbove,
+  openingSymbol,
   planForFloor,
+  planWallMaterials,
   resolveFloor,
-  validateFloorDoorSweeps
+  validateFloorDoorSweeps,
+  withPatterns
 } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import type { LabelStyle } from '../canvas2d/labelPlacement'
 import { doorHandingOf } from '../canvas2d/doorHanding'
-import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import type { Viewport } from '../canvas2d/viewport'
 import { fitTo, viewBoxOf } from '../canvas2d/viewport'
 import type { Look, LookName, PlanLook } from './look'
-import { LOOKS, toLook } from './look'
+import { LOOKS, detailShown, fileLook, lengthText, toLook } from './look'
 import { planScene } from './scene'
 import type { FaultLine, PictureKey } from './faults'
 import { faultKey, faultsOnFloor } from './faults'
-import { keyEntries, stackBands, writingBand } from './writing'
+import { keyEntries, northArrowNode, stackBands, writingBand } from './writing'
+import { drawingMarkNodes } from './drawingMarks'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
+import { ENGLISH_WORDS, drawingText, saidText, wordsOf, type DrawingWords } from './words'
 
 export interface PictureOptions {
   /** Which floor to draw. Unset, or a floor the plan does not have, means its lowest floor. */
@@ -75,10 +86,28 @@ export interface PictureOptions {
   /**
    * SHT-7: what the picture shows. Each is on by default: `title` and `key` (the plan's own, in
    * the band under the drawing; `key: true` adds a key the plan does not ask for), `notes`,
-   * `sketch`, `areas`, `swings` and `warnings` (door warnings and MSG-8's marks and list).
-   * `colourBy: 'use'` fills each room by its use, and puts the uses in the key.
+   * `sketch`, `areas`, `swings`, `warnings` (door warnings and MSG-8's marks and list) and
+   * `above` (SHT-11: the dashed outline of the floor above).
+   * `colourBy: 'use'` fills each room by its use, SHT-10's `colourBy: 'finish'` by its floor
+   * finish (CNT-15), and either puts what each fill stands for in the key, which is then drawn
+   * unless `key: false` leaves it off. So is the key of a drawing whose walls are hatched by
+   * their material (SHT-10's detail, at 1:50 and larger).
    */
   readonly show?: PictureShow
+  /**
+   * MSG-11: the language Grid's own words on the picture are written in (its key, its list of
+   * what to look at, its label), with that language's decimal mark unless the display states
+   * one. The display's own language when left out (`labels.display`, else the plan's
+   * `display`), else English. Room names and the plan's own words are drawn as written.
+   */
+  readonly language?: Language
+  /**
+   * LVL-9: the marks for the plan's other drawings: `section`, a section's cut line with the way it
+   * looks; `elevations`, a mark outside each main side looking at the building; `levels`, each
+   * room's floor level; ARE-15's `schedule`, each room's and opening's mark in the schedules, by
+   * id. None by default.
+   */
+  readonly marks?: DrawingMarksAsked
 }
 
 /** SHT-7: what a picture shows. */
@@ -90,7 +119,14 @@ export interface PictureShow {
   readonly areas?: boolean
   readonly swings?: boolean
   readonly warnings?: boolean
-  readonly colourBy?: 'use' | null
+  readonly above?: boolean
+  readonly colourBy?: 'use' | 'finish' | null
+  /**
+   * CNT-9: parts picked out, by id, each in its colour (`GROUP_COLOURS`, `HIGHLIGHT_COLOUR`), and
+   * what each colour stands for in the key, which is then drawn.
+   */
+  readonly paint?: ReadonlyMap<string, string>
+  readonly paintKey?: readonly { readonly colour: string; readonly words: string }[]
 }
 
 /** A picture before it is written out. */
@@ -108,13 +144,20 @@ export interface Picture {
    * plan does not state, in a look that marks them (`technical`). Empty in any other look.
    */
   readonly undecidedDoors: readonly string[]
-  /** The plan's elements: exactly what the app's 2D view draws inside its `<svg>`. */
+  /**
+   * The plan's elements: exactly what the app's 2D view draws inside its `<svg>`, and, when the
+   * plan states its north, the north arrow in the corner of the view (CNT-3).
+   */
   readonly nodes: readonly SvgNode[]
   /**
    * The key under the drawing, when the picture was given faults: `height` more pixels below
    * the plan's `height`. Null otherwise.
    */
   readonly key: PictureKey | null
+  /** MSG-11: the language of its own words, for the label and the description. English when left out. */
+  readonly language?: Language
+  /** What the picture is, for its accessible name: a floor plan's when left out. LVL-8: a facade's; LVL-9: a section's. */
+  readonly title?: string
 }
 
 /** The picture's whole height in pixels: the plan and the key under it. */
@@ -133,21 +176,25 @@ export function handingsOf(plan: FloorPlan): Map<string, DoorHanding> {
 
 /**
  * Doors whose swing runs into something (a wall, or another door), with what they say and
- * what they hit. The warnings that only say a value is missing are left out: that door has no
- * symbol, so there is nothing to point at.
+ * what they hit, and a wide door with no kind drawn as one leaf (CNT-14). The warnings that only
+ * say a value is missing are left out: that door has no symbol, so there is nothing to point at.
  *
  * Only for the floor shown (QAR-7): `slice` is its `planForFloor` and `drawing` the
  * `buildFloorPlan(slice)` the view draws, so nothing is built twice and no other floor is checked.
  */
 export function doorWarningsOf(
   slice: FloorPlan,
-  drawing: PlanDrawing
+  drawing: PlanDrawing,
+  words: DrawingWords = ENGLISH_WORDS
 ): Map<string, { messages: string[]; hits: Set<string> }> {
   const byDoor = new Map<string, { messages: string[]; hits: Set<string> }>()
   for (const issue of validateFloorDoorSweeps(slice, drawing, doorHandingOf)) {
-    if (issue.hits.length === 0) continue
+    // CNT-14: a wide door drawn as one leaf has its arc to point at, so its question is marked too.
+    if (issue.hits.length === 0 && issue.code !== 'opening/wide-single-leaf') continue
     const entry = byDoor.get(issue.id) ?? { messages: [], hits: new Set<string>() }
-    if (!entry.messages.includes(issue.message)) entry.messages.push(issue.message)
+    // MSG-11: in the drawing's language, from the sentence's key and values.
+    const message = saidText(words, issue.message, issue.said)
+    if (!entry.messages.includes(message)) entry.messages.push(message)
     issue.hits.forEach((id) => entry.hits.add(id))
     byDoor.set(issue.id, entry)
   }
@@ -162,7 +209,8 @@ export function warningMessages(
 }
 
 function undecidedIn(drawing: PlanDrawing, handings: ReadonlyMap<string, DoorHanding>): string[] {
-  return drawing.openings.filter((o) => o.type === 'door' && doorSymbolOf(o, handings.get(o.id)) === null).map((o) => o.id)
+  // CNT-14: a door whose kind slides, rolls or lifts is drawn from its kind and is never undecided.
+  return drawing.openings.filter((o) => o.type === 'door' && openingSymbol(o, handings.get(o.id)) === null).map((o) => o.id)
 }
 
 /**
@@ -171,13 +219,21 @@ function undecidedIn(drawing: PlanDrawing, handings: ReadonlyMap<string, DoorHan
  * have, means its lowest floor.
  */
 export function undecidedDoorsOf(plan: FloorPlan, floor?: string | null): string[] {
-  const slice = planForFloor(plan, resolveFloor(plan, floor))
+  const slice = planForFloor(withPatterns(plan), resolveFloor(plan, floor))
   return undecidedIn(buildFloorPlan(slice), handingsOf(slice))
 }
 
 /** What a plan view frames: the drawing and its dimensions, which sit outside the walls. */
 export function framingOf(drawing: PlanDrawing, dimensions: readonly Dimension[]): Bounds {
   return boundsWithDimensions(drawing, dimensions)
+}
+
+/**
+ * SHT-10: the look a picture written to a file or handed to an agent is drawn in: the one asked
+ * for, on light paper whatever the screen's theme (`fileLook`): `dark` draws the working look.
+ */
+export function fileLookOf(look: PictureOptions['look']): Look {
+  return fileLook(lookOf(look))
 }
 
 /** The look a picture is drawn in. */
@@ -214,12 +270,31 @@ function sizeOf(framed: Bounds, options: PictureOptions): { width: number; heigh
 
 function framePicture(plan: FloorPlan, options: PictureOptions) {
   const floor = resolveFloor(plan, options.floor)
-  const slice = planForFloor(plan, floor)
+  // LVL-8: a plan's opening patterns are drawn as the plain openings they expand into.
+  const slice = planForFloor(withPatterns(plan), floor)
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
-  const framed = options.frame ?? framingOf(drawing, dimensions)
+  const around = framingOf(drawing, dimensions)
+  // LVL-9: the marks stand outside the drawing and its dimensions, and the view frames them too.
+  const marks = marksOf(plan, floor, drawing, around, options.marks)
+  const framed = options.frame ?? (marks === null ? around : withMarks(around, marks))
   const { width, height } = sizeOf(framed, options)
-  return { floor, slice, drawing, dimensions, width, height, view: fitTo(framed, width / height) }
+  return { floor, slice, drawing, dimensions, marks, width, height, view: fitTo(framed, width / height) }
+}
+
+function marksOf(plan: FloorPlan, floor: string, drawing: PlanDrawing, around: Bounds, asked: DrawingMarksAsked | undefined): DrawingMarks | null {
+  if (asked === undefined || (asked.section == null && asked.elevations !== true && asked.levels !== true && asked.schedule == null)) return null
+  return drawingMarks(plan, floor, drawing, around, asked)
+}
+
+/** The frame round the drawing and its marks, with half a mark's distance round each, for its symbol. */
+function withMarks(around: Bounds, marks: DrawingMarks): Bounds {
+  const reach = limit('elevationMarkOffset') / 2
+  const points = marksExtent(marks).flatMap((p) => [
+    { x: p.x - reach, y: p.y - reach },
+    { x: p.x + reach, y: p.y + reach }
+  ])
+  return computeBounds([around.min, around.max, ...points])
 }
 
 /**
@@ -231,56 +306,130 @@ export function pictureView(plan: FloorPlan, options: PictureOptions = {}): Pick
   return { width, height, view }
 }
 
+/**
+ * WRT-7, MSG-11: the display a picture's labels are written in: the call's, else the plan's own,
+ * with the language asked for. A language asked for on a plan with no display gets that
+ * language's own (a decimal comma for Spanish). Undefined for plain metres in English.
+ */
+export function displayOfPicture(plan: FloorPlan, options: PictureOptions): Display | undefined {
+  const asked = options.language
+  const own = options.labels?.display
+  if (own !== undefined) return asked === undefined ? own : { ...own, language: asked }
+  if (plan.display === undefined && (asked === undefined || asked === 'en')) return undefined
+  return statedDisplay({ ...(plan.display ?? {}), ...(asked === undefined ? {} : { language: asked }) })
+}
+
 /** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
 export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
-  const { floor, slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
+  const { floor, slice, drawing, dimensions, marks, width, height, view } = framePicture(plan, options)
+  const display = displayOfPicture(plan, options)
+  const words = wordsOf(display)
   const look = lookOf(options.look)
   const all = options.faults ?? []
   const faults = faultsOnFloor(all, floor, new Map(slice.openings.map((opening) => [opening.id, opening.wall])))
   const handings = handingsOf(slice)
   const show = options.show ?? {}
-  const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key'>): boolean => show[part] !== false
+  const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key' | 'paint' | 'paintKey'>): boolean => show[part] !== false
   const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
-  const nodes = planScene({
+  // SHT-10: each room's floor finish, and the plan's finishes in the order its rooms first name
+  // them, so a finish keeps its tint on every floor; the plan's wall materials, for their hatch.
+  const finishOrder = [...new Set(plan.rooms.flatMap((room) => (room.finishes?.floor === undefined ? [] : [room.finishes.floor])))]
+  const finishes = { rooms: new Map(slice.rooms.flatMap((room) => (room.finishes?.floor === undefined ? [] : [[room.id, room.finishes.floor] as const]))), order: finishOrder }
+  const materials = planWallMaterials(plan)
+  const mpp = view.width / width
+  // SHT-11: the floor above, worked out only when it is shown.
+  const above = on('above') ? floorAbove(slice) : undefined
+  const scene = planScene({
     drawing,
     handings,
-    doorWarnings: warningMessages(doorWarningsOf(slice, drawing)),
+    doorWarnings: warningMessages(doorWarningsOf(slice, drawing, words)),
     dimensions,
-    metersPerPixel: view.width / width,
+    metersPerPixel: mpp,
     look,
     ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
-    labels: options.labels,
+    // WRT-7: the labels and dimensions are in the call's display, else the plan's own.
+    labels: display === undefined ? options.labels : { ...options.labels, display },
     faults,
     uses,
+    finishes,
+    materials,
+    ...(above === undefined ? {} : { above }),
+    // ARE-15: the schedules' marks go by the room labels, which the scene places.
+    ...(marks === null || marks.schedule.length === 0 ? {} : { scheduleMarks: marks.schedule }),
     show: {
       notes: on('notes'),
       sketch: on('sketch'),
       areas: on('areas'),
       swings: on('swings'),
       warnings: on('warnings'),
-      colourBy: show.colourBy ?? null
+      above: on('above'),
+      colourBy: show.colourBy ?? null,
+      paint: show.paint ?? null
     }
   })
+  // CNT-3: a plan that states its north gets a north arrow in the corner of the view.
+  const withMarkNodes = marks === null ? scene : [...scene, ...drawingMarkNodes(marks, look, view.width / width, options.paperScale, words)]
+  const nodes = drawing.north === null ? withMarkNodes : [...withMarkNodes, northArrowNode(drawing.north, view, view.width / width, look.colors)]
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
-  const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))
+  const painted = show.paintKey ?? []
+  // CNT-10: a drawing of work keys its phases unless the key is turned off.
   const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
+  // SHT-10: the floor finishes tinted on this floor, and the materials hatched on it.
+  const tinted = look.tints.finishes
+  const shownFinishes = show.colourBy === 'finish' && tinted.length > 0 ? finishOrder.filter((finish) => drawing.rooms.some((room) => finishes.rooms.get(room.id) === finish)).map((finish) => ({ finish, colour: tinted[finishOrder.indexOf(finish) % tinted.length]! })) : []
+  const detail = detailShown(look, mpp, options.paperScale) ? look.detail : null
+  const shownMaterials =
+    detail === null || detail.hatches.length === 0
+      ? []
+      : materials.filter((material) => drawing.walls.some((wall) => !wall.virtual && wall.phase !== 'demolished' && wall.material === material)).map((material) => ({ material, angles: detail.hatches[materials.indexOf(material) % detail.hatches.length]!, ink: look.ink }))
+  // CNT-10: a drawing of work keys its phases unless the key is turned off. SHT-10: so does one
+  // whose colours or hatches carry a meaning of the plan's own: its rooms tinted, its walls hatched.
+  const keyed = show.key === true || (show.key !== false && (painted.length > 0 || drawing.notes.some((note) => note.kind === 'key') || drawing.walls.some((wall) => wall.phase !== undefined) || shownUses.length > 0 || shownFinishes.length > 0 || shownMaterials.length > 0))
   const marked = on('warnings') && faults.length > 0
-  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked }) : []
-  const writing = writingBand(title, entries, width, look.colors)
-  const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors)
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0, painted, phases: look.phases, walls: look.walls.fill, useFills: look.tints.uses, finishes: shownFinishes, materials: shownMaterials }, words) : []
+  const writing = writingBand(title, entries, width, look.colors, words)
+  const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors, words)
   const key = stackBands(writing, listed)
   const undecidedDoors = look.undecidedDoors ? undecidedIn(drawing, handings) : []
-  return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes, key }
+  const picture: Picture = { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes, key }
+  return words.language === 'en' ? picture : { ...picture, language: words.language }
+}
+
+/** How a picture is written as a file. */
+export interface PictureFileOptions {
+  /**
+   * MSG-3: the label "General guidance, not your local rules" in the top-left corner. On by
+   * default; off only where the page round the picture carries it already (a sheet).
+   */
+  readonly label?: boolean
+}
+
+/** The label's text size in pixels, as a dimension's. */
+const LABEL_PX = 11
+
+/**
+ * The label on a paper-coloured strip in the top-left corner, in pixels like every label, so it
+ * reads the same at any zoom. Its width is estimated, never measured, as room labels are.
+ */
+function labelNode(look: Look, x: number, y: number, unitsPerPixel: number, language: Language): SvgNode {
+  const label = say(language, 'label')
+  const width = label.length * LABEL_PX * 0.56 + 12
+  return el('g', { 'data-part': 'guidance-label', transform: `translate(${lengthText(x)} ${lengthText(y)}) scale(${lengthText(unitsPerPixel)})` }, [
+    el('rect', { x: 0, y: 0, width: lengthText(width), height: LABEL_PX + 10, fill: look.colors.paper, opacity: 0.9 }),
+    el('text', { x: 6, y: LABEL_PX + 3, fill: look.colors.labelSoft, 'font-family': look.colors.font, 'font-size': LABEL_PX }, [label])
+  ])
 }
 
 /**
  * The picture as an SVG file. `scale` multiplies its size in pixels and nothing else: the
- * drawing is the same, only finer.
+ * drawing is the same, only finer. It carries the label in its top-left corner (MSG-3).
  */
-export function pictureToSvg(picture: Picture, scale = 1): string {
+export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOptions = {}): string {
   const { view, look, key } = picture
-  const label = `Floor plan with ${picture.rooms} rooms`
+  const stamp = options.label !== false
+  const language = picture.language ?? 'en'
+  const words = { ...ENGLISH_WORDS, language }
   if (key) {
     // The plan in its own frame at the top, in plan metres; the key under it, in pixels.
     const total = fullHeight(picture)
@@ -297,12 +446,14 @@ export function pictureToSvg(picture: Picture, scale = 1): string {
         height: Math.round(total * scale),
         viewBox: `0 0 ${picture.width} ${total}`,
         role: 'img',
-        'aria-label': `${label}, and a key of what to look at`
+        'aria-label': picture.title === undefined ? drawingText(words, 'drawing.picture.keyed', { count: picture.rooms }) : drawingText(words, 'drawing.picture.titled.keyed', { title: picture.title })
       },
       [
         el('rect', { 'data-part': 'paper', x: 0, y: 0, width: picture.width, height: total, fill: look.colors.paper }),
         plan,
-        el('g', { 'data-part': 'key', transform: `translate(0 ${picture.height})` }, key.nodes)
+        el('g', { 'data-part': 'key', transform: `translate(0 ${picture.height})` }, key.nodes),
+        // In this frame a unit is a pixel already.
+        ...(stamp ? [labelNode(look, 0, 0, 1, language)] : [])
       ]
     )
     return `${toSvg(root)}\n`
@@ -324,9 +475,9 @@ export function pictureToSvg(picture: Picture, scale = 1): string {
       viewBox: viewBoxOf(view),
       preserveAspectRatio: 'xMidYMid meet',
       role: 'img',
-      'aria-label': label
+      'aria-label': picture.title ?? drawingText(words, 'drawing.picture', { count: picture.rooms })
     },
-    [paper, ...picture.nodes]
+    [paper, ...picture.nodes, ...(stamp ? [labelNode(look, view.x, view.y, view.width / picture.width, language)] : [])]
   )
   return `${toSvg(root)}\n`
 }

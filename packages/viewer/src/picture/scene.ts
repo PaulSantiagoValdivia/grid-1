@@ -22,8 +22,8 @@
  *
  * Pure: no DOM, no React.
  */
-import type { Dimension, Ghosts, PlanDrawing, PlanOpening, PlanRoom, PlanWall, Vec2 } from '@ongrid/floorplan/geometry'
-import { areaText as areaFigure, boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
+import type { Dimension, Ghosts, OpeningSymbol, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, ScheduleMark, SymbolPart, Vec2, WallDrawnKind } from '@ongrid/floorplan/geometry'
+import { boundsWithDimensions, hatchLines, openingDetail, openingSymbol, poleOfInaccessibility, traceWall, wallDrawnKind } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import { openingAt, stripAcross } from '../canvas2d/strip'
@@ -31,23 +31,30 @@ import type { Box, LabelStyle } from '../canvas2d/labelPlacement'
 import {
   DIMENSION_DY,
   ROOM_AREA_DY,
+  areaNumber,
+  areaUnit,
   dimensionText,
   dimensionTextBox,
   doorSwingBox,
+  drawingWords,
   formatArea,
   labelName,
   lineBox,
   placeDimensionLabel,
-  placeRoomLabels
+  placeRoomLabels,
+  withDisplay,
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { Look, PlanLook } from './look'
-import { LINE_PX, TEXT_PX, UNDRAWN_TINT, USE_FILLS, lengthText, lineMetres, toLook } from './look'
+import { GRID_BUBBLE_PX, LINE_PX, TEXT_PX, UNDRAWN_TINT, detailShown, hatchSpacingMetres, lengthText, lineMetres, toLook, wallOutlineMetres } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 import type { NumberedFault } from './faults'
 import { faultMarks, undrawnRoomText } from './faults'
 import { noteNodes, sketchNodes } from './writing'
+import { scheduleMarkNodes } from './drawingMarks'
+import { drawingText } from './words'
+import { siteNodes, sitePaints } from './site'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 
 /** The door-sweep warning mark's size on screen, whatever the zoom. */
@@ -160,8 +167,22 @@ export interface SceneInput {
   readonly faults?: readonly NumberedFault[]
   /** SHT-7: what the drawing shows. Everything on, and rooms in one fill, by default. */
   readonly show?: Partial<SceneShow>
+  /**
+   * SHT-11: the outline of the floor above (`floorAbove` of the floor's slice), drawn dashed over
+   * the room fills and under the walls. None by default.
+   */
+  readonly above?: PlanAbove
   /** SHT-7: each room's use by id, for `show.colourBy: 'use'`. */
   readonly uses?: ReadonlyMap<string, RoomUse>
+  /**
+   * SHT-10: each room's floor finish by id (CNT-15), for `show.colourBy: 'finish'`, and the plan's
+   * floor finishes in the order its rooms first name them: the n-th takes the look's n-th tint.
+   */
+  readonly finishes?: { readonly rooms: ReadonlyMap<string, string>; readonly order: readonly string[] }
+  /** SHT-10: the plan's wall materials in order (`planWallMaterials`): the n-th takes the look's n-th hatch. */
+  readonly materials?: readonly string[]
+  /** ARE-15: the schedules' marks (`DrawingMarks.schedule`), drawn by the room labels where they are placed. None by default. */
+  readonly scheduleMarks?: readonly ScheduleMark[]
   readonly live?: Partial<SceneLive>
 }
 
@@ -173,12 +194,22 @@ export interface SceneShow {
   readonly swings: boolean
   /** The door warning dots and the numbered marks of what went wrong (MSG-8). */
   readonly warnings: boolean
-  /** `use` fills each room by its use; null gives every room the look's one fill. */
-  readonly colourBy: 'use' | null
+  /** SHT-11: the dashed outline of the floor above. */
+  readonly above: boolean
+  /**
+   * `use` fills each room by its use, SHT-10's `finish` by its floor finish, each from the look's
+   * tints; null gives every room the look's one fill.
+   */
+  readonly colourBy: 'use' | 'finish' | null
+  /**
+   * CNT-9: parts picked out, by id, each in its colour: a room's fill at half strength over its
+   * own, a wall, door, window or opening laid over in the colour. Null for none.
+   */
+  readonly paint?: ReadonlyMap<string, string> | null
 }
 
 /** Everything shown, rooms in one fill. */
-export const SHOW_ALL: SceneShow = { notes: true, sketch: true, areas: true, swings: true, warnings: true, colourBy: null }
+export const SHOW_ALL: SceneShow = { notes: true, sketch: true, areas: true, swings: true, warnings: true, above: true, colourBy: null }
 
 /** The paint for each part, for one look, zoom and output scale. */
 function paints(named: Look, mpp: number, paperScale: number | undefined) {
@@ -195,39 +226,74 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
   })
   return {
     room: { fill: look.room } as Attrs,
-    wall: (exposure: PlanWall['exposure'] | undefined): Attrs => ({
-      fill: exposure === 'exterior' ? look.wallExterior : look.wall
+    // SHT-10: each kind of wall in its own fill; a wall hatched in a detailed drawing on the paper.
+    wall: (kind: WallDrawnKind, phase?: PlanWall['phase'], hatched = false): Attrs => ({
+      // CNT-10: an existing wall in its tone and a new one filled, where the look says so.
+      fill: (phase === 'existing' ? named.phases.existing : phase === 'new' ? named.phases.new : null) ?? (hatched ? look.paper : named.walls.fill[kind])
     }),
+    // SHT-10: a wall material's hatch, a door's or window's frame and a window's sill, in a detailed drawing.
+    wallHatch: { fill: 'none', stroke: ink, 'stroke-width': width('hatch'), 'stroke-linecap': 'butt' } as Attrs,
+    frame: { fill: look.paper, stroke: ink, 'stroke-width': width('frame'), 'stroke-linejoin': 'miter' } as Attrs,
+    sill: { stroke: ink, 'stroke-width': width('sill'), 'stroke-linecap': 'butt' } as Attrs,
+    // CNT-10: a wall or an opening to be demolished: a dashed outline, no fill.
+    demolished: {
+      fill: 'none',
+      stroke: named.phases.demolished,
+      'stroke-width': width('demolished'),
+      'stroke-dasharray': dashes('demolished'),
+      'stroke-linejoin': 'miter'
+    } as Attrs,
     // Drawn under every wall's fill and twice as wide as the pen: the fill covers its inner
     // half, and where two walls meet, the seam, so what shows is one outline the pen's width
     // round the walls as a whole.
-    wallOutline:
-      named.wallOutline === null
+    // SHT-10: each kind of wall with its own pen.
+    wallOutline: ((stroke: string | null) =>
+      stroke === null
         ? null
-        : ({
+        : (kind: WallDrawnKind): Attrs => ({
             fill: 'none',
-            stroke: named.wallOutline,
-            'stroke-width': lengthText(2 * line.width('wallOutline')),
+            stroke,
+            'stroke-width': lengthText(wallOutlineMetres(named, kind, mpp, paperScale)),
             'stroke-linejoin': 'miter'
-          } as Attrs),
+          }))(named.wallOutline),
     virtual: {
       fill: 'none',
       stroke: look.virtual,
       'stroke-width': width('virtual'),
       'stroke-dasharray': dashes('virtual')
     } as Attrs,
-    opening: (type: PlanOpening['type'], swing: boolean): Attrs =>
+    opening: (type: PlanOpening['type'], swing: boolean, above = false): Attrs =>
       // A paper look leaves the gap open, so the walls' outline shows across their cut ends.
       named.wallOutline !== null
         ? { fill: 'none', stroke: 'none' }
         : {
             fill: type === 'window' ? look.window : look.paper,
-            ...(type === 'opening' || swing ? { stroke: 'none' } : { stroke: ink, 'stroke-width': width('opening') })
+            ...(type === 'opening' || swing ? { stroke: 'none' } : { stroke: ink, 'stroke-width': width('opening') }),
+            // SHT-10: a window above the plan's cut, its outline dashed.
+            ...(above && type === 'window' && named.aboveDashed ? { 'stroke-dasharray': dashes('above') } : {})
           },
     jamb: { stroke: ink, 'stroke-width': width('jamb') } as Attrs,
     step: { stroke: ink, 'stroke-width': width('step'), 'stroke-linecap': 'butt' } as Attrs,
+    stair: { fill: 'none', stroke: ink, 'stroke-width': width('stair') } as Attrs,
+    // SHT-11: a stair past its break line, dashed as what lies above the cut.
+    stairAbove: { fill: 'none', stroke: ink, 'stroke-width': width('stair'), ...(named.aboveDashed ? { 'stroke-dasharray': dashes('above') } : {}) } as Attrs,
+    /** SHT-10: the dash of what lies above the plan's cut, or none in a look that draws it solid. */
+    aboveDash: named.aboveDashed ? ({ 'stroke-dasharray': dashes('above') } as Attrs) : ({} as Attrs),
+    stairArrow: { fill: ink, stroke: 'none' } as Attrs,
+    above: { fill: 'none', stroke: ink, 'stroke-width': width('above'), 'stroke-dasharray': dashes('above') } as Attrs,
+    // CNT-4: a flat's outline, a chain line as thin as the floor above's, in the paper's colour:
+    // it runs along the middle of the walls, over them.
+    flat: { fill: 'none', stroke: look.paper, 'stroke-width': width('above'), 'stroke-dasharray': dashes('chain'), 'stroke-linejoin': 'miter' } as Attrs,
+    // BRF-4: a floor's stated outline, solid, at the weight of the floor above's line.
+    outline: { fill: 'none', stroke: ink, 'stroke-width': width('above') } as Attrs,
     fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
     fixtureLine: { fill: 'none', stroke: ink, 'stroke-width': width('fixture'), 'stroke-linecap': 'butt' } as Attrs,
+    // CNT-16: a column cut through as a wall is, in the outside walls' tone, outlined in ink; a
+    // structural grid's chain lines and its names' circles in the dimensions' colour.
+    column: { fill: look.wallExterior, stroke: ink, 'stroke-width': width('column'), 'stroke-linejoin': 'miter' } as Attrs,
+    gridLine: { fill: 'none', stroke: look.dimension, 'stroke-width': width('grid'), 'stroke-dasharray': dashes('chain') } as Attrs,
+    gridBubble: { fill: look.paper, stroke: look.dimension, 'stroke-width': width('grid') } as Attrs,
+    gridName: text(look.dimensionText, TEXT_PX.gridName),
     doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
     doorArc: { fill: 'none', stroke: ink, 'stroke-width': width('doorArc') } as Attrs,
     windowFace: { stroke: ink, 'stroke-width': width('windowFace'), 'stroke-linecap': 'butt' } as Attrs,
@@ -247,7 +313,17 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     // A disc of paper under the "?", so the dashed line never runs through it. Not a halo of
     // stroke under the text: Skia, which draws the PNG, does not honour `paint-order`.
     undecidedDisc: { fill: look.paper } as Attrs,
+    // WRT-6 (lab WR-15): what the plan marks assumed, for the person to confirm: a dashed line in
+    // the look's warning colour, with the undecided door's pen and dash, in every look.
+    assumed: {
+      fill: 'none',
+      stroke: look.warning,
+      'stroke-width': width('undecided'),
+      'stroke-dasharray': dashes('undecided'),
+      'stroke-linejoin': 'round'
+    } as Attrs,
     extension: { stroke: look.dimension, 'stroke-width': width('extension') } as Attrs,
+    tick: { stroke: look.dimension, 'stroke-width': width('tick'), 'stroke-linecap': 'butt' } as Attrs,
     dimensionLine: (room: boolean): Attrs =>
       room
         ? {
@@ -282,7 +358,9 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
       // A mark of what went wrong, not a line of the drawing: in screen pixels in every look.
       'stroke-width': lengthText(LINE_PX.undrawn * mpp),
       'stroke-dasharray': LINE_PX.undrawnDash.map((value) => lengthText(value * mpp)).join(' ')
-    } as Attrs
+    } as Attrs,
+    // BRF-3: the plot and what is on it, in the look's own site colours.
+    site: sitePaints(named, line)
   }
 }
 
@@ -290,11 +368,52 @@ type Paints = ReturnType<typeof paints>
 
 const virtualPath = (points: readonly Vec2[]): string => `M${points.map((p) => `${p.x},${-p.y}`).join('L')}`
 
+/** A dividing line's points: its two ends, or a curved one's stations (CNT-18). */
+const linePoints = (wall: PlanWall): readonly Vec2[] => wall.curve?.path ?? wall.centerline
+
+/** The first share `t` of a line, along it, for a line being traced. */
+function lineShare(points: readonly Vec2[], t: number): Vec2[] {
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i]!.x, p.y - points[i]!.y))
+  let left = t * lengths.reduce((sum, length) => sum + length, 0)
+  const out = [points[0]!]
+  for (let i = 0; i < lengths.length; i++) {
+    const [a, b, length] = [points[i]!, points[i + 1]!, lengths[i]!]
+    if (left >= length) {
+      out.push(b)
+      left -= length
+      continue
+    }
+    const k = length === 0 ? 0 : left / length
+    out.push({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k })
+    break
+  }
+  return out
+}
+
+/** SHT-11: the part each kind of a stair symbol's line is drawn as. */
+const STAIR_PARTS = { outline: 'stair-outline', riser: 'stair-riser', walk: 'stair-line' } as const
+
 /** A label group: placed in metres, then scaled so its contents are in pixels. */
 /** How far an opening's id sits off its wall's face, in screen pixels. */
 const OPENING_ID_PX = 12
 
 const labelTransform = (at: Vec2, mpp: number): string => `translate(${at.x} ${-at.y}) scale(${mpp})`
+
+/** How long the 45-degree tick across each end of a drafted dimension is, in screen pixels (SHT-4). */
+export const DIMENSION_TICK_PX = 7
+
+/**
+ * The angle a number along a dimension line is turned by, in degrees as SVG turns (clockwise
+ * on the page), so it reads from the bottom or from the right, never upside down.
+ */
+function readingAngle(a: Vec2, b: Vec2): number {
+  // To a thousandth of a degree first, so an upright line a hair off reads like any other.
+  let degrees = Number(((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI).toFixed(3))
+  if (degrees > 90) degrees -= 180
+  if (degrees <= -90) degrees += 180
+  // Plan y grows up and SVG y down, so a turn counter-clockwise on the plan is a negative one.
+  return degrees === 0 ? 0 : -degrees
+}
 
 /**
  * A ghost of the earlier version's room, wall or opening. Ghosts carry no paint: they belong
@@ -307,7 +426,7 @@ function roomShape(room: PlanRoom, attrs: Attrs, key?: string): SvgNode {
 /** A solid wall is one path per run between its openings; a virtual wall is a line. */
 function wallShape(wall: PlanWall, attrs: Attrs, key?: string): SvgNode {
   if (wall.virtual) {
-    return el('path', { d: virtualPath(wall.centerline), 'data-part': 'virtual', ...attrs }, [], key)
+    return el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'virtual', ...attrs }, [], key)
   }
   return el(
     'g',
@@ -347,7 +466,8 @@ function dimensionMark(
   mpp: number,
   labelAt: Vec2 | null,
   opacity: number | undefined,
-  paint: Paints
+  paint: Paints,
+  drafted: boolean
 ): SvgNode {
   const room = dim.kind === 'room'
   const shift = { x: dim.normal.x * dim.offset, y: dim.normal.y * dim.offset }
@@ -367,16 +487,34 @@ function dimensionMark(
     )
   }
   children.push(el('line', { 'data-part': 'dimension-line', x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, ...paint.dimensionLine(room) }))
+  const span = Math.hypot(b.x - a.x, b.y - a.y)
+  if (drafted && span > 0) {
+    // A tick across each end, turned 45 degrees from the line, as a drawing marks it.
+    const half = (DIMENSION_TICK_PX / 2) * mpp
+    const along = { x: (b.x - a.x) / span, y: (b.y - a.y) / span }
+    const tick = { x: ((along.x - along.y) * half) / Math.SQRT2, y: ((along.y + along.x) * half) / Math.SQRT2 }
+    for (const end of [a, b]) {
+      children.push(el('line', { 'data-part': 'dimension-tick', x1: end.x - tick.x, y1: -(end.y - tick.y), x2: end.x + tick.x, y2: -(end.y + tick.y), ...paint.tick }))
+    }
+  }
   if (labelAt) {
+    // The number stands where every look puts it; a drafted look turns it along the line.
+    const angle = drafted ? readingAngle(a, b) : 0
     children.push(
       el('g', { transform: labelTransform(labelAt, mpp) }, [
-        el('text', { 'data-part': 'dimension-text', dy: String(DIMENSION_DY), ...paint.dimensionText(room) }, [
+        el('text', { 'data-part': 'dimension-text', dy: String(DIMENSION_DY), ...(angle !== 0 && { transform: `rotate(${angle})` }), ...paint.dimensionText(room) }, [
           dimensionText(dim.value)
         ])
       ])
     )
   }
-  return el('g', { 'data-part': 'dimension', 'data-kind': dim.kind, 'data-id': dim.id, opacity }, children, dim.id)
+  // What each end measures to (SHT-4): `face`, `centre-line` or `finish`, from's then to's.
+  return el(
+    'g',
+    { 'data-part': 'dimension', 'data-kind': dim.kind, 'data-id': dim.id, 'data-measured-to': dim.measuredTo.join(' '), opacity },
+    children,
+    dim.id
+  )
 }
 
 /** The label boxes a dimension's number could meet anywhere along its line. */
@@ -407,19 +545,102 @@ const lineEl = (part: string, [a, b]: Line, attrs: Attrs): SvgNode => el('line',
  * A window as the wall's break bridged by thin lines: one along each face of the wall and the
  * glass line along its middle. Drawing, not a target.
  */
-function windowSymbol(opening: PlanOpening, paint: Paints): SvgNode {
+function windowSymbol(opening: PlanOpening, paint: Paints, panes = false, above = false): SvgNode {
   const half = opening.thickness / 2
+  // SHT-10: a window above the plan's cut, every line dashed.
+  const dash = above ? paint.aboveDash : {}
+  const flip = ([a, b]: readonly [Vec2, Vec2]): Line => [
+    { x: a.x, y: -a.y },
+    { x: b.x, y: -b.y }
+  ]
+  // SHT-10: in a detailed drawing, its glass as the core lays out its two panes (`openingDetail`).
+  const glass = panes ? openingDetail(opening).glass.map((pane) => lineEl('window-glass', flip(pane), { ...paint.glass, ...dash })) : [lineEl('window-glass', across(opening, 0), { ...paint.glass, ...dash })]
   return el(
     'g',
-    { 'data-part': 'window-symbol', 'data-opening': opening.id, 'pointer-events': 'none', 'aria-hidden': 'true' },
-    [
-      lineEl('window-face', across(opening, half), paint.windowFace),
-      lineEl('window-face', across(opening, -half), paint.windowFace),
-      lineEl('window-glass', across(opening, 0), paint.glass)
-    ],
+    { 'data-part': 'window-symbol', 'data-opening': opening.id, 'data-above': above ? 'true' : undefined, 'pointer-events': 'none', 'aria-hidden': 'true' },
+    [lineEl('window-face', across(opening, half), { ...paint.windowFace, ...dash }), lineEl('window-face', across(opening, -half), { ...paint.windowFace, ...dash }), ...glass],
     `${opening.id}:window`
   )
 }
+
+/**
+ * SHT-10: a door's or window's detail in a drawing at 1:50 or larger, as the core lays it out
+ * (`openingDetail`): a frame at each side of the hole and a window's sill on each face of the
+ * wall. Null for a doorless opening. Drawing, not a target.
+ */
+function detailNode(opening: PlanOpening, paint: Paints): SvgNode | null {
+  const detail = openingDetail(opening)
+  if (detail.frames.length === 0) return null
+  const dash = opening.above ? paint.aboveDash : {}
+  return el(
+    'g',
+    { 'data-part': 'opening-detail', 'data-opening': opening.id, 'pointer-events': 'none', 'aria-hidden': 'true' },
+    [
+      ...detail.frames.map((ring, index) => el('path', { 'data-part': 'frame', d: pathOf(ring), ...paint.frame, ...dash }, [], `f${index}`)),
+      ...detail.sills.map(([a, b], index) => el('line', { 'data-part': 'sill', x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, ...paint.sill, ...dash }, [], `s${index}`))
+    ],
+    `${opening.id}:detail`
+  )
+}
+
+/** CNT-14: the drawing's names of a symbol's lines, by what each is. */
+const PIECE_PARTS: Readonly<Record<SymbolPart, string>> = {
+  jamb: 'jamb',
+  leaf: 'door-leaf',
+  panel: 'door-panel',
+  face: 'window-face',
+  glass: 'window-glass'
+}
+
+/**
+ * CNT-14: a door or window that states its kind, or the part of it that opens, drawn from its
+ * kind's symbol (`openingSymbol` in the core): every line and swing where the core puts it, a
+ * line above the plan's cut or hidden in the wall dashed. Drawing, not a target.
+ */
+function kindSymbolNode(opening: PlanOpening, symbol: OpeningSymbol, paint: Paints, opacity: number | undefined): SvgNode {
+  const flip = (p: Vec2): Vec2 => ({ x: p.x, y: -p.y })
+  const pen = (part: SymbolPart): Attrs =>
+    part === 'jamb' ? paint.jamb : part === 'leaf' ? paint.doorLeaf : part === 'glass' ? paint.glass : paint.windowFace
+  const children = symbol.pieces.map((piece) => {
+    if (piece.shape === 'arc') {
+      const a = flip(piece.tip)
+      const b = flip(piece.far)
+      const r = piece.radius.toFixed(4)
+      const d = `M${a.x.toFixed(4)},${a.y.toFixed(4)}A${r},${r} 0 0 ${piece.counterClockwise ? 1 : 0} ${b.x.toFixed(4)},${b.y.toFixed(4)}`
+      return el('path', { 'data-part': 'door-arc', d, ...paint.doorArc })
+    }
+    const [a, b] = [flip(piece.from), flip(piece.to)]
+    const attrs = pen(piece.part)
+    return el('line', {
+      'data-part': PIECE_PARTS[piece.part],
+      'data-above': piece.above || opening.above ? 'true' : undefined,
+      x1: a.x,
+      y1: a.y,
+      x2: b.x,
+      y2: b.y,
+      ...attrs,
+      // SHT-10: a window wholly above the plan's cut is dashed whatever its kind.
+      ...(piece.above || opening.above ? paint.aboveDash : {})
+    })
+  })
+  const door = opening.type === 'door'
+  return el(
+    'g',
+    {
+      'data-part': door ? 'door-symbol' : 'window-symbol',
+      'data-opening': opening.id,
+      'data-kind': symbol.kind,
+      'pointer-events': 'none',
+      'aria-hidden': 'true',
+      opacity
+    },
+    children,
+    `${opening.id}:${door ? 'door' : 'window'}`
+  )
+}
+
+/** CNT-14: whether a door or window is drawn from its kind's symbol: it states a kind or the part of it that opens. */
+const drawnByKind = (handing: DoorHanding | undefined): boolean => handing?.kind !== undefined || handing?.opens !== undefined
 
 /**
  * A door whose hinge or swing the plan does not state: a dashed line across the gap and a "?",
@@ -429,7 +650,7 @@ function undecidedSymbol(opening: PlanOpening, mpp: number, paint: Paints): SvgN
   const at = { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }
   return el(
     'g',
-    { 'data-part': 'door-undecided', 'data-opening': opening.id, 'pointer-events': 'none', role: 'img', 'aria-label': 'Door with no stated swing' },
+    { 'data-part': 'door-undecided', 'data-opening': opening.id, 'pointer-events': 'none', role: 'img', 'aria-label': drawingText(drawingWords(), 'drawing.undecidedDoor') },
     [
       lineEl('door-undecided-line', across(opening, 0), paint.undecided),
       el('g', { transform: labelTransform(at, mpp) }, [
@@ -441,8 +662,26 @@ function undecidedSymbol(opening: PlanOpening, mpp: number, paint: Paints): SvgN
   )
 }
 
+/** SHT-7, SHT-10: a room's tint, by its use or its floor finish, from the look's tints; none for the look's one fill. */
+function tintOf(look: Look, by: SceneShow['colourBy'], id: string, input: SceneInput): Attrs {
+  if (by === 'use') {
+    const use = input.uses?.get(id)
+    return use === undefined ? {} : { fill: look.tints.uses[use] }
+  }
+  if (by === 'finish' && look.tints.finishes.length > 0) {
+    const finish = input.finishes?.rooms.get(id)
+    const at = finish === undefined ? -1 : input.finishes!.order.indexOf(finish)
+    return at < 0 ? {} : { fill: look.tints.finishes[at % look.tints.finishes.length]! }
+  }
+  return {}
+}
+
 /** The plan's elements, back to front: what goes inside the `<svg>`. */
 export function planScene(input: SceneInput): SvgNode[] {
+  return withDisplay(input.labels?.display, () => planSceneIn(input))
+}
+
+function planSceneIn(input: SceneInput): SvgNode[] {
   const { drawing, handings, doorWarnings, dimensions, metersPerPixel: mpp } = input
   const look = toLook(input.look)
   const style = input.labels ?? {}
@@ -450,10 +689,16 @@ export function planScene(input: SceneInput): SvgNode[] {
   const live: SceneLive = { ...STILL, ...input.live }
   const paint = paints(look, mpp, input.paperScale)
   const show: SceneShow = { ...SHOW_ALL, ...input.show }
+  const picked = show.paint ?? null
   const fillOf = (id: string): Attrs => {
-    const use = show.colourBy === 'use' ? input.uses?.get(id) : undefined
-    return use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+    const colour = picked?.get(id)
+    const base = { ...paint.room, ...tintOf(look, show.colourBy, id, input) }
+    return colour === undefined ? base : { ...base, fill: colour, 'fill-opacity': 0.45 }
   }
+  // SHT-10: the detail a drawing at 1:50 or larger shows, in a look that has it.
+  const detail = detailShown(look, mpp, input.paperScale) ? look.detail : null
+  const materials = input.materials ?? []
+  const hatched = (wall: PlanWall): boolean => detail !== null && !wall.virtual && wall.material !== undefined && materials.includes(wall.material)
   const out: SvgNode[] = []
 
   const selected = (id: string): boolean => id === live.selectedId
@@ -471,7 +716,7 @@ export function planScene(input: SceneInput): SvgNode[] {
       if (!ids.has(wall.id)) continue
       if (wall.virtual) {
         children.push(
-          el('path', { d: virtualPath(wall.centerline), 'data-part': 'virtual', 'data-id': wall.id, ...paint.virtual }, [], wall.id)
+          el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'virtual', 'data-id': wall.id, ...paint.virtual }, [], wall.id)
         )
         continue
       }
@@ -484,7 +729,8 @@ export function planScene(input: SceneInput): SvgNode[] {
               'data-part': 'wall',
               'data-id': wall.id,
               'data-exposure': wall.exposure,
-              ...paint.wall(wall.exposure)
+              'data-wall-kind': wallDrawnKind(wall),
+              ...paint.wall(wallDrawnKind(wall))
             },
             [],
             `${wall.id}:${index}`
@@ -512,6 +758,21 @@ export function planScene(input: SceneInput): SvgNode[] {
     out.push(el('g', { 'data-leaving': 'true', opacity: 1 - progress, 'pointer-events': 'none' }, children, 'leaving'))
   }
 
+  // BRF-3: the site, under everything: the building covers what it stands on. Drawn only.
+  if (drawing.site !== null && drawing.site !== undefined) out.push(...siteNodes(drawing.site, paint.site, mpp))
+  // CNT-6 (C23): the context round the plan, dashed under everything: drawn only, never measured.
+  const context = drawing.context ?? []
+  if (context.length > 0) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'context', 'pointer-events': 'none', 'aria-hidden': 'true' },
+        context.map((shape) => el('path', { 'data-part': 'context-shape', 'data-context': shape.id, d: virtualPath([...shape.points, shape.points[0]!]), ...paint.above }, [], shape.id)),
+        'context'
+      )
+    )
+  }
+
   // A ghost room lies under the current rooms, like a floor that used to be there.
   for (const room of live.ghosts?.rooms ?? []) {
     out.push(roomShape(room, live.ghostAttrs(room.id), `ghost-room-${room.id}`))
@@ -537,19 +798,81 @@ export function planScene(input: SceneInput): SvgNode[] {
     )
   }
 
+  // CNT-16: each structural grid, its chain lines over the room fills and under the walls, and
+  // each line's name in a circle past both its ends. Drawing, not a target. Its spacing is with
+  // the other dimensions.
+  for (const grid of drawing.grids ?? []) {
+    const r = GRID_BUBBLE_PX * mpp
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'grid', 'data-id': grid.id, 'data-name': grid.name ?? undefined, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        grid.lines.flatMap((line, index) => {
+          const ends = [
+            { x: line.from.x + line.along.x * r, y: line.from.y + line.along.y * r },
+            { x: line.to.x - line.along.x * r, y: line.to.y - line.along.y * r }
+          ]
+          return [
+            el('path', { 'data-part': 'grid-line', 'data-line': line.name, d: virtualPath([line.from, line.to]), ...paint.gridLine }, [], `l${index}`),
+            ...ends.flatMap((at, end) => [
+              el('circle', { 'data-part': 'grid-bubble', cx: at.x, cy: -at.y, r, ...paint.gridBubble }, [], `b${index}-${end}`),
+              el('g', { transform: labelTransform(at, mpp) }, [el('text', { 'data-part': 'grid-name', dy: String(DIMENSION_DY), ...paint.gridName }, [line.name])], `n${index}-${end}`)
+            ])
+          ]
+        }),
+        `grid:${grid.id}`
+      )
+    )
+  }
+
   // CNT-12: the fixtures, over the room fills and under the walls, so a wall covers a fixture
   // that runs into it. Each is its symbol to scale, in the wall's ink on the paper. Drawing, not
-  // a target: clicks reach the room underneath.
+  // a target: clicks reach the room underneath. Lit, like a wall, while the warning of a door
+  // that swings into it is hovered (CNT-13).
   for (const item of drawing.items) {
     out.push(
       el(
         'g',
-        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none' },
+        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none', ...live.hit(item.id) },
         [
           ...item.rings.map((ring, index) => el('path', { 'data-part': 'fixture-ring', d: `${pathOf(ring)}`, ...paint.fixture }, [], `r${index}`)),
           ...item.lines.map((line, index) => el('path', { 'data-part': 'fixture-line', d: virtualPath(line), ...paint.fixtureLine }, [], `l${index}`))
         ],
         `fixture:${item.id}`
+      )
+    )
+  }
+
+  // SHT-11: a lift shaft's cross, corner to corner, over its room's fill and under the walls that
+  // box it. Drawing, not a target.
+  for (const lift of drawing.lifts) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'lift', 'data-id': lift.id, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        lift.lines.map(([a, b], index) => el('path', { 'data-part': 'lift-cross', d: virtualPath([a, b]), ...paint.stair }, [], String(index))),
+        `lift:${lift.id}`
+      )
+    )
+  }
+
+  // BRF-4 (C17): the outline the floor states, a solid line round it: the massing before any
+  // wall, under the walls once they are drawn. Drawing, not a target.
+  const floorRing = drawing.outline
+  if (floorRing !== undefined && floorRing.length >= 3) {
+    out.push(el('path', { 'data-part': 'floor-outline', d: virtualPath([...floorRing, floorRing[0]!]), ...paint.outline, 'pointer-events': 'none', 'aria-hidden': 'true' }, [], 'floor-outline'))
+  }
+
+  // SHT-11: the outline of the floor above, dashed, over the floors and under the walls, so a
+  // stretch over an inner wall is hidden by it. Drawing, not a target.
+  const above = input.above
+  if (show.above && above !== undefined && above.lines.length > 0) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'above', 'data-floors': above.floors.join(' '), 'pointer-events': 'none', 'aria-hidden': 'true' },
+        above.lines.map((line, index) => el('path', { 'data-part': 'above-line', d: virtualPath(line), ...paint.above }, [], String(index))),
+        'above'
       )
     )
   }
@@ -573,7 +896,7 @@ export function planScene(input: SceneInput): SvgNode[] {
         'g',
         { 'data-part': 'wall-outlines', 'pointer-events': 'none', 'aria-hidden': 'true' },
         drawing.walls.flatMap((wall) =>
-          wall.virtual ? [] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'wall-outline', 'data-wall': wall.id, ...outline }))
+          wall.virtual || wall.phase === 'demolished' ? [] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'wall-outline', 'data-wall': wall.id, ...outline(wallDrawnKind(wall)) }))
         ),
         'wall-outlines'
       )
@@ -588,17 +911,21 @@ export function planScene(input: SceneInput): SvgNode[] {
     const offset = live.wallOffset(wall.id)
     const transform = offset ? `translate(${offset.x} ${-offset.y})` : undefined
 
+    // CNT-10: a wall to be demolished is drawn as it stands before the work, dashed and unfilled,
+    // under what stands after it. Drawing, not a target.
+    if (wall.phase === 'demolished') {
+      const shapes = wall.virtual ? [el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished })] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished }))
+      out.push(el('g', { 'data-phase': 'demolished', 'pointer-events': 'none' }, shapes, `demolished-${wall.id}`))
+      continue
+    }
+
     if (wall.virtual) {
-      const [start, end] = wall.centerline
-      const reach =
-        tracing === null
-          ? end
-          : { x: start.x + (end.x - start.x) * tracing, y: start.y + (end.y - start.y) * tracing }
+      const points = linePoints(wall)
       out.push(
         el(
           'path',
           {
-            d: virtualPath([start, reach]),
+            d: virtualPath(tracing === null ? points : lineShare(points, tracing)),
             'data-part': 'virtual',
             'data-id': wall.id,
             'data-moving': offset ? wall.id : undefined,
@@ -626,11 +953,13 @@ export function planScene(input: SceneInput): SvgNode[] {
               'data-part': 'wall',
               'data-id': wall.id,
               'data-exposure': wall.exposure,
+              'data-wall-kind': wallDrawnKind(wall),
+              'data-phase': wall.phase,
               'data-selectable': 'true',
               'data-selected': selected(wall.id),
               ...live.marks(wall.id),
               ...live.hit(wall.id),
-              ...paint.wall(wall.exposure)
+              ...paint.wall(wallDrawnKind(wall), wall.phase, hatched(wall))
             },
             [],
             String(index)
@@ -641,11 +970,58 @@ export function planScene(input: SceneInput): SvgNode[] {
     )
   }
 
+  // SHT-10: each wall of a material hatched across, at 1:50 and larger, with the material's hatch
+  // in turn (`planWallMaterials`), over the walls' paper and under the openings. Drawing, not a target.
+  if (detail !== null && detail.hatches.length > 0) {
+    const spacing = hatchSpacingMetres(look, mpp, input.paperScale)
+    const hatches: SvgNode[] = []
+    for (const wall of drawing.walls) {
+      if (!hatched(wall) || wall.phase === 'demolished') continue
+      const angles = detail.hatches[materials.indexOf(wall.material!) % detail.hatches.length]!
+      const lines = wall.slices.flatMap((slice) => angles.flatMap((angle) => hatchLines(slice, spacing, (angle * Math.PI) / 180)))
+      if (lines.length === 0) continue
+      const d = lines.map(([a, b]) => `M${lengthText(a.x)},${lengthText(-a.y)}L${lengthText(b.x)},${lengthText(-b.y)}`).join('')
+      hatches.push(el('path', { 'data-part': 'wall-hatch', 'data-wall': wall.id, 'data-material': wall.material, d, ...paint.wallHatch }, [], `hatch:${wall.id}`))
+    }
+    if (hatches.length > 0) out.push(el('g', { 'data-part': 'wall-hatches', 'pointer-events': 'none', 'aria-hidden': 'true' }, hatches, 'wall-hatches'))
+  }
+
+  // CNT-16: each column, cut through as the walls are, over them where it meets one. A round one
+  // is its true circle. Drawing, not a target: clicks reach the room underneath.
+  for (const column of drawing.columns ?? []) {
+    out.push(
+      column.radius !== undefined
+        ? el('circle', { 'data-part': 'column', 'data-id': column.id, 'data-shape': column.shape, 'data-room': column.room ?? undefined, cx: column.centre.x, cy: -column.centre.y, r: column.radius, 'pointer-events': 'none', ...paint.column }, [], `column:${column.id}`)
+        : el('path', { 'data-part': 'column', 'data-id': column.id, 'data-shape': column.shape, 'data-room': column.room ?? undefined, d: pathOf(column.outline), 'pointer-events': 'none', ...paint.column }, [], `column:${column.id}`)
+    )
+  }
+
+  // SHT-11 with CNT-4: each flat's outline, a chain line along the middle of the walls round its
+  // rooms, so one line runs between two flats. It is drawn over the walls in the paper's colour,
+  // where a line in ink would vanish into a dark wall, and under the openings, so a doorway
+  // breaks it. Drawing, not a target.
+  for (const flat of drawing.flats) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'flat', 'data-id': flat.id, 'data-name': flat.name, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        flat.rings.map((ring, index) => el('path', { 'data-part': 'flat-outline', d: pathOf(ring), ...paint.flat }, [], String(index))),
+        `flat:${flat.id}`
+      )
+    )
+  }
+
   for (const opening of drawing.openings) {
+    if (opening.phase === 'demolished') continue
     const opened = live.openingOpen(opening.id)
     const span = opened === null ? opening : openingAt(opening, opened)
-    const exposure = drawing.walls.find((wall) => wall.id === opening.wallId)?.exposure
-    const door = doorSymbolOf(opening, handings.get(opening.id))
+    const host = drawing.walls.find((wall) => wall.id === opening.wallId)
+    const exposure = host?.exposure
+    const handing = handings.get(opening.id)
+    // CNT-14: a door or window that states its kind is drawn from its kind's symbol; any other as before.
+    const kinded = opening.type !== 'opening' && drawnByKind(handing) ? openingSymbol(opening, handing) : null
+    const door = kinded === null ? doorSymbolOf(opening, handing) : null
+    const drawn = kinded !== null || door !== null
 
     if (opened !== null) {
       // The part of the gap not yet open is still wall, so the wall parts from the
@@ -661,9 +1037,10 @@ export function planScene(input: SceneInput): SvgNode[] {
               d: pathOf(stripAcross(a, b, opening.normal, opening.thickness)),
               'data-part': 'wall',
               'data-exposure': exposure,
+              'data-wall-kind': host === undefined ? undefined : wallDrawnKind(host),
               'data-closing': 'true',
               'pointer-events': 'none',
-              ...paint.wall(exposure)
+              ...paint.wall(host === undefined ? 'inside' : wallDrawnKind(host), host?.phase, host !== undefined && hatched(host))
             },
             [],
             `${opening.id}:closing:${index}`
@@ -679,12 +1056,15 @@ export function planScene(input: SceneInput): SvgNode[] {
           'data-part': 'opening',
           'data-type': opening.type,
           'data-id': opening.id,
+          'data-phase': opening.phase,
           'data-selectable': 'true',
           'data-selected': selected(opening.id),
           ...live.marks(opening.id),
-          'data-swing': door ? 'true' : undefined,
+          'data-swing': opening.type === 'door' && drawn ? 'true' : undefined,
+          ...(kinded !== null && { 'data-kind': kinded.kind }),
+          'data-above': opening.above ? 'true' : undefined,
           ...live.hit(opening.id),
-          ...paint.opening(opening.type, door !== null)
+          ...paint.opening(opening.type, opening.type === 'door' && drawn, opening.above === true)
         },
         [],
         opening.id
@@ -718,8 +1098,82 @@ export function planScene(input: SceneInput): SvgNode[] {
         )
       )
     }
-    if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
-    if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
+    if (kinded !== null && opening.type === 'door' && show.swings) out.push(kindSymbolNode(opening, kinded, paint, opened ?? undefined))
+    // SHT-10: in a detailed drawing a plain window's glass is two panes; a window above the cut is dashed.
+    if (look.glass && opening.type === 'window') out.push(kinded !== null ? kindSymbolNode(opening, kinded, paint, undefined) : windowSymbol(opening, paint, detail !== null, opening.above === true))
+    if (look.undecidedDoors && opening.type === 'door' && !drawn) out.push(undecidedSymbol(opening, mpp, paint))
+    if (detail !== null && opened === null) {
+      const node = detailNode(opening, paint)
+      if (node !== null) out.push(node)
+    }
+  }
+  // CNT-10: each opening to be demolished, as a dashed outline across its wall where it stood,
+  // over the walls and the openings that stand after the work: a blocked window shows on its
+  // wall, a widened door's old opening inside the new one. Drawing, not a target.
+  for (const opening of drawing.openings) {
+    if (opening.phase !== 'demolished') continue
+    out.push(el('path', { d: pathOf(stripAcross(opening.from, opening.to, opening.normal, opening.thickness)), 'data-part': 'demolished-opening', 'data-type': opening.type, 'data-id': opening.id, 'pointer-events': 'none', ...paint.demolished }, [], `demolished-${opening.id}`))
+  }
+
+  // WRT-6 (lab WR-15): what the plan marks assumed, drawn in its own style: a dashed line round
+  // each assumed room, wall and fixture and across each assumed opening, over the walls so it
+  // shows on every one. Drawing, not a target: clicks reach the parts underneath.
+  const assumed: SvgNode[] = []
+  for (const room of drawing.rooms) if (room.assumed) assumed.push(el('path', { d: roomPathOf(room), 'data-part': 'assumed-room', 'data-id': room.id, ...paint.assumed }, [], `room:${room.id}`))
+  for (const wall of drawing.walls) {
+    if (!wall.assumed) continue
+    if (wall.virtual) assumed.push(el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}`))
+    else wall.slices.forEach((slice, index) => assumed.push(el('path', { d: pathOf(slice), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}:${index}`)))
+  }
+  for (const opening of drawing.openings) if (opening.assumed) assumed.push(lineEl('assumed-opening', across(opening, 0), { 'data-id': opening.id, ...paint.assumed }))
+  for (const item of drawing.items) if (item.assumed) assumed.push(el('path', { d: pathOf(item.outline), 'data-part': 'assumed-item', 'data-id': item.id, ...paint.assumed }, [], `item:${item.id}`))
+  if (assumed.length > 0) out.push(el('g', { 'data-part': 'assumed', 'pointer-events': 'none', role: 'img', 'aria-label': drawingText(drawingWords(), 'drawing.assumed') }, assumed, 'assumed'))
+  // CNT-9: the walls, doors, windows and openings picked out, over the drawing, each in its
+  // colour. Drawing, not a target: clicks reach the part underneath.
+  if (picked !== null && picked.size > 0) {
+    const pen = lengthText(3 * mpp)
+    for (const wall of drawing.walls) {
+      const colour = picked.get(wall.id)
+      if (colour === undefined) continue
+      if (wall.virtual) {
+        out.push(el('path', { d: virtualPath(linePoints(wall)), 'data-part': 'picked', 'data-id': wall.id, fill: 'none', stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${wall.id}`))
+        continue
+      }
+      out.push(el('g', { 'data-part': 'picked', 'data-id': wall.id, 'pointer-events': 'none' }, wall.slices.map((slice, index) => el('path', { d: pathOf(slice), fill: colour, 'fill-opacity': 0.75 }, [], String(index))), `picked:${wall.id}`))
+    }
+    for (const opening of drawing.openings) {
+      const colour = picked.get(opening.id)
+      if (colour === undefined) continue
+      out.push(el('path', { d: pathOf(stripAcross(opening.from, opening.to, opening.normal, opening.thickness)), 'data-part': 'picked', 'data-id': opening.id, fill: colour, 'fill-opacity': 0.85, stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${opening.id}`))
+    }
+  }
+
+  // A stair the plan states (LVL-3), on both floors it joins, as the core lays out its symbol
+  // (SHT-11): on the floor it rises from, solid up to the break line at the plan's cut and dashed
+  // above it; on the floor it arrives on, whole. A line at every riser, the walking line and an
+  // arrow head pointing up. Drawing, not a target: clicks reach the room underneath.
+  for (const stair of drawing.stairs) {
+    const children: SvgNode[] = []
+    for (const line of stair.symbol.lines) {
+      children.push(
+        el('path', {
+          d: line.closed ? pathOf(line.points) : virtualPath(line.points),
+          'data-part': STAIR_PARTS[line.kind],
+          'data-above': line.above ? 'true' : undefined,
+          ...(line.above ? paint.stairAbove : paint.stair)
+        })
+      )
+    }
+    if (stair.symbol.cut !== null) children.push(el('path', { d: virtualPath(stair.symbol.cut), 'data-part': 'stair-break', ...paint.stair }))
+    if (stair.symbol.arrow !== null) children.push(el('path', { d: pathOf(stair.symbol.arrow), 'data-part': 'stair-arrow', ...paint.stairArrow }))
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'stair', 'data-id': stair.id, 'data-end': stair.end, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        children,
+        `stair:${stair.id}`
+      )
+    )
   }
 
   // A step between rooms at different levels (LVL-7): a solid line in the wall's ink across the
@@ -775,7 +1229,7 @@ export function planScene(input: SceneInput): SvgNode[] {
     if (!show.areas) return ''
     const change = live.areaChange(room.id)
     return change
-      ? `${areaFigure(change.before, decimals)} → ${areaFigure(change.after, decimals)} m²`
+      ? `${areaNumber(change.before, decimals)} → ${areaNumber(change.after, decimals)} ${areaUnit()}`
       : formatArea(room.area, decimals)
   }
   // The same text in the pieces the app has always drawn it in, one text node each.
@@ -783,8 +1237,8 @@ export function planScene(input: SceneInput): SvgNode[] {
     if (!show.areas) return []
     const change = live.areaChange(room.id)
     return change
-      ? [areaFigure(change.before, decimals), ' → ', areaFigure(change.after, decimals), ' m²']
-      : [areaFigure(room.area, decimals), ' m²']
+      ? [areaNumber(change.before, decimals), ' → ', areaNumber(change.after, decimals), ` ${areaUnit()}`]
+      : [areaNumber(room.area, decimals), ` ${areaUnit()}`]
   }
   const names = drawing.rooms.map((room, index) => {
     const name = labelName(room.name, index, style)
@@ -829,11 +1283,18 @@ export function planScene(input: SceneInput): SvgNode[] {
     look: look.colors
   }
 
+  // A number outside the plan keeps off the room labels and the numbers already placed on its
+  // chain and the next: one that has no room between its ticks waits for the user to zoom in.
+  const placedNumbers: Box[] = []
   for (const dim of dimensions) {
     const shown = live.dimensionShown(dim)
     if (shown <= 0) continue
-    const labelAt = dim.kind === 'room' ? placeDimensionLabel(dim, blocksNear(dim, labelBlocks, mpp), mpp) : dim.labelAt
-    out.push(dimensionMark(dim, mpp, labelAt, shown < 1 ? shown : undefined, paint))
+    const labelAt =
+      dim.kind === 'room'
+        ? placeDimensionLabel(dim, blocksNear(dim, labelBlocks, mpp), mpp)
+        : placeDimensionLabel(dim, [...blocksNear(dim, labelBlocks, mpp), ...blocksNear(dim, placedNumbers, mpp)], mpp)
+    if (labelAt && dim.kind !== 'room') placedNumbers.push(dimensionTextBox(labelAt, dim, mpp))
+    out.push(dimensionMark(dim, mpp, labelAt, shown < 1 ? shown : undefined, paint, look.draftedDimensions))
   }
 
   drawing.rooms.forEach((room, index) => {
@@ -874,17 +1335,17 @@ export function planScene(input: SceneInput): SvgNode[] {
       el(
         'g',
         { transform: labelTransform(poleOfInaccessibility(room.polygon, undefined, room.holes).point, mpp), ...live.ghostAttrs(room.id) },
-        [el('text', { 'data-part': 'label' }, [`${room.name} · ${formatArea(room.area, decimals)} · removed`])],
+        [el('text', { 'data-part': 'label' }, [`${room.name} · ${formatArea(room.area, decimals)} · ${drawingText(drawingWords(), 'drawing.removed')}`])],
         `ghost-label-${room.id}`
       )
     )
   }
 
   // SHT-7: the notes, tags and symbols. A note in a room goes under that room's label.
-  if (show.notes) {
-    const labelAt = new Map(labels.flatMap((label) => (label ? [[label.id, label.at] as const] : [])))
-    out.push(...noteNodes(drawing.notes, labelAt, mpp, look.colors))
-  }
+  const labelAt = new Map(labels.flatMap((label) => (label ? [[label.id, label.at] as const] : [])))
+  if (show.notes) out.push(...noteNodes(drawing.notes, labelAt, mpp, look.colors))
+  // ARE-15: the schedules' marks, a room's over its label where it was placed.
+  if (input.scheduleMarks !== undefined && input.scheduleMarks.length > 0) out.push(...scheduleMarkNodes(input.scheduleMarks, labelAt, look, mpp))
 
   // The check view: each opening's id just off the middle of its wall, on the side its normal
   // points to, upright and sized in screen pixels like the labels.

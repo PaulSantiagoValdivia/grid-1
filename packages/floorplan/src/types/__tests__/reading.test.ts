@@ -3,7 +3,7 @@
  * knows, instead of being dropped in silence (lab MS-1, AU3-3).
  */
 import { describe, expect, it } from 'vitest'
-import { FloorPlanSchema, ROOM_USES } from '../floorplan'
+import { FloorPlanSchema, USE_WORDS } from '../floorplan'
 import { nearestUse, nearestWord, readingNotes, type ReadingNote } from '../reading'
 import { flat } from '../../test-support/plans'
 
@@ -49,7 +49,8 @@ describe('a field Grid does not know', () => {
     delete wall.thickness
     wall.thick = 0.3
     expect(fields(readingNotes(raw))).toEqual([
-      { kind: 'unknown-field', field: 'thick', at: 'walls[0]', part: { list: 'walls', index: 0 }, nearest: 'thickness', nearestWritten: false, known: ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor'] }
+      // LVL-5: a wall's fields hold through, the highest floor it rises through; CNT-18 adds arc, CNT-10 phase, HND-11 face, CNT-6 beyond, CNT-15 wallType.
+      { kind: 'unknown-field', field: 'thick', at: 'walls[0]', part: { list: 'walls', index: 0 }, nearest: 'thickness', nearestWritten: false, known: ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', 'through', 'arc', 'properties', 'phase', 'beyond', 'face', 'wallType'] }
     ])
   })
 
@@ -112,14 +113,17 @@ describe('a field Grid does not know', () => {
     raw['floors'] = [{ id: 'ground', name: 'Ground', level: 0, colour: 'red' }]
     raw['referenceImage'] = { path: 'a.png', scale: 2 }
     raw['site'] = { area: 300 }
-    // In the order the file gives them: this plan lists its rooms and openings first.
+    raw['plot'] = { area: 300 }
+    // In the order the file gives them: this plan lists its rooms and openings first. `site` is a
+    // part of the plan (CNT-3, with LVL-4's ground), so a field it does not have is named on it.
     expect(fields(readingNotes(raw)).map((n) => [n.at, n.field, n.part])).toEqual([
       ['rooms[0]', 'colour', { list: 'rooms', index: 0 }],
       ['openings[0]', 'colour', { list: 'openings', index: 0 }],
       ['walls[1]', 'colour', { list: 'walls', index: 1 }],
       ['floors[0]', 'colour', { list: 'floors', index: 0 }],
       ['referenceImage', 'scale', null],
-      ['', 'site', null]
+      ['site', 'area', null],
+      ['', 'plot', null]
     ])
   })
 
@@ -139,24 +143,44 @@ describe('a field Grid does not know', () => {
 })
 
 describe('a room use Grid does not know', () => {
-  it('names each of the 20 uses AU3-3 found, but reads Bedroom as bedroom', () => {
+  // CNT-5: 15 of AU3-3's 20 words are uses now, or plainly mean one (`USE_WORDS`); five are named.
+  it('names the 5 of the 20 uses AU3-3 found that Grid still does not read, and reads the other 15 as the use they mean', () => {
     const named: string[] = []
+    const readAs: Record<string, string> = {}
     for (const use of AU3_USES) {
       const raw = plan()
       raw['rooms'][0].use = use
       const notes = readingNotes(raw)
       const read = FloorPlanSchema.parse(raw).rooms[0]!.use
-      if ((ROOM_USES as readonly string[]).includes(use.toLowerCase())) {
-        expect(read, use).toBe(use.toLowerCase())
+      if (read !== undefined) {
+        readAs[use] = read
         expect(notes, use).toEqual([])
       } else {
-        expect(read, use).toBeUndefined()
         expect(notes, use).toEqual([{ kind: 'unknown-use', use, notText: null, part: { list: 'rooms', index: 0 }, nearest: nearestUse(use) }])
         named.push(use)
       }
     }
-    expect(named).toHaveLength(19)
-    expect(FloorPlanSchema.parse({ ...plan(), rooms: [{ ...plan()['rooms'][0], use: 'Bedroom' }] }).rooms[0]!.use).toBe('bedroom')
+    expect(named).toEqual(['studio', 'balcony', 'terrace', 'porch', 'lounge'])
+    expect(readAs).toEqual({
+      classroom: 'classroom', office: 'office', toilet: 'toilet', consulting: 'treatment', warehouse: 'storage', reception: 'reception',
+      meeting: 'meeting', changing: 'changing', waiting: 'waiting', staff: 'staff', Bedroom: 'bedroom', servery: 'retail', gym: 'sport',
+      retail: 'retail', garage: 'parking',
+    })
+  })
+
+  it('reads a word that plainly means a use as it, and never as a use the figure checks look at', () => {
+    const read = (use: string): string | undefined => {
+      const raw = plan()
+      raw['rooms'][0].use = use
+      return FloorPlanSchema.parse(raw).rooms[0]!.use
+    }
+    expect(read('WC')).toBe('toilet')
+    expect(read('Pooja room')).toBe('worship')
+    expect(read('bryggers')).toBe('utility')
+    expect(read('Staff room')).toBe('staff')
+    expect(read('plant_room')).toBe('plant')
+    for (const word of ['bed', 'lounge', 'Living room', 'dining room', 'hall', 'studio']) expect(read(word), word).toBeUndefined()
+    for (const use of Object.values(USE_WORDS)) expect(['bedroom', 'living', 'dining']).not.toContain(use)
   })
 
   it('reads a use whatever its capitals', () => {
@@ -169,13 +193,13 @@ describe('a room use Grid does not know', () => {
   })
 
   it('suggests the use a word most likely means, and none for a room Grid has no use for', () => {
-    expect(nearestUse('toilet')).toBe('bathroom')
     expect(nearestUse('lounge')).toBe('living')
-    expect(nearestUse('Hallway')).toBe('corridor')
+    expect(nearestUse('Living room')).toBe('living')
+    expect(nearestUse('hall')).toBe('corridor')
     expect(nearestUse('bedrooms')).toBe('bedroom')
     expect(nearestUse('bath')).toBe('bathroom')
-    expect(nearestUse('office')).toBeNull()
-    expect(nearestUse('classroom')).toBeNull()
+    expect(nearestUse('balcony')).toBeNull()
+    expect(nearestUse('studio')).toBeNull()
   })
 
   it('names a use that is not text, and leaves a use not stated alone', () => {

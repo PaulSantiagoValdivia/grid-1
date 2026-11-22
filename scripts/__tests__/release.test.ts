@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
+import { fragmentNames, readFragment, readFragments, withAgentEntries, withPeopleEntries } from '../release/fragments.mjs'
 import { GATES } from '../release/gates.mjs'
 import {
   compareVersions,
@@ -124,6 +125,92 @@ describe('the changelog for agents, in the result contract', () => {
   })
 })
 
+describe('the fragments in changes/', () => {
+  const changelog = text('CHANGELOG.md')
+  const contract = text('docs/result-contract.md')
+  const FRAGMENT = [
+    '# 2026-12-01: a new thing (XYZ-1)',
+    '',
+    '## For people',
+    '',
+    '- You can do a new thing (XYZ-1).',
+    '',
+    '## For agents',
+    '',
+    '- `grid_check` gives `room/new-thing`.',
+    '',
+    '## Codes',
+    '',
+    '| `room/new-thing` | Room "{name}" is new | nothing |',
+    '| `zone/first` | A zone | nothing |',
+    '',
+  ].join('\n')
+
+  it('reads a fragment: its day, what changed, its ID and its parts', () => {
+    expect(readFragment('XYZ-1.md', FRAGMENT)).toEqual({
+      id: 'XYZ-1',
+      day: '2026-12-01',
+      title: 'a new thing',
+      people: '- You can do a new thing (XYZ-1).',
+      agents: '- `grid_check` gives `room/new-thing`.',
+      codes: ['| `room/new-thing` | Room "{name}" is new | nothing |', '| `zone/first` | A zone | nothing |'],
+    })
+    expect(readFragment('XYZ-2.md', '# 2026-12-01: internal (XYZ-2)\n\n## For people\n\n- A line.\n').agents).toBe('')
+    expect(fragmentNames(['README.md', 'B-2.md', 'A-1.md', 'notes.txt'])).toEqual(['A-1.md', 'B-2.md'])
+  })
+
+  it('refuses a fragment it cannot place, naming the file and the fault', () => {
+    const refused: Array<[string, RegExp]> = [
+      ['XYZ-1: a new thing\n', /first line must be "# <YYYY-MM-DD>: <what changed> \(XYZ-1\)"/],
+      [FRAGMENT.replace('(XYZ-1)', '(XYZ-9)'), /names XYZ-9; it names the file's ID, XYZ-1/],
+      [FRAGMENT.replace('## Codes', '## Notes'), /"## Notes" is not a part/],
+      [FRAGMENT.replace('## Codes', '## For people'), /"## For people" is given twice/],
+      ['# 2026-12-01: a new thing (XYZ-1)\n\nStray text.\n', /text before the first part/],
+      ['# 2026-12-01: a new thing (XYZ-1)\n\n## Codes\n\n| `room/x` | X | y |\n', /says nothing/],
+      ['# 2026-12-01: a new thing (XYZ-1)\n\n## For people\n\n- A line.\n\n## Codes\n\n| `room/x` | X | y |\n', /a new code comes with its entry under "## For agents"/],
+      [FRAGMENT.replace('| `zone/first` | A zone | nothing |', 'room/x is new'), /each line is a row of the code table/],
+      [FRAGMENT.replace('- `grid_check`', '### A heading\n\n- `grid_check`'), /holds a heading/],
+    ]
+    for (const [fragment, reason] of refused) expect(() => readFragment('XYZ-1.md', fragment), String(reason)).toThrow(reason)
+    expect(() => readFragments([['XYZ-1.md', FRAGMENT.replace('2026-12-01', '2026-13-45')]])).toThrow(/"2026-13-45" is not a day/)
+  })
+
+  it("puts each fragment's line for people at the top of Unreleased, newest first", () => {
+    const older = readFragment('ABC-2.md', '# 2026-11-30: an older thing (ABC-2)\n\n## For people\n\n- An older thing.\n')
+    const combined = withPeopleEntries(changelog, [older, readFragment('XYZ-1.md', FRAGMENT)])
+    expect(combined).toContain('## Unreleased\n\n- You can do a new thing (XYZ-1).\n- An older thing.\n\n')
+    expect(combined.replace('- You can do a new thing (XYZ-1).\n- An older thing.\n\n', '')).toBe(changelog)
+    expect(withPeopleEntries(changelog, [])).toBe(changelog)
+    // An empty Unreleased is filled, so the release step has something to cut.
+    const empty = releaseChangelog(changelog, CUT)
+    expect(releaseChangelog(withPeopleEntries(empty, [older]), { ...CUT, version: '0.1.1' })).toMatch(/## 0\.1\.1 \(2026-11-22\)\n\nResult version 1, plan format version 1\.\n\n- An older thing\.\n\n## 0\.1\.0/)
+  })
+
+  it('puts the entry for agents at the top of their changelog and each code in the table by its kind', () => {
+    const combined = withAgentEntries(contract, [readFragment('XYZ-1.md', FRAGMENT)])
+    expect(combined).toMatch(/^## Changelog for agents\n\n### 2026-12-01: a new thing \(XYZ-1\)\n\n- `grid_check` gives `room\/new-thing`\.\n\n### /m)
+    const table = combined.slice(combined.indexOf('## The codes'), combined.indexOf('### Words Grid does not read')).split('\n').filter((l) => l.startsWith('| `'))
+    const at = table.indexOf('| `room/new-thing` | Room "{name}" is new | nothing |')
+    expect(table[at - 1]).toMatch(/^\| `room\//)
+    expect(table[at + 1]).not.toMatch(/^\| `room\//)
+    expect(table.at(-1)).toBe('| `zone/first` | A zone | nothing |')
+    const cut = releaseAgentChangelog(combined, CUT)
+    expect(cut).toMatch(/### Release 0\.1\.0 \(2026-11-22\): result version 1\n\nongrid 0\.1\.0 ships the entries below[^\n]*\n\n### 2026-12-01: a new thing \(XYZ-1\)/)
+    const listed = [...contract.matchAll(/^\| `([a-z]+\/[a-z0-9-]+)` \|/gm)].map((m) => m[1])
+    const taken = FRAGMENT.replaceAll('room/new-thing', String(listed.find((code) => code?.startsWith('room/'))))
+    expect(() => withAgentEntries(contract, [readFragment('XYZ-1.md', taken)])).toThrow(/is already in the contract's code table/)
+  })
+
+  it('reads and combines every fragment waiting in changes/', () => {
+    const folder = join(root, 'changes')
+    const names = existsSync(folder) ? readdirSync(folder) : []
+    const fragments = readFragments(names.map((name) => [name, readFileSync(join(folder, name), 'utf8')] as [string, string]))
+    // A version no release takes, so this holds inside the release step's own tests gate too.
+    expect(() => releaseAgentChangelog(withAgentEntries(contract, fragments), { ...CUT, version: '99.0.0' })).not.toThrow()
+    expect(() => withPeopleEntries(changelog, fragments)).not.toThrow()
+  })
+})
+
 it('writes the version into the lock file for the workspace packages only', () => {
   const lock = text('package-lock.json')
   const cut = withVersion(lock, '0.1.0', true)
@@ -150,9 +237,14 @@ const COPIED = [
   ...readdirSync(join(root, 'packages')).map((name) => `packages/${name}/package.json`).filter((path) => existsSync(join(root, path))),
 ]
 
-function copy(): { dir: string; files: Map<string, string> } {
+function copy(fragments: Record<string, string> = {}): { dir: string; files: Map<string, string> } {
   const dir = temp('grid-release-')
   const files = new Map<string, string>()
+  mkdirSync(join(dir, 'changes'))
+  for (const [name, fragment] of Object.entries(fragments)) {
+    writeFileSync(join(dir, 'changes', name), fragment)
+    files.set(`changes/${name}`, fragment)
+  }
   for (const path of COPIED) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
     cpSync(join(root, path), join(dir, path))
@@ -178,7 +270,8 @@ function packing(manifest: Record<string, unknown>) {
     writeFileSync(join(stage, 'package.json'), JSON.stringify(manifest))
     writeFileSync(join(stage, 'grid.mjs'), '')
     const file = join(folder, `ongrid-${String(manifest['version'])}.tgz`)
-    const tar = spawnSync('tar', ['-czf', file, '-C', join(folder, 'stage'), 'package'])
+    // Relative names, from the folder: GNU tar on Windows reads the `C:` of a path as a host (QAR-4).
+    const tar = spawnSync('tar', ['-czf', basename(file), '-C', 'stage', 'package'], { cwd: folder })
     expect(tar.status, tar.stderr?.toString()).toBe(0)
     rmSync(join(folder, 'stage'), { recursive: true, force: true })
     return file
@@ -226,6 +319,30 @@ describe('the release step', () => {
     expect(readFileSync(join(out, 'CHANGELOG.md'), 'utf8')).toContain('## 0.1.0 (2026-11-22)')
     expect(readFileSync(join(out, 'result-contract.md'), 'utf8')).toContain('### Release 0.1.0 (2026-11-22): result version 1')
     expect(lines.at(-1)).toBe("Stopped before publishing: publishing waits on the owner's yes (CMD-8). Nothing was published.")
+  })
+
+  it('combines the fragments into both changelogs, deletes them for the gates, and a dry run puts them back', () => {
+    const fragment = '# 2026-11-22: a new thing (XYZ-1)\n\n## For people\n\n- You can do a new thing (XYZ-1).\n\n## For agents\n\n- No new code in the record.\n'
+    const { dir, files } = copy({ 'XYZ-1.md': fragment, 'README.md': '# Not a fragment\n' })
+    const check = node([
+      "const fs = require('fs')",
+      "if (fs.existsSync('changes/XYZ-1.md') || !fs.existsSync('changes/README.md')) process.exit(1)",
+      "if (!fs.readFileSync('CHANGELOG.md', 'utf8').includes('## 0.1.0 (2026-11-22)\\n\\nResult version 1, plan format version 1.\\n\\n- You can do a new thing (XYZ-1).\\n')) process.exit(1)",
+      "if (!fs.readFileSync('docs/result-contract.md', 'utf8').includes('ships the entries below, down to the next release heading.\\n\\n### 2026-11-22: a new thing (XYZ-1)\\n\\n- No new code in the record.\\n\\n')) process.exit(1)",
+    ].join('; '))
+    const out = join(dir, 'out')
+    const lines: string[] = []
+    release({ root: dir, ...CUT, dryRun: true, out, steps: [{ name: 'sees', ...check }], pack: packing(PACKED), log: (line) => lines.push(line) })
+    expect(lines).toContain('Combined and deleted 1 fragment: changes/XYZ-1.md.')
+    for (const [path, before] of files) expect(readFileSync(join(dir, path), 'utf8'), path).toBe(before)
+    expect(readFileSync(join(out, 'CHANGELOG.md'), 'utf8')).toContain('- You can do a new thing (XYZ-1).')
+    expect(readFileSync(join(out, 'result-contract.md'), 'utf8')).toContain('### 2026-11-22: a new thing (XYZ-1)')
+  })
+
+  it('refuses a fragment it cannot read before writing anything', () => {
+    const { dir, files } = copy({ 'XYZ-1.md': '# A new thing\n' })
+    expect(() => release({ root: dir, ...CUT, dryRun: true, steps: [], log: quiet })).toThrow(/changes\/XYZ-1\.md: the first line must be/)
+    for (const [path, before] of files) expect(readFileSync(join(dir, path), 'utf8'), path).toBe(before)
   })
 
   it('refuses a tarball that is not private, or not set for provenance', () => {

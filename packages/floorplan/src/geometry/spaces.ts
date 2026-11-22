@@ -18,7 +18,8 @@
  *     apart into the spaces.
  *  4. Each room's outline is set against them. Enclosed floor that no room covers is unclaimed.
  *     A room that covers wall, or ground outside the walls, or parts of two spaces, does not
- *     match the space its walls enclose.
+ *     match the space its walls enclose. A zone (CNT-8, `zones.ts`) is part of its room: it is
+ *     set against no space, and a dividing line only zones list is left out of step 2.
  *
  * The joining is done by `polygon-clipping` (MIT). Everything else here is Grid's own. After the
  * one join, every comparison is local: a room is cut only against the spaces and walls whose
@@ -28,11 +29,16 @@
 
 import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
-import { floorOf, planFloors } from './floors'
+import { floorOf, planFloors, wallsOnFloor } from './floors'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, roomWallIds } from './plan'
-import { quoted } from '../types/planText'
+import { straightPieces } from './wall'
+import { curveFault } from './arc'
+import type { Said } from '../messages/say'
+import { english, name, said } from '../messages/say'
 import { roomNesting, tryRoomPolygon } from './room'
+import { roomZones } from './zones'
+import { statedOutline } from './massing'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
 import { TOLERANCES, tolerance } from './tolerances'
@@ -132,6 +138,11 @@ export interface FloorSpaces {
   /** Inside the outer edge of the walls, in square metres. */
   readonly outlineArea: number
   /**
+   * That outer edge, piece by piece: each piece's rings as points, the outer ring first, with no
+   * point repeated at the end (ARE-13 measures the outside face and the roof from it).
+   */
+  readonly outline: readonly (readonly (readonly Vec2[])[])[]
+  /**
    * Taken by the solid walls and the corners made good between them, less any such corner a
    * room's outline takes in (see `cornerFills`), so that the four figures add up.
    */
@@ -146,13 +157,23 @@ export interface FloorSpaces {
   /** The pieces of unclaimed floor of at least `areaReported`, largest first. */
   readonly unclaimed: readonly FloorPiece[]
   readonly mismatches: readonly RoomMismatch[]
+  /**
+   * BRF-4 (C17): how much of what the walls enclose lies outside the outline the floor states,
+   * m²; null when it states none. The outline and the walls are joined either way.
+   */
+  readonly pastOutline: number | null
 }
 
 /** Why a floor's spaces were not worked out. */
 export interface FloorSpacesUnknown {
   readonly floor: string
+  /** The reason in English, made from `reasonSaid`. */
   readonly reason: string
+  /** MSG-11: the reason by its key and values (`issue.part.far.*`). */
+  readonly reasonSaid: Said
 }
+
+const unknown = (floor: string, reasonSaid: Said): FloorSpacesUnknown => ({ floor, reason: english(reasonSaid), reasonSaid })
 
 /** A wall as a strip, and the rectangle around it that counts as being along it. */
 interface WallShape {
@@ -212,15 +233,17 @@ function contact(a: Pair, b: Pair, shape: WallShape): number {
 
 function pieceOf(polygon: Polygon, shapes: readonly WallShape[]): FloorPiece {
   const box = boxOfRings(polygon)
-  const walls: string[] = []
+  // How far the piece runs along each wall: a curved wall's pieces add up to it (CNT-18).
+  const alongWall = new Map<string, number>()
   for (const shape of shapes) {
     if (!overlaps(box, shape.box)) continue
     let along = 0
     for (const ring of polygon) {
       for (let i = 0; i + 1 < ring.length; i++) along += contact(ring[i]!, ring[i + 1]!, shape)
     }
-    if (along >= TOUCH_LENGTH()) walls.push(shape.wall.id)
+    alongWall.set(shape.wall.id, (alongWall.get(shape.wall.id) ?? 0) + along)
   }
+  const walls = [...alongWall].filter(([, along]) => along >= TOUCH_LENGTH()).map(([id]) => id)
   return {
     rings: polygon.map((ring) => ring.slice(0, -1).map(([x, y]) => ({ x, y }))),
     area: polygonArea(polygon),
@@ -265,13 +288,19 @@ function lengthInside(a: Vec2, b: Vec2, polygon: readonly Vec2[]): number {
 }
 
 /** Why the spaces of this floor cannot be worked out, or null when they can. */
-function farReason(walls: readonly Wall[]): string | null {
+export function farReason(walls: readonly Wall[]): string | null {
+  const far = farSaid(walls)
+  return far === null ? null : english(far)
+}
+
+/** `farReason` by its key and values (MSG-11). */
+export function farSaid(walls: readonly Wall[]): Said | null {
   for (const wall of walls) {
     if ([...wall.start, ...wall.end].some((v) => !Number.isFinite(v) || Math.abs(v) > FAR())) {
-      return `wall ${quoted(wall.id)} lies more than ${FAR() / 1000} km from the origin`
+      return said('issue.part.far.wall', { wall: name(wall.id), km: FAR() / 1000 })
     }
     if (!wall.virtual && (!Number.isFinite(wall.thickness) || wall.thickness > FAR())) {
-      return `wall ${quoted(wall.id)} is more than ${FAR() / 1000} km thick`
+      return said('issue.part.far.thick', { wall: name(wall.id), km: FAR() / 1000 })
     }
   }
   return null
@@ -295,8 +324,8 @@ interface DrawnRoom {
   readonly area: number
 }
 
-/** The whole comparison, with every point rounded to `grid` metres (0: as drawn). */
-function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoom[], grid: number, reach: number): FloorSpaces {
+/** The walls joined, with every point rounded to `grid` metres (0: as drawn): steps 1 to 3 above. */
+function joinWalls(walls: readonly Wall[], grid: number, reach: number, outline: Polygon | null = null) {
   const steps = grid === 0 ? 0 : Math.round(1 / grid)
   const snap = grid === 0 ? (v: number) => v : (v: number) => Math.round(v * steps) / steps
   const lineHalf = Math.max(LINE_HALF_WIDTH, 5 * grid, reach * TOLERANCES.farNoise.value)
@@ -307,8 +336,24 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
   const fills = cornerFills(solidShapes, lineHalf, snap).map((polygon) => ({ polygon, box: boxOfRings(polygon) }))
   const solid = union([...solidShapes.map((s) => s.body), ...fills.map((f) => f.polygon)])
   const frame = lineShapes.length === 0 ? solid : union([...solid, ...lineShapes.map((s) => s.body)])
-  const filled = union(frame.map((polygon) => [polygon[0]!]))
-  const faces = filled.length === 0 ? [] : polygonClipping.difference(filled, frame)
+  const walled = union(frame.map((polygon) => [polygon[0]!]))
+  // BRF-4 (C17): the floor's stated outline joins what the walls enclose; floor inside it that no
+  // wall encloses is floor too, and what the walls reach past it is measured apart.
+  const stated = outline === null ? null : [outline[0]!.map(([x, y]): Pair => [snap(x), snap(y)])]
+  const filled = stated === null ? walled : union([...walled, stated])
+  return { snap, shapes, solidShapes, lineShapes, fills, solid, frame, filled, walled, stated }
+}
+
+/** How far the walls' own outline reaches past a stated outline, m²; null with no outline stated. */
+function pastOutline(walled: MultiPolygon, stated: Polygon | null): number | null {
+  if (stated === null) return null
+  return walled.length === 0 ? 0 : multiArea(polygonClipping.difference(walled, stated))
+}
+
+/** The whole comparison, with every point rounded to `grid` metres (0: as drawn). */
+function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoom[], grid: number, reach: number, outline: Polygon | null = null): FloorSpaces {
+  const { snap, shapes, solidShapes, lineShapes, fills, solid, frame, filled, walled, stated } = joinWalls(walls, grid, reach, outline)
+  const faces = filled.length === 0 ? [] : frame.length === 0 ? filled : polygonClipping.difference(filled, frame)
   const outlineArea = multiArea(filled)
 
   const drawn = rooms.map((r) => {
@@ -416,7 +461,11 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
       const listed = new Set(roomWallIds(r.room))
       for (const shape of near) {
         const area = intersectionArea(r.polygon, shape.body)
-        if (area >= WALL_SHARE()) onWalls.push({ wall: shape.wall.id, area, listed: listed.has(shape.wall.id) })
+        if (area < WALL_SHARE()) continue
+        // The pieces of a curved wall are one wall (CNT-18).
+        const same = onWalls.find((on) => on.wall === shape.wall.id)
+        if (same) same.area += area
+        else onWalls.push({ wall: shape.wall.id, area, listed: listed.has(shape.wall.id) })
       }
       const body = union([...near.map((s) => s.body), ...nearFills])
       outside = Math.max(0, r.area - enclosedOf[ri]! - multiArea(polygonClipping.intersection(r.polygon, body)))
@@ -430,6 +479,7 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
               return lengthInside(s.start, end, r.outline) >= LINE_INSIDE()
             })
             .map((s) => s.wall.id)
+            .filter((id, i, all) => all.indexOf(id) === i)
         : []
     mismatches.push({ room: r.room.id, area: r.area, enclosed: enclosedOf[ri]!, onWalls, outside, spaces: spans, lines, sharedWith: beside })
   })
@@ -438,14 +488,71 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
   return {
     floor,
     outlineArea,
+    outline: filled.map((polygon) => polygon.map((ring) => ring.slice(0, -1).map(([x, y]) => ({ x, y })))),
     wallArea,
     floorArea: outlineArea - wallArea,
     roomArea: rooms.reduce((sum, r) => sum + r.area, 0),
     unclaimedArea,
     spaces,
     unclaimed,
-    mismatches
+    mismatches,
+    pastOutline: pastOutline(walled, stated)
   }
+}
+
+/** The walls of one floor that the spaces are worked out from, in plan order. */
+function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): Wall[] {
+  // LVL-5: a wall through floors is one of each floor's it stands on.
+  return wallsOnFloor(plan, floor)
+    .filter(
+      (wall) =>
+        !broken.has(wall.id) &&
+        (wall.arc !== undefined ? curveFault(wall) === null : wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
+        (wall.virtual === true || wall.thickness > 0)
+    )
+    // A curved wall is joined as its straight pieces, each a strip under its id (CNT-18).
+    .flatMap(straightPieces)
+}
+
+const reachOf = (walls: readonly Wall[], outline: Polygon | null = null): number => {
+  let reach = 0
+  for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
+  for (const [x, y] of outline?.[0] ?? []) reach = Math.max(reach, Math.abs(x), Math.abs(y))
+  return reach
+}
+
+/** BRF-4: why a stated outline is too far out to join, or null. */
+export function outlineFarReason(floor: string, outline: Polygon | null): string | null {
+  const far = outlineFarSaid(floor, outline)
+  return far === null ? null : english(far)
+}
+
+/** `outlineFarReason` by its key and values (MSG-11). */
+export function outlineFarSaid(floor: string, outline: Polygon | null): Said | null {
+  if (outline === null) return null
+  return outline[0]!.some(([x, y]) => Math.abs(x) > FAR() || Math.abs(y) > FAR()) ? said('issue.part.far.outline', { floor: name(floor), km: FAR() / 1000 }) : null
+}
+
+/**
+ * SHT-11: the outline of one floor, as step 3 above joins it: what the outer edges of its walls
+ * and dividing lines enclose, the outline whose area is the gross external area (ARE-9). One ring
+ * per separate part, counter-clockwise or not as the join gives it, with no point repeated. Empty
+ * with no walls; null when the walls cannot be joined (see `floorSpaces`).
+ */
+export function floorOutline(plan: FloorPlan, floor: string, options: SpacesOptions = {}): Vec2[][] | null {
+  const walls = floorWalls(plan, floor, options.broken ?? new Set<string>())
+  const outline = statedOutline(plan, floor)
+  if (walls.length === 0 && outline === null) return []
+  if (farReason(walls) || outlineFarReason(floor, outline)) return null
+  const reach = reachOf(walls, outline)
+  for (const grid of GRIDS) {
+    try {
+      return joinWalls(walls, grid, reach, outline).filled.map((polygon) => polygon[0]!.slice(0, -1).map(([x, y]) => ({ x, y })))
+    } catch {
+      // Tried again on a coarser grid.
+    }
+  }
+  return null
 }
 
 /**
@@ -457,41 +564,38 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
 export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptions = {}): FloorSpaces | FloorSpacesUnknown {
   const index = options.index ?? indexPlan(plan)
   const broken = options.broken ?? new Set<string>()
-  const walls = plan.walls.filter(
-    (wall) =>
-      floorOf(wall) === floor &&
-      !broken.has(wall.id) &&
-      (wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
-      (wall.virtual === true || wall.thickness > 0)
-  )
-  const far = farReason(walls)
-  if (far) return { floor, reason: far }
+  // CNT-8: a zone is set against no space, and a line that only zones list divides none.
+  const zones = roomZones(index)
+  const walls = floorWalls(plan, floor, broken).filter((wall) => !zones.lines.has(wall.id))
+  const outline = statedOutline(plan, floor)
+  const far = farSaid(walls) ?? outlineFarSaid(floor, outline)
+  if (far) return unknown(floor, far)
 
   const nesting = roomNesting(index)
   const rooms: DrawnRoom[] = []
   for (const room of plan.rooms) {
-    if (floorOf(room) !== floor || broken.has(room.id)) continue
+    if (floorOf(room) !== floor || broken.has(room.id) || zones.zoneOf.has(room.id)) continue
     const outline = tryRoomPolygon(room, index)
     if (!outline || outline.length < 3) continue
     if (outline.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > FAR() || Math.abs(p.y) > FAR())) {
-      return { floor, reason: `room ${quoted(room.id)} lies more than ${FAR() / 1000} km from the origin` }
+      return unknown(floor, said('issue.part.far.room', { room: name(room.id), km: FAR() / 1000 }))
     }
     const host = nesting.hosts.get(room.id)
     rooms.push(host ? { room, outline, region: host.region, area: host.area } : { room, outline, area: Math.abs(signedArea(outline)) })
   }
 
-  let reach = 0
-  for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
+  const reach = reachOf(walls, outline)
   let failure: unknown = null
   for (const grid of GRIDS) {
     try {
-      return compare(floor, walls, rooms, grid, reach)
+      return compare(floor, walls, rooms, grid, reach, outline)
     } catch (error) {
       failure = error
     }
   }
   const why = failure instanceof Error ? failure.message : String(failure)
-  return { floor, reason: `the walls could not be joined (${why})` }
+  // The polygon library's own error, in its words.
+  return unknown(floor, said('issue.part.notJoined', { error: why }))
 }
 
 /** `floorSpaces` for every floor of the plan, in floor order. */

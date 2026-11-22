@@ -9,9 +9,12 @@
  * them, which is the part the schema has to match.
  */
 
+import type { OpeningKind, OpeningPart } from '../types/floorplan'
 import type { PlanOpening } from './floorplan'
 import type { Vec2 } from './vec2'
-import { add, cross, distance, normalize, scale, sub } from './vec2'
+import { add, cross, distance, lerp, normalize, scale, sub } from './vec2'
+import { limit, tolerance } from './tolerances'
+import { doorKindOf, foldingPanels, pairLeaves, partWidth } from './openingKinds'
 
 /**
  * Which jamb the leaf hangs from, named by the ends of the opening along the
@@ -67,14 +70,19 @@ const angleOf = (v: Vec2): number => Math.atan2(v.y, v.x)
 export function doorSwing(
   opening: PlanOpening,
   hinge: DoorHinge | null | undefined,
-  side: DoorSide | null | undefined
+  side: DoorSide | null | undefined,
+  leafWidth?: number
 ): DoorSwing | null {
   if (!hinge || !side) return null
 
-  const width = distance(opening.from, opening.to)
+  const whole = distance(opening.from, opening.to)
   // A zero-width opening has no axis to hang anything from, and `normalize`
   // would hand back a direction that is not one.
-  if (width <= 0) return null
+  if (whole <= 0) return null
+  // CNT-14: a leaf narrower than its opening (a door beside a fixed panel, one leaf of a pair)
+  // hangs from the same jamb and lies closed along the same line, and reaches only so far.
+  const width = leafWidth === undefined ? whole : Math.min(leafWidth, whole)
+  if (!(width > 0)) return null
 
   const open = side === 'left' ? opening.normal : scale(opening.normal, -1)
   // The leaf hangs from the face of the wall it opens towards, not from the wall's centre line
@@ -101,4 +109,66 @@ export function doorSwing(
       counterClockwise: cross(closed, open) > 0
     }
   }
+}
+
+/**
+ * What a door states about how it hangs and opens, as the caller holds it (CNT-14): the end it
+ * hangs from, the face it opens to, its kind and the part of it that opens. Any may be missing.
+ */
+export interface DoorValues {
+  readonly hinge?: DoorHinge | null
+  readonly swing?: DoorSide | null
+  readonly kind?: OpeningKind | null
+  readonly opens?: OpeningPart | null
+}
+
+/**
+ * The floor one door sweeps as it opens (CNT-14): the quarter disc of each leaf that swings, or
+ * the strip a folding door's panels sweep as they fold, one panel deep on the face it opens to.
+ */
+export type DoorSweep =
+  | { readonly shape: 'arc'; readonly swing: DoorSwing }
+  | { readonly shape: 'strip'; readonly polygon: readonly Vec2[] }
+
+/**
+ * What a door sweeps, by its kind, or `null` when its kind sweeps the floor and the plan does not
+ * state enough to say where: then nothing is drawn or checked, and nothing is guessed.
+ *
+ * - one leaf (a door with no kind, or `single`): its quarter disc, as wide as the part that opens;
+ * - a pair (`double`): a quarter disc from each jamb, the main leaf (the part that opens, else
+ *   half) at the end it hangs from (`start` when unstated);
+ * - `folding`: a strip along the part that folds, on the face it opens to, one panel deep;
+ * - `sliding`, `pocket`, `roller`, `garage`: nothing (an empty list).
+ */
+export function doorSweeps(opening: PlanOpening, values: DoorValues): readonly DoorSweep[] | null {
+  const kind = doorKindOf(values.kind)
+  const hinge = values.hinge ?? null
+  const side = values.swing ?? null
+  const width = distance(opening.from, opening.to)
+  if (kind === 'single') {
+    const swing = doorSwing(opening, hinge, side, values.opens ? partWidth(width, values.opens) : undefined)
+    return swing === null ? null : [{ shape: 'arc', swing }]
+  }
+  if (kind === 'double') {
+    if (side === null) return null
+    const main = hinge ?? 'start'
+    const other: DoorHinge = main === 'start' ? 'end' : 'start'
+    const [first, second] = pairLeaves(width, values.opens)
+    const leaves = [doorSwing(opening, main, side, first), doorSwing(opening, other, side, second)]
+    return leaves.filter((swing): swing is DoorSwing => swing !== null).map((swing) => ({ shape: 'arc', swing }))
+  }
+  if (kind === 'folding') {
+    if (hinge === null || side === null || !(width > 0)) return null
+    const folds = partWidth(width, values.opens)
+    const depth = folds / foldingPanels(folds, limit('foldingPanel'))
+    const open = side === 'left' ? opening.normal : scale(opening.normal, -1)
+    const face = scale(open, opening.thickness / 2)
+    const near = hinge === 'start' ? opening.from : opening.to
+    const far = lerp(near, hinge === 'start' ? opening.to : opening.from, folds / width)
+    const a = add(near, face)
+    const b = add(far, face)
+    const polygon = [a, b, add(b, scale(open, depth)), add(a, scale(open, depth))]
+    return depth > tolerance('noLength') ? [{ shape: 'strip', polygon }] : []
+  }
+  return []
 }

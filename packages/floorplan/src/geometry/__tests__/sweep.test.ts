@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { cpus, loadavg } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan, Opening, Wall } from '../plan'
@@ -379,6 +380,35 @@ describe('a door against another door', () => {
       expect(all(turned(p, theta), FACING)).toEqual(all(p, FACING))
     }
     expect(all(turned(corner(), theta), INTO_CORNER)).toEqual(all(corner(), INTO_CORNER))
+  })
+})
+
+/**
+ * A timing guard (lab SC-2, from Z-4). The check once tested every door against every wall,
+ * and took seconds above 1,000 rooms. 400 rooms in a 20 by 20 grid, each 4 m square with a
+ * door in its south wall, ran in about a third of a second in the lab; it passed before any
+ * fix and must stay under one second. Most of that time is building the floor the check runs
+ * on, not the sweeps themselves.
+ *
+ * A fixed bound means nothing on a machine running more work than it has cores, so the guard
+ * is skipped there, and retried, like the comparison's, against a burst of load.
+ */
+const BUSY = loadavg()[0]! > cpus().length
+
+describe('the door-swing check on a large floor (lab SC-2)', () => {
+  it.skipIf(BUSY)('SC-2 checks 400 rooms in under a second (skipped on a machine under load)', { retry: 2 }, () => {
+    const walls: Wall[] = []
+    const openings: Opening[] = []
+    for (let i = 0; i < 400; i++) {
+      const x = (i % 20) * 4
+      const y = Math.floor(i / 20) * 4
+      const corners: Tuple[] = [[x, y], [x + 4, y], [x + 4, y + 4], [x, y + 4]]
+      corners.forEach((p, k) => walls.push(wall(`r${i}-w${k + 1}`, p, corners[(k + 1) % 4]!)))
+      openings.push(door(`d${i}`, `r${i}-w1`, 1))
+    }
+    const started = performance.now()
+    validateDoorSweeps(plan(walls, openings), () => OPEN_LEFT)
+    expect(performance.now() - started).toBeLessThan(1000)
   })
 })
 

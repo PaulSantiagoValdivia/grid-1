@@ -19,8 +19,12 @@ npm test
 npm run check:licenses
 ```
 
+The same checks run on GitHub for every pull request, on Linux and on Windows
+([RELEASING.md](RELEASING.md#the-checks-on-github)).
+
 Use [conventional commits](https://www.conventionalcommits.org/) for commit messages. If people
-will notice your change, add a line under "Unreleased" in [CHANGELOG.md](CHANGELOG.md).
+will notice your change, write its changelog line in a file of its own in
+[changes/](changes/README.md); the release adds it to [CHANGELOG.md](CHANGELOG.md).
 [RELEASING.md](RELEASING.md) says how a version is released.
 
 Building-code figures have their own rules: see [packages/rules/README.md](packages/rules/README.md).

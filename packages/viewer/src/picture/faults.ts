@@ -18,14 +18,15 @@
 import type { PlanDrawing, Vec2 } from '@ongrid/floorplan/geometry'
 import { centroid } from '@ongrid/floorplan/geometry'
 import type { Box } from '../canvas2d/labelPlacement'
-import { estimateTextWidth, overlaps } from '../canvas2d/labelPlacement'
+import { drawingWords, estimateTextWidth, overlaps } from '../canvas2d/labelPlacement'
 import type { PlanLook } from './look'
 import { LINE_PX, TEXT_PX } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
+import { ENGLISH_WORDS, drawingText, type DrawingWords } from './words'
 
 /** What a line is about, as the result record names it. */
-export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item'
+export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item' | 'stair' | 'pattern' | 'flat'
 
 /**
  * The part of a result line (MSG-1's `ResultLine`) a picture uses. A record's `lines` can be
@@ -131,7 +132,7 @@ export interface FaultLayout {
 
 /**
  * The text inside each room that could not be drawn: its name and why, from its lines, or
- * "Not drawn" when the picture was given none. Centred in the box round its walls.
+ * "Not drawn" (in the drawing's language) when the picture was given none. Centred in the box round its walls.
  */
 export function undrawnRoomText(layout: FaultLayout, faults: readonly NumberedFault[]): SvgNode[] {
   const { drawing, metersPerPixel: mpp, look } = layout
@@ -139,7 +140,7 @@ export function undrawnRoomText(layout: FaultLayout, faults: readonly NumberedFa
   const groups = byThing(faults)
   return drawing.undrawn.map((room, index) => {
     const own = groups.get(`room:${room.id}`) ?? []
-    const reason = own.length === 0 ? 'Not drawn' : wordsOf(own)
+    const reason = own.length === 0 ? drawingText(drawingWords(), 'drawing.notDrawn') : wordsOf(own)
     const width = Math.max(room.box.width / mpp - 2 * FAULT_MARK_PX, 140)
     const lines = wrapText(reason, TEXT_PX.warning, width)
     const centre = { x: room.box.min.x + room.box.width / 2, y: room.box.min.y + room.box.height / 2 }
@@ -185,6 +186,17 @@ function spotOf(kind: FaultThingKind, id: string, layout: FaultLayout, wall?: st
     // A fixture (CNT-12): on the middle of its outline.
     const item = drawing.items.find((i) => i.id === id)
     return item && item.outline.length > 0 ? { at: centroid(item.outline), words: true } : null
+  }
+  if (kind === 'stair') {
+    // A stair (LVL-3): at the foot of its walking line, where it is drawn on this floor.
+    const stair = drawing.stairs.find((s) => s.id === id)
+    const at = stair?.line[0]
+    return at === undefined ? null : { at, words: true }
+  }
+  if (kind === 'flat') {
+    // A flat (CNT-4): on the first corner of its outline on this floor.
+    const at = drawing.flats.find((f) => f.id === id)?.rings[0]?.[0]
+    return at === undefined ? null : { at, words: true }
   }
   if (kind === 'wall') {
     const wall = drawing.walls.find((w) => w.id === id)
@@ -368,15 +380,15 @@ export interface PictureKey {
 
 /**
  * The key: a heading, then each line's number and words, wrapped to the picture's width, and
- * how many lines are about other floors. Null when there is nothing to list.
+ * how many lines are about other floors, in `words`' language. Null when there is nothing to list.
  */
-export function faultKey(faults: readonly NumberedFault[], elsewhere: number, width: number, look: PlanLook): PictureKey | null {
+export function faultKey(faults: readonly NumberedFault[], elsewhere: number, width: number, look: PlanLook, words: DrawingWords = ENGLISH_WORDS): PictureKey | null {
   if (faults.length === 0 && elsewhere === 0) return null
   const paint = paints(look)
   const textWidth = Math.max(width - 2 * KEY_MARGIN_PX - KEY_NUMBER_PX, 80)
   const nodes: SvgNode[] = []
   let y = KEY_MARGIN_PX + ASCENT * TEXT_PX.warning
-  const heading = faults.length === 0 ? 'Nothing to look at on this floor.' : `To look at on this floor (${faults.length}), numbered as in the check:`
+  const heading = faults.length === 0 ? drawingText(words, 'drawing.faults.none') : drawingText(words, 'drawing.faults.some', { count: faults.length })
   nodes.push(el('text', { 'data-part': 'key-heading', x: KEY_MARGIN_PX, y: lengthOf(y), ...paint.keyText }, [heading]))
   for (const fault of faults) {
     y += KEY_LINE_PX
@@ -388,7 +400,7 @@ export function faultKey(faults: readonly NumberedFault[], elsewhere: number, wi
   }
   if (elsewhere > 0) {
     y += KEY_LINE_PX
-    nodes.push(el('text', { 'data-part': 'key-elsewhere', x: KEY_MARGIN_PX, y: lengthOf(y), ...paint.keyText }, [`${elsewhere} more on other floors.`]))
+    nodes.push(el('text', { 'data-part': 'key-elsewhere', x: KEY_MARGIN_PX, y: lengthOf(y), ...paint.keyText }, [drawingText(words, 'drawing.faults.elsewhere', { count: elsewhere })]))
   }
   const height = Math.ceil(y + DESCENT * TEXT_PX.warning + KEY_MARGIN_PX)
   return { height, nodes: [el('rect', { 'data-part': 'key-rule', x: KEY_MARGIN_PX, y: 0, width: Math.max(width - 2 * KEY_MARGIN_PX, 1), height: 1, fill: look.labelSoft }), ...nodes] }

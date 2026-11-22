@@ -16,7 +16,8 @@
  * - each room's name is replaced by its use (`bedroom`, `bedroom 2`), or `room` when it states none;
  * - every id is replaced by its kind and a number (`room-1`, `wall-3`, `door-2`);
  * - a floor's name becomes `floor 1`, a fixture's label goes, and so do the trace image, the
- *   project id, the record of how the plan was written and every field Grid does not know;
+ *   project id, the record of how the plan was written, the site and the front (CNT-3) and
+ *   every field Grid does not know; the north and the y direction are kept;
  * - in every text of the draft (the message, the answer, the call's arguments, what was
  *   expected) the plan's names and ids get the same replacements, and paths, file names, web
  *   addresses and email addresses are replaced by `<path>`, `<file>`, `<address>` and `<email>`.
@@ -24,7 +25,7 @@
  * What is left is held to the plan's text rule before it is shown.
  */
 import { tolerance } from '@ongrid/floorplan/geometry/tolerances'
-import { ITEM_KINDS, ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import { BUILDING_TYPES, ITEM_KINDS, ROOM_TENURES, ROOM_USES, Y_AXES, readUse } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL, RESULT_VERSION, type GridResult, type ResultLine } from '@ongrid/rules'
 import { planTextProblem } from '../command/planText'
 
@@ -186,12 +187,35 @@ function cutDown(raw: Record<string, unknown>, named: ReadonlySet<string>): Cut 
 /** The fields of each part a draft keeps: geometry and Grid's own words, never free text. */
 const KEPT_FIELDS: Readonly<Record<string, readonly string[]>> = {
   walls: ['start', 'end', 'thickness', 'height', 'kind', 'virtual'],
-  rooms: ['inside', 'height', 'floorOffset'],
+  rooms: ['inside', 'height', 'floorOffset', 'tenure'],
   openings: ['type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing'],
   items: ['at', 'size', 'height', 'turn'],
-  floors: ['level', 'elevation', 'height', 'slab'],
+  floors: ['level', 'elevation', 'height', 'slab', 'building'],
 }
 const WALL_KINDS = ['exterior', 'interior', 'partition']
+/** The fields that hold one of the format's own words, which are kept only when they are one. */
+const WORDS: Readonly<Record<string, readonly string[]>> = {
+  kind: WALL_KINDS,
+  type: ['door', 'window', 'opening'],
+  hinge: ['start', 'end'],
+  swing: ['left', 'right'],
+  tenure: ROOM_TENURES,
+  building: BUILDING_TYPES,
+}
+/** A room's use as Grid reads it (CNT-5: `WC` is toilet), or null. */
+const roomUseOf = (value: unknown): string | null => {
+  const read = readUse(value)
+  return typeof read === 'string' && (ROOM_USES as readonly string[]).includes(read) ? read : null
+}
+
+/** CNT-18: a curved wall's arc, numbers only, kept as the wall's geometry: its centre and sweep. */
+function arcOf(wall: Part): Record<string, Json> {
+  const arc = wall['arc']
+  if (!isObject(arc)) return {}
+  const centre = plainValue(arc['centre'])
+  const sweep = arc['sweep']
+  return Array.isArray(centre) && centre.length === 2 && finiteNumber(sweep) ? { arc: { centre, sweep } } : {}
+}
 
 /** Only plain JSON: numbers, booleans, and lists and objects of them. Text is never copied. */
 function plainValue(value: unknown): Json | undefined {
@@ -267,7 +291,7 @@ function usesOf(rooms: readonly Part[]): Map<Part, string> {
   const uses = new Map<Part, string>()
   const count = new Map<string, number>()
   const total = new Map<string, number>()
-  const roomUse = (room: Part): string => (typeof room['use'] === 'string' && (ROOM_USES as readonly string[]).includes(room['use']) ? room['use'] : 'room')
+  const roomUse = (room: Part): string => roomUseOf(room['use']) ?? 'room'
   for (const room of rooms) total.set(roomUse(room), (total.get(roomUse(room)) ?? 0) + 1)
   for (const room of rooms) {
     const use = roomUse(room)
@@ -307,9 +331,9 @@ function clearedPlan(raw: Record<string, unknown>, cut: Cut, clearing: Clearing)
     for (const field of KEPT_FIELDS[kind]!) {
       const value = plainValue(from[field])
       if (value !== undefined) out[field] = value
-      else if (typeof from[field] === 'string' && ['kind', 'type', 'hinge', 'swing'].includes(field)) {
+      else if (typeof from[field] === 'string' && Object.hasOwn(WORDS, field)) {
         const text = from[field] as string
-        const allowed = field === 'kind' ? WALL_KINDS : field === 'type' ? ['door', 'window', 'opening'] : field === 'hinge' ? ['start', 'end'] : ['left', 'right']
+        const allowed = WORDS[field]!
         if (allowed.includes(text)) out[field] = text
       }
     }
@@ -319,16 +343,19 @@ function clearedPlan(raw: Record<string, unknown>, cut: Cut, clearing: Clearing)
   }
   const ids = (list: unknown): Json[] => (Array.isArray(list) ? list.map((id) => clearing.idOf(id) ?? 'wall-?') : [])
   const plan: Record<string, Json> = { version: '1', units: 'm' }
+  // CNT-5: what kind of building it is decides which checks run, and is one of the format's words.
+  if (typeof raw['building'] === 'string' && (BUILDING_TYPES as readonly string[]).includes(raw['building'])) plan['building'] = raw['building']
   if (cut.floors.length > 0) {
     plan['floors'] = cut.floors.map((floor) => {
       const i = listOf(raw, 'floors').indexOf(floor)
       return part('floors', floor, { name: `floor ${i + 1}` })
     })
   }
-  plan['walls'] = cut.walls.map((wall) => part('walls', wall))
+  plan['walls'] = cut.walls.map((wall) => part('walls', wall, arcOf(wall)))
   plan['rooms'] = cut.rooms.map((room) => {
     const extra: Record<string, Json> = { name: uses.get(room)!, boundary: ids(room['boundary']) }
-    if (typeof room['use'] === 'string' && (ROOM_USES as readonly string[]).includes(room['use'])) extra['use'] = room['use']
+    const use = roomUseOf(room['use'])
+    if (use !== null) extra['use'] = use
     if (Array.isArray(room['holes'])) extra['holes'] = room['holes'].map(ids)
     const { id, ...rest } = part('rooms', room)
     return { id: id!, ...extra, ...rest }
@@ -344,6 +371,10 @@ function clearedPlan(raw: Record<string, unknown>, cut: Cut, clearing: Clearing)
       return { id: id!, kind, ...rest }
     })
   }
+  // CNT-3: which way the plan faces is a number and a word of Grid's; where it sits, a place on
+  // the earth, and its front, an id, are left out.
+  if (typeof raw['north'] === 'number' && Number.isFinite(raw['north'])) plan['north'] = raw['north']
+  if (typeof raw['yAxis'] === 'string' && (Y_AXES as readonly string[]).includes(raw['yAxis'])) plan['yAxis'] = raw['yAxis']
   return plan
 }
 

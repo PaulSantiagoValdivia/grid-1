@@ -22,26 +22,53 @@
  * must not read every wall as an inside wall (MS-11). Where the stated kind and the worked-out
  * one disagree, `wallSides` says so, and validation prints one line.
  *
+ * CNT-7 (C26): a room marked as outdoor space is the outside to the building. A wall between a room
+ * and an outdoor space faces outside, and a wall with outdoor space beside it and no room (a fence,
+ * a parapet round a terrace) stands in the open and faces outside too. The stretches still name
+ * the outdoor spaces on their faces.
+ *
  * Every consumer reads this one answer: the 2D drawing and the 3D scene (`exposure`), the DXF
  * layers, the IFC `IsExternal` mark, the order a plan is built in, and the route and escape
  * checks (which also tell outside from enclosed floor no room claims, `rules/graph.ts`).
  */
 
 import type { FloorPlan, PlanIndex, Room, Wall, WallKind } from './plan'
+import type { BeyondWall } from '../types/floorplan'
 import { roomWallIds } from './plan'
-import { floorOf } from './floors'
+import { floorOf, wallsOnFloor } from './floors'
 import { roomOutline } from './room'
 import { floorSpaces, spacesKnown } from './spaces'
 import { tolerance, tolerancesAsStated } from './tolerances'
 import type { Vec2 } from './vec2'
 import { dot, sub } from './vec2'
-import { wallAxis } from './wall'
+import { wallFrameAt, wallLength, wallSegments } from './wall'
+import { curveFault } from './arc'
+import { outdoorIds } from './outdoor'
 
 /**
  * Whether the wall separates two rooms or faces the outside, as every view and export shows it.
- * `detached`: no room lies along it.
+ * `detached`: no room lies along it. CNT-6 (C23): `separating`, a party wall or a wall to the
+ * common parts: one stated `separating`, or one with a room on one side only that states a common
+ * part or a neighbour beyond it. It is not an outside wall: no way out, no escape window and not
+ * external, and gross external area is measured to its middle.
  */
-export type WallExposure = 'exterior' | 'interior' | 'detached'
+export type WallExposure = 'exterior' | 'interior' | 'separating' | 'detached'
+
+/**
+ * CNT-6 (C23): what lies past a wall's side with no room on it, as the plan states it: its
+ * `beyond`, else, for a wall stated `separating`, a common part (the one way a door through it is
+ * right). Null when the plan says nothing, and the drawing decides (the outside, or floor no room
+ * claims).
+ */
+export function wallBeyond(wall: Pick<Wall, 'kind' | 'beyond'>): BeyondWall | null {
+  return wall.beyond ?? (wall.kind === 'separating' ? 'common' : null)
+}
+
+/** Whether what the plan states beyond a wall is more of the building, not the outside. */
+const separates = (wall: Wall): boolean => {
+  const beyond = wallBeyond(wall)
+  return beyond === 'common' || beyond === 'neighbour'
+}
 
 /** One stretch of a wall, measured along it from its start, and the rooms on each of its faces. */
 export interface WallStretch {
@@ -50,7 +77,10 @@ export interface WallStretch {
   /** Rooms on the face its normal points at (90 degrees counter-clockwise from start to end). */
   readonly left: readonly string[]
   readonly right: readonly string[]
-  /** Worked out from the rooms alone: `interior` with rooms on both faces, `exterior` with one. */
+  /**
+   * Worked out from the rooms alone: `interior` with rooms on both faces, `exterior` with one, or
+   * `separating` with one where the plan states more of the building beyond the wall (CNT-6).
+   */
   readonly worked: WallExposure
 }
 
@@ -169,28 +199,31 @@ class Buckets<T> {
 }
 
 function listedCover(wall: Wall, rooms: readonly Traced[]): { from: number; to: number; room: string; left: boolean }[] {
-  const axis = wallAxis(wall)
   const half = wall.virtual === true ? 0 : wall.thickness / 2
   const near = tolerance('wallContact')
   const cover: { from: number; to: number; room: string; left: boolean }[] = []
-  for (const traced of rooms) {
-    if (!traced.walls.has(wall.id)) continue
-    for (const polygon of [traced.polygon, ...traced.holes]) {
-      for (let i = 0; i < polygon.length; i++) {
-        const a = polygon[i]!
-        const b = polygon[(i + 1) % polygon.length]!
-        const e = sub(b, a)
-        const length = Math.hypot(e.x, e.y)
-        if (length < tolerance('noLength')) continue
-        const offA = dot(sub(a, axis.start), axis.normal)
-        const offB = dot(sub(b, axis.start), axis.normal)
-        if (Math.abs(Math.abs(offA) - half) > near || Math.abs(Math.abs(offB) - half) > near) continue
-        // The room lies to the left of its counter-clockwise outline, and of its clockwise holes,
-        // so on the face the edge's left points to.
-        const left = dot({ x: -e.y, y: e.x }, axis.normal) > 0
-        const s0 = Math.max(0, Math.min(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
-        const s1 = Math.min(axis.length, Math.max(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
-        if (s1 - s0 > tolerance('noLength')) cover.push({ from: s0, to: s1, room: traced.room.id, left })
+  // A curved wall is read piece by piece (CNT-18): a room traced along it has one edge per piece.
+  for (const axis of wallSegments(wall)) {
+    const along = axis.length === 0 ? 1 : (axis.to - axis.from) / axis.length
+    for (const traced of rooms) {
+      if (!traced.walls.has(wall.id)) continue
+      for (const polygon of [traced.polygon, ...traced.holes]) {
+        for (let i = 0; i < polygon.length; i++) {
+          const a = polygon[i]!
+          const b = polygon[(i + 1) % polygon.length]!
+          const e = sub(b, a)
+          const length = Math.hypot(e.x, e.y)
+          if (length < tolerance('noLength')) continue
+          const offA = dot(sub(a, axis.start), axis.normal)
+          const offB = dot(sub(b, axis.start), axis.normal)
+          if (Math.abs(Math.abs(offA) - half) > near || Math.abs(Math.abs(offB) - half) > near) continue
+          // The room lies to the left of its counter-clockwise outline, and of its clockwise holes,
+          // so on the face the edge's left points to.
+          const left = dot({ x: -e.y, y: e.x }, axis.normal) > 0
+          const s0 = Math.max(0, Math.min(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
+          const s1 = Math.min(axis.length, Math.max(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
+          if (s1 - s0 > tolerance('noLength')) cover.push({ from: axis.from + s0 * along, to: axis.from + s1 * along, room: traced.room.id, left })
+        }
       }
     }
   }
@@ -225,8 +258,8 @@ function bodiesOf(walls: readonly Wall[]): Body[] {
   return walls.flatMap((wall) => {
     if (wall.virtual === true || !(wall.thickness > 0)) return []
     try {
-      const axis = wallAxis(wall)
-      return [{ wall, start: axis.start, dir: axis.dir, normal: axis.normal, length: axis.length, half: wall.thickness / 2 }]
+      if (curveFault(wall) !== null) return []
+      return wallSegments(wall).map((axis) => ({ wall, start: axis.start, dir: axis.dir, normal: axis.normal, length: axis.length, half: wall.thickness / 2 }))
     } catch {
       return []
     }
@@ -242,15 +275,18 @@ const inBody = (p: Vec2, b: Body): boolean => {
 /** Whether a point lies in floor the walls enclose: a room, or a space no room claims. */
 type Enclosed = (p: Vec2) => boolean
 
-function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>, bodies: Buckets<Body>, enclosed: Enclosed): WallSides {
-  let axis
+function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>, bodies: Buckets<Body>, enclosed: Enclosed, outdoor: ReadonlySet<string>): WallSides {
+  const detached: WallSides = { wall: wall.id, stated: wall.kind, stretches: [], worked: 'detached', exposure: wall.kind === 'exterior' ? 'exterior' : 'detached', differs: null }
+  // A curve that cannot be built (CNT-18) has no length to work its sides out along.
+  if (curveFault(wall) !== null) return detached
+  let total: number
   try {
-    axis = wallAxis(wall)
+    total = wallLength(wall)
   } catch {
-    return { wall: wall.id, stated: wall.kind, stretches: [], worked: 'detached', exposure: wall.kind === 'exterior' ? 'exterior' : 'detached', differs: null }
+    return detached
   }
   const cover = listedCover(wall, listing)
-  const cuts = [...new Set([0, axis.length, ...cover.flatMap((c) => [c.from, c.to])])].sort((a, b) => a - b)
+  const cuts = [...new Set([0, total, ...cover.flatMap((c) => [c.from, c.to])])].sort((a, b) => a - b)
   const step = (wall.virtual === true ? 0 : wall.thickness / 2) + tolerance('stepPastFace')
   const raw: WallStretch[] = []
   for (let i = 0; i + 1 < cuts.length; i++) {
@@ -262,11 +298,11 @@ function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>,
     const right = [...new Set(on.filter((c) => !c.left).map((c) => c.room))]
     // A side no listed room covers: the room just past that face, if any. A face that looks into
     // the body of another wall, where two walls meet, looks at neither a room nor the outside.
-    const centre = { x: axis.start.x + axis.dir.x * mid, y: axis.start.y + axis.dir.y * mid }
+    const { point: centre, normal } = wallFrameAt(wall, mid)
     const blocked = [false, false]
     for (const [side, sign, k] of [[left, 1, 0], [right, -1, 1]] as const) {
       if (side.length > 0) continue
-      const probe = { x: centre.x + axis.normal.x * step * sign, y: centre.y + axis.normal.y * step * sign }
+      const probe = { x: centre.x + normal.x * step * sign, y: centre.y + normal.y * step * sign }
       const held = roomHolding(probe, rooms.near(probe))
       if (held !== null) side.push(held)
       else blocked[k] = bodies.near(probe).some((b) => b.wall !== wall && inBody(probe, b))
@@ -274,8 +310,14 @@ function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>,
       // not the outside (ARE-4). Asked only for a wall not stated exterior, which faces outside anyway.
       if (held === null && !blocked[k] && wall.kind !== 'exterior' && (left.length > 0 || right.length > 0)) blocked[k] = enclosed(probe)
     }
-    const worked = workedOf(left.length + (blocked[0] ? 1 : 0), right.length + (blocked[1] ? 1 : 0))
-    raw.push({ from, to, left, right, worked: left.length + right.length === 0 ? 'detached' : worked })
+    // CNT-7 (C26): an outdoor space beside a face is the outside to the building. A wall with
+    // outdoor space beside it and no room (a fence, a parapet) stands in the open: it faces outside.
+    const indoor = (side: readonly string[]): number => (outdoor.size === 0 ? side.length : side.filter((id) => !outdoor.has(id)).length)
+    const found = workedOf(indoor(left) + (blocked[0] ? 1 : 0), indoor(right) + (blocked[1] ? 1 : 0))
+    const worked = found === 'detached' && left.length + right.length > 0 ? 'exterior' : found
+    // CNT-6 (C23): a room on one side and more of the building stated beyond the other.
+    const one = worked === 'exterior' && separates(wall) ? 'separating' : worked
+    raw.push({ from, to, left, right, worked: left.length + right.length === 0 ? 'detached' : one })
   }
   // Neighbouring stretches with the same rooms are one.
   const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x))
@@ -288,12 +330,19 @@ function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>,
   const long = (s: WallStretch): boolean => s.to - s.from > tolerance('lineInside')
   const worked: WallExposure = stretches.some((s) => long(s) && s.worked === 'exterior')
     ? 'exterior'
-    : stretches.some((s) => s.worked === 'interior')
-      ? 'interior'
-      : stretches.some((s) => s.worked === 'exterior')
-        ? 'exterior'
-        : 'detached'
-  const exposure: WallExposure = wall.kind === 'exterior' ? 'exterior' : worked
+    : stretches.some((s) => long(s) && s.worked === 'separating')
+      ? 'separating'
+      : stretches.some((s) => s.worked === 'interior')
+        ? 'interior'
+        : stretches.some((s) => s.worked === 'exterior')
+          ? 'exterior'
+          : stretches.some((s) => s.worked === 'separating')
+            ? 'separating'
+            : 'detached'
+  // CNT-6: a wall stated separating stays one between two rooms too (two flats), unless the plan
+  // says it faces outside.
+  const exposure: WallExposure =
+    wall.kind === 'exterior' ? 'exterior' : wall.kind === 'separating' && worked !== 'exterior' && worked !== 'detached' ? 'separating' : worked
   const length = (kind: WallExposure): number =>
     stretches.filter((s) => s.worked === kind).reduce((sum, s) => sum + (s.to - s.from), 0)
   let differs: WallSides['differs'] = null
@@ -312,6 +361,7 @@ export function planWallSides(index: PlanIndex): ReadonlyMap<string, WallSides> 
   if (found === undefined) {
     found = new Map()
     const rooms = traceRooms(index)
+    const outdoor = outdoorIds(index.plan)
     const tracedById = new Map([...rooms.values()].flat().map((t) => [t.room.id, t] as const))
     const roomBuckets = new Map<string, Buckets<Traced>>()
     for (const [floor, list] of rooms) {
@@ -347,7 +397,7 @@ export function planWallSides(index: PlanIndex): ReadonlyMap<string, WallSides> 
       const floor = floorOf(wall)
       if (!bodies.has(floor)) {
         const buckets = new Buckets<Body>()
-        for (const b of bodiesOf(index.plan.walls.filter((w) => floorOf(w) === floor))) {
+        for (const b of bodiesOf(wallsOnFloor(index.plan, floor))) {
           const ends = [b.start, { x: b.start.x + b.dir.x * b.length, y: b.start.y + b.dir.y * b.length }]
           buckets.add(b, {
             x0: Math.min(ends[0]!.x, ends[1]!.x) - b.half,
@@ -362,7 +412,7 @@ export function planWallSides(index: PlanIndex): ReadonlyMap<string, WallSides> 
         const t = tracedById.get(r.id)
         return t !== undefined && floorOf(r) === floor ? [t] : []
       })
-      found.set(wall.id, sidesOf(wall, listing, roomBuckets.get(floor) ?? new Buckets(), bodies.get(floor)!, enclosedOn(floor)))
+      found.set(wall.id, sidesOf(wall, listing, roomBuckets.get(floor) ?? new Buckets(), bodies.get(floor)!, enclosedOn(floor), outdoor))
     }
     if (stated) cache.set(index, found)
   }

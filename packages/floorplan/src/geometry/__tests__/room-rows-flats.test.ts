@@ -97,7 +97,16 @@ describe('R-7 the Berlin flat: a Berliner Zimmer whose court wall carries on thi
   // MSG-13: the balcony is drawn as a room against the court wall, which says it is exterior:
   // kept as an outside wall, as stated, with one line saying so.
   // LVL-1 (lab R-12): "3. Obergeschoss", level 3, drawn alone, with no elevation.
-  const byRoom = areas(plan, [['plan/level-gap', 'plan'], ['wall/kind-differs', 'sw']])
+  // MSG-16: the balcony's 1 m railing ends on the court wall inside the kitchen window, whose
+  // sill is at 0.9 m; and the Berliner Zimmer's window, 0.1 m from the corner of the 0.51 m court
+  // wall, runs 0.16 m into it and 0.025 m into the partition x5 that ends on it.
+  const byRoom = areas(plan, [
+    ['plan/level-gap', 'plan'],
+    ['wall/ends-in-opening', 'b-n'],
+    ['opening/crosses-wall', 'f-berliner'],
+    ['wall/ends-in-opening', 'x5'],
+    ['wall/kind-differs', 'sw']
+  ])
 
   it('measures every room', () => {
     expect([...byRoom.keys()]).toEqual(plan.rooms.map((r) => r.id))

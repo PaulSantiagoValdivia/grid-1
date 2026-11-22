@@ -19,10 +19,12 @@ export const NAME_MAX = 120
 export const ID_MAX = 64
 /** The most characters the trace image's path may have. */
 export const IMAGE_PATH_MAX = 1024
-/** The most walls, rooms, openings, floors or items a plan may have, each. */
+/** The most walls, rooms, openings, floors, items or stairs a plan may have, each. */
 export const PARTS_MAX = 50_000
 /** The most walls a room's boundary may list. */
 export const BOUNDARY_MAX = 2_000
+/** CNT-9: the most facts of the person's own one wall, opening, room or floor may carry. */
+export const PROPERTIES_MAX = 100
 
 /** Line breaks of every kind: one would start a line of its own in a report. */
 const LINE_BREAK = /[\n\r\u0085\u2028\u2029]/

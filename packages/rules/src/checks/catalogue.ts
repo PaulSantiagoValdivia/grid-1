@@ -7,8 +7,9 @@
  */
 
 import { RULES as PLAN_RULES } from '@ongrid/floorplan/geometry'
-import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
-import { ESCAPE_TOP_LEVEL, FIGURES, US_MODEL_CODES, type FigureKey, type SourceCitation } from './figures'
+import { english, said, type MessageKey } from '@ongrid/floorplan/messages'
+import type { BuildingType, RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { ESCAPE_TOP_LEVEL, FIGURES, READ_FOR_BUILDINGS, US_MODEL_CODES, readForCovers, type BuildingKind, type FigureKey, type SourceCitation } from './figures'
 import type { Rule, RuleCitation } from './types'
 
 const SOURCE_LABEL = `${US_MODEL_CODES}: IBC 2024 and IRC 2024` as const
@@ -42,7 +43,7 @@ export type FigureRuleId = keyof typeof RULE_FIGURES
 export const FIGURE_RULES: readonly (Rule & { readonly id: FigureRuleId })[] = [
   {
     id: 'habitable-room-area',
-    title: 'Rooms people live or sleep in have a minimum floor area',
+    title: english(said('check.title.habitable-room-area')),
     source: {
       kind: 'building-code',
       label: SOURCE_LABEL,
@@ -51,7 +52,7 @@ export const FIGURE_RULES: readonly (Rule & { readonly id: FigureRuleId })[] = [
   },
   {
     id: 'escape-opening',
-    title: 'Bedrooms have a window or door to the outside someone can escape through',
+    title: english(said('check.title.escape-opening')),
     source: {
       kind: 'building-code',
       label: SOURCE_LABEL,
@@ -75,17 +76,48 @@ export const RULE_USES: Readonly<Record<FigureRuleId, readonly RoomUse[]>> = {
   'escape-opening': ['bedroom']
 }
 
-/** The figure rules that look at a room of this use; none for a room with no use stated. */
-export function rulesForUse(use: RoomUse | undefined): readonly (Rule & { readonly id: FigureRuleId })[] {
-  if (use === undefined) return []
-  return FIGURE_RULES.filter((rule) => RULE_USES[rule.id].includes(use))
+/**
+ * CNT-5: the kinds of building each figure rule's figures were read for, from the figures
+ * themselves (and the escape rule's top storey), so a figure read for another kind changes it.
+ */
+export const RULE_READ_FOR: Readonly<Record<FigureRuleId, readonly BuildingKind[]>> = {
+  'habitable-room-area': [...new Set(RULE_FIGURES['habitable-room-area'].map((key) => FIGURES[key].provenance.readFor))],
+  'escape-opening': [
+    ...new Set([ESCAPE_TOP_LEVEL.provenance.readFor, ...RULE_FIGURES['escape-opening'].map((key) => FIGURES[key].provenance.readFor)])
+  ]
 }
 
+/**
+ * CNT-5: the kinds of building a plan may state that each figure rule reads. On a floor the plan
+ * says is another kind, the rule looks at no room, and the report says why. Where the plan does
+ * not say, every rule runs, as before.
+ */
+export const RULE_BUILDINGS: Readonly<Record<FigureRuleId, readonly BuildingType[]>> = {
+  'habitable-room-area': [...new Set(RULE_READ_FOR['habitable-room-area'].flatMap((kind) => READ_FOR_BUILDINGS[kind]))],
+  'escape-opening': [...new Set(RULE_READ_FOR['escape-opening'].flatMap((kind) => READ_FOR_BUILDINGS[kind]))]
+}
+
+/** Whether a figure rule runs in a building, or a floor, of this kind: always when it is not stated. */
+export function ruleReadsBuilding(ruleId: FigureRuleId, building: BuildingType | undefined): boolean {
+  return readForCovers(RULE_READ_FOR[ruleId], building)
+}
+
+/**
+ * The figure rules that look at a room of this use, in a building of this kind (CNT-5: every kind
+ * when it is not stated); none for a room with no use stated.
+ */
+export function rulesForUse(use: RoomUse | undefined, building?: BuildingType): readonly (Rule & { readonly id: FigureRuleId })[] {
+  if (use === undefined) return []
+  return FIGURE_RULES.filter((rule) => RULE_USES[rule.id].includes(use) && ruleReadsBuilding(rule.id, building))
+}
+
+// Until a ceiling-height check exists, which needs each room's own height and the roof plane over a slope (the last limit).
+export const FIGURE_LIMIT_KEYS = [
+  'check.limit.figure.0',
+  'check.limit.figure.1',
+  'check.limit.figure.2',
+  'check.limit.figure.3'
+] as const satisfies readonly MessageKey[]
+
 /** What the figure checks never look at. Shown with every report, after the core's own. */
-export const FIGURE_LIMITS: readonly string[] = [
-  'Windows are measured as drawn: the part that opens may be smaller',
-  'Where an escape window or door leads, and basements without a bedroom, are not checked',
-  'The shortest side of a room, and the total size of a home, are not checked',
-  // Until a ceiling-height check exists, which needs each room's own height and the roof plane over a slope.
-  'Ceiling height is not checked, in any room or under a sloping roof'
-]
+export const FIGURE_LIMITS: readonly string[] = FIGURE_LIMIT_KEYS.map((key) => english(said(key)))

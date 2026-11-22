@@ -12,6 +12,7 @@
 import * as geometry from '@ongrid/floorplan/geometry'
 import * as exporter from '@ongrid/floorplan/export'
 import * as rules from '@ongrid/rules'
+import * as rooms from '@ongrid/floorplan/rooms'
 import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 
 export type Probe =
@@ -56,20 +57,33 @@ export const CAPABILITIES = {
   'export-table': { what: 'writes a table (CSV or a spreadsheet)', probe: { kind: 'export', format: 'csv' } },
   north: { what: 'holds where north is', probe: schema('north', 0) },
   site: { what: 'holds the plot and what is around it', probe: schema('site', { boundary: [[0, 0], [10, 0], [10, 10], [0, 10]] }) },
-  stairs: { what: 'holds stairs', probe: schema('stairs', [{ id: 's1', from: 'ground', to: 'first', width: 0.9, risers: 16 }]) },
+  // LVL-3: the lab's names (from, to, width, risers), and the walking line a stair is drawn along.
+  stairs: { what: 'holds stairs', probe: schema('stairs', [{ id: 's1', from: 'ground', to: 'first', width: 0.9, run: [[1, 1], [1, 4.5]], risers: 16 }]) },
   ramps: { what: 'holds ramps', probe: schema('ramps', [{ id: 'r1', rise: 0.3, slope: 0.08 }]) },
-  roof: { what: 'holds a roof', probe: schema('roof', { type: 'gable', pitch: 35 }) },
+  // LVL-6: a floor's roof, with its shape, eaves and pitch, which its walls and rooms are cut to.
+  roof: { what: 'holds a roof', probe: schema('floors', [{ id: 'ground', name: 'Ground', level: 0, roof: { shape: 'gable', eaves: 2.7, pitch: 35 } }]) },
   fixtures: { what: 'holds fixtures (WC, basin, kitchen units)', probe: schema('rooms.0.fixtures', [{ type: 'wc' }]) },
   furniture: { what: 'holds furniture', probe: schema('furniture', [{ type: 'table', at: [1, 1], size: [1.8, 0.9] }]) },
-  'door-leaves': { what: 'holds doors with several leaves (bifold, double)', probe: schema('openings.0.leaves', 2) },
-  'clear-width': { what: 'holds the clear width of a door', probe: schema('openings.0.clearWidth', 0.8) },
+  // CNT-14: a door's kind (`folding`, `double`) says how many leaves it has; the lab's agents wrote `leaves`.
+  'door-leaves': { what: 'holds doors with several leaves (bifold, double)', probe: schema('openings.0.kind', 'folding') },
+  // CNT-13: the clear width a doorway leaves, worked out from its hole, an open leaf and the fixtures in front of it.
+  'clear-width': {
+    what: 'gives the clear width a door leaves',
+    probe: lib((s) => {
+      const plan = parseFloorPlan(s)
+      const door = plan.openings.find((o) => o.type === 'door')!
+      const wall = plan.walls.find((w) => w.id === door.wall)!
+      return geometry.doorwayClearance(wall, door, []).clear < door.width
+    }),
+  },
   threshold: { what: 'holds a step or threshold at a door', probe: schema('openings.0.threshold', 0.02) },
   'fire-rating': { what: 'holds fire ratings of walls and doors', probe: schema('openings.0.fireRating', 'EI30') },
   occupancy: { what: 'holds how many people a room or home is for', probe: schema('rooms.0.occupancy', 2) },
   'existing-new': { what: 'holds which parts are existing, new or removed', probe: schema('walls.0.status', 'existing') },
   'outdoor-space': { what: 'holds outdoor spaces (garden, courtyard, balcony)', probe: schema('rooms.0.outdoor', true) },
   flats: { what: 'groups rooms into homes or flats', probe: schema('flats', [{ id: 'a', rooms: ['r1'] }]) },
-  'ceiling-height': { what: 'holds ceiling heights', probe: schema('rooms.0.ceilingHeight', 2.5) },
+  // LVL-4: a room's ceiling, at the room's height (ARE-10), with the zones lowered under it at theirs.
+  'ceiling-height': { what: 'holds ceiling heights', probe: schema('rooms.0.ceiling', { lowered: [{ points: [[0, 0], [1, 0], [1, 1]], height: 2.3 }] }) },
   'gross-area': {
     what: 'gives gross areas (to the outside of the walls)',
     // ARE-9: gross external, and gross internal, each with the rule it follows.
@@ -90,8 +104,16 @@ export const CAPABILITIES = {
   'route-length': { what: 'measures a walking route (to an exit, along a corridor)', probe: none },
   'take-offs': { what: 'measures lengths and surfaces of walls, skirting and plaster', probe: none },
   'opening-schedule': { what: 'lists doors and windows by size', probe: none },
-  'clearance': { what: 'measures the free space between things', probe: none },
-  'turning-space': { what: 'tests a turning circle in a room', probe: none },
+  // CNT-13: the floor round a fixture, and the way through a room clear of the fixtures.
+  'clearance': { what: 'measures the free space between things', probe: lib(() => has(geometry, 'fixtureSpace') && has(geometry, 'passageWidth')) },
+  // CNT-13: the widest circle a room's free floor holds, clear of its fixtures.
+  'turning-space': {
+    what: 'tests a turning circle in a room',
+    probe: lib((s) => {
+      const [first] = geometry.roomShapes(geometry.indexPlan(parseFloorPlan(s)))
+      return first !== undefined && geometry.turningSpace(first.shape.polygon, first.shape.holes, []).diameter > 0
+    }),
+  },
   'inside-view': { what: 'shows a view from inside a room', probe: none },
   'drawing-key': { what: 'explains the drawing (key, which side is which)', probe: none },
   'drawing-style': { what: 'chooses what a drawing shows and its colours', probe: none },
@@ -99,19 +121,39 @@ export const CAPABILITIES = {
   'imperial-units': { what: 'shows sizes in feet and inches', probe: none },
   'marks-on-plan': { what: 'marks notes and changes on the drawing', probe: none },
   'note-reasons': { what: 'says why each note was given and what to change', probe: none },
-  'compare-notes': { what: 'compares the notes of two versions', probe: none },
+  'compare-notes': {
+    what: 'compares the notes of two versions',
+    // WRT-8: the comparison says which notes of the drawing check came and went.
+    probe: lib((s) => {
+      const plan = parseFloorPlan(s)
+      const note = { code: 'plan/probe', thing: { kind: 'plan', id: 'plan' }, also: [], message: 'A note' }
+      return geometry.compareBuildings(plan, plan, { notes: { before: [], after: [note] } }).issues.some((issue) => issue.code === 'note_added')
+    }),
+  },
   'layout-help': { what: 'works out a layout (how many flats fit)', probe: none },
-  'repeat-floor': { what: 'repeats a floor', probe: none },
+  'repeat-floor': {
+    what: 'repeats a floor',
+    // WRT-4: rooms text copies a floor from its floor line ('floor f2 ... copy f1'), each floor
+    // standing in the plan with its own walls, rooms and ids.
+    probe: lib(() => {
+      const written = rooms.compileRoomsText('walls outside 0.3 inside 0.1 height 2.7\nfloor f1 "First" level 1\nroom a "Flat" living 6 x 4 at 0,0\nfloor f2 "Second" level 2 copy f1\n')
+      const plan = written.plan === null ? null : parseFloorPlan(written.plan)
+      return plan !== null && plan.floors?.length === 2 && plan.rooms.filter((room) => room.floor === 'f2').length === 1 && plan.walls.some((wall) => wall.floor === 'f2')
+    }),
+  },
   'local-rules': { what: 'checks the rules of the place named', probe: none },
   permission: { what: 'says whether a design is allowed (never: Grid gives general guidance only)', probe: none },
-  'openable-part': { what: 'holds the part of a window that opens, and its glass', probe: none },
+  // CNT-14: the part of a door or window that opens (`opens`); its glass is drawn in 3D.
+  'openable-part': { what: 'holds the part of a window that opens, and its glass', probe: schema('openings.0.opens', { width: 0.6, height: 1 }) },
   services: { what: 'holds services (fans, ducts)', probe: none },
   'exit-side': { what: 'knows which side of an exit door is out', probe: none },
-  lift: { what: 'holds lifts', probe: none },
+  // LVL-3: a lift shaft is a room used as a lift on each floor it serves.
+  lift: { what: 'holds lifts', probe: schema('rooms.0.use', 'lift') },
   parking: { what: 'holds parking spaces', probe: none },
   materials: { what: 'holds wall, roof and floor build-ups', probe: none },
   shading: { what: 'holds sun shading', probe: none },
-  'accessible-mark': { what: 'marks a room or fitting as accessible', probe: none },
+  // CNT-17: the rooms and routes that need to be accessible (C14). A fitting is not marked yet.
+  'accessible-mark': { what: 'marks a room or fitting as accessible', probe: schema('accessible', { rooms: ['r1'], routes: [{ to: 'r1' }] }) },
 } as const satisfies Record<string, Capability>
 
 export type CapabilityId = keyof typeof CAPABILITIES

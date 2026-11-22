@@ -7,6 +7,7 @@ import {
   boundsWithGhosts,
   buildDimensions,
   buildFloorPlan,
+  floorAbove,
   ghostsOf,
   planForFloor,
   resolveFloor,
@@ -42,6 +43,7 @@ import { progressOf, removalProgress } from '../preview/progress'
 import { pulseAt } from '../preview/pulse'
 import { CLICK_SLOP } from '../preview/click'
 import { useReducedMotion } from '../preview/useReducedMotion'
+import { drawingText, wordsOf } from '../picture/words'
 import './plan.css'
 
 /**
@@ -179,6 +181,8 @@ export function Canvas2D({
   const plan = useMemo(() => planForFloor(source, floorId), [source, floorId])
 
   const drawing = useMemo(() => buildFloorPlan(plan), [plan])
+  // SHT-11: the outline of the floor above, dashed, as the picture draws it.
+  const above = useMemo(() => floorAbove(plan), [plan])
 
   // Which way each door opens, where the plan says so. A door that
   // doesn't say draws as a plain gap.
@@ -551,7 +555,7 @@ export function Canvas2D({
   const removedRooms = ghosts?.rooms.filter((room) => diffStatus?.[room.id] === 'removed') ?? []
 
   if (!view) {
-    return <svg ref={hostRef} className={CANVAS_CLASS} role="img" aria-label="Floor plan" />
+    return <svg ref={hostRef} className={CANVAS_CLASS} role="img" aria-label={drawingText(wordsOf(labels?.display), 'drawing.picture.empty')} />
   }
 
   // The viewBox is in meters, so a font-size in pixels would come out the size
@@ -569,6 +573,7 @@ export function Canvas2D({
     metersPerPixel,
     look,
     labels,
+    above,
     live: {
       leaving: leaving !== null && prevDrawing ? { drawing: prevDrawing, ids: removing, progress: leaving } : null,
       ghosts,
@@ -607,7 +612,7 @@ export function Canvas2D({
       viewBox={viewBoxOf(view)}
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label={`Floor plan with ${drawing.rooms.length} rooms`}
+      aria-label={drawingText(wordsOf(labels?.display), 'drawing.picture', { count: drawing.rooms.length })}
       tabIndex={0}
       data-panning={panning}
       // The reference image (a backdrop to trace over) is not part of this viewer yet.

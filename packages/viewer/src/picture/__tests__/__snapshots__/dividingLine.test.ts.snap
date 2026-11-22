@@ -3,7 +3,7 @@
 exports[`a dividing line in the 2D picture > is drawn dashed, over the floor of both rooms, which meet on it 1`] = `
 {
   "line": [
-    "<path d="M4,0L4,-4" data-part="virtual" data-id="line" fill="none" stroke="#b3afa2" stroke-width="0.01276" stroke-dasharray="0.05955 0.04253">",
+    "<path d="M4,0L4,-4" data-part="virtual" data-id="line" fill="none" stroke="#817e75" stroke-width="0.01509" stroke-dasharray="0.07042 0.0503">",
   ],
   "opening": [
     "<path d="M4.0000,-1.0000L4.0000,-3.0000L4.0000,-3.0000L4.0000,-1.0000Z" data-part="opening" data-type="opening" data-id="gap" data-selectable="true" data-selected="false" fill="#ffffff" stroke="none">",

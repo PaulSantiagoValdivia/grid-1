@@ -44,6 +44,8 @@ export interface WallExposurePalette {
 export function wallExposureColor(exposure: WallExposure, palette: WallExposurePalette): string {
   switch (exposure) {
     case 'exterior':
+    // CNT-6: a party wall, or one to the common parts, bounds the home as an outside wall does.
+    case 'separating':
       return palette.wallExterior
     case 'interior':
       return palette.wallInterior

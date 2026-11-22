@@ -8,16 +8,30 @@
  * from a name: a room is a bedroom only when its `use` says so.
  */
 import {
+  columnDepth,
+  columnRoom,
+  roomColumnArea,
+  roomShapes,
+  soundColumns,
   cross,
   dot,
+  floorJoins,
   floorOf,
+  hasWallsThrough,
   indexPlan,
+  phaseCounts,
   planFloors,
   planForFloor,
+  planHasPhases,
+  planInState,
   roomArea,
+  roomZones,
   sub,
   tolerance,
-  wallAxis,
+  wallCurve,
+  wallFrameAt,
+  wallLength,
+  wallSegments,
   type Floor,
   type FloorPlan,
   type Opening,
@@ -25,11 +39,12 @@ import {
   type Vec2,
   type Wall,
 } from '@ongrid/floorplan/geometry'
-import { DEFAULT_FLOOR_ID, type RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_FLOOR_ID, heightByDefault, WALL_DEFAULTS, type BuildingType, type OutdoorKind, type RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { outdoorKind } from '@ongrid/floorplan/geometry/outdoor'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { openingSides, roomOutlines, sidesAt, type RoomOutline } from '@ongrid/floorplan/geometry/rules/graph'
 
-/** A direction on the drawing: north is up (+y). The plan itself holds no north. */
+/** A direction on the drawing: north is up (+y), whatever north the plan states (CNT-3). */
 export type Compass = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW'
 
 const COMPASS: readonly Compass[] = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE']
@@ -57,8 +72,12 @@ export interface RoomFacts {
   readonly floor: string
   /** Null when the drawing's checks leave the room out: it has no outline to measure. */
   readonly shape: RoomShape | null
-  /** Rooms across one of its walls, whether or not anything joins them, by id. */
+  /** Rooms across one of its walls, whether or not anything joins them, by id. None for a zone. */
   readonly neighbours: readonly string[]
+  /** CNT-8, only on a zone: the room it is part of. A zone is measured, and counted in no total. */
+  readonly zoneOf?: string
+  /** CNT-7 (C26), only on an outdoor space: its kind. It is measured, and counted in no total. */
+  readonly outdoor?: OutdoorKind
 }
 
 /** How far an opening's edge is from the inside corner at one end of the room's side. */
@@ -104,8 +123,12 @@ export interface WallFacts {
   readonly end: Vec2
   readonly thickness: number
   readonly height: number
+  /** WRT-6: the height is stated by neither the wall nor its floor: Grid's default, drawn only. */
+  readonly heightNotStated: boolean
   readonly kind: Wall['kind']
   readonly virtual: boolean
+  /** CNT-18: a curved wall's centre, radius, sweep in degrees and length along the curve. */
+  readonly curve?: { readonly centre: Vec2; readonly radius: number; readonly sweep: number; readonly length: number }
 }
 
 /** A floor laid out like an earlier one: same walls, rooms and openings, other ids. */
@@ -127,10 +150,28 @@ export interface FloorFacts {
   readonly openSides: readonly OpenSide[]
   readonly repeats: Repeat | null
   readonly area: number
-  /** The usual height of a solid wall on this floor; null when it has none. */
+  /**
+   * The usual height of a solid wall on this floor, of those that state one (or whose floor
+   * does); of all of them when none does (WRT-6). Null when it has no solid wall.
+   */
   readonly wallHeight: number | null
   /** Rooms and openings the drawing's checks leave out on this floor, by id. */
   readonly leftOut: readonly string[]
+  /** CNT-16: the columns standing on this floor, in plan order. Left out on a plan with none. */
+  readonly columns?: readonly ColumnFacts[]
+}
+
+/** CNT-16: a column, as the description says it. */
+export interface ColumnFacts {
+  readonly id: string
+  readonly label: string | null
+  readonly shape: 'square' | 'round'
+  readonly width: number
+  /** A square column's other side; null for a round one. */
+  readonly depth: number | null
+  readonly at: Vec2
+  /** The room it stands in, by id, or null. */
+  readonly room: string | null
 }
 
 /** Something that departs from the usual height. */
@@ -141,8 +182,13 @@ export interface HeightException {
 }
 
 export interface Heights {
-  /** The usual height of a solid wall; null when there are none. */
+  /** The usual height of a solid wall that states one, or whose floor does; null when none does. */
   readonly wall: number | null
+  /**
+   * WRT-6 (lab AU3-6): the solid walls whose height nothing states, so they are drawn at Grid's
+   * default, and that default. Their height is not stated, never "2.70 m".
+   */
+  readonly notStated: { readonly count: number; readonly drawn: number }
   /** Floors whose walls are usually another height. */
   readonly floorWalls: ReadonlyArray<{ readonly floor: string; readonly value: number }>
   /** Walls of another height than most on their floor. */
@@ -161,8 +207,84 @@ export interface PlanFacts {
   readonly heights: Heights
   readonly wallCount: number
   readonly openingCount: number
-  /** Rooms with a stair use: the plan may say a stair is there, never what it joins. */
+  /** Rooms with a stair use. */
   readonly stairRooms: number
+  /** CNT-5: what kind of building the plan says it is, and each floor that says otherwise for itself. */
+  readonly building: { readonly plan: BuildingType | undefined; readonly floors: readonly { readonly floor: string; readonly building: BuildingType }[] }
+  /**
+   * How the floors are joined (LVL-3): stairs the plan states, with the figures Grid works out,
+   * stair rooms and lift shafts that lie one over the other, and stair rooms or shafts out of line.
+   */
+  readonly connections: Connections
+  /** Whether the plan states its north (CNT-3). The descriptions' sides stay the drawing's either way. */
+  readonly northStated: boolean
+  /** CNT-4: whether the plan lists its flats, so which rooms make each is something it says. */
+  readonly flatsListed: boolean
+  /**
+   * CNT-10: what the plan's work holds, for a plan with phases: how many walls, openings and rooms
+   * are in each phase, and the base it is fitted out in. Every other fact is of the building after
+   * the work. Null for a plan with no phases.
+   */
+  readonly work: WorkFacts | null
+}
+
+export interface WorkFacts {
+  readonly counts: ReturnType<typeof phaseCounts>
+  readonly base: string | null
+}
+
+export interface StairFacts {
+  readonly id: string
+  readonly name: string
+  readonly lower: string
+  readonly upper: string
+  readonly risers: number
+  readonly riserHeight: number
+  readonly going: number
+  readonly width: number
+  /** The plan area of its flights and landings, m²: floor of the rooms it stands in, not added. */
+  readonly footprint: number
+}
+
+export interface Connections {
+  readonly stairs: readonly StairFacts[]
+  /** Pairs of floors whose rooms used as a stair (or a lift) lie one over the other, lower first. */
+  readonly stairRooms: readonly (readonly [string, string])[]
+  readonly lifts: readonly (readonly [string, string])[]
+  /** Pairs of floors whose stair rooms (or shafts) do not line up, lower first. */
+  readonly outOfLine: readonly { readonly kind: 'stair' | 'lift'; readonly floors: readonly [string, string] }[]
+  /** Floors with rooms that no stair, stated or drawn as a room, joins to another floor. */
+  readonly unjoined: readonly string[]
+}
+
+/** How the floors are joined, from the one answer the way-out check reads (`floorJoins`). */
+function connectionsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Connections {
+  const empty: Connections = { stairs: [], stairRooms: [], lifts: [], outOfLine: [], unjoined: [] }
+  if (floors.length < 2) return empty
+  const found = floorJoins(plan)
+  const pairs = (kind: 'stair-room' | 'lift'): [string, string][] => {
+    const seen = new Map<string, [string, string]>()
+    for (const join of found.joins) if (join.kind === kind) seen.set(`${join.lower.floor}|${join.upper.floor}`, [join.lower.floor, join.upper.floor])
+    return [...seen.values()]
+  }
+  const joined = new Set(found.joins.filter((j) => j.kind !== 'lift').flatMap((j) => [j.lower.floor, j.upper.floor]))
+  return {
+    stairs: found.stairs.map((stair) => ({
+      id: stair.id,
+      name: stair.name,
+      lower: stair.lower.floor,
+      upper: stair.upper.floor,
+      risers: stair.risers,
+      riserHeight: stair.riserHeight,
+      going: stair.going,
+      width: stair.width,
+      footprint: stair.footprint,
+    })),
+    stairRooms: pairs('stair-room'),
+    lifts: pairs('lift'),
+    outOfLine: found.outOfLine.map((out) => ({ kind: out.kind, floors: [out.lower[0]!.floor, out.upper[0]!.floor] as const })),
+    unjoined: floors.filter((floor) => floor.rooms.length > 0 && !joined.has(floor.id)).map((floor) => floor.id),
+  }
 }
 
 /** How far a point may be from a wall's face and still be on it, in metres. */
@@ -192,14 +314,15 @@ function usual(values: readonly number[]): number | null {
   return best
 }
 
-function shapeOf(polygon: readonly Vec2[], area: number): RoomShape {
+/** CNT-16: `columns` is the floor its columns take off `area`, which leaves its outline a rectangle. */
+function shapeOf(polygon: readonly Vec2[], area: number, columns = 0): RoomShape {
   const xs = polygon.map((p) => p.x)
   const ys = polygon.map((p) => p.y)
   const minX = Math.min(...xs)
   const minY = Math.min(...ys)
   const across = Math.max(...xs) - minX
   const up = Math.max(...ys) - minY
-  const rectangle = polygon.length === 4 && Math.abs(across * up - area) < 0.01
+  const rectangle = polygon.length === 4 && Math.abs(across * up - (area + columns)) < 0.01
   return { at: { x: minX, y: minY }, across, up, rectangle, area }
 }
 
@@ -208,23 +331,40 @@ function shapeOf(polygon: readonly Vec2[], area: number): RoomShape {
  * they cover. `toward` is +1 for a room on the side the wall's normal points at, -1 for the other.
  */
 function faceStretches(wall: Wall, polygon: readonly Vec2[], toward: 1 | -1): Array<readonly [number, number]> {
-  const axis = wallAxis(wall)
   const half = wall.virtual === true ? 0 : wall.thickness / 2
-  const off = (point: Vec2): number => dot(sub(point, axis.start), axis.normal) * toward - half
   const stretches: Array<readonly [number, number]> = []
-  for (let i = 0; i < polygon.length; i++) {
-    const p = polygon[i]!
-    const q = polygon[(i + 1) % polygon.length]!
-    const edge = sub(q, p)
-    const length = Math.hypot(edge.x, edge.y)
-    if (length < tolerance('noLength')) continue
-    if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
-    if (Math.abs(off(p)) > ON_FACE_M || Math.abs(off(q)) > ON_FACE_M) continue
-    const a = dot(sub(p, axis.start), axis.dir)
-    const b = dot(sub(q, axis.start), axis.dir)
-    stretches.push([Math.min(a, b), Math.max(a, b)])
+  // A curved wall piece by piece (CNT-18): each stretch along the curve, where its piece is.
+  const curved = wall.arc !== undefined
+  for (const axis of wallSegments(wall)) {
+    const along = axis.length === 0 ? 1 : (axis.to - axis.from) / axis.length
+    const off = (point: Vec2): number => dot(sub(point, axis.start), axis.normal) * toward - half
+    for (let i = 0; i < polygon.length; i++) {
+      const p = polygon[i]!
+      const q = polygon[(i + 1) % polygon.length]!
+      const edge = sub(q, p)
+      const length = Math.hypot(edge.x, edge.y)
+      if (length < tolerance('noLength')) continue
+      if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
+      if (Math.abs(off(p)) > ON_FACE_M || Math.abs(off(q)) > ON_FACE_M) continue
+      let a = dot(sub(p, axis.start), axis.dir)
+      let b = dot(sub(q, axis.start), axis.dir)
+      if (curved) {
+        if (Math.max(a, b) < -ON_FACE_M || Math.min(a, b) > axis.length + ON_FACE_M) continue
+        a = axis.from + Math.min(Math.max(a, 0), axis.length) * along
+        b = axis.from + Math.min(Math.max(b, 0), axis.length) * along
+      }
+      stretches.push([Math.min(a, b), Math.max(a, b)])
+    }
   }
-  return stretches
+  if (!curved) return stretches
+  // Pieces in a row along the curve are one stretch.
+  const joined: Array<[number, number]> = []
+  for (const [lo, hi] of [...stretches].sort((x, y) => x[0] - y[0])) {
+    const last = joined.at(-1)
+    if (last !== undefined && lo <= last[1] + ON_FACE_M) last[1] = Math.max(last[1], hi)
+    else joined.push([lo, hi])
+  }
+  return joined
 }
 
 /** The stretch of the room's side on the wall's face that holds the point `along` the axis. */
@@ -239,7 +379,8 @@ function sideOf(
   toward: 1 | -1,
   outlines: ReadonlyMap<string, RoomOutline>,
 ): OpeningSide {
-  const axis = wallAxis(wall)
+  // Where the opening is: on a curved wall the way the curve runs at its middle (CNT-18).
+  const axis = wallFrameAt(wall, opening.offset + opening.width / 2)
   const inward = { x: -axis.normal.x * toward, y: -axis.normal.y * toward }
   const polygon = outlines.get(room)!.polygon
   const stretch = faceStretch(wall, polygon, toward, opening.offset + opening.width / 2)
@@ -247,13 +388,21 @@ function sideOf(
   return {
     room,
     face: compassOf(inward),
-    corners: stretch === null
+    // A whole circle has no corners to measure from (CNT-18).
+    corners: stretch === null || wallCurve(wall)?.closed === true
       ? null
       : [
           { toward: compassOf(back), distance: opening.offset - stretch[0] },
           { toward: compassOf(axis.dir), distance: stretch[1] - (opening.offset + opening.width) },
         ],
   }
+}
+
+/** CNT-18: a curved wall's curve, for its facts. */
+function curveFacts(wall: Wall): Pick<WallFacts, 'curve'> {
+  const curve = wallCurve(wall)
+  if (curve === null || wall.arc === undefined) return {}
+  return { curve: { centre: curve.centre, radius: curve.radius, sweep: wall.arc.sweep, length: curve.length } }
 }
 
 /** What is past an opening's side with no room on it, read as the way-out check reads it. */
@@ -274,8 +423,10 @@ function neighboursOn(storey: FloorPlan, index: PlanIndex, outlines: ReadonlyMap
     next.get(a)!.add(b)
     next.get(b)!.add(a)
   }
+  // A zone is inside its room (CNT-8): the room meets its neighbours, the zone none.
+  const zoneOf = roomZones(index).zoneOf
   for (const wall of storey.walls) {
-    const named = (index.roomsByWall.get(wall.id) ?? []).filter((room) => outlines.has(room.id))
+    const named = (index.roomsByWall.get(wall.id) ?? []).filter((room) => outlines.has(room.id) && !zoneOf.has(room.id))
     if (named.length < 2) continue
     const on = (toward: 1 | -1): Array<{ room: string; lo: number; hi: number }> =>
       named.flatMap((room) => faceStretches(wall, outlines.get(room.id)!.polygon, toward).map(([lo, hi]) => ({ room: room.id, lo, hi })))
@@ -295,7 +446,7 @@ function layoutOf(storey: FloorPlan): { key: string; ids: string[] } {
   const n = (value: number): string => value.toFixed(4)
   const wallKey = new Map<string, string>()
   for (const wall of storey.walls) {
-    wallKey.set(wall.id, [n(wall.start[0]), n(wall.start[1]), n(wall.end[0]), n(wall.end[1]), n(wall.thickness), n(wall.height), wall.kind, wall.virtual === true].join(','))
+    wallKey.set(wall.id, [n(wall.start[0]), n(wall.start[1]), n(wall.end[0]), n(wall.end[1]), n(wall.thickness), n(wall.height), wall.kind, wall.virtual === true, ...(wall.arc === undefined ? [] : [n(wall.arc.centre[0]), n(wall.arc.centre[1]), n(wall.arc.sweep)])].join(','))
   }
   const entries: Array<[string, string]> = [
     ...storey.walls.map((wall): [string, string] => [`w${wallKey.get(wall.id)}`, wall.id]),
@@ -304,7 +455,7 @@ function layoutOf(storey: FloorPlan): { key: string; ids: string[] } {
       room.id,
     ]),
     ...storey.openings.map((o): [string, string] => [
-      `o${[wallKey.get(o.wall), o.type, n(o.offset), n(o.width), n(o.sill), n(o.height), o.hinge ?? '', o.swing ?? ''].join(',')}`,
+      `o${[wallKey.get(o.wall), o.type, n(o.offset), n(o.width), n(o.sill), n(o.height), o.hinge ?? '', o.swing ?? '', o.kind ?? ''].join(',')}`,
       o.id,
     ]),
   ]
@@ -333,16 +484,20 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
   const index = indexPlan(storey)
   const outlines = roomOutlines(storey, index, leftOut.rooms)
   const next = neighboursOn(storey, index, outlines)
+  const zoneOf = roomZones(index).zoneOf
 
   const rooms: RoomFacts[] = storey.rooms.map((room) => {
     const outline = outlines.get(room.id)
+    const of = zoneOf.get(room.id)
     return {
       id: room.id,
       name: room.name,
       ...(room.use === undefined ? {} : { use: room.use }),
       floor: floor.id,
-      shape: outline === undefined ? null : shapeOf(outline.polygon, roomArea(room, index)),
+      shape: outline === undefined ? null : shapeOf(outline.polygon, roomArea(room, index), roomColumnArea(room, index)),
       neighbours: [...(next.get(room.id) ?? [])].sort(byText),
+      ...(of === undefined ? {} : { zoneOf: of }),
+      ...(outdoorKind(room) === null ? {} : { outdoor: outdoorKind(room)! }),
     }
   })
 
@@ -371,7 +526,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
   const openSides: OpenSide[] = []
   for (const wall of storey.walls) {
     if (wall.virtual !== true) continue
-    const [left, right] = sidesAt(wall, wallAxis(wall).length / 2, index, outlines)
+    const [left, right] = sidesAt(wall, wallLength(wall) / 2, index, outlines)
     if (left !== null && right !== null && left !== right) openSides.push({ wall: wall.id, rooms: [left, right] })
   }
 
@@ -381,8 +536,10 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     end: { x: wall.end[0], y: wall.end[1] },
     thickness: wall.thickness,
     height: wall.height,
+    heightNotStated: heightByDefault(plan, wall),
     kind: wall.kind,
     virtual: wall.virtual === true,
+    ...curveFacts(wall),
   }))
 
   return {
@@ -394,41 +551,86 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     openings,
     openSides,
     repeats: null,
-    area: rooms.reduce((sum, room) => sum + (room.shape?.area ?? 0), 0),
-    wallHeight: usual(storey.walls.filter((wall) => wall.virtual !== true).map((wall) => wall.height)),
+    // A zone's floor is its room's (CNT-8): counted once.
+    // CNT-7: an outdoor space is listed apart, in no total.
+    area: rooms.reduce((sum, room) => sum + (room.zoneOf === undefined && room.outdoor === undefined ? (room.shape?.area ?? 0) : 0), 0),
+    wallHeight: usualHeight(plan, storey.walls),
     leftOut: [...leftOut.rooms, ...leftOut.openings].sort(byText),
+    ...(storey.columns === undefined ? {} : { columns: columnFacts(storey, index) }),
   }
+}
+
+/** CNT-16: the columns a floor's slice holds that are drawn, each with the room it stands in. */
+function columnFacts(storey: FloorPlan, index: ReturnType<typeof indexPlan>): ColumnFacts[] {
+  const rooms = roomShapes(index)
+  return soundColumns(storey).map((column) => ({
+    id: column.id,
+    label: column.label ?? null,
+    shape: column.shape,
+    width: column.width,
+    depth: column.shape === 'round' ? null : columnDepth(column),
+    at: { x: column.at[0], y: column.at[1] },
+    room: columnRoom(column, rooms)?.id ?? null,
+  }))
 }
 
 /**
  * The usual heights and the exceptions. A floor laid out like an earlier one adds no
  * exceptions of its own: they are the earlier floor's.
  */
+/** WRT-6: the usual height of the solid walls that state one, else of them all. */
+function usualHeight(plan: FloorPlan, walls: readonly Wall[]): number | null {
+  const solid = walls.filter((wall) => wall.virtual !== true)
+  const stated = solid.filter((wall) => !heightByDefault(plan, wall))
+  return usual((stated.length > 0 ? stated : solid).map((wall) => wall.height))
+}
+
 function heightsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Heights {
   const own = new Set(floors.filter((floor) => floor.repeats === null).map((floor) => floor.id))
   const usualOn = new Map(floors.map((floor) => [floor.id, floor.wallHeight]))
-  const solid = plan.walls.filter((wall) => wall.virtual !== true)
+  const all = plan.walls.filter((wall) => wall.virtual !== true)
+  const solid = all.filter((wall) => !heightByDefault(plan, wall))
   const wall = usual(solid.map((w) => w.height))
+  const statedOn = new Set(solid.map((w) => floorOf(w)))
   const floorOfWall = new Map(plan.walls.map((w) => [w.id, floorOf(w)]))
-  const onOwn = (o: Opening): boolean => own.has(floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID)
-  const windows = plan.openings.filter((o) => o.type === 'window')
+  // LVL-5: an opening in a wall through floors stands on the floor its foot is on, its sill above
+  // that floor's level: each opening as the lowest floor's slice that holds part of it has it.
+  const placed = new Map<Opening, string>()
+  if (hasWallsThrough(plan)) {
+    const seen = new Set<string>()
+    for (const floor of planFloors(plan)) {
+      for (const o of planForFloor(plan, floor.id).openings) {
+        if (seen.has(o.id)) continue
+        seen.add(o.id)
+        placed.set(o, floor.id)
+      }
+    }
+  }
+  const openingList = hasWallsThrough(plan) ? [...placed.keys()] : plan.openings
+  const floorOfOpening = (o: Opening): string => placed.get(o) ?? floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID
+  const onOwn = (o: Opening): boolean => own.has(floorOfOpening(o))
+  const windows = openingList.filter((o) => o.type === 'window')
   const windowSill = usual(windows.map((o) => o.sill))
-  const at = (o: Opening): HeightException => ({ id: o.id, floor: floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID, value: o.sill })
+  const at = (o: Opening): HeightException => ({ id: o.id, floor: floorOfOpening(o), value: o.sill })
   return {
     wall,
+    notStated: { count: all.length - solid.length, drawn: WALL_DEFAULTS.solid.height },
     floorWalls: floors.flatMap((floor) =>
-      floor.repeats === null && floor.wallHeight !== null && floor.wallHeight !== wall ? [{ floor: floor.id, value: floor.wallHeight }] : []),
+      floor.repeats === null && floor.wallHeight !== null && floor.wallHeight !== wall && statedOn.has(floor.id) ? [{ floor: floor.id, value: floor.wallHeight }] : []),
     walls: solid
       .filter((w) => own.has(floorOf(w)) && w.height !== usualOn.get(floorOf(w)))
       .map((w) => ({ id: w.id, floor: floorOf(w), value: w.height })),
     windowSill,
     windowSills: windows.filter((o) => o.sill !== windowSill && onOwn(o)).map(at),
-    doorSills: plan.openings.filter((o) => o.type !== 'window' && o.sill > 0 && onOwn(o)).map(at),
+    doorSills: openingList.filter((o) => o.type !== 'window' && o.sill > 0 && onOwn(o)).map(at),
   }
 }
 
 /** Everything `grid describe` says, from a plan that passed the schema. */
-export function planFacts(plan: FloorPlan): PlanFacts {
+export function planFacts(stated: FloorPlan): PlanFacts {
+  // CNT-10: the building as it will be after the work; the work itself is counted apart.
+  const work = planHasPhases(stated) ? { counts: phaseCounts(stated), base: stated.base ?? null } : null
+  const plan = planInState(stated, 'after')
   const registered = new Set((plan.floors ?? []).map((floor) => floor.id))
   const layouts = new Map<string, { floor: string; ids: string[] }>()
   const floors: FloorFacts[] = planFloors(plan).map((floor) => {
@@ -449,5 +651,16 @@ export function planFacts(plan: FloorPlan): PlanFacts {
     wallCount: plan.walls.length,
     openingCount: plan.openings.length,
     stairRooms: plan.rooms.filter((room) => room.use === 'stair').length,
+    building: {
+      plan: plan.building,
+      floors: floors.flatMap((floor) => {
+        const own = (plan.floors ?? []).find((f) => f.id === floor.id)?.building
+        return own === undefined || own === plan.building ? [] : [{ floor: floor.id, building: own }]
+      }),
+    },
+    connections: connectionsOf(plan, floors),
+    northStated: typeof plan.north === 'number',
+    flatsListed: (plan.flats ?? []).length > 0,
+    work,
   }
 }

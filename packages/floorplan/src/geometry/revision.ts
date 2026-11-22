@@ -15,6 +15,7 @@
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { WallEnds } from './wall'
+import type { WallTopPoint } from './roofs'
 
 /**
  * Millimeter precision, which is finer than any plan needs and coarse enough
@@ -43,7 +44,7 @@ function openingKey(opening: Opening): string {
  * `kind` is deliberately absent: it changes the line weight, never the mesh.
  * Including it would rebuild the geometry on a purely cosmetic edit.
  */
-export function wallRevision(wall: Wall, openings: readonly Opening[] = [], ends?: WallEnds): string {
+export function wallRevision(wall: Wall, openings: readonly Opening[] = [], ends?: WallEnds, top?: readonly WallTopPoint[] | null): string {
   const base = [
     wall.id,
     num(wall.start[0]),
@@ -53,18 +54,21 @@ export function wallRevision(wall: Wall, openings: readonly Opening[] = [], ends
     num(wall.thickness),
     num(wall.height),
     wall.virtual === true ? 'v' : '-'
-  ].join(':')
+  ].join(':') + (wall.arc === undefined ? '' : `~${[wall.arc.centre[0], wall.arc.centre[1], wall.arc.sweep].map(num).join(':')}`)
 
   // A wall joined to others changes shape when they move (SHT-2), so its corners are part of it.
   const corners =
     ends === undefined ? '' : `@${[ends.start.left, ends.start.right, ends.end.left, ends.end.right].map(num).join(':')}`
 
-  if (openings.length === 0) return `${base}${corners}`
+  // LVL-6: a wall the roof cuts changes shape when the roof does.
+  const roof = top == null ? '' : `^${top.map((p) => `${num(p.u)},${num(p.z)}`).join(';')}`
+
+  if (openings.length === 0) return `${base}${corners}${roof}`
 
   // Sorted so the key does not depend on the order the file happens to list
   // openings in.
   const cuts = openings.map(openingKey).sort().join('|')
-  return `${base}${corners}#${cuts}`
+  return `${base}${corners}${roof}#${cuts}`
 }
 
 /** Revision of every wall in the plan, keyed by wall id. */

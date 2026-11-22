@@ -36,8 +36,9 @@ Two areas "differ" when they are more than 0.01 m² apart.
    changed, an opening moved, a number set wrong, a word misspelt and so on. A plan counts
    here when Grid reads it, nothing throws, and Grid's results change (areas, issues, notes,
    storey heights or exports), but Grid prints nothing new. Nothing new means no new issue, no
-   new door warning, no new rules note and no new "not checked" line, both with and without a
-   country. The other outcomes are listed under "Damage" in the printout:
+   new door warning, no new rules note and no new "not checked" line, both with the US and with
+   Spain stated as the place (before COD-3, with no country and with Spain: a plan that states
+   no place now gets no figure, so the scoreboard states the US, whose figures it measured). The other outcomes are listed under "Damage" in the printout:
    - Grid names the damaged part;
    - Grid names something else;
    - the schema refuses the plan;
@@ -64,7 +65,7 @@ Two guards stop the counts from improving the wrong way:
   lower count 2.
 
 A guard can rise for a good reason, for example a new refusal with a clear message. In that
-case, store the new figure in the same commit and say why.
+case, the change says why, and the new figure is stored as "Changing a count" says.
 
 ## Capabilities
 
@@ -237,10 +238,72 @@ counted that the lab did not mark "answered fully": the lab's harness had no gro
 estate agent's and the developer's area turns still need feet and inches, and flats. Checks the
 plan can feed stays 5: the two checks that need gross areas also need the plot (`site`).
 
+MSG-16 (where each opening stands, against the walls that meet its wall) moved two counts.
+Damage that passes in silence, 386 to 278: 108 damaged plans are now named, all from "move an
+opening". The opening pushed to the very start or flush to the end of its wall runs into the wall
+that meets it there (`opening/crosses-wall`), and an opening moved onto a junction is named with
+the wall that ends in it (`wall/ends-in-opening`); every one of the 141 openings pushed to an end
+is named (`scoreboard/__tests__/openingPlaces.test.ts`). Design mistakes named, 2 to 5: mistake 2
+(a window crossed by a new partition), 4 (a door straddling an end wall) and 9 (openings cut by
+moved partitions). Sound plans with a warning stays 95: the generator keeps every opening 0.35 m
+clear of the junctions, further than any wall's half thickness, and puts windows only in outside
+walls.
+
+CNT-14 (kinds of door and window, and the part that opens) moved one count. Checks the plan can
+feed, 15 to 17: the probe `openable-part` now asks for an opening's `opens` (it was `none`), which
+is all that checks 8 and 9 need (a window's glass, and the part of it that opens, as a share of
+the floor). The probe `door-leaves` asks for `kind` (`folding`) instead of the lab's `leaves`; the
+one turn that needs it (wide bifold doors and a roof lantern) also needs a roof, so turns answered
+stays 16. The runner now passes each door's kind to the swing check and counts the doors listed as
+not checked among the "not checked" lines; damage that passes in silence stays 278, and sound
+plans with a warning 95 (no sound plan has a door of 1.5 m or more).
+
+CNT-14 merged with LVL-6 (sloped roofs) moved two counts past both. Turns answered, 18 to 19: the
+homeowner's sixth turn (wide bifold doors and a roof lantern) needs `door-leaves` and `roof`, and
+each branch had only one of them; together it is answered. Checks the plan can feed, 16 (LVL-6) to
+18: CNT-14's `openable-part` feeds checks 8 and 9 beside LVL-6's roof check. Every other count is
+both branches' figure.
+
 The same run stores two figures of the detail that had moved earlier without a count moving:
 since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435
 rooms are compared, not 16,451. SHT-2 changes neither: the schema reads the same 1,100 of the
 1,131 lab plans before and after it.
+
+WRT-4 (a room type placed many times, a floor copied from its floor line, rooms through several
+floors) moved one count. Turns answered, 18 to 19: `repeat-floor` ("repeats a floor") now has a
+probe, rooms text that copies a floor from its floor line and gets the second floor with its own
+walls and rooms (`scoreboard/src/capabilities.ts`). The developer's "times six floors" needed only
+it and the area table. No other count moved.
+
+CNT-4 (flats and flat types in the plan, the areas per flat and the mix) moved one count. Turns
+answered, 19 to 21: the `flats` capability's probe (a plan with `flats`, each a list of rooms) now
+holds, so the developer's "the mix and net to gross" (with the gross and area table already
+there) and "a schedule of accommodation" are answered. The developer's "how many flats of about
+50 and 70 m2 fit" still needs layout help, and "colour by flat type" the drawing styles. Checks
+the plan can feed stays 20: the size of a whole home also needs its occupancy. No other count
+moved. The stored figures were set by hand from the run's printout, as the run reads them.
+
+LVL-5 (walls through floors, and floors, stair rooms and lift shafts that line up) moved one
+count. Damage that passes in silence, 278 to 277: one damaged plan now gets a line from the new
+checks, a floor's outline off the floor below or a stair room or shaft moved from the one below,
+which names another part than the one changed, so it is counted as caught vaguely (139 to 140).
+The runner does not keep plan-by-plan outcomes, so which plan it is was not traced. Sound plans with a warning stays 95:
+the generator gives each floor's outside walls their own thickness, from 0.20 to 0.50 m, on the
+same axes, so a floor's outline is measured against the one below allowing half the thickest wall
+along each stretch (`stackShift` and the wall). Before that allowance the guard rose to 218, which
+is how the allowance was found. The stair and shaft findings are plan-check findings, which the
+guard does not count.
+
+CNT-14 merged with WRT-4 and BRF-3 (main at 26e928e) moved two counts past main. Turns answered,
+19 to 20: main's 19 (with WRT-4's `repeat-floor`) and the homeowner's sixth turn, which CNT-14's
+`door-leaves` answers with LVL-6's `roof`. Checks the plan can feed, 20 to 22: CNT-14's
+`openable-part` feeds checks 8 and 9 beside main's. Every other count is both branches' figure.
+
+CNT-14 merged with CNT-4, LVL-5 and BRF-6 (main at 8a0c839e) moves one count past main. Turns
+answered, 21 to 22: main's 21 (with CNT-4's `flats`) and the homeowner's sixth turn, which
+CNT-14's `door-leaves` answers with LVL-6's `roof`. Checks the plan can feed stays CNT-14's 22
+(main's 20 and `openable-part`). Damage that passes in silence is LVL-5's 277 (CNT-14's branch
+had 278). Every other count is both branches' figure.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The
@@ -251,6 +314,27 @@ silent, 117 no effect, 506 refused. The printout's `plansWhoseOutcomeDiffersNow`
 have moved since. Of the 560 silent plans, the lab judged about 223 to be edits that are not
 mistakes (lab entry W-3): a wall list reordered or reversed, an opening moved along its own
 wall, a room or opening deleted. They stay in the count as the lab defined it.
+
+## The retelling set
+
+MSG-3. An agent that retells a Grid report must keep its label first, never say a plan passes,
+complies, is approved or meets code, and give each figure with its basis and status.
+`retell/cases.json` holds twelve questions a person asks about a real report (eight lab plans,
+three fixtures, one of them for Germany); each prompt gives the model the tool server's
+instructions and what `grid check` prints for that plan. `src/retell.ts` builds the prompts and
+scores an answer on the three points; `retell/samples.json` holds retellings written by hand,
+each with the score it must get, and `__tests__/retell.test.ts` holds the scorer to them,
+offline.
+
+Sending the prompts to a model costs money, so it is not part of the tests or CI:
+
+```bash
+npm run retell -- --prompts out/prompts          # write the prompts, send nothing
+npm run retell -- --from out/answers             # score answers saved as <id>.txt
+npm run retell -- --model <model id> --out r.json   # send them, with ANTHROPIC_API_KEY set
+```
+
+It prints one line a case and how many held every point, and exits 1 when one did not.
 
 ## The data
 
@@ -304,10 +388,13 @@ All 2,300 generated plans have a referee figure.
 
 ## Changing a count
 
-- A change that makes a count better: run `npm run scoreboard -- --write-current` and commit
-  `current.json` with the change. Say in the message which count moved.
-- A change that makes a count worse fails CI. If the change is still right (a guard rising
-  for a good reason), store the new figure in the same commit and say why.
+- A feature branch does not edit `current.json`, so branches built at the same time never
+  conflict there. It runs the scoreboard and says in its review note which counts it moves,
+  from what to what. A count made worse fails the run; if the change is still right (a guard
+  rising for a good reason), the note says why, and that one count is the only failure.
+- The person who merges runs `npm run scoreboard` on `main` after the merge, checks the counts
+  against what the branch said, and stores them with `npm run scoreboard -- --write-current`
+  in a commit of their own (`chore(scoreboard): …`), saying which counts moved and why.
 - Never edit `baseline.json`. It records one fixed commit.
 - New data goes under `data/`, passes `npm run check:data`, and the total stays under about
   25 MB. A test checks the size.

@@ -10,22 +10,45 @@ import type { FloorPlan, Opening } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
 import { add, centroid, dot, fromTuple, intersectLines, scale, sub } from './vec2'
-import { tolerance } from './tolerances'
-import type { WallAxis } from './wall'
-import { openingSpan, pointAlong, wallAxis, wallCenterline, wallPlanSlices } from './wall'
+import { limit, tolerance } from './tolerances'
+import { typeMaterial, wallTypeOf } from './partTypes'
+import type { SliceSide, WallAxis } from './wall'
+import { openingChord, openingSpan, wallAxis, wallCenterline, wallParts, wallPath, wallPlanSlices, wallSegments, wallSliceShape } from './wall'
+import { wallCurve } from './arc'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { roomFloorArea, tryRoomShape } from './room'
 import { poleOfInaccessibility } from './innerPoint'
 import { wallExposure } from './exposure'
 import type { Issue } from './validate'
-import { validatePlan } from './validate'
+import { brokenOnFloor, validatePlan } from './validate'
 import type { PlanStep } from './steps'
 import type { PlanNote, PlanSketch } from './writing'
 import { planNotes, planSketch, sketchExtent } from './writing'
+import { contextOn } from './buildings'
+import { boundaryEdgeCount } from '../types/floorplan'
+import { planOrientation } from './orientation'
 import { planSteps } from './steps'
+import type { RiserLine, StairLayout } from './stairs'
+import { planStairs } from './stairs'
+import type { StairSymbol } from './stairSymbol'
+import { stairSymbol } from './stairSymbol'
+import type { LiftSymbol } from './liftSymbol'
+import { liftSymbol } from './liftSymbol'
+import { floorOf, planFloors, wholePlan } from './floors'
+import { columnFootprint, columnRoom, columnStandsOn, soundColumns } from './columns'
+import { gridsOn, planGrid, type PlanGrid } from './structuralGrid'
+import type { ColumnShape } from '../types/floorplan'
+import { statedOutline } from './massing'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
+import { planMarks } from './marks'
+import type { MarkedPart, OpeningKind, OpeningPart, Phase } from '../types/floorplan'
+import { statedKind } from './openingKinds'
+import { planSite, siteExtent, type PlanSite } from './plot'
+import { siteFloors } from './site'
+import { flatOutlines, type PlanFlatOutline } from './flats'
+import { partPhases, planHasPhases, planInState } from './phases'
 
 export interface PlanWall {
   readonly id: string
@@ -43,6 +66,40 @@ export interface PlanWall {
   readonly slices: readonly Vec2[][]
   /** The axis, for drawing virtual walls as a line. */
   readonly centerline: readonly [Vec2, Vec2]
+  /** How thick it is, in metres: 0 for a virtual wall, which is a line (SHT-4: where its faces are). */
+  readonly thickness: number
+  /** WRT-6: the plan marks the wall, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
+  /**
+   * CNT-10: what the work does to it, in a plan with phases; left out in one with none. A
+   * demolished wall is drawn as it stands before the work, the others as they will be after it.
+   */
+  readonly phase?: Phase
+  /**
+   * CNT-18: a curved wall's arc, exactly, for a drawing or an export that can draw an arc; absent
+   * for a straight wall. `path` is its axis by its stations (what a curved dividing line draws as),
+   * and `runs` each solid run's two faces exactly, one per slice and in the same order.
+   */
+  readonly curve?: PlanCurve
+  /**
+   * SHT-10: the plan states the wall a partition and it stands inside, so a drawing can draw it
+   * lighter than an inside wall (`wallDrawnKind`). Left out for every other wall.
+   */
+  readonly partition?: true
+  /** SHT-10: the material of the wall's type (CNT-15, C24), as the person names it, for a detailed drawing's hatch. Left out with none. */
+  readonly material?: string
+}
+
+/** CNT-18: a curved wall's arc in a drawing (`PlanWall.curve`). */
+export interface PlanCurve {
+  readonly centre: Vec2
+  readonly radius: number
+  /** Radians, counter-clockwise from +X, where the wall starts. */
+  readonly startAngle: number
+  /** Signed radians, counter-clockwise positive. */
+  readonly sweep: number
+  readonly path: readonly Vec2[]
+  readonly runs: readonly { readonly left: SliceSide; readonly right: SliceSide }[]
 }
 
 export interface PlanRoom {
@@ -62,6 +119,10 @@ export interface PlanRoom {
   readonly area: number
   /** Where to place the name label. In a room with holes, a point on its floor, never in a hole. */
   readonly labelAt: Vec2
+  /** WRT-6: the plan marks the room, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
+  /** CNT-10: what the work does to it, in a plan with phases. Only rooms that stand after the work are drawn. */
+  readonly phase?: Phase
 }
 
 export interface PlanOpening {
@@ -79,6 +140,21 @@ export interface PlanOpening {
   readonly hinge?: Opening['hinge']
   /** The face a door opens toward, when the plan states it (`left` is the face `normal` points at). */
   readonly swing?: Opening['swing']
+  /** CNT-14: its kind, when the plan states one its type takes. A door with none is one swinging leaf. */
+  readonly kind?: OpeningKind
+  /** CNT-14: the part of it that opens, when the plan states one. */
+  readonly opens?: OpeningPart
+  /** CNT-14: how high it is, from its sill, for a symbol that shows what lies overhead (a garage door). */
+  readonly height?: number
+  /** WRT-6: the plan marks the opening, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
+  /** CNT-10: what the work does to it, in a plan with phases; left out in one with none. */
+  readonly phase?: Phase
+  /**
+   * SHT-10: a window that lies above the plan's cut (`planCutHeight`): its sill at or above it,
+   * or a high-level window (CNT-14). A drawing draws it dashed. Left out for every other opening.
+   */
+  readonly above?: true
 }
 
 /** A fixture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
@@ -94,6 +170,76 @@ export interface PlanItem {
   /** Rings to fill with the paper and outline, in order, then lines over them (`itemSymbol`). */
   readonly rings: readonly (readonly Vec2[])[]
   readonly lines: readonly (readonly Vec2[])[]
+  /** WRT-6: the plan marks the fixture, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
+}
+
+/**
+ * A column, ready to draw (CNT-16): the floor it covers, cut through as a wall is. A round
+ * column also gives its middle and radius, so a drawing can draw its true circle.
+ */
+export interface PlanColumn {
+  readonly id: string
+  readonly shape: ColumnShape
+  /** What it is called: its label, else null. */
+  readonly label: string | null
+  /** The room it stands in, or null. */
+  readonly room: string | null
+  /** The floor it covers, counter-clockwise (`columnFootprint`). */
+  readonly outline: readonly Vec2[]
+  readonly centre: Vec2
+  /** A round column's radius; absent on a square one. */
+  readonly radius?: number
+}
+
+/**
+ * A stair the plan states, as one of the floors it joins draws it (LVL-3): its flights with a
+ * line across at every riser, its landings, and its walking line from the lower end to the upper,
+ * which the drawing ends with an arrow pointing up. The figures are the ones `planStairs` works
+ * out, so a label can say them without measuring.
+ */
+export interface PlanStair {
+  readonly id: string
+  readonly name: string
+  /** Whether this floor is the stair's lower end or its upper end. */
+  readonly end: 'lower' | 'upper'
+  readonly flights: readonly { readonly outline: readonly Vec2[]; readonly riserLines: readonly RiserLine[] }[]
+  readonly landings: readonly (readonly Vec2[])[]
+  /** The walking line, lower end first. */
+  readonly line: readonly Vec2[]
+  readonly risers: number
+  readonly riserHeight: number
+  readonly going: number
+  /**
+   * SHT-11: the symbol as this floor draws it: on the lower floor cut at `planCutHeight`, with a
+   * break line and the part above it marked to be dashed; on the upper floor whole. Every line
+   * the drawing draws for the stair is here.
+   */
+  readonly symbol: StairSymbol
+}
+
+/** A laid-out stair as the floor `floor` draws it; on a plan that is no slice, as its lower floor does. */
+export function planStair(stair: StairLayout, floor: string | null): PlanStair {
+  const end = floor !== null && floor === stair.upper.floor ? 'upper' : 'lower'
+  return {
+    id: stair.id,
+    name: stair.name,
+    end,
+    flights: stair.flights.map((f) => ({ outline: f.outline, riserLines: f.riserLines })),
+    landings: stair.landings.map((l) => l.outline),
+    line: stair.line,
+    risers: stair.risers,
+    riserHeight: stair.riserHeight,
+    going: stair.going,
+    symbol: stairSymbol(stair, end)
+  }
+}
+
+/** SHT-11: a room used as a lift shaft, with its symbol: a cross in the shaft. */
+export interface PlanLift {
+  /** The room's id. */
+  readonly id: string
+  readonly lines: LiftSymbol['lines']
 }
 
 export interface Bounds {
@@ -125,6 +271,19 @@ export interface PlanDrawing {
    */
   readonly steps: readonly PlanStep[]
   /**
+   * The stairs the plan states that start or end on this floor (LVL-3), each drawn on both. Empty
+   * when the plan states none.
+   */
+  readonly stairs: readonly PlanStair[]
+  /** SHT-11: the rooms used as a lift that could be drawn, each with its cross. Empty with none. */
+  readonly lifts: readonly PlanLift[]
+  /**
+   * SHT-11 with CNT-4: each flat of the plan's flats list with a room on this floor that could be
+   * drawn, as its outline: its rooms grown to the middle of the walls round them, joined. Empty
+   * when the plan lists no flats.
+   */
+  readonly flats: readonly PlanFlatOutline[]
+  /**
    * The rooms that could not be drawn, each as the box round the walls it lists that the plan
    * holds (MSG-8). A room none of whose walls can be found has no box and is not here.
    */
@@ -135,8 +294,43 @@ export interface PlanDrawing {
   readonly sketch: readonly PlanSketch[]
   /** SHT-7: the notes, tags, symbols and key written on the drawing. */
   readonly notes: readonly PlanNote[]
+  /**
+   * CNT-3: the plan's stated north, for the drawing's north arrow: the way north points, in
+   * radians counter-clockwise from +Y. Null when the plan states no north, or places a north
+   * symbol of its own on this floor (which then points to it).
+   */
+  readonly north: { readonly turn: number } | null
   /** SHT-7: the box round the sketch layer, so a view frames it too; null with none. */
   readonly sketchBounds: Bounds | null
+  /**
+   * BRF-3: the plot's boundary, its street edges and the site's things, on the ground floor's
+   * plan only (`siteFloors`); null on another floor, or when the plan states none. Drawn only.
+   */
+  readonly site: PlanSite | null
+  /** BRF-3: the box round the site, so a view frames the plot too; null with no site drawn. */
+  readonly siteBounds: Bounds | null
+  /**
+   * BRF-4 (C17): the outline the floor states, its corners in order, drawn as a line round the
+   * floor: massing before any wall, and the outside face the walls are drawn inside. Left out
+   * when the floor states none.
+   */
+  readonly outline?: readonly Vec2[]
+  /**
+   * CNT-6 (C23): the context shapes drawn round the plan on this floor (a neighbour's house, the
+   * hall a stand stands in), each its outline's corners in order. Drawn only: in no measure or
+   * check. Left out when the floor has none.
+   */
+  readonly context?: readonly { readonly id: string; readonly name: string | null; readonly points: readonly Vec2[] }[]
+  /**
+   * CNT-16 (C25): the columns standing on this floor, drawn cut through as the walls are. Left out
+   * when the plan states none.
+   */
+  readonly columns?: readonly PlanColumn[]
+  /**
+   * CNT-16 (C25): the structural grids drawn on this floor, each its named lines; the spacing is
+   * dimensioned by `buildDimensions`. Drawn only. Left out when none is drawn here.
+   */
+  readonly grids?: readonly PlanGrid[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -186,6 +380,9 @@ export function planBounds(plan: FloorPlan): Bounds {
   const points: Vec2[] = []
   for (const wall of plan.walls) {
     points.push(fromTuple(wall.start), fromTuple(wall.end))
+    // CNT-18: a curve bows out past its ends.
+    const curve = wall.arc === undefined ? null : wallCurve(wall)
+    if (curve !== null && curve.radius > 0) points.push(...wallPath(wall))
   }
   return computeBounds(points)
 }
@@ -196,9 +393,40 @@ export function planBounds(plan: FloorPlan): Bounds {
  * A broken plan does not make this fail: whatever cannot be built is skipped
  * and recorded in `issues`.
  */
+/**
+ * CNT-10: a plan with phases is drawn as it will be after the work, each wall, opening and room
+ * with its phase, and the walls and openings to be demolished as they stand before it, first in
+ * the lists so that what stands after the work is drawn over them. Each state's corners are
+ * joined among its own walls, so a demolished wall never bends a new one. A plan with no phases
+ * is drawn as it always was.
+ */
 export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
-  const index = indexPlan(plan)
-  const { issues, broken } = validatePlan(plan, index)
+  if (!planHasPhases(plan)) {
+    const index = indexPlan(plan)
+    const { issues, broken } = validatePlan(plan, index)
+    return buildDrawing(plan, index, issues, broken, null)
+  }
+  const { issues, broken } = validatePlan(plan)
+  const phases = partPhases(plan)
+  const afterPlan = planInState(plan, 'after')
+  const after = buildDrawing(afterPlan, indexPlan(afterPlan), issues, broken, phases)
+  const beforePlan = planInState(plan, 'before')
+  const before = buildDrawing(beforePlan, indexPlan(beforePlan), issues, broken, phases)
+  const demolished = (part: { readonly phase?: Phase }): boolean => part.phase === 'demolished'
+  const walls = [...before.walls.filter(demolished), ...after.walls]
+  const openings = [...before.openings.filter(demolished), ...after.openings]
+  const extent = [after.bounds.min, after.bounds.max, ...walls.filter(demolished).flatMap((wall) => [...wall.slices.flat(), ...wall.centerline, ...(wall.curve?.path ?? [])])]
+  return { ...after, walls, openings, bounds: computeBounds(after.walls.length + after.rooms.length + after.items.length + after.stairs.length === 0 ? extent.slice(2) : extent) }
+}
+
+function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issues: readonly Issue[], broken: ReadonlySet<string>, phases: ReadonlyMap<string, Phase> | null): PlanDrawing {
+  const phaseOf = (id: string): { phase?: Phase } => {
+    const phase = phases?.get(id)
+    return phase === undefined ? {} : { phase }
+  }
+  // WRT-6: what the plan marks assumed is drawn in its own style; only those parts get the key.
+  const marks = planMarks(plan)
+  const assumed = (part: MarkedPart, id: string): { assumed?: true } => (marks.assumed(part, id) ? { assumed: true } : {})
 
   const walls: PlanWall[] = []
   const openings: PlanOpening[] = []
@@ -209,42 +437,77 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   for (const wall of plan.walls) {
     if (broken.has(wall.id)) continue
 
-    const axis = wallAxis(wall)
     const usable = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
-    const slices = wall.virtual ? [] : wallPlanSlices(wall, usable, joints.get(wall.id))
+    const ends = joints.get(wall.id)
+    const slices = wall.virtual ? [] : wallPlanSlices(wall, usable, ends)
+    const curve = wallCurve(wall)
+    const path = wallPath(wall)
+    const exposure = wallExposure(index, wall.id)
+    const material = typeMaterial(wallTypeOf(plan, wall))
 
     walls.push({
       id: wall.id,
       virtual: wall.virtual === true,
-      exposure: wallExposure(index, wall.id),
+      exposure,
       slices,
-      centerline: wallCenterline(wall)
+      centerline: wallCenterline(wall),
+      thickness: wall.virtual ? 0 : wall.thickness,
+      ...(curve !== null && {
+        curve: {
+          centre: curve.centre,
+          radius: curve.radius,
+          startAngle: curve.startAngle,
+          sweep: curve.sweep,
+          path,
+          runs: wall.virtual
+            ? []
+            : wallParts(wall, usable)
+                .filter((part) => part.kind === 'solid')
+                .map((part) => wallSliceShape(wall, part.from, part.to, ends))
+        }
+      }),
+      ...assumed('wall', wall.id),
+      ...phaseOf(wall.id),
+      // SHT-10: a stated partition standing inside, and its type's material, for the drawing's detail.
+      ...(wall.kind === 'partition' && !wall.virtual && exposure === 'interior' && { partition: true as const }),
+      ...(material !== null && !wall.virtual && { material })
     })
 
     for (const slice of slices) extent.push(...slice)
-    extent.push(axis.start, axis.end)
+    extent.push(...path)
 
     for (const opening of usable) {
       const span = openingSpan(opening)
+      // The hole is straight between its edges (C21): on a curved wall, the chord between them.
+      const hole = openingChord(wall, span.from, span.to)
+      const kind = statedKind(opening.type, opening.kind)
       openings.push({
         id: opening.id,
         wallId: wall.id,
         type: opening.type,
-        from: pointAlong(axis, span.from),
-        to: pointAlong(axis, span.to),
-        normal: axis.normal,
+        from: hole.start,
+        to: hole.end,
+        normal: hole.normal,
         // A dividing line has no width, so neither has a gap in it: it must not paint the
         // written thickness across the floor.
         thickness: wall.virtual ? 0 : wall.thickness,
         width: opening.width,
         // Only what the plan states: an undecided door has no key, so nothing downstream guesses.
         ...(opening.hinge !== undefined && { hinge: opening.hinge }),
-        ...(opening.swing !== undefined && { swing: opening.swing })
+        ...(opening.swing !== undefined && { swing: opening.swing }),
+        ...(kind !== null && { kind }),
+        ...(opening.opens !== undefined && { opens: opening.opens }),
+        height: opening.height,
+        ...assumed('opening', opening.id),
+        ...phaseOf(opening.id),
+        // SHT-10: a window wholly above the plan's cut is drawn dashed.
+        ...(opening.type === 'window' && (kind === 'high-level' || (opening.sill !== undefined && opening.sill >= limit('planCutHeight'))) && { above: true as const })
       })
     }
   }
 
   const rooms: PlanRoom[] = []
+  const lifts: PlanLift[] = []
   const undrawn: UndrawnRoom[] = []
   for (const room of plan.rooms) {
     const shape = broken.has(room.id) ? null : tryRoomShape(room, index)
@@ -254,6 +517,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       continue
     }
     const { polygon, holes } = shape
+    if (room.use === 'lift') lifts.push({ id: room.id, lines: liftSymbol(polygon, holes).lines })
     rooms.push({
       id: room.id,
       name: room.name,
@@ -263,7 +527,9 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       area: roomFloorArea(room, index, polygon),
       // The middle of the corners of a ring lies in its hole: there, the point of its floor
       // farthest from every edge.
-      labelAt: holes.length === 0 ? centroid(polygon) : poleOfInaccessibility(polygon, undefined, holes).point
+      labelAt: holes.length === 0 ? centroid(polygon) : poleOfInaccessibility(polygon, undefined, holes).point,
+      ...assumed('room', room.id),
+      ...phaseOf(room.id)
     })
     extent.push(...polygon)
   }
@@ -283,16 +549,72 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
         room: itemRoom(item, shapes)?.id ?? null,
         outline,
         rings: symbol.rings,
-        lines: symbol.lines
+        lines: symbol.lines,
+        ...assumed('item', item.id)
       })
       extent.push(...outline)
     }
   }
 
+  // The stairs that start or end here, read from the plan this floor was cut from.
+  const floor = wholePlan(plan).floor
+  const stairs = (plan.stairs ?? []).length === 0 ? [] : planStairs(plan, floor === null ? () => broken : brokenOnFloor).stairs.map((stair) => planStair(stair, floor))
+  for (const stair of stairs) for (const flight of stair.flights) extent.push(...flight.outline)
+
   const sketch = planSketch(plan)
   const notes = planNotes(plan, (id) => rooms.find((room) => room.id === id)?.labelAt)
   const sketchBounds = sketch.length === 0 ? null : computeBounds(sketchExtent(sketch))
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, sketch, notes, sketchBounds, bounds: computeBounds(extent), issues }
+  const stated = planOrientation(plan).north
+  const north = stated === null || notes.some((note) => note.kind === 'symbol' && note.symbol === 'north') ? null : { turn: (stated * Math.PI) / 180 }
+  // BRF-3: the site on the ground floor's plan, and on a plan that is no slice.
+  const site = floor === null || siteFloors(wholePlan(plan).whole).includes(floor) ? planSite(plan) : null
+  const siteBounds = site === null ? null : computeBounds(siteExtent(site))
+  const flats = flatOutlines(plan, index, broken)
+  // BRF-4 (C17): the floor's stated outline, on its own plan; on a plan that is no slice, its one floor's.
+  const floors = planFloors(plan)
+  const drawnFloor = floor ?? (floors.length === 1 ? floors[0]!.id : null)
+  const statedRing = drawnFloor === null ? null : statedOutline(plan, drawnFloor)
+  const floorRing = statedRing === null ? null : statedRing[0]!.slice(0, -1).map(([x, y]) => ({ x, y }))
+  if (floorRing !== null) extent.push(...floorRing)
+  // CNT-6 (C23): the context round the plan, on the floor drawn; framed with it.
+  const context = (drawnFloor === null ? [] : contextOn(plan, drawnFloor)).map((shape) => {
+    const ring = boundaryEdgeCount(shape.points) === shape.points.length ? shape.points : shape.points.slice(0, -1)
+    return { id: shape.id, name: shape.name ?? null, points: ring.map(([x, y]) => ({ x, y })) }
+  })
+  for (const shape of context) extent.push(...shape.points)
+  // CNT-16 (C25): the columns standing here, and the structural grids drawn on this floor.
+  const columns = planColumns(plan, index)
+  for (const column of columns ?? []) extent.push(...column.outline)
+  const grids = gridsOn(plan, drawnFloor).map(planGrid)
+  for (const grid of grids) for (const line of grid.lines) extent.push(line.from, line.to)
+  return {
+    walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds,
+    ...(floorRing === null ? {} : { outline: floorRing }),
+    ...(context.length === 0 ? {} : { context }),
+    ...(columns === undefined ? {} : { columns }),
+    ...(grids.length === 0 ? {} : { grids }),
+    bounds: computeBounds(extent),
+    issues
+  }
+}
+
+/** CNT-16: the columns a drawing of this plan (or floor's slice) draws; undefined when the plan states none. */
+function planColumns(plan: FloorPlan, index: ReturnType<typeof indexPlan>): PlanColumn[] | undefined {
+  if (plan.columns === undefined) return undefined
+  const floors = planFloors(plan)
+  const rooms = roomShapes(index)
+  return soundColumns(plan).map((column) => {
+    const floor = floors.find((f) => columnStandsOn(plan, column, f.id))?.id ?? floorOf(column)
+    return {
+      id: column.id,
+      shape: column.shape,
+      label: column.label ?? null,
+      room: columnRoom(column, rooms, floor)?.id ?? null,
+      outline: columnFootprint(column),
+      centre: { x: column.at[0], y: column.at[1] },
+      ...(column.shape === 'round' ? { radius: column.width / 2 } : {})
+    }
+  })
 }
 
 /**
@@ -308,8 +630,17 @@ function boxRoundWalls(room: FloorPlan['rooms'][number], index: ReturnType<typeo
   for (const id of new Set([...room.boundary, ...(room.holes ?? []).flat()])) {
     const wall = index.wallsById.get(id)
     if (!wall || ![...wall.start, ...wall.end].every(Number.isFinite)) continue
+    const half = Number.isFinite(wall.thickness) && wall.thickness > 0 ? wall.thickness / 2 : 0
+    // CNT-18: a curved wall stands as its straight pieces, when it can be built at all.
+    if (wall.arc !== undefined) {
+      const curve = wallCurve(wall)
+      if (curve !== null && curve.radius > 0 && [...wall.arc.centre].every(Number.isFinite)) {
+        for (const axis of wallSegments(wall)) walls.push({ axis, half })
+      }
+      continue
+    }
     if (wall.start[0] === wall.end[0] && wall.start[1] === wall.end[1]) continue
-    walls.push({ axis: wallAxis(wall), half: Number.isFinite(wall.thickness) && wall.thickness > 0 ? wall.thickness / 2 : 0 })
+    walls.push({ axis: wallAxis(wall), half })
   }
   if (walls.length === 0) return null
   const half = Math.max(...walls.map((wall) => wall.half))

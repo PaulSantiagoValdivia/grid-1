@@ -7,12 +7,14 @@
  * and checked. A plan that passes the schema but has parts that can't be drawn is not refused
  * either: those parts are left out, as the app leaves them out, and `grid check` says which and
  * why. A command that writes the plan back reads it whole (`{ whole: true }`), so nothing the
- * reader left out is lost.
+ * reader left out is lost, and its opening patterns (LVL-8) stay patterns: every other command
+ * reads them as the plain openings they expand into.
  */
-import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
+import { planInMetres } from '@ongrid/floorplan/types/units'
+import { mergeBase, planFloors, validatePlan, withPatterns, type Issue } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, quoted, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type UnfinishedMerge } from '@ongrid/floorplan/types/jsonText'
-import { readPlanParts, type ReadFault } from '@ongrid/floorplan/types/readParts'
+import { readPlanParts, type LeftOutPart, type ReadFault } from '@ongrid/floorplan/types/readParts'
 import { PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
@@ -26,17 +28,41 @@ export class PlanRefused extends Error {
 export interface LoadedPlan {
   /** The real path of the plan file, inside the project. */
   readonly file: string
+  /**
+   * The plan as Grid draws, measures, checks and exports it. LVL-8: with its opening patterns
+   * expanded into plain openings, except when read whole for a command that writes it back.
+   */
   readonly plan: FloorPlan
+  /** LVL-8: the plan as its file states it, patterns and all, when it has patterns and `plan` expands them. */
+  readonly stated?: FloorPlan
   readonly issues: readonly Issue[]
   /** Ids the views and exports leave out because they can't be drawn. */
   readonly broken: ReadonlySet<string>
   /** What the reader did with each part or value it could not read as written (MSG-6). */
   readonly faults?: readonly ReadFault[]
+  /** MSG-5: the walls, rooms and openings the reader left out, for the checks to hold back what rests on them. */
+  readonly leftOut?: readonly LeftOutPart[]
   /**
    * The file's text, which `grid check` reads again for the record, so the record names what
    * the reader did (MSG-6). Absent for a plan made in memory.
    */
   readonly text?: string
+  /**
+   * CNT-10: the base plan a fit-out names, read in: its file, the plan as read, and the ids of
+   * the walls and openings it gave the plan, which are read-only: no change writes them back.
+   * Absent for a plan that names no base.
+   */
+  readonly base?: LoadedBase
+}
+
+/** CNT-10: a fit-out's base plan, as `loadPlan` read it in. */
+export interface LoadedBase {
+  /** The base's path as the plan names it. */
+  readonly file: string
+  /** The base plan as read, its opening patterns expanded. */
+  readonly plan: FloorPlan
+  readonly walls: ReadonlySet<string>
+  readonly openings: ReadonlySet<string>
 }
 
 export interface LoadOptions {
@@ -45,6 +71,8 @@ export interface LoadOptions {
    * For a command that writes the plan back: reading it part by part would drop what it left out.
    */
   readonly whole?: boolean
+  /** CNT-10: the plan is read as a fit-out's base: its own base, if it names one, is not read. */
+  readonly asBase?: boolean
 }
 
 function oneLine(text: string): string {
@@ -150,9 +178,51 @@ function traceImageCheck(project: Project, file: string, plan: FloorPlan): void 
   }
 }
 
+/**
+ * CNT-10 (lab CP4-4): the base plan a fit-out names. Its path, written in the plan, is resolved
+ * like the trace image's, from the project folder and inside it (CMD-15); the file is read as any
+ * plan is, and must name no base of its own. Its walls and openings are read into the plan as
+ * existing (`mergeBase`); one whose id the plan uses for a part of its own refuses the plan.
+ */
+function readBase(project: Project, file: string, plan: FloorPlan): { plan: FloorPlan; base: LoadedBase } {
+  const named = plan.base!
+  let real: string
+  try {
+    real = project.resolve(named, 'project')
+  } catch (error) {
+    if (!(error instanceof PathRefused)) throw error
+    throw new PlanRefused(`${file} can't be used: its base plan, base, is refused. ${error.message} Name a plan inside the project folder, or take base out of the plan.`)
+  }
+  let loaded: LoadedPlan
+  try {
+    const { text } = readText(project, real)
+    loaded = loadPlanText(project, named, text, real, { asBase: true })
+  } catch (error) {
+    if (!(error instanceof PlanRefused)) throw error
+    throw new PlanRefused(`${file} can't be used: its base plan ${quoted(named)} can't be read. ${error.message}`)
+  }
+  if (loaded.plan.base !== undefined) {
+    throw new PlanRefused(`${file} can't be used: its base plan ${quoted(named)} names a base of its own, and a base must be a plan that stands on its own.`)
+  }
+  const merged = mergeBase(plan, loaded.plan)
+  if (merged.clashes.length > 0) {
+    const ids = merged.clashes.slice(0, 5).map(quoted).join(', ')
+    throw new PlanRefused(`${file} can't be used: it gives ${merged.clashes.length === 1 ? 'a part' : 'parts'} of its own the ${merged.clashes.length === 1 ? 'id' : 'ids'} ${ids}${merged.clashes.length > 5 ? ` and ${merged.clashes.length - 5} more` : ''} of the base plan ${quoted(named)}'s walls and openings. Rename ${merged.clashes.length === 1 ? 'it' : 'them'} in this plan.`)
+  }
+  return { plan: merged.plan, base: { file: named, plan: loaded.plan, walls: merged.walls, openings: merged.openings } }
+}
+
 /** Reads a plan file inside the project. Refused with `PlanRefused`, or `PathRefused` for the path. */
 export function loadPlan(project: Project, file: string, options: LoadOptions = {}): LoadedPlan {
   const { text, real } = readText(project, file)
+  return loadPlanText(project, file, text, real, options)
+}
+
+/**
+ * Reads a plan from its text, as `loadPlan` reads a file's: an earlier version of `file` kept in
+ * a start marker or in git (WRT-8). `real` is the path it is named by in what is said of it.
+ */
+export function loadPlanText(project: Project, file: string, text: string, real: string, options: LoadOptions = {}): LoadedPlan {
   // MSG-6: the text first, for a merge left unfinished, NaN and a decimal comma.
   const read = readPlanText(text)
   if (!read.ok && read.fault.kind === 'unfinished-merge') {
@@ -178,7 +248,7 @@ export function loadPlan(project: Project, file: string, options: LoadOptions = 
   const parts = readPlanParts(raw, read.marks)
   const strict = (): void => {
     // The schema's own words, as before MSG-6.
-    const parsed = FloorPlanSchema.safeParse(raw)
+    const parsed = FloorPlanSchema.safeParse(planInMetres(raw).raw)
     if (parsed.success) return
     const [first, ...rest] = parsed.error.issues
     const where = first && first.path.length > 0 ? `${pathText(first.path)}: ` : ''
@@ -189,17 +259,34 @@ export function loadPlan(project: Project, file: string, options: LoadOptions = 
     strict()
     throw new PlanRefused(`${file} is not a Grid plan.`)
   }
-  if (options.whole === true && parts.faults.length > 0) {
+  // WRT-7: lengths stated in another unit are read in it, and the change is written in metres.
+  const faults = parts.faults.filter((f) => !(f.kind === 'read-as-meant' && f.path.length === 1 && f.path[0] === 'units' && planInMetres(raw).from !== null))
+  if (options.whole === true && faults.length > 0) {
     // A value the text could not hold is named for what it is; the rest in the schema's words.
     if (read.marks.length === 0) strict()
-    const [first, ...rest] = parts.faults
+    const [first, ...rest] = faults
     const more = rest.length > 0 ? ` (and ${rest.length} more)` : ''
     throw new PlanRefused(`${file} has a part Grid would leave out or read otherwise: ${faultText(first!)}${more}. grid check names each; correct them first.`)
   }
-  const plan = parts.plan
-  traceImageCheck(project, file, plan)
-  const { issues, broken } = validatePlan(plan, undefined, { leftOutWalls: parts.leftOutWalls })
-  return { file: real, plan, issues, broken, faults: parts.faults, text }
+  traceImageCheck(project, file, parts.plan)
+  // CNT-10: a fit-out is read with its base's walls and openings in it, as existing.
+  const based = parts.plan.base === undefined || options.asBase === true ? null : readBase(project, file, parts.plan)
+  const plan = based?.plan ?? parts.plan
+  // LVL-8: what kept a pattern's openings from being placed is checked on the plan as stated. A
+  // command that writes the plan back keeps it as stated, so its patterns stay patterns.
+  const { issues, broken } = validatePlan(plan, undefined, { leftOutWalls: parts.leftOutWalls, leftOutParts: parts.leftOut })
+  const expanded = options.whole === true || plan.patterns === undefined ? null : withPatterns(plan)
+  return {
+    file: real,
+    plan: expanded ?? plan,
+    ...(expanded === null ? {} : { stated: plan }),
+    issues,
+    broken,
+    faults: parts.faults,
+    leftOut: parts.leftOut,
+    text,
+    ...(based === null ? {} : { base: based.base }),
+  }
 }
 
 /**

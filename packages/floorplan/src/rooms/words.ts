@@ -3,9 +3,13 @@
  *
  * A line is split at spaces; a word in double or single quotes may hold spaces; `#` starts a
  * comment outside quotes; a comma at the end of a word is dropped, so a line may read like a
- * sentence. Lengths are metres, written as plain numbers. A number may be a sum written with
- * digits and the signs + - * / and brackets, such as `3.0+0.3`: nothing else is evaluated.
+ * sentence. A plain number is metres. A length may instead carry its unit in one word, with no
+ * space (`readLength` in `types/units.ts` reads it): `381cm`, `3810mm`, `3.81m`, `12ft`, `150in`,
+ * `12ft6in`, `12'6"`, `12'-6"`. A quote mark straight after a digit is a foot or inch mark, not a
+ * quote. A number may be a sum written with digits and the signs + - * / and brackets, such as
+ * `3.0+0.3`, in metres: nothing else is evaluated.
  */
+import { LengthRefused, readLength } from '../types/units'
 
 /** A problem that stops the reading, with its code and the line it is on. */
 export class RoomsStop extends Error {
@@ -30,6 +34,11 @@ export function wordsOf(line: string, at: number): string[] {
     if (quote !== null) {
       if (c === quote) quote = null
       else word += c
+      continue
+    }
+    // A foot or inch mark: 12'6", 150". A quote opens only where a digit does not end the word.
+    if ((c === '"' || c === "'") && started && /[0-9]$/.test(word)) {
+      word += c
       continue
     }
     if (c === '"' || c === "'") {
@@ -109,16 +118,24 @@ function evaluate(text: string): number | null {
   return value !== null && i === text.length && Number.isFinite(value) ? value : null
 }
 
-/** A length in metres. */
+/** A length with its unit in one word: `381cm`, `12ft6in`, `12'-6"`. */
+const UNIT_WORD = /^[-+]?[0-9.]+\s*(mm|cm|m|ft|in|'|")/
+
+/** A length in metres: a plain number is metres; a word with its unit is read in that unit. */
 export function numberOf(word: string, at: number): number {
   if (/^[0-9.+\-*/() ]+$/.test(word)) {
     const value = evaluate(word)
     if (value !== null) return value
   }
-  if (/^[0-9.]+\s*(mm|cm|m|ft|in|'|")$/.test(word)) {
-    throw new RoomsStop('rooms/units', `line ${at}: '${word}' has a unit. Write lengths in metres as plain numbers, for example 3.6.`, at)
+  if (UNIT_WORD.test(word)) {
+    try {
+      return readLength(word)
+    } catch (error) {
+      if (!(error instanceof LengthRefused)) throw error
+      throw new RoomsStop('rooms/units', `line ${at}: '${word}' ${error.message}. In rooms text a length and its unit are one word with no space, such as 3.6, 360cm, 12ft or 12'6".`, at)
+    }
   }
-  throw new RoomsStop('rooms/syntax', `line ${at}: expected a number in metres, found '${word}'.`, at)
+  throw new RoomsStop('rooms/syntax', `line ${at}: expected a length (3.6 for metres, or with its unit: 360cm, 12ft, 12'6"), found '${word}'.`, at)
 }
 
 /** A point written `x,y` with no space. */
@@ -132,7 +149,9 @@ export function pointOf(word: string, at: number): [number, number] {
 
 /** Is this word a number as `numberOf` reads it? */
 export function isNumberWord(word: string): boolean {
-  return /^[0-9.+\-*/()]+$/.test(word) && evaluate(word) !== null
+  if (/^[0-9.+\-*/()]+$/.test(word)) return evaluate(word) !== null
+  // A word that starts as a length with its unit is one, so a wrong one is refused as a length.
+  return UNIT_WORD.test(word)
 }
 
 /** A length as rooms text writes it: up to four decimals, no trailing zeros. */

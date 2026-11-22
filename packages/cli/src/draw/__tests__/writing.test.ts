@@ -173,6 +173,17 @@ describe('display options', () => {
     expect(drawShowOf({ hide: 'dimensions' }).showDimensions).toBe(false)
   })
 
+  it('leave off the outline of the floor above with --hide above (SHT-11)', () => {
+    expect(drawShowOf({ hide: 'above' }).show).toEqual({ above: false })
+    // The flat with a first floor 2 m deeper to the north: its outline shows dashed on the ground floor.
+    const flat = twoBedFlat()
+    const wall = (id: string, start: [number, number], end: [number, number]) => ({ id, start, end, thickness: 0.25, height: 2.6, kind: 'exterior' as const, floor: 'first' })
+    const up = [wall('up-s', [0, 0], [10, 0]), wall('up-e', [10, 0], [10, 9.5]), wall('up-n', [10, 9.5], [0, 9.5]), wall('up-w', [0, 9.5], [0, 0])]
+    const plan = parseFloorPlan({ ...flat, floors: [{ id: 'ground', name: 'Ground floor', level: 0 }, { id: 'first', name: 'First floor', level: 1 }], walls: [...flat.walls, ...up] })
+    expect(planToSvg(plan, { floor: 'ground' })).toContain('data-part="above"')
+    expect(planToSvg(plan, { floor: 'ground', show: drawShowOf({ hide: 'above' }).show })).not.toContain('data-part="above"')
+  })
+
   it('refuse a part Grid does not know, and a part for the 3D model', () => {
     expect(() => drawShowOf({ hide: 'trees' })).toThrow(UsageError)
     expect(() => drawShowOf({ hide: 'trees' })).toThrow(/"trees" is not a part Grid can leave off/)

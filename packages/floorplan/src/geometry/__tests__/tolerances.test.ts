@@ -52,8 +52,8 @@ const NOT_A_CODE_FIGURE = "Grid's own size, not a code figure"
 const TOLERANCE_LITERAL = /(?<![\w.])(?:\d+(?:\.\d+)?e-\d+|0\.0\d*)(?![\w.])/g
 
 describe('the tolerance table', () => {
-  it('is the only place a numeric tolerance is written, in the geometry, validation, schema and rooms-first writing', () => {
-    const files = [...sources(join(SOURCE, 'geometry')), ...sources(join(SOURCE, 'types')), ...sources(join(SOURCE, 'rooms'))].filter(
+  it('is the only place a numeric tolerance is written, in the geometry, validation, schema, rooms-first writing and the scan reader', () => {
+    const files = [...sources(join(SOURCE, 'geometry')), ...sources(join(SOURCE, 'types')), ...sources(join(SOURCE, 'rooms')), ...sources(join(SOURCE, 'scan'))].filter(
       (file) => !file.endsWith(join('geometry', 'tolerances.ts'))
     )
     expect(files.length).toBeGreaterThan(30)
@@ -84,14 +84,27 @@ describe('the tolerance table', () => {
     }
   })
 
-  it('holds the size a person passes through as Grid\'s own, saying it is not a code figure (MSG-18)', () => {
-    const passable = { passableWidth: 0.4, passableHeight: 1.2, passableSill: 0.3 } as const
+  it('holds the size a person passes through as Grid\'s own, saying it is not a code figure (MSG-18), the use indicators (CNT-13), the headroom bands (LVL-6) and the hall of a first layout (BRF-6)', () => {
+    const passable = {
+      passableWidth: 0.4,
+      passableHeight: 1.2,
+      passableSill: 0.3,
+      useOpenLeaf: 0.05,
+      useApproachDepth: 0.3,
+      useDoorwayClear: 0.8,
+      usePassageWidth: 0.9,
+      useTurningCircle: 1.5,
+      useClearSpace: 0.6,
+      headroomLow: 1.5,
+      headroomFull: 2.2,
+      layoutHall: 1.1
+    } as const
     for (const [name, value] of Object.entries(passable)) {
       const entry: ToleranceEntry = TOLERANCES[name as keyof typeof passable]
       expect(entry, name).toMatchObject({ kind: 'limit', value, unit: 'm', basis: 'grid-drawing-check' })
       expect(entry.decides.startsWith(`${NOT_A_CODE_FIGURE}.`), name).toBe(true)
     }
-    // Only these three carry the words: no other figure needs to say it is not one.
+    // Only these carry the words: no other figure needs to say it is not one.
     const saying = Object.entries(TOLERANCES).filter(([, entry]) => entry.decides.includes(NOT_A_CODE_FIGURE)).map(([name]) => name)
     expect(saying.sort()).toEqual(Object.keys(passable).sort())
   })

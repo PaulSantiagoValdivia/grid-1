@@ -16,13 +16,19 @@ import type { FloorPlan } from '../types/floorplan'
 import type { PartList, ReadFault } from '../types/readParts'
 import { planFloors, planForFloor } from '../geometry/floors'
 import { validatePlan, type Issue } from '../geometry/validate'
-import type { LeftOutKind, LeftOutPart } from '../geometry/export/leftOut'
+import type { ApproximatedPart, LeftOutKind, LeftOutPart } from '../geometry/export/leftOut'
+import { roomWallIds } from '../geometry/plan'
 
 export interface ExportContents {
   /** What the file leaves out, in the order: read, then by floor, walls, rooms, openings, fixtures. */
   readonly leftOut: readonly LeftOutPart[]
   /** True when the file holds no wall, room or fixture: nothing of the plan. */
   readonly empty: boolean
+  /**
+   * CNT-18: the curved solid walls the file holds, and the rooms it holds that run along a curved
+   * wall, by floor; each format says which of them it writes as straight pieces.
+   */
+  readonly curved: { readonly walls: readonly ApproximatedPart[]; readonly rooms: readonly ApproximatedPart[] }
 }
 
 const KIND_OF_LIST: Readonly<Record<PartList, LeftOutKind>> = {
@@ -30,7 +36,8 @@ const KIND_OF_LIST: Readonly<Record<PartList, LeftOutKind>> = {
   rooms: 'room',
   openings: 'opening',
   floors: 'floor',
-  items: 'item'
+  items: 'item',
+  patterns: 'pattern'
 }
 
 /** The code of the first line that names the part, an error before a warning. */
@@ -74,6 +81,8 @@ export function exportContents(plan: FloorPlan, floorIds: readonly string[], fau
   const leftOutWalls = new Set(readWalls(faults))
   let drawn = 0
   const held = new Set<object>()
+  const curvedWalls: ApproximatedPart[] = []
+  const curvedRooms: ApproximatedPart[] = []
 
   for (const floor of planFloors(plan)) {
     const slice = planForFloor(plan, floor.id)
@@ -88,6 +97,12 @@ export function exportContents(plan: FloorPlan, floorIds: readonly string[], fau
     for (const room of slice.rooms) add('room', room.id, true)
     for (const opening of slice.openings) add('opening', opening.id, false)
     for (const item of slice.items ?? []) add('item', item.id, true)
+    const floorName = floor.id
+    const curved = new Set(slice.walls.filter((wall) => wall.arc !== undefined && !broken.has(wall.id)).map((wall) => wall.id))
+    for (const wall of slice.walls) if (curved.has(wall.id) && wall.virtual !== true) curvedWalls.push({ kind: 'wall', id: wall.id, floor: floorName })
+    for (const room of slice.rooms) {
+      if (!broken.has(room.id) && roomWallIds(room).some((id) => curved.has(id))) curvedRooms.push({ kind: 'room', id: room.id, floor: floorName })
+    }
   }
 
   // An opening no floor holds goes with every file that holds a floor with a wall of its wall's
@@ -107,5 +122,5 @@ export function exportContents(plan: FloorPlan, floorIds: readonly string[], fau
     }
   }
 
-  return { leftOut, empty: drawn === 0 }
+  return { leftOut, empty: drawn === 0, curved: { walls: curvedWalls, rooms: curvedRooms } }
 }

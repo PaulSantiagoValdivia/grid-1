@@ -13,8 +13,9 @@ import { DIRECTIONS, type Direction } from '../edit/edits'
 import { mergeRooms } from '../edit/merge'
 import { renameRoom, type UseOrNone } from '../edit/rename'
 import { splitRoom } from '../edit/split'
+import { squarePlan } from '../edit/square'
 import { stretchPlan } from '../edit/stretch'
-import { floorArg, listSchema, objectSchema, PLAN_ARG, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
+import { DECIMAL_IN_ARG, floorArg, listSchema, NUMBER, objectSchema, PLAN_ARG, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
 import { EDIT_OUTPUT, OUT_ARG, writeChange } from './writeTools'
 
 const NAME = (description: string, example: string, required = false): { type: 'string'; maxLength: number; description: string; examples: string[]; required: boolean } => ({ type: 'string', maxLength: NAME_MAX, description, examples: [example], required })
@@ -26,14 +27,17 @@ const mergeTool: GridTool = {
   hint: 'change-plan',
   description:
     'Use this when the person asks to knock two rooms into one, open them up or take out the wall between them: "knock the kitchen and living room into one". '
-    + 'It takes out the stretch of wall the two rooms share, cut where the walls round them meet it, with the doors and windows in that stretch; the first room takes in the second and keeps its id, name and use unless name or use say otherwise. It answers with the area of the room it makes. '
-    + 'Do not use to make a room bigger by moving a wall (grid_move_room_side) or for rooms that share more than one wall. It replaces the plan file unless out is given. Units are metres.',
+    + 'It takes out the stretch of wall the two rooms share, cut where the walls round them meet it, with the doors and windows in that stretch; the first room takes in the second and keeps its id, name and use unless name or use say otherwise. '
+    + 'Two rooms of different uses (a kitchen and a living room) need use, the merged room\'s, or zones true, which keeps both as zones of one open-plan room, each with its id, name and use, either side of a dividing line; left out, the call is refused and asks. It answers with the area of the room it makes, and the verdict names any use the plan no longer has. '
+    + 'Do not use to make a room bigger by moving a wall (grid_move_room_side) or for rooms that share more than one wall. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
-    room: { type: 'string', id: true, required: true, description: 'The room that takes in the other and keeps its id.', examples: ['living'] },
-    with: { type: 'string', id: true, required: true, description: 'The room it takes in, which is gone after.', examples: ['kitchen'] },
+    room: { type: 'string', id: true, required: true, description: 'The room that takes in the other and keeps its id; with zones, the first zone.', examples: ['living'] },
+    with: { type: 'string', id: true, required: true, description: 'The room it takes in, which is gone after; with zones, the second zone.', examples: ['kitchen'] },
     name: NAME('The merged room\'s name. The first room\'s when left out.', 'Kitchen and living'),
-    use: USE('The merged room\'s use. The first room\'s when left out.'),
+    use: USE('The merged room\'s use. The first room\'s when left out; needed when the two rooms have different uses, unless zones is true.'),
+    zones: { type: 'boolean', description: 'true to keep both rooms as zones of the merged room, each with its id, name and use: an open-plan room. The merged room is a new room.', examples: [true] },
+    new_room: { type: 'string', id: true, description: 'With zones: the merged room\'s id. Made from the two rooms\' ids when left out.', examples: ['kitchen-living'] },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
@@ -41,7 +45,12 @@ const mergeTool: GridTool = {
     return writeChange(context, args, (survey) => {
       const a = roomArg(survey.plan, args['room'])
       const b = roomArg(survey.plan, args['with'], 'with room')
-      return mergeRooms(survey, a, b, { ...(args['name'] !== undefined ? { name: args['name'] as string } : {}), ...(args['use'] !== undefined ? { use: args['use'] as string } : {}) })
+      return mergeRooms(survey, a, b, {
+        ...(args['name'] !== undefined ? { name: args['name'] as string } : {}),
+        ...(args['use'] !== undefined ? { use: args['use'] as string } : {}),
+        ...(args['zones'] === true ? { zones: true } : {}),
+        ...(args['new_room'] !== undefined ? { id: args['new_room'] as string } : {}),
+      })
     })
   },
 }
@@ -53,22 +62,23 @@ const splitTool: GridTool = {
   description:
     'Use this when the person asks to divide a room, or take part of one for another room: "bedroom 2 into a study and a second bathroom", "a 1.4 m bathroom off the east end". '
     + 'A new wall goes across the room; the new room takes its side, size metres inside from that side\'s face, and the room keeps its id and the rest, with name and use for its own if they change. A door goes in the new wall, centred unless door_from and door_distance place it (door_width 0 for none). It answers with both areas, what it guessed and a room left with no window. '
-    + 'Rectangles square to the drawing only. Do not use to add a room outside the walls (grid_add_room). It replaces the plan file unless out is given. Units are metres.',
+    + 'Rectangles square to the drawing only. Do not use to add a room outside the walls (grid_add_room). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The room to split.', examples: ['bed2'] },
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'The side of the room the new room takes.', examples: ['east'] },
-    size: { type: 'number', required: true, description: 'The new room\'s inside size across from that side, in metres.', examples: [1.4], minimum: 0.3, maximum: 100 },
+    size: { type: 'number', length: true, required: true, description: 'The new room\'s inside size across from that side, in metres.', examples: [1.4], minimum: 0.3, maximum: 100 },
     new_room: { type: 'string', id: true, required: true, description: 'The new room\'s id.', examples: ['bath2'] },
     new_name: NAME('The new room\'s name.', 'Bathroom 2', true),
     new_use: USE('The new room\'s use.'),
     name: NAME('The room\'s own new name, if it changes.', 'Study'),
     use: USE('The room\'s own new use, if it changes.'),
     wall: { type: 'string', id: true, description: 'An id for the new wall. Made from the new room\'s when left out.', examples: ['study-east'] },
-    thickness: { type: 'number', description: 'The new wall\'s thickness, in metres. 0.1 when left out.', examples: [0.1], minimum: 0.03, maximum: 1 },
-    door_width: { type: 'number', description: 'The door in the new wall, in metres; 0 for none. 0.8 when left out.', examples: [0.7, 0], minimum: 0, maximum: 5 },
+    thickness: { type: 'number', length: true, description: 'The new wall\'s thickness, in metres. 0.1 when left out.', examples: [0.1], minimum: 0.03, maximum: 1 },
+    door_width: { type: 'number', length: true, description: 'The door in the new wall, in metres; 0 for none. 0.8 when left out.', examples: [0.7, 0], minimum: 0, maximum: 5 },
     door_from: { type: 'string', enum: DIRECTIONS, description: 'Which end of the new wall the door is measured from: a side of the room.', examples: ['south'] },
-    door_distance: { type: 'number', description: 'Metres from that side\'s inside face to the door\'s nearer edge.', examples: [1.35], minimum: 0, maximum: 100 },
+    door_distance: { type: 'number', length: true, description: 'Metres from that side\'s inside face to the door\'s nearer edge.', examples: [1.35], minimum: 0, maximum: 100 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
@@ -98,22 +108,23 @@ const addRoomTool: GridTool = {
   description:
     'Use this when the person asks for an extension or a new room outside the walls, against one side of a room: "a 3 x 4 m extension at the back of the living room, with an opening into it and a door to the garden". '
     + 'It builds the room\'s three walls, as thick as the wall it stands against, cuts that wall where they meet it, and makes the stretch between the rooms an inside wall. A door or window in that stretch is in the way: pass in_the_way remove or keep (kept, it joins the two rooms); left out, the call is refused naming them. opening_width puts a doorless opening between the rooms and door_width a door in the far side, both centred. '
-    + 'Sizes are inside sizes unless size is centre (to the walls\' centre lines). Grid has no sliding or folding door: the door is drawn with no swing. Do not use to make an existing room bigger (grid_move_room_side) or to divide one (grid_split_room). It replaces the plan file unless out is given. Units are metres.',
+    + 'Sizes are inside sizes unless size is centre (to the walls\' centre lines). The door is drawn with no swing until grid_change_opening gives it one, or a kind such as sliding or folding. Do not use to make an existing room bigger (grid_move_room_side) or to divide one (grid_split_room). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The new room\'s id.', examples: ['extension'] },
     name: NAME('The new room\'s name.', 'Garden room', true),
     use: USE('The new room\'s use.'),
     against: { type: 'string', id: true, required: true, description: 'The room it is built against.', examples: ['living'] },
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'Which side of that room: north is the top of the drawing.', examples: ['south'] },
-    width: { type: 'number', required: true, description: 'Its size along that side, in metres.', examples: [3], minimum: 0.5, maximum: 100 },
-    depth: { type: 'number', required: true, description: 'Its size out from that side, in metres.', examples: [4], minimum: 0.5, maximum: 100 },
+    width: { type: 'number', length: true, required: true, description: 'Its size along that side, in metres.', examples: [3], minimum: 0.5, maximum: 100 },
+    depth: { type: 'number', length: true, required: true, description: 'Its size out from that side, in metres.', examples: [4], minimum: 0.5, maximum: 100 },
     size: { type: 'string', enum: SIZE_BASES, description: 'inside (the default) or centre: what width and depth measure to.', examples: ['inside', 'centre'] },
     from: { type: 'string', enum: DIRECTIONS, description: 'Its place along the side: which side of the room it is built against it is measured from. Centred when left out.', examples: ['west'] },
-    distance: { type: 'number', description: 'Metres from that side\'s inside face to the new room\'s inside face.', examples: [0.8], minimum: 0, maximum: 100 },
+    distance: { type: 'number', length: true, description: 'Metres from that side\'s inside face to the new room\'s inside face.', examples: [0.8], minimum: 0, maximum: 100 },
     in_the_way: { type: 'string', enum: IN_THE_WAY, description: 'What happens to doors and windows in the stretch of wall it covers: remove, or keep them between the two rooms.', examples: ['remove'] },
-    opening_width: { type: 'number', description: 'A doorless opening between the two rooms, centred, in metres.', examples: [2.4], minimum: 0, maximum: 50 },
-    door_width: { type: 'number', description: 'A door in the far side, to the outside, centred, in metres.', examples: [2.2], minimum: 0, maximum: 50 },
+    opening_width: { type: 'number', length: true, description: 'A doorless opening between the two rooms, centred, in metres.', examples: [2.4], minimum: 0, maximum: 50 },
+    door_width: { type: 'number', length: true, description: 'A door in the far side, to the outside, centred, in metres.', examples: [2.2], minimum: 0, maximum: 50 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
@@ -146,11 +157,12 @@ const stretchTool: GridTool = {
   description:
     'Use this when the person asks for the whole building, flat or house wider, longer or deeper: "the flat 30 cm wider", "the house 1 m longer to the north, through the kitchen". '
     + 'Everything beyond a line across the building moves out by the distance: the line is just inside the outside wall on that side, or through the middle of a room with through. Walls across the line get longer and the rooms they bound grow; every floor moves together unless floor names one. Doors and windows keep their anchor or their place in the building, so one in a wall that grows at its start does not slide. '
-    + 'Do not use for one room (grid_move_room_side). It replaces the plan file unless out is given. Units are metres.',
+    + 'Do not use for one room (grid_move_room_side). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'Which way it grows: north is the top of the drawing.', examples: ['east'] },
-    by: { type: 'number', required: true, description: 'Metres to grow; negative to shrink.', examples: [0.3, -0.2], minimum: -50, maximum: 50 },
+    by: { type: 'number', length: true, required: true, description: 'Metres to grow; negative to shrink.', examples: [0.3, -0.2], minimum: -50, maximum: 50 },
     through: { type: 'string', id: true, description: 'A room the line runs through, across its middle: it and the rooms in line with it grow.', examples: ['living'] },
     floor: { type: 'string', id: true, description: 'A floor id from the plan\'s "floors": stretch that floor only. Every floor when left out.', examples: ['ground'] },
     out: OUT_ARG,
@@ -168,27 +180,64 @@ const stretchTool: GridTool = {
 
 const renameTool: GridTool = {
   name: 'grid_rename_room',
-  title: 'Rename a room or change its use',
+  title: 'Rename a room, or change its use or finishes',
   hint: 'change-plan',
   description:
-    'Use this when the person asks to call a room something else, or to use it for something else: "the front room is a bedroom now", "the room names in Spanish". '
-    + 'It changes the room\'s name, its use (none to leave it unstated), or both, and nothing else, and answers with which of Grid\'s checks now look at the room and which no longer do: they go by its use, never its name. '
+    'Use this when the person asks to call a room something else, to use it for something else, or what its floor, walls, ceiling or skirting are finished in: "the front room is a bedroom now", "the room names in Spanish", "tile the kitchen floor", "the bathroom walls are tiled". '
+    + 'It changes the room\'s name, its use (none to leave it unstated), its finishes (by the person\'s own names; none takes one out), or more than one, and nothing else, and answers with which of Grid\'s checks now look at the room and which no longer do: they go by its use, never its name. A zone of an open-plan room takes finishes too: its part of the room is finished in them. '
     + 'Do not use to change a room\'s size (grid_move_room_side) or its id. It replaces the plan file unless out is given.',
   args: {
     plan: PLAN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The room to rename or give another use.', examples: ['bed2'] },
     name: NAME('Its new name.', 'Dormitorio 2'),
     use: { type: 'string', enum: [...ROOM_USES, 'none'], description: 'Its new use, or none to leave its use unstated.', examples: ['other', 'bedroom'] },
+    floor_finish: NAME('Its floor finish, in the person\'s words, or none to take it out.', 'Porcelain tile'),
+    wall_finish: NAME('The finish of its walls\' inside faces, or none to take it out.', 'Painted plaster'),
+    ceiling_finish: NAME('Its ceiling finish, or none to take it out.', 'Painted plasterboard'),
+    skirting_finish: NAME('Its skirting, or none to take it out.', 'Oak skirting'),
     out: OUT_ARG,
   },
   outputSchema: { ...EDIT_OUTPUT, properties: { ...(EDIT_OUTPUT['properties'] as Record<string, unknown>), checks: objectSchema({ now: listSchema(STRING), noLonger: listSchema(STRING) }) } },
   run(args, context) {
     return writeChange(context, args, (survey) => {
       const id = roomArg(survey.plan, args['room'])
-      return renameRoom(survey, id, { ...(args['name'] !== undefined ? { name: args['name'] as string } : {}), ...(args['use'] !== undefined ? { use: args['use'] as UseOrNone } : {}) })
+      const finishes = Object.fromEntries((['floor', 'wall', 'ceiling', 'skirting'] as const).filter((surface) => args[`${surface}_finish`] !== undefined).map((surface) => [surface === 'wall' ? 'walls' : surface, args[`${surface}_finish`] as string]))
+      return renameRoom(survey, id, { ...(args['name'] !== undefined ? { name: args['name'] as string } : {}), ...(args['use'] !== undefined ? { use: args['use'] as UseOrNone } : {}), ...(Object.keys(finishes).length === 0 ? {} : { finishes }) })
+    })
+  },
+}
+
+const squareTool: GridTool = {
+  name: 'grid_square_scan',
+  title: 'Square a scanned plan',
+  hint: 'change-plan',
+  description:
+    'Use this when a plan came from a scan or a capture and its walls are a degree or two off square, or the person asks to square it up or straighten the walls: "square the scan". '
+    + 'It turns each wall within about 3 degrees of the plan\'s main directions onto them, about its middle, puts the corners back where the new lines cross, and answers with how far each wall turned and moved; a wall further off is left as it is and named. '
+    + 'Only the walls the plan marks scanned (its marks, source scanned) are squared unless all is true. The marks stay, so areas from those walls still carry their give or take. '
+    + 'Do not use for a plan drawn by hand, or to move one wall (grid_move_room_side). It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm); angles are degrees.',
+  args: {
+    plan: PLAN_ARG,
+    all: { type: 'boolean', description: 'true to square every wall, not only those marked scanned. false when left out.', examples: [true, false] },
+    floor: { type: 'string', id: true, description: 'A floor id from the plan\'s "floors": square that floor only. Every floor when left out.', examples: ['ground'] },
+    out: OUT_ARG,
+  },
+  outputSchema: {
+    ...EDIT_OUTPUT,
+    properties: {
+      ...(EDIT_OUTPUT['properties'] as Record<string, unknown>),
+      // WRT-6 (lab AE-4): each wall the squaring moved, and the walls it left as they were.
+      moves: listSchema(objectSchema({ wall: STRING, turned: NUMBER, moved: NUMBER })),
+      leftAsTheyAre: listSchema(STRING),
+    },
+  },
+  run(args, context) {
+    return writeChange(context, args, (survey) => {
+      const floor = floorArg(survey.plan, args['floor'])
+      return squarePlan(survey, { ...(args['all'] === true ? { all: true } : {}), ...(floor !== undefined ? { floor } : {}) })
     })
   },
 }
 
 /** In the order `tools/list` gives them, after the other changes to the plan. */
-export const EDIT_TOOLS: readonly GridTool[] = [mergeTool, splitTool, addRoomTool, stretchTool, renameTool]
+export const EDIT_TOOLS: readonly GridTool[] = [mergeTool, splitTool, addRoomTool, stretchTool, renameTool, squareTool]

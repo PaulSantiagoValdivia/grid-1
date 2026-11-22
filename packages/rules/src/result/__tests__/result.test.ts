@@ -6,7 +6,7 @@ import * as geometry from '@ongrid/floorplan/geometry'
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { planNotes as planCheckNotes } from '@ongrid/floorplan/notes'
-import { CODES, GENERAL_GUIDANCE_LABEL, LINE_KINDS, checkLocalRules, inspectPlan, planNotes, type GridResult, type ResultLine } from '../..'
+import { CODES, GENERAL_GUIDANCE_LABEL, LINE_KINDS, PLURALS, checkLocalRules, inspectPlan, planNotes, type GridResult, type ResultLine } from '../..'
 import { door, edit, exterior, flat, room, twoFloorHouse, wall, window_, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 const SRC = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -50,9 +50,10 @@ function wordsNotRead(): Raw {
   raw['walls'][0].thick = 0.3
   raw['walls'][1].status = 'new'
   raw['walls'][2].status = 'existing'
-  raw['site'] = { north: 12 }
-  raw['rooms'][0].use = 'toilet'
-  raw['rooms'][1].use = 'office'
+  raw['plot'] = { north: 12 }
+  // CNT-5: `toilet` and `office` are uses now; `lounge` and `balcony` are still not read.
+  raw['rooms'][0].use = 'lounge'
+  raw['rooms'][1].use = 'balcony'
   raw['rooms'][2].use = 'Bedroom'
   return raw
 }
@@ -81,6 +82,8 @@ function corpus(): [string, unknown][] {
     ['a window off its wall', edit(flat(), (copy) => void copy.openings.push(window_('far', copy.walls[0]!.id, 40)))],
     ['a wall of no length', edit(flat(), (copy) => void copy.walls.push(wall('dot', [3, 3], [3, 3])))],
     ['words Grid does not read', wordsNotRead()],
+    // WRT-6: a value the plan marks assumed, and a mark on a part it does not have.
+    ['marks', { ...flat(), marks: [{ part: 'wall', id: 's1', value: 'height', source: 'assumed' }, { part: 'room', id: 'study', source: 'given' }] }],
     ['an empty plan', {}]
   ]
 }
@@ -88,8 +91,9 @@ function corpus(): [string, unknown][] {
 const run = (name: string, plan: unknown): GridResult => inspectPlan(plan, name === 'for Spain' ? { country: 'ES' } : {})
 
 /** A message with the plan's names and every figure taken out: what is left is its wording. */
+// MSG-5: a line for several rooms is read back to its one room's words (`PLURALS`).
 const wordingOf = (message: string): string =>
-  message
+  PLURALS.reduce((text, [one, many]) => text.replace(many, one), message)
     .replace(/"(?:[^"\\]|\\.)*"(?:, "(?:[^"\\]|\\.)*")*/g, 'NAME')
     .replace(/-?\d+(?:\.\d+)?/g, 'N')
     // The thing a line is about is one part of its wording, whichever kind of opening it is.
@@ -176,8 +180,11 @@ describe('words Grid does not read (MSG-4)', () => {
       also: [],
       message: `Wall "${walls[0]}" has a field Grid does not know, "thick"`,
       found: '"thick" at walls[0], which Grid does not read; the nearest field it knows is "thickness"',
-      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor',
-      fix: 'Did you mean "thickness"? Rename "thick" to "thickness". Until then Grid reads the plan without it.'
+      // LVL-5: a wall's fields now hold through, the highest floor it rises through; CNT-18 adds arc, CNT-10 phase, HND-11 face.
+      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor, through, arc, properties, phase, beyond, face, wallType',
+      fix: 'Did you mean "thickness"? Rename "thick" to "thickness". Until then Grid reads the plan without it.',
+      // MSG-11: the names and places its words were made with, as data.
+      values: { name: walls[0], nearest: 'thickness', place: 'walls[0]', word: 'thick' }
     })
   })
 
@@ -193,15 +200,16 @@ describe('words Grid does not read (MSG-4)', () => {
     ])
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
-    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, projectId, walls, rooms, openings, floors, referenceImage, items, title, annotations, sketch, written')
+    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-6 `marks`, WRT-7 `display`, VEW-3 `views`, LVL-8 `patterns`, CNT-17 `accessible`, HND-11 `taped`, CNT-10 `base`, CNT-4 `flatTypes` and `flats`.
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, patterns, floors, stairs, referenceImage, base, items, title, annotations, sketch, north, yAxis, front, site, marks, views, accessible, taped, flatTypes, flats, buildings, context, types, columns, grids, display, written')
   })
 
   it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {
-    const [toilet, office] = reading.slice(4)
-    expect(toilet!.message).toBe(`Room "${rooms[0]!.name}" has a use Grid does not know, "toilet"`)
-    expect(toilet!.fix).toMatch(/^Did you mean "bathroom"\?/)
-    expect(office!.found).toBe('the use "office" at rooms[1].use, read as no use stated')
-    expect(office!.fix).toMatch(/^If none of the uses Grid knows fits, write "other"\./)
+    const [lounge, balcony] = reading.slice(4)
+    expect(lounge!.message).toBe(`Room "${rooms[0]!.name}" has a use Grid does not know, "lounge"`)
+    expect(lounge!.fix).toMatch(/^Did you mean "living"\?/)
+    expect(balcony!.found).toBe('the use "balcony" at rooms[1].use, read as no use stated')
+    expect(balcony!.fix).toMatch(/^If none of the uses Grid knows fits, write "other"\./)
     expect(reading.some((l) => l.message.includes('Bedroom'))).toBe(false)
   })
 
@@ -235,9 +243,9 @@ describe('every line', () => {
   it('carries a stable code of one style, the thing, its floor, found, needed, fix and its wording', () => {
     for (const [name, l] of lines) {
       const where = `${name}: ${l.code}`
-      expect(l.code, where).toMatch(/^(plan|floor|wall|room|opening)\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      expect(l.code, where).toMatch(/^(plan|floor|wall|room|opening|item|stair|pattern)\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
       expect(Object.keys(CODES), where).toContain(l.code)
-      expect(['plan', 'floor', 'wall', 'room', 'opening'], where).toContain(l.thing.kind)
+      expect(['plan', 'floor', 'wall', 'room', 'opening', 'item', 'stair'], where).toContain(l.thing.kind)
       expect(l.thing.id === '', where).toBe(l.thing.kind === 'plan')
       expect(l.floor === null || typeof l.floor === 'string', where).toBe(true)
       // Only an opening on a wall the plan does not have is on no floor that can be told.
@@ -265,7 +273,8 @@ describe('every line', () => {
       const result = inspectPlan(plan, options)
       const findings = result.lines.filter((l) => l.kind === 'finding')
       expect(findings.map((l) => l.message), name).toEqual(report.findings.map((f) => f.message))
-      expect(result.lines.filter((l) => l.kind === 'not-checked').map((l) => l.message), name).toEqual(report.notChecked.map((n) => n.message))
+      // CNT-14: the doors with no swing stated come from the door check, not the report.
+      expect(result.lines.filter((l) => l.kind === 'not-checked' && l.code !== 'floor/not-checked-door-swings').map((l) => l.message), name).toEqual(report.notChecked.map((n) => n.message))
       // The notes a person reads: the same wording, the names set apart instead of quoted.
       const notes = planNotes(FloorPlanSchema.parse(plan), report).notes
       expect(notes.map((n) => geometry.wordingText(n.title)), name).toEqual(findings.map((l) => l.message))
@@ -285,9 +294,9 @@ describe('every line', () => {
     expect(lines[0]).toMatchObject({
       thing: { kind: 'opening', id: 'd_bb' },
       also: ['bathroom', 'bedroom'],
-      message: 'An opening from "Bathroom" is too small for a person to pass through, so it is not a way through',
+      message: 'An opening from "Bathroom" is too small for a person to get through, so it is not a way through',
       found: 'the door is 0.30 m wide',
-      needed: "at least 0.40 m wide: Grid's own size for a person to pass, not a code figure"
+      needed: "at least 0.40 m wide: Grid's own size for a person to get through, not a code figure"
     })
   })
 })
@@ -302,7 +311,7 @@ describe('the catalogue', () => {
         if (entry === '__tests__' || entry === 'node_modules') continue
         if (statSync(path).isDirectory()) walk(path)
         else if (entry.endsWith('.ts')) {
-          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor|item)\/[a-z-]+)'/g)) found.add(match[1]!)
+          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor|item|stair|pattern|flat)\/[a-z-]+)'/g)) found.add(match[1]!)
         }
       }
     }

@@ -3,17 +3,26 @@
  * someone can climb through.
  *
  * Reads `Room.use` and `Wall.kind` as declared and never guesses either. A window is
- * measured as drawn: the plan does not say how much of it opens, so a note says "as
- * drawn", and a window that opens only in part needs a bigger frame than these figures.
+ * measured by the part of it that opens when the plan states one (CNT-14, `opens`), and a fixed
+ * window opens nothing; otherwise it is measured as drawn, so a note says "as drawn", and a
+ * window that opens only in part needs a bigger frame than these figures.
  */
 
-import { indexPlan, overFigure, rounded, shownAgainst, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
+import { indexPlan, overFigure, partHeight, partWidth, roomZones, rounded, shownAgainst, statedKind, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
 import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
-import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import { outdoorIds } from '@ongrid/floorplan/geometry/outdoor'
+import { RULE_USES } from './catalogue'
 import type { FloorScope } from './coverage'
 import { ESCAPE_TOP_LEVEL } from './figures'
 import { messages } from './messages'
-import type { AppliedFigure, RuleFinding } from './types'
+import type { AppliedFigure, RuleFinding, WholeRoom } from './types'
+import { appliedUse, type AppliedUse } from './zoned'
+
+/**
+ * The uses this check covers, as its coverage lists them (CNT-5's `uses`). CNT-8: a room with a
+ * sleeping zone is one someone sleeps in.
+ */
+const COVERS = RULE_USES['escape-opening']
 
 /** The figures of the check. One that is `null` is not tested. */
 export interface EscapeFigures {
@@ -38,14 +47,16 @@ interface Measured {
   readonly area: number
 }
 
-/** A window as drawn, compared as it is and never rounded first (ARE-7). */
-const measure = (opening: Opening): Measured => ({
-  id: opening.id,
-  width: opening.width,
-  height: opening.height,
-  sill: opening.sill,
-  area: opening.width * opening.height
-})
+/**
+ * A window as drawn, compared as it is and never rounded first (ARE-7): the part of it that opens
+ * when the plan states one, and nothing for a fixed window (CNT-14). The part opens from the sill.
+ */
+const measure = (opening: Opening): Measured => {
+  const fixed = opening.type === 'window' && statedKind(opening.type, opening.kind) === 'fixed'
+  const width = fixed ? 0 : partWidth(opening.width, opening.opens)
+  const height = fixed ? 0 : partHeight(opening.height, opening.opens)
+  return { id: opening.id, width, height, sill: opening.sill, area: width * height }
+}
 
 /**
  * What a finding carries: lengths to the millimetre and areas to 0.01 m², or to the digits
@@ -70,31 +81,47 @@ export function escapeCheck(
   floor: string,
   level: number,
   roomName: (id: string) => string,
-  figures: EscapeFigures
-): { findings: RuleFinding[]; scope: FloorScope } {
+  figures: EscapeFigures,
+  /**
+   * Whether the floor is the ground floor (LVL-4, `groundLevel`): the floor at level 0, or, with
+   * the site's ground level stated, the floor nearest it. Its windows take the figure for a floor
+   * at grade where one is carried. Unstated, the floor at level 0.
+   */
+  atGround: boolean = level === 0
+): { findings: RuleFinding[]; scope: FloorScope; wholeRooms: WholeRoom[] } {
   const index = indexPlan(storey)
   const outlines = roomOutlines(storey, index, leftOut)
+  const zones = roomZones(index)
   // MSG-2: every room of the floor is looked at or skipped, with the reason. Only bedrooms are
-  // looked at; a room with no use stated may be one, so it is said apart.
+  // looked at; a room with no use stated may be one, so it is said apart. CNT-8: a room with a
+  // zone that is a bedroom is looked at as a whole, through every outside wall it has, and a
+  // zone is looked at as part of its room.
   const above = level > ESCAPE_TOP_LEVEL.level
   const scope: FloorScope = { lookedAt: [], skipped: { cannot_be_drawn: [], no_use: [], use_not_covered: [], above_escape_storeys: [] } }
+  const applied = new Map<string, AppliedUse>()
+  const wholeRooms: WholeRoom[] = []
   for (const room of storey.rooms) {
+    const use = appliedUse(room, storey.rooms, zones, COVERS)
+    applied.set(room.id, use)
     const reason = !outlines.has(room.id)
       ? 'cannot_be_drawn'
-      : !(ROOM_USES as readonly unknown[]).includes(room.use)
-        ? 'no_use'
-        : room.use !== 'bedroom'
-          ? 'use_not_covered'
-          : above
-            ? 'above_escape_storeys'
-            : null
+      : use.kind === 'zone'
+        ? 'part_of_room'
+        : use.kind === 'no_use'
+          ? 'no_use'
+          : use.kind === 'not_covered'
+            ? 'use_not_covered'
+            : above
+              ? 'above_escape_storeys'
+              : null
     if (reason === null) scope.lookedAt.push(room.id)
-    else scope.skipped[reason]!.push(room.id)
+    else (scope.skipped[reason] ??= []).push(room.id)
+    if (reason === null && use.kind === 'checked' && zones.zones.has(room.id)) wholeRooms.push({ floor, room: room.id, use: use.use, zone: use.zone })
   }
   // Above the third storey the figures here stop: the bedrooms are said to be not checked (CH-4).
-  if (above || !hasEscapeFigures(figures)) return { findings: [], scope }
+  if (above || !hasEscapeFigures(figures)) return { findings: [], scope, wholeRooms }
 
-  const minArea = level === 0 ? (figures.minAreaGrade ?? figures.minArea) : figures.minArea
+  const minArea = atGround ? (figures.minAreaGrade ?? figures.minArea) : figures.minArea
   const { minWidth, minHeight, maxSill } = figures
   const bigEnough = (w: Measured): boolean =>
     (minWidth === null || !underFigure(w.width, minWidth.value, 'm')) &&
@@ -106,16 +133,22 @@ export function escapeCheck(
   // with a room on one side only and no enclosed floor on the other (MSG-13, `outsideTest`).
   const outside = new Map<string, Opening[]>()
   const facesOutside = outsideTest(storey, index)
+  const outdoor = outdoorIds(storey)
   for (const opening of storey.openings) {
     if (opening.type === 'opening') continue
     const wall = index.wallsById.get(opening.wall)
     if (wall === undefined) continue
     const [left, right] = openingSides(opening, index, outlines)
     const along = opening.offset + opening.width / 2
+    // CNT-7 (C26): an outdoor space beyond the opening is the open air.
     const rooms =
       wall.kind === 'exterior'
         ? [left, right]
-        : left !== null && right === null && facesOutside(wall, along, 'right')
+        : right !== null && outdoor.has(right)
+          ? [left]
+          : left !== null && outdoor.has(left)
+            ? [right]
+            : left !== null && right === null && facesOutside(wall, along, 'right')
           ? [left]
           : right !== null && left === null && facesOutside(wall, along, 'left')
             ? [right]
@@ -130,7 +163,8 @@ export function escapeCheck(
 
   const findings: RuleFinding[] = []
   for (const room of storey.rooms) {
-    if (room.use !== 'bedroom' || !outlines.has(room.id)) continue
+    const use = applied.get(room.id)!
+    if (use.kind !== 'checked' || !outlines.has(room.id)) continue
     const openings = outside.get(room.id) ?? []
     // A door straight outside is enough.
     if (openings.some((o) => o.type === 'door')) continue
@@ -138,7 +172,9 @@ export function escapeCheck(
     const windows = openings.map(measure)
     if (windows.some((w) => bigEnough(w) && lowEnough(w))) continue
 
-    const base = { ruleId: 'escape-opening', floor, rooms: [room.id] }
+    // CNT-8: a room with zones says which use the check applied, and the zone it read it from.
+    const whole = zones.zones.has(room.id) ? { use: use.use, ...(use.zone === null ? {} : { zone: use.zone }) } : {}
+    const base = { ruleId: 'escape-opening', floor, rooms: use.zone === null ? [room.id] : [room.id, use.zone], ...whole }
     if (windows.length === 0) {
       findings.push({ ...base, code: 'no_escape_opening', openings: [], message: messages.noEscapeOpening(roomName(room.id)) })
       continue
@@ -170,5 +206,5 @@ export function escapeCheck(
       figures: present([minArea, minWidth, minHeight])
     })
   }
-  return { findings, scope }
+  return { findings, scope, wholeRooms }
 }

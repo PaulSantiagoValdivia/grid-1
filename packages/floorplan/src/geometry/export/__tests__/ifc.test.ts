@@ -10,6 +10,23 @@ import { indexPlan } from '../../plan'
 import { wallExposure } from '../../exposure'
 import { parseFloorPlan } from '../../../types/floorplan'
 import { ballroomWithStage, genkanFlat } from '../../../test-support/plans'
+import {
+  en,
+  entity,
+  items,
+  num,
+  nums,
+  ofType,
+  only,
+  parseArgs,
+  parseDoc,
+  ref,
+  refs,
+  str,
+  walk,
+  type Doc,
+  type Entity
+} from './step-reader'
 
 /**
  * IFC export.
@@ -19,279 +36,10 @@ import { ballroomWithStage, genkanFlat } from '../../../test-support/plans'
  * and a reader that mis-unescapes it the same way would agree with each other
  * and with nobody else. The parser rejects anything the standard does not
  * allow (an unescaped quote, a raw non-ASCII byte, a dangling reference), so a
- * malformed file fails here instead of in an architect's import dialog.
+ * malformed file fails here instead of in an architect's import dialog. It is
+ * in `step-reader.ts`, which the structural test (`ifc.structure.test.ts`) reads
+ * files with too.
  */
-
-// ---------------------------------------------------------------------------
-// A strict ISO 10303-21 reader
-// ---------------------------------------------------------------------------
-
-type Value =
-  | { readonly t: 'null' }
-  | { readonly t: 'derived' }
-  | { readonly t: 'str'; readonly v: string }
-  | { readonly t: 'num'; readonly v: number; readonly raw: string }
-  | { readonly t: 'enum'; readonly v: string }
-  | { readonly t: 'ref'; readonly v: number }
-  | { readonly t: 'list'; readonly v: readonly Value[] }
-  | { readonly t: 'typed'; readonly name: string; readonly v: Value }
-
-interface Entity {
-  readonly id: number
-  readonly type: string
-  readonly args: readonly Value[]
-}
-
-interface Doc {
-  readonly header: ReadonlyMap<string, readonly Value[]>
-  readonly entities: ReadonlyMap<number, Entity>
-  readonly order: readonly Entity[]
-}
-
-class Reader {
-  pos = 0
-  constructor(readonly src: string) {}
-
-  private fail(message: string): never {
-    throw new Error(`${message} at ${this.pos} in: ${this.src}`)
-  }
-
-  peek(): string {
-    return this.src[this.pos] ?? ''
-  }
-
-  expect(char: string): void {
-    if (this.peek() !== char) this.fail(`expected ${char}`)
-    this.pos++
-  }
-
-  atEnd(): boolean {
-    return this.pos >= this.src.length
-  }
-
-  value(): Value {
-    const c = this.peek()
-    if (c === '$') {
-      this.pos++
-      return { t: 'null' }
-    }
-    if (c === '*') {
-      this.pos++
-      return { t: 'derived' }
-    }
-    if (c === "'") return this.string()
-    if (c === '.') return this.enumeration()
-    if (c === '#') return this.reference()
-    if (c === '(') return this.list()
-    if (c === '-' || (c >= '0' && c <= '9')) return this.number()
-    if (c >= 'A' && c <= 'Z') return this.typed()
-    return this.fail(`unexpected ${JSON.stringify(c)}`)
-  }
-
-  private string(): Value {
-    this.expect("'")
-    let out = ''
-    for (;;) {
-      if (this.atEnd()) this.fail('unterminated string')
-      const c = this.src[this.pos]!
-      const code = c.charCodeAt(0)
-      if (code < 0x20 || code > 0x7e) this.fail(`raw character U+${code.toString(16)} in string`)
-
-      if (c === "'") {
-        if (this.src[this.pos + 1] === "'") {
-          out += "'"
-          this.pos += 2
-          continue
-        }
-        this.pos++
-        return { t: 'str', v: out }
-      }
-
-      if (c === '\\') {
-        if (this.src[this.pos + 1] === '\\') {
-          out += '\\'
-          this.pos += 2
-          continue
-        }
-        if (this.src.startsWith('\\X2\\', this.pos)) {
-          this.pos += 4
-          const end = this.src.indexOf('\\X0\\', this.pos)
-          if (end < 0) this.fail('unterminated \\X2\\ block')
-          const hex = this.src.slice(this.pos, end)
-          if (hex.length === 0 || hex.length % 4 !== 0 || !/^[0-9A-F]+$/.test(hex)) {
-            this.fail(`bad \\X2\\ payload ${hex}`)
-          }
-          for (let i = 0; i < hex.length; i += 4) {
-            out += String.fromCharCode(parseInt(hex.slice(i, i + 4), 16))
-          }
-          this.pos = end + 4
-          continue
-        }
-        this.fail('unknown escape')
-      }
-
-      out += c
-      this.pos++
-    }
-  }
-
-  private enumeration(): Value {
-    this.expect('.')
-    const m = /^[A-Z][A-Z0-9_]*/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad enumeration')
-    this.pos += m[0].length
-    this.expect('.')
-    return { t: 'enum', v: m[0] }
-  }
-
-  private reference(): Value {
-    this.expect('#')
-    const m = /^\d+/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad reference')
-    this.pos += m[0].length
-    return { t: 'ref', v: Number(m[0]) }
-  }
-
-  private number(): Value {
-    const m = /^-?\d+(\.\d*)?(E[+-]?\d+)?/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad number')
-    this.pos += m[0].length
-    return { t: 'num', v: Number(m[0]), raw: m[0] }
-  }
-
-  private list(): Value {
-    this.expect('(')
-    const items: Value[] = []
-    if (this.peek() === ')') {
-      this.pos++
-      return { t: 'list', v: items }
-    }
-    for (;;) {
-      items.push(this.value())
-      if (this.peek() === ',') {
-        this.pos++
-        continue
-      }
-      this.expect(')')
-      return { t: 'list', v: items }
-    }
-  }
-
-  private typed(): Value {
-    const m = /^[A-Z][A-Z0-9_]*/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad type name')
-    this.pos += m[0].length
-    this.expect('(')
-    const inner = this.value()
-    this.expect(')')
-    return { t: 'typed', name: m[0], v: inner }
-  }
-
-  /** `a,b,c` with no enclosing parentheses: the argument list of an entity. */
-  args(): Value[] {
-    const out: Value[] = []
-    if (this.atEnd()) return out
-    for (;;) {
-      out.push(this.value())
-      if (this.peek() === ',') {
-        this.pos++
-        continue
-      }
-      if (!this.atEnd()) this.fail('trailing characters')
-      return out
-    }
-  }
-}
-
-function parseArgs(text: string): Value[] {
-  return new Reader(text).args()
-}
-
-function parseDoc(text: string): Doc {
-  const lines = text.split('\n')
-  expect(lines[lines.length - 1]).toBe('')
-  lines.pop()
-  expect(text).not.toContain('\r')
-
-  let i = 0
-  const next = (): string => {
-    const line = lines[i++]
-    if (line === undefined) throw new Error('unexpected end of file')
-    return line
-  }
-
-  expect(next()).toBe('ISO-10303-21;')
-  expect(next()).toBe('HEADER;')
-
-  const header = new Map<string, Value[]>()
-  for (let line = next(); line !== 'ENDSEC;'; line = next()) {
-    const m = /^([A-Z_]+)\((.*)\);$/.exec(line)
-    if (!m) throw new Error(`bad header line: ${line}`)
-    header.set(m[1]!, parseArgs(m[2]!))
-  }
-
-  expect(next()).toBe('DATA;')
-
-  const entities = new Map<number, Entity>()
-  const order: Entity[] = []
-  for (let line = next(); line !== 'ENDSEC;'; line = next()) {
-    const m = /^#(\d+)=([A-Z][A-Z0-9_]*)\((.*)\);$/.exec(line)
-    if (!m) throw new Error(`bad entity line: ${line}`)
-    const entity: Entity = { id: Number(m[1]), type: m[2]!, args: parseArgs(m[3]!) }
-    if (entities.has(entity.id)) throw new Error(`duplicate #${entity.id}`)
-    entities.set(entity.id, entity)
-    order.push(entity)
-  }
-
-  expect(next()).toBe('END-ISO-10303-21;')
-  expect(i).toBe(lines.length)
-
-  return { header, entities, order }
-}
-
-function* walk(value: Value): Generator<Value> {
-  yield value
-  if (value.t === 'list') for (const item of value.v) yield* walk(item)
-  if (value.t === 'typed') yield* walk(value.v)
-}
-
-// Typed accessors: each throws on a mismatch, so a wrong attribute shape fails loudly.
-const str = (v: Value | undefined): string => {
-  if (v?.t !== 'str') throw new Error(`expected string, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const num = (v: Value | undefined): number => {
-  if (v?.t !== 'num') throw new Error(`expected number, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const ref = (v: Value | undefined): number => {
-  if (v?.t !== 'ref') throw new Error(`expected reference, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const en = (v: Value | undefined): string => {
-  if (v?.t !== 'enum') throw new Error(`expected enumeration, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const items = (v: Value | undefined): readonly Value[] => {
-  if (v?.t !== 'list') throw new Error(`expected list, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const refs = (v: Value | undefined): number[] => items(v).map(ref)
-const nums = (v: Value | undefined): number[] => items(v).map(num)
-
-const ofType = (doc: Doc, type: string): Entity[] => doc.order.filter((e) => e.type === type)
-
-function entity(doc: Doc, id: number): Entity {
-  const found = doc.entities.get(id)
-  if (!found) throw new Error(`#${id} is not defined`)
-  return found
-}
-
-const only = (doc: Doc, type: string): Entity => {
-  const found = ofType(doc, type)
-  expect(found, type).toHaveLength(1)
-  return found[0]!
-}
 
 // ---------------------------------------------------------------------------
 // Placements, composed by hand
@@ -453,6 +201,25 @@ function bodyOf(doc: Doc, product: Entity): WorldSolid {
   return { base, top: base.map((p) => add3(p, scale3(direction, depth))), direction, depth }
 }
 
+/** CNT-14: every solid of a product's Body representation, placed in the world (a door's frame, leaves and glass). */
+function bodiesOf(doc: Doc, product: Entity): WorldSolid[] {
+  const shape = entity(doc, ref(product.args[6]))
+  const bodies = refs(shape.args[2])
+    .map((id) => entity(doc, id))
+    .filter((r) => str(r.args[1]) === 'Body')
+  expect(bodies).toHaveLength(1)
+  const object = placementFrame(doc, ref(product.args[5]))
+  return refs(bodies[0]!.args[3]).map((id) => {
+    const solid = entity(doc, id)
+    expect(solid.type).toBe('IFCEXTRUDEDAREASOLID')
+    const position = axisFrame(doc, ref(solid.args[1]))
+    const base = profileOutline(doc, ref(solid.args[0])).map(([x, y]) => toWorld(object, toWorld(position, [x, y, 0])))
+    const direction = norm3(rotate(object, rotate(position, direction3(doc, ref(solid.args[2])))))
+    const depth = num(solid.args[3])
+    return { base, top: base.map((p) => add3(p, scale3(direction, depth))), direction, depth }
+  })
+}
+
 /** Shoelace over x and y: a signed area, positive when counter-clockwise from above. */
 function signedAreaXY(points: readonly V3[]): number {
   let sum = 0
@@ -506,7 +273,8 @@ describe('document skeleton', () => {
     expect(text.endsWith('ENDSEC;\nEND-ISO-10303-21;\n')).toBe(true)
 
     const description = doc.header.get('FILE_DESCRIPTION')!
-    expect(items(description[0]).map(str)).toEqual(['ViewDefinition [CoordinationView_V2.0]'])
+    // MSG-3: the label follows the view definition.
+    expect(items(description[0]).map(str)).toEqual(['ViewDefinition [CoordinationView_V2.0]', 'General guidance, not your local rules'])
     expect(str(description[1])).toBe('2;1')
 
     const schema = doc.header.get('FILE_SCHEMA')!
@@ -1238,8 +1006,9 @@ describe('wall placement in the building', () => {
 describe('Pset_WallCommon', () => {
   /** IsExternal as a reader sees it: through the property set attached to the wall. */
   function isExternal(doc: Doc, wall: Entity): boolean {
-    const defining = ofType(doc, 'IFCRELDEFINESBYPROPERTIES').filter((r) =>
-      refs(r.args[4]).includes(wall.id)
+    // HND-2 gives the wall its base quantities too: Pset_WallCommon is one of its sets.
+    const defining = ofType(doc, 'IFCRELDEFINESBYPROPERTIES').filter(
+      (r) => refs(r.args[4]).includes(wall.id) && str(entity(doc, ref(r.args[5])).args[2]) === 'Pset_WallCommon'
     )
     expect(defining).toHaveLength(1)
 
@@ -1520,23 +1289,24 @@ describe('doors and windows fill their void', () => {
     expect(new Set(rooted.map((e) => str(e.args[0]))).size).toBe(rooted.length)
   })
 
-  it('gives the filler a thin leaf, centred in the wall, over the void', () => {
+  it('CNT-14 fills the void with a frame and a leaf: the frame lines the wall, the leaf of a door with no swing sits in its middle', () => {
     const doc = exported(plan)
     const door = fillersOf(doc, openingByName(doc, 'd'))[0]!
-    const solid = bodyOf(doc, door)
-    const terms = inWallTerms(solid, wall)
-
-    const [from, to] = span(terms.along)
+    const solids = bodiesOf(doc, door).map((solid) => inWallTerms(solid, wall))
+    // Together they fill the void: along the opening, through the wall, from the floor to the head.
+    const [from, to] = span(solids.flatMap((t) => t.along))
     expect(from).toBeCloseTo(0.5, 8)
     expect(to).toBeCloseTo(1.4, 8)
-
-    const [left, right] = span(terms.across)
-    expect(right - left).toBeCloseTo(0.05, 8)
-    expect(left + right).toBeCloseTo(0, 8)
-
-    const [low, high] = span(terms.z)
+    const [low, high] = span(solids.flatMap((t) => t.z))
     expect(low).toBeCloseTo(0, 8)
     expect(high).toBeCloseTo(2.1, 8)
+    // Two jambs and a head (a door has no sill), then the leaf, `leafThickness` thick, centred.
+    expect(solids).toHaveLength(4)
+    const leaf = solids[3]!
+    const [left, right] = span(leaf.across)
+    expect(right - left).toBeCloseTo(0.04, 8)
+    expect(left + right).toBeCloseTo(0, 8)
+    for (const jamb of solids.slice(0, 2)) expect(span(jamb.across)[1] - span(jamb.across)[0]).toBeCloseTo(wall.thickness, 8)
   })
 
   it('places the filler relative to the void it fills', () => {
@@ -1616,8 +1386,9 @@ const roomOf = (id: string, name: string, boundary: string[], floor?: string): R
 
 const spacesOf = (doc: Doc): Entity[] => ofType(doc, 'IFCSPACE')
 
+/** HND-2: by the room's name, its LongName; its Name is its number. */
 function spaceByName(doc: Doc, name: string): Entity {
-  const found = spacesOf(doc).filter((e) => str(e.args[2]) === name)
+  const found = spacesOf(doc).filter((e) => str(e.args[7]) === name)
   expect(found, name).toHaveLength(1)
   return found[0]!
 }
@@ -1631,8 +1402,8 @@ function spaceStoreys(doc: Doc): Map<string, string> {
     for (const id of refs(rel.args[5])) {
       const child = entity(doc, id)
       expect(child.type).toBe('IFCSPACE')
-      expect(out.has(str(child.args[2]))).toBe(false)
-      out.set(str(child.args[2]), str(parent.args[2]))
+      expect(out.has(str(child.args[7]))).toBe(false)
+      out.set(str(child.args[7]), str(parent.args[2]))
     }
   }
   return out
@@ -1645,12 +1416,13 @@ describe('spaces', () => {
     rooms: [roomOf('kitchen', 'Kitchen', boundary)]
   })
 
-  it('exports each room as a space named after it, under its storey', () => {
+  it('exports each room as a space numbered and named after it, under its storey', () => {
     const doc = exported(kitchenPlan())
     const space = spaceByName(doc, 'Kitchen')
 
     expect(spacesOf(doc)).toHaveLength(1)
-    // IfcSpace(..., Name, ..., LongName)
+    // IfcSpace(..., Name, ..., LongName): HND-2 makes the Name the room's number.
+    expect(str(space.args[2])).toBe('1')
     expect(str(space.args[7])).toBe('Kitchen')
     expect(spaceStoreys(doc)).toEqual(new Map([['Kitchen', 'Ground floor']]))
   })
@@ -1791,7 +1563,7 @@ describe('names cannot corrupt the document', () => {
     for (const name of ["Ba\u00f1o 'B'", 'C:\\Kitchen', 'caf\u00e9 \u65e5\u672c \u{1F600}']) {
       const doc = exported(named(name))
       const space = spacesOf(doc)[0]!
-      expect(str(space.args[2])).toBe(name)
+      expect(str(space.args[2])).toBe('1')
       expect(str(space.args[7])).toBe(name)
     }
   })
@@ -1811,7 +1583,7 @@ describe('names cannot corrupt the document', () => {
     expect(hostile.entities.has(900)).toBe(false)
     expect(hostile.entities.has(901)).toBe(false)
 
-    const name = str(spacesOf(hostile)[0]!.args[2])
+    const name = str(spacesOf(hostile)[0]!.args[7])
     expect(name).not.toContain('\n')
     expect(name).toBe("Bath#900=IFCWALL($,$);#901=IFCSPACE('x');")
   })
@@ -1844,6 +1616,8 @@ function expectWellFormed(text: string): Doc {
 }
 
 const namesOf = (entities: readonly Entity[]): string[] => entities.map((e) => str(e.args[2]))
+/** HND-2: a space's Name is its room number, and its LongName the room's name. */
+const roomNamesOf = (spaces: readonly Entity[]): string[] => spaces.map((e) => str(e.args[7]))
 
 describe('broken geometry degrades instead of failing', () => {
   /** A sound 4 x 3 room (k*), and a second sound room (m*) to prove the rest still exports. */
@@ -1862,7 +1636,7 @@ describe('broken geometry degrades instead of failing', () => {
   it('exports the sound plan completely, as the baseline', () => {
     const doc = exportOf(sound())
     expect(wallsOf(doc)).toHaveLength(8)
-    expect(namesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
     expect(namesOf(openingsIn(doc))).toEqual(['door'])
   })
 
@@ -1871,7 +1645,7 @@ describe('broken geometry degrades instead of failing', () => {
     plan.rooms.push(roomOf('ghost', 'Ghost', ['k1', 'k2', 'nowhere', 'k4']))
     const doc = exportOf(plan)
 
-    expect(namesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
     expect(wallsOf(doc)).toHaveLength(8)
   })
 
@@ -1882,7 +1656,7 @@ describe('broken geometry degrades instead of failing', () => {
 
     expect(namesOf(wallsOf(doc))).toEqual(['k2', 'k3', 'k4', 'm1', 'm2', 'm3', 'm4'])
     // The kitchen rests on the broken wall; the door hangs on it.
-    expect(namesOf(spacesOf(doc))).toEqual(['Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Main'])
     expect(openingsIn(doc)).toHaveLength(0)
     expect(ofType(doc, 'IFCDOOR')).toHaveLength(0)
   })
@@ -1953,7 +1727,7 @@ describe('broken geometry degrades instead of failing', () => {
     const doc = expectWellFormed(text)
 
     expect(namesOf(wallsOf(doc))).toEqual(['k1', 'k2', 'k3', 'k4', 'm1', 'm2', 'm3', 'm4'])
-    expect(namesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
     expect(namesOf(openingsIn(doc))).toEqual(['door'])
   })
 
@@ -1980,7 +1754,7 @@ describe('broken geometry degrades instead of failing', () => {
     }).not.toThrow()
 
     const doc = expectWellFormed(text)
-    expect(namesOf(spacesOf(doc))).toEqual(['Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Main'])
     expect(wallsOf(doc).length).toBe(7)
   })
 
@@ -2051,9 +1825,11 @@ describe('wall material layer set usage', () => {
   function usages(doc: Doc): Map<string, Entity[]> {
     const out = new Map<string, Entity[]>()
     // IfcRelAssociatesMaterial(GlobalId, OwnerHistory, Name, Description, RelatedObjects, RelatingMaterial)
+    // HND-2 associates each wall type with its layer set too; only the walls are read here.
     for (const rel of ofType(doc, 'IFCRELASSOCIATESMATERIAL')) {
       const material = entity(doc, ref(rel.args[5]))
       for (const id of refs(rel.args[4])) {
+        if (entity(doc, id).type !== 'IFCWALLSTANDARDCASE') continue
         const name = str(entity(doc, id).args[2])
         out.set(name, [...(out.get(name) ?? []), material])
       }
@@ -2105,7 +1881,7 @@ describe('wall material layer set usage', () => {
     }
   })
 
-  it('shares one usage between walls of the same thickness, and none for virtual walls', () => {
+  it('shares one usage between walls of the same kind and thickness, and none for virtual walls', () => {
     const doc = exported(plan())
     const byWall = usages(doc)
 
@@ -2114,19 +1890,55 @@ describe('wall material layer set usage', () => {
     expect(ofType(doc, 'IFCMATERIALLAYERSETUSAGE')).toHaveLength(2)
     expect(ofType(doc, 'IFCMATERIALLAYERSET')).toHaveLength(2)
     expect(ofType(doc, 'IFCMATERIALLAYER')).toHaveLength(2)
+    // HND-2: one material for the walls. CNT-15 (lab AU3-4): the plan states none, so it is "Not stated".
     expect(ofType(doc, 'IFCMATERIAL')).toHaveLength(1)
-    expect(str(only(doc, 'IFCMATERIAL').args[0])).toBe('Wall')
+    expect(str(only(doc, 'IFCMATERIAL').args[0])).toBe('Not stated')
     expect(byWall.has('virtual')).toBe(false)
   })
 
-  it('names the layer set after the thickness', () => {
+  it('names the layer set after the kind and the thickness', () => {
     const names = ofType(exported(plan()), 'IFCMATERIALLAYERSET').map((e) => str(e.args[1]))
-    expect(names).toEqual(['Wall 0.2 m', 'Wall 0.3 m'])
+    expect(names).toEqual(['Interior wall 0.2 m', 'Interior wall 0.3 m'])
+  })
+
+  it('HND-2 types the walls by kind and thickness, each type carrying its layer set and material', () => {
+    const doc = exported({
+      ...plan(),
+      walls: [...plan().walls, wallAt('e', [0, 4], 0, 4, { thickness: 0.2, kind: 'exterior' })]
+    })
+    const types = ofType(doc, 'IFCWALLTYPE')
+    // IfcWallType(..., Name (2), Description, ApplicableOccurrence, HasPropertySets, RepresentationMaps, Tag (7), ElementType, PredefinedType)
+    expect(types.map((t) => [str(t.args[2]), str(t.args[7]), en(t.args[9])])).toEqual([
+      ['Interior wall 0.2 m', 'wall:interior:0.2', 'STANDARD'],
+      ['Interior wall 0.3 m', 'wall:interior:0.3', 'STANDARD'],
+      ['Exterior wall 0.2 m', 'wall:exterior:0.2', 'STANDARD']
+    ])
+    // CNT-15 (lab AU3-4): no material is stated, so one material says so, for every kind.
+    expect(ofType(doc, 'IFCMATERIAL').map((m) => str(m.args[0]))).toEqual(['Not stated'])
+
+    const typed = new Map<string, string>()
+    for (const rel of ofType(doc, 'IFCRELDEFINESBYTYPE')) {
+      const type = entity(doc, ref(rel.args[5]))
+      if (type.type !== 'IFCWALLTYPE') continue
+      for (const id of refs(rel.args[4])) typed.set(str(entity(doc, id).args[2]), str(type.args[2]))
+    }
+    expect(Object.fromEntries(typed)).toEqual({ a: 'Interior wall 0.2 m', b: 'Interior wall 0.3 m', c: 'Interior wall 0.2 m', e: 'Exterior wall 0.2 m' })
+
+    for (const type of types) {
+      const rel = ofType(doc, 'IFCRELASSOCIATESMATERIAL').filter((r) => refs(r.args[4]).includes(type.id))
+      expect(rel, str(type.args[2])).toHaveLength(1)
+      const set = entity(doc, ref(rel[0]!.args[5]))
+      expect(set.type).toBe('IFCMATERIALLAYERSET')
+      expect(str(set.args[1])).toBe(str(type.args[2]))
+      // The usage its walls carry is of the same set.
+      const wallUsage = usages(doc).get([...typed].find(([, name]) => name === str(type.args[2]))![0])![0]!
+      expect(ref(wallUsage.args[0])).toBe(set.id)
+    }
   })
 
   it('writes nothing when there is no wall', () => {
     const doc = exported(emptyPlan())
-    for (const type of ['IFCMATERIAL', 'IFCRELASSOCIATESMATERIAL', 'IFCMATERIALLAYERSETUSAGE']) {
+    for (const type of ['IFCMATERIAL', 'IFCRELASSOCIATESMATERIAL', 'IFCMATERIALLAYERSETUSAGE', 'IFCWALLTYPE']) {
       expect(ofType(doc, type), type).toHaveLength(0)
     }
   })
@@ -2177,24 +1989,34 @@ describe('slabs', () => {
     expect(SLAB_THICKNESS).toBe(0.25)
   })
 
-  it('writes a floor slab under every room, a base slab on the lowest storey and a roof on the top', () => {
+  // LVL-4: one slab per floor, from its outline, and a roof over every part with nothing above.
+  // Before, a slab per room (its inner faces) and a roof over every room of the top level.
+  it('writes one slab per floor, a base slab on the lowest level, and a roof over the part with nothing above', () => {
     const doc = exported(house())
     const kinds = Object.fromEntries(slabsOf(doc).map((e) => [str(e.args[2]), kind(e)]))
 
     expect(kinds).toEqual({
-      'Store floor slab': 'BASESLAB',
-      'Hall floor slab': 'FLOOR',
-      'Bedroom floor slab': 'FLOOR',
-      'Bedroom roof': 'ROOF'
+      'Cellar slab': 'BASESLAB',
+      'Ground slab': 'FLOOR',
+      'First slab': 'FLOOR',
+      'First roof slab': 'ROOF'
     })
+    // IfcRoof(..., ShapeType): a flat roof, made of its slab.
+    const roof = only(doc, 'IFCROOF')
+    expect(str(roof.args[2])).toBe('First roof')
+    expect((roof.args[8] as { v: string }).v).toBe('FLAT_ROOF')
+    const parts = ofType(doc, 'IFCRELAGGREGATES').filter((rel) => ref(rel.args[4]) === roof.id)
+    expect(parts.flatMap((rel) => refs(rel.args[5])).map((id) => str(entity(doc, id).args[2]))).toEqual(['First roof slab'])
   })
 
-  it('contains each slab in its own storey', () => {
+  it('contains each slab in its own storey, and the roof in the storey it covers', () => {
     const map = containment(exported(house()))
-    expect(map.get('Store floor slab')).toBe('Cellar')
-    expect(map.get('Hall floor slab')).toBe('Ground')
-    expect(map.get('Bedroom floor slab')).toBe('First')
-    expect(map.get('Bedroom roof')).toBe('First')
+    expect(map.get('Cellar slab')).toBe('Cellar')
+    expect(map.get('Ground slab')).toBe('Ground')
+    expect(map.get('First slab')).toBe('First')
+    expect(map.get('First roof')).toBe('First')
+    // The roof's slab is part of the roof, not contained apart.
+    expect(map.has('First roof slab')).toBe(false)
   })
 
   it('lays each floor slab 0.25 m under its storey floor level, and the roof 0.25 m on its walls', () => {
@@ -2203,10 +2025,10 @@ describe('slabs', () => {
     const { floors, roof } = floorElevations(plan)
 
     const expectations: Array<[string, number, number]> = [
-      ['Store floor slab', floors.get('cellar')!.floorLevel - 0.25, floors.get('cellar')!.floorLevel],
-      ['Hall floor slab', -0.25, 0],
-      ['Bedroom floor slab', 3.0, 3.25],
-      ['Bedroom roof', roof.bottom, roof.top]
+      ['Cellar slab', floors.get('cellar')!.floorLevel - 0.25, floors.get('cellar')!.floorLevel],
+      ['Ground slab', -0.25, 0],
+      ['First slab', 3.0, 3.25],
+      ['First roof slab', roof.bottom, roof.top]
     ]
     expect(roof.bottom).toBeCloseTo(6.05, 9)
 
@@ -2219,21 +2041,15 @@ describe('slabs', () => {
     }
   })
 
-  it('gives every slab the footprint of its room space (C3: the inner faces)', () => {
+  it('gives every slab the floor\'s outline, to the outside faces of its walls (VE-4: none under walls before)', () => {
     const doc = exported(house())
-    const pairs: Array<[string, string]> = [
-      ['Store floor slab', 'Store'],
-      ['Hall floor slab', 'Hall'],
-      ['Bedroom floor slab', 'Bedroom'],
-      ['Bedroom roof', 'Bedroom']
-    ]
-    const xy = (solid: WorldSolid): string[] =>
-      solid.base.map((p) => `${p[0].toFixed(6)},${p[1].toFixed(6)}`)
-
-    for (const [slab, room] of pairs) {
-      const slabSolid = bodyOf(doc, slabFor(doc, slab))
-      expect(xy(slabSolid), slab).toEqual(xy(bodyOf(doc, spaceByName(doc, room))))
-      expect(Math.abs(signedAreaXY(slabSolid.base)), slab).toBeCloseTo(12, 8)
+    for (const name of ['Cellar slab', 'Ground slab', 'First slab', 'First roof slab']) {
+      const solid = bodyOf(doc, slabFor(doc, name))
+      // 4.2 × 3.2 m between wall axes, 0.2 m walls: 4.4 × 3.4 m outside, where the room is 4.0 × 3.0.
+      expect(Math.abs(signedAreaXY(solid.base)), name).toBeCloseTo(4.4 * 3.4, 8)
+      const xs = solid.base.map((p) => p[0])
+      expect(Math.min(...xs), name).toBeCloseTo(-0.1, 9)
+      expect(Math.max(...xs), name).toBeCloseTo(4.3, 9)
     }
   })
 
@@ -2250,12 +2066,12 @@ describe('slabs', () => {
       rooms: [roomOf('kitchen', 'Kitchen', ['k1', 'k2', 'k3', 'k4'])]
     })
 
-    const base = bodyOf(doc, slabFor(doc, 'Kitchen floor slab'))
-    expect(kind(slabFor(doc, 'Kitchen floor slab'))).toBe('BASESLAB')
+    const base = bodyOf(doc, slabFor(doc, 'Ground floor slab'))
+    expect(kind(slabFor(doc, 'Ground floor slab'))).toBe('BASESLAB')
     expect(Math.min(...zs(base))).toBeCloseTo(-0.25, 9)
     expect(Math.max(...zs(base))).toBeCloseTo(0, 9)
 
-    const roof = bodyOf(doc, slabFor(doc, 'Kitchen roof'))
+    const roof = bodyOf(doc, slabFor(doc, 'Ground floor roof slab'))
     expect(Math.min(...zs(roof))).toBeCloseTo(2.7, 9)
     expect(Math.max(...zs(roof))).toBeCloseTo(2.95, 9)
   })
@@ -2277,23 +2093,23 @@ describe('slabs', () => {
     })
 
     expect(slabsOf(doc).map((e) => `${str(e.args[2])}:${kind(e)}`).sort()).toEqual([
-      'A floor slab:BASESLAB',
-      'A roof:ROOF',
-      'B floor slab:BASESLAB',
-      'B roof:ROOF'
+      'Ground roof slab:ROOF',
+      'Ground slab:BASESLAB',
+      'Wing roof slab:ROOF',
+      'Wing slab:BASESLAB'
     ])
   })
 
-  it('writes no slab for a room that does not close, or one on a broken wall', () => {
-    const walls = boxWalls('k', 0, 0, 4.2, 3.2)
+  it('writes a slab wherever the walls close a floor, whatever the rooms, and none where they close none', () => {
     const doc = exported({
-      ...planOf(undefined, [...walls, ...boxWalls('z', 10, 0, 4.2, 3.2), wallAt('nan', [20, 0], 0, 4, { height: Number.NaN })]),
-      rooms: [
-        roomOf('open', 'Open', ['k1', 'k2', 'k3']),
-        roomOf('broken', 'Broken', ['z1', 'z2', 'z3', 'nan'])
-      ]
+      ...planOf(undefined, [...boxWalls('k', 0, 0, 4.2, 3.2), wallAt('nan', [20, 0], 0, 4, { height: Number.NaN })]),
+      // A room that does not close is no slab of its own: the walls round it carry one.
+      rooms: [roomOf('open', 'Open', ['k1', 'k2', 'k3'])]
     })
-    expect(slabsOf(doc)).toHaveLength(0)
+    const slab = bodyOf(doc, slabFor(doc, 'Ground floor slab'))
+    expect(Math.abs(signedAreaXY(slab.base))).toBeCloseTo(4.4 * 3.4, 8)
+    // A lone wall closes nothing, and one that is not a number is left out.
+    expect(slabsOf(exported(planOf(undefined, [wallAt('lone', [0, 0], 0, 4)])))).toHaveLength(0)
   })
 
   it('gives every slab its own GlobalId, the same on every export', () => {
@@ -2348,6 +2164,8 @@ describe('door swing', () => {
     const out = new Map<string, string | null>(ofType(doc, 'IFCDOOR').map((d) => [str(d.args[2]), null]))
     for (const rel of ofType(doc, 'IFCRELDEFINESBYTYPE')) {
       const style = entity(doc, ref(rel.args[5]))
+      // HND-2 types the walls too.
+      if (style.type === 'IFCWALLTYPE') continue
       expect(style.type).toBe('IFCDOORSTYLE')
       for (const id of refs(rel.args[4])) out.set(str(entity(doc, id).args[2]), en(style.args[8]))
     }
@@ -2401,31 +2219,45 @@ describe('door swing', () => {
     const doc = exported(twoFloors)
     const styles = ofType(doc, 'IFCDOORSTYLE')
     expect(styles.map((s) => en(s.args[8])).sort()).toEqual(['SINGLE_SWING_LEFT', 'SINGLE_SWING_RIGHT'])
-    const related = ofType(doc, 'IFCRELDEFINESBYTYPE').map((r) => [en(entity(doc, ref(r.args[5])).args[8]), refs(r.args[4]).length])
+    const related = ofType(doc, 'IFCRELDEFINESBYTYPE')
+      .filter((r) => entity(doc, ref(r.args[5])).type === 'IFCDOORSTYLE')
+      .map((r) => [en(entity(doc, ref(r.args[5])).args[8]), refs(r.args[4]).length])
     expect(Object.fromEntries(related)).toEqual({ SINGLE_SWING_LEFT: 3, SINGLE_SWING_RIGHT: 1 })
   })
 
-  it('leaves an undecided door untyped and unturned', () => {
+  it('HND-2 types an undecided door by its size with no handing, and leaves it unturned', () => {
     const doc = exported(doorsPlan([{ hinge: 'start' }, { swing: 'left' }, {}, { hinge: 'end', swing: 'right' }]))
     const styles = stylesByDoor(doc)
-    expect([styles.get('d1'), styles.get('d2'), styles.get('d3')]).toEqual([null, null, null])
+    expect([styles.get('d1'), styles.get('d2'), styles.get('d3')]).toEqual(['NOTDEFINED', 'NOTDEFINED', 'NOTDEFINED'])
     for (const name of ['d1', 'd2', 'd3']) {
       const local = entity(doc, ref(doorNamed(doc, name).args[5]))
       expect(axisFrame(doc, ref(local.args[1])).o).toEqual([0, 0, 0])
     }
   })
 
-  it('writes no door style for a plan with no stated swing', () => {
-    expect(ofType(exported(samplePlan()), 'IFCDOORSTYLE')).toHaveLength(0)
-    expect(ofType(exported(samplePlan()), 'IFCRELDEFINESBYTYPE')).toHaveLength(0)
+  it('HND-2 writes one door style with no handing for a plan with no stated swing', () => {
+    const styles = ofType(exported(samplePlan()), 'IFCDOORSTYLE')
+    expect(styles.map((s) => [str(s.args[2]), str(s.args[7]), en(s.args[8])])).toEqual([['Door 0.9 x 2.1 m, swing not stated', 'door:0.9x2.1', 'NOTDEFINED']])
   })
 
-  it('names the styles in plain words and keeps their GUIDs stable', () => {
+  it('names the styles by size and handing in plain words, and keeps their GUIDs stable', () => {
     const plan = doorsPlan(table.map(([h]) => h))
     const a = ofType(exported(plan), 'IFCDOORSTYLE')
     const b = ofType(exported(plan), 'IFCDOORSTYLE')
-    expect(a.map((s) => str(s.args[2])).sort()).toEqual(['Single swing, left', 'Single swing, right'])
+    expect(a.map((s) => str(s.args[2]))).toEqual(['Door 0.9 x 2.1 m, single swing, left', 'Door 0.9 x 2.1 m, single swing, right'])
     expect(a.map((s) => str(s.args[0]))).toEqual(b.map((s) => str(s.args[0])))
+  })
+
+  it('HND-2 gives doors of another size a style of their own, and windows styles by size', () => {
+    const plan = doorsPlan([{ hinge: 'start', swing: 'left' }, { hinge: 'start', swing: 'left' }])
+    plan.openings[1] = { ...plan.openings[1]!, width: 0.8 }
+    plan.openings.push({ id: 'win1', wall: 'w1', type: 'window', offset: 3.2, width: 0.6, sill: 0.9, height: 1.2 })
+    const doc = exported(plan)
+    expect(ofType(doc, 'IFCDOORSTYLE').map((s) => str(s.args[2]))).toEqual(['Door 0.8 x 2.1 m, single swing, left', 'Door 0.9 x 2.1 m, single swing, left'])
+    const windows = ofType(doc, 'IFCWINDOWSTYLE')
+    expect(windows.map((s) => [str(s.args[2]), str(s.args[7])])).toEqual([['Window 0.6 x 1.2 m', 'window:0.6x1.2']])
+    const typed = ofType(doc, 'IFCRELDEFINESBYTYPE').filter((r) => ref(r.args[5]) === windows[0]!.id)
+    expect(typed.flatMap((r) => refs(r.args[4]).map((id) => str(entity(doc, id).args[2])))).toEqual(['win1'])
   })
 
   // IFC opens a door toward its own +y and puts a LEFT door's hinge at local x = 0. Checked in
@@ -2448,10 +2280,14 @@ describe('door swing', () => {
     expect(hingeWorld[0]).toBeCloseTo(along * dir[0], 9)
     expect(hingeWorld[1]).toBeCloseTo(along * dir[1], 9)
 
-    // Turning the door doesn't move it: its leaf still fills the opening's span along the wall.
-    const span = bodyOf(doc, door).base.map((p) => dot3(p, dir))
+    // Turning the door doesn't move it: its frame and leaf still fill the opening's span along the wall.
+    const span = bodiesOf(doc, door).flatMap((solid) => solid.base.map((p) => dot3(p, dir)))
     expect(Math.min(...span)).toBeCloseTo(0.5, 9)
     expect(Math.max(...span)).toBeCloseTo(1.4, 9)
+    // CNT-14: closed, the leaf hangs from the face of the wall it opens toward (SHT-2).
+    const leaf = bodiesOf(doc, door)[3]!.base.map((p) => dot3(p, normal))
+    const face = (swing === 'left' ? 1 : -1) * 0.1
+    expect(swing === 'left' ? Math.max(...leaf) : Math.min(...leaf)).toBeCloseTo(face, 9)
   })
 })
 
@@ -2527,14 +2363,18 @@ describe('a room with a hole (ARE-6)', () => {
     expect(Math.max(...xs)).toBeCloseTo(7.15, 8)
   })
 
+  // LVL-4: the slab is the floor's outline, so the courtyard's walls stand on it, and only the floor
+  // they enclose, 3.7 m square, is open: before, the slab was the gallery's own floor, open over the
+  // 4.3 m square of the hole's outer faces.
   it('leaves the courtyard open in the floor slab and the roof too', () => {
     const doc = exported(ring())
     const slabs = ofType(doc, 'IFCSLAB')
     expect(slabs).toHaveLength(2)
     for (const slab of slabs) {
-      const { type, inner } = profileRings(doc, slab)
+      const { type, outer, inner } = profileRings(doc, slab)
       expect(type).toBe('IFCARBITRARYPROFILEDEFWITHVOIDS')
-      expect(inner.map((curve) => ringArea2(curve))).toEqual([expect.closeTo(18.49, 8)])
+      expect(ringArea2(outer)).toBeCloseTo(10.3 * 10.3, 8)
+      expect(inner.map((curve) => ringArea2(curve))).toEqual([expect.closeTo(3.7 * 3.7, 8)])
     }
   })
 
@@ -2568,12 +2408,15 @@ describe('LVL-7 a step inside a floor in the IFC file', () => {
     expect(zRange(bodyOf(doc, spaceByName(doc, 'Hall')))[0]).toBeCloseTo(0, 9)
   })
 
+  // LVL-4: the storey's one slab lies under every room, so the genkan's own slab rises from it.
   it('puts the top of the genkan\'s slab at 0.18 m, solid down to the storey\'s slab', () => {
     const doc = parseDoc(toIfc(genkanFlat()))
     const [low, high] = zRange(bodyOf(doc, slabNamed(doc, 'Genkan floor slab')))
     expect(high).toBeCloseTo(0.18, 9)
-    expect(low).toBeCloseTo(-SLAB_THICKNESS, 9)
-    expect(zRange(bodyOf(doc, slabNamed(doc, 'Hall floor slab')))).toEqual([-SLAB_THICKNESS, 0])
+    expect(low).toBeCloseTo(0, 9)
+    const storey = ofType(doc, 'IFCSLAB').filter((e) => (e.args[8] as { v: string }).v === 'BASESLAB')
+    expect(storey).toHaveLength(1)
+    expect(zRange(bodyOf(doc, storey[0]!))).toEqual([-SLAB_THICKNESS, 0])
   })
 
   it('lowers a sunken genkan\'s space and slab 0.18 m', () => {

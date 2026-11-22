@@ -10,8 +10,10 @@
  * means no loop can forget to filter, so cross-floor bleed is impossible by
  * construction rather than by discipline.
  */
-import { DEFAULT_FLOOR_ID, type Floor } from '../types/floorplan'
-import type { FloorPlan } from './plan'
+import { DEFAULT_FLOOR_ID, type BuildingType, type Floor } from '../types/floorplan'
+import type { FloorPlan, Opening, Wall } from './plan'
+import { hasWallsThrough, storeyWalls, throughFloorParts, wallStandsOn } from './through'
+import { sliceColumns } from './columns'
 
 /** The floor every entity belongs to until it says otherwise. */
 export const DEFAULT_FLOOR: Floor = { id: DEFAULT_FLOOR_ID, name: 'Ground floor', level: 0 }
@@ -59,6 +61,19 @@ export function planFloors(plan: FloorPlan): Floor[] {
 
   const all = [...registry, ...derived]
   return all.length > 0 ? all : [DEFAULT_FLOOR]
+}
+
+/**
+ * CNT-5: what kind of building a floor is: its own `building`, else the plan's, else undefined
+ * (the plan does not say). The first floor entry with the id wins, as in `planFloors`.
+ */
+export function floorBuilding(plan: Pick<FloorPlan, 'building' | 'floors'>, floorId: string): BuildingType | undefined {
+  return (plan.floors ?? []).find((floor) => floor.id === floorId)?.building ?? plan.building
+}
+
+/** CNT-5: whether a floor's kind of building is its own, not the plan's. */
+export function floorStatesBuilding(plan: Pick<FloorPlan, 'floors'>, floorId: string): boolean {
+  return (plan.floors ?? []).find((floor) => floor.id === floorId)?.building !== undefined
 }
 
 /**
@@ -131,19 +146,60 @@ function collidingWallIds(plan: FloorPlan): ReadonlySet<string> {
  * the collision as `plan/duplicate-id` so it is not silent.
  */
 export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
+  // LVL-5 (C19): a wall through floors stands on each floor it rises through, as its stretch
+  // there, with the part of each of its openings that lies in it (`throughFloorParts`).
+  if (hasWallsThrough(plan)) {
+    const parts = throughFloorParts(plan, floorId)
+    return cutFloor(plan, floorId, parts.walls, parts.openings)
+  }
   const walls = plan.walls.filter((wall) => floorOf(wall) === floorId)
+  return cutFloor(plan, floorId, walls, plan.openings)
+}
+
+/**
+ * LVL-5: one floor's slice as the storeys are stacked from it (`floorElevations`): a wall through
+ * floors stands only on the floor it rises through, as a wall of that floor, without its openings
+ * (`storeyWalls`). A plan with no such wall slices as `planForFloor` does.
+ */
+export function storeySlice(plan: FloorPlan, floorId: string): FloorPlan {
+  if (!hasWallsThrough(plan)) return planForFloor(plan, floorId)
+  const walls = storeyWalls(plan, floorId)
+  const plain = new Set(walls.filter((wall) => wall.through === undefined).map((wall) => wall.id))
+  const sharedIds = new Set(plan.walls.filter((wall) => wall.through !== undefined).map((wall) => wall.id))
+  return cutFloor(plan, floorId, walls, plan.openings.filter((o) => plain.has(o.wall) && !sharedIds.has(o.wall)))
+}
+
+/**
+ * The walls standing on a floor, as its slice holds them: `planForFloor(plan, floor).walls`, read
+ * without cutting the rest when no wall rises through floors.
+ */
+export function wallsOnFloor(plan: FloorPlan, floorId: string): Wall[] {
+  if (!hasWallsThrough(plan)) return plan.walls.filter((wall) => floorOf(wall) === floorId)
+  return throughFloorParts(plan, floorId).walls
+}
+
+/** Whether a wall stands on a floor: its own, or (LVL-5) one it rises through. */
+export { wallStandsOn }
+
+function cutFloor(plan: FloorPlan, floorId: string, walls: readonly Wall[], candidates: readonly Opening[]): FloorPlan {
   const wallIds = new Set(walls.map((wall) => wall.id))
   const collided = collidingWallIds(plan)
 
+  // LVL-8: a slice holds plain openings only. A pattern names a wall on one floor and repeats on
+  // others, so it is expanded on the whole plan (`expandPatterns`), never on a slice.
+  const { patterns: _patterns, ...whole } = plan
+  void _patterns
   const slice: FloorPlan = {
-    ...plan,
-    walls,
+    ...whole,
+    walls: [...walls],
     rooms: plan.rooms.filter((room) => floorOf(room) === floorId),
-    openings: plan.openings.filter(
+    openings: candidates.filter(
       (opening) => wallIds.has(opening.wall) && !collided.has(opening.wall)
     ),
     // CNT-12: an item by its own floor. A plan with no items keeps no key.
     ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) }),
+    // CNT-16: a column on each floor it stands on, as a column of that floor (`sliceColumns`).
+    ...(plan.columns !== undefined && { columns: sliceColumns(plan, floorId) }),
     // SHT-7: a sketch item by its own floor; a note by its room's, or its own when at a point.
     ...(plan.sketch !== undefined && { sketch: plan.sketch.filter((item) => floorOf(item) === floorId) }),
     ...(plan.annotations !== undefined && {
@@ -152,12 +208,25 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
       )
     })
   }
-  slices.add(slice)
+  // A slice of a slice still leads back to the plan the first was cut from.
+  slices.set(slice, { whole: slices.get(plan)?.whole ?? plan, floor: floorId })
   return slice
 }
 
-/** Every plan `planForFloor` returned, held weakly: nothing about the slice itself changes. */
-const slices = new WeakSet<FloorPlan>()
+/**
+ * Every plan `planForFloor` returned, with the plan it was cut from and its floor, held weakly:
+ * nothing about the slice itself changes.
+ */
+const slices = new WeakMap<FloorPlan, { readonly whole: FloorPlan; readonly floor: string }>()
+
+/**
+ * The whole plan a floor's slice was cut from, and the slice's floor; a plan that is no slice is
+ * its own whole, with no floor. A stair (LVL-3) joins two floors, so a slice reads it from here.
+ */
+export function wholePlan(plan: FloorPlan): { readonly whole: FloorPlan; readonly floor: string | null } {
+  const found = slices.get(plan)
+  return found === undefined ? { whole: plan, floor: null } : found
+}
 
 /**
  * Whether `plan` is one floor's slice (`planForFloor`). A slice keeps the whole floor list but
@@ -171,7 +240,9 @@ export function isFloorSlice(plan: FloorPlan): boolean {
 /** Whether the floor has anything to draw. Cheaper than slicing. */
 export function floorHasGeometry(plan: FloorPlan, floorId: string): boolean {
   return (
-    plan.walls.some((wall) => floorOf(wall) === floorId) ||
-    plan.rooms.some((room) => floorOf(room) === floorId)
+    plan.walls.some((wall) => wallStandsOn(plan, wall, floorId)) ||
+    plan.rooms.some((room) => floorOf(room) === floorId) ||
+    // BRF-4 (C17): a floor's stated outline is something drawn on it, before any wall.
+    (plan.floors?.some((floor) => floor.id === floorId && floor.outline !== undefined) ?? false)
   )
 }

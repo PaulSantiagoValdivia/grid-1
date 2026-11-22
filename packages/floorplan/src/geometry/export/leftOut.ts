@@ -13,12 +13,16 @@
  * the plan: each is written as a JSON string, and each format escapes that string its own way.
  */
 import type { EntityKind } from '../validate'
+import { english, num, said } from '../../messages/say'
 
-/** The kinds of part an export can leave out: everything but the plan itself. */
-export type LeftOutKind = Exclude<EntityKind, 'plan'>
+/**
+ * The kinds of part an export can leave out: everything but the plan itself, and a flat (CNT-4),
+ * whose lines leave out nothing but the ids they name.
+ */
+export type LeftOutKind = Exclude<EntityKind, 'plan' | 'flat'>
 
 /** In the order a note lists them. */
-export const LEFT_OUT_KINDS: readonly LeftOutKind[] = ['wall', 'room', 'opening', 'item', 'floor']
+export const LEFT_OUT_KINDS: readonly LeftOutKind[] = ['wall', 'room', 'opening', 'item', 'stair', 'floor', 'pattern']
 
 /** One part of the plan an export left out. */
 export interface LeftOutPart {
@@ -38,7 +42,11 @@ const PLURAL: Readonly<Record<LeftOutKind, readonly [string, string]>> = {
   room: ['room', 'rooms'],
   opening: ['opening', 'openings'],
   item: ['fixture', 'fixtures'],
-  floor: ['floor', 'floors']
+  // LVL-3: a stair that cannot be laid out.
+  stair: ['stair', 'stairs'],
+  floor: ['floor', 'floors'],
+  // LVL-8: an opening pattern the reader could not read.
+  pattern: ['opening pattern', 'opening patterns']
 }
 
 /** `1 wall`, `3 openings`. */
@@ -91,4 +99,42 @@ export function kindLabel(kind: LeftOutKind, count: number): string {
 /** One line per kind: `Openings left out (42): "d1", "d2" 4 times`. */
 export function leftOutLines(parts: readonly LeftOutPart[]): string[] {
   return leftOutByKind(parts).map(({ kind, parts: group }) => `${kindLabel(kind, group.length)}${partNames(group).join(', ')}`)
+}
+
+/**
+ * CNT-18: a part of the plan a file writes with its curve as straight pieces: a curved wall, or
+ * a room whose outline runs along one. It is in the file, so it is not left out; the note names
+ * it beside what is.
+ */
+export interface ApproximatedPart {
+  readonly kind: 'wall' | 'room'
+  readonly id: string
+  /** The floor it is on. */
+  readonly floor: string | null
+}
+
+/** What a file writes as straight pieces, and how far off its curve they are at most. */
+export interface Approximations {
+  readonly parts: readonly ApproximatedPart[]
+  /** Metres: the most any piece stands off its curve. */
+  readonly off: number
+}
+
+export const NO_APPROXIMATIONS: Approximations = { parts: [], off: 0 }
+
+/**
+ * The note's lines for the curves a file writes as straight pieces; none when it writes none.
+ * MSG-11: a file's own words are the English of their keys (`drawing.approximated.*`).
+ */
+export function approximationLines(approximations: Approximations): string[] {
+  const { parts, off } = approximations
+  if (parts.length === 0) return []
+  const lines = [english(said(parts.length === 1 ? 'drawing.approximated.one' : 'drawing.approximated.many', { n: parts.length, off: num(off.toFixed(4)) }))]
+  for (const kind of ['wall', 'room'] as const) {
+    const group = parts.filter((part) => part.kind === kind)
+    if (group.length === 0) continue
+    const names = partNames(group.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))
+    lines.push(english(said('drawing.approximated.group', { what: said(`drawing.approximated.${kind}`), n: group.length, names: names.join(', ') })))
+  }
+  return lines
 }

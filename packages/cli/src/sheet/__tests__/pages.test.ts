@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { floorOf, planFloors, validatePlan } from '@ongrid/floorplan/geometry'
 import { areaText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import { said } from '@ongrid/floorplan/messages'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkOnFloor, checkPlan, NOTHING_FOUND } from '../../command/check'
 import type { LoadedPlan } from '../../command/plan'
@@ -157,9 +158,9 @@ describe('one scale for every floor (VEW-7)', () => {
 describe('the check layout (VEW-7)', () => {
   const sheet = sheetPages(house, words, 'check', { name: 'two-floor-house', date })
 
-  it('is a summary, then one page per floor, then the room schedule and the door and window schedule (ARE-12)', () => {
-    expect(sheet.pages.map((p) => p.kind)).toEqual(['summary', 'floor', 'floor', 'summary', 'summary'])
-    expect(sheet.pages.slice(3).map((p) => p.title)).toEqual(['Room schedule', 'Door and window schedule'])
+  it('is a summary, then one page per floor, then the room schedule, the door and window schedule (ARE-12) and their types (ARE-15)', () => {
+    expect(sheet.pages.map((p) => p.kind)).toEqual(['summary', 'floor', 'floor', 'summary', 'summary', 'summary'])
+    expect(sheet.pages.slice(3).map((p) => p.title)).toEqual(['Room schedule', 'Door and window schedule', 'Door and window types'])
   })
 
   it('takes nothing from sheet.json', () => {
@@ -191,7 +192,7 @@ describe('the check layout (VEW-7)', () => {
   })
 
   it('lists a drawing problem on no floor once, on the summary', () => {
-    const issue = { code: 'test', entity: 'plan' as const, id: 'p', message: 'A plan-wide problem.', severity: 'warning' as const }
+    const issue = { code: 'test', entity: 'plan' as const, id: 'p', message: 'A plan-wide problem.', said: said('issue.part.error', { error: 'A plan-wide problem.' }), severity: 'warning' as const }
     const loaded: LoadedPlan = { ...house, issues: [...house.issues, issue] }
     const made = sheetPages(loaded, null, 'check', { name: 'x', date })
     const line = 'Worth a look, plan "p": A plan-wide problem.'
@@ -567,6 +568,28 @@ describe('floors with the same name (VEW-7)', () => {
   it.each(['client', 'check'] as const)('says which floor a floor page is, continued or not (%s)', (layout) => {
     const sheet = sheetPages(sameNames(false), null, layout, { name: 'x', date })
     // The check set ends with its two schedules (ARE-12), which belong to no floor.
-    expect(sheet.pages.map((p) => p.floor)).toEqual(layout === 'check' ? [null, 'ground', 'first', null, null] : [null, 'ground', 'first'])
+    expect(sheet.pages.map((p) => p.floor)).toEqual(layout === 'check' ? [null, 'ground', 'first', null, null, null] : [null, 'ground', 'first'])
+  })
+})
+
+describe("the person's units on the sheet (WRT-7)", () => {
+  const inFeet: LoadedPlan = { ...house, plan: { ...house.plan, display: { length: 'ft-in' } } }
+  const areas = planAreas(surveyPlan(house.plan))
+  const sqFt = (m2: number): number => m2 / (0.3048 * 0.3048)
+
+  it('writes the areas in square feet and the heights in feet and inches when the plan reads in feet', () => {
+    const sheet = sheetPages(inFeet, words, 'client', { name: 'two-floor-house', date })
+    expect(sheet.pages[0]!.figures.find((f) => f.label === 'gross internal area')!.value).toBe(`${areaText(sqFt(areas.grossInternal!), 0)} sq ft`)
+    expect(sheet.pages[0]!.figures.find((f) => f.label === 'floor to floor')!.value).toMatch(/^\d+'-\d+"$/)
+    const floor = sheet.pages[1]!
+    expect(floor.table!.heading).toBe('Rooms / sq ft')
+    const shown = sumText(areas.floors[0]!.rooms.filter((r) => r.zoneOf === undefined && r.countedWith === undefined).map((r) => sqFt(r.net ?? 0)), sqFt(areas.floors[0]!.net), 0)
+    expect(floor.table!.total!.area).toBe(shown.total)
+  })
+
+  it('keeps metres for a plan with no display, as before', () => {
+    const sheet = sheetPages(house, words, 'client', { name: 'two-floor-house', date })
+    expect(sheet.pages[1]!.table!.heading).toBe('Rooms / m²')
+    expect(sheet.pages[0]!.figures.find((f) => f.label === 'gross internal area')!.value).toMatch(/ m²$/)
   })
 })

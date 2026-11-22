@@ -26,9 +26,14 @@
 
 import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
+import type { Said } from '../messages/say'
+import { english, said } from '../messages/say'
+import { groupedNum } from './issueWords'
 import { floorOf } from './floors'
 import type { Room, Wall } from './plan'
 import type { Vec2 } from './vec2'
+import { straightPieces } from './wall'
+import { curveFault } from './arc'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Box, WallRun } from './polygons'
 import { boxOfRings, cornerFills, intersectionArea, multiArea, overlaps, polygonArea, strip, union } from './polygons'
@@ -52,8 +57,10 @@ export interface InnerRoom {
   readonly nearest: { readonly room: string; readonly outside: number } | null
   /** How much floor it takes off its host, in square metres: 0 with no host. */
   readonly taken: number
-  /** Set when the host could not be worked out: why. */
+  /** Set when the host could not be worked out: why, in English, made from `reasonSaid`. */
   readonly reason?: string
+  /** MSG-11: the reason by its key and values. */
+  readonly reasonSaid?: Said
 }
 
 /**
@@ -112,12 +119,16 @@ function footprint(inner: Traced, wallsById: ReadonlyMap<string, Wall>, snap: (v
   for (const id of new Set(inner.room.boundary)) {
     const wall = wallsById.get(id)
     if (!wall || wall.virtual === true || !(wall.thickness > 0) || !Number.isFinite(wall.thickness)) continue
-    const start = { x: wall.start[0], y: wall.start[1] }
-    const dx = wall.end[0] - start.x
-    const dy = wall.end[1] - start.y
-    const length = Math.hypot(dx, dy)
-    if (!(length > 0) || !Number.isFinite(length)) continue
-    runs.push({ wall, start, dir: { x: dx / length, y: dy / length }, length, half: wall.thickness / 2 })
+    // A curved wall is its straight pieces (CNT-18).
+    if (wall.arc !== undefined && curveFault(wall) !== null) continue
+    for (const piece of straightPieces(wall)) {
+      const start = { x: piece.start[0], y: piece.start[1] }
+      const dx = piece.end[0] - start.x
+      const dy = piece.end[1] - start.y
+      const length = Math.hypot(dx, dy)
+      if (!(length > 0) || !Number.isFinite(length)) continue
+      runs.push({ wall: piece, start, dir: { x: dx / length, y: dy / length }, length, half: wall.thickness / 2 })
+    }
   }
   const strips = runs.map((r) => strip(r.start, r.dir, r.length, r.half, 0, snap))
   const joined = union([inner.polygon, ...strips, ...cornerFills(runs, FILL_INSET, snap)])
@@ -139,14 +150,15 @@ function nest(traced: readonly Traced[], marked: readonly Traced[], wallsById: R
   for (const m of marked) {
     const r = byOrder.get(m.order)!
     if (cuts >= MAX_HOST_CUTS) {
-      const reason = `the plan has more than ${MAX_HOST_CUTS.toLocaleString('en')} pairs of outlines to compare, and the rest were not compared`
-      inner.set(r.room.id, { room: r.room.id, host: null, nearest: null, taken: 0, reason })
+      const reasonSaid = said('issue.part.nesting.tooMany', { most: groupedNum(MAX_HOST_CUTS.toLocaleString('en')) })
+      inner.set(r.room.id, { room: r.room.id, host: null, nearest: null, taken: 0, reason: english(reasonSaid), reasonSaid })
       continue
     }
     let host: Traced | null = null
     let nearest: { room: Traced; shared: number } | null = null
     for (const c of rooms) {
-      if (c.order === r.order || c.floor !== r.floor || !overlaps(c.box, r.box)) continue
+      // A zone (CNT-8) is part of its room, never a room something sits in.
+      if (c.order === r.order || c.floor !== r.floor || c.room.partOf !== undefined || !overlaps(c.box, r.box)) continue
       cuts++
       const shared = intersectionArea(r.polygon, c.polygon)
       if (shared <= 0) continue
@@ -202,7 +214,8 @@ export function nestRooms(rooms: readonly TracedRoom[], wallsById: ReadonlyMap<s
 
 /** The rooms marked `inside`, each with the room it sits in, and what each of those keeps. */
 function nestMarked(traced: readonly Traced[], wallsById: ReadonlyMap<string, Wall>): RoomNesting {
-  const marked = traced.filter((t) => t.room.inside === true)
+  // A zone (CNT-8) lies in its room on purpose and takes no floor off it.
+  const marked = traced.filter((t) => t.room.inside === true && t.room.partOf === undefined)
   if (marked.length === 0) return NO_NESTING
 
   let failure: unknown = null
@@ -213,9 +226,11 @@ function nestMarked(traced: readonly Traced[], wallsById: ReadonlyMap<string, Wa
       failure = error
     }
   }
-  const reason = `the outlines could not be compared (${failure instanceof Error ? failure.message : String(failure)})`
+  // The polygon library's own error, in its words.
+  const reasonSaid = said('issue.part.nesting.failed', { error: failure instanceof Error ? failure.message : String(failure) })
+  const reason = english(reasonSaid)
   return {
-    inner: new Map(marked.map((t) => [t.room.id, { room: t.room.id, host: null, nearest: null, taken: 0, reason }])),
+    inner: new Map(marked.map((t) => [t.room.id, { room: t.room.id, host: null, nearest: null, taken: 0, reason, reasonSaid }])),
     hosts: new Map()
   }
 }
