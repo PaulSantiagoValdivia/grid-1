@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FACT_FIELDS, PHASE_FIELDS, FloorPlanFieldsSchema, FloorSchema, OpeningSchema, RoomSchema, WallSchema } from '@ongrid/floorplan/types/floorplan'
+import { FACT_FIELDS, PHASE_FIELDS, FloorPlanFieldsSchema, FloorSchema, OpeningFieldsSchema, RoomSchema, WallSchema } from '@ongrid/floorplan/types/floorplan'
 import { FACT_COVERAGE, OUTLINE_COVERAGE, PHASE_COVERAGE, SHEET_COVERAGE } from '../coverage'
 
 describe('the sheet covers every part of a plan (VEW-7)', () => {
@@ -15,7 +15,8 @@ describe('the sheet covers every part of a plan (VEW-7)', () => {
     expect(Object.keys(FACT_COVERAGE).sort()).toEqual([...FACT_FIELDS].sort())
     const shapes: Record<string, Record<string, unknown>> = {
       walls: (WallSchema as unknown as { _def: { schema: { _def: { schema: { shape: Record<string, unknown> } } } } })._def.schema._def.schema.shape,
-      openings: OpeningSchema.shape,
+      // CNT-15: an opening's fields are under the reading that records what its type filled in.
+      openings: OpeningFieldsSchema.shape,
       rooms: RoomSchema.shape,
       floors: FloorSchema.shape,
     }
@@ -31,7 +32,8 @@ describe('the sheet covers every part of a plan (VEW-7)', () => {
     expect(Object.keys(PHASE_COVERAGE).sort()).toEqual([...PHASE_FIELDS].sort())
     const shapes: Record<string, Record<string, unknown>> = {
       walls: (WallSchema as unknown as { _def: { schema: { _def: { schema: { shape: Record<string, unknown> } } } } })._def.schema._def.schema.shape,
-      openings: OpeningSchema.shape,
+      // CNT-15: an opening's fields are under the reading that records what its type filled in.
+      openings: OpeningFieldsSchema.shape,
       rooms: RoomSchema.shape,
     }
     for (const field of PHASE_FIELDS) {

@@ -10,9 +10,9 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { cameraRecord, compassBearing, doorKindOf, dot, drawingBearing, handingFromRooms, kindFits, kindWords, planOrientation, statedKind, storedView, sub, swingNeeds, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type HandSide, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { planHasTypes, cameraRecord, compassBearing, doorKindOf, dot, drawingBearing, handingFromRooms, kindFits, kindWords, planOrientation, statedKind, storedView, sub, swingNeeds, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type HandSide, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { english, name, said as sentence } from '@ongrid/floorplan/messages'
-import { DOOR_KINDS, FloorPlanSchema, WINDOW_KINDS, wallWithEnds, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
+import { DOOR_KINDS, FloorPlanSchema, WINDOW_KINDS, statedOpening, statedWall, wallWithEnds, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { EditRefused } from './refused'
@@ -24,7 +24,18 @@ type Pair = [number, number]
 type RawRecord = Record<string, unknown>
 
 /** A change to one opening. `null` takes a key out. */
-export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall' | 'phase']: Opening[K] }> & { anchor?: OpeningAnchor | null; kind?: OpeningKind | null }
+export type OpeningChange = Partial<{ [K in 'offset' | 'type' | 'hinge' | 'swing' | 'wall' | 'phase']: Opening[K] }> & {
+  /** CNT-15: null takes the opening's own size out, so its door or window type's is read. */
+  width?: number | null
+  height?: number | null
+  sill?: number | null
+  anchor?: OpeningAnchor | null
+  kind?: OpeningKind | null
+  opens?: Opening['opens'] | null
+  /** CNT-15: the door or window type it takes; null takes it out. */
+  doorType?: string | null
+  windowType?: string | null
+}
 
 /** A change to one room. `null` takes a key out. `partOf` makes it a zone of that room (CNT-8). */
 export type RoomChange = {
@@ -35,6 +46,8 @@ export type RoomChange = {
   properties?: Readonly<Record<string, string | number | boolean>>
   /** CNT-10: a room taken out of a plan with phases stays, to be demolished. */
   phase?: Room['phase']
+  /** CNT-15: its finishes, by surface; null takes them all out. */
+  finishes?: Readonly<Record<string, string>> | null
 }
 
 /** What a change does, by id. */
@@ -44,7 +57,7 @@ export interface Patch {
    * HND-11: `mirrored` turns a wall placed by its face over to its other face, as a mirror does.
    * CNT-18: `arc`, a curved wall's new centre and sweep.
    */
-  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind']; mirrored?: boolean; arc?: { centre: Pair; sweep: number }; phase?: Wall['phase'] }>
+  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind'] | null; mirrored?: boolean; arc?: { centre: Pair; sweep: number }; phase?: Wall['phase']; wallType?: string | null; thickness?: null; height?: null }>
   readonly openings: ReadonlyMap<string, OpeningChange>
   readonly removeOpenings: ReadonlySet<string>
   readonly rooms: ReadonlyMap<string, RoomChange>
@@ -125,8 +138,15 @@ export function readingAfter(plan: FloorPlan, patch: Patch): FloorPlan {
     return parsed.success ? (parsed.data.walls[0] as unknown as RawRecord) : wall
   }
   const reading = patch.addWalls === undefined ? patch : { ...patch, addWalls: patch.addWalls.map(read) }
-  return applyPatch(plan as unknown as RawRecord, reading) as unknown as FloorPlan
+  const applied = applyPatch(plan as unknown as RawRecord, reading) as unknown as FloorPlan
+  // CNT-15 (C24): with named types, a part takes what its type gives as the file will be read, so
+  // the plan is read again from what each part states: a changed type reaches every part of it.
+  if (!planHasTypes(plan) && !(isRecordLike(patch.plan) && patch.plan['types'] !== undefined)) return applied
+  const again = FloorPlanSchema.safeParse({ ...applied, walls: applied.walls.map(statedWall), openings: applied.openings.map(statedOpening) })
+  return again.success ? again.data : applied
 }
+
+const isRecordLike = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** Applies a patch to a plan's JSON, the file's own or Grid's reading of it, without changing anything else. */
 export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {

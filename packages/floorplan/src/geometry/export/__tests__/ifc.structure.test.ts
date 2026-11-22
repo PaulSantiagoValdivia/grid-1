@@ -549,7 +549,8 @@ describe('HND-2 the bench\'s two-bed flat, room by room (lab EX-2: name only, 0 
     expect(str(type!.args[2])).toBe('Exterior wall 0.3 m')
     const [layers] = carried.get(type!.id)!.materials
     const material = entity(doc, ref(entity(doc, refs(layers!.args[0])[0]!).args[0]))
-    expect(str(material.args[0])).toBe('Exterior wall')
+    // CNT-15 (lab AU3-4): the plan states no material, and the IFC says so.
+    expect(str(material.args[0])).toBe('Not stated')
   })
 
   it('types the entrance door by its size and handing, with its quantities', () => {

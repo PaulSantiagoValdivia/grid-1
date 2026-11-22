@@ -505,6 +505,12 @@ export const CODES = {
     variant: { says: (s) => (s.also[0] === undefined ? 'one' : '') }
   },
   'flat/zone-without-room': {},
+  // --- Named types (CNT-15) -------------------------------------------------------------------
+  // The types list's own faults. Each is worth a look: the part is read as taking no type, and
+  // nothing else changes. The found is the check's own sentence, with the ids.
+  'type/unknown': {},
+  'type/duplicate-id': {},
+  'type/wrong-part': {},
 
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},

@@ -54,6 +54,7 @@ import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './ro
 import { roomZones } from './zones'
 import { plotBoundary, ringFault } from './plot'
 import { flatIssues } from './flats'
+import { typeIssues } from './partTypes'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
@@ -1389,6 +1390,8 @@ export function validatePlan(
   issues.push(...itemUseIssues(plan, index, broken))
   // CNT-4: the flats list, on the whole plan: a slice holds one floor of a duplex.
   issues.push(...flatIssues(plan, index))
+  // CNT-15 (C24): the named types list, and the parts that name a type, on the whole plan.
+  issues.push(...typeIssues(plan))
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
   if (options.spaces !== false) validateStairs(plan, broken, issues)

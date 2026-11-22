@@ -72,6 +72,10 @@ export const SHEET_COVERAGE = {
   // type as a table, from the same rows as grid_schedule of=flats. A flat type is in that table.
   flats: { shown: 'drawn and tabled' },
   flatTypes: { shown: 'tabled' },
+  // CNT-15: the plan's named door and window types are the check set's "Door and window types"
+  // page, from the same rows as grid_schedule of=doors and of=windows; a wall type and a finish
+  // are in grid_takeoff and grid_schedule of=finishes, not on the sheet yet.
+  types: { shown: 'tabled' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**

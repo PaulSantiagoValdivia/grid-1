@@ -15,7 +15,7 @@
  */
 import { expandPatterns, planHasPhases, validatePlan, type FloorPlan, type TapedRow } from '@ongrid/floorplan/geometry'
 import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
-import { FloorPlanSchema, safeParseFloorPlan, statedWall } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, safeParseFloorPlan, statedOpening, statedWall } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
 import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
 import { TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
@@ -197,7 +197,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   // WRT-6: a height the text did not state stays out of the file; the reading fills it again.
   next['walls'] = plan.walls.map(statedWall)
   next['rooms'] = plan.rooms
-  next['openings'] = plan.openings
+  // CNT-15: a value an opening's type gives stays out of the file, as a wall's does.
+  next['openings'] = plan.openings.map(statedOpening)
   // CNT-4: the flats a text places (a unit that is a flat type) replace the file's; a text that
   // places none keeps the file's, as it keeps its opening patterns.
   if (plan.flats !== undefined) {

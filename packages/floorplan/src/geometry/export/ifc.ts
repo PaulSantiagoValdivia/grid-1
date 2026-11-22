@@ -31,7 +31,9 @@
  */
 
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
-import type { OpeningKind, WindowKind } from '../../types/floorplan'
+import type { DoorType, OpeningKind, WallType, WindowKind, WindowType } from '../../types/floorplan'
+import { en as englishWords } from '../../messages/en'
+import { openingTypeOf, typeMaterial, wallTypeOf } from '../partTypes'
 import { doorKindOf, statedKind } from '../openingKinds'
 import { openingParts } from '../openingParts'
 import { planFloors, planForFloor } from '../floors'
@@ -310,10 +312,12 @@ interface Shared {
   readonly east2: number
 }
 
-/** One wall type: the walls of one stated kind and one thickness, with their material. */
+/** One wall type: the walls of one stated kind and one thickness, with their material; or (CNT-15) the walls of one named type and thickness. */
 interface WallTypeEntry {
   readonly kind: WallKind
   readonly thickness: number
+  /** CNT-15: the plan's named type, or null for a type Grid makes from the kind and thickness. */
+  readonly named: WallType | null
   /** The layer set the type carries, and the usage its walls carry. */
   readonly set: number
   readonly usage: number
@@ -322,8 +326,8 @@ interface WallTypeEntry {
 
 /** Wall materials and types, created on first use. */
 interface WallMaterials {
-  /** One material per stated kind. */
-  readonly byKind: Map<WallKind, number>
+  /** CNT-15: one material per name, the type's own or "Not stated" (lab AU3-4). */
+  readonly byName: Map<string, number>
   /** One type per kind and thickness. Insertion order is first use, so the output stays deterministic. */
   readonly byType: Map<string, WallTypeEntry>
 }
@@ -337,10 +341,14 @@ interface OpeningStyleEntry {
   readonly width: number
   readonly height: number
   readonly fillers: number[]
+  /** CNT-15: the plan's named door or window type, or null. */
+  readonly named: DoorType | WindowType | null
 }
 
 interface Context {
   readonly w: StepWriter
+  /** CNT-15: the plan's named types, which the walls, doors and windows name. */
+  readonly plan: Pick<FloorPlan, 'types'>
   readonly owner: number
   readonly shared: Shared
   readonly materials: WallMaterials
@@ -1010,12 +1018,28 @@ const WALL_KIND_WORDS: Readonly<Record<WallKind, string>> = {
   partition: 'Partition'
 }
 
-/** The plan holds no material or construction (CNT-15 will): the type says so. */
+/** The plan holds no type, material or construction for these walls: the type says so. */
 const WALL_TYPE_NOTE =
-  'The plan holds no material or build-up: the type is the walls of one stated kind and one thickness, with one layer named after the kind.'
+  'The plan holds no type, material or build-up for these walls: the type is the walls of one stated kind and one thickness, with one layer whose material is not stated.'
+
+/** CNT-15: a type the plan names: its material, as one layer; the plan holds no build-up. */
+const NAMED_WALL_TYPE_NOTE = "The plan's own wall type: one layer of its material, as thick as the wall. The plan holds no build-up."
+
+/** CNT-15 (lab AU3-4): what a material the plan does not state is called. */
+const NOT_STATED = englishWords['type.material.notStated']
 
 /** A wall's stated kind; a file read without the schema may leave it out, and the schema's default is interior. */
 const kindOf = (wall: Wall): WallKind => (wall.kind in WALL_KIND_WORDS ? wall.kind : 'interior')
+
+/** CNT-15: the one material of a name, written on first use. */
+function materialNamed(c: Context, label: string): number {
+  let material = c.materials.byName.get(label)
+  if (material === undefined) {
+    material = c.w.add('IFCMATERIAL', str(label))
+    c.materials.byName.set(label, material)
+  }
+  return material
+}
 
 /**
  * IFC2x3 requires every IfcWallStandardCase to be associated with exactly one
@@ -1027,24 +1051,23 @@ const kindOf = (wall: Wall): WallKind => (wall.kind in WALL_KIND_WORDS ? wall.ki
  * HND-2: walls are typed by the kind the plan states and their thickness, the way
  * the estimate groups them (`wall:exterior:0.35`, ARE-13). Each type is an
  * IfcWallType carrying its IfcMaterialLayerSet; its walls carry that set's usage.
- * One material per kind, named after it. All are created on first use and the
- * relations are written once at the end, so nothing is written for a plan with
- * no walls.
+ * CNT-15 (C24): a wall that takes one of the plan's named types is typed by it (and
+ * its thickness, which the wall may state for itself), named after it, and its layer
+ * is the type's material; every other layer's material is "Not stated" (lab AU3-4),
+ * never a word Grid made up. All are created on first use and the relations are
+ * written once at the end, so nothing is written for a plan with no walls.
  */
 function typeWall(c: Context, wall: Wall, element: number): void {
   const { w, materials } = c
   const kind = kindOf(wall)
-  const key = `wall:${kind}:${sizeText(wall.thickness)}`
+  const named = wallTypeOf(c.plan, wall)
+  const key = named === null ? `wall:${kind}:${sizeText(wall.thickness)}` : `wall-type:${named.id}:${sizeText(wall.thickness)}`
 
   let entry = materials.byType.get(key)
   if (!entry) {
-    let material = materials.byKind.get(kind)
-    if (material === undefined) {
-      material = w.add('IFCMATERIAL', str(WALL_KIND_WORDS[kind]))
-      materials.byKind.set(kind, material)
-    }
+    const material = materialNamed(c, typeMaterial(named) ?? NOT_STATED)
     const layer = w.add('IFCMATERIALLAYER', ref(material), real(wall.thickness), NULL)
-    const set = w.add('IFCMATERIALLAYERSET', refs([layer]), str(wallTypeName(kind, wall.thickness)))
+    const set = w.add('IFCMATERIALLAYERSET', refs([layer]), str(wallTypeName(kind, wall.thickness, named)))
     const usage = w.add(
       'IFCMATERIALLAYERSETUSAGE',
       ref(set),
@@ -1052,33 +1075,36 @@ function typeWall(c: Context, wall: Wall, element: number): void {
       en('POSITIVE'),
       real(-wall.thickness / 2)
     )
-    entry = { kind, thickness: wall.thickness, set, usage, walls: [] }
+    entry = { kind, thickness: wall.thickness, named, set, usage, walls: [] }
     materials.byType.set(key, entry)
   }
   entry.walls.push(element)
 }
 
-const wallTypeName = (kind: WallKind, thickness: number): string => `${WALL_KIND_WORDS[kind]} ${sizeText(thickness)} m`
+/** A type's name: Grid's from the kind and thickness, or the plan's own, with the thickness when a wall states another. */
+const wallTypeName = (kind: WallKind, thickness: number, named: WallType | null = null): string =>
+  named === null ? `${WALL_KIND_WORDS[kind]} ${sizeText(thickness)} m` : named.thickness === undefined || named.thickness === thickness ? named.name : `${named.name} ${sizeText(thickness)} m`
 
 /**
  * Each wall type, the walls it types, and the two material associations: the layer set on the
  * type, its usage on the walls.
  */
 function writeWallTypes(c: Context): void {
-  for (const [key, { kind, thickness, set, usage, walls }] of c.materials.byType) {
+  for (const [key, { kind, thickness, named, set, usage, walls }] of c.materials.byType) {
     // IfcWallType: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
     // HasPropertySets, RepresentationMaps, Tag, ElementType, PredefinedType.
     const type = c.w.add(
       'IFCWALLTYPE',
       str(c.guid('wall-type', key)),
       ref(c.owner),
-      str(wallTypeName(kind, thickness)),
-      str(WALL_TYPE_NOTE),
+      str(wallTypeName(kind, thickness, named)),
+      str(named === null ? WALL_TYPE_NOTE : NAMED_WALL_TYPE_NOTE),
       NULL,
       NULL,
       NULL,
       str(key),
-      str(WALL_KIND_WORDS[kind]),
+      // CNT-15: a glazed type says so in its element type: a glass partition is not plastered.
+      str(named?.glazed === true ? `${WALL_KIND_WORDS[kind]}, glazed` : WALL_KIND_WORDS[kind]),
       en('STANDARD')
     )
     relate(c, 'IFCRELDEFINESBYTYPE', key, refs(walls), ref(type))
@@ -1215,6 +1241,8 @@ const styleTag = (type: 'door' | 'window', kind: OpeningKind | null, width: numb
   `${type}:${kind === null ? '' : `${kind}:`}${sizeText(width)}x${sizeText(height)}`
 
 function styleName(entry: OpeningStyleEntry): string {
+  // CNT-15: a type the plan names is called by its name, with a door's handing.
+  if (entry.named !== null) return entry.type === 'window' ? entry.named.name : `${entry.named.name}, ${HANDING_WORDS[entry.operation]}`
   const size = `${sizeText(entry.width)} x ${sizeText(entry.height)} m`
   if (entry.type === 'window') return entry.kind === null ? `Window ${size}` : `Window ${size}, ${entry.kind}`
   if (entry.kind !== null && entry.operation === 'NOTDEFINED') return `Door ${size}, ${entry.kind}, handing not stated`
@@ -1225,15 +1253,26 @@ function styleName(entry: OpeningStyleEntry): string {
 const STYLE_NOTE =
   'Grid groups the openings by kind (as the plan states it; a door with none is one swinging leaf), size (the hole in the wall, width by height) and, for a door, its handing.'
 
+/** CNT-15: how a type the plan names is written. */
+const NAMED_STYLE_NOTE = "The plan's own door or window type, and for a door its handing; its material is the type's."
+
 /** Puts a door or window in its type, made on first use. */
 function typeOpening(c: Context, opening: Opening, operation: DoorOperation | null, filler: number): void {
   const type = opening.type === 'door' ? 'door' : 'window'
   const kind = statedKind(type, opening.kind)
   const handing = type === 'door' ? operation ?? 'NOTDEFINED' : 'NOTDEFINED'
-  const key = `${styleTag(type, kind, opening.width, opening.height)}:${handing}`
+  // CNT-15 (C24): a door or window that takes one of the plan's named types is typed by it.
+  const named = openingTypeOf(c.plan, opening)
+  const key = named === null ? `${styleTag(type, kind, opening.width, opening.height)}:${handing}` : `${type}-type:${named.id}:${handing}`
   const entry = c.openingStyles.get(key)
   if (entry) entry.fillers.push(filler)
-  else c.openingStyles.set(key, { type, kind, operation: handing, width: opening.width, height: opening.height, fillers: [filler] })
+  else c.openingStyles.set(key, { type, kind, operation: handing, width: opening.width, height: opening.height, fillers: [filler], named })
+}
+
+/** CNT-15: Grid's types first, then the plan's named ones by id. */
+function namedOrder(a: { readonly id: string } | null, b: { readonly id: string } | null): number {
+  if (a === null || b === null) return a === b ? 0 : a === null ? -1 : 1
+  return a.id === b.id ? 0 : a.id < b.id ? -1 : 1
 }
 
 /**
@@ -1246,13 +1285,16 @@ function writeOpeningStyles(c: Context): void {
   const entries = [...c.openingStyles.entries()].sort(
     ([, a], [, b]) =>
       (a.type === b.type ? 0 : a.type === 'door' ? -1 : 1) ||
+      // CNT-15: Grid's types first, then the plan's named ones by id.
+      namedOrder(a.named, b.named) ||
       (a.kind === b.kind ? 0 : a.kind === null ? -1 : b.kind === null ? 1 : a.kind < b.kind ? -1 : 1) ||
       OPERATION_ORDER[a.operation] - OPERATION_ORDER[b.operation] ||
       a.width - b.width ||
       a.height - b.height
   )
   for (const [key, entry] of entries) {
-    const tag = styleTag(entry.type, entry.kind, entry.width, entry.height)
+    const tag = entry.named === null ? styleTag(entry.type, entry.kind, entry.width, entry.height) : `${entry.type}-type:${entry.named.id}`
+    const note = entry.named === null ? STYLE_NOTE : NAMED_STYLE_NOTE
     const style =
       entry.type === 'door'
         ? // IfcDoorStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
@@ -1263,7 +1305,7 @@ function writeOpeningStyles(c: Context): void {
             str(c.guid('door-style', key)),
             ref(c.owner),
             str(styleName(entry)),
-            str(STYLE_NOTE),
+            str(note),
             NULL,
             NULL,
             NULL,
@@ -1281,7 +1323,7 @@ function writeOpeningStyles(c: Context): void {
             str(c.guid('window-style', key)),
             ref(c.owner),
             str(styleName(entry)),
-            str(STYLE_NOTE),
+            str(note),
             NULL,
             NULL,
             NULL,
@@ -1292,6 +1334,8 @@ function writeOpeningStyles(c: Context): void {
             '.T.'
           )
     relate(c, 'IFCRELDEFINESBYTYPE', key, refs(entry.fillers), ref(style))
+    // CNT-15 (lab AU3-4): a named type's doors or windows are of its material, or "Not stated".
+    if (entry.named !== null) relate(c, 'IFCRELASSOCIATESMATERIAL', `material:${key}`, refs(entry.fillers), ref(materialNamed(c, typeMaterial(entry.named) ?? NOT_STATED)))
   }
 }
 
@@ -2387,7 +2431,8 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     w,
     owner,
     shared,
-    materials: { byKind: new Map(), byType: new Map() },
+    plan,
+    materials: { byName: new Map(), byType: new Map() },
     openingStyles: new Map(),
     glassStyle: null,
     roomNumbers: new Map(roomNumbers(plan).map((n) => [onFloorKey(n.floor, n.id), n] as const)),

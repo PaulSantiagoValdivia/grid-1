@@ -6,7 +6,7 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { buildingKind, floorBuilding, floorOf } from '@ongrid/floorplan/geometry'
+import { FINISH_SURFACES, buildingKind, floorBuilding, floorOf, roomFinishes, type FinishSurface } from '@ongrid/floorplan/geometry'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { rulesForUse } from '@ongrid/rules'
 import { quoted } from '../fs/projectFiles'
@@ -17,12 +17,31 @@ import { EditRefused } from './refused'
 /** A use, or `none` to leave the room's use unstated. */
 export type UseOrNone = RoomUse | 'none'
 
-export function renameRoom(survey: Survey, roomId: string, request: { readonly name?: string; readonly use?: UseOrNone }): Patch {
+/** CNT-15: a finish's name, or `none` to take it out. */
+export type FinishOrNone = string
+
+export function renameRoom(survey: Survey, roomId: string, request: { readonly name?: string; readonly use?: UseOrNone; readonly finishes?: Partial<Record<FinishSurface, FinishOrNone>> }): Patch {
   const room = survey.plan.rooms.find((r) => r.id === roomId)!
   const name = quoted(room.name)
-  if (request.name === undefined && request.use === undefined) throw new EditRefused('Pass name, use or both.')
+  const finishing = request.finishes !== undefined && Object.keys(request.finishes).length > 0
+  if (request.name === undefined && request.use === undefined && !finishing) throw new EditRefused('Pass name, use, a finish, or more than one.')
   const change: RoomChange = {}
   const said: string[] = []
+  // CNT-15 (C24): the room's or zone's finishes, by the person's own names; none takes one out.
+  if (finishing) {
+    const was = roomFinishes(room)
+    const next: Record<string, string> = Object.fromEntries(FINISH_SURFACES.flatMap((surface) => (was[surface] === null ? [] : [[surface, was[surface]!]])))
+    for (const surface of FINISH_SURFACES) {
+      const asked = request.finishes![surface]
+      if (asked === undefined) continue
+      const now = asked.trim().toLowerCase() === 'none' ? null : asked
+      if (now === was[surface]) continue
+      if (now === null) delete next[surface]
+      else next[surface] = now
+      said.push(`${quoted(request.name ?? room.name)}: ${surface} finish ${was[surface] === null ? 'not stated' : quoted(was[surface]!)} → ${now === null ? 'not stated' : quoted(now)}.`)
+    }
+    if (said.length > 0) change.finishes = Object.keys(next).length === 0 ? null : next
+  }
   if (request.name !== undefined && request.name !== room.name) {
     change.name = request.name
     said.push(`Renamed ${name} to ${quoted(request.name)}.`)
@@ -34,6 +53,11 @@ export function renameRoom(survey: Survey, roomId: string, request: { readonly n
     said.push(`${quoted(request.name ?? room.name)} is ${is === undefined ? 'of no stated use' : `used as ${is}`} now, not ${was === undefined ? 'of no stated use' : was}.`)
   }
   if (said.length === 0) throw new EditRefused(`That is how ${name} is already: nothing to change.`)
+  if (request.name === undefined && request.use === undefined) {
+    const patch = emptyPatch(said)
+    ;(patch.rooms as Map<string, RoomChange>).set(roomId, change)
+    return { ...patch, extra: { checks: { now: [], noLonger: [] } } }
+  }
 
   // Which checks look at the room before and after: they go by its use, never its name, and
   // run only in the kinds of building they read (CNT-5).

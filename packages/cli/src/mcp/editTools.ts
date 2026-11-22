@@ -180,24 +180,29 @@ const stretchTool: GridTool = {
 
 const renameTool: GridTool = {
   name: 'grid_rename_room',
-  title: 'Rename a room or change its use',
+  title: 'Rename a room, or change its use or finishes',
   hint: 'change-plan',
   description:
-    'Use this when the person asks to call a room something else, or to use it for something else: "the front room is a bedroom now", "the room names in Spanish". '
-    + 'It changes the room\'s name, its use (none to leave it unstated), or both, and nothing else, and answers with which of Grid\'s checks now look at the room and which no longer do: they go by its use, never its name. '
+    'Use this when the person asks to call a room something else, to use it for something else, or what its floor, walls, ceiling or skirting are finished in: "the front room is a bedroom now", "the room names in Spanish", "tile the kitchen floor", "the bathroom walls are tiled". '
+    + 'It changes the room\'s name, its use (none to leave it unstated), its finishes (by the person\'s own names; none takes one out), or more than one, and nothing else, and answers with which of Grid\'s checks now look at the room and which no longer do: they go by its use, never its name. A zone of an open-plan room takes finishes too: its part of the room is finished in them. '
     + 'Do not use to change a room\'s size (grid_move_room_side) or its id. It replaces the plan file unless out is given.',
   args: {
     plan: PLAN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The room to rename or give another use.', examples: ['bed2'] },
     name: NAME('Its new name.', 'Dormitorio 2'),
     use: { type: 'string', enum: [...ROOM_USES, 'none'], description: 'Its new use, or none to leave its use unstated.', examples: ['other', 'bedroom'] },
+    floor_finish: NAME('Its floor finish, in the person\'s words, or none to take it out.', 'Porcelain tile'),
+    wall_finish: NAME('The finish of its walls\' inside faces, or none to take it out.', 'Painted plaster'),
+    ceiling_finish: NAME('Its ceiling finish, or none to take it out.', 'Painted plasterboard'),
+    skirting_finish: NAME('Its skirting, or none to take it out.', 'Oak skirting'),
     out: OUT_ARG,
   },
   outputSchema: { ...EDIT_OUTPUT, properties: { ...(EDIT_OUTPUT['properties'] as Record<string, unknown>), checks: objectSchema({ now: listSchema(STRING), noLonger: listSchema(STRING) }) } },
   run(args, context) {
     return writeChange(context, args, (survey) => {
       const id = roomArg(survey.plan, args['room'])
-      return renameRoom(survey, id, { ...(args['name'] !== undefined ? { name: args['name'] as string } : {}), ...(args['use'] !== undefined ? { use: args['use'] as UseOrNone } : {}) })
+      const finishes = Object.fromEntries((['floor', 'wall', 'ceiling', 'skirting'] as const).filter((surface) => args[`${surface}_finish`] !== undefined).map((surface) => [surface === 'wall' ? 'walls' : surface, args[`${surface}_finish`] as string]))
+      return renameRoom(survey, id, { ...(args['name'] !== undefined ? { name: args['name'] as string } : {}), ...(args['use'] !== undefined ? { use: args['use'] as UseOrNone } : {}), ...(Object.keys(finishes).length === 0 ? {} : { finishes }) })
     })
   },
 }

@@ -9,7 +9,8 @@
  */
 import { baseRefusal, baseTouched, phasedPatch } from '../edit/phases'
 import { planInMetres } from '@ongrid/floorplan/types/units'
-import { OPENING_KINDS, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
+import { DOOR_KINDS, OPENING_KINDS, WINDOW_KINDS, WallKindSchema, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
+import { changeType, TYPE_FIELDS, TYPE_OF, type TypeOf } from '../edit/types'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { keptDerived, LAYOUT_SHAPES, type LayoutShape } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
@@ -370,6 +371,53 @@ const changeOpeningTool: GridTool = {
   },
 }
 
+const TYPE_KINDS = [...new Set([...WallKindSchema.options, ...DOOR_KINDS, ...WINDOW_KINDS])]
+const TYPE_CLEARABLE = [...new Set(Object.values(TYPE_FIELDS).flat())].filter((field) => field !== 'name')
+
+/** CNT-15 (C24): one change to a named type, which every part of the type takes. */
+const changeTypeTool: GridTool = {
+  name: 'grid_change_type',
+  title: 'Change a wall, door or window type',
+  hint: 'change-plan',
+  description:
+    'Use this when the person asks to change every wall, door or window of one kind at once, or to say what they are made of: "make every partition 120 mm", "all the internal doors are 0.9 m", "the glass partition is laminated glass", "raise the partitions to 2.6 m", "the party walls are 250 mm concrete". '
+    + 'It changes one of the plan\'s named types (types in the plan: a wall type\'s thickness, height, kind, whether it is glazed and its material; a door or window type\'s size, kind and material), and every wall, door or window of the type takes it in the same change. With a new type id and a name it adds the type. parts gives the type to walls or openings by id, taking out their own values for what the type states; default makes it the type of every wall of its kind, or every door or window, that names none. clear takes a value out of the type. '
+    + 'It answers with what changed, every part of the type and the area verdict. A part that states a value of its own keeps it, and the answer says so. '
+    + 'Do not use for one door or window alone (grid_change_opening), or to move a wall (grid_move_room_side). Grid checks no material. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
+  args: {
+    plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
+    of: { type: 'string', enum: TYPE_OF, required: true, description: 'Which list the type is in: wall, door or window.', examples: ['wall', 'door'] },
+    type: { type: 'string', id: true, required: true, description: 'The type\'s id: one of the plan\'s types to change, or a new id to add one (then give its name).', examples: ['partition-100', 'D90'] },
+    name: { type: 'string', maxLength: 120, description: 'The type\'s name, as the person and the IFC call it.', examples: ['Stud partition 100', 'Internal door 900'] },
+    thickness: { type: 'number', length: true, description: 'Wall types: the thickness, in metres.', examples: [0.1, 0.25], minimum: 0.01, maximum: 3 },
+    height: { type: 'number', length: true, description: 'The height, in metres: a wall type\'s walls, or a door or window type\'s opening. A wall type with none takes its floor\'s height.', examples: [2.6, 2.1], minimum: 0.1, maximum: 30 },
+    width: { type: 'number', length: true, description: 'Door and window types: the width of the hole in the wall, in metres.', examples: [0.9, 1.2], minimum: 0.3, maximum: 20 },
+    sill: { type: 'number', length: true, description: 'Window types: the sill above the floor, in metres.', examples: [0.9], minimum: 0, maximum: 5 },
+    kind: { type: 'string', enum: TYPE_KINDS, description: 'A wall type: exterior, interior or partition (the kinds the plan holds). A door type: single, double, sliding, pocket, folding, roller or garage. A window type: single, double, sliding, fixed or high-level.', examples: ['partition', 'sliding'] },
+    glazed: { type: 'boolean', description: 'Whether the type is glass: a glazed partition, a glazed door.', examples: [true] },
+    material: { type: 'string', maxLength: 120, description: 'What it is made of, in the person\'s words; the IFC writes it, and "Not stated" when left out.', examples: ['Concrete', 'Laminated glass', 'Oak'] },
+    clear: { type: 'array', description: 'Values to take out of the type, so its parts take their own or the default.', examples: [['height'], ['material']], items: { enum: TYPE_CLEARABLE }, minItems: 1, maxItems: TYPE_CLEARABLE.length },
+    parts: { type: 'array', description: 'Walls (of=wall), doors or windows, by id, to give the type; each takes out its own values for what the type states.', examples: [['w-hall-bath', 'w-bed1-bed2'], ['door-bath']], items: { id: true }, minItems: 1, maxItems: 500 },
+    default: { type: 'boolean', description: 'true makes it the type of every wall of its kind (or every door, or window) that names none: the template an office keeps.', examples: [true] },
+    out: OUT_ARG,
+  },
+  outputSchema: EDIT_OUTPUT,
+  run(args, context) {
+    const set = Object.fromEntries(['name', 'thickness', 'height', 'width', 'sill', 'kind', 'glazed', 'material'].filter((field) => args[field] !== undefined).map((field) => [field, args[field] as string | number | boolean]))
+    return writeChange(context, args, (survey) =>
+      changeType(survey, {
+        of: args['of'] as TypeOf,
+        id: args['type'] as string,
+        set,
+        ...(args['clear'] === undefined ? {} : { clear: args['clear'] as string[] }),
+        ...(args['parts'] === undefined ? {} : { parts: args['parts'] as string[] }),
+        ...(args['default'] === true ? { makeDefault: true } : {}),
+      })
+    )
+  },
+}
+
 const moveSideTool: GridTool = {
   name: 'grid_move_room_side',
   title: 'Move one side of a room',
@@ -607,4 +655,4 @@ const writeRoomsTool: GridTool = {
   },
 }
 
-export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, writeRoomsTool, changeOpeningTool, moveSideTool, mirrorTool]
+export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, writeRoomsTool, changeOpeningTool, changeTypeTool, moveSideTool, mirrorTool]
