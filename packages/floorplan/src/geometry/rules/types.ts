@@ -68,6 +68,14 @@ export type FindingCode =
    * the site states (lab VE-7), wholly or in part. Only when the plan states the ground.
    */
   | 'opening_below_ground'
+  /**
+   * BRF-3 (lab EL-16): the building stands nearer an edge of the plot's boundary than the set-back
+   * the person asked for from it: their figure, never a code's. On the floor whose outline comes
+   * nearest the edge.
+   */
+  | 'setback_short'
+  /** BRF-3: the building's outside face reaches past an edge of the plot's boundary, out of the plot. */
+  | 'over_boundary'
 
 /** One way through from a room: the room on its other side, and the opening or virtual wall. */
 export interface RouteStep {
@@ -114,6 +122,23 @@ export interface RuleFinding {
     readonly top: number
     readonly wholly: boolean
   }
+  /**
+   * Only on `setback_short` and `over_boundary` (BRF-3): the edge of the boundary by number, the way
+   * it faces and whether it is on a street; the least distance from the building's outside face to
+   * it, in m, and how far past it the building reaches (0 when it does not); and the set-back the
+   * person asked for from it, with where it was asked for and who gave it, or null. `northStated`
+   * is false when the way is read with north as the top of the drawing. Optional, like `through`.
+   */
+  readonly boundary?: {
+    readonly edge: number
+    readonly faces: string
+    readonly street: boolean
+    readonly name: string
+    readonly distance: number
+    readonly past: number
+    readonly asked: { readonly distance: number; readonly from: 'edge' | 'street' | 'all'; readonly source: 'given' | 'assumed' | null } | null
+    readonly northStated: boolean
+  }
 }
 
 export type NotCheckedReason =
@@ -129,6 +154,11 @@ export type NotCheckedReason =
    * does. Whether that space is a way out cannot be told, so the routes were not checked.
    */
   | 'way_out_not_drawn'
+  /**
+   * BRF-3: the site states a boundary, but the building's outline could not be worked out, so no
+   * distance to it was measured and no set-back compared.
+   */
+  | 'boundary_not_measured'
 
 export interface NotChecked {
   readonly reason: NotCheckedReason

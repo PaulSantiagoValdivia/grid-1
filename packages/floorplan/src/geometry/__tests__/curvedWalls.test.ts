@@ -20,7 +20,7 @@ import { wallExposure } from '../exposure'
 import { floorSpaces, spacesKnown } from '../spaces'
 import { wallFaults } from '../wallFaults'
 import { wallRevision } from '../revision'
-import { diffPlans } from '../diff'
+import { diffPlans, PLAN_TURNS, turnPlan } from '../diff'
 import { planFacing } from '../orientation'
 import { doorSwing } from '../door'
 import { validateDoorSweeps } from '../sweep'
@@ -72,7 +72,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C13)', () => {
+describe('a curved wall in the plan file (C14)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
@@ -444,3 +444,10 @@ function entitiesOf(dxf: string): { type: string; layer: string; values: (code: 
   }
   return out
 }
+
+describe('a curved wall turned or mirrored for a comparison (WRT-4)', () => {
+  it.each(PLAN_TURNS)('%s keeps every curved wall on its circle', (id) => {
+    const turned = turnPlan(bayRoom(), id)
+    for (const w of turned.walls.filter((x) => x.arc !== undefined)) expect(curveFault(w), `${id} ${w.id}`).toBeNull()
+  })
+})

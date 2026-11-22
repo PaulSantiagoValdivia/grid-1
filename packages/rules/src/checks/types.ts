@@ -189,6 +189,10 @@ export type SkipReason =
   | 'no_ground_level'
   /** CNT-5: the plan says the building, or its floor, is a kind the check's figures were not read for. */
   | 'not_for_building'
+  /** BRF-3: the building's outline could not be worked out, so no distance to the plot's boundary was measured. */
+  | 'no_building_outline'
+  /** BRF-3: the plot's boundary crosses itself or encloses no ground, so nothing is measured from it. */
+  | 'boundary_not_closed'
 
 /** Parts of one floor, by id. `floor` is empty for parts of the whole plan. */
 export interface CoverageGroup {
@@ -212,8 +216,8 @@ export interface CoverageSkip extends CoverageGroup {
 export interface CheckCoverage {
   readonly ruleId: string
   readonly title: string
-  /** What the check looks at: whole floors, rooms, or doors and openings. */
-  readonly looksAt: 'floor' | 'room' | 'door'
+  /** What the check looks at: whole floors, rooms, doors and openings, or the edges of the plot's boundary (BRF-3), by number. */
+  readonly looksAt: 'floor' | 'room' | 'door' | 'edge'
   readonly lookedAt: readonly CoverageGroup[]
   /** How many parts it looked at: the ids under `lookedAt`, counted. */
   readonly lookedAtCount: number

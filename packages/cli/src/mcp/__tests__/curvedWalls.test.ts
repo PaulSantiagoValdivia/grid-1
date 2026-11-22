@@ -131,4 +131,17 @@ describe('a curved wall through the tool server (CNT-18)', () => {
     const check = await b.call('grid_areas', { plan: 'mirrored.json' })
     expect(check.isError).toBe(false)
   })
+
+  it('turns a curved wall a quarter with its centre, so it stays on its circle (WRT-4)', async () => {
+    const turned = await b.call('grid_mirror', { plan: 'plan.json', turn: 90, out: 'turned.json' })
+    expect(turned.isError, turned.text).toBe(false)
+    type Curved = { id: string; start: number[]; end: number[]; arc: { centre: number[]; sweep: number } }
+    const after = JSON.parse(readFileSync(join(b.folder, 'turned.json'), 'utf8')) as { walls: Curved[] }
+    const bay = after.walls.find((w) => w.id === 'bay')!
+    const radius = (p: readonly number[]): number => Math.hypot(p[0]! - bay.arc.centre[0]!, p[1]! - bay.arc.centre[1]!)
+    expect(bay.arc.sweep).toBe(180)
+    expect(radius(bay.end)).toBeCloseTo(radius(bay.start), 6)
+    const check = await b.call('grid_check', { plan: 'turned.json' })
+    expect(check.text).not.toMatch(/arc-ends-apart/)
+  })
 })

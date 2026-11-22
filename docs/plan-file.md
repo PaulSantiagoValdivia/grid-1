@@ -45,8 +45,10 @@ file never reaches the exports with its letters turned into question marks. A fi
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
-| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items or saved views | 50,000 of each | |
+| a thing on the site: its id; its label | 64 characters; 120 | the same |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views or things on the site | 50,000 of each | |
 | the floors one opening pattern repeats on | 200 | |
+| the points of the site's boundary, or of one of its things | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
 | the lowered zones of one ceiling, the rooflights of one roof | 50,000 | |
 | the walls a room lists | 2,000 | |
@@ -671,7 +673,8 @@ of it changes an area, a check or a wall count.
   `GRID-SKETCH-` and the category in capitals. Grid never takes a sketch as a wall, a room or
   anything it understands, and the record says so once per floor, as a line not checked
   (`floor/sketch-drawn-only`). Where a sketch is something Grid holds, such as a fixture, write
-  it as that instead; furniture and site parts will be offered the same way once Grid holds them.
+  it as that instead: a fence, a path, a tree or a pool is one of [the site's things](#the-plot-its-boundary-set-backs-and-what-is-on-it);
+  furniture will be offered the same way once Grid holds it.
 
 A field the format does not have, on a note or a sketch item, is named like any other
 (`plan/unknown-field`). The 3D views do not show the sketch yet.
@@ -794,7 +797,7 @@ before, with no north and y up the page.
 | `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
 | `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
 | `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
-| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for, and `boundary`, `streets`, `setbacks` and `things` are [the plot](#the-plot-its-boundary-set-backs-and-what-is-on-it) |
 
 North is drawn and written where the plan states it:
 
@@ -843,13 +846,101 @@ way round.
 
 `grid_mirror` makes a new design, the old one mirrored. The stated north is mirrored with it,
 to minus itself, so the swap it promises is the real one: left to right, what faced east faces
-west, whichever way the drawing is turned. The site's origin is mirrored with the walls, the
+west, whichever way the drawing is turned. The site's origin, its boundary and its things are
+mirrored with the walls (each edge keeps its number), the
 front stays the part it names, and `yAxis` is kept.
+
+`grid_mirror` with `turn` turns the plan a quarter or half round about the middle of its walls
+(WRT-4): 90 degrees is a quarter counter-clockwise on the drawing as Grid draws it, with y up,
+the way `north` is measured; 270 or -90 a quarter clockwise. Every room keeps its size and its
+walls, every door its swing, and the fixtures and the site's origin turn with the walls. The
+stated north is kept: the building turns on its site, so what faced south faces east after a
+quarter counter-clockwise. `yAxis` is kept too, so on a page whose y runs down the same turn
+looks clockwise, and the answer says so.
 
 | Code | What it says |
 |---|---|
 | `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
+
+## The plot: its boundary, set-backs and what is on it
+
+The site may hold the plot as well as where the building is (BRF-3): its boundary, which edges
+are on a street, the set-backs the person asked for, and what stands on the ground outside. All
+four are optional and never defaulted, so a plan that states none reads as before.
+
+```json
+"site": {
+  "boundary": [[0, 0], [15, 0], [15, 30], [0, 30]],
+  "streets": [1],
+  "setbacks": [{ "from": "all", "distance": 3, "source": "given" }, { "from": "street", "distance": 5 }],
+  "things": [
+    { "id": "fence", "kind": "fence", "points": [[0, 0], [15, 0], [15, 30], [0, 30], [0, 0]], "height": 1.8 },
+    { "id": "oak", "kind": "tree", "at": [3, 4], "canopy": 5 },
+    { "id": "pool", "kind": "pool", "points": [[1, 21], [5, 21], [5, 29], [1, 29]] }
+  ]
+}
+```
+
+| Field | What it states |
+|---|---|
+| `boundary` | The plot's corners, in plan metres, in order round it, either way round. Edge 1 runs from the first point to the second, and the last edge back to the first point; a last point written on the first again closes it and adds no edge. Three corners at least |
+| `streets` | The edges on a street, by number |
+| `setbacks` | The set-backs the person asked for: each `from` every edge (`all`), the street edges (`street`) or one edge by its number, with its `distance` in metres and, if known, its `source`: `given` by the person, or `assumed` for them to confirm. An edge takes the one asked for it, else the street's when it is on the street, else the one for every edge. One set-back for each `from` |
+| `things` | What is on the site, each with an `id` and a `kind`, and a `label` if wanted (below) |
+
+The set-backs are the person's own figures, never a code's: Grid compares the drawing with them,
+applies no figure of its own, and never says a distance is enough. A street or a set-back that
+names an edge the boundary does not have, a second set-back from the same edge, or one from the
+street with no street edge, is left out alone, and `grid check` says so (`plan/value-left-out`).
+
+Each of the site's things has a kind of its own: never a wall, a room or a fixture, so it adds no
+wall, no area, no note and no storey height, and the roof stays where the walls put it.
+
+| Kind | Fields |
+|---|---|
+| `fence` | `points`, two or more, along it; `height` if known |
+| `gate` | `points`, its two posts |
+| `path` | `points`, two or more, along its middle, and its `width` |
+| `paving` | `points`, three or more, round it |
+| `pool` | `points`, three or more, round its edge |
+| `tree` | `at`, its trunk; `canopy`, across its crown, and `height` if known |
+
+The site is the ground: it is drawn on the ground floor's plan, in every look, in its own style:
+the boundary in a long dash and a dot, its street edges heavier, paving and paths a pale fill, a
+pool its water, a tree its crown, a fence a fine line and a gate its posts, all under the building.
+The view frames the whole plot. The 3D views and the exports do not show it yet; `grid check`
+says once that the site's things are drawn only (`plan/site-things-drawn-only`).
+
+Grid measures the building against the plot from its outside face: the outer faces of the walls
+of every floor at or above the ground floor, joined into one shape seen from above. A basement is
+under the ground and is left out; an upper floor that reaches out past the one below counts where
+it reaches; nothing outside the walls, such as eaves or steps, is drawn to measure.
+
+- **Each edge.** The least distance from the building to the edge, as a tape between the two
+  nearest points measures it. A building nearer an edge than the set-back asked for, by more than
+  `setbackShort` (0.005 m), is a finding: "The building is 1.00 m from the east boundary; you
+  asked for 3.00 m" (`plan/setback-short`). One reaching past an edge, by more than
+  `pastBoundary`, is "The building reaches 0.50 m over the east boundary, out of the plot"
+  (`plan/over-boundary`). An edge is named by the way it faces out of the plot, by the plan's
+  north (the top of the drawing when it states none, and the answer says so), with its number when
+  two edges face one way.
+- **Each face.** The distance from each face of the building to the edge of the boundary in
+  front of it, square to the face.
+- **The plot coverage.** The part of the building's shape inside the boundary against the
+  boundary's area: 90 m² on 450 m² is 20%.
+
+`grid_measure` with `what=site` answers with all three
+([tool-server.md](tool-server.md#the-plot-distances-to-the-boundary-and-the-coverage)), and
+`grid describe` with the plot's area, its coverage and the edge the building comes nearest.
+
+| Code | What it says |
+|---|---|
+| `plan/setback-short` | The building is nearer an edge than the set-back the person asked for, with both figures |
+| `plan/over-boundary` | The building reaches past an edge of the boundary, out of the plot |
+| `plan/boundary-crosses` | The boundary crosses itself or encloses no ground: nothing is measured from it |
+| `plan/not-checked-boundary` | The building has no outline to measure from, so no distance was measured |
+| `plan/site-things-drawn-only` | The site's things are drawn only, never measured or checked |
 
 ## The place
 

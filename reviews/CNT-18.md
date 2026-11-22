@@ -9,7 +9,7 @@ under "For the owner".
 
 ## What changed
 
-- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C13 in its header).
+- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C14 in its header).
   A wall may state `arc: { centre: [x, y], sweep }`: `sweep` is the angle in degrees the wall
   turns through round `centre` from `start` to `end`, counter-clockwise positive as `turn` and
   `north` are, never 0 and at most a whole turn either way (the schema refuses others). 360 is a
@@ -239,6 +239,19 @@ room is measured as before.
   257 of 257 files passed, 4,657 tests passed and 4 skipped, exit 0. The full suite was not run
   again.
 
+- After merging `main` at 26e928e1 (BRF-3, WRT-4): four conflicts, both sides kept
+  (`CHANGELOG.md`, `docs/result-contract.md`, the bundle line in `grid.e2e.test.ts` and
+  `types/floorplan.ts`). BRF-3 took convention C13, so the curved wall is C14 now, in the code,
+  `AGENTS.md` and this review. WRT-4's quarter turn (`turnPlanBy`) and the comparison's turns and
+  mirrors (`diff/turn.ts`) moved a wall's ends but not its arc's centre, which would leave a
+  curved wall off its circle; both now move the centre too, and a mirror turns the sweep the
+  other way. Tests added: turning the bay a quarter through `grid_mirror` keeps it on its
+  circle, and every one of `PLAN_TURNS` keeps the curved walls free of faults. The bundle is
+  544,541 bytes, under the 550,000 cap. Build, typecheck and lint clean; the scoreboard "Same as
+  the stored figures"; all of `packages/floorplan/src`, the result record, the tool server,
+  quantities, edit, describe, the commands' tests, sheet, versions, the viewer and
+  `scoreboard/__tests__`: 263 of 263 files passed, 4,719 tests, 4 skipped.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -250,7 +263,7 @@ room is measured as before.
    | Room outline (`room.ts`) | pieces | traced by its chords; a round room of 2.9 m inside radius is 0.016% under |
    | Areas (net, gross internal, gross external) | pieces | the same outline and chord strips |
    | Wall length, offsets, opening fit | exact | along the curve (`wallLength`) |
-   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C13) |
+   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C14) |
    | Door swings, sweep check | exact | from the straight hole; the swing is a true arc |
    | Routes (door graph, way-out checks) | exact | each opening's sides from the curve's normal at its middle; room floors by the outline |
    | Exposure, spaces, outside walls, facing, use indicators | pieces | by the chords |

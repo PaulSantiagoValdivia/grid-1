@@ -15,7 +15,7 @@ describe('the rules', () => {
     expect(new Set(RULES.map((r) => r.id)).size).toBe(RULES.length)
   })
 
-  it('are the six plan checks, none of which needs a figure', () => {
+  it('are the seven plan checks, none of which needs a figure', () => {
     expect(RULES.map((r) => r.id)).toEqual([
       'floor-has-exit',
       'room-has-door',
@@ -24,7 +24,9 @@ describe('the rules', () => {
       // LVL-3: a stair or a lift drawn on each floor lines up.
       'stairs-line-up',
       // LVL-4: no door or window below the ground the site states.
-      'openings-above-ground'
+      'openings-above-ground',
+      // BRF-3: the building inside its plot, as far from each edge as the person asked.
+      'site-boundary'
     ])
   })
 
