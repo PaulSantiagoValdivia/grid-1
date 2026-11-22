@@ -98,7 +98,17 @@
  *   metres with z up from the ground floor's floor level. Grid writes both and reads the setting
  *   (`geometry/camera.ts`). Optional and never defaulted (version 1).
  *
- * C12 · Kinds of door and window (CNT-14)
+ * C12 · Opening patterns (LVL-8)
+ *   A facade's rhythm may be stated once, in the plan's `patterns`: one opening (its type, width,
+ *   height, sill and door fields), a wall, a `count` or a `spacing` (or both), the `margins` kept
+ *   clear at the wall's start and end (measured along its axis, as C2's offset is), and the
+ *   `floors` above it is repeated on, onto the wall in the same line on each. A pattern is never an
+ *   opening: it is expanded into plain openings (`expandPatterns` in the geometry core), with ids
+ *   `<pattern>-<floor>-<n>`, before anything is drawn, measured, checked or exported, so every
+ *   exporter and check reads plain openings only. The file keeps the pattern, not its openings.
+ *   Optional and never defaulted (version 1).
+ *
+ * C13 · Kinds of door and window (CNT-14)
  *   A door or window MAY state its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that
  *   opens (`opens`). Its handing stays in the wall's terms (`hinge`, `swing`, C2): the person's
  *   terms, the room it opens into and the side it is hinged on as seen from a room, are turned
@@ -720,7 +730,7 @@ export const OpeningAnchorSchema = z
   })
 
 /**
- * CNT-14 (C12): the kinds of door, and of window, a plan may state. A door with no kind is a
+ * CNT-14 (C13): the kinds of door, and of window, a plan may state. A door with no kind is a
  * single swinging leaf, as every door was before (version 1). `single` and `double` are one or
  * two hinged leaves; `sliding` slides along its wall, `pocket` into it; `folding` folds to one
  * side in panels; `roller` rolls up and `garage` lifts overhead. A window may be `single` or
@@ -763,7 +773,7 @@ export const OpeningSchema = z.object({
   // geometry/wall.ts `wallFaces`.
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
-  // CNT-14 (C12): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
+  // CNT-14 (C13): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
   // (`OpeningPartSchema`). Optional and never defaulted (version 1): a door that states no kind is
   // one swinging leaf, and the whole of an opening opens.
   kind: z.enum(OPENING_KINDS).optional(),
@@ -773,6 +783,54 @@ export const OpeningSchema = z.object({
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
 })
+
+/** LVL-8: the most floors above its own that one opening pattern may be repeated on. */
+export const PATTERN_FLOORS_MAX = 200
+
+/**
+ * LVL-8 (C12): the one opening a pattern repeats: an opening without its id, wall and place, which
+ * the pattern gives each copy.
+ */
+export const PatternOpeningSchema = z.object({
+  type: OpeningTypeSchema,
+  width: finite().positive(),
+  sill: finite().nonnegative().default(0),
+  height: finite().positive(),
+  hinge: z.enum(['start', 'end']).optional(),
+  swing: z.enum(['left', 'right']).optional(),
+  // CNT-14 (C13): its kind and the part of it that opens, carried into every opening it makes.
+  kind: z.enum(OPENING_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
+})
+
+/**
+ * LVL-8 (C12): a facade's rhythm, stated once. On `wall`, between `margins.start` metres from its
+ * start and `margins.end` from its end (each 0 when unstated), along its axis:
+ *
+ * - `count` alone: that many openings, spread evenly, the first at the start margin and the last
+ *   at the end margin (one alone sits in the middle);
+ * - `spacing` alone: an opening every `spacing` metres, centre to centre, from the start margin,
+ *   as many as fit before the end margin;
+ * - both: `count` openings `spacing` apart, from the start margin.
+ *
+ * `floors` names the floors above to repeat it on: on each, the openings stand where they stand on
+ * this wall, on the wall in the same line. Optional and never defaulted (version 1).
+ */
+export const OpeningPatternSchema = z
+  .object({
+    id: text('id'),
+    wall: text('id'),
+    opening: PatternOpeningSchema,
+    count: z.number().int().positive().max(PARTS_MAX).optional(),
+    spacing: finite().positive().optional(),
+    margins: z.object({ start: finite().nonnegative().optional(), end: finite().nonnegative().optional() }).optional(),
+    floors: z.array(text('id').pipe(z.string().min(1))).max(PATTERN_FLOORS_MAX).optional(),
+  })
+  .superRefine((pattern, ctx) => {
+    if (pattern.count === undefined && pattern.spacing === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['count'], message: 'needs a count, a spacing or both: how many openings, or how far apart' })
+    }
+  })
 
 export const ReferenceImageSchema = z.object({
   // Path relative to the project directory
@@ -1174,6 +1232,9 @@ export const FloorPlanFieldsSchema = z.object({
   walls: parts(WallSchema, 'walls').default([]),
   rooms: parts(RoomSchema, 'rooms').default([]),
   openings: parts(OpeningSchema, 'openings').default([]),
+  // LVL-8 (C12): opening patterns, each expanded into plain openings before anything reads the
+  // plan (`expandPatterns`). Optional and never defaulted (version 1).
+  patterns: parts(OpeningPatternSchema, 'opening patterns').optional(),
   // C5: names and orders the floors. Advisory — a floor named only by a wall or
   // room still counts as a floor of the plan, so geometry can never become
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
@@ -1239,6 +1300,8 @@ export type RoomTenure = z.infer<typeof RoomTenureSchema>
 export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
+export type OpeningPattern = z.infer<typeof OpeningPatternSchema>
+export type PatternOpening = z.infer<typeof PatternOpeningSchema>
 export type Stair = z.infer<typeof StairSchema>
 export type Ceiling = z.infer<typeof CeilingSchema>
 export type Roof = z.infer<typeof RoofSchema>

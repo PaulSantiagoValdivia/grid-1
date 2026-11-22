@@ -9,7 +9,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C12), version 1,
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C13), version 1,
    nothing defaulted:
    - `kind` on an opening: `DOOR_KINDS` (`single`, `double`, `sliding`, `pocket`, `folding`,
      `roller`, `garage`) and `WINDOW_KINDS` (`single`, `double`, `sliding`, `fixed`,
@@ -341,3 +341,48 @@ homeowner's sixth turn, "wide bifold doors and a roof lantern", needs `door-leav
 - `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1 packages/floorplan
   packages/rules packages/cli packages/viewer scoreboard/__tests__`: 292 of 292 files passed,
   5,244 tests passed, 4 skipped (5,248), in 706 s.
+
+### Again after merging `main` 8b599e9 (LVL-8)
+
+`main` brought facades drawn from the model and opening patterns (LVL-8).
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`, `docs/tolerances.md`: every entry and row of both sides, CNT-14's first.
+- `docs/result-contract.md`: both agents' changelog entries, CNT-14's at the top, with one more
+  line: a pattern carries its opening's kind, part and handing.
+- `packages/floorplan/src/types/floorplan.ts`: LVL-8 took C12 for opening patterns, so CNT-14's
+  convention is now C13 (the header, its two comments, `openingKinds.ts` and point 1 above).
+- `geometry/tolerances.ts`: CNT-14's six entries, then LVL-8's three.
+- `geometry/validate.ts`, `mcp/readTools.ts`: import lists, the union of both.
+
+**Where the two features meet.** LVL-8's template opening (`PatternOpeningSchema`) took `hinge`
+and `swing` but not CNT-14's fields: it now takes `kind` and `opens`, and `expandPatterns` gives
+each opening it makes the kind, the part that opens and the handing. On a floor above whose wall
+in the same line runs the other way, `hinge` and `swing` are now turned with the wall, so each
+door hangs from the same jamb and opens to the same side (before, they were copied as written,
+which put the leaf on the other jamb and face). Lengths in a plan written in millimetres or feet:
+`planInMetres` did not scale an opening's `opens` (a gap in CNT-14 itself); it now scales
+`opens.width` and `opens.height` on openings and on a pattern's opening, through a path of any
+depth. New tests in `geometry/__tests__/patterns.test.ts`, "a pattern of doors or windows of a
+kind": a pattern of sliding doors gives each opening its kind, part and handing and no opening
+issue; a door repeated onto a wall drawn the other way has its handing turned; the part is read
+in metres in a millimetre plan. `docs/plan-file.md`'s pattern table says so. The facade (LVL-8)
+draws a door or window as its outline and does not draw its kind yet: a follow-up.
+
+**Goldens.** No golden moved: LVL-8's four exporter lines leave the four files as they were
+(the golden test passes as written).
+
+**Expectations changed.** None.
+
+**Scoreboard.** LVL-8 touched none of it; run anyway: 197, 278, 19, 5, 18, 735, 95, "Same as the
+stored figures."
+
+**Checks run**
+
+- While merging: `patterns.test.ts` and `packages/floorplan/src/types` (11 files, 191 tests passed).
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1 packages/floorplan
+  packages/rules packages/cli packages/viewer scoreboard/__tests__`: 297 of 297 files passed,
+  5,298 tests passed, 4 skipped (5,302), in 1,214 s.
+- `npm run scoreboard`: same as the stored figures.

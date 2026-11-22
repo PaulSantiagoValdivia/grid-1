@@ -197,8 +197,8 @@ describe('words Grid does not read (MSG-4)', () => {
     ])
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
-    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-6 `marks`, WRT-7 `display`, VEW-3 `views`.
-    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, marks, views, display, written')
+    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-6 `marks`, WRT-7 `display`, VEW-3 `views`, LVL-8 `patterns`.
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, patterns, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, marks, views, display, written')
   })
 
   it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {
@@ -240,7 +240,7 @@ describe('every line', () => {
   it('carries a stable code of one style, the thing, its floor, found, needed, fix and its wording', () => {
     for (const [name, l] of lines) {
       const where = `${name}: ${l.code}`
-      expect(l.code, where).toMatch(/^(plan|floor|wall|room|opening|item|stair)\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      expect(l.code, where).toMatch(/^(plan|floor|wall|room|opening|item|stair|pattern)\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
       expect(Object.keys(CODES), where).toContain(l.code)
       expect(['plan', 'floor', 'wall', 'room', 'opening', 'item', 'stair'], where).toContain(l.thing.kind)
       expect(l.thing.id === '', where).toBe(l.thing.kind === 'plan')
@@ -308,7 +308,7 @@ describe('the catalogue', () => {
         if (entry === '__tests__' || entry === 'node_modules') continue
         if (statSync(path).isDirectory()) walk(path)
         else if (entry.endsWith('.ts')) {
-          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor|item|stair)\/[a-z-]+)'/g)) found.add(match[1]!)
+          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor|item|stair|pattern)\/[a-z-]+)'/g)) found.add(match[1]!)
         }
       }
     }

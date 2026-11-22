@@ -21,6 +21,7 @@ import {
   planFloors,
   checkDoorSweeps,
   validatePlan,
+  withPatterns,
   LIMITS as PLAN_LIMITS,
   GENERAL_GUIDANCE_LABEL,
   type FloorPlan,
@@ -39,7 +40,7 @@ import { LINE_KINDS, RESULT_VERSION, type Cause, type GridResult, type HeldNote,
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
 
-const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item', stair: 'Stair' }
+const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item', stair: 'Stair', pattern: 'Opening pattern' }
 const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as const
 /** An id from a file the format refused, when it is one Grid would read: else it is not repeated. */
 const safeId = (value: unknown): string | null =>
@@ -102,7 +103,7 @@ function placeText(path: readonly (string | number)[]): string {
 function partAt(raw: Record<string, unknown>, path: readonly (string | number)[]): { thing: Thing; floor: string | null; label: string } {
   const whole = { thing: { kind: 'plan' as const, id: '' }, floor: null, label: NOUN.plan }
   const [list, at] = path
-  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item', stairs: 'stair' }
+  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item', stairs: 'stair', patterns: 'pattern' }
   if (typeof list !== 'string' || typeof at !== 'number' || !Object.hasOwn(kinds, list)) return whole
   const items = raw[list]
   const item = Array.isArray(items) ? (items[at] as unknown) : undefined
@@ -113,7 +114,7 @@ function partAt(raw: Record<string, unknown>, path: readonly (string | number)[]
   const kind = kinds[list]!
   let floor: string | null
   if (kind === 'floor') floor = id
-  else if (kind === 'opening') {
+  else if (kind === 'opening' || kind === 'pattern') {
     const walls = Array.isArray(raw['walls']) ? (raw['walls'] as unknown[]) : []
     const wall = walls.find((w) => typeof w === 'object' && w !== null && (w as Record<string, unknown>)['id'] === fields['wall'])
     floor = wall === undefined ? null : safeId((wall as Record<string, unknown>)['floor']) ?? DEFAULT_FLOOR_ID
@@ -162,6 +163,7 @@ const FIELDS_OF: Record<string, string> = {
   openings: 'an opening',
   floors: 'a floor',
   items: 'a fixture',
+  patterns: 'an opening pattern',
   '': 'the plan',
   referenceImage: 'the trace image',
   written: 'the record of how the plan was written'
@@ -212,7 +214,7 @@ function faultPart(raw: Record<string, unknown>, ref: PartRef): { thing: Thing; 
   const noun = kind === 'opening' && (type === 'door' || type === 'window' || type === 'opening') ? OPENING_NOUN[type] : NOUN[kind]
   let floor: string | null
   if (kind === 'floor') floor = ref.id
-  else if (kind === 'opening') {
+  else if (kind === 'opening' || kind === 'pattern') {
     const walls = Array.isArray(raw['walls']) ? (raw['walls'] as unknown[]) : []
     const wall = walls.find((w) => typeof w === 'object' && w !== null && (w as Record<string, unknown>)['id'] === fields['wall'])
     floor = wall === undefined ? null : safeId((wall as Record<string, unknown>)['floor']) ?? DEFAULT_FLOOR_ID
@@ -222,7 +224,7 @@ function faultPart(raw: Record<string, unknown>, ref: PartRef): { thing: Thing; 
   return { thing: { kind, id: ref.id }, floor, label: `${noun} ${quoted(ref.id)}`, place }
 }
 
-const PART_KINDS: Record<PartRef['list'], ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item' }
+const PART_KINDS: Record<PartRef['list'], ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item', patterns: 'pattern' }
 
 /** An id no part of the file has: `kitchen-2`. */
 function freeId(raw: Record<string, unknown>, id: string): string {
@@ -332,7 +334,7 @@ interface Names {
   itemName(id: string): string
 }
 
-function namesOf(plan: FloorPlan): Names {
+function namesOf(plan: FloorPlan, stated: FloorPlan = plan): Names {
   const floors = planFloors(plan)
   const floorNames = new Map(floors.map((f) => [f.id, f.name || f.id] as const))
   const rooms = new Map<string, FloorPlan['rooms'][number]>()
@@ -345,6 +347,9 @@ function namesOf(plan: FloorPlan): Names {
   for (const stair of plan.stairs ?? []) if (!stairs.has(stair.id)) stairs.set(stair.id, stair)
   const items = new Map<string, NonNullable<FloorPlan['items']>[number]>()
   for (const item of plan.items ?? []) if (!items.has(item.id)) items.set(item.id, item)
+  // LVL-8: a pattern is on its wall's floor.
+  const patterns = new Map<string, NonNullable<FloorPlan['patterns']>[number]>()
+  for (const pattern of stated.patterns ?? []) if (!patterns.has(pattern.id)) patterns.set(pattern.id, pattern)
   const floorName = (id: string): string => floorNames.get(id) ?? id
   const roomName = (id: string): string => rooms.get(id)?.name || id
   return {
@@ -382,6 +387,10 @@ function namesOf(plan: FloorPlan): Names {
             name: id,
             floor: wall ? floorOf(wall) : null
           }
+        }
+        case 'pattern': {
+          const wall = walls.get(patterns.get(id)?.wall ?? '')
+          return { label: `${NOUN.pattern} ${quoted(id)}`, name: id, floor: wall ? floorOf(wall) : null }
         }
         case 'item': {
           // A fixture by its kind: `Toilet "wc1"` (CNT-12). One of a kind Grid does not hold is an `Item`.
@@ -675,9 +684,13 @@ export function problemsIn(lines: readonly ResultLine[]): number {
 
 /** Every line about a plan that was read. */
 function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOptions): GridResult {
-  const { plan } = read
+  // LVL-8: the checks read the plain openings a pattern expands into, so a window placed by a
+  // pattern counts for escape like one placed by hand. The drawing check reads the plan as stated,
+  // and says first what kept any pattern's openings from being placed (`validatePlan`).
+  const stated = read.plan
+  const plan = withPatterns(stated)
   const lines: ResultLine[] = [...read.lines]
-  const names = namesOf(plan)
+  const names = namesOf(plan, stated)
   const stage = (name: string, body: () => void): void => {
     try {
       body()
@@ -690,7 +703,7 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     lines.push(...readingLines(read.raw, readingNotes(read.raw), names))
   })
   stage('drawing check', () => {
-    lines.push(...validatePlan(plan, undefined, { leftOutWalls: read.leftOutWalls, leftOutParts: read.leftOut }).issues.map((issue) => issueLine(issue, names)))
+    lines.push(...validatePlan(stated, undefined, { leftOutWalls: read.leftOutWalls, leftOutParts: read.leftOut }).issues.map((issue) => issueLine(issue, names)))
   })
   stage('door check', () => {
     const seen = new Set<string>()

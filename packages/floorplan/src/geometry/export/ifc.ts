@@ -2110,7 +2110,9 @@ const LEFT_OUT_PROPERTIES: Readonly<Record<LeftOutKind, readonly [string, string
   opening: ['Openings', 'OpeningIds'],
   item: ['Fixtures', 'FixtureIds'],
   stair: ['Stairs', 'StairIds'],
-  floor: ['Floors', 'FloorIds']
+  floor: ['Floors', 'FloorIds'],
+  // LVL-8: an opening pattern the reader could not read.
+  pattern: ['OpeningPatterns', 'OpeningPatternIds']
 }
 
 /**

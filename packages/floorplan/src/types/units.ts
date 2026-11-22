@@ -173,10 +173,23 @@ export const FILE_UNITS: Readonly<Record<string, { metres: number; name: string 
 /** Every length a plan file holds, by list: the fields, and those that are a point or a pair. */
 const LENGTH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   walls: ['start', 'end', 'thickness', 'height'],
-  openings: ['offset', 'width', 'sill', 'height'],
+  // CNT-14: the part of a door or window that opens is a length too.
+  openings: ['offset', 'width', 'sill', 'height', 'opens.width', 'opens.height'],
   rooms: ['height', 'floorOffset'],
   floors: ['elevation', 'height', 'slab'],
   items: ['at', 'size', 'height'],
+  // LVL-8: an opening pattern's spacing, and the lengths of the opening and the margins in it.
+  patterns: ['spacing', 'opening.width', 'opening.sill', 'opening.height', 'opening.opens.width', 'opening.opens.height', 'margins.start', 'margins.end'],
+}
+
+/** `part` with the length at `path` (a field, or a field inside a field) scaled, when it is there. */
+function scaledAt(part: Record<string, unknown>, path: readonly string[], scaled: (v: unknown) => unknown): Record<string, unknown> {
+  const [head, ...rest] = path as [string, ...string[]]
+  if (!(head in part)) return part
+  if (rest.length === 0) return { ...part, [head]: scaled(part[head]) }
+  const nested = part[head]
+  if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) return part
+  return { ...part, [head]: scaledAt(nested as Record<string, unknown>, rest, scaled) }
 }
 
 /**
@@ -198,8 +211,8 @@ export function planInMetres<T>(raw: T): { raw: T; from: string | null } {
     if (!Array.isArray(plan[list])) continue
     out[list] = (plan[list] as unknown[]).map((part) => {
       if (typeof part !== 'object' || part === null || Array.isArray(part)) return part
-      const next: Record<string, unknown> = { ...(part as Record<string, unknown>) }
-      for (const field of fields) if (field in next) next[field] = scaled(next[field])
+      let next: Record<string, unknown> = { ...(part as Record<string, unknown>) }
+      for (const field of fields) next = scaledAt(next, field.split('.'), scaled)
       return next
     })
   }

@@ -42,14 +42,15 @@ import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
 import { kindFits, statedKind } from './openingKinds'
 import { DOOR_KINDS, WINDOW_KINDS } from '../types/floorplan'
+import { expandPatterns } from './patterns'
 import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
 import { roomZones } from './zones'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
- * (CNT-12); `stair` (LVL-3), a stated stair.
+ * (CNT-12); `stair` (LVL-3), a stated stair; `pattern` (LVL-8), an opening pattern.
  */
-export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair'
+export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair' | 'pattern'
 
 /**
  * `error` is something that cannot be drawn, or sits on a floor the plan does not know, and gets
@@ -1156,6 +1157,13 @@ export function validatePlan(
   if (options.tolerances !== undefined && Object.keys(options.tolerances).length > 0) {
     const { tolerances, ...rest } = options
     return withTolerances(tolerances, () => validatePlan(plan, index, rest))
+  }
+  // LVL-8: a plan's opening patterns are checked as the plain openings they expand into, after
+  // what stopped any of them being placed.
+  if (plan.patterns !== undefined) {
+    const expanded = expandPatterns(plan)
+    const result = validatePlan(expanded.plan, undefined, options)
+    return { issues: [...expanded.issues, ...result.issues], broken: result.broken }
   }
   const issues: Issue[] = []
   const broken = new Set<string>()
