@@ -63,6 +63,11 @@ Notes for agents and people changing this repository.
   out of the file, so a reader reads the part and a change to the type reaches every part of it.
   The quantities by type and finish are the CLI's `quantities/finishes.ts`; the change is
   `edit/types.ts` (`grid_change_type`, `grid edit type`).
+- `packages/floorplan/src/geometry/columns.ts` (CNT-16): the plan's columns (`columns`, C25), a
+  thing of their own, never a wall, a room or a fixture: their footprints, the room each stands in,
+  the floor it takes off that room's area (`roomColumnArea`, read by `roomFloorArea`), the floors it
+  rises `through` and its checks. `structuralGrid.ts` works out a named grid's lines (`grids`) and
+  the dimensions of their spacing; a grid is drawn only.
 - `packages/floorplan/src/types/facts.ts` (CNT-9): facts of the person's own, in `properties` on
   walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
