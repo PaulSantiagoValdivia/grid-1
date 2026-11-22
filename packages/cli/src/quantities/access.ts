@@ -35,6 +35,7 @@ import {
   turningSpace,
   type FloorJoin,
   type JoinKind,
+  type Passage,
   type PlanStep,
   type Segment,
   type Vec2,
@@ -485,8 +486,13 @@ export interface AccessAnswer {
   readonly data: AccessData
 }
 
-/** The narrowest point of a corridor from end to end: its two ends are the sides of its outline no wider than it, farthest apart. */
-function corridorNarrowest(room: SurveyRoom, obstacles: ReturnType<ReturnType<typeof fixturesOf>['obstacles']>): { narrowest: number | null; at: Vec2 | null; widest: number } {
+/**
+ * The way along a corridor from end to end: its two ends are the sides of its outline no wider
+ * than it, farthest apart, and the way is CNT-13's `passageWidth` between them; null when Grid
+ * finds no two ends. With the widest circle it holds. COD-8's firm standards read a corridor's
+ * width by it too.
+ */
+export function corridorEnds(room: SurveyRoom, obstacles: ReturnType<ReturnType<typeof fixturesOf>['obstacles']>): { way: Passage | null; widest: number } {
   const widest = turningSpace(room.polygon, room.holes, obstacles).diameter
   const outline = room.edges.slice(0, room.polygon.length)
   const reach = widest + 2 * tolerance('useRaster') + tolerance('lengthEqual')
@@ -500,8 +506,13 @@ function corridorNarrowest(room: SurveyRoom, obstacles: ReturnType<ReturnType<ty
       if (best === null || d > best.d) best = { a: [caps[i]!.from, caps[i]!.to], b: [caps[j]!.from, caps[j]!.to], d }
     }
   }
-  if (best === null || best.d <= widest) return { narrowest: null, at: null, widest }
-  const way = passageWidth(room.polygon, room.holes, obstacles, best.a, best.b)
+  if (best === null || best.d <= widest) return { way: null, widest }
+  return { way: passageWidth(room.polygon, room.holes, obstacles, best.a, best.b), widest }
+}
+
+/** The narrowest point of a corridor from end to end (`corridorEnds`). */
+function corridorNarrowest(room: SurveyRoom, obstacles: ReturnType<ReturnType<typeof fixturesOf>['obstacles']>): { narrowest: number | null; at: Vec2 | null; widest: number } {
+  const { way, widest } = corridorEnds(room, obstacles)
   return way === null ? { narrowest: null, at: null, widest } : { narrowest: way.width, at: way.at, widest }
 }
 

@@ -30,6 +30,7 @@ import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
 import { readSeen, SeenRefused } from '../seen/marks'
+import { firmForCheck } from '../firm/measure'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms, describeWalk, walkOf } from './describe'
 import { walkPictures } from '../describe/walkPictures'
@@ -325,9 +326,11 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
     const country = textOf(parsed, '--country')
+    // COD-8: the firm's own standards beside the plan, when it has a file of them.
+    const firm = firmForCheck(project, planFile, loaded.plan)
     // MSG-10: a number is the note's in the whole plan's report, whatever --floor shows.
-    const done: MarkDone | null = ask === null ? null : markNote(project, planFile, loaded, checkPlan(loaded, { country }), ask, ask.mark === 'seen' ? '--seen' : '--unseen')
-    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country }), loaded, readSeen(project, planFile))
+    const done: MarkDone | null = ask === null ? null : markNote(project, planFile, loaded, checkPlan(loaded, { country, firm }), ask, ask.mark === 'seen' ? '--seen' : '--unseen')
+    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country, firm }), loaded, readSeen(project, planFile))
     if (json) io.stdout(checkJson(result, done ?? undefined))
     else {
       const text = checkText(result, planFloors(loaded.plan).length, { full: parsed.values.has('--full') })
