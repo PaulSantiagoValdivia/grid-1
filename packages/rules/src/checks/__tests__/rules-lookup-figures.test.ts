@@ -16,8 +16,11 @@ import { edit, flat, madeVirtual, twoFloorHouse, longWallStrip, withoutOpening }
 /** COD-3: the place the figures here are for. With none stated, no figure applies. */
 const US = { country: 'US' } as const
 
-/** The plan checks that look at something in these plans: none has a stair room, so the stairs check (LVL-3) is not listed. */
-const PLAN_RULES = CORE_RULES.filter((rule) => rule.id !== 'stairs-line-up')
+/**
+ * The plan checks that look at something in these plans: none has a stair room, so the stairs check
+ * (LVL-3) is not listed, and none states the ground, so neither is the check of openings below it (LVL-4).
+ */
+const PLAN_RULES = CORE_RULES.filter((rule) => rule.id !== 'stairs-line-up' && rule.id !== 'openings-above-ground')
 
 const source = { url: 'https://www.boe.es/x', quote: 'sample passage: at least 30 m2', retrievedAt: '2026-11-14T10:00:00.000Z' }
 
@@ -207,8 +210,9 @@ describe('a plan for a country the carried figures do not cover', () => {
     expect(report.notChecked.filter((n) => n.reason === 'no_figures_for_place').map((n) => n.message)).toEqual([
       'Escape openings were not checked: the figures here are from US model codes, and this plan is for Italy'
     ])
-    // Not listed: the escape check, and the stairs check (LVL-3), which finds no stair room here.
-    expect(RULES.length).toBe(report.rules.length + 2)
+    // Not listed: the escape check, the stairs check (LVL-3), which finds no stair room here, and
+    // the check of openings below the ground (LVL-4), as the plan states no ground.
+    expect(RULES.length).toBe(report.rules.length + 3)
   })
 })
 

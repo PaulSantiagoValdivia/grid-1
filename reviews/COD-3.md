@@ -311,3 +311,55 @@ Checks run after merging `main` at 25747b7:
   --maxWorkers=2 --minWorkers=1` (every package the merge touched, the scoreboard's
   approval-words and retell tests among them): 251 files passed, 4,849 tests passed, 4 skipped,
   none failed.
+
+## Merging main at b58930a (LVL-4)
+
+LVL-4 adds `site.ground`, the ground level, beside COD-3's `site.country`. Conflicts, each kept
+both sides:
+
+- `packages/floorplan/src/types/floorplan.ts`, `SiteSchema`: `ground` and `country` side by side.
+  The reader's unknown-field list comes from the schema, so it knows both; `readTop` still leaves
+  out a bad `site.country` alone and keeps the rest of the site, `ground` among it. `ground` is a
+  number, so `planText.ts` needs no limit for it.
+- `packages/cli/src/sheet/coverage.ts`, `site`: LVL-4's reason (the ground is read by the checks,
+  no drawing shows it) with COD-3's sentence (the check page names the place).
+- `docs/plan-file.md`, the `site` row: LVL-4's `ground` sentence, then COD-3's `country` one.
+- `docs/result-contract.md`: the agents changelog has COD-3's entry first, then LVL-4's; the
+  short-report paragraph gives the new byte counts below.
+- `packages/rules/src/checks/__tests__/rules-lookup-figures.test.ts`: COD-3's `US` constant, and
+  LVL-4's `PLAN_RULES` (which also leaves out `openings-above-ground`).
+- `packages/cli/src/command/__tests__/shortReport.test.ts`: COD-3's tests, with LVL-4's changes
+  folded in (below).
+
+**The flat's byte counts.** LVL-4 adds a coverage line to every plan that states no ground level
+(its check of openings below the ground looked at nothing), and a tenth line to the limits. That
+line alone is 213 bytes from `grid check` and 211 from `grid_check`, so on `main` the flat's
+report is over MSG-10's 1,000 bytes (1,201 and 1,184), and LVL-4 pins it so: the full count, and
+the count without the ground line under 1,000 (its review, "For the owner"). Re-measured here and
+pinned the same way:
+
+| | full | without the ground line |
+|---|---|---|
+| `grid check`, no place | 1,196 | 984 |
+| `grid check --country US` | 1,200 | 988 |
+| `grid_check` text, no place | 1,179 | 969 |
+
+Each "without" figure is one byte more than before the merge: "(9)" became "(10)" in the line
+on what `--full` adds. The coverage counts are 8 (were 7) and the limits 10 (were 9) in every
+expectation of `shortReport.test.ts`.
+
+One of LVL-4's own tests needed the place: `packages/rules/src/result/__tests__/ground.test.ts`,
+"the floor at grade (LVL-4)", checks which escape figure a bedroom is held to, with no place
+stated; with no place no figure applies, so both cases failed. Its `upstairs()` plan now states
+`site: { country: 'US' }` beside its `ground`, and both pass with what they tested. No other test
+changed in this merge.
+
+Checks run after merging `main` at b58930a:
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean.
+- `npx vitest run packages/cli packages/rules packages/floorplan packages/viewer
+  scoreboard/__tests__/approvalWords.test.ts scoreboard/__tests__/retell.test.ts
+  --maxWorkers=2 --minWorkers=1`: 248 files, 4,853 passed, 2 skipped, 2 failed: the two cases of
+  `ground.test.ts` above. After the fix, `packages/rules` alone: 23 files, 380 passed.
+- `npm run scoreboard` (the merge brought changes to the rules' checks and `scoreboard/`):
+  "Same as the stored figures" (checks fed 15 of 42, as stored on `main`).

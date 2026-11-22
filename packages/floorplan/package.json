@@ -18,7 +18,8 @@
     "./export": "./src/export/planExport.ts",
     "./notes": "./src/notes/notes.ts",
     "./rooms": "./src/rooms/index.ts",
-    "./test-support/plans": "./src/test-support/plans.ts"
+    "./test-support/plans": "./src/test-support/plans.ts",
+    "./test-support/lab": "./src/test-support/lab.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

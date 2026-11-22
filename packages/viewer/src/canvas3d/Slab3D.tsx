@@ -51,16 +51,10 @@ export function floorSlabGeometry(slab: SceneSlab): THREE.BufferGeometry {
   return slabBetween(slab, bottom, top - bottom)
 }
 
-/** The roof over a room of the top storey, lying on its walls (`clearHeight` up). */
-export function roofGeometry(slab: SceneSlab, clearHeight: number): THREE.BufferGeometry {
-  return slabBetween(slab, clearHeight)
-}
-
 export function Slab3D({
   slab,
   color,
   meshRef,
-  roofAt,
   castShadow = false,
   glow = 0
 }: {
@@ -68,17 +62,12 @@ export function Slab3D({
   color: string
   /** For a live build, which fades the slab in. */
   meshRef?: (mesh: THREE.Mesh | null) => void
-  /** Draw the roof at this local height instead of the floor slab. */
-  roofAt?: number
   /** Upper storeys' slabs shade the storeys below. */
   castShadow?: boolean
   /** How much the slab glows in its own colour (a muted storey in light theme, `mutedGlow`). */
   glow?: number
 }): JSX.Element {
-  const geometry = useMemo(
-    () => (roofAt === undefined ? floorSlabGeometry(slab) : roofGeometry(slab, roofAt)),
-    [slab, roofAt]
-  )
+  const geometry = useMemo(() => floorSlabGeometry(slab), [slab])
 
   useEffect(() => () => geometry.dispose(), [geometry])
 
