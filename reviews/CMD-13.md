@@ -105,3 +105,10 @@ Nothing was removed.
 7. **A line about a floor or the whole plan keeps the whole plan.** Cutting to one floor's
    parts would be a small follow-up.
 8. **The tool count.** 16 tools now, one past the "about a dozen" test's old ceiling of 15.
+
+## Seen on main, not changed here
+
+After merging main at c4f773f, `packages/cli/src/command/__tests__/wordsNotRead.test.ts` ("names
+thick on a wall…") fails, alone as well as in the suite. `grid check` now numbers its lines
+(`1. worth a look, …`), and MSG-4's test still expects `- worth a look, …`. That file and
+`check.ts` are the same on this branch as on main, so the failure is main's. I left it alone.
