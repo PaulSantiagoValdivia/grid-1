@@ -37,6 +37,7 @@
  *   repeat <unit> <n> <direction> of <room or unit> as <first label> [...]
  *   copy <floor> [with openings]   rename <room> <new id> "<name>" [use]   remove <id>
  *   raw wall|room|opening { ...Grid's own JSON... }     a part written the Grid way
+ *   raw floor { "roof": {...}, "parapet": <m> }         the floor's fields rooms text has no words for (LVL-6)
  *
  * Pure: text in, a plan and a report out. Nothing here reads or writes a file.
  */
@@ -201,6 +202,8 @@ interface FloorDraft {
   slab: number | null
   /** CNT-5: the floor's own kind of building. */
   building: BuildingType | null
+  /** LVL-6: the floor's fields rooms text has no words for, as Grid's plan file holds them (`raw floor`). */
+  extra: { roof?: unknown; parapet?: unknown }
   rooms: Map<string, RoomDraft>
   inst: Map<string, string[]>
   between: Map<string, WallSay>
@@ -391,6 +394,11 @@ class Compiler {
       const at = i + 1
       const text = this.lines[i]!
       i++
+      const rawFloor = /^\s*raw\s+floor\s+(.*)$/.exec(text)
+      if (rawFloor) {
+        this.rawFloor(rawFloor[1]!, at)
+        continue
+      }
       const raw = /^\s*raw\s+(wall|room|opening)\s+(.*)$/.exec(text)
       if (raw) {
         this.rawPart(raw[1] as 'wall' | 'room' | 'opening', raw[2]!, at)
@@ -420,6 +428,21 @@ class Compiler {
       }
     }
     return this.emit()
+  }
+
+  /** LVL-6: the current floor's `roof` and `parapet`, as Grid's plan file holds them. */
+  private rawFloor(json: string, at: number): void {
+    let value: unknown
+    try {
+      value = JSON.parse(json)
+    } catch {
+      this.stop('rooms/raw', at, `line ${at}: a raw floor is one JSON object on the rest of the line, with the floor's roof or parapet as Grid's plan file holds them; this one could not be read.`)
+    }
+    const keys = typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.keys(value) : null
+    if (keys === null || keys.some((k) => k !== 'roof' && k !== 'parapet')) {
+      this.stop('rooms/raw', at, `line ${at}: a raw floor is a JSON object holding only the floor's "roof" and "parapet", as Grid's plan file holds them.`)
+    }
+    Object.assign(this.floor().extra, value)
   }
 
   private rawPart(kind: 'wall' | 'room' | 'opening', json: string, at: number): void {
@@ -1801,6 +1824,7 @@ class Compiler {
         ...(f.height !== null ? { height: f.height } : {}),
         ...(f.slab !== null ? { slab: f.slab } : {}),
         ...(f.building !== null ? { building: f.building } : {}),
+        ...(f.extra as Pick<NonNullable<FloorPlan['floors']>[number], 'roof' | 'parapet'>),
       }))
     }
     if (this.building !== null) plan.building = this.building
@@ -1977,6 +2001,7 @@ function newFloor(id: string, name: string, level: number): FloorDraft {
     elevation: null,
     slab: null,
     building: null,
+    extra: {},
     rooms: new Map(),
     inst: new Map(),
     between: new Map(),

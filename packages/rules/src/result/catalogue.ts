@@ -421,6 +421,15 @@ export const CODES = {
       fixOf(s, 'height') === null ? 'its sill and height together no higher than the wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
     fix: (s) => (fixOf(s, 'height') === null ? 'Lower its height or its sill.' : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, or lower its sill.`)
   },
+  'opening/above-roof': {
+    says: (s) => `${s.label} reaches above the roof over its wall`,
+    needed: (s) =>
+      fixOf(s, 'height') === null ? 'its sill and height together no higher than the roof over that stretch of its wall' : `a height of at most ${metresText(fixOf(s, 'height')!)} m at its sill`,
+    fix: (s) =>
+      fixOf(s, 'height') === null
+        ? 'Lower it under the roof, move it along the wall to where the roof is higher, or, for a window in the slope, state it as a rooflight in the floor\'s roof.'
+        : `Make it ${metresText(fixOf(s, 'height')!)} m high or lower, lower its sill, or move it to where the roof is higher.`
+  },
   'opening/negative-sill': {
     says: (s) => `${s.label} has its sill below the floor`,
     needed: fixed('a sill at 0 or above'),
@@ -682,6 +691,16 @@ export const CODES = {
     says: (s) => `${s.label} is the top floor and has nothing drawn on it`,
     needed: fixed('a top floor with something on it'),
     fix: fixed('Remove the floor if nothing is on it yet: it still counts as a storey and the roof stands on it.')
+  },
+  'floor/rooflight-misplaced': {
+    says: (s) => `${s.label} has a rooflight that does not lie on one slope of its roof`,
+    needed: fixed("a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips"),
+    fix: fixed("Move the rooflight's middle (at) onto one slope, or make it smaller, so it neither leaves the roof nor crosses where two slopes meet. Until then it is left out.")
+  },
+  'floor/dormers-not-drawn': {
+    says: (s) => `${s.label} lists dormers, which are not supported yet`,
+    needed: fixed('a roof Grid can draw: dormers are not supported yet'),
+    fix: fixed("Grid draws and measures the roof without its dormers. A window in a dormer's face can be drawn in an outside wall raised to it; a window in the slope is a rooflight.")
   },
   'floor/size-question': {
     says: (s) => `${s.label} states a height that may not be meant`,

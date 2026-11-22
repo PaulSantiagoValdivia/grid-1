@@ -14,6 +14,7 @@ clause, place, day read and status, and none is carried yet.
 | Net area | Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it; a stair drawn as a room on floor after floor counts once, on the floor it rises from. | Nothing inside a room is taken off: fixed units, a column drawn without walls and floor under a low ceiling all count. | The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside. |
 | Gross internal area | Gross internal area is the floor inside the inside face of the walls that face outside, with the inner walls and partitions counted. | Inner walls, partitions, stairs and floor no room claims are not taken off. | Which walls face outside is worked out from the rooms beside them; the plan cannot say whether floor no room claims, such as a courtyard or a light well, is covered, so it counts. |
 | Gross external area | Gross external area is the floor inside the outside face of the walls, every wall counted. | Outer walls, inner walls and floor no room claims are not taken off. | The plan cannot say which walls are shared with a neighbour, so a shared wall counts in full, and a wall standing apart counts too. |
+| Area by headroom | Area by headroom is the floor of each room with at least 1.5 m, and with at least 2.2 m, of height over it, from the room's floor to its ceiling or to the underside of the roof its floor states, whichever is lower. | It is part of the net area: nothing standing in the room is taken off, and floor under a lowered zone of the ceiling counts by that zone's height. | The plan cannot say how deep the roof is built up or where a low slope is boxed in, so the height is taken to the roof's underside as stated, from its eaves on the outside walls' lines. |
 
 On every floor the gross external area is the net area, plus the rooms named outside, the walls
 and the floor no room claims, to a millionth of a square metre. Where rooms overlap, or run over
@@ -21,6 +22,16 @@ walls or outside them, the answer says how much floor that is, and the sum takes
 gross internal area leaves out the walls that face outside, stretch by stretch, as Grid works
 them out from the rooms beside them, with the corners between them; a floor with no such wall
 has none. A room Grid could not draw is named and left out of every figure.
+
+Under a sloped roof (LVL-6) a room's floor is also given by headroom band: how much of it has at
+least 1.5 m (`headroomLow`) and at least 2.2 m (`headroomFull`) of height over it, Grid's own
+figures, not a code figure ([tolerances.md](tolerances.md)). The height is measured from the room's
+floor to the lower of its ceiling (its own `height`, else its storey's, with any lowered zone) and
+the underside of the roof its floor states ([plan-file.md](plan-file.md#sloped-roofs-and-ceilings)).
+`grid_areas` gives the bands for each room on such a floor, with its lowest and highest height,
+and adds them up per floor and in all; a floor that states no roof gets none, since its ceilings
+are level. In the library: `roomHeadroom(plan, room)`. No band is checked against a figure: the
+bands are reported, and nothing says a room is high enough.
 
 A stair is counted once (SHT-11, lab DR-5). Where rooms used as a stair lie one over the other
 on neighbouring floors, joined as the way-out check joins them (they share at least half of the

@@ -360,6 +360,26 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Headroom under a sloped roof (LVL-6) ──────────────────────────────────────────────────
+  headroomLow: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      "Grid's own size, not a code figure. The lower headroom band: a room's floor with at least " +
+      'this much height over it, to its ceiling or the roof above it, is reported as one area.',
+    basis: own
+  },
+  headroomFull: {
+    kind: 'limit',
+    value: 2.2,
+    unit: 'm',
+    decides:
+      "Grid's own size, not a code figure. The upper headroom band: a room's floor with at least " +
+      'this much height over it is reported as a second area.',
+    basis: own
+  },
+
   // ── A way through that a person fits (MSG-18) ─────────────────────────────────────────────
   passableWidth: {
     kind: 'limit',

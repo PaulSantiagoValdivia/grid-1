@@ -38,9 +38,9 @@ import { cornerFills, inPolygon, polygonArea, strip, union } from './polygons'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 
-/** The three measures. */
-export type Measure = 'net' | 'grossInternal' | 'grossExternal'
-export type GrossMeasure = Exclude<Measure, 'net'>
+/** The three measures, and the floor by headroom band (LVL-6). */
+export type Measure = 'net' | 'grossInternal' | 'grossExternal' | 'headroom'
+export type GrossMeasure = 'grossInternal' | 'grossExternal'
 
 /** A measure described in Grid's own words. No standard's text, and no standard's name. */
 export interface MeasureRule {
@@ -80,6 +80,13 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
     measures: 'Gross external area is the floor inside the outside face of the walls, every wall counted.',
     notTakenOff: 'Outer walls, inner walls and floor no room claims are not taken off.',
     cannotSay: 'The plan cannot say which walls are shared with a neighbour, so a shared wall counts in full, and a wall standing apart counts too.',
+  },
+  headroom: {
+    measure: 'headroom',
+    name: 'Area by headroom',
+    measures: `Area by headroom is the floor of each room with at least ${TOLERANCES.headroomLow.value} m, and with at least ${TOLERANCES.headroomFull.value} m, of height over it, from the room's floor to its ceiling or to the underside of the roof its floor states, whichever is lower.`,
+    notTakenOff: 'It is part of the net area: nothing standing in the room is taken off, and floor under a lowered zone of the ceiling counts by that zone\'s height.',
+    cannotSay: 'The plan cannot say how deep the roof is built up or where a low slope is boxed in, so the height is taken to the roof\'s underside as stated, from its eaves on the outside walls\' lines.',
   },
 }
 
