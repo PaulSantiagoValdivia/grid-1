@@ -23,6 +23,9 @@ Grid has not been released yet. The first release will hold:
 - Every report, `grid_check` and the check sheet list what the checks never look at, ceiling
   height and which walls carry load among them.
 - `grid tidy` lists the walls that do not meet and makes the fixes you choose.
+- Every note and pass that used a figure says which kind of building the figure was read for:
+  today, homes. A plan cannot say yet what kind of building it is, so a café or a hotel is
+  measured with a home's figures, and the report now says so.
 - `grid describe`, `grid draw`, `grid export` and `grid sheet` describe a plan, draw it, export
   it and lay it out as an A3 sheet in PDF.
 - `grid init` makes a folder a Grid project, where the commands read its `plan.json`.

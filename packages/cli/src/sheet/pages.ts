@@ -8,7 +8,7 @@
 import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geometry'
 import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { findingReadFor, GENERAL_GUIDANCE_LABEL, readForSentence } from '@ongrid/rules'
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 import { pictureView, undecidedDoorsOf, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
@@ -241,11 +241,14 @@ function issueLine(issue: { severity: string; entity: string; id: string; messag
 }
 
 /** A finding, by the ids of the rooms and openings it names, as a drawing problem is by its own. */
-export function findingLine(finding: { rooms: readonly string[]; openings: readonly string[]; message: string }): string {
+export function findingLine(finding: Parameters<typeof findingReadFor>[0] & { rooms: readonly string[]; openings: readonly string[]; message: string }): string {
   const ids = (one: string, list: readonly string[]): string[] =>
     list.length === 0 ? [] : [`${list.length === 1 ? one : `${one}s`} ${list.map(quoted).join(', ')}`]
   const named = [...ids('room', finding.rooms), ...ids('opening', finding.openings)]
-  return named.length === 0 ? `Finding: ${finding.message}` : `Finding, ${named.join(', ')}: ${finding.message}`
+  // COD-2: a finding that used a figure says which kind of building the figure was read for.
+  const kinds = findingReadFor(finding)
+  const message = kinds.length === 0 ? finding.message : `${finding.message}. ${readForSentence(kinds)}`
+  return named.length === 0 ? `Finding: ${message}` : `Finding, ${named.join(', ')}: ${message}`
 }
 
 function noticeLine(notice: { message: string }): string {

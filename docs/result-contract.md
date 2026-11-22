@@ -48,7 +48,7 @@ record. It never throws: a check that fails inside Grid becomes a line
 | `lookupNotice` | Only with `local-lookup`: the figures were found by an AI and not checked by a person. |
 | `checks` | Every check that ran and looked at something, with where its figures come from. A check that looked at no room, floor or door is not listed (MSG-2). Empty when the plan was refused. |
 | `coverage` | What each check looked at and skipped, one entry per check Grid has, whether it ran or not. See "What each check looked at". Empty when the plan was refused. |
-| `figures` | Every figure a check applied, with its document, edition, clause, place, day read and status. The figures of a check that looked at nothing are not listed. |
+| `figures` | Every figure a check applied, with its document, edition, clause, place, day read, status and `readFor`, the kind of building it was read for (`homes` for every figure today). The figures of a check that looked at nothing are not listed. |
 | `limits` | What these checks never look at, whatever the plan. The same lines every time. |
 
 ### A line
@@ -200,6 +200,7 @@ checks first, then the figure checks, whether it ran or not:
 | `skipped` | The parts it did not look at, by floor and reason: `{ floor, ids, reason, why }`. `floor` is `""` for the whole plan. |
 | `skippedCount` | How many parts that is. |
 | `findings` | How many findings it gave. |
+| `readFor` | Only on a figure check that looked at something: the kinds of building its figures were read for, as `["homes"]` (COD-2). |
 
 A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
 so a record with no findings says what it is: these parts were looked at and nothing was
@@ -287,6 +288,21 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: which kind of building a figure was read for (COD-2)
+
+- Every figure, in `figures` and on a finding, adds `readFor`: the kind of building it was read
+  for. Every figure today is `homes`. A plan cannot say yet what kind of building it is, so a
+  figure is applied whatever the building, and every note and pass that used one says so.
+- `coverage` adds `readFor` on a figure check that looked at something, so a pass with no
+  finding says it (lab CH-2: a café's seating marked "dining" passed against a home's figure
+  without a line).
+- `needed` on `room/too-small`, `room/no-escape-opening`, `room/escape-window-too-small` and
+  `room/escape-window-too-high` ends "; this check's figures were read for homes (houses and
+  flats people live in)". No code changes meaning, so `resultVersion` stays.
+- `grid check` prints it after each such check's findings and on each figure used; `grid_check`
+  prints `Needed:` on those lines and the kind on each such check; the notes on a plan and the
+  check sheet add the sentence.
 
 ### 2026-11-22: what is never looked at (COD-4)
 
