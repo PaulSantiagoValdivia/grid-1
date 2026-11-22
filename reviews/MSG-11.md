@@ -1098,3 +1098,36 @@ stair or shaft, as the other notes are (`notYet`).
     are written as the file writes them in the Spanish lines, as the other field names are.
 46. **The note on a moved stair or shaft** (`notes/notes.ts`, the plan's notes) stays English, as
     the other notes do; the ratchet counts it.
+
+## After merging main at 8a0c839e
+
+Main moved while the merge above was checked: BRF-6 (a first layout from the brief, `grid write
+--layout tidy|sizes` and `layout` on `grid_write_rooms`, and the alignment offered for a door
+between rooms that share no wall). Two files conflicted, `CHANGELOG.md` and
+`docs/result-contract.md`: the Unreleased list keeps MSG-11's line and BRF-6's; the contract keeps
+MSG-11's section first of the day, with a line on BRF-6, then main's new section. Main adds no
+code to the record and no tool, so no key moves.
+
+### The ownWords guard
+
+BRF-6's text answers as rooms text does, in English. Not counted: `geometry/tolerances.ts`
+219 → 223 (`developer`, its three limits) and `mcp/writeTools.ts` 93 → 100 (`tools`). The ratchet
+moves from 1453 to 1474, by 21 of the kinds MSG-11 left for later: the first layout's refusals and
+answer (`floorplan/src/rooms/layout.ts` 4 and `cli/src/brief/layout.ts` 12, both new and listed),
+the alignment offered in rooms text (`rooms/compile.ts` 117 → 118) and the command's new option
+(`command/main.ts` 60 → 63, `write.ts` 31 → 32).
+
+### Results after 8a0c839e
+
+- `npm run build`: `dist/grid.mjs` 648,688 bytes, under main's cap of 650,000 (not touched), 1,312
+  bytes to spare; the Spanish chunk 178,611 bytes.
+- `npm run typecheck`, `npm run lint`: clean.
+- Floorplan `rooms/` (BRF-6's layout tests among them), `messages/` and the tolerances test, rules
+  `result/`, the CLI's guard, `brief/`, `write`, `mcp/` tools and `command/` (everyPath,
+  grid.e2e, language.e2e): 34 files, 460 tests pass. Main's tests pass unchanged.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (8a0c839e)
+
+47. **The bundle is 1,312 bytes under main's 650,000 cap** after BRF-6. The next change to main or
+    MSG-11 that adds code will need the cap raised; that is main's to decide, so it is not touched.

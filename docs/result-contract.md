@@ -669,7 +669,7 @@ its text, which says the same.
 | `grid_preview` | `floor`, `view`, `room` (the room framed), `note`, `highlight`, `selected`, `camera`, `revision`, `planFile`, `previewFile` (the record beside the plan, inside the project) and `shown` (false when it only read the selection and wrote nothing). It never writes the plan ([The preview, shared with the person](tool-server.md#the-preview-shared-with-the-person)). |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, `reminder`: one line on a first plan with no brief beside it, else null, and `layout`: null, or for a first layout from the brief (BRF-6) its `shape`, `rooms` (the rooms text written), `outline`, `added`, `notKept` (each `room`, `name`, `text`, `by`), `notPlaced` and `touch` ([brief.md](brief.md#a-first-layout-from-the-brief)), and `scan`: null, or for a phone room scan (HND-12) its `evidence`, `paired`, `oneSided`, `areas`, `assumed`, `leftOut` and `match` ([commands.md](commands.md#a-plan-from-a-phone-room-scan-grid-write---scan)). |
 
 A line of the brief (BRF-1, [brief.md](brief.md)) has a `state` (`met`, `missed`, `open`, or
 `differs` for a size in a room's name), `wish` (`room`, `rooms`, `footprint`, `touch`, a figure's
@@ -759,6 +759,31 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `fix`. A shifted stair's or shaft's lines have `values` `ways` (east or north, in metres) or
   `sideWays` (its sides, for a shaft not moved as a whole); the finding's `shift` is data and the
   same in every language. A coordinate pair in Spanish is written `(1,20; 0,00)`.
+- BRF-6's first layout (`grid_write_rooms layout`, `grid write --layout`) and the alignment offered
+  for a door between rooms that share no wall answer in English, as rooms text does.
+
+### 2026-11-22: a first layout from the brief, and a door's alignment (BRF-6)
+
+- `grid_write_rooms` takes `layout` (`tidy` or `sizes`) in place of `rooms`, which is no longer
+  required: one of three, with HND-12's `scan`. A call with none of them, or more than one, is
+  refused naming them (`Pass layout or scan, not both.` for those two). It writes a first layout
+  of the brief beside the plan as rooms text, refused when there is no brief, it can't be read, or
+  it holds no room with a size. Its receipt adds `layout`: null when rooms text or a scan was
+  passed (and a layout's receipt carries `scan: null`); else `shape`, `rooms` (the rooms
+  text written, to change and send back), `outline` (east-west by north-south, m), `added` (the
+  hall Grid added, by name, or null), `notKept` (each size not kept: `room`, `name`, `text`, the
+  brief's own line for it with how much its area changed, and `by`, that change in m²),
+  `notPlaced` (each room of the brief not placed, with why) and `touch` (`wished`, `held`). The
+  text adds the same, then the rooms text. `grid write --layout tidy|sizes` does the same, and its
+  `--json` adds `layout`; it refuses `--layout` with a rooms file or with `--scan`.
+- A door between two rooms that share no wall (`rooms/no-shared-wall`) is refused, when one
+  room's other alignment would make them share one, with `With line 3 written '…', they share a
+  wall.` at the end of the message. The core's `compileRoomsText` gives the same as data on the
+  problem: `fixes`, each `{ line, text }`. A refusal of the tool stays text, as every refusal is.
+- A wall height the rooms text does not state is no longer written into the plan file as Grid's
+  default with an `unstated` beside it, which the check then named as a field it does not know;
+  the reading fills it, as for any wall written without one.
+- No new code in the record.
 
 ### 2026-11-22: walls through floors, and floors that line up (LVL-5)
 

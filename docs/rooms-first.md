@@ -45,6 +45,13 @@ window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
 - Rooms that overlap, that touch with no wall between them (unless one is `open` to the other),
   or that leave a gap that is neither a wall nor a room are refused in plain words naming both
   rooms. Every refusal has a code, such as `rooms/overlap`.
+- A door between two rooms that share no wall (`rooms/no-shared-wall`) is refused with the line
+  that would make them share one, when changing how one of them lines up does (BRF-6, lab
+  AB-11): `With line 3 written 'room bed2 "Bedroom 2" bedroom 2.0 x 3.5 north of bed1 align
+  east', they share a wall.` Nothing is changed: the line is offered, and the problem carries it
+  as data (`fixes`: `line`, `text`).
+- From the brief's rooms and sizes, `layout` writes a first layout as rooms text
+  ([A first layout from the brief](brief.md#a-first-layout-from-the-brief)).
 - What rooms cannot say is written raw, one line of the plan file's own JSON:
   `raw wall {...}`, `raw room {...}`, `raw opening {...}`. Free-standing walls, curved or
   out-of-the-way walls and rooms with holes are written that way.

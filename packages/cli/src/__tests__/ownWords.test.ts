@@ -34,6 +34,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/apps/cadApps.ts': [1, 'developer'],
   'packages/cli/src/brief/answer.ts': [2, 'notYet'],
   'packages/cli/src/brief/brief.ts': [50, 'agent'],
+  'packages/cli/src/brief/layout.ts': [12, 'notYet'],
   'packages/cli/src/brief/lines.ts': [20, 'notYet'],
   'packages/cli/src/command/check.ts': [10, 'command'],
   'packages/cli/src/command/describe.ts': [9, 'command'],
@@ -44,7 +45,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/export.ts': [17, 'command'],
   'packages/cli/src/command/init.ts': [15, 'command'],
   'packages/cli/src/command/language.ts': [2, 'command'],
-  'packages/cli/src/command/main.ts': [60, 'command'],
+  'packages/cli/src/command/main.ts': [63, 'command'],
   'packages/cli/src/command/options.ts': [9, 'command'],
   'packages/cli/src/command/plan.ts': [29, 'command'],
   'packages/cli/src/command/planText.ts': [19, 'command'],
@@ -52,7 +53,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/section.ts': [6, 'command'],
   'packages/cli/src/command/sheet.ts': [3, 'command'],
   'packages/cli/src/command/tidy.ts': [12, 'command'],
-  'packages/cli/src/command/write.ts': [31, 'command'],
+  'packages/cli/src/command/write.ts': [32, 'command'],
   'packages/cli/src/describe/card.ts': [13, 'agentForm'],
   'packages/cli/src/describe/facts.ts': [2, 'notYet'],
   'packages/cli/src/describe/walk.ts': [4, 'agentForm'],
@@ -90,7 +91,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/serveTools.ts': [1, 'tools'],
   'packages/cli/src/mcp/toolkit.ts': [27, 'agent'],
   'packages/cli/src/mcp/viewTool.ts': [15, 'tools'],
-  'packages/cli/src/mcp/writeTools.ts': [93, 'tools'],
+  'packages/cli/src/mcp/writeTools.ts': [100, 'tools'],
   'packages/cli/src/occupancy/occupancy.ts': [16, 'notYet'],
   'packages/cli/src/preview/localServer.ts': [6, 'agent'],
   'packages/cli/src/preview/record.ts': [4, 'command'],
@@ -138,14 +139,15 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/rounding.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/rules/doors.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
-  'packages/floorplan/src/geometry/tolerances.ts': [219, 'developer'],
+  'packages/floorplan/src/geometry/tolerances.ts': [223, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/wallFaults.ts': [3, 'notYet'],
   'packages/floorplan/src/notes/notes.ts': [18, 'notYet'],
   'packages/floorplan/src/rooms/answer.ts': [6, 'notYet'],
-  'packages/floorplan/src/rooms/compile.ts': [117, 'notYet'],
+  'packages/floorplan/src/rooms/compile.ts': [118, 'notYet'],
+  'packages/floorplan/src/rooms/layout.ts': [4, 'notYet'],
   'packages/floorplan/src/rooms/read.ts': [21, 'notYet'],
   'packages/floorplan/src/rooms/words.ts': [4, 'notYet'],
   'packages/floorplan/src/scan/evidence.ts': [2, 'notYet'],
@@ -243,9 +245,11 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // measures (29), the area rules for an outline (4), the outline's schema refusal (1) and the
     // commands' new options (main 2, write 1); and CNT-4 10: the flats in rooms text (1), the
     // schema (1), the area rules (1, and the CLI's 1), the flat schedule's rules (3) and the
-    // commands' refusals (planText 1, write 2); and LVL-5 1: a moved stair's note (notes.ts)
+    // commands' refusals (planText 1, write 2); and LVL-5 1: a moved stair's note (notes.ts); and
+    // BRF-6 21: the first layout's refusals and answer (rooms/layout.ts 4, brief/layout.ts 12), the
+    // alignment offered for a door in rooms text (1) and the commands' new option (main 3, write 1)
     // (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1453)
+    expect(left).toBeLessThanOrEqual(1474)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {

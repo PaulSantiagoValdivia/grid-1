@@ -15,7 +15,7 @@
  */
 import { expandPatterns, planHasPhases, validatePlan, type FloorPlan, type TapedRow } from '@ongrid/floorplan/geometry'
 import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
-import { FloorPlanSchema, safeParseFloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, safeParseFloorPlan, statedWall } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
 import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
 import { TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
@@ -39,6 +39,10 @@ export const WRITE_OPTIONS: OptionSpecs = {
   '--scan': {
     takesValue: true,
     help: 'Write the plan from a phone room scan in the project (Apple\'s room model, as JSON) in place of rooms text. The scan is kept beside the plan as <plan>.scan.json.',
+  },
+  '--layout': {
+    takesValue: true,
+    help: 'In place of a rooms file: a first layout from the brief beside the plan. tidy: a rectangle; sizes: every size kept.',
   },
   '--json': { takesValue: false, help: 'Print the answer as JSON.' },
   ...PROJECT_OPTION,
@@ -190,7 +194,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   if (plan.building !== undefined) next['building'] = plan.building
   // WRT-7: a `display` line sets how the person reads lengths; without one, the file's stays.
   if (plan.display !== undefined) next['display'] = plan.display
-  next['walls'] = plan.walls
+  // WRT-6: a height the text did not state stays out of the file; the reading fills it again.
+  next['walls'] = plan.walls.map(statedWall)
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings
   // CNT-4: the flats a text places (a unit that is a flat type) replace the file's; a text that
