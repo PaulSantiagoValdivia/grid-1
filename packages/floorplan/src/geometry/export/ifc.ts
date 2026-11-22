@@ -1905,7 +1905,7 @@ function writeStoreyContents(building: Context, storey: Storey): void {
   const joints = phasedJoints(storey.model.walls, c.phaseOf)
 
   for (const part of storey.model.walls) {
-    // LVL-5 (C18): a wall through floors is one wall element, on its own floor's storey, from its
+    // LVL-5 (C19): a wall through floors is one wall element, on its own floor's storey, from its
     // foot to its top, with its openings as stated: the window through two storeys is one window.
     const whole = wholeWall(part, openingsOf(index, part.id).filter((o) => !broken.has(o.id)))
     if (whole === null) continue

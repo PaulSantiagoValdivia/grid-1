@@ -1,5 +1,5 @@
 /**
- * LVL-5 (C18, lab VE-9, H-10): a wall that rises through floors, shared by them, and a window in it
+ * LVL-5 (C19, lab VE-9, H-10): a wall that rises through floors, shared by them, and a window in it
  * through two storeys. The lab's case is hx3: a stair window from 0.9 to 5.4 m in the north wall of
  * a house of two floors, refused as taller than its wall and not drawn.
  */

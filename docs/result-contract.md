@@ -673,7 +673,7 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ### 2026-11-22: walls through floors, and floors that line up (LVL-5)
 
-- The plan format takes a wall's `through` (C18): the highest floor it rises through. A room on
+- The plan format takes a wall's `through` (C19): the highest floor it rises through. A room on
   any floor it stands on may list it, so `room/cross-floor` is no longer given for such a wall.
   An opening in it may reach as high as the wall rises, measured from the wall's own floor, so
   `opening/too-tall` compares with that height; openings one over the other in it are not

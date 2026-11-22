@@ -450,7 +450,7 @@ export const CODES = {
     needed: fixed('a height above 0, or a virtual wall for a line with no substance'),
     fix: fixed('Give it its height, or mark it virtual.')
   },
-  // LVL-5 (C18): a wall through floors that names no floor above its own.
+  // LVL-5 (C19): a wall through floors that names no floor above its own.
   'wall/through-floor': {
     says: (s) => `${s.label} rises through a floor that is not above its own, so it stands on its own floor only`,
     needed: fixed('through naming a floor above the wall\'s own, from the plan\'s floors'),

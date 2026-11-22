@@ -1,5 +1,5 @@
 /**
- * Walls through floors (LVL-5, C18, lab VE-9, WR-9).
+ * Walls through floors (LVL-5, C19, lab VE-9, WR-9).
  *
  * A wall may state `through`, the highest floor it rises through: it stands on its own floor and
  * on every floor above it up to that one, in the order of `level`. It is one wall, shared by those
