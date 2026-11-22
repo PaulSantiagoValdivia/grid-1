@@ -8,6 +8,7 @@ met or missed after an edit means.
 - [Met and missed after every change](#met-and-missed-after-every-change)
 - [A size written in a room's name](#a-size-written-in-a-rooms-name)
 - [The first plan with no brief](#the-first-plan-with-no-brief)
+- [A first layout from the brief](#a-first-layout-from-the-brief)
 
 ## What the brief holds
 
@@ -120,3 +121,46 @@ When a plan is first written (`grid_write_rooms` or `grid write` on a plan that 
 empty or is still the starter plan) and no brief is kept beside it, the answer gives one line
 saying so, and the plan is written as asked. It is a reminder, never a refusal, and it is not
 repeated on the writes after.
+
+## A first layout from the brief
+
+From the brief's rooms, with their sizes and the rooms it wants to touch, Grid writes a first
+layout (BRF-6): `grid_write_rooms` with `layout` in place of `rooms`, or `grid write --layout`.
+It packs the rooms into rooms text and writes that as any rooms text is
+([rooms-first.md](rooms-first.md)), so the plan is an ordinary plan written rooms first, and
+the answer gives the rooms text back to change and write again.
+
+```text
+First layout from the brief ("plan.brief.json"): 5 rooms in two rows along "Hall", 7.00 x 8.90 m inside the outside walls, in a rectangle. It places no door or window: add them to the rooms text.
+Added "Hall", 1.10 m wide (Grid's own size, not a code figure): the brief names no corridor for the rooms to stand along.
+Sizes not kept (3):
+  met (must): "Kitchen" inside asked 2.4 x 3, drawn 2.40 x 3.10 m: 0.24 m² more.
+  missed (must): "Bathroom" inside asked 1.7 x 2, drawn 1.70 x 3.10 m: 1.87 m² more.
+  missed (must): "Bedroom 1" inside asked 4.1 x 3.2, drawn 3.30 x 4.50 m: 1.73 m² more.
+```
+
+- **`tidy`**: the outline is a rectangle. Every room in a row is as deep as the row, and the
+  shorter row's room already changed, else its largest, takes up the length left over. Each
+  size not kept is the brief's own line for it, met or missed, with how much its area changed.
+- **`sizes`**: every size is kept, and the outline steps where the rooms differ.
+- **How it packs**: three rooms or more, or a corridor in the brief, stand in two rows, one on
+  each side of a hall running east-west: the brief's first room used as a corridor, or a hall
+  Grid adds (`layoutHall` in [tolerances.md](tolerances.md)). Fewer stand in one row. A size is
+  either way round, so a room may be turned; a room given only an area (or `at_least`,
+  `at_most`) takes its row's depth and the width that keeps it. Of every way of sharing the rooms
+  between the rows and every depth a row could take, it keeps the one that holds the most wishes
+  to touch, then the smallest rectangle, then the squarest. The same brief gives the same plan,
+  byte for byte.
+- **What it places**: a room wish by name, `count` times; a wish for the rooms of a use, as many
+  more as its `count` asks, named after the use ("Bedroom 3"). A wish to avoid a room, or a count
+  of 0, places nothing. A room with no size is not placed, and the answer says so.
+- **What it does not do**: doors and windows, the footprint (its line is said, not packed to),
+  the plot, the orientation, more than one floor, rooms that are not rectangles, and more than
+  `layoutRooms` rooms.
+- With no brief beside the plan, or one that can't be read, nothing is written. Over a plan
+  written some other way it is refused as rooms text is, and `replace` writes over it.
+
+The answer's data adds `layout`: `shape`, `rooms` (the rooms text written), `outline`, `added`
+(the hall Grid added, by name, or null), `notKept` (each `room`, `name`, `text` and `by`, the
+change of its area in m²), `notPlaced` and `touch` (`wished`, `held`).
+
