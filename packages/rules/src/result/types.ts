@@ -24,8 +24,8 @@ export const RESULT_VERSION = 1 as const
 export const LINE_KINDS = ['refused', 'left-out', 'worth-a-look', 'finding', 'not-checked'] as const
 export type LineKind = (typeof LINE_KINDS)[number]
 
-/** What a line is about. The plan as a whole has the id `''`. */
-export type ThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening'
+/** What a line is about. The plan as a whole has the id `''`. An `item` is a fixture (CNT-12). */
+export type ThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item'
 
 export interface Thing {
   readonly kind: ThingKind

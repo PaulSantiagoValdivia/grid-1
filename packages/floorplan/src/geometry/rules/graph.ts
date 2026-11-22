@@ -18,7 +18,8 @@ import { planWallSides } from '../exposure'
 import type { Vec2 } from '../vec2'
 import { add, area, scale } from '../vec2'
 import { wallAxis } from '../wall'
-import { TOLERANCES, tolerance } from '../tolerances'
+import { TOLERANCES, limit, tolerance } from '../tolerances'
+import { overFigure, underFigure } from '../rounding'
 
 /** How far past a wall's face a point is taken to be in the room beyond it, in metres (`stepPastFace`). */
 export const STEP_PAST_FACE_M = TOLERANCES.stepPastFace.value
@@ -161,6 +162,30 @@ export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
   }
 }
 
+/** What keeps a person from passing a door or a doorless opening: a sill above the floor, too narrow, or too low. */
+export type ShortOf = 'width' | 'height' | 'sill'
+
+/**
+ * Whether a person fits through a door or a doorless opening (MSG-18): wide and high enough, with
+ * its sill at the floor, by Grid's own sizes (`passableWidth`, `passableHeight`, `passableSill`),
+ * which are not code figures. The first it falls short of (sill, width, height), or `null` when it is a way
+ * through. Compared as drawn, never rounded first (ARE-7): a door drawn at exactly the size fits.
+ */
+export function shortOf(opening: Opening): ShortOf | null {
+  // A door up in the wall is named for that first, whatever its size.
+  if (overFigure(opening.sill, limit('passableSill'), 'm')) return 'sill'
+  if (underFigure(opening.width, limit('passableWidth'), 'm')) return 'width'
+  if (underFigure(opening.height, limit('passableHeight'), 'm')) return 'height'
+  return null
+}
+
+/** A door or doorless opening no person fits through, and the rooms on its sides, in id order. */
+export interface TooSmall {
+  readonly opening: string
+  readonly rooms: readonly string[]
+  readonly short: ShortOf
+}
+
 /** Two rooms a person can move between, in id order, and the opening or virtual wall between them. */
 export interface RouteLink {
   readonly rooms: readonly [string, string]
@@ -181,6 +206,11 @@ export interface FloorGraph {
   readonly exits: readonly OneSided[]
   /** Doors and doorless openings into enclosed floor that no room claims. */
   readonly undrawn: readonly OneSided[]
+  /**
+   * Doors and doorless openings beside a room that no person fits through (MSG-18). None of them
+   * is in `links`, `exits` or `undrawn`: a 5 cm hole is not a way out.
+   */
+  readonly tooSmall: readonly TooSmall[]
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -197,6 +227,7 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
   const links: RouteLink[] = []
   const exits: OneSided[] = []
   const undrawn: OneSided[] = []
+  const tooSmall: TooSmall[] = []
 
   const outside = outsideTest(plan, index)
   const passage = (wall: Wall, via: string, along: number, sides: [string | null, string | null]): void => {
@@ -227,7 +258,15 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     if (opening.type === 'window') continue
     const wall = index.wallsById.get(opening.wall)
     if (wall === undefined) continue
-    passage(wall, opening.id, opening.offset + opening.width / 2, openingSides(opening, index, outlines))
+    const sides = openingSides(opening, index, outlines)
+    // A door no person fits through is named, and is not a way through (MSG-18).
+    const short = shortOf(opening)
+    if (short !== null) {
+      const rooms = [...new Set(sides.filter((room): room is string => room !== null))].sort(byText)
+      if (rooms.length > 0) tooSmall.push({ opening: opening.id, rooms, short })
+      continue
+    }
+    passage(wall, opening.id, opening.offset + opening.width / 2, sides)
   }
   // A virtual wall is an open side all along its length (MSG-14): each stretch of it joins the
   // rooms on its two sides there. The stretches are cut wherever the rooms beside it change, so
@@ -250,6 +289,7 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
       (a, b) => byText(a.rooms[0], b.rooms[0]) || byText(a.rooms[1], b.rooms[1]) || byText(a.via, b.via)
     ),
     exits: once(exits, (e) => `${e.room}|${e.opening}`).sort(bySide),
-    undrawn: once(undrawn, (u) => `${u.room}|${u.opening}`).sort(bySide)
+    undrawn: once(undrawn, (u) => `${u.room}|${u.opening}`).sort(bySide),
+    tooSmall: tooSmall.sort((a, b) => byText(a.rooms[0]!, b.rooms[0]!) || byText(a.opening, b.opening))
   }
 }

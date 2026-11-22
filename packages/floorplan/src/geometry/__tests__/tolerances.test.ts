@@ -46,6 +46,9 @@ const codeOf = (text: string): string =>
  * of a few centimetres or less (0.01, 0.002). Halves, shares like 0.9, sizes that draw the plan
  * and counts are not tolerances and are not looked for.
  */
+/** The words a size that could be read as a requirement carries (MSG-18). */
+const NOT_A_CODE_FIGURE = "Grid's own size, not a code figure"
+
 const TOLERANCE_LITERAL = /(?<![\w.])(?:\d+(?:\.\d+)?e-\d+|0\.0\d*)(?![\w.])/g
 
 describe('the tolerance table', () => {
@@ -76,8 +79,21 @@ describe('the tolerance table', () => {
       expect(Object.keys(entry).sort(), name).toEqual(
         'values' in entry ? ['basis', 'decides', 'kind', 'unit', 'values'] : ['basis', 'decides', 'kind', 'unit', 'value', ...('home' in entry ? ['home'] : [])].sort()
       )
-      expect(entry.decides, name).not.toMatch(/\b(code|regulation|standard|clause|CTE|BS|DIN|IBC)\b/)
+      // A size that could be read as a requirement says it is not one (MSG-18), in these words only.
+      expect(entry.decides.replace(NOT_A_CODE_FIGURE, ''), name).not.toMatch(/\b(code|regulation|standard|clause|CTE|BS|DIN|IBC)\b/)
     }
+  })
+
+  it('holds the size a person passes through as Grid\'s own, saying it is not a code figure (MSG-18)', () => {
+    const passable = { passableWidth: 0.4, passableHeight: 1.2, passableSill: 0.3 } as const
+    for (const [name, value] of Object.entries(passable)) {
+      const entry: ToleranceEntry = TOLERANCES[name as keyof typeof passable]
+      expect(entry, name).toMatchObject({ kind: 'limit', value, unit: 'm', basis: 'grid-drawing-check' })
+      expect(entry.decides.startsWith(`${NOT_A_CODE_FIGURE}.`), name).toBe(true)
+    }
+    // Only these three carry the words: no other figure needs to say it is not one.
+    const saying = Object.entries(TOLERANCES).filter(([, entry]) => entry.decides.includes(NOT_A_CODE_FIGURE)).map(([name]) => name)
+    expect(saying.sort()).toEqual(Object.keys(passable).sort())
   })
 
   it('holds the three figures MSG-15 names', () => {

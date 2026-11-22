@@ -118,7 +118,7 @@ function collidingWallIds(plan: FloorPlan): ReadonlySet<string> {
 /**
  * The plan restricted to one floor.
  *
- * Walls and rooms by their own floor, openings by their wall's — so an opening
+ * Walls, rooms and items by their own floor, openings by their wall's — so an opening
  * whose wall is elsewhere is dropped rather than left orphaned. `version`,
  * `units`, the registry and the reference image carry over untouched.
  *
@@ -141,7 +141,9 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
     rooms: plan.rooms.filter((room) => floorOf(room) === floorId),
     openings: plan.openings.filter(
       (opening) => wallIds.has(opening.wall) && !collided.has(opening.wall)
-    )
+    ),
+    // CNT-12: an item by its own floor. A plan with no items keeps no key.
+    ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) })
   }
   slices.add(slice)
   return slice

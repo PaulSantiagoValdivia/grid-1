@@ -29,6 +29,10 @@ Notes for agents and people changing this repository.
   plan records about how it was written (`written`). The plan file is the source of truth and
   rooms text a way of writing and reading it. `fixtures/rooms/` holds the lab's eight buildings
   as rooms text with their originals; `rooms/__tests__/buildings.test.ts` holds them to it.
+- `packages/floorplan/src/geometry/items.ts` (CNT-12): the plan's fixtures (`items`, C6 in
+  `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
+  CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind
+  needs its symbol there and a decision first. A fixture is never a wall or a room.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,

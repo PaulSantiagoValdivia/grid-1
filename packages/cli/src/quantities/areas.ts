@@ -12,6 +12,7 @@
 import { MEASURES, type GrossMeasure, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
 import { planAreaFigures } from '@ongrid/floorplan/geometry/areas'
 import type { Survey } from './survey'
+import { FIXTURE_RULES, planFixtures } from './fixtures'
 
 /** What each measure measures, in one sentence each. */
 export const AREA_RULES = {
@@ -30,6 +31,9 @@ export interface RoomArea {
   /** Inside sizes across and up the drawing, when the room is a rectangle square to it. */
   readonly size: readonly [number, number] | null
   readonly outside: boolean
+  /** CNT-12, only on a room with fixtures: the floor they stand on, and the net area less it. */
+  readonly fixtures?: number
+  readonly free?: number
 }
 
 export interface FloorAreas {
@@ -91,12 +95,14 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     ...(request.country ? { country: request.country } : {}),
     ...(request.gross ? { gross: request.gross } : {}),
   })
+  const { taken } = planFixtures(survey.plan, request.floors)
   // Lab plans repeat room ids from floor to floor, so a room is found by its floor too.
   const shapes = new Map(survey.rooms.map((room) => [`${room.facts.floor}\u0000${room.facts.id}`, room.facts.shape] as const))
   const floors: FloorAreas[] = figures.floors.map((f) => ({
     floor: f.floor,
     rooms: f.rooms.map((room) => {
       const shape = shapes.get(`${room.floor}\u0000${room.id}`)
+      const fixtures = taken.get(room.id)
       return {
         id: room.id,
         name: room.name,
@@ -105,6 +111,8 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
         net: room.area,
         size: shape?.rectangle ? [shape.across, shape.up] : null,
         outside: room.outside,
+        // Fixtures add no area and take none from the totals: only the room's free floor (CNT-12).
+        ...(fixtures === undefined ? {} : { fixtures, free: Math.max(0, room.area - fixtures) }),
       }
     }),
     leftOut: f.leftOut,
@@ -135,7 +143,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     reader: figures.reader,
     grossWhy,
     measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal],
-    rules: Object.values(AREA_RULES),
+    rules: taken.size === 0 ? Object.values(AREA_RULES) : [...Object.values(AREA_RULES), FIXTURE_RULES.free],
     notes: [...(grossWhy ? [grossWhy] : []), ...figures.notes],
   }
 }
