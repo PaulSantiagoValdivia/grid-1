@@ -19,7 +19,8 @@ import {
   floorAbove,
   planForFloor,
   resolveFloor,
-  validateFloorDoorSweeps
+  validateFloorDoorSweeps,
+  withPatterns
 } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import type { LabelStyle } from '../canvas2d/labelPlacement'
@@ -129,6 +130,8 @@ export interface Picture {
    * the plan's `height`. Null otherwise.
    */
   readonly key: PictureKey | null
+  /** What the picture is, for its accessible name: a floor plan's when left out. LVL-8: a facade's. */
+  readonly title?: string
 }
 
 /** The picture's whole height in pixels: the plan and the key under it. */
@@ -185,7 +188,7 @@ function undecidedIn(drawing: PlanDrawing, handings: ReadonlyMap<string, DoorHan
  * have, means its lowest floor.
  */
 export function undecidedDoorsOf(plan: FloorPlan, floor?: string | null): string[] {
-  const slice = planForFloor(plan, resolveFloor(plan, floor))
+  const slice = planForFloor(withPatterns(plan), resolveFloor(plan, floor))
   return undecidedIn(buildFloorPlan(slice), handingsOf(slice))
 }
 
@@ -228,7 +231,8 @@ function sizeOf(framed: Bounds, options: PictureOptions): { width: number; heigh
 
 function framePicture(plan: FloorPlan, options: PictureOptions) {
   const floor = resolveFloor(plan, options.floor)
-  const slice = planForFloor(plan, floor)
+  // LVL-8: a plan's opening patterns are drawn as the plain openings they expand into.
+  const slice = planForFloor(withPatterns(plan), floor)
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
   const framed = options.frame ?? framingOf(drawing, dimensions)
@@ -328,7 +332,7 @@ function labelNode(look: Look, x: number, y: number, unitsPerPixel: number): Svg
 export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOptions = {}): string {
   const { view, look, key } = picture
   const stamp = options.label !== false
-  const label = `Floor plan with ${picture.rooms} rooms`
+  const label = picture.title ?? `Floor plan with ${picture.rooms} rooms`
   if (key) {
     // The plan in its own frame at the top, in plan metres; the key under it, in pixels.
     const total = fullHeight(picture)

@@ -7,7 +7,7 @@ cannot be given to any check; the narrow flat gets "Notes: 0", "Not checked: (no
 
 ## What CNT-17 adds
 
-**A mark of what needs to be accessible** (C12, `packages/floorplan/src/types/floorplan.ts`). A
+**A mark of what needs to be accessible** (C13, `packages/floorplan/src/types/floorplan.ts`). A
 plan may state `accessible`: `rooms` by id, and `routes`, each `to` a room and `from` a room or,
 left out, from the entrance. Optional and never defaulted (version 1), as the format's change
 rule asks, so no plan, export or snapshot gains a key. A mark that cannot be read is left out
@@ -127,4 +127,29 @@ Nothing else changed; no snapshot or golden file.
 
 ## Checks run
 
-Pending: the full suite and the checks after merging main.
+On this branch at 5c3583d (main at c05d051 plus CNT-17):
+
+- `npm run build` (bundle 535,791 bytes, under the 550 kB limit), `npm run typecheck`,
+  `npm run lint`: clean.
+- The full suite, `timeout 1500 ./node_modules/.bin/vitest run --exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`, after the build: 298 of 298 files, 5,328 passed and 4 skipped,
+  exit 0 (568 s).
+- `npm run scoreboard`: 197, 278, 18, 5, 16, 735, 95. Same as the stored figures. The stored
+  capability `accessible-mark` was set to `yes` by hand, as the run reads it; no count moved.
+- While building, only the touched files: the new tests, `rules-report`, `result`, the tool
+  server's `tools`, `contract`, `server` and `useIndicators` tests, `src/sheet` and `src/brief`.
+  On the way: the rules package's import test read "its document." in a comment of
+  `figures.ts` as the DOM's `document.` (reworded), and the first wording of the answer's head
+  ("None of them says that … is accessible") matched the test that no line says a plan is
+  accessible (reworded).
+
+After merging `main` at 8b599e9 (LVL-8): LVL-8 took contract letter C12 (opening patterns), so
+the accessible mark is **C13**. Conflicts, both sides kept: `CHANGELOG.md`, the agents'
+changelog in `docs/result-contract.md` (CNT-17's entry on top), the `grid_measure` and
+`grid_view` rows of `docs/tool-server.md`, the contract header in `floorplan.ts`, and MSG-4's
+list of the plan's fields in `result.test.ts` (now `… openings, patterns, … views, accessible,
+display, written`). Build (540,324 bytes), typecheck and lint clean; the affected tests rerun
+(`packages/cli/src/mcp`, `src/sheet`, `src/brief`, `src/quantities`, `grid.e2e`, `shortReport`,
+all of `packages/rules`, `packages/floorplan/src/types`, `tolerances.test.ts`,
+`scoreboard/__tests__`): 92 files, 1,239 passed and 3 skipped. The scoreboard: same as the
+stored figures.
