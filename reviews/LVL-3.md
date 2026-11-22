@@ -45,7 +45,7 @@ A straight stair may be written with `start` and `end` in place of `run`; it is 
 `risers`). Without it, that plan, which Grid read before (dropping the key), would have been
 refused. `type` is dropped as any unknown key is.
 
-## Decisions the owner should check
+## For the owner
 
 - **What "stair area is counted once" means.** I read it as: the stair object never adds floor
   area, because its flights stand inside rooms that are already measured (a stair room, a hall).
