@@ -161,3 +161,14 @@ letter clash (C13 stays) and no scoreboard file changed, so the scoreboard was n
 (`packages/cli/src/export`, `everyPath.e2e`, `packages/floorplan/src/export`,
 `src/geometry/export`, `exposure`, `holes`) to the set above: 113 files, 1,765 passed and 3
 skipped.
+
+After merging `main` at 26e928e (BRF-3, WRT-4): BRF-3 took C13 for the plot, so the accessible
+mark is now **C14**. Conflicts, both sides kept: `CHANGELOG.md` and the agents' changelog
+(CNT-17's entry on top), the `grid_measure` row of `docs/tool-server.md`, the contract header in
+`floorplan.ts`, and `grid_measure` in `readTools.ts` (both `what=site` and `what=access`; the
+stray-argument refusal is main's "takes no other argument"). The bundle grew to 555,889 bytes
+with no new dependency, so its cap in `grid.e2e.test.ts` went to 600 kB. Build, typecheck and
+lint clean; the affected tests rerun (`packages/cli/src/mcp`, `quantities`, `sheet`, `edit`,
+`versions`, `draw/__tests__/site`, `command/__tests__`, `src/__tests__`, `packages/floorplan`
+`src/types`, `src/geometry/__tests__` and `src/rooms`, all of `packages/rules/src`): 197 files,
+4,040 passed and 2 skipped once the cap moved. The scoreboard: same as the stored figures.
