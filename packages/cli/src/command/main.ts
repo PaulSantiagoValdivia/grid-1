@@ -1,7 +1,7 @@
 /**
- * The `grid` command, which `ongrid` runs too: `init`, `write`, `check`, `describe`, `draw`,
- * `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an agent's
- * host types (`npx -y ongrid mcp`, CMD-9).
+ * The `grid` command, which `ongrid` runs too: `init`, `write`, `edit`, `check`, `describe`,
+ * `draw`, `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an
+ * agent's host types (`npx -y ongrid mcp`, CMD-9).
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -29,6 +29,7 @@ import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
+import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
@@ -66,6 +67,12 @@ const COMMANDS = {
     usage: 'grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json] [--project <folder>]',
     summary: 'Writes a plan from rooms text: name the rooms with their sizes and neighbours, and Grid works out the walls. The main way to write a plan.',
     options: WRITE_OPTIONS,
+  },
+  edit: {
+    usage: EDIT_USAGE,
+    summary: EDIT_SUMMARY,
+    // Each verb takes its own options: grid edit <verb> --help.
+    options: {},
   },
   check: {
     usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--json] [--project <folder>]',
@@ -187,6 +194,10 @@ function warnLeftOut(io: CommandIo, loaded: LoadedPlan): void {
 }
 
 async function runCommand(name: CommandName, args: readonly string[], io: CommandIo): Promise<number> {
+  if (name === 'edit') {
+    await runEdit(args, io.cwd, (text) => io.stdout(text))
+    return EXIT_OK
+  }
   const command = COMMANDS[name]
   const parsed = parseOptions(name, args, { ...command.options, ...HELP_FLAG })
   if (parsed.values.has('--help')) {
@@ -391,7 +402,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

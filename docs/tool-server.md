@@ -12,7 +12,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, then the preview, the export and the sheet, and last the four that
+requests people make most, then the preview, the export and the sheet, and last the nine that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Units are metres.
@@ -31,9 +31,17 @@ the same facts as data; a view also returns its picture. Units are metres.
 | `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/` |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
-| `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into) or removes it |
-| `grid_move_room_side` | Moves one side of a room out or in; walls ending on it follow |
+| `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
+| `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |
+| `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share |
+| `grid_split_room` | Splits a room with a new wall, the new room taking one side, with a door in it |
+| `grid_add_room` | Builds a room against the outside of a side of a room, saying what happens to openings in the wall it covers |
+| `grid_stretch` | Makes the whole building wider or longer, at its outside wall or through a room |
+| `grid_rename_room` | Renames a room or changes its use, saying which checks now look at it |
+
+Every change answers with what it changed, what it guessed and what it could not keep, and
+names the plan by its path in the project, so its size does not grow with the building.
 
 A tool that names no plan reads the project's `plan.json` in a folder `grid init` made. A floor
 or room the plan does not have is refused with the ones it has, a room, wall, door or window
