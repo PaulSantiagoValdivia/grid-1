@@ -218,6 +218,15 @@ Each of these is reversible; I took the option that keeps the format and the exp
 10. **The sheet does not add facade pages.** `grid sheet` is unchanged; a facade page per side is a
     small follow-up (`pages.ts`), left for a decision on the page count.
 
-## Checks run
+## Checks run (after merging main at c05d051)
 
-(Filled in below after merging main.)
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass. The bundle is 523,841 bytes, under
+  the 550 kB that VEW-3 set on main; LVL-8 adds no dependency.
+- `npm run scoreboard`: "Same as the stored figures." No count moved; nothing stored.
+- Full suite, `vitest run --exclude '.claude/**' --maxWorkers=2`: 299 files, 5353 tests passed,
+  4 skipped, none failed.
+- An earlier full run, after merging main at d058d4d only, failed two tests: the bundle-size
+  guard (500,808 bytes against the 500 kB limit then on main) and
+  `cli/src/versions/__tests__/diff.test.ts` (a merge refused by CNT-8's new use rule, a clash
+  between WRT-8 and CNT-8 on main). Both pass after merging main at c05d051, which raised the
+  limit and fixed the diff test; neither expected value was changed here.
