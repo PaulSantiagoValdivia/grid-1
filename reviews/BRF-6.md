@@ -168,3 +168,14 @@ Run once each, in order, on a laptop shared with other sessions (load average ab
 - Packing to the footprint or the plot, orientation to north or the street, more than one floor.
 - Plans other than two rows along one hall; rooms that are not rectangles; more than 10 rooms.
 - Structured data for the door's fix in a tool refusal, and `shift` as a fix.
+
+## After merging main at 4fe29edc and 90a933b1
+
+Merged COD-8, CNT-17 and LVL-9 (ef73f5ae), then HND-11 (b69c913a). Conflicts: both changelogs
+(every entry kept), `docs/commands.md` (`grid write --layout` beside COD-8's firm standards on
+`grid check`), the bundle cap in `grid.e2e.test.ts` (main's 600 kB from CNT-17 kept, BRF-6's share
+noted), and with HND-11 `write.ts` (both imports: BRF-6's unstated-height fix and HND-11's taped
+rows), `writeTools.ts` (`grid_write_rooms` answers both `layout` and `taped`), `tolerances.ts`
+(both sets) and the contract's write-tools row (both fields). After the merges: build, typecheck
+and lint clean; the tests either side touched, in two runs, 59 files (676 passed, 1 skipped) and
+56 files (826 passed); scoreboard "Same as the stored figures". No second full suite.
