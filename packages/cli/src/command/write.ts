@@ -15,7 +15,7 @@
  */
 import { expandPatterns, planHasPhases, validatePlan, type FloorPlan, type TapedRow } from '@ongrid/floorplan/geometry'
 import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
-import { FloorPlanSchema, safeParseFloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, safeParseFloorPlan, statedWall } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
 import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
 import { TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
@@ -39,6 +39,10 @@ export const WRITE_OPTIONS: OptionSpecs = {
   '--scan': {
     takesValue: true,
     help: 'Write the plan from a phone room scan in the project (Apple\'s room model, as JSON) in place of rooms text. The scan is kept beside the plan as <plan>.scan.json.',
+  },
+  '--layout': {
+    takesValue: true,
+    help: 'In place of a rooms file: a first layout from the brief beside the plan. tidy: a rectangle; sizes: every size kept.',
   },
   '--json': { takesValue: false, help: 'Print the answer as JSON.' },
   ...PROJECT_OPTION,
@@ -190,9 +194,16 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   if (plan.building !== undefined) next['building'] = plan.building
   // WRT-7: a `display` line sets how the person reads lengths; without one, the file's stays.
   if (plan.display !== undefined) next['display'] = plan.display
-  next['walls'] = plan.walls
+  // WRT-6: a height the text did not state stays out of the file; the reading fills it again.
+  next['walls'] = plan.walls.map(statedWall)
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings
+  // CNT-4: the flats a text places (a unit that is a flat type) replace the file's; a text that
+  // places none keeps the file's, as it keeps its opening patterns.
+  if (plan.flats !== undefined) {
+    next['flatTypes'] = plan.flatTypes ?? []
+    next['flats'] = plan.flats
+  }
   next['written'] = stampFor(plan)
   // BRF-1: whether this is the plan's first write, before it is written.
   const first = before === null || nothingToLose(before)
@@ -215,6 +226,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     ...(carried === null || carried.kept === 0 ? [] : [`Facts of your own and room numbers kept by id on ${carried.kept} part${carried.kept === 1 ? '' : 's'}.`]),
     ...(carried === null || carried.lost.length === 0 ? [] : [`Not in the text, so their facts and numbers are gone with them: ${carried.lost.slice(0, 10).join(', ')}${carried.lost.length > 10 ? ` and ${carried.lost.length - 10} more` : ''}.`]),
     ...(before === null || patterns.length === 0 ? [] : [patternsKept(before, kept)]),
+    ...(plan.flats !== undefined || (before?.flats ?? []).length === 0 ? [] : [`Kept the plan's ${before!.flats!.length === 1 ? 'flat' : `${before!.flats!.length} flats`} as the file has ${before!.flats!.length === 1 ? 'it' : 'them'}: this rooms text places no flat type. grid check names a room a flat lists that the text no longer has.`]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
     ...brief.text,
     ...(reminder === null ? [] : [reminder]),

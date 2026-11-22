@@ -64,6 +64,9 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `diffRoomCentre` | tolerance | 0.1 m | And whose centres are this close |
 | `briefAbout` | tolerance | 0.05 ratio | A size the person asked for as a figure, not as at least or at most, is met when the drawn size is within this share of it, above or below (BRF-1) |
 | `nameSize` | tolerance | 0.02 ratio | A size written in a room's name and the size drawn differ when they are further apart than this share of the size named (BRF-1) |
+| `layoutHall` | limit | 1.1 m | Grid's own size, not a code figure. How wide the hall a first layout adds is, when the brief names no corridor (BRF-6) |
+| `layoutRooms` | limit | 10 count | The most rooms a first layout places; every way of sharing them between its two rows is tried (BRF-6) |
+| `layoutRowOrders` | limit | 6 count | The most rooms in one row of a first layout whose every order is tried for the rooms the brief wants to touch (BRF-6) |
 | `diffPlace` | tolerance | 0.05 m | Two walls whose ends are this close, or two openings whose middles are, stand in the same place when two versions are compared by what stands where (WRT-8) |
 | `tapedAgree` | tolerance | 0.01 m | A length taped on site and the same length drawn agree when they are no further apart than this, unless the taped length states its own tolerance; further apart, `room/taped-differs` names both figures (HND-11) |
 | `setbackShort` | tolerance | 0.005 m | The building stands short of a set-back the person asked for when its outside face is more than this nearer the boundary than their figure; less rounds to the figure (`plan/setback-short`, BRF-3) |
@@ -90,6 +93,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
 | `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
 | `stairRoomOverlap` | tolerance | 0.5 ratio | Rooms used as a stair (or a lift) on neighbouring floors that share at least this of the smaller one are one stair (or shaft); less, and they are named as out of line |
+| `stackShift` | tolerance | 0.05 m | A floor whose outline reaches past the floor below it, or sits back from it, by more than this and half the thickest wall that stretch runs along does not line up with it (`floor/out-of-line`), nor does a stair room or a lift shaft moved by more than this from the one below (`room/stair-shifted`, `room/lift-shifted`), unless the plan marks it as meant (LVL-5) |
 | `stairStepLength` | limit | 0.63 m | A stair that states no number of risers gets the number that brings twice the riser plus the going nearest this |
 | `planCutHeight` | limit | 1.2 m | How high above a floor its plan is cut: a stair rising from the floor is drawn solid up to this height, with a break line there, and dashed above (SHT-11) |
 | `sectionGroundRun` | limit | 1 m | How far the ground line of a section runs past the building on each side (LVL-9) |

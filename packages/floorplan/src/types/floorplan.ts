@@ -164,6 +164,31 @@
  *   counts against the person's own limits and never brings a figure for. All three are optional
  *   and never defaulted (version 1).
  *
+ * C18 · Flats (CNT-4, lab EL-1, WR-6, AR-7, CP3-6)
+ *   A plan MAY say which rooms make each flat (a dwelling, a unit), in `flats`: each with an id, a
+ *   name, the `type` it is, by id, and its `rooms`, by id, on one floor or several (a duplex). A
+ *   flat type is stated once, in `flatTypes` (an id and a name), and placed many times: a flat
+ *   that is its type's mirror image says so (`mirrored`). A flat is a named group of rooms, never
+ *   a room: it adds no floor and closes no outline, and a room is in one flat at most. The areas
+ *   per flat, the mix by type, the flat's outline on the drawing and the IFC's zones are worked
+ *   out from the list (`geometry/flats.ts`), never from the rooms' names. Ids a flat names that
+ *   are no room or no type are named and left out of its figures, never refused. Both optional
+ *   and never defaulted (version 1).
+ *
+ * C19 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
+ *   C5 put every wall on one floor. Reopened: a wall MAY state `through`, the highest floor it rises
+ *   through. It stands on its own `floor` and on every floor above it up to that one, in order of
+ *   `level`: one wall, shared by those floors, so one edit moves it on all of them, and a room on
+ *   any of them may list it. Its `height` is how high it stands above the `through` floor's level,
+ *   as a wall of that floor; below that it runs up through each floor and slab between. An opening
+ *   in it states its sill and height from the wall's own floor, as always (C2), and may reach as
+ *   high as the wall does: a stair window through two storeys is one window. Each floor's slice
+ *   holds the part of the wall and of its openings on that floor (`planForFloor`); the 3D view,
+ *   the exports and the sections draw it once, whole.
+ *   A floor whose outline does not lie over the floor below it, and a stair or lift room that does
+ *   not lie over the one below, are said, unless the floor or room states `overhang: "meant"`.
+ *   All optional and never defaulted (version 1): a plan that states none reads as before.
+ *
  * C20 · Kinds of door and window (CNT-14)
  *   A door or window MAY state its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that
  *   opens (`opens`). Its handing stays in the wall's terms (`hinge`, `swing`, C2): the person's
@@ -362,6 +387,12 @@ export const RoofSchema = z
     if (roof.highSide !== undefined && roof.shape !== 'mono-pitch') add('highSide', 'belongs to a mono-pitch roof: only it has one high side')
   })
 
+/**
+ * LVL-5 (C19): the one word `overhang` takes, on a floor or on a room used as a stair or a lift:
+ * it does not line up with the floor below on purpose.
+ */
+export const OVERHANG_MEANT = ['meant'] as const
+
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
   name: text('name').pipe(z.string().min(1)),
@@ -388,6 +419,9 @@ export const FloorSchema = z.object({
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
   building: BuildingTypeSchema.optional(),
+  // LVL-5 (C19): the floor's outline overhangs or sits back from the floor below it on purpose, so
+  // Grid does not say it does not line up. Optional and never defaulted (version 1).
+  overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
   // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
@@ -607,10 +641,11 @@ export function heightStated(wall: { readonly unstated?: readonly UnstatedWallVa
  */
 export function heightByDefault(
   plan: { readonly floors?: readonly { readonly id: string; readonly height?: number | undefined }[] | undefined },
-  wall: { readonly virtual?: boolean | undefined; readonly floor?: string | undefined; readonly unstated?: readonly UnstatedWallValue[] | undefined },
+  wall: { readonly virtual?: boolean | undefined; readonly floor?: string | undefined; readonly through?: string | undefined; readonly unstated?: readonly UnstatedWallValue[] | undefined },
 ): boolean {
   if (wall.virtual === true || heightStated(wall)) return false
-  const floor = wall.floor ?? DEFAULT_FLOOR_ID
+  // LVL-5: a wall through floors takes its height from the floor it rises through.
+  const floor = wall.through ?? wall.floor ?? DEFAULT_FLOOR_ID
   return (plan.floors ?? []).find((f) => f.id === floor)?.height === undefined
 }
 
@@ -632,6 +667,10 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
+      // LVL-5 (C19): the highest floor the wall rises through, from its own floor: it is one wall
+      // on each floor between, and its height is measured from this floor's level. Optional and
+      // never defaulted: unstated, the wall stands on its own floor only (version 1).
+      through: text('id').pipe(z.string().min(1)).optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
       // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
@@ -856,8 +895,9 @@ export const RoomSchema = z.object({
   // room, so the hole's walls are not floor either. Optional and never defaulted, so a plan
   // written before ARE-6 reads with no key added (version 1).
   holes: parts(wallList(), 'holes in one room').optional(),
-  // C5: unstated means the ground floor. Every wall in `boundary` must be on this
-  // same floor — a cross-floor boundary is a validation error.
+  // C5: unstated means the ground floor. Every wall in `boundary` must stand on this
+  // same floor — a cross-floor boundary is a validation error. LVL-5 (C19): a wall that rises
+  // through floors stands on each of them.
   floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
   // unknown value is read as unstated instead of rejecting the whole plan: `use`
@@ -895,6 +935,9 @@ export const RoomSchema = z.object({
   ceiling: CeilingSchema.optional(),
   // CNT-5: who the room is for (`ROOM_TENURES`). Optional and never defaulted (version 1).
   tenure: RoomTenureSchema.optional(),
+  // LVL-5 (C19): a room used as a stair or a lift that does not lie over the one below on
+  // purpose, so Grid does not say it is shifted. Optional and never defaulted (version 1).
+  overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-5: the firm's own type for the room, as its room data sheets name it ("B2 double
   // bedroom", "Consult A"), beside the fixed `use`. Grid keeps it and reads nothing from it.
   // Optional and never defaulted (version 1).
@@ -1523,6 +1566,28 @@ export const AccessibleSchema = z.object({
 })
 
 /**
+ * CNT-4 (C18): a kind of flat, stated once and placed many times: an id the flats name in their
+ * `type`, and a name to read it by ("One bedroom"). Optional and never defaulted (version 1).
+ */
+export const FlatTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+})
+
+/**
+ * CNT-4 (C18): a flat (a dwelling, a unit): an id, a name, the type it is (an id in `flatTypes`),
+ * its rooms by id (on one floor or several: a duplex), and whether it is its type's mirror image.
+ * A group of rooms, never a room. Optional and never defaulted (version 1).
+ */
+export const FlatSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  type: text('id').pipe(z.string().min(1)).optional(),
+  rooms: parts(text('id').pipe(z.string().min(1)), 'rooms').pipe(z.array(z.string()).min(1, { message: 'A flat lists at least one room' })),
+  mirrored: z.boolean().optional(),
+})
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
  * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
@@ -1554,6 +1619,8 @@ function withFloorHeights(raw: unknown): unknown {
   }
   if (heights.size === 0 && roofs.size === 0) return raw
   const floorOfRaw = (w: Record<string, unknown>): string => (typeof w.floor === 'string' ? w.floor : DEFAULT_FLOOR_ID)
+  // LVL-5: a wall through floors stands as a wall of the floor it rises through.
+  const heightFloorOfRaw = (w: Record<string, unknown>): string => (typeof w.through === 'string' && seen.has(w.through) ? w.through : floorOfRaw(w))
   const tops = new Map<string, number>()
   for (const [id, roof] of roofs) {
     const lines = (plan.walls as unknown[]).flatMap((wall) => {
@@ -1572,7 +1639,7 @@ function withFloorHeights(raw: unknown): unknown {
     if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return wall
     const w = wall as Record<string, unknown>
     if (w.height !== undefined || w.virtual === true) return wall
-    const floor = floorOfRaw(w)
+    const floor = heightFloorOfRaw(w)
     const height = tops.get(floor) ?? heights.get(floor)
     return height === undefined ? wall : { ...w, height, [HEIGHT_FROM_FLOOR]: true }
   })
@@ -1639,6 +1706,10 @@ export const FloorPlanFieldsSchema = z.object({
   // HND-11 (C15): lengths taped on site, kept as checks beside the drawing (`TapedSchema`).
   // Optional and never defaulted (version 1).
   taped: parts(TapedSchema, 'taped lengths').optional(),
+  // CNT-4 (C18): the flat types, each stated once (`FlatTypeSchema`), and the flats, each a group
+  // of rooms by id (`FlatSchema`). Optional and never defaulted (version 1).
+  flatTypes: parts(FlatTypeSchema, 'flat types').optional(),
+  flats: parts(FlatSchema, 'flats').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -1700,6 +1771,8 @@ export type View = z.infer<typeof ViewSchema>
 export type Accessible = z.infer<typeof AccessibleSchema>
 export type AccessibleRoute = z.infer<typeof AccessibleRouteSchema>
 export type Taped = z.infer<typeof TapedSchema>
+export type FlatType = z.infer<typeof FlatTypeSchema>
+export type Flat = z.infer<typeof FlatSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

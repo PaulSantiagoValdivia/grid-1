@@ -275,10 +275,35 @@ probe, rooms text that copies a floor from its floor line and gets the second fl
 walls and rooms (`scoreboard/src/capabilities.ts`). The developer's "times six floors" needed only
 it and the area table. No other count moved.
 
+CNT-4 (flats and flat types in the plan, the areas per flat and the mix) moved one count. Turns
+answered, 19 to 21: the `flats` capability's probe (a plan with `flats`, each a list of rooms) now
+holds, so the developer's "the mix and net to gross" (with the gross and area table already
+there) and "a schedule of accommodation" are answered. The developer's "how many flats of about
+50 and 70 m2 fit" still needs layout help, and "colour by flat type" the drawing styles. Checks
+the plan can feed stays 20: the size of a whole home also needs its occupancy. No other count
+moved. The stored figures were set by hand from the run's printout, as the run reads them.
+
+LVL-5 (walls through floors, and floors, stair rooms and lift shafts that line up) moved one
+count. Damage that passes in silence, 278 to 277: one damaged plan now gets a line from the new
+checks, a floor's outline off the floor below or a stair room or shaft moved from the one below,
+which names another part than the one changed, so it is counted as caught vaguely (139 to 140).
+The runner does not keep plan-by-plan outcomes, so which plan it is was not traced. Sound plans with a warning stays 95:
+the generator gives each floor's outside walls their own thickness, from 0.20 to 0.50 m, on the
+same axes, so a floor's outline is measured against the one below allowing half the thickest wall
+along each stretch (`stackShift` and the wall). Before that allowance the guard rose to 218, which
+is how the allowance was found. The stair and shaft findings are plan-check findings, which the
+guard does not count.
+
 CNT-14 merged with WRT-4 and BRF-3 (main at 26e928e) moved two counts past main. Turns answered,
 19 to 20: main's 19 (with WRT-4's `repeat-floor`) and the homeowner's sixth turn, which CNT-14's
 `door-leaves` answers with LVL-6's `roof`. Checks the plan can feed, 20 to 22: CNT-14's
 `openable-part` feeds checks 8 and 9 beside main's. Every other count is both branches' figure.
+
+CNT-14 merged with CNT-4, LVL-5 and BRF-6 (main at 8a0c839e) moves one count past main. Turns
+answered, 21 to 22: main's 21 (with CNT-4's `flats`) and the homeowner's sixth turn, which
+CNT-14's `door-leaves` answers with LVL-6's `roof`. Checks the plan can feed stays CNT-14's 22
+(main's 20 and `openable-part`). Damage that passes in silence is LVL-5's 277 (CNT-14's branch
+had 278). Every other count is both branches' figure.
 
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The

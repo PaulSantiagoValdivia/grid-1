@@ -174,4 +174,14 @@ describe('grid write', () => {
     expect(edit.status).toBe(0)
     expect(edit.out).toMatch(/"Bathroom" area asked 4\.5, drawn \d+\.\d\d m²\./)
   })
+
+  it('keeps a wall height the text did not state out of the plan file, so the check names no field of its own (found with BRF-6)', async () => {
+    const dir = await project()
+    writeFileSync(join(dir, 'bare.rooms'), 'room a "A" - 3 x 3\nroom b "B" - 3 x 3 east of a\n')
+    expect((await grid(dir, 'write', 'bare.rooms')).status).toBe(0)
+    const walls = (JSON.parse(readFileSync(join(dir, 'plan.json'), 'utf8')) as { walls: Array<Record<string, unknown>> }).walls
+    expect(walls.filter((w) => 'unstated' in w || 'height' in w)).toEqual([])
+    const check = await grid(dir, 'check', '--json')
+    expect(check.out).not.toContain('plan/unknown-field')
+  })
 })

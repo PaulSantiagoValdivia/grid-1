@@ -52,7 +52,7 @@ import { LINE_KINDS, RESULT_VERSION, type Cause, type GridResult, type HeldNote,
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
 
-const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item', stair: 'Stair', pattern: 'Opening pattern' }
+const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item', stair: 'Stair', pattern: 'Opening pattern', flat: 'Flat' }
 const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as const
 /** An id from a file the format refused, when it is one Grid would read: else it is not repeated. */
 const safeId = (value: unknown): string | null =>
@@ -72,6 +72,8 @@ const FINDING_CODES: Record<FindingCode, string> = {
   escape_window_too_high: 'room/escape-window-too-high',
   stair_out_of_line: 'room/stair-out-of-line',
   lift_out_of_line: 'room/lift-out-of-line',
+  stair_shifted: 'room/stair-shifted',
+  lift_shifted: 'room/lift-shifted',
   setback_short: 'plan/setback-short',
   over_boundary: 'plan/over-boundary'
 }
@@ -364,6 +366,8 @@ function namesOf(plan: FloorPlan, stated: FloorPlan = plan): Names {
   // LVL-8: a pattern is on its wall's floor.
   const patterns = new Map<string, NonNullable<FloorPlan['patterns']>[number]>()
   for (const pattern of stated.patterns ?? []) if (!patterns.has(pattern.id)) patterns.set(pattern.id, pattern)
+  const flats = new Map<string, NonNullable<FloorPlan['flats']>[number]>()
+  for (const flat of plan.flats ?? []) if (!flats.has(flat.id)) flats.set(flat.id, flat)
   const floorName = (id: string): string => floorNames.get(id) ?? id
   const roomName = (id: string): string => rooms.get(id)?.name || id
   return {
@@ -405,6 +409,12 @@ function namesOf(plan: FloorPlan, stated: FloorPlan = plan): Names {
         case 'pattern': {
           const wall = walls.get(patterns.get(id)?.wall ?? '')
           return { label: `${NOUN.pattern} ${quoted(id)}`, name: id, floor: wall ? floorOf(wall) : null }
+        }
+        case 'flat': {
+          // CNT-4: a flat by its name; on the floor of its first room, and on none when it holds none.
+          const flat = flats.get(id)
+          const first = flat?.rooms.map((room) => rooms.get(room)).find((room) => room !== undefined)
+          return { label: `${NOUN.flat} ${quoted(flat?.name ?? id)}`, name: flat?.name ?? id, floor: first === undefined ? null : floorOf(first) }
         }
         case 'item': {
           // A fixture by its kind: `Toilet "wc1"` (CNT-12). One of a kind Grid does not hold is an `Item`.

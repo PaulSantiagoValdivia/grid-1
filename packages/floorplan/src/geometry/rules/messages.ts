@@ -37,6 +37,31 @@ export function wordingText(parts: readonly WordingPart[]): string {
   return parts.map((part) => (part.name ? quoted(part.text) : part.text)).join('')
 }
 
+/** The kinds of opening a plan has (C2). */
+export type OpeningKind = 'door' | 'window' | 'opening'
+
+/**
+ * LVL-5 (lab A-16, MS-13): openings named by what they are, never a window called a door: `this
+ * window`, `these doors`, `these doors and windows`, with the words for them that go with it.
+ * With no kinds given, the words of every kind.
+ */
+export function openingWords(kinds: readonly OpeningKind[] | undefined, count: number): { these: string; plain: string; they: string; them: string } {
+  const many = count !== 1
+  const order: readonly OpeningKind[] = ['door', 'window', 'opening']
+  const nouns: Record<OpeningKind, [string, string]> = { door: ['door', 'doors'], window: ['window', 'windows'], opening: ['doorless opening', 'doorless openings'] }
+  const present = kinds === undefined || kinds.length === 0 ? [] : order.filter((k) => kinds.includes(k))
+  const they = many ? 'they' : 'it'
+  const them = many ? 'them' : 'it'
+  if (present.length === 0) return { these: 'these doors or windows', plain: 'doors or windows', they: 'they', them: 'them' }
+  if (present.length === 1) {
+    const noun = nouns[present[0]!][many ? 1 : 0]
+    return { these: `${many ? 'these' : 'this'} ${noun}`, plain: many ? noun : `a ${noun}`, they, them }
+  }
+  const list = present.map((k) => nouns[k][1])
+  const joined = list.length === 2 ? `${list[0]} and ${list[1]}` : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`
+  return { these: `these ${joined}`, plain: joined, they: 'they', them: 'them' }
+}
+
 export const wordings = {
   noExit: (floor: string): WordingPart[] => [name(floor), words(' has no door to the outside')],
   roomWithoutDoor: (room: string): WordingPart[] => [name(room), words(' has no door or opening to another space')],
@@ -71,6 +96,32 @@ export const wordings = {
     ...joinedWith(lowerFloors, ' and '),
     words(kind === 'stair' ? ', so it does not join the two floors' : ', so the shaft is out of line')
   ],
+  /**
+   * LVL-5 (lab WR-9): a stair room or a lift shaft moved from the one below it. `how` says how far
+   * and which way ("is 1.20 m east of", or for a shaft not moved as a whole "has its east side
+   * 0.60 m west of that of"), `upperAt` and `lowerAt` where each stands ("(1.20, 0.00) to
+   * (2.40, 3.00)").
+   */
+  shifted: (
+    kind: 'stair' | 'lift',
+    upper: string,
+    upperFloor: string,
+    lower: string,
+    lowerFloor: string,
+    how: string,
+    upperAt: string,
+    lowerAt: string
+  ): WordingPart[] => [
+    words(kind === 'stair' ? 'The stair ' : 'The lift shaft '),
+    name(upper),
+    words(' on '),
+    name(upperFloor),
+    words(` ${how} `),
+    name(lower),
+    words(' on '),
+    name(lowerFloor),
+    words(` below it: it stands from ${upperAt}, the one below from ${lowerAt}`)
+  ],
   wayOutNotDrawn: (floor: string): WordingPart[] => [
     words('The way out of '),
     name(floor),
@@ -86,13 +137,19 @@ export const wordings = {
     words(', these rooms could not be drawn, so they and what rests on them were not checked: '),
     ...listed(rooms)
   ],
-  /** MSG-5: `openings` holds at least one id, and names them. */
-  doorsNotDrawn: (floor: string, openings: readonly string[]): WordingPart[] => [
-    words('On '),
-    name(floor),
-    words(', these doors or windows could not be drawn, so they and what rests on them were not checked: '),
-    ...listed(openings)
-  ],
+  /**
+   * MSG-5: `openings` holds at least one id, and names them. LVL-5: `kinds`, the type of each, words
+   * them as what they are (`openingWords`).
+   */
+  doorsNotDrawn: (floor: string, openings: readonly string[], kinds?: readonly OpeningKind[]): WordingPart[] => {
+    const w = openingWords(kinds, openings.length)
+    return [
+      words('On '),
+      name(floor),
+      words(`, ${w.these} could not be drawn, so ${w.they} and what rests on ${w.them} were not checked: `),
+      ...listed(openings)
+    ]
+  },
   doorToUndrawnSpace: (room: string): WordingPart[] => [
     words('A door from '),
     name(room),
@@ -161,9 +218,10 @@ export const messages = {
   noRouteToAnyDoorOut: (room: string): string => wordingText(wordings.noRouteToAnyDoorOut(room)),
   noStairs: (floor: string): string => wordingText(wordings.noStairs(floor)),
   outOfLine: (...args: Parameters<typeof wordings.outOfLine>): string => wordingText(wordings.outOfLine(...args)),
+  shifted: (...args: Parameters<typeof wordings.shifted>): string => wordingText(wordings.shifted(...args)),
   wayOutNotDrawn: (floor: string): string => wordingText(wordings.wayOutNotDrawn(floor)),
-  cannotBeDrawn: (floor: string, rooms: readonly string[], openings: readonly string[]): string =>
-    wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor, openings)),
+  cannotBeDrawn: (floor: string, rooms: readonly string[], openings: readonly string[], kinds?: readonly OpeningKind[]): string =>
+    wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor, openings, kinds)),
   doorToUndrawnSpace: (room: string): string => wordingText(wordings.doorToUndrawnSpace(room)),
   doorOutAboveGround: (room: string, height: string): string => wordingText(wordings.doorOutAboveGround(room, height)),
   belowGround: (kind: 'door' | 'window' | 'opening', room: string | null, wall: string, wholly: boolean, depth: string): string =>

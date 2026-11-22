@@ -256,6 +256,9 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     stairAbove: { fill: 'none', stroke: ink, 'stroke-width': width('stair'), 'stroke-dasharray': dashes('above') } as Attrs,
     stairArrow: { fill: ink, stroke: 'none' } as Attrs,
     above: { fill: 'none', stroke: ink, 'stroke-width': width('above'), 'stroke-dasharray': dashes('above') } as Attrs,
+    // CNT-4: a flat's outline, a chain line as thin as the floor above's, in the paper's colour:
+    // it runs along the middle of the walls, over them.
+    flat: { fill: 'none', stroke: look.paper, 'stroke-width': width('above'), 'stroke-dasharray': dashes('chain'), 'stroke-linejoin': 'miter' } as Attrs,
     // BRF-4: a floor's stated outline, solid, at the weight of the floor above's line.
     outline: { fill: 'none', stroke: ink, 'stroke-width': width('above') } as Attrs,
     fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
@@ -831,6 +834,21 @@ function planSceneIn(input: SceneInput): SvgNode[] {
           )
         ),
         wall.id
+      )
+    )
+  }
+
+  // SHT-11 with CNT-4: each flat's outline, a chain line along the middle of the walls round its
+  // rooms, so one line runs between two flats. It is drawn over the walls in the paper's colour,
+  // where a line in ink would vanish into a dark wall, and under the openings, so a doorway
+  // breaks it. Drawing, not a target.
+  for (const flat of drawing.flats) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'flat', 'data-id': flat.id, 'data-name': flat.name, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        flat.rings.map((ring, index) => el('path', { 'data-part': 'flat-outline', d: pathOf(ring), ...paint.flat }, [], String(index))),
+        `flat:${flat.id}`
       )
     )
   }

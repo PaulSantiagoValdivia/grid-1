@@ -147,7 +147,7 @@ async function drawnOf(plan: FloorPlan, record: PreviewRecord, camera: CameraRec
   }
   const floor = resolveFloor(plan, record.floor ?? null)
   const parts = planParts(plan)
-  const frame = record.frame !== null && parts.has(record.frame) && parts.get(record.frame)!.floor === floor ? record.frame : undefined
+  const frame = record.frame !== null && parts.has(record.frame) && parts.get(record.frame)!.floors.includes(floor) ? record.frame : undefined
   const highlight = record.highlight.filter((id) => parts.has(id))
   return viewTool.run(readArgs(viewTool, {
     plan: planFile,
@@ -325,7 +325,7 @@ export const previewSyncTool: GridTool = {
     if (!(LOOKS as readonly string[]).includes(look)) throw new ToolRefusal('look takes working or dark.')
     const change: Parameters<typeof writePreview>[3] = {}
     const floor = floorArg(plan, args['floor'])
-    if (floor !== undefined) Object.assign(change, { floor, frame: read.record.frame !== null && parts.get(read.record.frame)?.floor !== floor ? null : read.record.frame, camera: null })
+    if (floor !== undefined) Object.assign(change, { floor, frame: read.record.frame !== null && parts.get(read.record.frame)?.floors.includes(floor) !== true ? null : read.record.frame, camera: null })
     if (args['view'] !== undefined) Object.assign(change, { view: args['view'] })
     if (args['camera'] !== undefined) {
       try {
@@ -365,7 +365,7 @@ export const previewSyncTool: GridTool = {
       return { text: ['The record changed; the drawing did not.', ...said].join('\n'), data: { changed: true, ...base, drawing: null } }
     }
     const floors = planFloors(plan).map((f) => ({ id: f.id, name: f.name }))
-    const onFloor = [...parts.values()].filter((part) => record.view === '3d' || part.floor === shown).map((part) => ({ id: part.id, kind: part.kind, name: part.name }))
+    const onFloor = [...parts.values()].filter((part) => record.view === '3d' || part.floors.includes(shown)).map((part) => ({ id: part.id, kind: part.kind, name: part.name }))
     const picture = await pictureOf(plan, record, camera, context, file)
     if (record.view === '3d') {
       return {

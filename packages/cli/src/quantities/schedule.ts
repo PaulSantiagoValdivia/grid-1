@@ -6,9 +6,10 @@
 import { compareIds, partHeight, partWidth, planForFloor, roomNumbers, sideSeenFrom, statedKind, tolerance } from '@ongrid/floorplan/geometry'
 import { factText, type Facts, type Opening, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import type { OpeningFacts } from '../describe/facts'
-import { AREA_RULES, planAreas } from './areas'
+import { AREA_RULES, FLAT_RULE, planAreas } from './areas'
+import { flatOfRoom, planFlatTypes, planFlats } from '@ongrid/floorplan/geometry'
 import { HEIGHT_RULE, roomHeight } from './measure'
-import type { AreaState, NumberState } from './state'
+import { joinStates, type AreaState, type NumberState } from './state'
 import { sideNames, type Survey } from './survey'
 import { csv, sqFt } from './units'
 
@@ -98,6 +99,8 @@ export interface RoomScheduleRow {
   readonly height: number | null
   /** CNT-9: the room's facts of the person's own, by name, as the plan gives them. */
   readonly properties: Facts
+  /** CNT-4, only on a plan that lists flats: the id of the flat the room is in, or null. */
+  readonly flat?: string | null
   /**
    * CNT-8, only on a room with zones: each zone, measured, by id. A zone is no row of
    * its own: its floor is in its room's area, so a column of areas adds up to the total.
@@ -197,6 +200,9 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
   const order = floorOrder(survey, options.floors)
   const areas = planAreas(survey, { floors: order.map((f) => f.id) })
   const numbered = roomNumbers(survey.plan, order.map((f) => f.id))
+  // CNT-4: on a plan that lists flats, each row says which flat its room is in.
+  const listsFlats = (survey.plan.flats ?? []).length > 0
+  const flatOf = flatOfRoom(planFlats(survey.plan))
   const rows: RoomScheduleRow[] = []
   const floors: RoomScheduleTotal[] = []
   for (const floor of order) {
@@ -226,6 +232,7 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
         state: room.state,
         height: roomHeight(storey, room.id).value,
         properties: own.get(id)?.properties ?? {},
+        ...(listsFlats ? { flat: flatOf.get(room.id) ?? null } : {}),
         ...(zones.length === 0 ? {} : { zones }),
       })
     }
@@ -305,20 +312,23 @@ function factCells(properties: Facts, columns: readonly string[]): Cell[] {
 export function roomScheduleCsv(schedule: RoomSchedule): string {
   const name = 'room schedule'
   const columns = factColumns(schedule.rows)
+  // CNT-4: a flat column only on a plan that lists flats, so every other schedule is as it was.
+  const flats = schedule.rows.some((r) => r.flat !== undefined)
   const rows: Cell[][] = schedule.rows.map((r, i) => {
     const n = i + 1
     const area = numberCell(name, n, 'area', r.area, r.state === 'not-looked-at')
     return [
       r.roomNumber ?? numberCell(name, n, 'number', r.number, false), textCell(name, n, 'room id', r.id), textCell(name, n, 'name', r.name), r.use,
       area, area === null ? null : sqFt(area), numberCell(name, n, 'height', r.height, true), textCell(name, n, 'floor', r.floorName), r.state,
+      ...(flats ? [r.flat ?? null] : []),
       ...factCells(r.properties, columns),
     ]
   })
   const totals = [...schedule.floors, schedule.total].map((t): Cell[] => {
     const area = numberCell(name, rows.length + 1, 'total area', t.area, false)!
-    return [null, '', t.floor === null ? 'Total, all floors' : `Total, ${t.floorName}`, null, area, sqFt(area), null, t.floorName ?? 'all', t.state.state, ...columns.map(() => null)]
+    return [null, '', t.floor === null ? 'Total, all floors' : `Total, ${t.floorName}`, null, area, sqFt(area), null, t.floorName ?? 'all', t.state.state, ...(flats ? [null] : []), ...columns.map(() => null)]
   })
-  return csv(['number', 'room id', 'name', 'use', 'area m2', 'area sq ft', 'height m', 'floor', 'state', ...columns], [...rows, ...totals])
+  return csv(['number', 'room id', 'name', 'use', 'area m2', 'area sq ft', 'height m', 'floor', 'state', ...(flats ? ['flat'] : []), ...columns], [...rows, ...totals])
 }
 
 /** The opening schedule as CSV: one row per opening, each listed once. */
@@ -359,4 +369,112 @@ function handingWords(opening: Opening, sides: OpeningFacts['sides'], name: (sid
   // A room by its name; past a face with no room, what lies there.
   const words = typeof into === 'object' ? `opens into ${name(into)}` : into === 'outside' ? 'opens outside' : `opens toward ${name(into)}`
   return opening.hinge === undefined ? words : `${words}, hinged on the ${sideSeenFrom(opening.swing, opening.hinge)}`
+}
+
+// ---------------------------------------------------------------------------------------------
+// CNT-4: the flat schedule and the mix by type, from the plan's flats list (lab EL-1, AR-7).
+
+/** A flat as the flat schedule lists it. */
+export interface FlatScheduleRow {
+  /** 1, 2, 3… in id order, whatever the order of the file. */
+  readonly number: number
+  readonly id: string
+  readonly name: string
+  /** The type it states, by id, and the type's name (its id when the plan does not state it); null with none. */
+  readonly type: string | null
+  readonly typeName: string | null
+  readonly mirrored: boolean
+  /** The floors its rooms are on, by name, in floor order: two or more for a duplex. */
+  readonly floors: readonly string[]
+  readonly rooms: number
+  /** Its rooms used as a bedroom. */
+  readonly bedrooms: number
+  /** Net, in m², as grid_areas measures a flat. */
+  readonly area: number
+  readonly state: NumberState
+}
+
+/** One type in the mix: how many flats of it, how many mirrored, and their area. */
+export interface FlatMixRow {
+  /** Null for the flats that state no type. */
+  readonly type: string | null
+  readonly name: string
+  readonly flats: number
+  readonly mirrored: number
+  /** The share of all flats, 0 to 1. */
+  readonly share: number
+  readonly area: number
+  /** The area of one flat of the type, on average; null with none placed. */
+  readonly each: number | null
+}
+
+export interface FlatSchedule {
+  readonly rows: readonly FlatScheduleRow[]
+  /** By type: the plan's flat types in their order, then any type it names but does not state, then the flats with none. */
+  readonly mix: readonly FlatMixRow[]
+  readonly total: { readonly flats: number; readonly area: number; readonly state: AreaState }
+  /** The net area of the rooms in no flat: the common parts. */
+  readonly notInFlats: number
+  readonly rules: readonly string[]
+}
+
+export const FLAT_SCHEDULE_RULE =
+  "Flats are the plan's own list of which rooms make each flat, never read from the rooms' names, numbered in id order. The mix counts the flats of each type the plan states, and the mirrored ones among them."
+
+export function flatSchedule(survey: Survey, options: { floors?: readonly string[] } = {}): FlatSchedule {
+  const order = floorOrder(survey, options.floors)
+  const areas = planAreas(survey, { floors: order.map((f) => f.id) })
+  const names = new Map(order.map((f) => [f.id, f.name] as const))
+  const uses = new Map(survey.plan.rooms.map((room) => [room.id, room.use] as const))
+  const rows: FlatScheduleRow[] = [...areas.flats]
+    .sort((a, b) => compareIds(a.id, b.id))
+    .map((flat, i) => ({
+      number: i + 1,
+      id: flat.id,
+      name: flat.name,
+      type: flat.type,
+      typeName: flat.type === null ? null : flat.typeName ?? flat.type,
+      mirrored: flat.mirrored,
+      floors: flat.floors.map((id) => names.get(id) ?? id),
+      rooms: flat.rooms.length,
+      bedrooms: flat.rooms.filter((id) => uses.get(id) === 'bedroom').length,
+      area: flat.net,
+      state: flat.state.state,
+    }))
+  const stated = planFlatTypes(survey.plan)
+  const named = [...new Set(rows.map((row) => row.type).filter((type): type is string => type !== null && !stated.some((t) => t.id === type)))]
+  const kinds: { type: string | null; name: string }[] = [
+    ...stated.map((t) => ({ type: t.id, name: t.name })),
+    ...named.map((type) => ({ type, name: type })),
+    ...(rows.some((row) => row.type === null) ? [{ type: null, name: 'no type' }] : []),
+  ]
+  const mix = kinds.map(({ type, name }): FlatMixRow => {
+    const of = rows.filter((row) => row.type === type)
+    const area = of.reduce((sum, row) => sum + row.area, 0)
+    return { type, name, flats: of.length, mirrored: of.filter((row) => row.mirrored).length, share: rows.length === 0 ? 0 : of.length / rows.length, area, each: of.length === 0 ? null : area / of.length }
+  })
+  const state = joinStates(areas.flats.map((flat) => flat.state))
+  return {
+    rows,
+    mix,
+    total: { flats: rows.length, area: rows.reduce((sum, row) => sum + row.area, 0), state },
+    notInFlats: areas.notInFlats ?? areas.net,
+    rules: [FLAT_SCHEDULE_RULE, FLAT_RULE],
+  }
+}
+
+/** The flat schedule as CSV: one row per flat, the totals, then the mix, one row per type. */
+export function flatScheduleCsv(schedule: FlatSchedule): string {
+  const name = 'flat schedule'
+  const rows: Cell[][] = schedule.rows.map((r, i) => {
+    const n = i + 1
+    return [
+      'flat', numberCell(name, n, 'number', r.number, false), textCell(name, n, 'flat id', r.id), textCell(name, n, 'name', r.name), r.typeName,
+      r.mirrored ? 'yes' : 'no', r.floors.join('; '), r.rooms, r.bedrooms, null, null, numberCell(name, n, 'area', r.area, false), sqFt(r.area), r.state,
+    ]
+  })
+  rows.push(['total', null, '', 'All flats', null, null, null, null, null, schedule.total.flats, null, schedule.total.area, sqFt(schedule.total.area), schedule.total.state.state])
+  rows.push(['total', null, '', 'In no flat', null, null, null, null, null, null, null, schedule.notInFlats, sqFt(schedule.notInFlats), null])
+  for (const m of schedule.mix) rows.push(['mix', null, m.type ?? '', m.name, m.name, null, null, null, null, m.flats, m.mirrored, m.area, sqFt(m.area), null])
+  return csv(['row', 'number', 'id', 'name', 'type', 'mirrored', 'floors', 'rooms', 'bedrooms', 'flats', 'mirrored flats', 'area m2', 'area sq ft', 'state'], rows)
 }

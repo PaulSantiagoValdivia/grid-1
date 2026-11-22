@@ -733,3 +733,78 @@ not-checked line, `floor/not-checked-door-swings` for `door-1` to `door-4` (was 
   passed, 2 skipped (1,030); `packages/cli`, 100 of 100 files, 1,362 passed, 1 skipped (1,363).
   No timing test failed, so none was rerun.
 - `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures." Nothing stored.
+
+### Again after merging main 8a0c839e (CNT-4, LVL-5, BRF-6)
+
+`main` moved again: flats, flat types and the mix (CNT-4), walls through floors and floors that
+line up (LVL-5), and a first layout from the brief with a door's alignment (BRF-6).
+
+**Conflicts and how each was kept**
+
+- `packages/cli/src/mcp/readTools.ts`: `grid_schedule`'s description keeps both: CNT-4's flats,
+  the area of each flat and the unit mix in its first sentence, `of=flats` and each room's flat,
+  and CNT-14's kind in the grouping and the kind, the part that opens and the handing with
+  `of=openings`. It keeps CNT-14's "the plan holds no frame" (CNT-14 dropped "or leaf", since
+  `opens` now states the part that opens). Its arguments (with `of=flats`) and outputs merged on
+  their own; the tool order is main's.
+- `packages/floorplan/src/geometry/floorplan.ts`: main's `flatOutlines` import kept; main's
+  `MarkedPart`/`Phase` import is already in CNT-14's one line with `OpeningKind` and
+  `OpeningPart`, so the second line was dropped. A drawn opening carries CNT-14's kind, part and
+  height and CNT-10's phase; CNT-4's flat outlines are drawn as on `main`.
+- `packages/floorplan/src/types/floorplan.ts`: the header goes C16, C17, C18 (CNT-4's flats), C19
+  (LVL-5's walls through floors), then CNT-14's C20, with every schema field from both sides.
+- `docs/rooms-first.md`: CNT-14's kind, `hinged` and `part` words, then BRF-6's door alignment and
+  `layout` lines. `docs/tool-server.md`: `grid_write_rooms` as main has it (with `layout` and
+  `scan`), `grid_change_opening` as CNT-14 has it.
+- `CHANGELOG.md`: every Unreleased entry, CNT-14's first, then BRF-6's and CNT-4's.
+- `docs/result-contract.md`: the code table takes LVL-5's new wording of
+  `floor/not-checked-doors-not-drawn` and keeps CNT-14's `floor/not-checked-door-swings` below it;
+  the agents' changelog has CNT-14's entry at the top, then BRF-6's, LVL-5's and CNT-4's.
+- `scoreboard/README.md`: CNT-4's and LVL-5's notes, then CNT-14's, then the note for this merge.
+- `scoreboard/current.json`: stored by `npm run scoreboard -- --write-current` (below).
+
+**Conventions.** C18 and C19 are CNT-4's and LVL-5's on `main`, as the coordinator kept them;
+CNT-14 stays C20.
+
+**Where the features meet.**
+
+- LVL-5: a floor's slice cuts an opening in a wall through floors into its stretch on that floor
+  (`{ ...opening, sill, height }`), so the stretch keeps `kind`, `opens`, `hinge` and `swing`, and
+  the 3D view, the exports and the sections draw the whole opening with its frame, leaves and
+  glass (`wholeWall`). One gap, fixed: CNT-14's `opening/part-too-large` measured a stated part
+  against the slice's stretch, so the stair window through two storeys with a part 2.3 m high was
+  "higher than the 2.05 m opening" on the ground floor's slice (the drawing's warnings), though
+  the whole plan said nothing. It now measures against the opening as the plan states it
+  (`statedOpening` in `through.ts`). Test: `geometry/__tests__/through.test.ts`, "measures the
+  part that opens of the window through two storeys against the whole window on each floor". Not
+  changed: the rules' escape check measures a window's part no higher than the opening it is
+  given (`partHeight`), so on a floor above its own it would see only that floor's stretch, as
+  LVL-5 has it for any window.
+- CNT-4: flats make no openings; a flat type placed many times (WRT-4's `unit` and `repeat`)
+  carries each door's and window's kind and part into every copy. Test:
+  `mcp/__tests__/flats.test.ts`, "carries a door's and a window's kind and part into every flat
+  placed, and schedules both the flats and the kinds": `of=flats` lists the two flats,
+  `of=openings` both pocket doors and both double windows with their 0.6 m part, and the grouped
+  schedule `2 × pocket door`.
+- BRF-6: a first layout places no doors or windows. Its door-alignment fix reads the rooms from a
+  door line's third and fifth words, which CNT-14's kind, `hinged` and `part` words follow, so
+  they do not meet.
+
+**Expectations changed.** None; two tests added (above).
+
+**Scoreboard.** Stored: 197, 277, 22, 5, 22, 735, 95. Against `main`'s stored figures (197, 277,
+21, 5, 20, 735, 95): turns answered 21 to 22 (`door-leaves` with `roof`) and checks the plan can
+feed 20 to 22 (`openable-part`), both CNT-14's own; damage that passes in silence is LVL-5's 277
+(CNT-14's branch had 278).
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- The affected tests in three parts with the same options (`--exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`): `packages/floorplan`, 133 of 133 files, 3,343 passed, 1
+  skipped (3,344); `packages/cli`, 103 of 103 files, 1,378 passed, 1 skipped (1,379);
+  `packages/rules packages/viewer scoreboard/__tests__`, 108 of 109 files, 1,038 passed, 1
+  failed, 2 skipped (1,041). The one failure was `scoreboard.test.ts` before the figures were
+  stored ("Better than the stored figures", turns 22 against `main`'s 21); after
+  `--write-current` the file alone, 19 of 19 passed.
+- `npm run scoreboard`: 197, 277, 22, 5, 22, 735, 95, "Same as the stored figures."

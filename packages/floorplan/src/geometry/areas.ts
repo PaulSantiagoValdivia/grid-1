@@ -29,7 +29,7 @@ import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Polygon } from 'polygon-clipping'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan } from './plan'
-import { floorOf, planFloors } from './floors'
+import { floorOf, planFloors, wallsOnFloor } from './floors'
 import { roomFloorArea, tryRoomPolygon } from './room'
 import { floorSpaces, spacesKnown, type FloorSpaces } from './spaces'
 import { planWallSides, type WallSides } from './exposure'
@@ -37,6 +37,7 @@ import { validatePlan } from './validate'
 import { floorJoins } from './floorJoins'
 import { cornerFills, inPolygon, polygonArea, strip, union } from './polygons'
 import { roomZones } from './zones'
+import { planFlats } from './flats'
 import { statedOutline } from './massing'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
@@ -194,8 +195,42 @@ export interface ReaderMeasure {
   readonly why: string
 }
 
+/** CNT-4: what a flat's area measures, in Grid's own words. */
+export const FLAT_AREA_RULE =
+  "A flat's area is the net area of the rooms the plan lists for it, each counted as the net counts it: a zone in its room, a room named outside not at all, and a stair once, on the floor it rises from."
+
+/**
+ * CNT-4 (lab EL-1): a flat's area, from the plan's flats list: the net area of the rooms it holds,
+ * counted as the net counts them (no zone, no room named outside, a stair counted once), on the
+ * floors given.
+ */
+export interface FlatAreaFigure {
+  readonly id: string
+  readonly name: string
+  /** The type it states, by id, and the type's name; null with none (or a type the plan does not state, for the name). */
+  readonly type: string | null
+  readonly typeName: string | null
+  readonly mirrored: boolean
+  /** The floors its rooms are on, of the floors given. */
+  readonly floors: readonly string[]
+  /** The net area of its rooms, on the floors given. */
+  readonly net: number
+  /** `net` by floor, for a flat on more than one (a duplex). */
+  readonly byFloor: Readonly<Record<string, number>>
+  /** The rooms counted, by id. */
+  readonly rooms: readonly string[]
+  /** Rooms it holds that are in no net figure, each with why: a zone, a room named outside, a stair counted below. */
+  readonly notCounted: readonly { readonly id: string; readonly why: 'zone' | 'outside' | 'stair-below' }[]
+  /** Rooms it holds that Grid could not draw: in no figure. */
+  readonly leftOut: readonly string[]
+}
+
 export interface PlanAreaFigures {
   readonly floors: readonly FloorAreaFigures[]
+  /** CNT-4: each flat of the plan's flats list with a room on the floors given, in plan order. Empty with none. */
+  readonly flats: readonly FlatAreaFigure[]
+  /** CNT-4: the net area of the rooms in no flat (the common parts, on a plan that lists flats); the whole net with none. */
+  readonly notInFlats: number
   readonly net: AreaFigure
   readonly grossInternal: AreaFigure
   readonly grossExternal: AreaFigure
@@ -227,9 +262,9 @@ const nameOf = (room: Room): string => (room.name.trim() === '' ? room.id : room
 
 /** The walls `floorSpaces` joins on this floor, in plan order. */
 export function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): Wall[] {
-  return plan.walls.filter(
+  // LVL-5: a wall through floors is one of each floor's it stands on.
+  return wallsOnFloor(plan, floor).filter(
     (wall) =>
-      floorOf(wall) === floor &&
       !broken.has(wall.id) &&
       (wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
       (wall.virtual === true || wall.thickness > 0)
@@ -566,9 +601,13 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
     }
   }
   if (rooms(floors).some((room) => room.outside)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure, and their floor is in the gross external one.')
+  const flats = flatFigures(plan, floors)
+  const notInFlats = sum(floors.map((f) => f.net)) - sum(flats.map((flat) => flat.net))
 
   return {
     floors,
+    flats,
+    notInFlats,
     net: total('net', floors, (f) => f.net),
     grossInternal: total('grossInternal', floors, (f) => f.grossInternal),
     grossExternal: total('grossExternal', floors, (f) => f.grossExternal),
@@ -581,3 +620,45 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
 }
 
 const rooms = (floors: readonly FloorAreaFigures[]): RoomAreaFigure[] => floors.flatMap((f) => f.rooms)
+
+/** CNT-4: each flat's figures, from the flats list and the rooms as the floors count them. */
+function flatFigures(plan: FloorPlan, floors: readonly FloorAreaFigures[]): FlatAreaFigure[] {
+  const flats = planFlats(plan)
+  if (flats.length === 0) return []
+  const measured = new Map(rooms(floors).map((room) => [`${room.floor}|${room.id}`, room] as const))
+  const missing = new Set(floors.flatMap((f) => f.leftOut.map((room) => `${room.floor}|${room.id}`)))
+  const given = new Set(floors.map((f) => f.floor))
+  const out: FlatAreaFigure[] = []
+  for (const flat of flats) {
+    const here = flat.rooms.filter((room) => given.has(room.floor))
+    if (here.length === 0) continue
+    const counted: string[] = []
+    const notCounted: FlatAreaFigure['notCounted'][number][] = []
+    const byFloor: Record<string, number> = {}
+    for (const { id, floor } of here) {
+      const room = measured.get(`${floor}|${id}`)
+      if (room === undefined) continue
+      if (room.zoneOf !== null) notCounted.push({ id, why: 'zone' })
+      else if (room.outside) notCounted.push({ id, why: 'outside' })
+      else if (room.countedWith !== undefined) notCounted.push({ id, why: 'stair-below' })
+      else {
+        counted.push(id)
+        byFloor[floor] = (byFloor[floor] ?? 0) + room.area
+      }
+    }
+    out.push({
+      id: flat.id,
+      name: flat.name,
+      type: flat.type,
+      typeName: flat.typeName,
+      mirrored: flat.mirrored,
+      floors: flat.floors.filter((floor) => given.has(floor)),
+      net: sum(Object.values(byFloor)),
+      byFloor,
+      rooms: counted,
+      notCounted,
+      leftOut: here.filter((room) => missing.has(`${room.floor}|${room.id}`)).map((room) => room.id),
+    })
+  }
+  return out
+}
