@@ -126,7 +126,7 @@ flat inside MSG-10's budget.
 
 New:
 
-- `packages/floorplan/src/types/__tests__/places.test.ts` (12): the list (249 entries, every
+- `packages/floorplan/src/types/__tests__/places.test.ts` (11): the list (249 entries, every
   code once, upper case; no name or code read as two places); US, USA, United States in any
   case, with dots and spaces, as one place (CH-3); the other names; names refused (`the moon`,
   `Congo`, `Korea`, `England`, `America`, a sentence, a code repeated forty times);
@@ -247,3 +247,27 @@ every count is as before.
 9. **A library caller's unknown `country`** throws `PlaceRefused`; `inspectPlan` still never
    throws (the plan checks' stage becomes a `plan/check-failed` line naming `country` and the
    rule). The command and the tool refuse it before that, by name.
+
+## Checks run
+
+Before merging `main`:
+
+- `npm run typecheck`, `npm run lint`, `npm run build`: clean.
+- `npm run scoreboard`: "Same as the stored figures" (counts above).
+- `packages/rules` (370 tests), then `packages/cli`, `packages/viewer`, `packages/floorplan` and
+  `scoreboard` (222 files): 9 failures, every one an expectation listed under "Changed" or the
+  word "pass" in the first draft of the place line (MSG-3's `approvalWords` over the lab plans;
+  it now says "give --country"). All fixed and rerun.
+
+After merging `main` at 56458e5 (CNT-5, what kind of building it is; conflicts in `check.ts`,
+`coverage.ts`, `figures.ts`, the CLI's `coverage.test.ts` and the contract, each kept both sides:
+a figure check runs where the place has figures and the building's kind is one they were read
+for, and the no-figures-for-place notice is skipped with no place):
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean.
+- `npm run scoreboard`: "Same as the stored figures"; `scoreboard/current.json` unchanged.
+- The affected tests (rules, floorplan types and rooms, the commands, the tool server, the
+  sheet, the edits, and the scoreboard's approval-words, retell and building-uses tests): 78
+  files, 1,291 passed, 1 skipped.
+- The full suite, `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 252
+  files passed, 4,889 tests passed, 2 skipped, none failed.
