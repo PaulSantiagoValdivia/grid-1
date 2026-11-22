@@ -13,7 +13,7 @@
  *
  * The tool server's `grid_write_rooms` does the same through `writeRoomsIntoProject`.
  */
-import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { expandPatterns, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
@@ -63,6 +63,19 @@ export interface WriteDone {
   /** BRF-1: one line when this is the plan's first write and no brief is kept beside it; never a refusal. */
   readonly reminder: string | null
   readonly lines: readonly string[]
+}
+
+/**
+ * WRT-4 with LVL-8: one line on the opening patterns `grid write` keeps: how many, and the first
+ * thing the walls just written keep a pattern from placing that the plan before did not.
+ */
+function patternsKept(before: FloorPlan, after: FloorPlan): string {
+  const n = after.patterns?.length ?? 0
+  const known = new Set(expandPatterns(before).issues.map((issue) => issue.message))
+  const fresh = expandPatterns(after).issues.filter((issue) => !known.has(issue.message))
+  const kept = `Kept the plan's ${n === 1 ? 'opening pattern' : `${n} opening patterns`} as the file has ${n === 1 ? 'it' : 'them'}: rooms text does not write ${n === 1 ? 'it' : 'them'}.`
+  if (fresh.length === 0) return kept
+  return `${kept} With the walls written now: ${fresh[0]!.message}${fresh.length > 1 ? ` (and ${fresh.length - 1} more)` : ''}.`
 }
 
 function oneLine(text: string): string {
@@ -172,13 +185,18 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   const reminder = first ? briefReminder(project, planFile) : null
 
   const verdict = before === null || nothingToLose(before) ? null : comparePlans(surveyPlan(before), surveyPlan(plan), ['the plan before', 'the plan now']).verdict
-  const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(plan).issues.length }
+  // WRT-4 with LVL-8: the file's opening patterns are kept and name their walls by id, so the plan
+  // written is counted with them, and what the new walls keep from being placed is said here.
+  const patterns = before?.patterns ?? []
+  const kept: FloorPlan = patterns.length === 0 ? plan : { ...plan, patterns }
+  const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(kept).issues.length }
   const lines = [
     `Wrote ${written} from rooms text: the walls, their kinds, the room boundaries and the openings' places are worked out by Grid.`,
     ...roomsAnswer(result, options.brief !== true || result.rooms.length <= ROOMS_LISTED_MAX),
     ...(verdict === null ? [] : [verdict]),
     ...(carried === null || carried.kept === 0 ? [] : [`Facts of your own and room numbers kept by id on ${carried.kept} part${carried.kept === 1 ? '' : 's'}.`]),
     ...(carried === null || carried.lost.length === 0 ? [] : [`Not in the text, so their facts and numbers are gone with them: ${carried.lost.slice(0, 10).join(', ')}${carried.lost.length > 10 ? ` and ${carried.lost.length - 10} more` : ''}.`]),
+    ...(before === null || patterns.length === 0 ? [] : [patternsKept(before, kept)]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
     ...brief.text,
     ...(reminder === null ? [] : [reminder]),

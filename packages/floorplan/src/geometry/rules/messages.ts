@@ -135,6 +135,24 @@ export function passageText(passage: NonNullable<RuleFinding['passage']>): strin
     : `${what} is ${size} m ${passage.short === 'width' ? 'wide' : 'high'}`
 }
 
+/**
+ * BRF-3 (lab EL-16): the set-back the person asked for, in their words: "you asked for 3.00 m", or
+ * for one assumed for them, that it is assumed. Their figure, never a code's.
+ */
+export function askedText(asked: string, source: 'given' | 'assumed' | null): string {
+  return source === 'assumed' ? `${asked} m is assumed for you, to confirm` : `you asked for ${asked} m`
+}
+
+/** BRF-3: the building stands nearer an edge of its plot than the set-back asked for. */
+export function setbackShortText(distance: string, boundary: string, asked: string, source: 'given' | 'assumed' | null): string {
+  return `The building is ${distance} m from ${boundary}; ${askedText(asked, source)}`
+}
+
+/** BRF-3: the building reaches past an edge of its plot. */
+export function overBoundaryText(past: string, boundary: string): string {
+  return `The building reaches ${past} m over ${boundary}, out of the plot`
+}
+
 /** The same wordings as report lines. */
 export const messages = {
   noExit: (floor: string): string => wordingText(wordings.noExit(floor)),
