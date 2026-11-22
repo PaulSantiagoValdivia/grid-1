@@ -29,6 +29,7 @@ import { LOOKS, SIDES, pictureLook, type LookName, type Side } from '../draw/vie
 import { MARK_WORDS, marksAsked, readMarks, sectionLineOf, towardOf } from '../command/section'
 import type { DrawingMarksAsked } from '@ongrid/floorplan/geometry/drawingMarks'
 import { AREA_RULES, planAreas, type AreaSureness } from '../quantities/areas'
+import { OUTDOOR_RULES_ARG, type OutdoorRules } from './outdoorRulesArg'
 import { stateText } from '../quantities/state'
 import { comparePlans, optionRow, type Comparison, type OptionRow } from '../quantities/compare'
 import {
@@ -284,6 +285,7 @@ const areasTool: GridTool = {
     'Use this when the person asks how big the plan or a room is, for the total floor area, a gross internal or gross external area, square feet, circulation or net to gross, or an area table for a spreadsheet. '
     + 'It lists every room with its inside size and net area, the totals by floor and by use, the area of each flat the plan lists (and of the rooms in no flat), and the gross areas, each with a sentence saying what it measures, what it does not take off and what the plan cannot say. '
     + 'Pass country for the gross measure the reader there usually means (the inside face of the outer walls in the UK and most of Europe, the outside face for US homes), or gross to ask for one or both. '
+    + 'On a plan that lists flats it gives each flat\'s area to the middle of its party walls too, and where fixtures stand the free floor beside the floor area, per room, zone, flat, floor and in all. Outdoor space is left out of every total unless outdoor_rules states a rule that counts part of it, and the answer says which. '
     + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart; a room Grid could not draw is named and left out of every figure. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
@@ -298,6 +300,7 @@ const areasTool: GridTool = {
     },
     country: { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code: the gross measure usual there is given first. Both when left out or when Grid has none for that place.', examples: ['GB', 'US'] },
     gross: { type: 'string', enum: ['internal', 'external', 'both'], description: 'The gross measure to give: internal (to the inside face of the outer walls), external (to the outside face) or both. The usual one for country when left out.', examples: ['both', 'external'] },
+    outdoor_rules: OUTDOOR_RULES_ARG,
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
@@ -324,11 +327,18 @@ const areasTool: GridTool = {
     // BRF-4: the storeys at or above the ground floor and below it.
     storeys: objectSchema({ above: NUMBER, below: NUMBER, storeys: { type: 'array' }, empty: { type: 'array' } }, ['above', 'below']),
     // CNT-4, only on a plan that lists flats: each flat's net area from the list, and the rooms in no flat.
-    flats: listSchema(objectSchema({ id: STRING, name: STRING, type: { type: ['string', 'null'] }, net: NUMBER, floors: listSchema(STRING), rooms: listSchema(STRING) }, ['id', 'name', 'net'])),
+    // ARE-14: toPartyWalls is each flat's area to the middle of its party walls, to each face of the outer walls.
+    flats: listSchema(objectSchema({ id: STRING, name: STRING, type: { type: ['string', 'null'] }, net: NUMBER, floors: listSchema(STRING), rooms: listSchema(STRING), toPartyWalls: { type: ['object', 'null'], properties: { grossInternal: NUMBER, grossExternal: NUMBER } }, free: NUMBER, fixtures: NUMBER, outdoor: { type: 'object' } }, ['id', 'name', 'net', 'toPartyWalls'])),
     notInFlats: NULLABLE_NUMBER,
+    notInFlatsToPartyWalls: { type: ['object', 'null'], properties: { grossInternal: NUMBER, grossExternal: NUMBER } },
+    // ARE-14 (lab S-6), only on a plan with fixtures: the floor they take from the rooms the net counts, and the net less it.
+    fixtures: NUMBER,
+    free: NUMBER,
+    // CNT-7, only on a plan with outdoor space: listed apart; weighted by the rules outdoor_rules states.
+    outdoor: { type: 'object' },
     // CNT-6, only on a plan that names buildings: each building's own floors' figures and its height.
     buildings: listSchema(objectSchema({ id: STRING, name: STRING, floors: listSchema(STRING), net: NUMBER, grossInternal: NULLABLE_NUMBER, grossExternal: NULLABLE_NUMBER, height: NULLABLE_NUMBER }, ['id', 'name', 'floors', 'net'])),
-  }), ['flats', 'notInFlats', 'buildings']),
+  }), ['flats', 'notInFlats', 'notInFlatsToPartyWalls', 'buildings', 'fixtures', 'free', 'outdoor']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const outside = (args['outside_rooms'] as string[] | undefined) ?? []
@@ -340,11 +350,13 @@ const areasTool: GridTool = {
     const gross = asked === undefined ? undefined : asked === 'both' ? 'both' : asked === 'internal' ? 'grossInternal' : 'grossExternal'
     const storeys = planStoreys(survey.plan)
     const heights = new Map(buildingHeights(survey.plan, storeys).map((b) => [b.id, b.height?.height ?? null] as const))
+    const outdoorRules = args['outdoor_rules'] as OutdoorRules | undefined
     const areas = planAreas(survey, {
       outside: new Set(outside),
       ...(floor === undefined ? {} : { floors: [floor] }),
       ...(country === undefined ? {} : { country }),
       ...(gross === undefined ? {} : { gross }),
+      ...(outdoorRules === undefined ? {} : { outdoorWeights: outdoorRules }),
     })
     const buildings = areas.buildings.map((b) => ({ ...b, height: heights.get(b.id) ?? null }))
     const data = {
@@ -367,7 +379,10 @@ const areasTool: GridTool = {
       // walls that close one: massing counts before any wall.
       storeys: { above: storeys.above, below: storeys.below, storeys: storeys.storeys, empty: storeys.empty },
       // CNT-4: only on a plan that lists flats, so every other answer is as it was.
-      ...(areas.notInFlats === null ? {} : { flats: areas.flats, notInFlats: areas.notInFlats }),
+      ...(areas.notInFlats === null ? {} : { flats: areas.flats, notInFlats: areas.notInFlats, notInFlatsToPartyWalls: areas.notInFlatsToPartyWalls }),
+      // ARE-14 and CNT-7: only on a plan with fixtures, or with outdoor space.
+      ...(areas.free === undefined ? {} : { fixtures: areas.fixtures, free: areas.free }),
+      ...(areas.outdoor === undefined ? {} : { outdoor: areas.outdoor }),
       // CNT-6: only on a plan that names buildings, so every other answer is as it was.
       ...(buildings.length === 0 ? {} : { buildings }),
     }
@@ -404,7 +419,8 @@ const areasTool: GridTool = {
     if (several) {
       for (const f of areas.floors) {
         const gross = areas.reader.gross.map((m) => `${m === 'grossInternal' ? 'gross internal' : 'gross external'} ${f[m] === null ? 'not known' : areaText(f[m]!, units)}`)
-        lines.push(`Floor ${q(f.floor)}: net ${areaText(f.net, units)}${surenessText(f.sureness, units)}, ${gross.join(', ')}.`)
+        const free = f.free === undefined ? '' : english(said('areas.free.floor', { area: areaText(f.free, units) }))
+        lines.push(`Floor ${q(f.floor)}: net ${areaText(f.net, units)}${surenessText(f.sureness, units)}${free}, ${gross.join(', ')}.`)
       }
     }
     // CNT-4: each flat the plan lists, from the list and never from the rooms' names (lab EL-1).
@@ -414,9 +430,10 @@ const areasTool: GridTool = {
         const type = flat.type === null ? '' : `${flat.typeName ?? flat.type}${flat.mirrored ? ', mirrored' : ''}; `
         const floors = flat.floors.length > 1 ? `, on ${flat.floors.length} floors (${flat.floors.map((id) => `${q(id)} ${areaText(flat.byFloor[id] ?? 0, units)}`).join(', ')})` : ''
         const doubt = flat.state.state === 'proven' ? '' : `, ${flat.state.state === 'not-proven' ? 'not proven' : 'not measured'}`
-        lines.push(`  ${q(flat.name)} (${type}${flat.rooms.length} room${flat.rooms.length === 1 ? '' : 's'}): ${areaText(flat.net, units)}${floors}${doubt}`)
+        lines.push(`  ${q(flat.name)} (${type}${flat.rooms.length} room${flat.rooms.length === 1 ? '' : 's'}): ${areaText(flat.net, units)}${floors}${doubt}${flatExtras(flat, areas.reader.gross, units)}`)
       }
-      lines.push(`  In no flat: ${areaText(areas.notInFlats, units)}.`)
+      lines.push(`  In no flat: ${areaText(areas.notInFlats, units)}${toPartyWallsText(areas.notInFlatsToPartyWalls, areas.reader.gross, units)}.`)
+      lines.push(`${MEASURES.partyWall.name}: ${MEASURES.partyWall.measures}`)
     }
     // CNT-6: each building the plan names, from its own floors.
     if (buildings.length > 0) {
@@ -436,6 +453,8 @@ const areasTool: GridTool = {
       lines.push(`${m === 'grossInternal' ? 'Gross internal' : 'Gross external'}: ${value === null ? 'not known' : areaText(value, units)}${state}. ${AREA_RULES[m]}`)
     }
     if (areas.headroom !== null) lines.push(`Area by headroom: ${bandsText(areas.headroom, units)}. ${MEASURES.headroom.measures}`)
+    // ARE-14 (lab S-6): the free floor beside the floor area, each with its label.
+    if (areas.free !== undefined) lines.push(english(said('areas.free.total', { free: areaText(areas.free, units), taken: areaText(areas.fixtures!, units), rule: MEASURES.freeFloor.measures })))
     if (areas.floors.some((f) => f.massing)) lines.push(storeysText(storeys))
     lines.push(`Assumed: ${areas.reader.why} Grid's own rule, not checked against any local standard.`)
     if (areas.grossInternal !== null && areas.reader.gross.includes('grossInternal')) {
@@ -447,15 +466,49 @@ const areasTool: GridTool = {
     if (areas.outdoor !== undefined) {
       const kinds = Object.entries(areas.outdoor.byKind).map(([kind, area]) => said('areas.outdoor.kind', { kind: said(`outdoor.kind.${kind}` as MessageKey), area: areaText(area ?? 0, units) }))
       lines.push(english(said('areas.outdoor', { area: areaText(areas.outdoor.area, units), kinds: joined(kinds, 'join.comma'), roofed: areaText(areas.outdoor.roofed, units), open: areaText(areas.outdoor.open, units), rule: areas.outdoor.rule.measures })))
+      // ARE-14: left out of every total, or counted by the rule the person stated: the answer says which.
+      lines.push(...outdoorCountedLines(areas.outdoor, units))
     }
     for (const rule of areas.measures) {
-      if (rule.measure === 'net' || rule.measure === 'headroom' || rule.measure === 'outdoor' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
+      const gross = rule.measure === 'grossInternal' || rule.measure === 'grossExternal'
+      if (!gross || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
     }
-    // Any rule beyond the measures', such as free floor where fixtures stand (CNT-12).
-    const measureRules: readonly string[] = [...Object.values(AREA_RULES), MEASURES.headroom.measures]
+    // Any rule beyond the measures' (ARE-14: free floor is one of them now, said with its figure).
+    const measureRules: readonly string[] = [...Object.values(AREA_RULES), MEASURES.headroom.measures, MEASURES.freeFloor.measures]
     lines.push(...areas.rules.filter((rule) => !measureRules.includes(rule)), ...areas.notes)
     return { text: lines.join('\n'), data }
   },
+}
+
+/** ARE-14: an area to the party walls, in the gross measures the reader asked for, after a flat's net. */
+function toPartyWallsText(area: { readonly grossInternal: number; readonly grossExternal: number } | null, gross: readonly ('grossInternal' | 'grossExternal')[], units: Display): string {
+  if (area === null) return ''
+  const parts = gross.map((m) => said(m === 'grossInternal' ? 'areas.toPartyWalls.grossInternal' : 'areas.toPartyWalls.grossExternal', { area: areaText(area[m], units) }))
+  return english(said('areas.flat.toPartyWalls', { areas: joined(parts, 'join.comma') }))
+}
+
+/** ARE-14: a flat's area to the party walls, its free floor and its outdoor space, after its net. */
+function flatExtras(flat: ReturnType<typeof planAreas>['flats'][number], gross: readonly ('grossInternal' | 'grossExternal')[], units: Display): string {
+  const free = flat.free === undefined ? '' : english(said('areas.flat.free', { area: areaText(flat.free, units) }))
+  const outdoor = flat.outdoor === undefined
+    ? ''
+    : flat.outdoor.weighted === null
+      ? english(said('areas.flat.outdoor', { area: areaText(flat.outdoor.area, units) }))
+      : english(said('areas.flat.outdoorCounted', { area: areaText(flat.outdoor.area, units), counted: areaText(flat.outdoor.weighted, units), withIt: areaText(flat.net + flat.outdoor.weighted, units) }))
+  return `${toPartyWallsText(flat.toPartyWalls, gross, units)}${free}${outdoor}`
+}
+
+/** ARE-14: whether the outdoor space is left out of every total or counted by the rules stated, kind by kind. */
+function outdoorCountedLines(outdoor: NonNullable<ReturnType<typeof planAreas>['outdoor']>, units: Display): string[] {
+  const kindSaid = (kind: string) => said(`outdoor.kind.${kind}` as MessageKey)
+  if (outdoor.weighted === null) return [english(said('areas.outdoor.leftOut'))]
+  const counted = outdoor.weighted.kinds.map((k) => english(said('areas.outdoor.counted', { kind: kindSaid(k.kind), share: num(String(Number((k.share * 100).toFixed(2)))), rule: k.rule, area: areaText(k.counted, units) })))
+  const left = Object.keys(outdoor.byKind).filter((kind) => !outdoor.weighted!.kinds.some((k) => k.kind === kind))
+  return [
+    ...counted,
+    ...(left.length === 0 ? [] : [english(said('areas.outdoor.notCounted', { kinds: joined(left.map(kindSaid), 'join.comma') }))]),
+    english(said('areas.outdoor.withNet', { area: areaText(outdoor.weighted.withNet, units) })),
+  ]
 }
 
 /** LVL-6: a stated roof's shape, pitch, area on its slope and rooflights, after its area on plan. */

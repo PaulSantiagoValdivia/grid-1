@@ -83,9 +83,12 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/briefTool.ts': [44, 'tools'],
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
   'packages/cli/src/mcp/editTools.ts': [73, 'tools'],
+  // ARE-14: grid_areas' outdoor_rules argument, its schema and its checks.
+  'packages/cli/src/mcp/outdoorRulesArg.ts': [12, 'tools'],
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [315, 'tools'],
+  // ARE-14: one more, grid_areas' description of the party walls, free floor and outdoor_rules.
+  'packages/cli/src/mcp/readTools.ts': [316, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -104,7 +107,8 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/estimate.ts': [33, 'notYet'],
   'packages/cli/src/quantities/finishes.ts': [2, 'notYet'],
   'packages/cli/src/quantities/facing.ts': [25, 'notYet'],
-  'packages/cli/src/quantities/fixtures.ts': [2, 'notYet'],
+  // ARE-14: the free floor rule is one of the area measures now, in the message files.
+  'packages/cli/src/quantities/fixtures.ts': [1, 'notYet'],
   'packages/cli/src/quantities/limits.ts': [29, 'notYet'],
   'packages/cli/src/quantities/measure.ts': [3, 'notYet'],
   'packages/cli/src/quantities/query.ts': [26, 'tools'],

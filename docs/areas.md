@@ -5,7 +5,8 @@ room and opening schedules are made, and how the quantities for a first estimate
 and priced from your own rates.
 
 Grid gives three areas, per floor and per use, from the spaces the walls enclose, and lists
-outdoor space apart. Each is
+outdoor space apart; a flat's area to the middle of its party walls and the free floor beside the
+floor area (ARE-14) are measured from the same rooms. Each is
 described in Grid's own words by what it measures, and no figure is said to follow a published
 standard: a standard's rule would come in only as a figure record, with its document, edition,
 clause, place, day read and status, and none is carried yet.
@@ -17,6 +18,8 @@ clause, place, day read and status, and none is carried yet.
 | Gross external area | Gross external area is the floor inside the outside face of the walls, every wall counted. | Outer walls, inner walls and floor no room claims are not taken off. | A wall shared with a neighbour, or with common parts the plan does not draw, counts to its middle once the plan marks it separating; any other wall counts in full, a wall standing apart too. |
 | Area by headroom | Area by headroom is the floor of each room with at least 1.5 m, and with at least 2.2 m, of height over it, from the room's floor to its ceiling or to the underside of the roof its floor states, whichever is lower. | It is measured on the room's whole floor: nothing standing in the room is taken off, a column neither, and floor under a lowered zone of the ceiling counts by that zone's height. | The plan cannot say how deep the roof is built up or where a low slope is boxed in, so the height is taken to the roof's underside as stated, from its eaves on the outside walls' lines. |
 | Outdoor area | Outdoor area is the floor of each room the plan marks as outdoor space, roofed or open, measured to the faces of its walls and edges as a room is. | It is in no net, gross internal or gross external figure, and nor is a wall that bounds outdoor space and no room, such as a fence or a parapet. | The plan cannot say how much of an outdoor space a local rule counts, such as part of a balcony: Grid counts none of it unless the caller states such a rule, with where it comes from. |
+| Area to the party walls | Area to the party walls is the floor of a flat's rooms with the walls and partitions between them, measured to the middle of each wall it shares with another flat, the common parts or a neighbour, and to the inside face of the walls that face outside, or to their outside face for the outside-face figure. | Nothing inside the flat is taken off: its inner walls, its partitions, its columns and its stair, on each floor it stands on, are all in it. | The plan cannot say which rooms make a flat but by its flats list, so floor no room claims and outdoor space are in no flat's figure, and a wall to a neighbour counts to its middle only once the plan marks it separating. |
+| Free floor | Free floor is a room's net area less the floor its fixtures stand on: their footprints, joined where they overlap, within the room. | Only the fixtures the plan states are taken off, at the sizes it states: loose furniture, which the plan does not hold, and the floor kept clear in front of a fixture both count as free. | The plan cannot say what stands in a room beyond what it states: a room with no fixtures stated is free floor all over, and a zone's fixtures are its room's too. |
 
 On every floor the gross external area is the net area, plus the floor under columns, the rooms
 named outside, the walls and the floor no room claims, to a millionth of a square metre. Where rooms overlap, or run over
@@ -71,8 +74,30 @@ room named outside is in no flat's figure, and a stair counts once, on the floor
 duplex has its area floor by floor and in all. The rooms in no flat, the common parts, are given
 apart, so the flats and the common parts add up to the net. `grid_areas` gives both on a plan
 that lists flats; on the lab's four-flat floor that is 68.27 m² for each one-bedroom flat, 99.23 m²
-for each two-bedroom flat and 84.49 m² in no flat. No figure to the middle of a party wall is
-given. In the library: `planAreaFigures(plan).flats` and `notInFlats`.
+for each two-bedroom flat and 84.49 m² in no flat. In the library: `planAreaFigures(plan).flats`
+and `notInFlats`.
+
+### A flat to the middle of its party walls
+
+The figure a developer quotes for a flat runs to the middle of its party walls (ARE-14, lab R-1).
+Grid gives it beside the net for every flat the plan lists (`toPartyWalls`), in the same two kinds
+as the gross areas and in the order the reader asked for: to the inside face of the walls that
+face outside (`grossInternal`), or to their outside face (`grossExternal`). Each side of a room is
+taken past the wall it lies on: by half that wall where another room of the flat, another flat,
+the common parts or a neighbour lies beyond it, by none of it or all of it where it faces outside,
+as the gross areas work that out ([the measures table](#measuring-areas)). The corner between two
+such sides is filled to where their lines meet, and the rooms of a flat are joined, so a wall
+inside the flat is counted once. A wall with no room drawn beyond it counts to its middle only
+when the plan marks it separating ([plan-file.md](plan-file.md)); any other faces outside. An
+outdoor space is the outside to the flat, and a zone is in its room. A duplex is measured floor by
+floor and added up.
+
+The rooms in no flat, the common parts, are measured the same way (`notInFlatsToPartyWalls`), so
+on a floor where every room is in a flat or the common parts, the flats, the common parts and the
+floor no room claims add up to the floor's gross internal area, and in the outside-face kind to
+its gross external area. On the lab's four-flat floor each one-bedroom flat is 72.95 m² to the
+inside face of the outer walls and 79.11 m² to their outside face, beside its 68.27 m² net.
+`grid_areas` prints the figure after each flat's net, and the rule's sentence after the list.
 
 A floor may state its outline before any wall (BRF-4,
 [plan-file.md](plan-file.md#a-floor-outline-before-the-walls)). On a floor with walls the outline is
@@ -99,10 +124,16 @@ net, 78.96 m² gross internal and 90.00 m² gross external, and 360.00 m² of ou
 apart (lab EL-8).
 
 No share of an outdoor space is counted by Grid. A local rule may count part of a balcony or a
-terrace; in the library the caller can state one per kind, its share and the rule in words with
-where it comes from (`planAreaFigures(plan, { outdoorWeights })`), and the weighted figure is then
-given beside the outdoor area (`outdoor.weighted`), never in the net or a gross figure. Grid holds
-no such rule of its own.
+terrace; the person can state one per kind, its share and the rule in their words with where it
+comes from: `grid_areas` with `outdoor_rules` (ARE-14), such as
+`{ "balcony": { "share": 0.5, "rule": "Half of each balcony, as my lender counts it" } }`, and in
+the library `planAreaFigures(plan, { outdoorWeights })`. The weighted figure is then given beside
+the outdoor area (`outdoor.weighted`, with each kind's share and what it counts, and `withNet`,
+the net with that floor added), and each flat that holds outdoor space gives its own
+(`outdoor`), never in the net or a gross figure. The answer always says which: with no rule, that
+the outdoor space is left out of every total; with one, each kind it counts, at what share and by
+which rule, said as the person's own and not checked by Grid, and the kinds no rule counts. Grid
+holds no such rule of its own.
 
 The site's things (BRF-3: fences, gates, paths, paving, trees and pools) are in no area: they are
 never rooms. The plot coverage, the building's shape seen from above against the plot's area, is
@@ -110,6 +141,20 @@ not one of these figures: `grid_measure` with `what=site` gives it, from the out
 floor at or above the ground floor ([tool-server.md](tool-server.md#the-plot-distances-to-the-boundary-and-the-coverage)).
 A floor area ratio the person gives is measured there too, by the gross measure they name: the
 figure's name and what it measures are said with it.
+
+## Free floor
+
+Where fixtures stand (CNT-12, [plan-file.md](plan-file.md)), a room's free floor is given beside
+its net area (ARE-14, lab S-6): the net less the floor its fixtures' footprints cover, joined where
+they overlap, within the room. A shop of 60 m² with 15 m² of counters and shelving runs has 45 m²
+of free floor: the two figures are a quarter apart, and each is said with its name. `grid_areas`
+gives the free floor for each room with fixtures (`free`, with `fixtures`, the floor they take),
+for each zone that holds a fixture's middle (the zone's part; its room's free floor holds it
+too), for each flat, for each floor and in all, beside the net, and prints the total with its
+rule. Only fixtures the plan states are taken off: loose furniture is not held yet, and a room
+with none stated is free floor all over. The kinds of fixture are CNT-11's, none of them a shop's:
+until shop kinds are decided, a counter or a run of shelving fixed to the floor is drawn as a
+`kitchen-run` with its own label, and its footprint is taken off as any fixture's is.
 
 ## Schedules
 

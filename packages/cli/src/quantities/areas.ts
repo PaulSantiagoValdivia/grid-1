@@ -13,7 +13,8 @@
  * are in no figure.
  */
 import { MEASURES, floorOf, floorRoofShape, headroomBands, planMarks, roomHeadroom, wallSureness, type GrossMeasure, type HeadroomBand, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
-import { FLAT_AREA_RULE, planAreaFigures, type FlatAreaFigure, type OutdoorAreaFigure, type PlanAreaFigures } from '@ongrid/floorplan/geometry/areas'
+import { FLAT_AREA_RULE, planAreaFigures, type FlatAreaFigure, type OutdoorAreaFigure, type OutdoorWeight, type PlanAreaFigures } from '@ongrid/floorplan/geometry/areas'
+import type { PartyWallArea } from '@ongrid/floorplan/geometry/partyWalls'
 import type { MarkSource, OutdoorKind } from '@ongrid/floorplan/types/floorplan'
 import type { Survey, SurveyRoom } from './survey'
 import { FIXTURE_RULES, planFixtures } from './fixtures'
@@ -103,6 +104,9 @@ export interface FloorAreas {
   readonly massing?: true
   /** WRT-6: the net area's sureness, from its rooms'; only when one of them has one. */
   readonly sureness?: AreaSureness
+  /** ARE-14 (lab S-6), only on a floor with fixtures: the floor they take from the rooms its net counts, and the net less it. */
+  readonly fixtures?: number
+  readonly free?: number
   readonly why: string | null
   /** LVL-6, only on a floor that states its roof: its rooms' floor by headroom band, those counted in net. */
   readonly headroom?: readonly HeadroomBand[]
@@ -120,6 +124,9 @@ export interface FloorAreas {
 export interface FlatAreas extends FlatAreaFigure {
   /** Proven, not proven (a room of it in doubt or left out) or not looked at (none measured). */
   readonly state: AreaState
+  /** ARE-14, only on a flat with fixtures in the rooms it counts: the floor they take, and its net less it. */
+  readonly fixtures?: number
+  readonly free?: number
 }
 
 export interface PlanAreas {
@@ -128,6 +135,8 @@ export interface PlanAreas {
   readonly flats: readonly FlatAreas[]
   /** CNT-4: the net area of the rooms in no flat: the common parts. Null when the plan lists no flats. */
   readonly notInFlats: number | null
+  /** ARE-14: the rooms in no flat to the party walls, as a flat's are. Null when the plan lists no flats. */
+  readonly notInFlatsToPartyWalls: PartyWallArea | null
   /** CNT-6: each building the plan names, its own floors' figures; empty with none. */
   readonly buildings: PlanAreaFigures['buildings']
   readonly net: number
@@ -154,6 +163,9 @@ export interface PlanAreas {
   readonly notes: readonly string[]
   /** WRT-6: the net total's sureness, from its rooms'; only when one of them has one. */
   readonly sureness?: AreaSureness
+  /** ARE-14 (lab S-6), only on a plan with fixtures: the floor they take from the rooms the net counts, and the net less it. */
+  readonly fixtures?: number
+  readonly free?: number
   /** MSG-2: the state of each total, and the rooms it left out or holds in doubt. */
   readonly states: {
     readonly net: AreaState
@@ -170,6 +182,8 @@ export interface AreasRequest {
   readonly floors?: readonly string[]
   readonly country?: string
   readonly gross?: GrossMeasure | 'both'
+  /** CNT-7, ARE-14: the share of each kind of outdoor space a rule the person states counts. */
+  readonly outdoorWeights?: Readonly<Partial<Record<OutdoorKind, OutdoorWeight>>>
 }
 
 const CIRCULATION = new Set(['corridor', 'stair'])
@@ -223,8 +237,9 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     ...(request.floors ? { floors: request.floors } : {}),
     ...(request.country ? { country: request.country } : {}),
     ...(request.gross ? { gross: request.gross } : {}),
+    ...(request.outdoorWeights ? { outdoorWeights: request.outdoorWeights } : {}),
   })
-  const { taken } = planFixtures(survey.plan, request.floors)
+  const { taken, zoneTaken } = planFixtures(survey.plan, request.floors)
   // LVL-6: a room on a floor that states its roof has its floor by headroom band.
   const headroomOf = (floor: string, id: string, net: number | null): Pick<RoomArea, 'headroom'> => {
     if (net === null || floorRoofShape(survey.plan, floor) === null) return {}
@@ -249,7 +264,8 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       const net = figure?.area ?? null
       const doubted = doubts.get(f.floor)?.get(id) ?? []
       const shape = shapes.get(key(f.floor, id))
-      const fixtures = taken.get(id)
+      // ARE-14: a zone's fixtures are those whose middle is in it; its room's free floor holds them too.
+      const fixtures = figure !== undefined && figure.zoneOf !== null ? zoneTaken.get(id) : taken.get(id)
       const sureness = roomSureness(surveyed.get(key(f.floor, id)), marks, net)
       return {
         id,
@@ -288,6 +304,9 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     for (const use of Object.keys(byUseState)) byUse[use] ??= 0
     const headroom = inside.some((room) => room.headroom !== undefined) ? addBands(inside.flatMap((room) => (room.headroom ? [room.headroom.bands] : []))) : null
     const floorSure = sumSureness(inside, f.net)
+    // ARE-14 (lab S-6): the floor the fixtures take from the rooms the net counts, beside the net.
+    const fitted = inside.filter((room) => room.fixtures !== undefined)
+    const floorFixtures = sum(fitted.map((room) => room.fixtures!))
     return {
       floor: f.floor,
       rooms,
@@ -304,6 +323,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       // BRF-4 (C17): only on a massing floor, an outline with no walls yet.
       ...(f.massing ? { massing: true as const } : {}),
       ...(floorSure === undefined ? {} : { sureness: floorSure }),
+      ...(fitted.length === 0 ? {} : { fixtures: floorFixtures, free: Math.max(0, f.net - floorFixtures) }),
       why: f.why,
       ...(headroom === null ? {} : { headroom }),
       states: {
@@ -359,17 +379,26 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       const room = listed.get(key(floorOfRoom.get(id) ?? '', id))
       return room === undefined ? [] : [room]
     })
-    return { ...flat, state: sumState(own) }
+    // ARE-14: the floor the fixtures take from the rooms it counts.
+    const fitted = flat.rooms.flatMap((id) => {
+      const room = listed.get(key(floorOfRoom.get(id) ?? '', id))
+      return room?.fixtures === undefined ? [] : [room.fixtures]
+    })
+    const fixtures = sum(fitted)
+    return { ...flat, state: sumState(own), ...(fitted.length === 0 ? {} : { fixtures, free: Math.max(0, flat.net - fixtures) }) }
   })
   const hasFlats = (survey.plan.flats ?? []).length > 0
   if (hasFlats) {
     const outOfFlats = flats.filter((flat) => flat.leftOut.length > 0)
     if (outOfFlats.length > 0) notes.push(`A flat's area leaves out the rooms of it Grid could not draw: ${outOfFlats.map((flat) => `${JSON.stringify(flat.name)} (${flat.leftOut.map((id) => JSON.stringify(id)).join(', ')})`).join('; ')}.`)
   }
+  const fittedFloors = floors.filter((f) => f.fixtures !== undefined)
+  const planFixtureFloor = sum(fittedFloors.map((f) => f.fixtures!))
   return {
     floors,
     flats,
     notInFlats: hasFlats ? figures.notInFlats : null,
+    notInFlatsToPartyWalls: hasFlats ? figures.notInFlatsToPartyWalls : null,
     buildings: figures.buildings,
     net,
     grossInternal,
@@ -382,11 +411,21 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     reader: figures.reader,
     grossWhy,
     headroom: floorBands.length === 0 ? null : addBands(floorBands),
-    measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal, ...(floorBands.length === 0 ? [] : [MEASURES.headroom]), ...(figures.outdoor === undefined ? [] : [MEASURES.outdoor])],
+    measures: [
+      MEASURES.net,
+      MEASURES.grossInternal,
+      MEASURES.grossExternal,
+      ...(floorBands.length === 0 ? [] : [MEASURES.headroom]),
+      ...(figures.outdoor === undefined ? [] : [MEASURES.outdoor]),
+      // ARE-14: a flat's area to the party walls, on a plan that lists flats, and free floor where fixtures stand.
+      ...(hasFlats ? [MEASURES.partyWall] : []),
+      ...(taken.size === 0 ? [] : [MEASURES.freeFloor]),
+    ],
     rules: [...Object.values(AREA_RULES), ...(hasFlats ? [FLAT_RULE] : []), ...(taken.size === 0 ? [] : [FIXTURE_RULES.free]), ...(floorBands.length === 0 ? [] : [MEASURES.headroom.measures]), ...(sureness === undefined ? [] : [SURENESS_RULE])],
     notes,
     ...(figures.outdoor === undefined ? {} : { outdoor: figures.outdoor }),
     ...(sureness === undefined ? {} : { sureness }),
+    ...(fittedFloors.length === 0 ? {} : { fixtures: planFixtureFloor, free: Math.max(0, net - planFixtureFloor) }),
     states: {
       net: netState,
       circulation: circulationState,

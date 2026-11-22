@@ -619,7 +619,8 @@ A flat is a named group of rooms, never a room: it adds no floor and closes no o
 never read from the rooms' names. What reads it:
 
 - **Areas.** `grid_areas` gives each flat's net area, the rooms it lists counted as the net counts
-  them, floor by floor for a duplex, and the rooms in no flat apart ([areas.md](areas.md)).
+  them, floor by floor for a duplex, and the rooms in no flat apart, each also to the middle of
+  its party walls (ARE-14, [areas.md](areas.md#a-flat-to-the-middle-of-its-party-walls)).
 - **Schedules.** `grid_schedule of=flats` lists each flat with its type, rooms, bedrooms and area,
   and the mix by type; the room schedule says each room's flat.
 - **The drawing.** Each flat's outline is drawn on its floors: a chain line along the middle of
@@ -902,7 +903,7 @@ it stands in is the one that holds its middle. The 2D drawing, the sheet and the
 `GRID-FIXTURES`) draw its symbol to scale inside its footprint; the IFC file holds it as an
 `IfcFurnishingElement` on its storey. `grid_schedule` counts the fixtures by kind with their
 rooms, `grid_areas` gives each room with fixtures its free floor (its net area less the floor
-they stand on), `grid_measure` measures between fixtures and fits a box clear of them, and
+they stand on), and each zone, flat and floor and the plan theirs ([areas.md](areas.md#free-floor)), `grid_measure` measures between fixtures and fits a box clear of them, and
 `grid check` names a fixture that runs into a wall or is taller than its room. A fixture is an
 obstacle (CNT-13): a door whose leaf swings into it names it, and `grid_measure what=use` and
 `what=route` with a width measure the turning circle, the way through and the floor round each
