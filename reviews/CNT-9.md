@@ -123,10 +123,10 @@ Run on a laptop shared with about ten other sessions (load average near 200), wi
 | `npm run scoreboard` | passes, **same as the stored figures**: 197 rooms measured wrong, 278 damage silent, 16 turns answered, 5 mistakes named, 11 checks fed, 735 rooms not measured, 95 sound plans with a warning. Nothing to store |
 | Full suite (`vitest run --exclude '.claude/**'`) | 243 files, 4,705 passed, 3 skipped, 2 failed, in 1,029 s. Both failures were tests that list a wall's known fields or stack every fixture (see "Tests"); each was fixed and passes when rerun on its own. No timing failure |
 
-**The bundle cap.** CNT-9 took the built file past the 500 kB cap of `grid.e2e.test.ts`, by
-1,829 bytes, with no new dependency. **I raised the cap to 525 kB**, with the reason in the
-test's comment; a second zod would still go over it. Trimming the tools' descriptions would have
-bought the bytes back once, at the cost of what the agents read.
+**The bundle cap.** Before the merge, CNT-9 took the built file to 501,829 bytes, past the 500 kB
+cap of `grid.e2e.test.ts`, and the build raised the cap to 525 kB. Main's build now minifies and
+splits the file into chunks, so after merging main `grid.mjs` is 386,069 bytes. The cap is back
+at main's 500 kB, unchanged by CNT-9.
 
 ## Tests
 
@@ -141,7 +141,6 @@ bought the bytes back once, at the cost of what the agents read.
     "keeps about a dozen tools" allows 24, up from 21, with a line saying why.
   - `server.test.ts`: `tools/list` over stdio gives 24 tools, not 21.
   - `everyPath.e2e.test.ts`: the three new tools' `plan` slots.
-  - `grid.e2e.test.ts`: the bundle cap, 500 kB to 525 kB (see "Gates").
   - `reading.test.ts`, "thick on a wall is named…", and `packages/rules/src/result/__tests__/result.test.ts`,
     "names thick on a wall…": the fields a wall knows, listed in the note, now end with
     `properties`.
@@ -187,8 +186,7 @@ bought the bytes back once, at the cost of what the agents read.
     `--highlight`. The picture code takes both, so they are a small step if wanted.
 13. **Nothing checks a fact.** No message says a door or wall meets its fire rating, and no
     check reads one; the tools' rule line says so in every answer.
-14. **The bundle cap is 525 kB now** (501,829 bytes). Keeping 500 kB means trimming about 2 kB,
-    most cheaply from the tools' descriptions.
+14. **The bundle cap stays at 500 kB.** With main's minified build the file is 386,069 bytes.
 15. **The stand-in's name and place**: `packages/floorplan/fixtures/facts-office.json`, read
     through `@ongrid/floorplan/test-support/facts`, so every fixture-wide test reads it too.
 
@@ -206,3 +204,11 @@ bought the bytes back once, at the cost of what the agents read.
 - **The IFC sets were not opened in a BIM tool**; they are checked by reading the STEP text back.
   The DXF text was not opened in a CAD tool either.
 - **No scoreboard count measures facts**; none moved.
+
+## After merging main
+
+Main was merged at `ef88ec9` (ARE-13's estimate, MSG-3's label). Two doc conflicts, both kept
+whole: the changelog for agents in `docs/result-contract.md` (CNT-9's entry first, then ARE-13's
+and MSG-3's) and `docs/tool-server.md` (both new sections, ARE-13's `grid_takeoff` row and
+CNT-9's `grid_schedule` row). MSG-3 now starts every CSV with the label, so the two schedule CSV
+checks in `packages/cli/src/mcp/__tests__/facts.test.ts` read the header from the second row.

@@ -334,7 +334,7 @@ export const TOLERANCES = {
     unit: 'm',
     decides:
       'Grid\'s own size, not a code figure. A door or a doorless opening narrower than this is ' +
-      'too narrow for a person to pass: it is named, and no route, way out or door to another ' +
+      'too narrow for a person to get through: it is named, and no route, way out or door to another ' +
       'room is read through it.',
     basis: own
   },
@@ -344,7 +344,7 @@ export const TOLERANCES = {
     unit: 'm',
     decides:
       'Grid\'s own size, not a code figure. A door or a doorless opening lower than this is too ' +
-      'low for a person to pass, even stooping: it is named and is not a way through.',
+      'low for a person to get through, even stooping: it is named and is not a way through.',
     basis: own
   },
   passableSill: {

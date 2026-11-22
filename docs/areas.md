@@ -1,7 +1,8 @@
 # Measuring areas
 
-Read this to know what an area figure measures, which gross area comes first where, and how the
-room and opening schedules are made.
+Read this to know what an area figure measures, which gross area comes first where, how the
+room and opening schedules are made, and how the quantities for a first estimate are measured
+and priced from your own rates.
 
 Grid gives three areas, per floor and per use, from the spaces the walls enclose. Each is
 described in Grid's own words by what it measures, and no figure is said to follow a published
@@ -58,3 +59,68 @@ cannot be written, a missing name or an area that is not a number, stops the sch
 error naming the row; it is never left out in silence. `grid sheet --layout check` ends with
 both schedules as tables.
 
+
+## Quantities for a first estimate
+
+`grid_takeoff` with `for=estimate` (ARE-13) turns the plan into the lines a first estimate
+needs. Each line has a key, a quantity in m², m or nr, its rule in one sentence and an
+`assumed` mark. They are built on the measuring above: the rooms' take-off, the gross internal
+area, each opening once as the schedule counts it, and each floor's outline.
+
+| Key | Line | Assumed |
+|---|---|---|
+| `floor:<use>` | Floor finish: the net area of the rooms of that use. The plan holds no finishes, so the person decides which finish a use gets, by the key they price | no |
+| `ceiling` | Ceilings: a flat ceiling as big as the floor below it | yes |
+| `wall_finish:<use>` | Inside wall faces of the rooms of that use, at the height of each wall, less every door, window and opening at full size; both faces of an inside wall count | no |
+| `skirting` | Each room's inside perimeter less the width of its doors and doorless openings | no |
+| `reveals` | Round each door and window, its sides and head, and its sill when it has one, times its wall's thickness | no |
+| `wall:<kind>:<thickness>` | Walls by the kind the plan states and their thickness: centre-line length times height, less openings | no |
+| `external_finish` | The outer edge of each floor's outline, corners in, times the height of the wall it runs along, less openings | no |
+| `door:<w>x<h>`, `window:<w>x<h>` | Doors and windows by the size of their hole in the wall, each counted once | no |
+| `slab` | A slab under the lowest floor's outline | yes |
+| `upper_floor` | Each upper floor's gross internal area, less the footprint of every stair the plan states arriving on it | yes |
+| `roof` | A flat roof over every part of a floor's outline that no floor above covers, so a single-storey part has its roof | yes |
+| `gross_internal` | The gross internal area, for a rate for the whole building: an alternative to the other lines, never added to them | no |
+
+The plan holds no slab, floor structure, roof or ceiling yet, so those lines are worked out from
+the outlines and say so. A floor that is part of a larger building cannot say what is above or
+below it, so it gets a slab and a roof like any other. A room Grid could not draw is left out
+of the room lines, and the answer names it.
+
+A cost comes only from the person's own rates, in a file of their own beside the plan:
+`rates.json`, or the file passed as `rates`, inside the project folder. Grid has no prices.
+
+```json
+{
+  "label": "Where these rates come from",
+  "currency": "EUR",
+  "rates": {
+    "floor": { "rate": 40, "unit": "m2" },
+    "floor:bathroom": { "rate": 85, "unit": "m2", "waste": 0.1 },
+    "wall:exterior": { "rate": 120, "unit": "m2" },
+    "door": { "rate": 350, "unit": "nr" }
+  },
+  "orders": {
+    "Plasterboard": { "for": ["wall_finish", "ceiling"], "covers": 2.88, "waste": 0.1, "pack": "sheets of 1.2 x 2.4 m" },
+    "Paint": { "for": ["wall_finish", "ceiling"], "covers": 50, "coats": 2, "pack": "tins of 5 l" }
+  }
+}
+```
+
+- A rates file that names no currency is refused, and so is a rate below 0 or in a unit other
+  than `m2`, `m`, `nr`, `ft2` or `ft`. A field Grid does not read is refused by name.
+- A rate prices the lines whose key it is, or begins with followed by a colon: `wall:exterior`
+  prices every outside wall thickness, `door` every door size, and an exact key wins over a
+  shorter one. A rate per ft² or ft is turned into one per m² or m.
+- A rate's `waste` is a share added to the quantity before it is priced.
+- A line with no rate, or with a rate left `null`, is listed and never filled. A rate in another
+  unit than its line's is not used, and is listed apart from the lines with no rate. A rate that
+  prices no line of the plan is named, so a mistyped key shows.
+- The total adds up the priced lines only, and says when it is not the whole cost.
+- An order says which lines it is for, how much one pack covers in their unit, the coats and
+  the waste; Grid gives the whole packs needed. Every figure in it is the person's.
+
+With no rates file the answer holds no money: it is a rate card, every line with its key and
+unit, and the data's `rateCard` is a rates file ready to fill in. With `format=csv` the bill is
+one row per line with its rule and assumed mark, then the total and the orders; amounts are
+values, not formulas.

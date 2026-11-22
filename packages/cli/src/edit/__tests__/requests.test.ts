@@ -85,7 +85,7 @@ describe("E's six requests, one call each", () => {
     expect(data.couldNotKeep).toEqual(['door "door-living" could not stay between the same rooms: they no longer share enough wall where it is. It was left in place.'])
     expect(data.guessed[0]).toBe('"Living room" gives the 1.00 m: the wall is its side too.')
     expect(data.doors).toEqual(['"door-living" joined "hall" and "living"; it now joins "hall" and "kitchen".'])
-    expect(reply.text.split('\n')[0]).toBe('"Kitchen": inside depth (north-south) 3.00 → 4.00 m.')
+    expect(reply.text.split('\n')[1]).toBe('"Kitchen": inside depth (north-south) 3.00 → 4.00 m.')
   })
 
   it('2. knock the kitchen and living room into one: the same plan as by hand', async () => {
@@ -164,7 +164,7 @@ describe('openings that stay put (WR-4)', () => {
     // Bedroom 2's door, kept from the bedroom's south side: then that side moves 0.3 m south.
     const pinned = await b.call('grid_change_opening', { plan: 'v00.json', opening: 'door-bed2', room: 'bed2', from: 'south', out: 'pinned.json' })
     expect(pinned.isError, pinned.text).toBe(false)
-    expect(pinned.text.split('\n')[0]).toBe('door "door-bed2" keeps its place from the south side of "Bedroom 2" when walls move.')
+    expect(pinned.text.split('\n')[1]).toBe('door "door-bed2" keeps its place from the south side of "Bedroom 2" when walls move.')
     const gap = (plan: FloorPlan): number => {
       const survey = surveyPlan(plan)
       const face = Math.min(...survey.byId.get('bed2')!.polygon.map((p) => p.y))
@@ -195,8 +195,10 @@ describe('rename and a change of use (AB-8)', () => {
   it('renames a room and says which checks now apply differently', async () => {
     const reply = await b.call('grid_rename_room', { plan: 'v00.json', room: 'bed2', name: 'Study', use: 'other', out: 'study.json' })
     expect(reply.isError, reply.text).toBe(false)
+    // MSG-3: the label leads every answer; the receipt follows it.
     const lines = reply.text.split('\n')
-    expect(lines.slice(0, 3)).toEqual([
+    expect(lines[0]).toBe('General guidance, not your local rules')
+    expect(lines.slice(1, 4)).toEqual([
       'Renamed "Bedroom 2" to "Study".',
       '"Study" is used as other now, not bedroom.',
       'Checks that no longer do: Rooms people live or sleep in have a minimum floor area; Bedrooms have a window or door to the outside someone can escape through.',
@@ -208,12 +210,12 @@ describe('rename and a change of use (AB-8)', () => {
 
   it('says when a change of use brings a check in', async () => {
     const reply = await b.call('grid_rename_room', { plan: 'v00.json', room: 'living', use: 'bedroom', out: 'living-bed.json' })
-    expect(reply.text.split('\n')[1]).toBe('Checks that now look at it: Bedrooms have a window or door to the outside someone can escape through.')
+    expect(reply.text.split('\n')[2]).toBe('Checks that now look at it: Bedrooms have a window or door to the outside someone can escape through.')
   })
 
   it('renames only, and says the same checks apply', async () => {
     const reply = await b.call('grid_rename_room', { plan: 'v00.json', room: 'kitchen', name: 'Cocina', out: 'es.json' })
-    expect(reply.text.split('\n')[0]).toBe('Renamed "Kitchen" to "Cocina".')
+    expect(reply.text.split('\n')[1]).toBe('Renamed "Kitchen" to "Cocina".')
     expect((reply.data as { checks: unknown }).checks).toEqual({ now: [], noLonger: [] })
   })
 })

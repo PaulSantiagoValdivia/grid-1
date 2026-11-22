@@ -19,6 +19,7 @@
 import type { Scene3D } from '../scene3d'
 import { floorMesh, makeNamer, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
+import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { leftOutLines, leftOutSummary, type LeftOutPart } from './leftOut'
 
 const MAGIC = 0x46546c67 // "glTF"
@@ -124,10 +125,11 @@ export interface GlbOptions {
  * application's own, which every reader keeps and none acts on. JSON escapes the ids.
  */
 function assetOf(leftOut: readonly LeftOutPart[]): object {
-  const asset = { version: '2.0', generator: GENERATOR }
+  // MSG-3: the label travels in the file, where glTF keeps data of the file's own.
+  const asset = { version: '2.0', generator: GENERATOR, extras: { label: GENERAL_GUIDANCE_LABEL } }
   if (leftOut.length === 0) return asset
   const note = [leftOutSummary(leftOut), ...leftOutLines(leftOut)]
-  return { ...asset, extras: { gridLeftOut: { count: leftOut.length, note, parts: leftOut } } }
+  return { ...asset, extras: { ...asset.extras, gridLeftOut: { count: leftOut.length, note, parts: leftOut } } }
 }
 
 /**

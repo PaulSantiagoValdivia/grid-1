@@ -6,6 +6,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 - [The tools](#the-tools)
 - [Asking across the parts: fields, find and count](#asking-across-the-parts-fields-find-and-count)
+- [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [Reporting a problem](#reporting-a-problem)
 - [Protocol versions](#protocol-versions)
@@ -23,7 +24,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 |---|---|
 | `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
 | `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), in metres or feet, as text or CSV, each figure with its rule stated |
-| `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
+| `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); a room's stated number and each part's facts of the person's own go with them; text or CSV |
 | `grid_fields` | What can be asked of the plan: the fields Grid works out for each kind of part, with their units, and the facts of the person's own the parts carry, with how many carry each and their values (see below) |
 | `grid_find` | The walls, doors, windows, openings, rooms or floors that meet every condition, by id, with only the fields asked for, and a `view` for `grid_view` that picks them out |
@@ -108,6 +109,17 @@ floor by its value (`colour`, the field it grouped by), with a key. The `floor` 
 holds most of them; `floors` lists every floor they are on. `grid_view` also takes either
 argument by hand. Grid checks nothing against a fact: no answer says what a fire rating or a
 head count means for the plan.
+
+## The label, and retelling a report
+
+Every answer's text starts with "General guidance, not your local rules", and its data carries
+it as `label` (MSG-3); the server adds it where it answers, so no tool can leave it out. A
+refusal is not an answer about the plan and has no label. The server's instructions tell the
+agent how to retell a report (`src/mcp/retelling.ts`): start with the label and keep it; never
+say a plan complies, is approved, meets code or has passed anything; give each figure as the
+figure used here, with its basis and its status. The plugin's skill carries the same words.
+`npm run retell` scores how well a model keeps to them (see the scoreboard's
+[README](../scoreboard/README.md#the-retelling-set)).
 
 ## Measuring from faces, and a room's height
 
