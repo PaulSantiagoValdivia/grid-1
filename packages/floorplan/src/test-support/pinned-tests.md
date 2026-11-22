@@ -20,6 +20,9 @@ entry whose fix may change it.
 | exports one floor for the 2D and 3D formats, the one the user is looking at | `packages/floorplan/src/export/__tests__/planExport.test.ts` | EX-4 |
 | is false for any other country | `packages/rules/src/checks/__tests__/rules-figures.test.ts` | CH-3 |
 
+Z-6 also named `rejects a non-integer level` (floorplan.test.ts, VE-3). LVL-1 changed it on
+purpose to `accepts a half level`, so it left this list (see below).
+
 The IFC export pins the same level rule as elevations: `ignores gaps in the level numbering:
 levels are an order, not positions` in `packages/floorplan/src/geometry/export/__tests__/ifc.test.ts`
 (VE-3).
@@ -88,6 +91,19 @@ Paths without a package are under `packages/floorplan/src/`.
 | MS-15 | MSG-12 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-12"; the plans behind MS-2, MS-15, MS-17, W-10 and L-6 in `geometry/__tests__/wallFaults.test.ts` |
 | MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
 | CH-6 (the size half) | MSG-18 | `packages/rules/src/checks/__tests__/rules-check.test.ts`, "lab failures fixed by MSG-18"; the lab's three cases in `geometry/__tests__/passable.test.ts` |
+
+## Probes that never failed
+
+Z-4 wrote 28 probes; 23 failed in the lab and 5 passed. The five that passed are in the suite
+as normal tests, so that all 28 are there.
+
+| Probe | Where |
+| --- | --- |
+| control: a rectangle measures between its inner faces | `geometry/__tests__/conventions.test.ts`, "lab failures fixed by ARE-1" |
+| AR-14 the L room measures the same turned by 1, 45 and 180 degrees | the same block; before ARE-1 it read the same wrong figure at every turn |
+| AR-14 the L room measures the same with two walls drawn from their other end | the same block, for the same reason |
+| MS-10 a misspelt floor is reported when the plan lists its floors | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; a warning before LVL-1, an error now |
+| SC-2 checks 400 rooms in under a second | `geometry/__tests__/sweep.test.ts`; skipped on a machine running more work than it has cores |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
@@ -171,13 +187,17 @@ courtyard), is MSG-17's and has no `it.fails`. No other expected figure changed 
 From the lab's entry Z-7. None of these is built here.
 
 - **An independent area referee.** Started here: `test-support/referee.ts`, the table in
-  `room-areas.test.ts` and the generated rooms in `room-shapes.test.ts`. It does not yet
-  measure virtual walls, angled rooms or whole plans.
+  `room-areas.test.ts` (each plan turned by 1, 45 and 180 degrees about a point away from the
+  origin) and the generated rooms in `room-shapes.test.ts`. It does not yet measure virtual
+  walls, angled rooms or whole plans.
 - **Generated room plans.** `room-shapes.test.ts` builds 300 rooms shaped L, T, U, Z and
   cross from a fixed seed and checks their areas. There are none yet for validation or for
   whole plans (MS-20).
-- **Timing guards.** Only the plan comparison has one. The door-swing check needs one (SC-2,
-  SC-3); its lab probe ran 400 rooms in about a third of a second, so it is not a failure today.
+- **Timing guards.** The plan comparison has one, and the door-swing check has the lab's
+  SC-2 probe (400 rooms under a second, about a third of a second in the lab), which is
+  skipped on a loaded machine. Nothing guards how its time grows with the floor (SC-2):
+  under heavy load it took about 1.4 s at 400 rooms and 8.3 s at 900, most of it building the
+  floor it runs on. The large files of SC-3 have no guard either.
 - **Pictures and real readers.** Nothing compares what the 2D or 3D view draws, and exported
   files are compared with Grid's own output and four golden IFC files, never opened by the
   programs people use (SE-8, SE-9, DR-3, EX-1).

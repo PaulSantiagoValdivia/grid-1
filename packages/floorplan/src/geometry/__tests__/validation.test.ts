@@ -517,6 +517,19 @@ describe('lab failures fixed by LVL-1', () => {
     expect(found.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['wall/unknown-floor', 'wall', 'w1', 'error']])
     expect(found[0]!.message).toContain('spelt like floor "first"')
   })
+
+  // Lab MS-10's other half: it passed before LVL-1, as a warning on the wall. LVL-1 made it an
+  // error, as it is without a floors list.
+  it('MS-10 a misspelt floor is reported when the plan lists its floors', () => {
+    const { walls, room } = outline(RECT)
+    const plan = parseFloorPlan({
+      floors: [{ id: 'ground', name: 'Ground', level: 0 }, { id: 'first', name: 'First', level: 1 }],
+      walls: walls.map((w, i) => (i === 0 ? { ...w, floor: 'frist' } : w)),
+      rooms: [room]
+    })
+    const found = validatePlan(plan).issues.filter((i) => /frist/.test(i.message))
+    expect(found.map((i) => [i.code, i.entity, i.id, i.severity])).toEqual([['wall/unknown-floor', 'wall', 'w1', 'error']])
+  })
 })
 
 /**
