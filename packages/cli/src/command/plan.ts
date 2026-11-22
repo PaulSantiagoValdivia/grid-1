@@ -7,7 +7,7 @@
  */
 import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
-import type { Project } from '../fs/projectFiles'
+import { PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
 import { UsageError } from './options'
@@ -89,6 +89,25 @@ function schemaProblem(issue: PlanSchemaIssue): string {
   }
 }
 
+/**
+ * CMD-15 (T-5): the trace image a plan names is a path written by whoever wrote the plan, and
+ * the plan may come from a stranger. It must lead to a file inside the project folder, by the
+ * same resolver as every other path: no web address, no network or device path, no `..` or
+ * absolute path out of the folder, no symbolic link out of it. Relative to the project folder,
+ * as the schema says, for the command and the tool server alike. The picture need not exist.
+ */
+function traceImageCheck(project: Project, file: string, plan: FloorPlan): void {
+  const image = plan.referenceImage
+  if (image === undefined) return
+  try {
+    project.resolve(image.path, 'project')
+  } catch (error) {
+    if (!(error instanceof PathRefused)) throw error
+    throw new PlanRefused(`${file} can't be used: its trace image, referenceImage.path, is refused. ${error.message} `
+      + 'Take referenceImage out of the plan, or name a picture inside the project folder.')
+  }
+}
+
 /** Reads a plan file inside the project. Refused with `PlanRefused`, or `PathRefused` for the path. */
 export function loadPlan(project: Project, file: string): LoadedPlan {
   const { text, real } = readText(project, file)
@@ -113,6 +132,7 @@ export function loadPlan(project: Project, file: string): LoadedPlan {
     throw new PlanRefused(`${file} is not a Grid plan: ${where}${first ? oneLine(schemaProblem(first)) : 'invalid'}${more}`)
   }
   const plan = parsed.data
+  traceImageCheck(project, file, plan)
   const { issues, broken } = validatePlan(plan)
   return { file: real, plan, issues, broken }
 }

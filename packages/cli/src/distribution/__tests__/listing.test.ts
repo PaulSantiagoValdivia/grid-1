@@ -17,6 +17,7 @@ import {
   packageManifest,
   PACKAGE_NAME,
   pluginFiles,
+  REPOSITORY,
   SERVER_COMMAND,
   SERVER_KEY,
   serverJson,
@@ -65,6 +66,11 @@ describe('the package an install unpacks', () => {
     // without it everything but a picture works.
     expect(manifest['optionalDependencies']).toEqual({ '@napi-rs/canvas': cliManifest.dependencies['@napi-rs/canvas'] })
     expect(manifest['engines']).toEqual({ node: '>=22' })
+  })
+
+  it('is set to publish with provenance, public, from this repository (QAR-10)', () => {
+    expect(manifest['publishConfig']).toEqual({ access: 'public', provenance: true })
+    expect(manifest['repository']).toMatchObject({ type: 'git', url: `git+${REPOSITORY}.git` })
   })
 
   it('names the registry entry it belongs to (mcpName)', () => {

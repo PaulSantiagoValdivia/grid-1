@@ -58,16 +58,19 @@ describe.each(plans)('the full report for %s', (_name, plan) => {
     expect(kept).toEqual(core.findings)
   })
 
-  it('keeps every plan-check notice, in the same order, adding only the rooms without a use', () => {
-    expect(full.notChecked.filter((n) => n.reason !== 'no_use')).toEqual(core.notChecked)
-    expect(full.notChecked.length - core.notChecked.length).toBe(full.notChecked.filter((n) => n.reason === 'no_use').length)
+  it('keeps every plan-check notice, in the same order, adding only its own: rooms without a use, bedrooms above the third storey, no rooms', () => {
+    const own = ['no_use', 'above_escape_storeys', 'no_rooms']
+    expect(full.notChecked.filter((n) => !own.includes(n.reason))).toEqual(core.notChecked)
+    expect(full.notChecked.length - core.notChecked.length).toBe(full.notChecked.filter((n) => own.includes(n.reason)).length)
   })
 
-  it('has the same shape, with the two figure rules after the six of the core', () => {
+  it('has the same shape, listing the rules that looked at something, the figure rules after those of the core (MSG-2)', () => {
     expect(full.schemaVersion).toBe(core.schemaVersion)
     expect(full.basis).toBe(core.basis)
     expect(full.label).toBe(core.label)
-    expect(full.rules).toEqual([...core.rules, ...FIGURE_RULES])
+    expect(full.coverage.map((c) => c.ruleId)).toEqual([...core.rules, ...FIGURE_RULES].map((r) => r.id))
+    const looked = new Set(full.coverage.filter((c) => c.lookedAtCount > 0).map((c) => c.ruleId))
+    expect(full.rules).toEqual([...core.rules, ...FIGURE_RULES].filter((r) => looked.has(r.id)))
     expect(JSON.parse(JSON.stringify(full))).toEqual(full)
   })
 

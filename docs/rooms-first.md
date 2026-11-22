@@ -1,0 +1,51 @@
+# Writing a plan rooms first
+
+Read this first to write a plan. Rooms text names the rooms, doors and windows; Grid works out
+the walls. The command is `grid write` ([commands.md](commands.md)) and the tool
+`grid_write_rooms` ([tool-server.md](tool-server.md)).
+
+The main way to write a plan, for an agent or a person: name the rooms with their inside sizes
+and where each goes, and the doors and windows by the rooms they join. Grid works out the walls,
+whether each is an outside or an inside wall, each room's boundary and where each opening sits,
+and writes them into the plan file.
+
+```
+walls outside 0.3 inside 0.1 height 2.6
+room living  "Living room" living   4.4 x 4.2
+room kitchen "Kitchen"     kitchen  4.4 x 3.0  north of living
+room hall    "Hall"        corridor 1.3 x *    east of living until kitchen
+door d-living between hall and living, 0.1 from south, 0.8 wide, opens into living
+door front    in hall north, centred, 0.9 wide, opens in, hinged east
+window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
+```
+
+- A size is east-west by north-south, to the inside faces. `3 x 4 centre` measures to the walls'
+  centre lines and `8 x 10 outside` to the outside faces; `sizes outside` makes that the
+  default. The answer states for each room what its size measured to, and its inside size.
+- `floor -0.15` on a room line puts its floor that far below its storey's (a genkan; LVL-7),
+  `height 2.4` gives its own height.
+- `*` stretches a side as far as the room named after `until`. `inside <room> corner ne` cuts a
+  room out of another's corner. `unit`, `place`, `repeat` and `mirror` write a group of rooms
+  once; `copy <floor>` starts a floor from another.
+- Rooms that overlap, that touch with no wall between them (unless one is `open` to the other),
+  or that leave a gap that is neither a wall nor a room are refused in plain words naming both
+  rooms. Every refusal has a code, such as `rooms/overlap`.
+- What rooms cannot say is written raw, one line of the plan file's own JSON:
+  `raw wall {...}`, `raw room {...}`, `raw opening {...}`. Free-standing walls, curved or
+  out-of-the-way walls and rooms with holes are written that way.
+- The full language is in the header of `packages/floorplan/src/rooms/compile.ts`.
+
+**The plan file is the source of truth.** Its walls stay in it, and they can still be changed
+there or with the tools; rooms text is a way of writing the plan and of reading it.
+`grid describe --as rooms` reads any plan back as rooms text, and writing that text again
+changes nothing: the walls line comes with every exception the plan holds (a wall's height,
+thickness, kind, id or direction), and a floor that rooms text cannot give back as it is comes in
+the plan's own terms. So that nothing is lost unseen, `grid write` refuses, with the difference,
+rooms text read from an earlier version of the plan (its `based on` line) and rooms text written
+over a plan changed some other way since Grid last wrote it; `--replace` writes over it anyway.
+
+Some parts are derived: Grid works them out and no one writes them. In a plan written rooms
+first (it records this in `written`), each room's boundary is derived, and one edited by hand is
+refused by the check with its own code, `room/derived-edited`. Grid's own edits keep it derived.
+Change the rooms and write them again, or take `written` out to keep the plan as a hand-written
+one.

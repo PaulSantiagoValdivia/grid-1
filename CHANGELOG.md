@@ -1,0 +1,29 @@
+# Changelog
+
+What changed in Grid, for the people who use it. Agents have a changelog of their own, beside
+the result contract in [docs/result-contract.md](docs/result-contract.md), which says what a
+tool's answer holds and what may change in it. [RELEASING.md](RELEASING.md) says how a version
+is cut.
+
+A change people will notice adds a line under "Unreleased", in plain words: what you can do now,
+or what works differently. The release step turns "Unreleased" into the release's section and
+records which versions of the result record and the plan format it carries.
+
+Every report Grid gives is labelled "General guidance, not your local rules". No release makes
+Grid say that a plan complies with anything.
+
+## Unreleased
+
+Grid has not been released yet. The first release will hold:
+
+- `grid write` writes a plan from rooms text, with each room's size and neighbours, and works
+  out the walls; `grid describe --as rooms` reads any plan back the same way.
+- `grid check` gives one list of what to look at in a plan, with one count: parts that cannot
+  be drawn, parts very likely wrong, what the checks found, and what they could not check.
+- `grid tidy` lists the walls that do not meet and makes the fixes you choose.
+- `grid describe`, `grid draw`, `grid export` and `grid sheet` describe a plan, draw it, export
+  it and lay it out as an A3 sheet in PDF.
+- `grid init` makes a folder a Grid project, where the commands read its `plan.json`.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 15 tools.
+- Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
+  rooms with holes, such as a courtyard.
