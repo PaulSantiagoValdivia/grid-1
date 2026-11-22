@@ -104,7 +104,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/use.ts': [28, 'notYet'],
   'packages/cli/src/report/draft.ts': [16, 'notYet'],
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
-  'packages/cli/src/sheet/coverage.ts': [21, 'developer'],
+  'packages/cli/src/sheet/coverage.ts': [22, 'developer'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
   'packages/cli/src/sheet/sheetFile.ts': [7, 'command'],
   'packages/cli/src/versions/diff.ts': [8, 'notYet'],
@@ -128,7 +128,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/rounding.ts': [1, 'developer'],
   'packages/floorplan/src/geometry/rules/doors.ts': [2, 'notYet'],
   'packages/floorplan/src/geometry/shell.ts': [2, 'notYet'],
-  'packages/floorplan/src/geometry/tolerances.ts': [201, 'developer'],
+  'packages/floorplan/src/geometry/tolerances.ts': [205, 'developer'],
   'packages/floorplan/src/geometry/use.ts': [9, 'notYet'],
   'packages/floorplan/src/geometry/vec2.ts': [2, 'developer'],
   'packages/floorplan/src/geometry/wall.ts': [1, 'developer'],
@@ -138,7 +138,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/rooms/compile.ts': [115, 'notYet'],
   'packages/floorplan/src/rooms/read.ts': [21, 'notYet'],
   'packages/floorplan/src/rooms/words.ts': [4, 'notYet'],
-  'packages/floorplan/src/types/floorplan.ts': [50, 'notYet'],
+  'packages/floorplan/src/types/floorplan.ts': [53, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
@@ -220,8 +220,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // The ratchet: what is shown to the person and not moved yet only comes down. It was 913 when
     // MSG-11 landed; main's MSG-5, COD-3, CNT-8, CNT-9, BRF-1, BRF-5, LVL-6, WRT-8 and VEW-3 brought
     // 190 more of the kinds MSG-11 left for later, LVL-8 8, HND-1 14, BRF-3 and WRT-4 63, LVL-9
-    // and CNT-17 65, and COD-8 18 more (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1271)
+    // and CNT-17 65, COD-8 18, and HND-11 3, the refusals of a taped length in the plan's schema
+    // (reviews/MSG-11.md, "After merging main").
+    expect(left).toBeLessThanOrEqual(1274)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {
@@ -242,7 +243,11 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
       'packages/cli/src/draw/drawSection.ts',
       // After merging main at 4fe29edc: COD-8's firm standards, their lines and where each was measured.
       'packages/rules/src/result/firm.ts',
-      'packages/cli/src/firm/measure.ts'
+      'packages/cli/src/firm/measure.ts',
+      // After merging main at 90a933b1: HND-11's taped lengths, their table and a GLB's origin note.
+      'packages/floorplan/src/geometry/taped.ts',
+      'packages/cli/src/taped/table.ts',
+      'packages/floorplan/src/geometry/export/gltf.ts'
     ]) {
       expect(counts.get(file), file).toBe(0)
     }

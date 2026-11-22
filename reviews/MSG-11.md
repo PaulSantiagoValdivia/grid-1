@@ -675,3 +675,101 @@ listing). The ratchet moves from 1253 to 1271.
     heading in the text is said in the language.
 28. **The main file is 550,002 bytes**, 2 bytes over the 550,000 this branch held to before CNT-17
     raised main's cap to 600,000; the cap in force is main's.
+
+## After merging main at 90a933b1
+
+Main brought HND-11: a survey drawn from its own numbers. A wall may be placed by a face
+(`face`), a plan keeps lengths taped on site (`taped`, a new top-level field) and every run sets
+each against the drawing, and a plan at survey coordinates states `site.origin`, which the
+far-from-origin check measures from and the exports write from. Eight files conflicted:
+`CHANGELOG.md`, `docs/result-contract.md`, `mcp/readTools.ts`, floorplan `geometry/validate.ts`,
+rules `result/__tests__/result.test.ts`, `result/catalogue.ts`, `result/inspect.ts` and
+`result/types.ts`. Main adds no tool. Main's English output is kept word for word.
+
+### How the conflicts were resolved
+
+- **The record** (`result/catalogue.ts`, `inspect.ts`, `types.ts`): MSG-11's files, with HND-11's
+  parts added. `room/taped-differs` and `plan/taped-not-measured` are logic only: `tapedValues`
+  gives a line what was taped (`what`, and `What` as a sentence starts it), the two figures
+  (`figures`) and, as data, `taped`, `drawn`, `off` and `within` in metres; a `.none` wording
+  keeps main's fallback for a line with no taped row. `Subject.taped` is now the row's figures
+  (`Pick<TapedRow, …>`) instead of main's three English strings, and the catalogue says them.
+  The `taped` stage is in `Stage` (`line.part.stage.taped`); `record(…, taped, firm)` and the
+  record's `taped` are main's, beside MSG-11's `language`. A taped length naming no room is
+  labelled `issue.part.named.room` (`room "x"`, main's English).
+- **The taped lengths in words** (floorplan `geometry/taped.ts`): `tapedWhatSaid`,
+  `tapedFiguresSaid`, `tapedWithinSaid` and `tapedMissingSaid` give each a sentence by key
+  (`line.part.taped.*`); main's `tapedWhatText`, `tapedFiguresText`, `tapedWithinText` and
+  `tapedMissingText` stay, as their English.
+- **The table** (cli `taped/table.ts`): its heading, count, columns, states and "… and n more"
+  are `report.taped.*`, said with `t()`, so `grid check` and `grid_check` give it in the
+  report's language. A change's answer (the edit tools, `grid edit`, `grid write`,
+  `grid_write_rooms`), not moved yet, calls it outside `inLanguage` and stays English.
+- **`plan/far-from-origin`** (`validate.ts`): MSG-11's `said` with a new `{from}` value, `the
+  origin` or `its site's origin (x, y)` (`issue.part.origin[.site]`, the point by
+  `issue.part.point`); the line's `needed` and `fix` take main's new English.
+- **A GLB's origin note** (`geometry/export/gltf.ts`): main's `asset.extras.gridOrigin.note` is
+  `drawing.glb.origin`, said in English as the file's own words, so the file stays at none.
+- **`grid_check`** (`mcp/readTools.ts`): MSG-11's `inLanguage` body with main's table after the
+  firm's note and `taped` in the data; the output schema's list of what is always there has both
+  `language` and `taped`.
+- **Tests and docs**: `result.test.ts` keeps MSG-11's `values` and takes main's `face` in a
+  wall's fields; the plan's field list is main's (`taped` after `accessible`), and
+  `sheet/coverage.ts` is main's. `CHANGELOG.md` keeps every Unreleased line; the contract keeps
+  MSG-11's section first of the day, with a line on HND-11 in Spanish, then main's HND-11 section
+  and its two code-table rows.
+
+New keys (46), in `en.ts` with main's English and in `es.ts` as a draft: `issue.part.origin`,
+`issue.part.origin.site`, `drawing.glb.origin`, `line.part.stage.taped`, `line.part.taped.*`
+(14), `line.room/taped-differs.*` (7), `line.plan/taped-not-measured.*` (5), `report.taped.*`
+(16). Changed to main's English: `issue.plan/far-from-origin` (takes `{from}`),
+`line.plan/far-from-origin.needed` and `.fix`.
+
+A test in rules `result/__tests__/language.test.ts` says a `room/taped-differs` and a
+`plan/taped-not-measured` line in English (main's words) and in Spanish: the message, found and
+needed, the same code, kind, thing, `also` and values, the same `taped` rows, no word of approval
+and no placeholder left.
+
+### The ownWords guard
+
+`floorplan/src/geometry/taped.ts`, `cli/src/taped/table.ts` and `floorplan/src/geometry/export/gltf.ts`
+are at none, and are added to the list held at none. Listed: `types/floorplan.ts` 50 → 53 (the
+three refusals of a taped length in the plan's schema, English as the schema's other refusals),
+`geometry/tolerances.ts` 201 → 205 (`tapedAgree`'s description and `farFromOrigin`'s new one,
+for docs/tolerances.md), `sheet/coverage.ts` 21 → 22 (why the sheet does not show `taped`). The
+ratchet moves from 1271 to 1274, by the three schema refusals.
+
+### Results after 90a933b1
+
+- `npm run build`: `dist/grid.mjs` 552,385 bytes, under main's cap of 600,000 in `grid.e2e`; the
+  Spanish chunk 160,420 bytes. The cap was not touched.
+- `npm run typecheck`, `npm run lint`: clean.
+- All of rules `src`, floorplan `messages/`, `geometry/` (HND-11's `survey.test.ts` and the
+  export tests among them), `types/` and `export/`, viewer `picture/`: 165 files, 3,691 tests
+  pass (1 skipped). `diff-size`'s one-second test failed once at 1,010 ms in a run under the
+  load of other sessions' suites, and passed on the rerun.
+- The CLI's guard, `describe/`, `draw/`, `sheet/`, `mcp/` (tools, server, replay), `command/`
+  (everyPath, grid.e2e, language.e2e), `quantities/`, `firm/`, `edit/` and HND-11's `taped/`:
+  81 files, 1,008 tests pass (1 skipped). No expectation of main's changed; main's tests pass
+  unchanged.
+- By hand: `grid check --lang es` on a plan with three taped lengths gives "Con cinta frente al
+  dibujo (3; 1 difiere, 1 sin medir): …" with its table in decimal commas ("3,700 m  3,800 m
+  +0,100  difiere (margen 0,010 m)"), and the two lines in Spanish; a plan far from its stated
+  `site.origin` says "… del origen de su emplazamiento, (499000,50; 4000000,00)". Without
+  `--lang` it is main's English.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (90a933b1)
+
+29. **The ratchet was raised, 1271 to 1274**, by the three refusals of a taped length in the
+    plan's schema (`types/floorplan.ts`), which stay in English as the schema's other refusals.
+30. **The taped table in a change's answer stays English** (the edit tools, `grid edit`, `grid
+    write`, `grid_write_rooms`), as the rest of those answers; `grid check` and `grid_check` say
+    it in the language asked for.
+31. **"Taped" is "medida con cinta"** in the Spanish draft, and the table's heading "Con cinta
+    frente al dibujo". A reviewer may prefer "medición en obra"; it is in `es.ts`'s
+    `line.part.taped.*`, `report.taped.*` and the two codes' keys. The Spanish `says` of
+    `room/taped-differs` keeps the label as English does ("… tomada con cinta en Estancia
+    "Hall", …"), capital and all.
+32. **A GLB's `gridOrigin.note` is a key now** (`drawing.glb.origin`), said in English as every
+    export's own words are; the Spanish draft of it is there for when exports take a language.

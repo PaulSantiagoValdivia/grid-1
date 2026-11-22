@@ -13,7 +13,7 @@
  * Plain words, never anything that reads as "this plan complies".
  */
 
-import { areaText, figureText, metresText, planCheckSaids, tolerance, type PlanFix } from '@ongrid/floorplan/geometry'
+import { areaText, figureText, fixedText, metresText, planCheckSaids, tapedFiguresSaid, tapedWhatSaid, tolerance, type PlanFix, type TapedRow } from '@ongrid/floorplan/geometry'
 import { en, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type Said, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
@@ -65,6 +65,11 @@ export interface Subject {
   readonly used?: Value | null
   /** MSG-6, on a part left out for its id: the part that keeps the id, as a line names it. */
   readonly kept?: Value
+  /**
+   * HND-11, on a taped length: what was taped, the two figures and how close they may be and
+   * agree (MSG-11: said by the catalogue, `line.part.taped.*`).
+   */
+  readonly taped?: Pick<TapedRow, 'what' | 'walls' | 'taped' | 'drawn' | 'off' | 'within'>
   /** MSG-6: an id no part has, to rename a part to, quoted. */
   readonly rename?: string
   /** MSG-6, on an unfinished merge: what each side adds or changes, in words. */
@@ -269,6 +274,25 @@ function firmValues(measure: FirmMeasure): (s: Subject) => Values {
 }
 const firmNone = (s: Subject): string => (s.firm === undefined || s.firm.measured === null ? 'none' : '')
 const firmEntry = (measure: FirmMeasure): CodeEntry => ({ values: firmValues(measure), variant: { says: firmNone, found: firmNone } })
+
+/**
+ * HND-11: a taped length's words (what was taped, as a sentence starts it too, and the two
+ * figures) and its figures as data: taped, drawn, drawn less taped and how close they may be.
+ */
+const tapedValues = (s: Subject): Values => {
+  const row = s.taped
+  if (row === undefined) return {}
+  return {
+    what: tapedWhatSaid(row),
+    What: tapedWhatSaid(row, true),
+    figures: tapedFiguresSaid(row),
+    within: num(fixedText(row.within, 3)),
+    taped: num(fixedText(row.taped, 3)),
+    ...(row.drawn === null ? {} : { drawn: num(fixedText(row.drawn, 3)) }),
+    ...(row.off === null ? {} : { off: num(fixedText(row.off, 3)) })
+  }
+}
+const tapedNone = (s: Subject): string => (s.taped === undefined ? 'none' : '')
 
 export const CODES = {
   // --- Reading: the plan could not be read, so nothing else ran ---------------------------------
@@ -624,7 +648,15 @@ export const CODES = {
   'plan/mark-no-part': {
     variant: { found: (s) => (s.word ? 'word' : '') }
   },
-  // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured, never checked.
+  // HND-11 (lab WR-14): a length taped on site against the same length drawn.
+  'room/taped-differs': {
+    values: tapedValues,
+    variant: { says: tapedNone, found: tapedNone, needed: tapedNone }
+  },
+  'plan/taped-not-measured': {
+    values: tapedValues,
+    variant: { found: tapedNone }
+  },
   'plan/not-checked-access': {},
   'plan/not-checked-no-rooms': {
     values: (): Values => ({ wording: figureSaids.noRooms() })

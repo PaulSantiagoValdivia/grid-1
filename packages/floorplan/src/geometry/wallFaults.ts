@@ -45,6 +45,7 @@ import type { Said, Value } from '../messages/say'
 import { english, joined, name, num, said } from '../messages/say'
 import { pointSaid } from './issueWords'
 import { factKey } from '../types/facts'
+import { wallWithEnds } from '../types/floorplan'
 import type { Vec2 } from './vec2'
 import { area, cross, dot, sub } from './vec2'
 import { wallAxis } from './wall'
@@ -258,7 +259,8 @@ export function applyWallEdits<P extends EditablePlan>(plan: P, edits: readonly 
   for (const edit of edits) {
     switch (edit.op) {
       case 'move-end':
-        walls = walls.map((w) => (w.id === edit.wall ? { ...w, [edit.end]: [...edit.to] } : w))
+        // HND-11: the point is on the centre line; a wall its file places by its face keeps it.
+        walls = walls.map((w) => (w.id === edit.wall ? wallWithEnds(w, { [edit.end]: edit.to }) : w))
         break
       case 'remove-wall': {
         const gone = walls.find((w) => w.id === edit.wall)

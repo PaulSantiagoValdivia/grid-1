@@ -20,6 +20,8 @@ import {
   planFacing,
   planFloors,
   siteThingsSaid,
+  tapedLengths,
+  tapedMissingSaid,
   validateDoorSweeps,
   validatePlan,
   withPatterns,
@@ -27,7 +29,8 @@ import {
   PLAN_LIMIT_KEYS,
   GENERAL_GUIDANCE_LABEL,
   type FloorPlan,
-  type Issue
+  type Issue,
+  type TapedRow
 } from '@ongrid/floorplan/geometry'
 import { DEFAULT_LANGUAGE, en, joined, name, num, said, say, sayValue, withSentence, type Language, type MessageKey, type SayOptions, type Value } from '@ongrid/floorplan/messages'
 import { DEFAULT_FLOOR_ID, FloorPlanSchema, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
@@ -629,7 +632,7 @@ function noticeLine(notice: NotChecked, names: Names, country: string, wayOutNot
 }
 
 /** The stages of a check, by their words (`line.part.stage.*`). */
-type Stage = 'reading' | 'drawing' | 'door' | 'plan' | 'firm' | 'writing' | 'site' | 'orientation' | 'marks' | 'accessible'
+type Stage = 'reading' | 'drawing' | 'door' | 'plan' | 'firm' | 'writing' | 'site' | 'orientation' | 'marks' | 'taped' | 'accessible'
 
 function checkFailed(stage: Stage, error: unknown): ResultLine {
   return line('plan/check-failed', 'not-checked', { kind: 'plan', id: '' }, null, {
@@ -686,7 +689,7 @@ function causeId(l: ResultLine): Cause {
   return { code: l.code, id: l.thing.kind === 'plan' && l.code === 'plan/duplicate-id' ? l.also[0] ?? '' : l.thing.id }
 }
 
-function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null, firm: FirmInput | null = null): GridResult {
+function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null, taped: readonly TapedRow[] | null = null, firm: FirmInput | null = null): GridResult {
   const language = speaking.language
   const sorted = filed(lines)
   const counts = Object.fromEntries(LINE_KINDS.map((kind) => [kind, sorted.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
@@ -707,6 +710,7 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
     limits: limitsIn(report?.limits ?? [...PLAN_LIMITS, ...FIGURE_LIMITS], language),
     place: report?.place ?? null,
     ...(report?.withoutPlace ? { withoutPlace: report.withoutPlace } : {}),
+    ...(taped === null ? {} : { taped }),
     ...(firm === null ? {} : { firm: firmUsed(firm) })
   }
 }
@@ -900,6 +904,24 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: I
       )
     }
   })
+  // HND-11 (lab WR-14): each length taped on site against the drawing. One that differs, or that
+  // cannot be measured, is a line; the whole table rides on the record.
+  let taped: readonly TapedRow[] | null = null
+  stage('taped', () => {
+    if ((plan.taped ?? []).length === 0) return
+    taped = tapedLengths(plan)
+    for (const row of taped) {
+      if (row.state === 'agrees') continue
+      const room = names.thingOf('room', row.room)
+      const also = [...new Set([row.room, ...row.walls])]
+      if (row.state === 'differs') {
+        lines.push(line('room/taped-differs', 'worth-a-look', { kind: 'room', id: row.room }, room.floor, { ...blank(room.label), name: room.name, floorName: room.floor === null ? '' : names.floorName(room.floor), also: row.walls, floors: names.floors, taped: row }))
+      } else {
+        const label = row.missing === 'no-room' ? said('issue.part.named.room', { id: name(row.room) }) : room.label
+        lines.push(line('plan/taped-not-measured', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(label), also, floors: names.floors, said: tapedMissingSaid(row) ?? '', taped: row }))
+      }
+    }
+  })
   // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured by
   // grid_measure what=access, never checked here: no figure for it has been confirmed.
   stage('accessible', () => {
@@ -919,7 +941,7 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: I
     if (stated !== undefined) CAUSE_LINES.set(units, stated)
     for (const l of lines) if (SIZED.has(l.code)) CAUSE_LINES.set(l, units)
   }
-  return record(lines, true, report, firm ?? null)
+  return record(lines, true, report, taped, firm ?? null)
 }
 
 /** WRT-6: a marked value as a line names it: a field with words of its own (`line.part.value.*`), else the field as the format names it. */

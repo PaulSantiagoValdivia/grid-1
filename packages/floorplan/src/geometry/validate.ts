@@ -137,24 +137,32 @@ const followOn = (found: Issue, cause: string | null): Issue => (cause === null 
  * lives on XY and z=0 is floor level. A plan that shows up hundreds of meters
  * away (`farFromOrigin`) is still drawable, but it almost always means the agent
  * lost the scale.
+ *
+ * HND-11 (lab MS-12): a plan kept at survey or map coordinates states a point near the building
+ * as `site.origin`, and is measured from that point: its exports write the geometry from it.
  */
 function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
+  const stated = plan.site?.origin
+  const origin = stated !== undefined && stated.every((v) => Number.isFinite(v) && Math.abs(v) <= tolerance('largest')) ? stated : null
+  const [ox, oy] = origin ?? [0, 0]
   let farthest = 0
   for (const wall of plan.walls) {
     for (const [x, y] of [wall.start, wall.end]) {
-      const distance = Math.hypot(x, y)
       // A number past `largest` is refused on its own wall (`validateWall`).
-      if (distance > farthest && distance <= tolerance('largest')) farthest = distance
+      if (Math.hypot(x, y) > tolerance('largest')) continue
+      const distance = Math.hypot(x - ox, y - oy)
+      if (distance > farthest) farthest = distance
     }
   }
 
   if (farthest > tolerance('farFromOrigin')) {
+    const from = origin === null ? said('issue.part.origin') : said('issue.part.origin.site', { point: pointSaid(fixedText(ox, 2), fixedText(oy, 2)) })
     issues.push(
       issue(
         'plan',
         'plan',
         'plan/far-from-origin',
-        said('issue.plan/far-from-origin', { distance: num(fixedText(farthest, 0)) }),
+        said('issue.plan/far-from-origin', { distance: num(fixedText(farthest, 0)), from }),
         'warning'
       )
     )

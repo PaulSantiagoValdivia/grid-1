@@ -184,3 +184,49 @@ describe("the firm's own standards, in Spanish (COD-8, after merging main at 4fe
     }
   })
 })
+
+describe('the lengths taped on site, in Spanish (HND-11, after merging main at 90a933b1)', () => {
+  const plan = {
+    version: '1',
+    units: 'm',
+    walls: [
+      { id: 's', start: [0, 0], end: [4, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'e', start: [4, 0], end: [4, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'n', start: [4, 3], end: [0, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'w', start: [0, 3], end: [0, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+    ],
+    rooms: [{ id: 'hall', name: 'Hall', use: 'corridor', boundary: ['s', 'e', 'n', 'w'] }],
+    openings: [{ id: 'd1', wall: 's', type: 'door', offset: 1, width: 0.9, height: 2.1, sill: 0 }],
+    taped: [
+      { room: 'hall', wall: 's', length: 3.7 },
+      { room: 'hall', wall: 'x', length: 2 },
+    ],
+  }
+
+  it('says a taped length that differs, and one not measured, in Spanish, with the same codes, rows and values', () => {
+    const english = inspectPlan(plan)
+    const spanish = inspectPlan(plan, { language: 'es' })
+    const differs = (r: GridResult) => r.lines.find((l) => l.code === 'room/taped-differs')!
+    const missing = (r: GridResult) => r.lines.find((l) => l.code === 'plan/taped-not-measured')!
+    // Main's English, word for word.
+    expect(differs(english).message).toBe('The side along wall "s" taped in Room "Hall" is not the length drawn')
+    expect(differs(english).found).toBe('3.800 m drawn against 3.700 m taped, 0.100 m longer')
+    expect(differs(english).needed).toBe('the drawing within 0.010 m of the length taped')
+    expect(missing(english).message).toBe('A length taped in Room "Hall" cannot be set against the drawing: the plan has no wall "x"')
+    expect(missing(english).found).toBe('the side along wall "x", taped 2.000 m')
+    expect(differs(spanish).message).toBe('La medida del lado a lo largo del muro "s", tomada con cinta en Estancia "Hall", no es la longitud del dibujo')
+    expect(differs(spanish).found).toBe('3,800 m en el dibujo frente a 3,700 m con cinta, 0,100 m más en el dibujo')
+    expect(differs(spanish).needed).toBe('el dibujo a menos de 0,010 m de la longitud medida con cinta')
+    expect(missing(spanish).message).toBe('Una longitud medida con cinta en Estancia "Hall" no se puede comparar con el dibujo: el plano no tiene ningún muro "x"')
+    expect(spanish.taped).toEqual(english.taped)
+    for (const pick of [differs, missing]) {
+      const [en, es] = [pick(english), pick(spanish)]
+      expect([es.code, es.kind, es.thing, es.also, es.values]).toEqual([en.code, en.kind, en.thing, en.also, en.values])
+      for (const text of [es.message, es.found, es.needed, es.fix]) {
+        expect(approvalWords(text)).toEqual([])
+        expect(text).not.toMatch(/\{[A-Za-z]/)
+      }
+    }
+    expect(differs(english).values).toMatchObject({ name: 'Hall', taped: 3.7, drawn: 3.8, off: 0.1, within: 0.01 })
+  })
+})
