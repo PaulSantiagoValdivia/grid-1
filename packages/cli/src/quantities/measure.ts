@@ -12,6 +12,7 @@ import {
   dot,
   floorOf,
   fromTuple,
+  itemFootprint,
   planForFloor,
   pointAlong,
   poleOfInaccessibility,
@@ -22,6 +23,7 @@ import {
   wallAxis,
   wallSlicePolygon,
   type FloorPlan,
+  type Item,
   type Opening,
   type Vec2,
   type Wall,
@@ -32,7 +34,7 @@ import { compassOf, type Compass } from '../describe/facts'
 import type { Survey, SurveyRoom } from './survey'
 
 export const EMPTY_ROOM_RULE =
-  'Measured in the empty room between wall faces: furniture, fixtures, radiators, door leaves and the space a person needs round them are not in the plan.'
+  'Measured in the empty room between wall faces: the fixtures the plan holds, furniture, radiators, door leaves and the space a person needs round them are not taken off.'
 
 export interface RoomSide {
   readonly facing: Compass
@@ -92,16 +94,21 @@ export interface FitAnswer {
   readonly widestCircle: number
 }
 
-export function fitInRoom(room: SurveyRoom, shape: { width: number; depth: number } | { diameter: number }): FitAnswer {
-  const pole = poleOfInaccessibility(room.polygon, undefined, room.holes)
+/**
+ * Whether a box or a circle fits in the room, and where. `clear` is the footprints it must keep
+ * clear of besides the room's holes: the room's fixtures (CNT-12), which take their floor.
+ */
+export function fitInRoom(room: SurveyRoom, shape: { width: number; depth: number } | { diameter: number }, clear: readonly (readonly Vec2[])[] = []): FitAnswer {
+  const holes = clear.length === 0 ? room.holes : [...room.holes, ...clear]
+  const pole = poleOfInaccessibility(room.polygon, undefined, holes)
   if ('diameter' in shape) {
     const fits = 2 * pole.distance >= shape.diameter - tolerance('joint')
     return { fits, what: `a circle ${shape.diameter.toFixed(2)} m across`, at: fits ? pole.point : null, turned: false, widestCircle: 2 * pole.distance }
   }
   const what = `a ${shape.width.toFixed(2)} × ${shape.depth.toFixed(2)} m rectangle`
-  const along = spotsInside(room.polygon, shape.width / 2, shape.depth / 2, room.holes)
+  const along = spotsInside(room.polygon, shape.width / 2, shape.depth / 2, holes)
   if (along.length > 0) return { fits: true, what, at: along[0]!, turned: false, widestCircle: 2 * pole.distance }
-  const turned = spotsInside(room.polygon, shape.depth / 2, shape.width / 2, room.holes)
+  const turned = spotsInside(room.polygon, shape.depth / 2, shape.width / 2, holes)
   if (turned.length > 0) return { fits: true, what, at: turned[0]!, turned: true, widestCircle: 2 * pole.distance }
   return { fits: false, what, at: null, turned: false, widestCircle: 2 * pole.distance }
 }
@@ -263,7 +270,7 @@ export function wallLengths(survey: Survey, wall: Wall): WallLengths {
 
 /** Something to measure from: its kind, id, floor and outline in plan (a polygon, a line or a point). */
 export interface Thing {
-  readonly kind: 'wall' | 'opening' | 'room' | 'point'
+  readonly kind: 'wall' | 'opening' | 'room' | 'item' | 'point'
   readonly id: string | null
   /** Null for a free point, which takes the floor of what it is measured to. */
   readonly floor: string | null
@@ -290,6 +297,11 @@ export function openingThing(opening: Opening, wall: Wall): Thing {
 
 export function roomThing(room: SurveyRoom): Thing {
   return { kind: 'room', id: room.facts.id, floor: room.facts.floor, shape: room.polygon }
+}
+
+/** A fixture by its footprint (CNT-12): the gap between two fixtures is between their edges. */
+export function itemThing(item: Item): Thing {
+  return { kind: 'item', id: item.id, floor: floorOf(item), shape: itemFootprint(item) }
 }
 
 export function pointThing(point: Vec2): Thing {
