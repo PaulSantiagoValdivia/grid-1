@@ -80,7 +80,7 @@ function against(measured: number, figure: Figure, L: Length): string {
 
 const isUnder = (measured: number | null, figure: Figure): boolean => measured === null || measured + tolerance('joint') < figure.value
 
-interface SurveyFixtures {
+export interface SurveyFixtures {
   readonly rows: readonly FixtureRow[]
   readonly items: readonly Item[]
   readonly obstacles: (floor: string) => Obstacle[]
@@ -88,8 +88,8 @@ interface SurveyFixtures {
 
 const fixturesCache = new WeakMap<Survey, SurveyFixtures>()
 
-/** The plan's fixtures that can be drawn, as obstacles, each with its row; worked out once a survey. */
-function fixturesOf(survey: Survey): SurveyFixtures {
+/** The plan's fixtures that can be drawn, as obstacles, each with its row; worked out once a survey. COD-8's firm standards measure with it too. */
+export function fixturesOf(survey: Survey): SurveyFixtures {
   const known = fixturesCache.get(survey)
   if (known) return known
   const found = fixturesOfPlan(survey)
@@ -109,7 +109,7 @@ function fixturesOfPlan(survey: Survey): SurveyFixtures {
 }
 
 /** Where a door, an opening or a dividing line (`via`) meets the room, or null. */
-function mouthOf(survey: Survey, room: SurveyRoom, via: string): Segment | null {
+export function mouthOf(survey: Survey, room: SurveyRoom, via: string): Segment | null {
   const opening = survey.plan.openings.find((o) => o.id === via)
   const wallId = opening?.wall ?? via
   const wall = survey.plan.walls.find((w) => w.id === wallId)
@@ -122,7 +122,7 @@ function namesOf(items: readonly Item[], ids: readonly string[]): string {
   return items.filter((item) => ids.includes(item.id)).map(itemName).join(', ')
 }
 
-function besideText(passage: { beside: { fixtures: readonly string[]; wall: boolean } }, items: readonly Item[]): string {
+export function besideText(passage: { beside: { fixtures: readonly string[]; wall: boolean } }, items: readonly Item[]): string {
   const fixtures = namesOf(items, passage.beside.fixtures)
   if (fixtures === '') return passage.beside.wall ? ', between walls' : ''
   return passage.beside.wall ? `, between ${fixtures} and a wall` : `, beside ${fixtures}`
@@ -134,7 +134,7 @@ const at = (p: Vec2): string => `(${p.x.toFixed(2)}, ${p.y.toFixed(2)})`
 // One room: grid_measure what=use
 
 /** The doors, doorless openings and dividing lines of a room, in plan order. */
-function waysOf(survey: Survey, room: SurveyRoom): { via: string; opening: Opening | null; wall: Wall }[] {
+export function waysOf(survey: Survey, room: SurveyRoom): { via: string; opening: Opening | null; wall: Wall }[] {
   const out: { via: string; opening: Opening | null; wall: Wall }[] = []
   for (const facts of room.openings) {
     if (facts.type === 'window') continue
