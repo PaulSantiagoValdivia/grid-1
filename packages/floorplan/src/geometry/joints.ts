@@ -37,6 +37,7 @@ import { tolerance } from './tolerances'
 import { add, cross, dot, perp, scale, sub } from './vec2'
 import type { FaceReach, WallEnds } from './wall'
 import { wallAxis } from './wall'
+import { boxIndex, boxOfPoints, widenBox } from './boxIndex'
 
 /** One wall seen from a joint: its axis leaving the joint, and its half thickness. */
 interface Ray {
@@ -195,6 +196,8 @@ function joinFloor(walls: readonly Wall[], indices: readonly number[], out: Map<
     readonly at: Vec2
   }
   const axes = new Map(indices.map((i) => [i, wallAxis(walls[i]!)]))
+  // Each axis's box, widened by twice `joint` so rounding never drops a joint exactly `joint` off.
+  const nearAxes = boxIndex(indices.map((i) => widenBox(boxOfPoints([axes.get(i)!.start, axes.get(i)!.end]), 2 * near)))
   const ends: End[] = []
   for (const i of indices) {
     const axis = axes.get(i)!
@@ -234,8 +237,10 @@ function joinFloor(walls: readonly Wall[], indices: readonly number[], out: Map<
       const dir = e.end === 'start' ? axis.dir : scale(axis.dir, -1)
       return { wall: e.wall, end: e.end, at: e.at, dir, half: walls[e.wall]!.thickness / 2, angle: Math.atan2(dir.y, dir.x) }
     })
-    // A wall that carries on through the joint: the joint lies on its axis, away from its ends.
-    for (const i of indices) {
+    // A wall that carries on through the joint: the joint lies on its axis, away from its ends,
+    // so within `joint` of its axis, and so in its widened box (QAR-7).
+    for (const k of nearAxes.near(boxOfPoints([centre]))) {
+      const i = indices[k]!
       if (members.has(i)) continue
       const axis = axes.get(i)!
       const s = dot(sub(centre, axis.start), axis.dir)

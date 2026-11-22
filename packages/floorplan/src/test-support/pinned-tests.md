@@ -193,11 +193,12 @@ From the lab's entry Z-7. None of these is built here.
 - **Generated room plans.** `room-shapes.test.ts` builds 300 rooms shaped L, T, U, Z and
   cross from a fixed seed and checks their areas. There are none yet for validation or for
   whole plans (MS-20).
-- **Timing guards.** The plan comparison has one, and the door-swing check has the lab's
-  SC-2 probe (400 rooms under a second, about a third of a second in the lab), which is
-  skipped on a loaded machine. Nothing guards how its time grows with the floor (SC-2):
-  under heavy load it took about 1.4 s at 400 rooms and 8.3 s at 900, most of it building the
-  floor it runs on. The large files of SC-3 have no guard either.
+- **Timing guards.** The plan comparison has one. The door-swing check has two: the lab's SC-2
+  probe (400 rooms under a second, about a third of a second in the lab), skipped on a machine
+  whose load is above its core count, in `geometry/__tests__/sweep.test.ts` (QAR-3); and one that
+  runs only when asked (QAR-7, SC-2): `GRID_TIMING=1` runs `scoreboard/__tests__/doorSweeps.test.ts`
+  on a 5,000-room floor, whose drawing takes minutes to build. Nothing times `buildFloorPlan`
+  itself. The large files of SC-3 have no guard.
 - **Pictures and real readers.** Nothing compares what the 2D or 3D view draws, and exported
   files are compared with Grid's own output and four golden IFC files, never opened by the
   programs people use (SE-8, SE-9, DR-3, EX-1).
