@@ -9,6 +9,7 @@
     "./geometry/*": "./src/geometry/*.ts",
     "./types/floorplan": "./src/types/floorplan.ts",
     "./types/reading": "./src/types/reading.ts",
+    "./types/nearest": "./src/types/nearest.ts",
     "./types/jsonText": "./src/types/jsonText.ts",
     "./types/readParts": "./src/types/readParts.ts",
     "./types/sheet": "./src/types/sheet.ts",

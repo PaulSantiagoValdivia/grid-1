@@ -152,12 +152,25 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
       )
     })
   }
-  slices.add(slice)
+  // A slice of a slice still leads back to the plan the first was cut from.
+  slices.set(slice, { whole: slices.get(plan)?.whole ?? plan, floor: floorId })
   return slice
 }
 
-/** Every plan `planForFloor` returned, held weakly: nothing about the slice itself changes. */
-const slices = new WeakSet<FloorPlan>()
+/**
+ * Every plan `planForFloor` returned, with the plan it was cut from and its floor, held weakly:
+ * nothing about the slice itself changes.
+ */
+const slices = new WeakMap<FloorPlan, { readonly whole: FloorPlan; readonly floor: string }>()
+
+/**
+ * The whole plan a floor's slice was cut from, and the slice's floor; a plan that is no slice is
+ * its own whole, with no floor. A stair (LVL-3) joins two floors, so a slice reads it from here.
+ */
+export function wholePlan(plan: FloorPlan): { readonly whole: FloorPlan; readonly floor: string | null } {
+  const found = slices.get(plan)
+  return found === undefined ? { whole: plan, floor: null } : found
+}
 
 /**
  * Whether `plan` is one floor's slice (`planForFloor`). A slice keeps the whole floor list but

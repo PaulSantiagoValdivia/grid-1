@@ -182,6 +182,9 @@ export const ROOM_USES = [
   'bathroom',
   'corridor',
   'stair',
+  // LVL-3: a lift shaft, drawn as a room on every floor it serves. The drawing checks line the
+  // shafts up from floor to floor; a lift is never taken as a way out.
+  'lift',
   'storage',
   'other',
 ] as const
@@ -305,6 +308,56 @@ export const ReferenceImageSchema = z.object({
   // showing the previous picture until a reload.
   updatedAt: finite().optional(),
 })
+
+/** LVL-3: the most points a stair's walking line may have: a foot, a head and the turns between. */
+export const STAIR_RUN_MAX = 64
+
+/**
+ * LVL-3 (decided in LVL-2): a stair is a designed object, stated once across the two floors it
+ * joins. The plan says what is meant (where it starts and ends, how wide it is, and the line a
+ * person walks up it) and Grid works out the rest: the rise from the floors' levels (LVL-1), the
+ * number of risers, their height, the going and the pitch (`planStairs` in the geometry core),
+ * and which room it leaves from and arrives in, which joins the two floors for the way-out check.
+ * Optional and never defaulted, so a plan written before LVL-3 reads with no key added (version 1).
+ */
+/**
+ * A straight stair said by its two ends, `start` and `end`, as the lab's agents first wrote one
+ * (lab H-1, h01a), is read as the walking line `[start, end]`. Only when it states no `run`.
+ */
+export function withRunFromEnds(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const stair = raw as Record<string, unknown>
+  if (stair.run !== undefined || stair.start === undefined || stair.end === undefined) return raw
+  const { start, end, ...rest } = stair
+  return { ...rest, run: [start, end] }
+}
+
+export const StairSchema = z.preprocess(withRunFromEnds, z.object({
+  id: text('id'),
+  name: text('name').optional(),
+  // The floor the walking line starts on and the floor it ends on. Either may be the higher.
+  from: text('id').pipe(z.string().min(1)),
+  to: text('id').pipe(z.string().min(1)),
+  // Metres: the width of the flight, measured across the walking line, which runs down its middle.
+  width: finite().positive(),
+  // The walking line, in plan coordinates (C4): from the edge of the stair on `from` (the middle
+  // of its first riser there) to its edge on `to`. A straight flight has two points; each point
+  // between is a turn, with a square landing as wide as the flight centred on it. A straight
+  // stair may say its two points as `start` and `end` instead (`withRunFromEnds`).
+  run: z
+    .array(Vec2)
+    .min(2)
+    .superRefine((list, ctx) => {
+      if (list.length <= STAIR_RUN_MAX) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `has ${list.length.toLocaleString('en-US')} points; a stair's walking line may have at most ${STAIR_RUN_MAX}`,
+      })
+    }),
+  // How many risers, when the design has chosen. Unstated, Grid works it out from the rise and
+  // the walking line's length. Optional and never defaulted.
+  risers: z.number().int().positive().optional(),
+}))
 
 /**
  * CNT-12: the kinds an item may be in this version. CNT-11 decided fixtures now, because the
@@ -475,6 +528,8 @@ export const FloorPlanFieldsSchema = z.object({
   // room still counts as a floor of the plan, so geometry can never become
   // unreachable because a registry entry was forgotten. See geometry/floors.ts.
   floors: parts(FloorSchema, 'floors').optional(),
+  // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
+  stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
@@ -520,6 +575,7 @@ export type RoomUse = z.infer<typeof RoomUseSchema>
 export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
+export type Stair = z.infer<typeof StairSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>

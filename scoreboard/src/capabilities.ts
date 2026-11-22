@@ -56,7 +56,8 @@ export const CAPABILITIES = {
   'export-table': { what: 'writes a table (CSV or a spreadsheet)', probe: { kind: 'export', format: 'csv' } },
   north: { what: 'holds where north is', probe: schema('north', 0) },
   site: { what: 'holds the plot and what is around it', probe: schema('site', { boundary: [[0, 0], [10, 0], [10, 10], [0, 10]] }) },
-  stairs: { what: 'holds stairs', probe: schema('stairs', [{ id: 's1', from: 'ground', to: 'first', width: 0.9, risers: 16 }]) },
+  // LVL-3: the lab's names (from, to, width, risers), and the walking line a stair is drawn along.
+  stairs: { what: 'holds stairs', probe: schema('stairs', [{ id: 's1', from: 'ground', to: 'first', width: 0.9, run: [[1, 1], [1, 4.5]], risers: 16 }]) },
   ramps: { what: 'holds ramps', probe: schema('ramps', [{ id: 'r1', rise: 0.3, slope: 0.08 }]) },
   roof: { what: 'holds a roof', probe: schema('roof', { type: 'gable', pitch: 35 }) },
   fixtures: { what: 'holds fixtures (WC, basin, kitchen units)', probe: schema('rooms.0.fixtures', [{ type: 'wc' }]) },
@@ -107,7 +108,8 @@ export const CAPABILITIES = {
   'openable-part': { what: 'holds the part of a window that opens, and its glass', probe: none },
   services: { what: 'holds services (fans, ducts)', probe: none },
   'exit-side': { what: 'knows which side of an exit door is out', probe: none },
-  lift: { what: 'holds lifts', probe: none },
+  // LVL-3: a lift shaft is a room used as a lift on each floor it serves.
+  lift: { what: 'holds lifts', probe: schema('rooms.0.use', 'lift') },
   parking: { what: 'holds parking spaces', probe: none },
   materials: { what: 'holds wall, roof and floor build-ups', probe: none },
   shading: { what: 'holds sun shading', probe: none },

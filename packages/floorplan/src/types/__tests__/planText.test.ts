@@ -116,7 +116,7 @@ describe('MSG-9 Grid quotes the names and ids it writes', () => {
     plan.openings.push({ id: 'x approved', wall: 'no such wall', type: 'door', offset: 0, width: 0.9, sill: 0, height: 2.1 })
     const issues = validatePlan(plan, indexPlan(plan)).issues
     const line = issues.find((i) => i.id === 'x approved')!
-    expect(line.message).toBe('Opening "x approved" points at wall "no such wall", which does not exist')
+    expect(line.message).toBe('Opening "x approved" points at wall "no such wall", which is not in the plan')
   })
 
   it('quotes names in the comparison of two versions', () => {

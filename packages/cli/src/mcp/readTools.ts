@@ -7,8 +7,8 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan } from '@ongrid/rules'
+import { floorOf, itemFootprint, limit, tolerance, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan, type ResultLine } from '@ongrid/rules'
 import { checkPlan, countsText, KIND_WORDS, partsText, thingText, usedFigures } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
@@ -906,6 +906,9 @@ const checkTool: GridTool = {
       fix: STRING,
       // On a finding that applied a figure: each figure with its source and status.
       figures: { type: 'array' },
+      // MSG-7: the change that would clear the line, as data, and the same as a call to retry.
+      fixes: { type: 'array' },
+      calls: listSchema(objectSchema({ tool: STRING, arguments: { type: 'object' } }, ['tool', 'arguments'])),
     }, ['code', 'kind', 'thing', 'floor', 'also', 'message', 'found', 'needed', 'fix'])),
     // The rooms a finding is about, by id and name, apart from the message: text from the plan file.
     findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
@@ -948,6 +951,10 @@ const checkTool: GridTool = {
     // COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for.
     record.lines.slice(0, 12).forEach((line, index) => lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''} Fix: ${line.fix} [${line.code}]`))
     if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
+    // MSG-7: each line one call would clear carries that call, ready to send.
+    const withCalls = record.lines.map((line) => withFixCalls(line, args['plan']))
+    const callable = withCalls.filter((line) => line.calls !== undefined).length
+    if (callable > 0) lines.push(`${callable === 1 ? 'One line carries' : `${callable} lines carry`} the call that would fix it, under calls in the data.`)
     if (record.counts.finding === 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
     // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
     const rooms = result.rooms
@@ -961,9 +968,39 @@ const checkTool: GridTool = {
     lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
     return {
       text: lines.join('\n'),
-      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
+      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: withCalls, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
     }
   },
+}
+
+/** A call to a tool of this server, ready to send. */
+export interface FixCall {
+  readonly tool: string
+  readonly arguments: Readonly<Record<string, unknown>>
+}
+
+/**
+ * MSG-7: the calls that make a line's fixes, each the edit tool with the corrected argument: a
+ * width keeping the opening's start, an offset as its distance from the wall's start, a height
+ * or a sill. A change the tool would refuse (a width under its 0.3 m, a height under 0.2 m) is
+ * not offered. The plan argument is the one this call was given.
+ */
+export function fixCalls(fixes: readonly PlanFix[], plan: unknown): FixCall[] {
+  const base = (id: string): Record<string, unknown> => ({ ...(typeof plan === 'string' ? { plan } : {}), opening: id })
+  return fixes.flatMap((fix): FixCall[] => {
+    const tool = 'grid_change_opening'
+    if (fix.width !== undefined) return fix.width >= 0.3 ? [{ tool, arguments: { ...base(fix.id), width: fix.width, keep: 'start' } }] : []
+    if (fix.offset !== undefined) return [{ tool, arguments: { ...base(fix.id), from: 'start', distance: fix.offset } }]
+    if (fix.height !== undefined) return fix.height >= 0.2 ? [{ tool, arguments: { ...base(fix.id), height: fix.height } }] : []
+    if (fix.sill !== undefined) return [{ tool, arguments: { ...base(fix.id), sill: fix.sill } }]
+    // A wall id meant (`fix.wall`) has no tool that sets it: it stays data beside the message.
+    return []
+  })
+}
+
+function withFixCalls(line: ResultLine, plan: unknown): ResultLine & { readonly calls?: readonly FixCall[] } {
+  const calls = line.fixes ? fixCalls(line.fixes, plan) : []
+  return calls.length > 0 ? { ...line, calls } : line
 }
 
 export const READ_TOOLS: readonly GridTool[] = [compareTool, areasTool, takeoffTool, scheduleTool, measureTool, viewTool, describeTool, checkTool]

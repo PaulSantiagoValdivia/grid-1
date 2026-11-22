@@ -165,8 +165,9 @@ the study, shows on the first read. It answers in three lengths:
 `--for agent` is terse and carries every id, the offsets along each wall and a key line, so an
 agent can edit the plan from it. A floor laid out like an earlier one is said once. Wall and
 sill heights are one line: the usual height and the exceptions. What the plan cannot say,
-such as where north is, the kind of building, how floors connect when it holds no stairs and
-which rooms make each flat, is said as such. Directions are on the drawing, with north at the
+such as where north is, the kind of building, how floors connect when no stair joins them and
+which rooms make each flat, is said as such. The stairs that join the floors are one line, with
+the risers and going Grid worked out. Directions are on the drawing, with north at the
 top. The card checks nothing; it ends with the label "General guidance, not your local rules".
 
 ## Walls that do not meet: `grid tidy`
@@ -251,7 +252,8 @@ Every field but `version` is optional. `floors` is keyed by the plan's floor ids
 paragraphs. Each string follows the plan's text rule. Without the file, the sheet carries the
 plan's name and no words: Grid writes none in the author's place. A check sheet takes no words.
 
-Grid draws only what the plan holds: no furniture, stairs or landscape. Every figure comes from
+Grid draws only what the plan holds: no furniture or landscape, and no stairs but the ones the
+plan states. Every figure comes from
 the same code as `grid check` and the area tools, and every page keeps the label "General
 guidance, not your local rules". The pages use Source Serif 4 and Source Sans 3, under the SIL
 Open Font Licence 1.1, which ship with Grid in `fonts/`. A sheet needs the canvas a PNG needs.
