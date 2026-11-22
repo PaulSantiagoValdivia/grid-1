@@ -13,6 +13,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
 - [What went wrong, on the drawing: `grid draw`](#what-went-wrong-on-the-drawing-grid-draw)
 - [What a drawing shows: `--hide`, `--colour` and `--key`](#what-a-drawing-shows---hide---colour-and---key)
+- [Stairs, lifts and the floor above on the drawing](#stairs-lifts-and-the-floor-above-on-the-drawing)
 - [The 3D model as a picture: `grid draw --3d`](#the-3d-model-as-a-picture-grid-draw---3d)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
@@ -188,10 +189,34 @@ A floor plan picture shows the plan's title and key in a band under the drawing,
 and symbols, its sketch, the sizes, the room areas, the door swings and the warnings (the
 plan file's writing is in [plan-file.md](plan-file.md#writing-on-the-drawing-and-the-sketch-layer)).
 `--hide` leaves parts off, named and joined by commas: `title`, `key`, `notes`, `sketch`,
-`dimensions`, `areas`, `swings`, `warnings`. `--colour use` fills each room by its use and lists
+`dimensions`, `areas`, `swings`, `warnings`, `above`. `--colour use` fills each room by its use and lists
 the uses in the key. `--key` adds a key where the plan asks for none. A word Grid does not know
 is refused by name, and none of the three is taken with `--3d`. `grid_view` takes the same as
 `hide`, `colour` and `key`.
+
+## Stairs, lifts and the floor above on the drawing
+
+A floor plan is drawn as an architect expects it (SHT-11), from shapes the core works out and the
+look only strokes:
+
+- **A stair the plan states** is drawn on both floors it joins, with a line at every riser and
+  its walking line ending in an arrow head pointing up. On the floor it rises from, the plan is
+  cut 1.2 m above the floor (`planCutHeight` in [tolerances.md](tolerances.md)): the stair is
+  solid up to the break line across the flight there, and dashed above it. On the floor it
+  arrives on, it lies wholly below the cut and is drawn solid. A stair drawn only as a room used
+  as a stair has no stair object, so it gets no treads: state it in `stairs`
+  ([plan-file.md](plan-file.md#stairs-that-join-two-floors)).
+- **A lift shaft**, a room used as a `lift`, gets a cross in it, corner to corner, on every floor.
+- **The floor above** shows as a dashed outline: the outline of the floors at the next level up,
+  the one whose area is the gross external area, less the stretches that lie on this floor's own
+  outline. What is left is an overhang past the walls, a loft or a floor that steps back inside
+  them. A stretch over an inner wall is hidden by the wall. `--hide above` leaves it off. The
+  plan cannot say where a floor has a void, so a void inside the walls above is not told apart.
+
+The working look draws all three in thin lines, dashed 4 on 3 pixels; the technical look with its
+finest pen (the floor above with the fine pen), dashed 1.5 on 1 mm on paper. The key, where the
+picture has one, names the floor above. The app's 2D view and `grid draw` draw the same shapes.
+The DXF does not draw them yet.
 
 ## What went wrong, on the drawing: `grid draw`
 
@@ -243,8 +268,8 @@ Every field but `version` is optional. `floors` is keyed by the plan's floor ids
 paragraphs. Each string follows the plan's text rule. Without the file, the sheet carries the
 plan's name and no words: Grid writes none in the author's place. A check sheet takes no words.
 
-Grid draws only what the plan holds: no furniture or landscape, and no stairs but the ones the
-plan states. Every figure comes from
+Grid draws only what the plan holds: no furniture or landscape, and no stair treads but for the
+stairs the plan states. Every figure comes from
 the same code as `grid check` and the area tools, and every page keeps the label "General
 guidance, not your local rules". The pages use Source Serif 4 and Source Sans 3, under the SIL
 Open Font Licence 1.1, which ship with Grid in `fonts/`. A sheet needs the canvas a PNG needs.

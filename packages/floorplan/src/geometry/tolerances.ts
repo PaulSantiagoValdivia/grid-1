@@ -417,6 +417,28 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── The plan as drawn (SHT-11) ────────────────────────────────────────────────────────────
+  planCutHeight: {
+    kind: 'limit',
+    value: 1.2,
+    unit: 'm',
+    decides:
+      'How high above a floor its plan is cut. A stair that climbs from the floor is drawn solid ' +
+      'up to where its flight reaches this height, with a break line across it there, and dashed ' +
+      'above. It only draws the plan; it judges nothing.',
+    basis: own
+  },
+  aboveSameEdge: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'm',
+    decides:
+      'A stretch of the outline of the floor above that lies within this of the outline of the ' +
+      'floor drawn, along it, is the same wall face seen twice, and is not drawn dashed as what ' +
+      'lies above.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',

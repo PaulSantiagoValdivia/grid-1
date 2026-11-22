@@ -20,7 +20,7 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png or --3d). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out. With --3d, that floor as a cutaway; the whole building when left out.' },
   '--look': { takesValue: true, help: 'How the plan is drawn: technical (the default: black on white, lines in millimetres on paper), working (as on screen) or dark. Not with --3d.' },
-  '--hide': { takesValue: true, help: 'Parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings. Not with --3d.' },
+  '--hide': { takesValue: true, help: 'Parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings, above (the dashed outline of the floor above). Not with --3d.' },
   '--colour': { takesValue: true, help: 'use: fill each room by its use, with the uses in the key. Not with --3d.' },
   '--key': { takesValue: false, help: 'Add a key under the drawing, even where the plan asks for none. Not with --3d.' },
   '--ids': { takesValue: false, help: 'The check view: draw the id of every room, door and window, as the plan file holds them. Not with --3d.' },

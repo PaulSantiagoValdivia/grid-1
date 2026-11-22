@@ -14,6 +14,7 @@ import {
   boundsWithDimensions,
   buildDimensions,
   buildFloorPlan,
+  floorAbove,
   planForFloor,
   resolveFloor,
   validateFloorDoorSweeps
@@ -75,7 +76,8 @@ export interface PictureOptions {
   /**
    * SHT-7: what the picture shows. Each is on by default: `title` and `key` (the plan's own, in
    * the band under the drawing; `key: true` adds a key the plan does not ask for), `notes`,
-   * `sketch`, `areas`, `swings` and `warnings` (door warnings and MSG-8's marks and list).
+   * `sketch`, `areas`, `swings`, `warnings` (door warnings and MSG-8's marks and list) and
+   * `above` (SHT-11: the dashed outline of the floor above).
    * `colourBy: 'use'` fills each room by its use, and puts the uses in the key.
    */
   readonly show?: PictureShow
@@ -90,6 +92,7 @@ export interface PictureShow {
   readonly areas?: boolean
   readonly swings?: boolean
   readonly warnings?: boolean
+  readonly above?: boolean
   readonly colourBy?: 'use' | null
 }
 
@@ -241,6 +244,8 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const show = options.show ?? {}
   const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key'>): boolean => show[part] !== false
   const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
+  // SHT-11: the floor above, worked out only when it is shown.
+  const above = on('above') ? floorAbove(slice) : undefined
   const nodes = planScene({
     drawing,
     handings,
@@ -252,12 +257,14 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     labels: options.labels,
     faults,
     uses,
+    ...(above === undefined ? {} : { above }),
     show: {
       notes: on('notes'),
       sketch: on('sketch'),
       areas: on('areas'),
       swings: on('swings'),
       warnings: on('warnings'),
+      above: on('above'),
       colourBy: show.colourBy ?? null
     }
   })
@@ -266,7 +273,7 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))
   const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
   const marked = on('warnings') && faults.length > 0
-  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked }) : []
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0 }) : []
   const writing = writingBand(title, entries, width, look.colors)
   const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors)
   const key = stackBands(writing, listed)
