@@ -31,6 +31,6 @@ Grid has not been released yet. The first release will hold:
   file it.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 16 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 21 tools.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.

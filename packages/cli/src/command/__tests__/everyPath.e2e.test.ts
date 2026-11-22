@@ -146,6 +146,10 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
     { label: 'the plan', args: (p) => ['tidy', p], given: asIs },
     { label: '--out', args: (p) => ['tidy', PLAN, '--apply', 'all', '--out', `${p}.json`], given: (p) => `${p}.json` },
   ],
+  edit: [
+    { label: 'the plan', args: (p) => ['edit', 'rename', p, '--room', 'lounge', '--name', 'Lounge'], given: asIs },
+    { label: '--out', args: (p) => ['edit', 'rename', PLAN, '--room', 'lounge', '--name', 'Lounge', '--out', `${p}.json`], given: (p) => `${p}.json` },
+  ],
   // HND-9: its occupancy file is the plan's name beside the plan, never a path of its own.
   occupancy: [{ label: 'the plan', args: (p) => ['occupancy', p], given: asIs }],
   // The tool server: its tools' paths are below. --project is the project folder itself.
@@ -210,6 +214,26 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_mirror: [
     { arg: 'plan', call: tool('grid_mirror', { plan: '@', how: 'left-right' }), given: asIs },
     { arg: 'out', call: tool('grid_mirror', { plan: PLAN, how: 'left-right', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_merge_rooms: [
+    { arg: 'plan', call: tool('grid_merge_rooms', { plan: '@', room: 'bed1', with: 'bed2' }), given: asIs },
+    { arg: 'out', call: tool('grid_merge_rooms', { plan: PLAN, room: 'bed1', with: 'bed2', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_split_room: [
+    { arg: 'plan', call: tool('grid_split_room', { plan: '@', room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store' }), given: asIs },
+    { arg: 'out', call: tool('grid_split_room', { plan: PLAN, room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_add_room: [
+    { arg: 'plan', call: tool('grid_add_room', { plan: '@', room: 'porch', name: 'Porch', against: 'lounge', side: 'north', width: 3, depth: 2, in_the_way: 'remove' }), given: asIs },
+    { arg: 'out', call: tool('grid_add_room', { plan: PLAN, room: 'porch', name: 'Porch', against: 'lounge', side: 'north', width: 3, depth: 2, in_the_way: 'remove', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_stretch: [
+    { arg: 'plan', call: tool('grid_stretch', { plan: '@', side: 'east', by: 0.3 }), given: asIs },
+    { arg: 'out', call: tool('grid_stretch', { plan: PLAN, side: 'east', by: 0.3, out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_rename_room: [
+    { arg: 'plan', call: tool('grid_rename_room', { plan: '@', room: 'lounge', name: 'Lounge' }), given: asIs },
+    { arg: 'out', call: tool('grid_rename_room', { plan: PLAN, room: 'lounge', name: 'Lounge', out: '@.json' }), given: (p) => `${p}.json` },
   ],
 }
 

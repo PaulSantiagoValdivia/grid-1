@@ -70,9 +70,18 @@ record. It never throws: a check that fails inside Grid becomes a line
 
 1. `refused`: the plan could not be read. Nothing else was checked.
 2. `left-out`: a part that cannot be drawn. Every view, measure and export skips it.
-3. `worth-a-look`: a part that is drawn and is very likely a mistake, door sweeps among them.
+3. `worth-a-look`: a part that is drawn and is very likely a mistake, door sweeps among them;
+   and first, what the file says that Grid does not read (below).
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
+
+### A line's number
+
+A line's number is its place in `lines`, counting from 1. `grid check` prints it before the line,
+and keeps it when only one floor is shown (`--floor`), so a floor's lines can skip numbers.
+`grid draw` and `grid_view` mark each line with the same number on the part it is about, and
+list them under the drawing (MSG-8). The numbers follow the record the drawing was made from:
+`grid check --country` can add lines, and with them change the numbers after them.
 
 ### One wording per code
 
@@ -95,6 +104,9 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/unknown-word` | {thing} has a word the format does not know | {wanted} at {place} |
 | `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
+| `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
+| `plan/unknown-use` | Room "{name}" has a use Grid does not know, "{use}" | one of the uses Grid knows: bedroom, living, … |
+| `plan/empty` | The plan has nothing in it: no walls, rooms or openings | walls, and the rooms and openings they hold |
 | `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
 | `plan/part-left-out` | {thing} is left out: a value it needs cannot be read | {wanted} at {place} |
 | `plan/value-left-out` | {thing} has a value the format cannot read, and is read without it | {wanted} at {place} |
@@ -189,6 +201,18 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
+
+### Words Grid does not read
+
+A plan with a field Grid does not know, or a room use it does not know, is still read: without
+that field, and with that room's use not stated. Each is a line worth a look, about the part it
+is on, with the nearest word Grid knows when one was most likely meant: `thick` on a wall gives
+`plan/unknown-field`, whose `found` and `fix` name `thickness` ("Did you mean "thickness"?"). A
+use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line. A plan with no
+walls, rooms or openings, `{}` among them, gives `plan/empty`. A field name or a use that breaks
+the text rule (MSG-9) is never repeated: the line says it is not. The fields each part has are
+read from the format itself (`readingNotes` in `@ongrid/floorplan/types/reading`), so a field
+added to the format is never named as unknown.
 
 A code is never reused for another meaning. Until the drawing's checks give their figures as
 data, `found` for a problem in the drawing is the check's own sentence, and figures are in it.
@@ -306,7 +330,7 @@ its text, which says the same.
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (parts that could not be drawn), `note`. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror` | `written`, `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, and `doors` (each door that now joins other rooms). |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -331,6 +355,26 @@ A change that would add a problem that leaves a part out is refused, and nothing
   returns `title`, `body`, `labels`, `link` (the issue form), `linkHasBody`, `code`, `plan`,
   `kept` and `sent: false`. Grid sends nothing: show the person the draft.
 - A tool call now sees the protocol version a 2026-07-28 request names. No other answer changes.
+
+### 2026-11-22: version 1 (WRT-3)
+
+- Five changes to the plan are new tools and `grid edit` verbs: `grid_merge_rooms`,
+  `grid_split_room`, `grid_add_room`, `grid_stretch` and `grid_rename_room`.
+  `grid_change_opening` moves and places an opening (`room`, `side`, `from`, `distance`);
+  `grid_move_room_side` takes an inside size (`to`).
+- Every edit receipt adds `guessed` and `couldNotKeep`. No new message code: refusals of an
+  edit are one line, as before.
+- An opening may state `anchor` in the plan file: what Grid's edits keep its place from.
+
+### 2026-11-22: version 1 (MSG-4)
+
+- New codes, all worth a look: `plan/unknown-field`, `plan/unknown-use` and `plan/empty`. A
+  field or a use Grid does not read was dropped in silence before. `{}` gives `plan/empty`,
+  beside MSG-2's `plan/not-checked-no-rooms`.
+- A room use is read whatever its capitals: `Bedroom` is `bedroom`.
+- `grid check` and `grid_check` read the plan file as written, so they name these words. The
+  edit tools' `toLookAt` counts the file as written, before and after: a change keeps a field
+  Grid does not know, and it is counted on both sides.
 
 ### 2026-11-22: a fault stays local (MSG-6)
 
@@ -403,6 +447,15 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `item/into-wall` and `item/too-tall` are worth a look. A kind the plan does not hold yet (a
   table, a chair) is `item/unknown-kind`: the fixture is left out and nothing else changes.
 - A refusal inside `items` names the item (`thing.kind` `item`) when its id can be read.
+
+### 2026-11-22: what went wrong, on the drawing (MSG-8)
+
+- No field changed. `grid check` and `grid_check` print each line's number, its place in
+  `lines` from 1, in place of a dash; `grid check --json` adds `numbers`, each line's number,
+  which on one floor is still its place in the whole record.
+- `grid draw` and `grid_view` (kind plan) mark every line of the floor drawn with its number on
+  its part, print its words beside the mark, and list the floor's lines under the drawing. A
+  room that cannot be drawn is the dashed box round its walls with its name and the reason.
 
 ### 2026-11-21: version 1 (MSG-1)
 

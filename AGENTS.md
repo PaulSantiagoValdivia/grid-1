@@ -46,7 +46,7 @@ Notes for agents and people changing this repository.
   the one drawing function, `planScene`, applies to the same geometry: `working` for the screen
   and every picture an agent gets, `technical` for sheets and `grid draw`, black on white with
   line weights in millimetres on paper from a pen set chosen by scale (1:50, 1:100, 1:200).
-- `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `check`,
+- `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `edit`, `check`,
   `describe`, `draw`, `export`, `sheet`, `tidy`, `serve` and `mcp`, in `src/command/`. `write`
   (WRT-2) writes a plan from rooms text, the main way to write one; `describe --as rooms` reads
   it back. `tidy` (MSG-12) lists the
@@ -58,7 +58,7 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 16 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 21 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
   export, the sheet, and the tools that change the plan). Each is written once in `readTools.ts`,
@@ -68,6 +68,13 @@ Notes for agents and people changing this repository.
   title, hint, examples or output schema, or when the order changes; `replay/replay.test.ts`
   replays the lab's five Y conversations and holds the score. A description starts "Use this
   when…" and says when not to use the tool.
+- The edits (WRT-3, `packages/cli/src/edit/`): one sentence of request is one call. `edits.ts`
+  holds the patch every change makes and the opening and side moves; `merge.ts`, `split.ts`,
+  `addRoom.ts`, `stretch.ts` and `rename.ts` the room edits; `seat.ts` where openings go when
+  walls change (an opening's `anchor`, else its place in the building). The room edits are the
+  tools in `src/mcp/editTools.ts` and the verbs of `grid edit` (`src/command/edit.ts`), made
+  from the tools' own arguments. `edit/__tests__/requests.test.ts` replays the lab's six flat
+  requests (WR-2) against the hand-made versions in `packages/floorplan/fixtures/edits/`.
 - `grid mcp` is the same server under the name agents start it by: `npx -y ongrid mcp` (CMD-9).
   `src/mcp/protocol.ts` answers both eras of the protocol: `initialize` for older clients, and
   for 2026-07-28 clients the version in each request's `_meta` and `server/discover`; a version

@@ -1,5 +1,5 @@
 export * from './types'
-export { FIGURE_LIMITS, FIGURE_RULES, HABITABLE_USES, RULE_FIGURES, RULES } from './catalogue'
+export { FIGURE_LIMITS, FIGURE_RULES, HABITABLE_USES, RULE_FIGURES, RULE_USES, RULES, rulesForUse } from './catalogue'
 export type { FigureRuleId } from './catalogue'
 export { basisOf, checkLocalRules } from './check'
 export type { CheckOptions } from './check'

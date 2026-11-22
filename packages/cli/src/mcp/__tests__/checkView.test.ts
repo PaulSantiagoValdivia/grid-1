@@ -2,6 +2,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
+import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { inspectPlan } from '@ongrid/rules'
 import { drawPlan } from '../../draw/drawPlan'
 import { openProject } from '../../fs/projectFiles'
 import { runGrid } from '../../command/main'
@@ -76,7 +78,9 @@ describe('the check view', () => {
     }
     const drawn = await run('draw', 'plan.json', '--ids')
     expect(drawn.status).toBe(0)
-    expect(drawn.out).toBe(await drawPlan(JSON.parse(readFileSync(sample, 'utf8')), { format: 'svg', look: 'technical', labels: { ids: true } }))
+    // With what grid check finds marked on it, as grid draw always draws it (MSG-8).
+    const plan = parseFloorPlan(JSON.parse(readFileSync(sample, 'utf8')))
+    expect(drawn.out).toBe(await drawPlan(plan, { format: 'svg', look: 'technical', labels: { ids: true }, faults: inspectPlan(plan).lines }))
     const refused = await run('draw', 'plan.json', '--ids', '--3d')
     expect(refused.status).toBe(2)
     expect(refused.err).toContain('--ids draws the ids on a floor plan, not on the 3D model')

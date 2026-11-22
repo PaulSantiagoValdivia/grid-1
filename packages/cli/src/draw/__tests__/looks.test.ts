@@ -10,6 +10,7 @@ import { runGrid } from '../../command/main'
 import { openProject } from '../../fs/projectFiles'
 import { GRID_TOOLS } from '../../mcp/serveTools'
 import { PLAN_BOX, SHEET_LOOK, UNDECIDED_NOTE, planPictureOptions, sheetPages } from '../../sheet/pages'
+import { inspectPlan } from '@ongrid/rules'
 import { drawPlan } from '../drawPlan'
 
 /**
@@ -49,11 +50,13 @@ describe('grid draw: a file to hand on', () => {
     const dir = folder()
     const drawn = await grid(dir, 'draw', 'flat.json')
     expect(drawn.status).toBe(0)
-    expect(drawn.out).toBe(await drawPlan(read(flat), { format: 'svg', look: 'technical' }))
+    // With what grid check finds marked on it, as grid draw always draws it (MSG-8).
+    const faults = inspectPlan(read(flat)).lines
+    expect(drawn.out).toBe(await drawPlan(read(flat), { format: 'svg', look: 'technical', faults }))
     expect(drawn.out).toContain('data-part="wall-outlines"')
     const working = await grid(dir, 'draw', 'flat.json', '--look', 'working')
-    expect(working.out).toBe(await drawPlan(read(flat), { format: 'svg' }))
-    expect((await grid(dir, 'draw', 'flat.json', '--look', 'dark')).out).toBe(await drawPlan(read(flat), { format: 'svg', look: 'dark' }))
+    expect(working.out).toBe(await drawPlan(read(flat), { format: 'svg', faults }))
+    expect((await grid(dir, 'draw', 'flat.json', '--look', 'dark')).out).toBe(await drawPlan(read(flat), { format: 'svg', look: 'dark', faults }))
   })
 
   it('names the doors it draws as undecided, on standard error', async () => {

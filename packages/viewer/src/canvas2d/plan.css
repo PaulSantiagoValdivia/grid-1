@@ -139,6 +139,64 @@
   user-select: none;
 }
 
+/* A room that could not be drawn (MSG-8): the box round its walls, tinted and dashed, with its
+   name and why in the middle. */
+.canvas [data-part='undrawn-room'] {
+  fill: var(--plan-warning, #b4531a);
+  fill-opacity: 0.1;
+  stroke: var(--plan-warning, #b4531a);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.canvas [data-part='undrawn-name'] {
+  fill: var(--plan-label, #232320);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+.canvas [data-part='undrawn-reason'] {
+  fill: var(--plan-warning, #b4531a);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* A numbered mark on the part a line of the result is about, its words beside it (MSG-8). */
+.canvas [data-part='fault-mark-dot'] {
+  fill: var(--plan-warning, #b4531a);
+  stroke: var(--plan-paper, #ffffff);
+  stroke-width: 1.5;
+}
+
+.canvas [data-part='fault-mark-number'] {
+  fill: var(--plan-paper, #ffffff);
+  font-family: var(--font-sans);
+  font-size: 10px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
+.canvas [data-part='fault-mark-backing'] {
+  fill: var(--plan-paper, #ffffff);
+}
+
+.canvas [data-part='fault-mark-text'] {
+  fill: var(--plan-warning, #b4531a);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* `[data-part]` matches the gap rule above in weight, so being later wins over its `stroke: none`. */
 .canvas [data-part][data-hit='true'] {
   stroke: var(--plan-warning, #b4531a);
