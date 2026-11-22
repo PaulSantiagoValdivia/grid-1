@@ -11,6 +11,10 @@ import {
 } from '../../checks'
 import { planNotes, type NoteText } from '../notes'
 
+/** COD-2: every note that used a figure says which kind of building its figures were read for. */
+const READ_FOR =
+  " This check's figures were read for homes (houses and flats people live in); the plan does not say what kind of building it is, so Grid applied them as they are."
+
 /** The figure as a check applies it when nothing was looked up. */
 const baseline = (key: FigureKey) => resolveFigure(key)!
 
@@ -186,7 +190,8 @@ describe('the room-size note', () => {
     expect(names(note.title)).toEqual(['Back bedroom'])
     expect(plain(note.detail)).toBe(
       'It measures 5.80 m². The figure used here for a room people sleep or live in is at least 6.5 m². ' +
-        'Basis: US model codes (IBC 2024 1208.4, IRC 2024 R312.1). Found by an AI and not yet checked by a person.'
+        'Basis: US model codes (IBC 2024 1208.4, IRC 2024 R312.1). Found by an AI and not yet checked by a person.' +
+        READ_FOR
     )
     expect(note.tag).toBe('Size')
     expect(note.room).toBe('bedroom')
@@ -219,7 +224,7 @@ describe('the escape notes', () => {
     const note = one(plan(), finding('no_escape_opening', ['bedroom'], { ruleId: 'escape-opening' }))
     expect(plain(note.title)).toBe('Back bedroom has no window or door to escape through')
     expect(names(note.title)).toEqual(['Back bedroom'])
-    expect(plain(note.detail)).toBe('It needs a window or a door to the outside that someone can climb through.')
+    expect(plain(note.detail)).toBe('The check looks for a window or a door to the outside that someone can climb through, and finds none.' + READ_FOR)
     expect(note.tag).toBe('Escape')
     expect(note.room).toBe('bedroom')
   })
@@ -241,7 +246,8 @@ describe('the escape notes', () => {
     expect(plain(note.detail)).toBe(
       'It opens 0.40 m² as drawn. The figures used here for a bedroom on this floor: at least 0.53 m², 50.8 cm wide, 61 cm tall. ' +
         'Basis: US model codes (IBC 2024 1031.3.1, IRC 2024 R319.2.1, IBC 2024 1031.3.2, IRC 2024 R319.2.2). ' +
-        'Found by an AI and not yet checked by a person.'
+        'Found by an AI and not yet checked by a person.' +
+        READ_FOR
     )
     expect(note.tag).toBe('Escape')
   })
@@ -259,7 +265,8 @@ describe('the escape notes', () => {
     expect(plain(note.title)).toBe('The window of Back bedroom is too high to escape through')
     expect(plain(note.detail)).toBe(
       'Its sill is 1.20 m above the floor as drawn. The figure used here is a sill 1.118 m or lower. ' +
-        'Basis: US model codes (IBC 2024 1031.3.3, IRC 2024 R319.2.3). Found by an AI and not yet checked by a person.'
+        'Basis: US model codes (IBC 2024 1031.3.3, IRC 2024 R319.2.3). Found by an AI and not yet checked by a person.' +
+        READ_FOR
     )
     expect(note.tag).toBe('Escape')
   })
@@ -304,7 +311,8 @@ describe('a report with findings of both kinds', () => {
     expect(plain(note.title)).toBe('Back bedroom is under 9 m²')
     expect(plain(note.detail)).toBe(
       'It measures 8.00 m². The figure used here for a room people sleep or live in is at least 9 m². ' +
-        'Basis: figures found online for this place. Found by an AI and not yet checked by a person. Source: https://example.org/rules.'
+        'Basis: figures found online for this place. Found by an AI and not yet checked by a person. Source: https://example.org/rules.' +
+        READ_FOR
     )
   })
 

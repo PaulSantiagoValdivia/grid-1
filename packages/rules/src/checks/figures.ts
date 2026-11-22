@@ -55,9 +55,37 @@ export interface Verification {
   readonly on: string
 }
 
+/**
+ * The kind of building a figure was read for (COD-2). Every figure here was read for homes.
+ * Until a plan can say what kind of building it is (CNT-5), a figure is applied to any plan,
+ * so every note and every pass that used one says which kind of building it was meant for.
+ */
+export const BUILDING_KINDS = ['homes'] as const
+export type BuildingKind = (typeof BUILDING_KINDS)[number]
+
+/** How a reader is told what a kind of building is, in our own words. */
+const BUILDING_KIND_TEXT: Record<BuildingKind, string> = {
+  homes: 'homes (houses and flats people live in)'
+}
+
+/** "homes (houses and flats people live in)", or several kinds joined. */
+export function buildingKindsText(kinds: readonly BuildingKind[]): string {
+  return [...new Set(kinds)].map((kind) => BUILDING_KIND_TEXT[kind]).join(' and ')
+}
+
+/**
+ * The sentence every note that used a figure carries (COD-2): which kind of building its figures
+ * were read for, and that Grid cannot yet tell whether the plan is one. No full stop at the end.
+ */
+export function readForSentence(kinds: readonly BuildingKind[]): string {
+  return `This check's figures were read for ${buildingKindsText(kinds)}; the plan does not say what kind of building it is, so Grid applied them as they are`
+}
+
 export interface Provenance {
   /** Where the figure applies. */
   readonly jurisdiction: string
+  /** The kind of building the figure was read for (COD-2). */
+  readonly readFor: BuildingKind
   /** Every document the figure was read in. */
   readonly citations: readonly SourceCitation[]
   /** The figure as the documents print it, before any conversion. */
@@ -104,6 +132,7 @@ const read = (
   metric: Provenance['metric'] = 'as-printed'
 ): Provenance => ({
   jurisdiction: US_MODEL_CODES,
+  readFor: 'homes',
   citations,
   original,
   metric,
@@ -251,6 +280,8 @@ export function resolveFigure(key: FigureKey, figures?: RuleFigures, country?: s
       unit: spec.unit,
       origin: 'lookup',
       status: 'ai-found',
+      // A lookup asks for the same figure for the same kind of building (`lookup/prompt.ts`).
+      readFor: spec.provenance.readFor,
       ...(given.source === undefined ? {} : { source: given.source })
     }
   }
@@ -262,8 +293,23 @@ export function resolveFigure(key: FigureKey, figures?: RuleFigures, country?: s
     unit: spec.unit,
     origin: 'baseline',
     status,
+    readFor: spec.provenance.readFor,
     jurisdiction,
     citations: citations.map(({ document, edition, clause }) => ({ document, edition, clause })),
     readOn
   }
+}
+
+/**
+ * The kinds of building a finding's figures were read for (COD-2): those of the figures it applied,
+ * or, for a bedroom with no escape opening at all, those of the escape rule it was held to. Empty
+ * for a finding that used no figure.
+ */
+export function findingReadFor(finding: {
+  readonly code?: string
+  readonly figures?: readonly { readonly readFor: BuildingKind }[]
+}): BuildingKind[] {
+  const kinds = (finding.figures ?? []).map((figure) => figure.readFor)
+  if (kinds.length === 0 && finding.code === 'no_escape_opening') kinds.push(ESCAPE_TOP_LEVEL.provenance.readFor)
+  return [...new Set(kinds)]
 }

@@ -82,8 +82,16 @@ export interface ToolAnswer {
 export interface ServerTool {
   /** The tool as `tools/list` shows it: name, title, description, schemas and hints. */
   readonly definition: { readonly name: string } & Record<string, unknown>
-  /** Runs one call. Every refusal comes back as text with `isError`, never as a throw. */
-  call(args: unknown): ToolAnswer | Promise<ToolAnswer>
+  /**
+   * Runs one call. Every refusal comes back as text with `isError`, never as a throw. `request`
+   * says what the request itself named: the protocol version, for a 2026-07-28 client (CMD-13).
+   */
+  call(args: unknown, request?: CallRequest): ToolAnswer | Promise<ToolAnswer>
+}
+
+/** What one request names about itself. The server keeps nothing between requests. */
+export interface CallRequest {
+  readonly protocolVersion?: string
 }
 
 function reply(id: Id, result: unknown): string {
@@ -111,10 +119,10 @@ function oneLine(text: string): string {
   return text.replace(/\s+/g, ' ').trim()
 }
 
-async function runTool(id: Id, tool: ServerTool, args: unknown, wrap: (result: Record<string, unknown>) => Record<string, unknown> = (result) => result): Promise<string> {
+async function runTool(id: Id, tool: ServerTool, args: unknown, wrap: (result: Record<string, unknown>) => Record<string, unknown> = (result) => result, request: CallRequest = {}): Promise<string> {
   let answer: ToolAnswer
   try {
-    answer = await tool.call(args)
+    answer = await tool.call(args, request)
   } catch (error) {
     answer = { text: `Something went wrong inside Grid: ${oneLine(String((error as Error)?.message ?? error))}`, isError: true }
   }
@@ -165,7 +173,8 @@ function perRequest(id: Id, method: unknown, params: Record<string, unknown>, to
     case 'tools/call': {
       const tool = tools.find((t) => t.definition.name === params['name'])
       if (!tool) return fail(id, -32602, 'Unknown tool')
-      return runTool(id, tool, params['arguments'], complete)
+      // The version is one Grid speaks, checked above: it may be repeated.
+      return runTool(id, tool, params['arguments'], complete, { protocolVersion: asked })
     }
     default:
       // initialize and ping are gone from this revision; anything else Grid does not offer.

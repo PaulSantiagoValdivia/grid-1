@@ -22,6 +22,10 @@ const WORST = 'M/scenarios/worst-1-sleeping-floor-level4.json'
 const WALLS_ONLY = 'M/scenarios/worst-2-walls-only.json'
 const BLOCK = 'D/scenarios/d2-block-g+5.json'
 const FAULTS = ['E/scenarios/faults/f05-boundary-missing-wall.json', 'E/scenarios/faults/f06-boundary-wrong-order.json', 'E/scenarios/faults/f07-room-two-walls.json']
+/** CH-2: the café whose seating is marked "dining" for want of a better word. */
+const CAFE = 'C/scenarios/cafe.json'
+/** The hotel whose twelve rooms on the ground floor each got a sill note from a home's figure. */
+const HOTEL = 'AU1/scenarios/MS-14/hotel-ground-fixed-glazing.json'
 const SOUND = ['A/scenarios/townhouse.json', 'A/scenarios/basement-flat.json', 'AU2/scenarios/H-h06-lift-four-floors/plan.json']
 
 function labPlans(names: readonly string[]): Map<string, LoadedPlan> {
@@ -40,7 +44,7 @@ function labPlans(names: readonly string[]): Map<string, LoadedPlan> {
   return found
 }
 
-const plans = labPlans([OFFICE, WORST, WALLS_ONLY, BLOCK, ...FAULTS, ...SOUND])
+const plans = labPlans([OFFICE, WORST, WALLS_ONLY, BLOCK, CAFE, HOTEL, ...FAULTS, ...SOUND])
 const plan = (name: string): LoadedPlan => plans.get(name)!
 const key = (floor: string, id: string): string => `${floor}/${id}`
 
@@ -183,5 +187,37 @@ describe('every area and total carries a state (AC-9, AA-12)', () => {
     const areas = planAreas(surveyPlan(repaired.plan))
     expect(areas.states.net).toEqual({ state: 'proven', leftOut: [], notProven: [] })
     expect(areas.floors.every((f) => f.rooms.every((r) => r.state === 'proven'))).toBe(true)
+  })
+})
+
+/** COD-2: the sentence on every pass and every note that used a figure. */
+const HOMES = 'homes (houses and flats people live in)'
+
+describe('a figure says which kind of building it was read for (COD-2)', () => {
+  it('the café\'s seating, measured against a home\'s figure, is never passed without a line (CH-2)', () => {
+    const result = checkPlan(plan(CAFE), { country: 'US' })
+    const size = result.result.coverage.find((c) => c.ruleId === 'habitable-room-area')!
+    expect(size.lookedAt.flatMap((g) => g.ids)).toEqual(['seating'])
+    expect(size.findings).toBe(0)
+    expect(size.readFor).toEqual(['homes'])
+    const text = checkText(result, 1)
+    expect(text).toContain(`  - Rooms people live or sleep in have a minimum floor area: looked at 1 room; 0 findings; its figures were read for ${HOMES}.`)
+    expect(text).toContain(`habitableRoomMinArea 6.5 m², US model codes, IBC 2024 1208.4; IRC 2024 R312.1, read 2026-11-14, status ai-found, read for ${HOMES}`)
+  })
+
+  it('a check that looked at nothing used no figure, and says nothing of one', () => {
+    const result = checkPlan(plan(OFFICE), { country: 'US' })
+    for (const check of result.result.coverage) expect(check.readFor, check.ruleId).toBeUndefined()
+  })
+
+  it('the hotel: each of its twelve sill notes says the figure was read for homes', () => {
+    const result = checkPlan(plan(HOTEL), { country: 'US' })
+    const sills = result.result.lines.filter((line) => line.code === 'room/escape-window-too-high')
+    expect(sills).toHaveLength(12)
+    for (const line of sills) expect(line.needed).toBe(`a sill at most 1.118 m above the floor; this check's figures were read for ${HOMES}`)
+    // Every line that used a figure says it; no other line does.
+    for (const line of result.result.lines) {
+      expect(line.needed.includes('were read for'), line.code).toBe(line.code.startsWith('room/escape-') || line.code === 'room/too-small')
+    }
   })
 })

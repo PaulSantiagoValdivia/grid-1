@@ -139,6 +139,8 @@ function skill(): string {
     '   `grid_move_room_side`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`,',
     '   `grid_stretch`, `grid_rename_room` or `grid_mirror`; each says what it changed, what it',
     '   guessed and what it could not keep. Change the plan only when asked.',
+    '6. When a Grid tool\'s answer looks wrong, `grid_report_problem` drafts an issue about it.',
+    '   Grid sends nothing: show the person the draft and let them decide whether to file it.',
     '',
     ROOM_NAMES_TRAVEL,
     '',

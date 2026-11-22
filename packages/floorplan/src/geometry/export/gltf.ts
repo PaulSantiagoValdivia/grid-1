@@ -20,6 +20,7 @@ import type { Scene3D } from '../scene3d'
 import { floorMesh, makeNamer, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
+import { leftOutLines, leftOutSummary, type LeftOutPart } from './leftOut'
 
 const MAGIC = 0x46546c67 // "glTF"
 const VERSION = 2
@@ -109,6 +110,24 @@ function partsOf(scene: Scene3D): Part[] {
   return parts
 }
 
+export interface GlbOptions {
+  /** HND-6: the parts of the plan this file leaves out, written into `asset.extras`. */
+  readonly leftOut?: readonly LeftOutPart[]
+}
+
+/**
+ * The asset block. HND-6: when the file leaves parts of the plan out, `asset.extras.gridLeftOut`
+ * says so: a note in words, the count, and each part. `extras` is glTF's place for data of an
+ * application's own, which every reader keeps and none acts on. JSON escapes the ids.
+ */
+function assetOf(leftOut: readonly LeftOutPart[]): object {
+  // MSG-3: the label travels in the file, where glTF keeps data of the file's own.
+  const asset = { version: '2.0', generator: GENERATOR, extras: { label: GENERAL_GUIDANCE_LABEL } }
+  if (leftOut.length === 0) return asset
+  const note = [leftOutSummary(leftOut), ...leftOutLines(leftOut)]
+  return { ...asset, extras: { ...asset.extras, gridLeftOut: { count: leftOut.length, note, parts: leftOut } } }
+}
+
 /**
  * The scene as a GLB file.
  *
@@ -117,10 +136,9 @@ function partsOf(scene: Scene3D): Part[] {
  * already absent from it, so a broken plan exports the part that is sound — the
  * same graceful degradation the canvases apply.
  */
-export function toGlb(scene: Scene3D): Uint8Array {
+export function toGlb(scene: Scene3D, options: GlbOptions = {}): Uint8Array {
   const parts = partsOf(scene)
-  // MSG-3: the label travels in the file, where glTF keeps data of the file's own.
-  const asset = { version: '2.0', generator: GENERATOR, extras: { label: GENERAL_GUIDANCE_LABEL } }
+  const asset = assetOf(options.leftOut ?? [])
   if (parts.length === 0) return encodeGlb({ asset, scene: 0, scenes: [{}] }, null)
 
   // Per mesh: its positions, then its indices. Both are 4 bytes a component, so

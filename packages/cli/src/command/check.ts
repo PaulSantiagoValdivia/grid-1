@@ -8,6 +8,7 @@
  */
 import { floorOf, type FloorPlan, type Issue } from '@ongrid/floorplan/geometry'
 import {
+  buildingKindsText,
   checkLocalRules,
   coverageOnFloor,
   figureUsedText,
@@ -222,6 +223,19 @@ function idsText(ids: readonly string[], most = 8): string {
  * check with the parts it looked at and the parts it skipped, with the reason and a count. An
  * empty list of lines is read with it: it only says what these parts gave.
  */
+/** COD-2: a line held to a figure check, whose `needed` names the kind of building it was read for. */
+export function usedFigures(line: ResultLine): boolean {
+  return (line.figures?.length ?? 0) > 0 || line.code === 'room/no-escape-opening'
+}
+
+/**
+ * COD-2: for a check that applied figures, the kind of building they were read for, after its
+ * count of findings, so a pass with none still says it: "; its figures were read for homes (…)".
+ */
+export function readForText(check: Pick<CheckCoverage, 'readFor'>): string {
+  return check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
+}
+
 export function coverageText(result: CheckResult): string[] {
   const { rooms } = result
   const coverage = result.result.coverage
@@ -233,8 +247,8 @@ export function coverageText(result: CheckResult): string[] {
   const several = new Set(coverage.flatMap((check) => [...check.lookedAt, ...check.skipped].map((group) => group.floor))).size > 1
   const lines = ['', `Looked at by at least one check: ${summary}.`, `What each check looked at (${coverage.length}):`]
   for (const check of coverage) {
-    if (check.lookedAtCount === 0) lines.push(`  - ${nothingCheckedText(check.title, check.looksAt)}.`)
-    else lines.push(`  - ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}; ${check.findings} finding${check.findings === 1 ? '' : 's'}.`)
+    if (check.lookedAtCount === 0) lines.push(`  - ${nothingCheckedText(check.title, check.looksAt)}${readForText(check)}.`)
+    else lines.push(`  - ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}; ${check.findings} finding${check.findings === 1 ? '' : 's'}${readForText(check)}.`)
     if (check.lookedAtCount > 0 && check.lookedAtCount <= 8) lines.push(`      looked at: ${idsText(check.lookedAt.flatMap((group) => group.ids))}`)
     for (const skip of check.skipped) {
       const where = several && skip.floor !== '' ? ` on ${JSON.stringify(skip.floor)}` : ''

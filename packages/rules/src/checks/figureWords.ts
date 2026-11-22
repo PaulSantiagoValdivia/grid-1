@@ -5,7 +5,7 @@
  * The report, the result record and the notes a person reads all word a figure from here.
  */
 import { figureText } from '@ongrid/floorplan/geometry'
-import type { FigureKey, VerificationStatus } from './figures'
+import { buildingKindsText, type FigureKey, type VerificationStatus } from './figures'
 import type { AppliedFigure } from './types'
 
 /** How far a figure has been checked, as a reader is told. */
@@ -34,11 +34,15 @@ export function figureValueText(figure: Pick<AppliedFigure, 'value' | 'unit'>): 
   return `${figureText(figure.value)} ${figure.unit}`
 }
 
-/** "US model codes, IBC 2024 1208.4; IRC 2024 R312.1, read 2026-11-14", or "looked up for this place, <url>". */
+/**
+ * "US model codes, IBC 2024 1208.4; IRC 2024 R312.1, read 2026-11-14 for homes (…)", or
+ * "looked up for this place, <url>, read for …" (COD-2: the kind of building it was read for).
+ */
 export function figureBasisText(figure: AppliedFigure): string {
-  if (figure.origin === 'lookup') return `looked up for this place${figure.source ? `, ${figure.source.url}` : ''}`
+  const kinds = buildingKindsText([figure.readFor])
+  if (figure.origin === 'lookup') return `looked up for this place${figure.source ? `, ${figure.source.url}` : ''}, read for ${kinds}`
   const cited = figure.citations.map((c) => `${c.document} ${c.edition} ${c.clause}`).join('; ')
-  return `${figure.jurisdiction}, ${cited}, read ${figure.readOn}`
+  return `${figure.jurisdiction}, ${cited}, read ${figure.readOn} for ${kinds}`
 }
 
 /** "status ai-found: found by an AI and not yet checked by a person". */
@@ -49,7 +53,7 @@ export function figureStatusText(figure: AppliedFigure): string {
 /**
  * One figure as a line of a report: "The figure used here for the smallest floor area of a room
  * people live or sleep in is 6.5 m² (habitableRoomMinArea). Basis: US model codes, IBC 2024
- * 1208.4; IRC 2024 R312.1, read 2026-11-14. Status ai-found: found by an AI and not yet checked
+ * 1208.4; IRC 2024 R312.1, read 2026-11-14 for homes (…). Status ai-found: found by an AI and not yet checked
  * by a person."
  */
 export function figureUsedText(figure: AppliedFigure): string {

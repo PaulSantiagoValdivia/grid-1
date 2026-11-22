@@ -20,7 +20,7 @@ import {
   type FloorPlan
 } from '@ongrid/floorplan/geometry'
 import { planNotes as planCheckNotes, type NoteText, type PlanNote as PlanCheckNote } from '@ongrid/floorplan/notes'
-import type { VerificationStatus } from '../checks/figures'
+import { ESCAPE_TOP_LEVEL, readForSentence, type VerificationStatus } from '../checks/figures'
 import { FIGURE_STATUS_WORDS } from '../checks/figureWords'
 import { wordings } from '../checks/messages'
 import type { AppliedFigure, FigureFindingCode, RuleFinding, RulesReport } from '../checks/types'
@@ -87,13 +87,18 @@ function basisText(figures: readonly AppliedFigure[]): string {
   if (lookedUp.length > 0) {
     const urls = [...new Set(lookedUp.flatMap((f) => (f.source === undefined ? [] : [f.source.url])))]
     const where = urls.length === 0 ? '' : ` Source: ${urls.join(', ')}.`
-    return ` Basis: figures found online for this place. ${STATUS['ai-found']}.${where}`
+    return ` Basis: figures found online for this place. ${STATUS['ai-found']}.${where}${readFor(figures)}`
   }
   const baselines = figures.filter((f) => f.origin === 'baseline')
   const cited = [...new Set(baselines.flatMap((f) => f.citations.map((c) => `${c.document} ${c.edition} ${c.clause}`)))]
   const place = [...new Set(baselines.map((f) => f.jurisdiction))].join(', ')
   const status = [...new Set(baselines.map((f) => STATUS[f.status]))].join('. ')
-  return ` Basis: ${place} (${cited.join(', ')}). ${status}.`
+  return ` Basis: ${place} (${cited.join(', ')}). ${status}.${readFor(figures)}`
+}
+
+/** COD-2: which kind of building the figures were read for, as one more sentence. */
+function readFor(figures: readonly AppliedFigure[]): string {
+  return ` ${readForSentence(figures.map((f) => f.readFor))}.`
 }
 
 export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
@@ -134,7 +139,7 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           ...base,
           tag: 'Escape',
           title: wordings.noEscapeOpening(shown),
-          detail: [words('It needs a window or a door to the outside that someone can climb through.')]
+          detail: [words(`The check looks for a window or a door to the outside that someone can climb through, and finds none. ${readForSentence([ESCAPE_TOP_LEVEL.provenance.readFor])}.`)]
         }
       case 'escape_window_too_small': {
         const width = figure('escapeOpeningMinWidth')
