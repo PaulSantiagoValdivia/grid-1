@@ -184,3 +184,11 @@ under half a second": it took 6.8 s and 8.7 s while the machine's load average w
 sessions running). `diff-size`'s timing guard failed once under the same load and passed alone.
 For a plan with no stairs the check adds one pass over the room outlines it already traced; it
 should be rerun on a quiet machine.
+
+## Merging main again (MSG-18, CNT-12)
+
+Both sides kept everywhere: stairs beside items (fixtures) in the schema's text limits, the id
+order, the drawing, the IFC (items, then stairs), the entity and thing kinds (`item`, `stair`)
+and the viewer's look; the out-of-line findings beside `opening_too_small_to_pass`, whose check
+now runs in the per-floor pass of the stair-aware routes; the limits keep both lines. No IFC
+golden file changed. After this merge every check passed, the two timing tests included.

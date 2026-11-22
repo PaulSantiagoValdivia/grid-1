@@ -116,6 +116,23 @@
   pointer-events: none;
 }
 
+/* A fixture (CNT-12): its symbol to scale, in the wall ink on the paper, over the room fill. */
+.canvas [data-part='fixture-ring'] {
+  fill: var(--plan-paper, #ffffff);
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 0.75;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.canvas [data-part='fixture-line'] {
+  fill: none;
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 0.75;
+  stroke-linecap: butt;
+  vector-effect: non-scaling-stroke;
+}
+
 /* A door whose swing runs into something: a small orange dot on the gap.
    Hovering it outlines what the door hits and says why. */
 .canvas [data-part='door-warning'] {

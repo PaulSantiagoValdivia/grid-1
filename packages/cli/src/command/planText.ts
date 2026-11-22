@@ -14,7 +14,7 @@ export const NAME_MAX = 120
 export const ID_MAX = 64
 /** The most characters the trace image's path may have. */
 export const IMAGE_PATH_MAX = 1024
-/** The most walls, rooms, openings, floors or stairs a plan may have, each. */
+/** The most walls, rooms, openings, floors, items or stairs a plan may have, each. */
 export const PARTS_MAX = 50_000
 /** The most walls a room's boundary may list. */
 export const BOUNDARY_MAX = 2_000
@@ -59,6 +59,8 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   floors: { id: 'id', name: 'name' },
   // LVL-3: a stair names the two floors it joins.
   stairs: { id: 'id', name: 'name', from: 'id', to: 'id' },
+  // CNT-12: a fixture's kind is held to an id's limit, its label to a name's.
+  items: { id: 'id', kind: 'id', label: 'name', floor: 'id' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

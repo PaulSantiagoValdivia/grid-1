@@ -48,6 +48,7 @@ function corpus(): [string, unknown][] {
     ['no exit', withoutOpening(flat(), 'front')],
     ['no door', withoutOpening(flat(), 'd_bb')],
     ['no route', withoutOpening(flat(), 'd_hb')],
+    ['a door too narrow to pass', edit(flat(), (copy) => void (copy.openings.find((o) => o.id === 'd_bb')!.width = 0.3))],
     ['a broken wall', edit(flat(), (copy) => {
       const bb = copy.walls.find((w) => w.id === 'bb')!
       bb.end = [...bb.start]
@@ -135,9 +136,9 @@ describe('every line', () => {
   it('carries a stable code of one style, the thing, its floor, found, needed, fix and its wording', () => {
     for (const [name, l] of lines) {
       const where = `${name}: ${l.code}`
-      expect(l.code, where).toMatch(/^(plan|floor|wall|room|opening|stair)\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      expect(l.code, where).toMatch(/^(plan|floor|wall|room|opening|item|stair)\/[a-z0-9]+(?:-[a-z0-9]+)*$/)
       expect(Object.keys(CODES), where).toContain(l.code)
-      expect(['plan', 'floor', 'wall', 'room', 'opening', 'stair'], where).toContain(l.thing.kind)
+      expect(['plan', 'floor', 'wall', 'room', 'opening', 'item', 'stair'], where).toContain(l.thing.kind)
       expect(l.thing.id === '', where).toBe(l.thing.kind === 'plan')
       expect(l.floor === null || typeof l.floor === 'string', where).toBe(true)
       // Only an opening on a wall the plan does not have is on no floor that can be told.
@@ -176,6 +177,19 @@ describe('every line', () => {
     const noDoor = result.lines.find((l) => l.code === 'room/no-door')!
     expect(noDoor).toMatchObject({ thing: { kind: 'room', id: 'bathroom' }, floor: 'ground', kind: 'finding' })
   })
+
+  it('names a door too small to pass by its id, with its size and Grid\'s own size, not a code figure (MSG-18)', () => {
+    const plan = edit(flat(), (copy) => void (copy.openings.find((o) => o.id === 'd_bb')!.width = 0.3))
+    const lines = inspectPlan(plan).lines.filter((l) => l.kind === 'finding')
+    expect(lines.map((l) => l.code)).toEqual(['opening/too-small-to-pass', 'room/no-door'])
+    expect(lines[0]).toMatchObject({
+      thing: { kind: 'opening', id: 'd_bb' },
+      also: ['bathroom', 'bedroom'],
+      message: 'An opening from "Bathroom" is too small for a person to pass through, so it is not a way through',
+      found: 'the door is 0.30 m wide',
+      needed: "at least 0.40 m wide: Grid's own size for a person to pass, not a code figure"
+    })
+  })
 })
 
 describe('the catalogue', () => {
@@ -188,7 +202,7 @@ describe('the catalogue', () => {
         if (entry === '__tests__' || entry === 'node_modules') continue
         if (statSync(path).isDirectory()) walk(path)
         else if (entry.endsWith('.ts')) {
-          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor|stair)\/[a-z-]+)'/g)) found.add(match[1]!)
+          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor|item|stair)\/[a-z-]+)'/g)) found.add(match[1]!)
         }
       }
     }

@@ -84,6 +84,8 @@ export const LINE_PX = {
   stair: 0.75,
   /** How long the head of a stair's arrow is. */
   stairArrow: 8,
+  /** A fixture's symbol (CNT-12). */
+  fixture: 0.75,
   doorLeaf: 1.5,
   doorArc: 0.75,
   dimension: 1,

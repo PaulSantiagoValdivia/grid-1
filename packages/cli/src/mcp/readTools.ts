@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { floorOf, itemFootprint, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkPlan, countsText, KIND_WORDS, thingText } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
@@ -23,6 +23,7 @@ import {
   FACES_RULE,
   fitInRoom,
   HEIGHT_RULE,
+  itemThing,
   measureRoom,
   openingThing,
   pointThing,
@@ -35,6 +36,7 @@ import {
   type Thing,
 } from '../quantities/measure'
 import { planSchedule } from '../quantities/schedule'
+import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
 import { areaText, csv, DISPLAY_UNITS, lengthText, sqFt, type DisplayUnits } from '../quantities/units'
@@ -61,6 +63,9 @@ import {
 } from './toolkit'
 
 const q = (text: string): string => JSON.stringify(text)
+
+/** CNT-12: what `fit` keeps clear of in a room with fixtures. */
+const FIT_CLEAR_RULE = 'What is fitted keeps clear of the room\'s fixtures: each takes the floor its footprint covers.'
 
 const UNITS_ARG: ArgSpec = {
   type: 'string',
@@ -248,7 +253,8 @@ const areasTool: GridTool = {
       if (several) lines.push(`Floor ${q(f.floor)}:`)
       for (const r of f.rooms) {
         const size = r.size ? `${lengthText(r.size[0], units)} × ${lengthText(r.size[1], units)}, ` : ''
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${size}${areaText(r.net, units)}${r.outside ? ', outside: not counted' : ''}`)
+        const free = r.free === undefined ? '' : `, free floor ${areaText(r.free, units)} (fixtures stand on ${areaText(r.fixtures!, units)})`
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${size}${areaText(r.net, units)}${free}${r.outside ? ', outside: not counted' : ''}`)
       }
     }
     lines.push(`Net: ${areaText(areas.net, units)}.`)
@@ -321,13 +327,13 @@ const scheduleTool: GridTool = {
   title: 'Door and window schedule',
   hint: 'read',
   description:
-    'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, or which doors are narrower than a width. '
+    'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, or how many toilets, basins, showers, baths or kitchen runs there are and where. '
     + 'It groups every door, window and doorless opening by type and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame or leaf, so a clear width is not known. '
     + 'Do not use for wall or plaster quantities (grid_takeoff). Units are metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
-    types: { type: 'array', description: 'Only these kinds. All three when left out.', examples: [['door'], ['door', 'opening']], items: { enum: ['door', 'window', 'opening'] }, minItems: 1, maxItems: 3 },
+    types: { type: 'array', description: 'Only these kinds: door, window, opening, or fixture for the toilets, basins, showers, baths and kitchen runs. All of them when left out.', examples: [['door'], ['door', 'opening'], ['fixture']], items: { enum: ['door', 'window', 'opening', 'fixture'] }, minItems: 1, maxItems: 4 },
     narrower_than: { type: 'number', description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
     units: UNITS_ARG,
     format: FORMAT_ARG,
@@ -336,24 +342,42 @@ const scheduleTool: GridTool = {
     rows: listSchema(objectSchema({ type: STRING, width: NUMBER, height: NUMBER, sill: NUMBER, count: NUMBER, items: { type: 'array' } })),
     counts: objectSchema({ door: NUMBER, window: NUMBER, opening: NUMBER }),
     rule: STRING,
-  }),
+    fixtures: listSchema(objectSchema({ id: STRING, kind: STRING, label: STRING, floor: STRING, room: { type: ['string', 'null'] }, size: { type: 'array' }, height: NUMBER })),
+    fixtureCounts: { type: 'object' },
+  }, ['rows', 'counts', 'rule']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
+    const types = args['types'] as ('door' | 'window' | 'opening' | 'fixture')[] | undefined
+    const openingTypes = types?.filter((t): t is 'door' | 'window' | 'opening' => t !== 'fixture')
     const s = planSchedule(survey, {
       ...(floor === undefined ? {} : { floors: [floor] }),
-      ...(args['types'] === undefined ? {} : { types: args['types'] as ('door' | 'window' | 'opening')[] }),
+      ...(openingTypes === undefined ? {} : { types: openingTypes }),
       ...(args['narrower_than'] === undefined ? {} : { narrowerThan: args['narrower_than'] as number }),
     })
+    // CNT-12: the fixtures by kind, with the room each stands in. A width says nothing of them.
+    const withFixtures = (types === undefined || types.includes('fixture')) && args['narrower_than'] === undefined
+    const f = withFixtures ? planFixtures(survey.plan, floor === undefined ? undefined : [floor]) : null
     const name = (id: string): string => (survey.facts.rooms.has(id) ? q(survey.facts.rooms.get(id)!.name) : id)
-    const data = { rows: s.rows, counts: s.counts, rule: s.rule }
+    const fixtureData = f === null || f.rows.length === 0 ? {} : { fixtures: f.rows.map((r) => ({ id: r.id, kind: r.kind, label: r.label, floor: r.floor, room: r.room, size: r.size, height: r.height })), fixtureCounts: f.counts }
+    const data = { rows: s.rows, counts: s.counts, rule: s.rule, ...fixtureData }
     if (args['format'] === 'csv') {
       const rows = s.rows.flatMap((row) => row.items.map((item) => [row.type, item.id, row.width, row.height, row.sill, item.floor, name(item.between[0]).replace(/"/g, ''), name(item.between[1]).replace(/"/g, '')]))
+      for (const r of f?.rows ?? []) rows.push([r.kind, r.id, r.size[0], r.height, '', r.floor, r.room === null ? 'no room' : name(r.room).replace(/"/g, ''), ''])
       return { text: csv(['type', 'id', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2'], rows), data }
     }
-    const lines = s.rows.map((row) => `${row.count} × ${row.type} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units)}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
-    if (lines.length === 0) lines.push(args['narrower_than'] !== undefined ? `Nothing of that kind is narrower than ${m(args['narrower_than'] as number)} m.` : 'The plan has no openings of that kind.')
-    lines.push(`In all: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
+    const lines = types?.length === 1 && types[0] === 'fixture' ? [] : s.rows.map((row) => `${row.count} × ${row.type} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units)}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
+    const onlyFixtures = types !== undefined && types.every((t) => t === 'fixture')
+    if (lines.length === 0 && !onlyFixtures) lines.push(args['narrower_than'] !== undefined ? `Nothing of that kind is narrower than ${m(args['narrower_than'] as number)} m.` : 'The plan has no openings of that kind.')
+    if (!onlyFixtures) lines.push(`In all: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
+    if (f !== null && (f.rows.length > 0 || onlyFixtures)) {
+      lines.push(`Fixtures: ${fixtureCountText(f.counts)}.`)
+      for (const r of f.rows) {
+        lines.push(`  ${r.label} ${q(r.id)} (${r.kind}), ${r.room === null ? 'in no room' : `in ${name(r.room)}`}: ${lengthText(r.size[0], units)} wide × ${lengthText(r.size[1], units)} deep × ${lengthText(r.height, units)} high`)
+      }
+      if (f.leftOut.length > 0) lines.push(`Left out, as grid_check says: ${f.leftOut.map(q).join(', ')}.`)
+      lines.push(FIXTURE_RULES.count)
+    }
     return { text: lines.join('\n'), data }
   },
 }
@@ -382,6 +406,12 @@ function thingOf(survey: Survey, named: ReturnType<typeof thingArg>): { thing: T
     return { thing: roomThing(room), label: `room ${q(room.facts.name)}` }
   }
   if (named.kind === 'wall') return { thing: wallThing(plan.walls.find((w) => w.id === named.id)!), label: `wall ${q(named.id)}` }
+  if (named.kind === 'item') {
+    const item = (plan.items ?? []).find((i) => i.id === named.id)!
+    const fixture = planFixtures(plan).rows.find((row) => row.id === item.id)
+    if (!fixture) throw new ToolRefusal(`Item ${q(item.id)} is left out of the drawing, so Grid cannot measure it; grid_check says why.`)
+    return { thing: itemThing(item), label: `${fixture.label} ${q(item.id)}` }
+  }
   const opening = plan.openings.find((o) => o.id === named.id)!
   const wall = plan.walls.find((w) => w.id === opening.wall)
   if (!wall) throw new ToolRefusal(`The wall of ${opening.type} ${q(opening.id)} is not in the plan; grid_check says so.`)
@@ -394,14 +424,14 @@ const measureTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
-    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under. '
-    + 'It measures the empty room between wall faces: the plan holds no furniture, fixtures or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas) or for what a building code asks (grid_check). Units are metres.',
+    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door it passes and the narrowest one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under. '
+    + 'It measures the room between wall faces: what=fit keeps clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas) or for what a building code asks (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
     what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow'], description: 'What to measure: room, between, wall, fit, route or narrow.', examples: ['between', 'fit', 'route'] },
     room: { type: 'string', id: true, description: 'For room, fit and route: the room id, where the route starts.', examples: ['kitchen', 'hall'] },
-    from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening or room to measure from.', examples: ['front-door', 'w-west'] },
-    to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
+    from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening, fixture or room to measure from.', examples: ['front-door', 'w-west'] },
+    to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening, fixture or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
     x: { type: 'number', description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
     y: { type: 'number', description: 'For between, with x: the point\'s y on the drawing in metres.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
     wall: { type: 'string', id: true, description: 'For wall: the wall id.', examples: ['w-south'] },
@@ -446,7 +476,7 @@ const measureTool: GridTool = {
       }
     }
     if (what === 'between') {
-      if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening or room.')
+      if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening, fixture or room.')
       const hasPoint = args['x'] !== undefined || args['y'] !== undefined
       if (hasPoint === (args['to'] !== undefined)) throw new ToolRefusal('what=between takes to, or x and y for a point, after from.')
       if (hasPoint && (args['x'] === undefined || args['y'] === undefined)) throw new ToolRefusal('A point needs both x and y.')
@@ -493,11 +523,16 @@ const measureTool: GridTool = {
       const hasBox = args['width'] !== undefined || args['depth'] !== undefined
       if (hasBox === (args['diameter'] !== undefined)) throw new ToolRefusal('what=fit takes width and depth for a box, or diameter for a circle.')
       if (hasBox && (args['width'] === undefined || args['depth'] === undefined)) throw new ToolRefusal('A box needs both width and depth.')
-      const fit = fitInRoom(room, hasBox ? { width: args['width'] as number, depth: args['depth'] as number } : { diameter: args['diameter'] as number })
+      // CNT-12: the room's fixtures take their floor, so what is fitted keeps clear of them.
+      const fixtures = planFixtures(survey.plan).rows.filter((row) => row.room === room.facts.id)
+      const footprints = fixtures.map((row) => itemFootprint({ id: row.id, kind: row.kind, at: [row.at[0], row.at[1]], size: [row.size[0], row.size[1]], height: row.height, turn: row.turn }))
+      const fit = fitInRoom(room, hasBox ? { width: args['width'] as number, depth: args['depth'] as number } : { diameter: args['diameter'] as number }, footprints)
       const where = fit.at ? `, for example centred at (${m(fit.at.x)}, ${m(fit.at.y)})${fit.turned ? ', turned a quarter' : ''}` : ''
+      const clear = fixtures.length === 0 ? '' : `, clear of its ${fixtures.length === 1 ? 'fixture' : `${fixtures.length} fixtures`} (${fixtures.map((f) => `${f.label} ${q(f.id)}`).join(', ')})`
+      const rule = fixtures.length === 0 ? EMPTY_ROOM_RULE : `${FIT_CLEAR_RULE} ${EMPTY_ROOM_RULE}`
       return {
-        text: `${fit.what} ${fit.fits ? 'fits' : 'does not fit'} in ${q(room.facts.name)}${where}. The widest circle the room holds is ${L(fit.widestCircle)} across.\n${EMPTY_ROOM_RULE}`,
-        data: { what, answer: { room: room.facts.id, ...fit }, rule: EMPTY_ROOM_RULE },
+        text: `${fit.what} ${fit.fits ? 'fits' : 'does not fit'} in ${q(room.facts.name)}${clear}${where}. The widest circle ${fixtures.length === 0 ? 'the room holds' : 'its free floor holds'} is ${L(fit.widestCircle)} across.\n${rule}`,
+        data: { what, answer: { room: room.facts.id, ...fit, ...(fixtures.length === 0 ? {} : { clearOf: fixtures.map((f) => f.id) }) }, rule },
       }
     }
     if (what === 'route') {

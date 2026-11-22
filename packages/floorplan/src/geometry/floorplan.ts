@@ -23,6 +23,8 @@ import { planSteps } from './steps'
 import type { RiserLine, StairLayout } from './stairs'
 import { planStairs } from './stairs'
 import { wholePlan } from './floors'
+import type { ItemKind } from './items'
+import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
 
 export interface PlanWall {
   readonly id: string
@@ -76,6 +78,21 @@ export interface PlanOpening {
   readonly hinge?: Opening['hinge']
   /** The face a door opens toward, when the plan states it (`left` is the face `normal` points at). */
   readonly swing?: Opening['swing']
+}
+
+/** A fixture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
+export interface PlanItem {
+  readonly id: string
+  readonly kind: ItemKind
+  /** What it is called: its label, else its kind's word. */
+  readonly label: string
+  /** The room it stands in, or null. */
+  readonly room: string | null
+  /** The floor it covers, counter-clockwise. */
+  readonly outline: readonly Vec2[]
+  /** Rings to fill with the paper and outline, in order, then lines over them (`itemSymbol`). */
+  readonly rings: readonly (readonly Vec2[])[]
+  readonly lines: readonly (readonly Vec2[])[]
 }
 
 /**
@@ -136,6 +153,8 @@ export interface PlanDrawing {
    * when the plan states none.
    */
   readonly stairs: readonly PlanStair[]
+  /** The fixtures (CNT-12), drawn over the room fills and under the walls. Empty when the plan has none. */
+  readonly items: readonly PlanItem[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -263,12 +282,33 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
     extent.push(...polygon)
   }
 
+  const items: PlanItem[] = []
+  if ((plan.items ?? []).length > 0) {
+    const shapes = roomShapes(index, broken)
+    for (const item of plan.items ?? []) {
+      if (broken.has(item.id) || !isItemKind(item.kind)) continue
+      const kind = item.kind
+      const outline = itemFootprint(item)
+      const symbol = itemSymbol({ ...item, kind })
+      items.push({
+        id: item.id,
+        kind,
+        label: item.label ?? ITEM_KIND_WORDS[kind],
+        room: itemRoom(item, shapes)?.id ?? null,
+        outline,
+        rings: symbol.rings,
+        lines: symbol.lines
+      })
+      extent.push(...outline)
+    }
+  }
+
   // The stairs that start or end here, read from the plan this floor was cut from.
   const floor = wholePlan(plan).floor
   const stairs = (plan.stairs ?? []).length === 0 ? [] : planStairs(plan, floor === null ? () => broken : brokenOnFloor).stairs.map((stair) => planStair(stair, floor))
   for (const stair of stairs) for (const flight of stair.flights) extent.push(...flight.outline)
 
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), stairs, bounds: computeBounds(extent), issues }
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, stairs, bounds: computeBounds(extent), issues }
 }
 
 /** Envelope with a margin, in meters, so the drawing is not flush to the edge. */

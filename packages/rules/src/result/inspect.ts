@@ -13,6 +13,7 @@
 
 import {
   floorOf,
+  itemNoun,
   planFloors,
   validateDoorSweeps,
   validatePlan,
@@ -30,7 +31,7 @@ import { LINE_KINDS, RESULT_VERSION, type GridResult, type LineKind, type Result
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
 
-const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', stair: 'Stair' }
+const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item', stair: 'Stair' }
 const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as const
 /** An id from a file the format refused, when it is one Grid would read: else it is not repeated. */
 const safeId = (value: unknown): string | null =>
@@ -42,6 +43,7 @@ const FINDING_CODES: Record<FindingCode, string> = {
   no_route_to_exit: 'room/no-route-out',
   door_to_undrawn_space: 'opening/to-undrawn-space',
   door_to_outside_above_ground: 'opening/door-out-above-ground',
+  opening_too_small_to_pass: 'opening/too-small-to-pass',
   room_too_small: 'room/too-small',
   no_escape_opening: 'room/no-escape-opening',
   escape_window_too_small: 'room/escape-window-too-small',
@@ -91,7 +93,7 @@ function placeText(path: readonly (string | number)[]): string {
 function partAt(raw: Record<string, unknown>, path: readonly (string | number)[]): { thing: Thing; floor: string | null; label: string } {
   const whole = { thing: { kind: 'plan' as const, id: '' }, floor: null, label: NOUN.plan }
   const [list, at] = path
-  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', stairs: 'stair' }
+  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item', stairs: 'stair' }
   if (typeof list !== 'string' || typeof at !== 'number' || !Object.hasOwn(kinds, list)) return whole
   const items = raw[list]
   const item = Array.isArray(items) ? (items[at] as unknown) : undefined
@@ -184,6 +186,8 @@ function namesOf(plan: FloorPlan): Names {
   for (const opening of plan.openings) if (!openings.has(opening.id)) openings.set(opening.id, opening)
   const stairs = new Map<string, NonNullable<FloorPlan['stairs']>[number]>()
   for (const stair of plan.stairs ?? []) if (!stairs.has(stair.id)) stairs.set(stair.id, stair)
+  const items = new Map<string, NonNullable<FloorPlan['items']>[number]>()
+  for (const item of plan.items ?? []) if (!items.has(item.id)) items.set(item.id, item)
   const floorName = (id: string): string => floorNames.get(id) ?? id
   const roomName = (id: string): string => rooms.get(id)?.name || id
   return {
@@ -218,6 +222,11 @@ function namesOf(plan: FloorPlan): Names {
             floor: wall ? floorOf(wall) : null
           }
         }
+        case 'item': {
+          // A fixture by its kind: `Toilet "wc1"` (CNT-12). One of a kind Grid does not hold is an `Item`.
+          const item = items.get(id)
+          return { label: item ? itemNoun(item) : `${NOUN.item} ${quoted(id)}`, name: id, floor: item ? floorOf(item) : null }
+        }
       }
     }
   }
@@ -251,7 +260,10 @@ function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: Readonl
   const thing: Thing =
     finding.code === 'no_exit'
       ? { kind: 'floor', id: finding.floor }
-      : (finding.code === 'door_to_undrawn_space' || finding.code === 'door_to_outside_above_ground') && finding.openings[0] !== undefined
+      : (finding.code === 'door_to_undrawn_space' ||
+          finding.code === 'door_to_outside_above_ground' ||
+          finding.code === 'opening_too_small_to_pass') &&
+        finding.openings[0] !== undefined
       ? { kind: 'opening', id: finding.openings[0] }
       : { kind: 'room', id: finding.rooms[0] ?? '' }
   const room = finding.rooms[0]

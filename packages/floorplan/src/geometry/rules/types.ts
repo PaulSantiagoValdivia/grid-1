@@ -58,6 +58,11 @@ export type FindingCode =
   | 'stair_out_of_line'
   /** LVL-3: the same for rooms used as a lift: the shaft is out of line. */
   | 'lift_out_of_line'
+  /**
+   * MSG-18: a door or doorless opening no person fits through, by Grid's own sizes (not code
+   * figures): too narrow, too low, or with its sill above the floor. It is not a way through.
+   */
+  | 'opening_too_small_to_pass'
 
 /** One way through from a room: the room on its other side, and the opening or virtual wall. */
 export interface RouteStep {
@@ -83,6 +88,17 @@ export interface RuleFinding {
    * the message says it. Optional, like `through` (MSG-1: the notes word it from this).
    */
   readonly elevation?: number
+  /**
+   * Only on `opening_too_small_to_pass`: whether it is a door or a doorless opening, what it falls short of, its size there as drawn
+   * in m (to the digits that keep it on its side of the size, ARE-7), and Grid's own size, which
+   * is not a code figure. Optional, like `through`.
+   */
+  readonly passage?: {
+    readonly kind: 'door' | 'opening'
+    readonly short: 'width' | 'height' | 'sill'
+    readonly drawn: number
+    readonly passable: number
+  }
 }
 
 export type NotCheckedReason =

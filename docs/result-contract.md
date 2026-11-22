@@ -53,7 +53,7 @@ record. It never throws: a check that fails inside Grid becomes a line
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding` or `not-checked`. |
-| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening or a stair (LVL-3). |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
 | `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
@@ -80,7 +80,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 ## The codes
 
 `{thing}` is the part as a line names it: `Wall "w1"`, `Door "d1"`, `Room "Kitchen"`, `Floor
-"Ground floor"` or `The plan`. Names in quotes are the plan's own text.
+"Ground floor"`, a fixture by its kind (`Toilet "wc1"`, CNT-12) or `The plan`. Names in quotes are the plan's own text.
 
 | Code | Wording | Needed |
 |---|---|---|
@@ -152,6 +152,14 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `stair/too-few-risers` | {thing} states fewer risers than its flights need | at least two risers on each flight |
 | `stair/end-in-no-room` | {thing} starts or ends in no room, so it joins nothing there | each end of its walking line in a room |
 | `stair/duplicate-id` | {thing} shares its id with another stair | an id of its own for each stair |
+| `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
+| `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
+| `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
+| `item/duplicate-id` | {thing} has an id another part of the plan has too | an id of its own on every item |
+| `item/unknown-floor` | {thing} is on a floor the plan does not have | a floor of the plan |
+| `item/outside-rooms` | {thing} stands in no room | its middle inside a room on its floor |
+| `item/into-wall` | {thing} runs into a wall | its footprint clear of the walls, against their faces at most |
+| `item/too-tall` | {thing} is taller than the room it stands in | a fixture no higher than its room |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
@@ -165,6 +173,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
+| `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to pass through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to pass, not a code figure |
 | `room/too-small` | "{name}" is under {minimum} m² | at least {minimum} m² |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
 | `room/escape-window-too-small` | The window of "{name}" is too small to escape through | a window someone can climb through |
@@ -225,6 +234,27 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: MSG-18
+
+- New finding `opening/too-small-to-pass`: a door or doorless opening narrower than 0.4 m,
+  lower than 1.2 m, or with its sill more than 0.3 m above its floor is named and is no longer
+  a way through. These are Grid's own sizes (`passableWidth`, `passableHeight`,
+  `passableSill` in the tolerance table), not code figures. A room or floor that had only such
+  an opening now also gets `room/no-door` or `floor/no-exit`. The finding carries `passage`:
+  what it falls short of, its size there as drawn and the passable size.
+- The limits line "Which way a door opens, and how wide doors and corridors are, are not
+  checked" now ends ", beyond whether a person fits through a door at all".
+
+### 2026-11-22: fixtures (CNT-12)
+
+- A line can be about a fixture: `thing.kind` is `item`, its id the item's id, and `{thing}` its
+  kind and id (`Toilet "wc1"`). Version 1 still: a kind of thing was added, none changed.
+- New codes, all from the plan's `items`: `item/too-large`, `item/no-size`, `item/unknown-kind`,
+  `item/duplicate-id` and `item/unknown-floor` leave the fixture out; `item/outside-rooms`,
+  `item/into-wall` and `item/too-tall` are worth a look. A kind the plan does not hold yet (a
+  table, a chair) is `item/unknown-kind`: the fixture is left out and nothing else changes.
+- A refusal inside `items` names the item (`thing.kind` `item`) when its id can be read.
 
 ### 2026-11-22: stairs (LVL-3)
 

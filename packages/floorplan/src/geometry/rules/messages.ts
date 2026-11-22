@@ -10,6 +10,8 @@
  */
 
 import { quoted } from '../../types/planText'
+import { metresText } from '../rounding'
+import type { RuleFinding } from './types'
 
 /** A run of a wording; `name` marks a room or floor name as the plan writes it. */
 export interface WordingPart {
@@ -96,7 +98,25 @@ export const wordings = {
     words('A door from '),
     name(room),
     words(` leads outside ${height} m above the ground, so it is not a way out`)
+  ],
+  /** MSG-18: a door or doorless opening no person fits through. Its size is the finding's `passage`. */
+  openingTooSmall: (room: string): WordingPart[] => [
+    words('An opening from '),
+    name(room),
+    words(' is too small for a person to pass through, so it is not a way through')
   ]
+}
+
+/**
+ * What a door or opening no person fits through falls short at, as drawn (MSG-18): "It is 0.30 m
+ * wide", "Its sill is 1.50 m above the floor". `drawn` is already printed against the size.
+ */
+export function passageText(passage: NonNullable<RuleFinding['passage']>): string {
+  const size = metresText(passage.drawn, 2, passage.passable)
+  const what = passage.kind === 'door' ? 'The door' : 'The opening'
+  return passage.short === 'sill'
+    ? `${what} has its sill ${size} m above the floor`
+    : `${what} is ${size} m ${passage.short === 'width' ? 'wide' : 'high'}`
 }
 
 /** The same wordings as report lines. */
@@ -111,5 +131,6 @@ export const messages = {
   cannotBeDrawn: (floor: string, rooms: readonly string[]): string =>
     wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor)),
   doorToUndrawnSpace: (room: string): string => wordingText(wordings.doorToUndrawnSpace(room)),
-  doorOutAboveGround: (room: string, height: string): string => wordingText(wordings.doorOutAboveGround(room, height))
+  doorOutAboveGround: (room: string, height: string): string => wordingText(wordings.doorOutAboveGround(room, height)),
+  openingTooSmall: (room: string): string => wordingText(wordings.openingTooSmall(room))
 }
