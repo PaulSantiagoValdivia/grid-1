@@ -111,7 +111,7 @@ describe('a field Grid does not know', () => {
     raw['openings'][0].colour = 'red'
     raw['floors'] = [{ id: 'ground', name: 'Ground', level: 0, colour: 'red' }]
     raw['referenceImage'] = { path: 'a.png', scale: 2 }
-    raw['site'] = { area: 300 }
+    raw['plot'] = { area: 300 }
     // In the order the file gives them: this plan lists its rooms and openings first.
     expect(fields(readingNotes(raw)).map((n) => [n.at, n.field, n.part])).toEqual([
       ['rooms[0]', 'colour', { list: 'rooms', index: 0 }],
@@ -119,7 +119,7 @@ describe('a field Grid does not know', () => {
       ['walls[1]', 'colour', { list: 'walls', index: 1 }],
       ['floors[0]', 'colour', { list: 'floors', index: 0 }],
       ['referenceImage', 'scale', null],
-      ['', 'site', null]
+      ['', 'plot', null]
     ])
   })
 

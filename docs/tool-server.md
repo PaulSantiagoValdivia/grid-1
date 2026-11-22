@@ -7,6 +7,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 - [The tools](#the-tools)
 - [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
+- [A note set aside as seen](#a-note-set-aside-as-seen)
 - [Reporting a problem](#reporting-a-problem)
 - [Protocol versions](#protocol-versions)
 
@@ -14,7 +15,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export and the sheet, and last the nine that
+requests people make most, with the problem report last of them, then the preview, the export, the sheet and the seen mark, and last the nine that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
@@ -25,14 +26,15 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), in metres or feet, as text or CSV, each figure with its rule stated |
 | `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); text or CSV |
-| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; and what is narrower than the person's own figure |
+| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; what is narrower than the person's own figure; and which way each room, outside wall and window faces by the plan's north |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`; always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
-| `grid_check` | The check, short, always labelled "General guidance, not your local rules" |
+| `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules"; the notes the person set aside are listed under Seen |
 | `grid_report_problem` | A draft issue about a failure the agent met, for the person to file or not: Grid sends nothing (see below) |
 | `grid_preview` | Points the live preview at a floor or room of the plan |
 | `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/`, and says what the file leaves out of the plan (the file says it too); a file that would hold nothing of the plan is refused |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
+| `grid_mark_seen` | Sets a note of `grid_check` aside as seen, with the person's reason and the name or role they give, in `plan.seen.json` beside the plan; or takes the mark off (see below) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
@@ -107,6 +109,21 @@ A room may state its height, floor to ceiling, in metres:
 
 A wall that states no height gets 2.7 m, which cannot be told from a stated 2.7 m. The plan
 comparison in `@ongrid/floorplan` (`diffPlans`) reports a room height stated, changed or taken out.
+
+## A note set aside as seen
+
+`grid_check` answers short by default (MSG-10): the notes, the figures they used, what each
+check looked at in counts, and one line on what `full: true` adds (the checks run, every figure
+and what these checks never look at). Its data is the whole record either way.
+
+When the person has read a note and asks to set it aside, `grid_mark_seen` marks it: the note's
+`line` number and `code` as `grid_check` gave them (with the same `country`), the person's
+`reason`, and `by`, the name or role they give. An agent never guesses either, and never marks a
+note the person did not ask about. The tool writes `plan.seen.json` beside the plan, never the
+plan, and refuses a number that now names a note of another code. A seen note is not dealt
+with: `grid_check` still lists it, under Seen, with the reason and who marked it, and lists it as
+new again, saying so, as soon as one of its parts changes. `unmark: true` takes a mark off. The
+marks file and its format are in the [result contract](result-contract.md#the-short-report-and-seen-notes).
 
 ## Reporting a problem
 

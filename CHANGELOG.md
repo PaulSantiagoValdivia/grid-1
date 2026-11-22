@@ -14,6 +14,7 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- `grid check` and `grid_check` are short by default and about your plan: what to look at, the figures those notes used, and what each check looked at. `--full` (or `full` for the tool) gives the whole report. A note you have looked at can be set aside as seen, with why and who (`grid check --seen 3 --reason … --by …`, or `grid_mark_seen`): it stays listed under Seen, in `plan.seen.json` beside the plan, and comes back as new when its part of the plan changes (MSG-10).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 
 Grid has not been released yet. The first release will hold:
@@ -42,7 +43,7 @@ Grid has not been released yet. The first release will hold:
   the tests, the licence check and the scoreboard.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 21 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 22 tools.
 - A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
   all floors) and a door and window schedule that lists each opening once with the two rooms it
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.
@@ -54,6 +55,9 @@ Grid has not been released yet. The first release will hold:
   wrong unit are listed, never filled.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.
+- A plan can say where north is, which way its y runs, which side is its front and where it
+  sits. The drawing then shows a north arrow, the IFC file states that north (and no north for
+  a plan that states none), and an agent can ask which rooms face east.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
   only the floor it shows.
 - `grid check` says where an opening does not fit: a door or window that runs into a wall meeting

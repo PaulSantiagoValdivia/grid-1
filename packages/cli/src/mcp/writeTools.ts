@@ -413,7 +413,7 @@ const mirrorTool: GridTool = {
   hint: 'change-plan',
   description:
     'Use this when the person asks to flip the plan, mirror it, or have it the other way round: "the lounge is on the right as you come in, flip it". '
-    + 'left-right swaps east and west, top-bottom swaps north and south. Every room keeps its size and every door keeps opening into the same room. '
+    + 'left-right swaps east and west, top-bottom swaps north and south. Every room keeps its size and every door keeps opening into the same room. A north the plan states is mirrored too, so the swap is the real one. '
     + 'Do not use to turn the drawing for a picture (grid_view). It replaces the plan file unless out is given.',
   args: {
     plan: PLAN_ARG,

@@ -125,6 +125,15 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
     const problem = textProblem(title, 'name')
     if (problem) return `title ${problem}`
   }
+  // CNT-3: the front names a wall or an opening by its id.
+  const front = raw['front']
+  if (isObject(front)) {
+    for (const field of ['wall', 'opening']) {
+      const id = front[field]
+      const problem = typeof id === 'string' ? textProblem(id, 'id') : null
+      if (problem) return `front.${field} ${problem}`
+    }
+  }
   const image = raw['referenceImage']
 
   if (isObject(image) && typeof image['path'] === 'string') {

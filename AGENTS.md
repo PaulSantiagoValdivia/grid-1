@@ -53,16 +53,19 @@ Notes for agents and people changing this repository.
   library's wall faults and makes the chosen fixes on the plan file as read. `describe` (VEW-5, `src/describe/`)
   prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`). A
   folder holding `grid.json` (`grid init` writes it) is a Grid project: there `check`,
-  `describe`, `draw`, `export` and `sheet` read its `plan.json` when no plan is named. `npm run build` bundles it with esbuild into
+  `describe`, `draw`, `export` and `sheet` read its `plan.json` when no plan is named. `check`
+  (MSG-10) is short by default and whole with `--full`; `--seen <n>` sets a note aside as seen in
+  `<plan>.seen.json` beside the plan (`src/seen/marks.ts`), keyed to the content of the parts the
+  note is about, so a change to one of them makes it new again. A seen note is always listed. `npm run build` bundles it with esbuild into
   `packages/cli/dist/grid.mjs`, which is git-ignored. The `grid` and `ongrid` bins point to
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 21 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 22 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
-  export, the sheet, and the tools that change the plan). Each is written once in `readTools.ts`,
-  `writeTools.ts` or `reportTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
+  export, the sheet, the seen mark (MSG-10, `seenTool.ts`), and the tools that change the plan).
+  Each is written once in `readTools.ts`, `writeTools.ts`, `reportTool.ts` or `seenTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
   check. The measuring is in `src/quantities/`, the changes in `src/edit/`, the views in
   `src/draw/views.ts`. `src/mcp/__tests__/tools.test.ts` fails when a tool loses its prefix,
   title, hint, examples or output schema, or when the order changes; `replay/replay.test.ts`
