@@ -52,7 +52,10 @@ stays listed under "seen", and comes back as new when its part of the plan chang
   opening with its wall; a floor with everything on it (its entry in `floors`, walls, rooms,
   openings, fixtures, stairs, notes and sketch); the whole plan for a line about the plan that
   names no part. An `also` id that is no wall, room, opening, fixture, stair or floor (a sketch
-  item, a note on the drawing, or a part gone) is hashed as what it is, or as missing. A mark
+  item, a note on the drawing, or a part gone) is hashed as what it is, or as missing. Each
+  part's hash holds the part as Grid reads it **and its entry in the plan file as written** (every
+  entry with its id in the list for its kind; the whole file for the plan), so a value Grid does
+  not read or reads otherwise is part of the mark too (see "The gap found in review" below). A mark
   holds while every hash is the same and no part was added or lost; otherwise the note is `back`:
   new again, naming the parts that changed. Keys in another order, or the file written again by
   Grid unchanged, keep the mark.
@@ -81,6 +84,26 @@ stays listed under "seen", and comes back as new when its part of the plan chang
   report ("The seen marks were not read: plan.seen.json is not JSON. Every note is listed as
   new."), never fails a check, and is never written over: marking is refused until it is fixed
   or taken out.
+
+### The gap found in review (fixed)
+
+The coordinator marked `plan/unknown-field` seen on the flat with `"extra": 1` at the top, changed
+it to `"extra": 2`, and the note stayed seen: the hash was made from the plan as read, and the
+reader leaves fields it does not know out. The same held for every note whose `found` names a
+value from the file that the plan as read does not keep: `plan/unknown-field` and
+`plan/unknown-use`, and MSG-6's `plan/value-left-out`, `plan/part-left-out` and
+`plan/read-as-meant` (the plan as read holds the default, nothing, or the value as meant).
+
+Fixed in 9f36820: a mark is made from the plan and the file's own text (`SeenSource`, the loaded
+plan), and each part's hash covers `{ read, written }`, where `written` is the part's entry in the
+file read by Grid's one text reader (`readPlanText`, so NaN and a decimal comma read as they do
+for the check). A plan made in memory, with no text, hashes the plan as read, as before. Four
+new cases in `shortReport.test.ts`, each marking the note, reading it again unchanged (still
+seen), then changing only the value in the file (back, naming the part): `"extra"` 1 → 2 at the
+top (the plan), an unknown `colour` on a wall red → blue, a door's `swing` Grid leaves out
+`sideways` → `upwards`, and a wall `height` written as text `"2.6"` → `"2.7"`. `plan/unknown-use`
+and `plan/part-left-out` go the same way (the room's or the part's own entry in the file) and
+have no case of their own.
 
 ### Docs
 
@@ -165,6 +188,10 @@ Each of these is the reversible choice I took overnight.
   plan": a room's outline walls and an opening's wall count, so moving a wall of a small room
   brings its note back; a floor note comes back on any change on that floor; a plan note that
   names no part comes back on any change to the plan.
+- **A part's content includes its text as written in the file**, not only what Grid reads (the
+  gap above). So writing a number as `2.60` instead of `2.6`, or moving a field's place, keeps the
+  mark (canonical JSON, the same number), but a hand edit that turns `2.6` into `"2.6"` brings the
+  note back, as it should for a read-as-meant note and harmlessly for others.
 - **A mark whose parts changed is not deleted** from the file: reading a check never writes, and
   `grid_check` is a read-only tool. It holds no more, and the report says the note is new again.
   Marking it again replaces it.
@@ -186,6 +213,31 @@ Each of these is the reversible choice I took overnight.
   a plan no one has marked gives the same JSON as before (a UTF-16 test compares two such outputs).
 
 ## Checks run
+
+### After merging main at ef88ec9 (ARE-13), on the branch at 9f36820
+
+`git merge --no-edit main` (041383d) had two conflicts, both resolved by keeping both sides:
+
+- `packages/cli/src/mcp/readTools.ts`, the imports: ARE-13's `PATH_MAX` import kept beside
+  MSG-10's `figureUsedText`, check and seen imports.
+- `docs/result-contract.md`, the changelog for agents: both new entries kept, MSG-10's first,
+  then ARE-13's.
+
+Everything else merged cleanly (ARE-13's `rates` path argument on `grid_takeoff` and its slot in
+`everyPath.e2e.test.ts`, the changelogs, `docs/tool-server.md`). The tool count stays 22: ARE-13
+added arguments, not a tool.
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- `npm run scoreboard`: "Same as the stored figures" (123.6 s).
+- The affected tests, `timeout 1500 npx vitest run packages/cli packages/rules
+  packages/floorplan/src/geometry docs scoreboard/__tests__/approvalWords.test.ts
+  scoreboard/__tests__/retell.test.ts --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`
+  (the merge touched `packages/cli` and `packages/floorplan/src/geometry`): 160 files, 3,937
+  tests passed, 2 skipped, in 448 s. The full suite was not run again after the merge.
+- The flat's default report, measured again after the merge and the fix: `grid check` 988 bytes,
+  `grid_check` 973 bytes, as before (ARE-13 changes no line of the check). The pins are unchanged.
+
+### Before the merge, on the branch at 4a34ea2
 
 `git merge --no-edit main`: already up to date (main is still at 6fce2ae, the branch point).
 Then, on the branch at 4a34ea2:
