@@ -11,12 +11,14 @@ import { planFloors, planForFloor } from '../floors'
 import { validatePlan } from '../validate'
 import { floorElevations } from '../elevations'
 import { limit } from '../tolerances'
+import type { ShortOf } from './graph'
 import { metresText } from '../rounding'
 import { LIMITS, RULES } from './catalogue'
 import { floorGraph } from './graph'
 import type { FloorGraph } from './graph'
 import { messages } from './messages'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from './types'
+import type { Opening } from '../plan'
 import { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from './types'
 
 const RULE_OF: Record<FindingCode, string> = {
@@ -24,7 +26,8 @@ const RULE_OF: Record<FindingCode, string> = {
   room_without_door: 'room-has-door',
   no_route_to_exit: 'room-reaches-exit',
   door_to_undrawn_space: 'door-leads-somewhere',
-  door_to_outside_above_ground: 'door-leads-somewhere'
+  door_to_outside_above_ground: 'door-leads-somewhere',
+  opening_too_small_to_pass: 'room-has-door'
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -113,6 +116,30 @@ function routeFindings(
   return { findings, wayOutNotDrawn }
 }
 
+/** The finding for a door or doorless opening no person fits through (MSG-18). */
+function tooSmallFinding(
+  opening: Opening,
+  rooms: readonly string[],
+  short: ShortOf,
+  floor: string,
+  roomName: (id: string) => string
+): RuleFinding {
+  const key = short === 'width' ? 'passableWidth' : short === 'height' ? 'passableHeight' : 'passableSill'
+  const passable = limit(key)
+  const value = short === 'width' ? opening.width : short === 'height' ? opening.height : opening.sill
+  const size = metresText(value, 2, passable)
+  const kind = opening.type === 'door' ? 'door' : 'opening'
+  return {
+    code: 'opening_too_small_to_pass',
+    ruleId: RULE_OF.opening_too_small_to_pass,
+    floor,
+    rooms: [...rooms],
+    openings: [opening.id],
+    message: messages.openingTooSmall(roomName(rooms[0]!)),
+    passage: { kind, short, drawn: Number(size), passable }
+  }
+}
+
 /**
  * The storey without the walls and openings validation rejects, and the rooms it
  * rejects (including those resting on a rejected wall), which stay in the plan so
@@ -181,6 +208,13 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
     const routes = groundIds.has(floor.id)
     const found = routeFindings(graph, floor.id, floorName, roomName, routes)
     findings.push(...found.findings)
+    // A door no person fits through (MSG-18), on every floor: it is why a room may have no door.
+    const openingsById = new Map(storey.openings.map((o) => [o.id, o] as const))
+    for (const { opening, rooms, short } of graph.tooSmall) {
+      const drawn = openingsById.get(opening)
+      if (drawn === undefined) continue
+      findings.push(tooSmallFinding(drawn, rooms, short, floor.id, roomName))
+    }
     // A door to the outside in mid-air (lab VE-8): said, and never a way out. Open sides of a
     // virtual wall are left alone: they edge a terrace or a stand, not a door.
     if (aboveGround(floor.id)) {

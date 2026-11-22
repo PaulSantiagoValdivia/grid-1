@@ -63,7 +63,6 @@ test fails, and `it.fails` becomes `it`.
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
 | CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
-| CH-6 | `packages/rules/src/checks/__tests__/rules-check.test.ts` |
 
 Paths without a package are under `packages/floorplan/src/`.
 
@@ -81,6 +80,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | VE-2 | MSG-15 | `geometry/__tests__/elevations.test.ts`, "lab failures fixed by MSG-15" |
 | MS-15 | MSG-12 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-12"; the plans behind MS-2, MS-15, MS-17, W-10 and L-6 in `geometry/__tests__/wallFaults.test.ts` |
 | MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
+| CH-6 (the size half) | MSG-18 | `packages/rules/src/checks/__tests__/rules-check.test.ts`, "lab failures fixed by MSG-18"; the lab's three cases in `geometry/__tests__/passable.test.ts` |
 
 ARE-1 also changed one expected figure on purpose: `exports a room bounded by a virtual wall`
 in `geometry/export/__tests__/ifc.test.ts` now expects the room to run to the dividing line,
@@ -152,6 +152,12 @@ else: a `PlanRoom` in `dimensions.test.ts`, and a `SceneSlab` in `gltf-large.tes
 `Slab3D.test.ts` and `RoomMarker3D.test.ts`. The new pins are in `geometry/__tests__/holes.test.ts`,
 `viewer/src/picture/__tests__/holes.test.ts`, "a room with a hole (ARE-6)" in `ifc.test.ts` and
 the AR-5 case in `scoreboard/__tests__/scoreboard.test.ts`.
+
+MSG-18 fixed `CH-6 a 5 cm hole in the outside wall is not a way out` and moved it to a block
+named "lab failures fixed by MSG-18", asserting every finding (`no_exit`, `room_without_door`
+and the new `opening_too_small_to_pass` on the hole) instead of only that `no_exit` is there. The other
+half of CH-6, what lies beyond an opening (a window into the next room, a door into a walled
+courtyard), is MSG-17's and has no `it.fails`. No other expected figure changed (`reviews/MSG-18.md`).
 
 ## Kinds of test the suite does not have yet
 

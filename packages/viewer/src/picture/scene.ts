@@ -167,6 +167,8 @@ function paints(look: PlanLook, mpp: number) {
     }),
     jamb: { stroke: look.wall, 'stroke-width': px(LINE_PX.jamb) } as Attrs,
     step: { stroke: look.wall, 'stroke-width': px(LINE_PX.step), 'stroke-linecap': 'butt' } as Attrs,
+    fixture: { fill: look.paper, stroke: look.wall, 'stroke-width': px(LINE_PX.fixture), 'stroke-linejoin': 'round' } as Attrs,
+    fixtureLine: { fill: 'none', stroke: look.wall, 'stroke-width': px(LINE_PX.fixture), 'stroke-linecap': 'butt' } as Attrs,
     doorLeaf: { stroke: look.wall, 'stroke-width': px(LINE_PX.doorLeaf), 'stroke-linecap': 'square' } as Attrs,
     doorArc: { fill: 'none', stroke: look.wall, 'stroke-width': px(LINE_PX.doorArc) } as Attrs,
     extension: { stroke: look.dimension, 'stroke-width': px(LINE_PX.extension) } as Attrs,
@@ -397,6 +399,23 @@ export function planScene(input: SceneInput): SvgNode[] {
     )
   }
 
+  // CNT-12: the fixtures, over the room fills and under the walls, so a wall covers a fixture
+  // that runs into it. Each is its symbol to scale, in the wall's ink on the paper. Drawing, not
+  // a target: clicks reach the room underneath.
+  for (const item of drawing.items) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none' },
+        [
+          ...item.rings.map((ring, index) => el('path', { 'data-part': 'fixture-ring', d: `${pathOf(ring)}`, ...paint.fixture }, [], `r${index}`)),
+          ...item.lines.map((line, index) => el('path', { 'data-part': 'fixture-line', d: virtualPath(line), ...paint.fixtureLine }, [], `l${index}`))
+        ],
+        `fixture:${item.id}`
+      )
+    )
+  }
+
   // Ghost walls and openings go over the room fills, which are opaque: a removed partition
   // or a wall that moved outward lies inside a current room. They stay under the current
   // walls, so a wall that kept its place covers its own ghost.
@@ -609,7 +628,8 @@ export function planScene(input: SceneInput): SvgNode[] {
   const padY = Math.max(framed.height, 0.001) * FRAME_MARGIN
   const labels = placeRoomLabels(
     drawing.rooms.map((room, index) => ({ id: room.id, polygon: room.polygon, holes: room.holes, name: names[index]!, areaText: areaText(room) })),
-    { swings, walls: drawing.walls.filter((wall) => !wall.virtual).flatMap((wall) => wall.slices), dimensions: dimensionBlocks },
+    // A fixture blocks a label like a wall does (CNT-12): a room's name never sits on a bath.
+    { swings, walls: [...drawing.walls.filter((wall) => !wall.virtual).flatMap((wall) => wall.slices), ...drawing.items.map((item) => item.outline)], dimensions: dimensionBlocks },
     mpp,
     { minX: framed.min.x - padX, maxX: framed.max.x + padX, minY: framed.min.y - padY, maxY: framed.max.y + padY }
   )
