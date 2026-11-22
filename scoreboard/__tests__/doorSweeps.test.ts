@@ -1,7 +1,7 @@
 // QAR-7: the door-swing check tries each door only against the walls and doors near it, and the
 // corners are joined with the same index. Both must say exactly what trying every pair said, so
 // here they are held to the code as it was (allPairs/), on the lab's plans, its generated floors
-// among them. The floors over 1,000 rooms and the 5,000-room timing run only when asked:
+// among them. The floors over 500 rooms and the 5,000-room timing run only when asked:
 // GRID_TIMING=1.
 import { describe, expect, it } from 'vitest'
 import { parseFloorPlan, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
@@ -57,8 +57,8 @@ function holdToAllPairs(plan: FloorPlan, tally: Tally): void {
   }
 }
 
-/** The lab's floors past this size take minutes to draw, and run only with GRID_TIMING=1. */
-const LARGE = 1000
+/** The lab's floors past this size take minutes to draw all together, and run only with GRID_TIMING=1. */
+const LARGE = 500
 const SC_2 = 'AU4/L-rerun/scenarios/size/grid-5000-pieces.json'
 
 const storedPlans = (): { name: string; plan: FloorPlan }[] =>
@@ -72,26 +72,26 @@ describe('the door-swing check with a spatial index (QAR-7)', () => {
     const tally: Tally = { floors: 0, findings: {} }
     const plans = storedPlans().filter(({ plan }) => plan.rooms.length <= LARGE)
     for (const { plan } of plans) holdToAllPairs(plan, tally)
-    // The lab's generated floors up to 1,000 rooms are among them, and there are enough of
-    // each finding that a difference would show.
-    expect(plans.filter(({ plan }) => plan.rooms.length >= 500).length).toBeGreaterThan(0)
+    // The lab's generated 500-room floor is among them, and there are enough of each finding
+    // that a difference would show.
+    expect(plans.filter(({ plan }) => plan.rooms.length === LARGE).length).toBeGreaterThan(0)
     expect(tally.floors).toBeGreaterThan(3000)
     expect(tally.findings['opening/door-blocked']).toBeGreaterThan(500)
     expect(tally.findings['opening/doors-collide']).toBeGreaterThan(50)
   }, 600_000)
 })
 
-// SC-2: the lab timed the check at 75.9 s on its 5,000-room floor. Drawing the lab's floors of
-// 2,000 to 5,000 rooms (`buildFloorPlan`, untimed here) takes minutes, so this runs only with
-// GRID_TIMING=1.
+// SC-2: the lab timed the check at 75.9 s on its 5,000-room floor. Drawing the lab's twelve
+// floors of 529 to 5,000 rooms (`buildFloorPlan`, untimed here) takes minutes, so this runs only
+// with GRID_TIMING=1.
 describe.skipIf(!process.env.GRID_TIMING)('the door-swing check on the lab\'s largest floors (QAR-7, SC-2)', () => {
   const large = (): { name: string; plan: FloorPlan }[] => storedPlans().filter(({ plan }) => plan.rooms.length > LARGE)
 
-  it('finds what trying every pair found, on floors of 2,000 to 5,000 rooms', () => {
+  it('finds what trying every pair found, on floors of 529 to 5,000 rooms', () => {
     const tally: Tally = { floors: 0, findings: {} }
     const plans = large()
     for (const { plan } of plans) holdToAllPairs(plan, tally)
-    expect(plans.length).toBeGreaterThanOrEqual(4)
+    expect(plans.length).toBe(12)
     expect(tally.findings['opening/door-blocked']).toBeGreaterThan(100)
   }, 3_600_000)
 
