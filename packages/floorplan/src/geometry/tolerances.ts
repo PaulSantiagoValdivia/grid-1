@@ -566,6 +566,61 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Kinds of door and window (CNT-14) ─────────────────────────────────────────────────────
+  wideSingleLeaf: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'A door at least this wide that states no kind is taken as one swinging leaf, as every door ' +
+      'without one is, and is asked about (`opening/wide-single-leaf`): a leaf this wide is rare, ' +
+      'and the door may be a pair, a sliding, folding, roller or garage door. It only asks.',
+    basis: own
+  },
+  foldingPanel: {
+    kind: 'limit',
+    value: 0.6,
+    unit: 'm',
+    decides:
+      'The widest panel a folding door is drawn and checked with: it folds in as many panels as ' +
+      'this needs, two at least, and sweeps a strip as deep as one panel on the face it opens to.',
+    basis: own
+  },
+  frameFace: {
+    kind: 'limit',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'How wide the frame round a door or window, and round each part of a window that opens, is ' +
+      'drawn in 3D. The plan holds no frame: it only draws the model.',
+    basis: own
+  },
+  frameDepth: {
+    kind: 'limit',
+    value: 0.07,
+    unit: 'm',
+    decides:
+      'How deep a window\'s frame is drawn in 3D, in the middle of its wall (no deeper than the ' +
+      'wall). A door\'s frame lines the whole depth of its wall. It only draws the model.',
+    basis: own
+  },
+  leafThickness: {
+    kind: 'limit',
+    value: 0.04,
+    unit: 'm',
+    decides:
+      'How thick a door leaf or panel is drawn in 3D, hung from the face of the wall it opens ' +
+      'toward. It only draws the model.',
+    basis: own
+  },
+  glassThickness: {
+    kind: 'limit',
+    value: 0.02,
+    unit: 'm',
+    decides: 'How thick a window\'s glass is drawn in 3D, in the middle of its frame. It only draws the model.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',

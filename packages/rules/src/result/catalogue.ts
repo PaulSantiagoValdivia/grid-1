@@ -514,6 +514,24 @@ export const CODES = {
     fix: fixed('Turn one of them to open the other way or hang it from its other end, or move them apart.')
   },
 
+  // CNT-14: kinds of door and window.
+  'opening/wide-single-leaf': {
+    says: (s) => `${s.label} states no kind, so it is drawn and checked as one swinging leaf this wide`,
+    found: fixed(`a door at least ${figureText(tolerance('wideSingleLeaf'))} m wide (Grid's own question) with no kind, taken as one swinging leaf`),
+    needed: fixed('its kind: single, double, sliding, pocket, folding, roller or garage'),
+    fix: fixed('State its kind ("kind": "double", "sliding", "folding", "roller" or "garage"), or "single" if it is one leaf.')
+  },
+  'opening/kind-not-for-type': {
+    says: (s) => `${s.label} states a kind it cannot be, so it is drawn with no kind`,
+    needed: fixed('a door kind on a door (single, double, sliding, pocket, folding, roller, garage) and a window kind on a window (single, double, sliding, fixed, high-level); none on a doorless opening'),
+    fix: fixed('Give it a kind its type takes, change its type, or leave its kind out.')
+  },
+  'opening/part-too-large': {
+    says: (s) => `${s.label} states a part that opens that cannot open there, so it is taken as the whole opening`,
+    needed: fixed('a part that opens no wider and no higher than its opening, on a door or a window that is not fixed'),
+    fix: fixed('Make the part that opens ("opens") no larger than the opening, or leave it out.')
+  },
+
   'opening/crosses-wall': {
     says: (s) => `${s.label} runs into a wall that meets its wall`,
     needed: fixed('an opening within the clear run of its wall, between the walls that meet it'),
@@ -892,6 +910,12 @@ export const CODES = {
     found: (s) => `doors or windows that cannot be drawn${s.heldSaid ? `; held back until they can be: ${s.heldSaid}` : ''}`,
     needed: fixed('doors and windows that can be drawn'),
     fix: fixed('Correct the lines that leave those doors or windows out. They are checked once they can be drawn, and so is what rests on them: a note held back comes back if it still holds.')
+  },
+  'floor/not-checked-door-swings': {
+    says: (s) => `On ${s.label.replace(/^Floor /, '')}, ${s.also.length === 1 ? 'a door states' : `${s.also.length} doors state`} no swing, so whether ${s.also.length === 1 ? 'it opens' : 'they open'} clear was not checked: ${s.also.map(quoted).join(', ')}`,
+    found: (s) => `${s.also.length === 1 ? 'a door' : 'doors'} with neither the end it hangs from ("hinge") nor the face it opens to ("swing"), drawn with no swing`,
+    needed: fixed('the hinge ("start" or "end") and the swing ("left" or "right") of each door that swings or folds; a sliding, pocket, roller or garage door ("kind") needs neither'),
+    fix: fixed('Say which room each opens into and which side it is hinged on (grid_change_opening with opens_into and hinged), or state its kind if it slides, rolls or lifts.')
   },
   'floor/sketch-drawn-only': {
     says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,

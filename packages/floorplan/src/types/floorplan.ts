@@ -81,6 +81,14 @@
  *   count). They sit in that one object, never as loose fields, so a misspelt field of the
  *   format is still named (MSG-4). A room MAY state its room number in `number`. Grid checks
  *   nothing against a fact. Optional and never defaulted (version 1).
+ *
+ * C10 · Kinds of door and window (CNT-14)
+ *   A door or window MAY state its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that
+ *   opens (`opens`). Its handing stays in the wall's terms (`hinge`, `swing`, C2): the person's
+ *   terms, the room it opens into and the side it is hinged on as seen from a room, are turned
+ *   into them when written (`handingFromRooms`). For a door that slides, rolls or lifts, `hinge`
+ *   names the end it opens toward and `swing` the face it runs on. A door with no kind is a single
+ *   swinging leaf. Optional and never defaulted (version 1).
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
@@ -619,6 +627,32 @@ export const OpeningAnchorSchema = z
     }
   })
 
+/**
+ * CNT-14 (C10): the kinds of door, and of window, a plan may state. A door with no kind is a
+ * single swinging leaf, as every door was before (version 1). `single` and `double` are one or
+ * two hinged leaves; `sliding` slides along its wall, `pocket` into it; `folding` folds to one
+ * side in panels; `roller` rolls up and `garage` lifts overhead. A window may be `single` or
+ * `double` (one or two hinged casements), `sliding`, `fixed` (nothing opens) or `high-level` (set
+ * high in its wall, above the plan's cut). A window with no kind is drawn and measured as before.
+ */
+export const DOOR_KINDS = ['single', 'double', 'sliding', 'pocket', 'folding', 'roller', 'garage'] as const
+export const WINDOW_KINDS = ['single', 'double', 'sliding', 'fixed', 'high-level'] as const
+export const OPENING_KINDS = ['single', 'double', 'sliding', 'pocket', 'folding', 'roller', 'garage', 'fixed', 'high-level'] as const
+export type DoorKind = (typeof DOOR_KINDS)[number]
+export type WindowKind = (typeof WINDOW_KINDS)[number]
+export type OpeningKind = (typeof OPENING_KINDS)[number]
+
+/**
+ * CNT-14: the part of a door or window that opens, when it is not the whole of it: a door's leaf
+ * beside a fixed panel, the main leaf of a pair, a window's casement. `width` is along the wall and
+ * `height` from its foot; unstated, the height is the opening's. It is at the end the door hangs
+ * from (`hinge`), else at the wall's start end. Unstated, the whole opening opens (version 1).
+ */
+export const OpeningPartSchema = z.object({
+  width: finite().positive(),
+  height: finite().positive().optional(),
+})
+
 export const OpeningSchema = z.object({
   id: text('id'),
   wall: text('id'),
@@ -637,6 +671,11 @@ export const OpeningSchema = z.object({
   // geometry/wall.ts `wallFaces`.
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
+  // CNT-14 (C10): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
+  // (`OpeningPartSchema`). Optional and never defaulted (version 1): a door that states no kind is
+  // one swinging leaf, and the whole of an opening opens.
+  kind: z.enum(OPENING_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
   // WRT-3: what its place is kept from when an edit changes its wall (OpeningAnchorSchema).
   anchor: OpeningAnchorSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
@@ -1033,6 +1072,7 @@ export type Stair = z.infer<typeof StairSchema>
 export type Ceiling = z.infer<typeof CeilingSchema>
 export type LoweredZone = z.infer<typeof LoweredZoneSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
+export type OpeningPart = z.infer<typeof OpeningPartSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type Annotation = z.infer<typeof AnnotationSchema>

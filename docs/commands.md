@@ -189,7 +189,12 @@ the file says that too.
   usage. The plan holds no build-up, and the type's description says so.
 - **Doors and windows** are typed by size, and doors by handing too (`Door 0.9 x 2.1 m, single
   swing, left`), tagged as the estimate keys them (`door:0.9x2.1`). A door whose swing the plan
-  does not state is typed by its size alone.
+  does not state is typed by its size alone. A door or window that states its kind (CNT-14) is
+  typed by it too, tagged `door:sliding:2.2x2.1`, with IFC's operation for it (`DOUBLE_DOOR_SLIDING`,
+  `FOLDING_TO_LEFT`, `ROLLINGUP`; a garage door is user-defined and its name says it lifts
+  overhead). Each door and window holds its frame, its leaves (closed, hung from the face of the
+  wall it opens toward) and its glass, styled as glass; the OBJ and GLB hold the same parts as
+  `frame_`, `leaf_` and `glass_` objects.
 - **Flats** are not written as zones: the plan format holds no flats yet.
 - **Where it stands.** A plan that reaches more than 500 m from the origin (`farFromOrigin`) is
   moved, in whole steps of that distance, to near the origin, and the move is the site's

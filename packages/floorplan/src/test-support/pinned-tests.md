@@ -194,6 +194,15 @@ unturned`, and `writes no door style for a plan with no stated swing` now expect
 handing; the material tests expect one material per stated kind (`Interior wall`) and layer sets
 named after kind and thickness. See `reviews/HND-2.md`.
 
+CNT-14 fixed no expected failure: the lab's EL-5 (every door one leaf, a 3.5 m dock door a 3.5 m
+arc) had no `it.fails`; `scoreboard/__tests__/doorKinds.test.ts` now holds the lab's 176 doors to
+it. It wrote the four IFC golden files again on purpose: each door and window is filled with its
+frame, leaves and glass (one solid each, the glass styled) instead of one thin box, and the door
+and window styles' description says how Grid groups them now; no wall, void, space or slab moved.
+In `ifc.test.ts`, `gives the filler a thin leaf, centred in the wall, over the void` is now `CNT-14
+fills the void with a frame and a leaf`, and the door-swing cases read every solid of the filler
+and check the leaf hangs from the face it opens to. See `reviews/CNT-14.md`.
+
 ## Kinds of test the suite does not have yet
 
 From the lab's entry Z-7. None of these is built here.

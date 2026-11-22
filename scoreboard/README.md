@@ -248,6 +248,15 @@ moved partitions). Sound plans with a warning stays 95: the generator keeps ever
 clear of the junctions, further than any wall's half thickness, and puts windows only in outside
 walls.
 
+CNT-14 (kinds of door and window, and the part that opens) moved one count. Checks the plan can
+feed, 15 to 17: the probe `openable-part` now asks for an opening's `opens` (it was `none`), which
+is all that checks 8 and 9 need (a window's glass, and the part of it that opens, as a share of
+the floor). The probe `door-leaves` asks for `kind` (`folding`) instead of the lab's `leaves`; the
+one turn that needs it (wide bifold doors and a roof lantern) also needs a roof, so turns answered
+stays 16. The runner now passes each door's kind to the swing check and counts the doors listed as
+not checked among the "not checked" lines; damage that passes in silence stays 278, and sound
+plans with a warning 95 (no sound plan has a door of 1.5 m or more).
+
 The same run stores two figures of the detail that had moved earlier without a count moving:
 since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435
 rooms are compared, not 16,451. SHT-2 changes neither: the schema reads the same 1,100 of the

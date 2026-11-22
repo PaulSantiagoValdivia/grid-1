@@ -81,6 +81,12 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `stairStepLength` | limit | 0.63 m | A stair that states no number of risers gets the number that brings twice the riser plus the going nearest this |
 | `planCutHeight` | limit | 1.2 m | How high above a floor its plan is cut: a stair rising from the floor is drawn solid up to this height, with a break line there, and dashed above (SHT-11) |
 | `aboveSameEdge` | tolerance | 0.02 m | A stretch of the outline of the floor above this close to the outline of the floor drawn, along it, is the same wall face, and is not drawn dashed (SHT-11) |
+| `wideSingleLeaf` | limit | 1.5 m | A door at least this wide that states no kind is taken as one swinging leaf and asked about (`opening/wide-single-leaf`, CNT-14) |
+| `foldingPanel` | limit | 0.6 m | The widest panel a folding door is drawn and checked with: it folds in as many panels as this needs, two at least, and sweeps a strip one panel deep (CNT-14) |
+| `frameFace` | limit | 0.05 m | How wide a door's or window's frame, and the frame round each part of a window that opens, is drawn in 3D (CNT-14) |
+| `frameDepth` | limit | 0.07 m | How deep a window's frame is drawn in 3D, in the middle of its wall; a door's frame lines the wall's whole depth (CNT-14) |
+| `leafThickness` | limit | 0.04 m | How thick a door leaf or panel is drawn in 3D, hung from the face of the wall it opens toward (CNT-14) |
+| `glassThickness` | limit | 0.02 m | How thick a window's glass is drawn in 3D, in the middle of its frame (CNT-14) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
 | `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning |
 | `wallThinnest` | limit | 0.02 m | A thinner solid wall is questioned; a line with no substance should be virtual |

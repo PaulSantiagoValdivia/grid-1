@@ -385,6 +385,8 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
         changes.push(`now opens into ${intoB === null ? 'a side not said' : JSON.stringify(intoB)}${intoA(a, pair.a)}`)
       }
       if (hingeA !== ob.hinge && swingA === ob.swing) changes.push('hung from the other side')
+      // CNT-14: a door or window of another kind.
+      if ((oa.kind ?? null) !== (ob.kind ?? null)) changes.push(ob.kind === undefined ? `no kind stated now (was ${oa.kind})` : `now ${ob.kind}${oa.kind === undefined ? '' : ` (was ${oa.kind})`}`)
       if (changes.length > 0) openingsChanged.push({ id: pair.b, type: ob.type, changes })
     }
   }

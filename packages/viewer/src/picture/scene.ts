@@ -22,8 +22,8 @@
  *
  * Pure: no DOM, no React.
  */
-import type { Dimension, Ghosts, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, Vec2 } from '@ongrid/floorplan/geometry'
-import { boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
+import type { Dimension, Ghosts, OpeningSymbol, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, SymbolPart, Vec2 } from '@ongrid/floorplan/geometry'
+import { boundsWithDimensions, openingSymbol, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import { openingAt, stripAcross } from '../canvas2d/strip'
@@ -489,6 +489,64 @@ function windowSymbol(opening: PlanOpening, paint: Paints): SvgNode {
   )
 }
 
+/** CNT-14: the drawing's names of a symbol's lines, by what each is. */
+const PIECE_PARTS: Readonly<Record<SymbolPart, string>> = {
+  jamb: 'jamb',
+  leaf: 'door-leaf',
+  panel: 'door-panel',
+  face: 'window-face',
+  glass: 'window-glass'
+}
+
+/**
+ * CNT-14: a door or window that states its kind, or the part of it that opens, drawn from its
+ * kind's symbol (`openingSymbol` in the core): every line and swing where the core puts it, a
+ * line above the plan's cut or hidden in the wall dashed. Drawing, not a target.
+ */
+function kindSymbolNode(opening: PlanOpening, symbol: OpeningSymbol, paint: Paints, opacity: number | undefined): SvgNode {
+  const flip = (p: Vec2): Vec2 => ({ x: p.x, y: -p.y })
+  const pen = (part: SymbolPart): Attrs =>
+    part === 'jamb' ? paint.jamb : part === 'leaf' ? paint.doorLeaf : part === 'glass' ? paint.glass : paint.windowFace
+  const children = symbol.pieces.map((piece) => {
+    if (piece.shape === 'arc') {
+      const a = flip(piece.tip)
+      const b = flip(piece.far)
+      const r = piece.radius.toFixed(4)
+      const d = `M${a.x.toFixed(4)},${a.y.toFixed(4)}A${r},${r} 0 0 ${piece.counterClockwise ? 1 : 0} ${b.x.toFixed(4)},${b.y.toFixed(4)}`
+      return el('path', { 'data-part': 'door-arc', d, ...paint.doorArc })
+    }
+    const [a, b] = [flip(piece.from), flip(piece.to)]
+    const attrs = pen(piece.part)
+    return el('line', {
+      'data-part': PIECE_PARTS[piece.part],
+      'data-above': piece.above ? 'true' : undefined,
+      x1: a.x,
+      y1: a.y,
+      x2: b.x,
+      y2: b.y,
+      ...attrs,
+      ...(piece.above ? { 'stroke-dasharray': paint.above['stroke-dasharray'] } : {})
+    })
+  })
+  const door = opening.type === 'door'
+  return el(
+    'g',
+    {
+      'data-part': door ? 'door-symbol' : 'window-symbol',
+      'data-opening': opening.id,
+      'data-kind': symbol.kind,
+      'pointer-events': 'none',
+      'aria-hidden': 'true',
+      opacity
+    },
+    children,
+    `${opening.id}:${door ? 'door' : 'window'}`
+  )
+}
+
+/** CNT-14: whether a door or window is drawn from its kind's symbol: it states a kind or the part of it that opens. */
+const drawnByKind = (handing: DoorHanding | undefined): boolean => handing?.kind !== undefined || handing?.opens !== undefined
+
 /**
  * A door whose hinge or swing the plan does not state: a dashed line across the gap and a "?",
  * so it reads as a door still to be decided, never as a guessed swing or an open gap.
@@ -748,7 +806,11 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     const opened = live.openingOpen(opening.id)
     const span = opened === null ? opening : openingAt(opening, opened)
     const exposure = drawing.walls.find((wall) => wall.id === opening.wallId)?.exposure
-    const door = doorSymbolOf(opening, handings.get(opening.id))
+    const handing = handings.get(opening.id)
+    // CNT-14: a door or window that states its kind is drawn from its kind's symbol; any other as before.
+    const kinded = opening.type !== 'opening' && drawnByKind(handing) ? openingSymbol(opening, handing) : null
+    const door = kinded === null ? doorSymbolOf(opening, handing) : null
+    const drawn = kinded !== null || door !== null
 
     if (opened !== null) {
       // The part of the gap not yet open is still wall, so the wall parts from the
@@ -785,9 +847,10 @@ function planSceneIn(input: SceneInput): SvgNode[] {
           'data-selectable': 'true',
           'data-selected': selected(opening.id),
           ...live.marks(opening.id),
-          'data-swing': door ? 'true' : undefined,
+          'data-swing': opening.type === 'door' && drawn ? 'true' : undefined,
+          ...(kinded !== null && { 'data-kind': kinded.kind }),
           ...live.hit(opening.id),
-          ...paint.opening(opening.type, door !== null)
+          ...paint.opening(opening.type, opening.type === 'door' && drawn)
         },
         [],
         opening.id
@@ -821,8 +884,9 @@ function planSceneIn(input: SceneInput): SvgNode[] {
         )
       )
     }
-    if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
-    if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
+    if (kinded !== null && opening.type === 'door' && show.swings) out.push(kindSymbolNode(opening, kinded, paint, opened ?? undefined))
+    if (look.glass && opening.type === 'window') out.push(kinded !== null ? kindSymbolNode(opening, kinded, paint, undefined) : windowSymbol(opening, paint))
+    if (look.undecidedDoors && opening.type === 'door' && !drawn) out.push(undecidedSymbol(opening, mpp, paint))
   }
 
   // WRT-6 (lab WR-15): what the plan marks assumed, drawn in its own style: a dashed line round

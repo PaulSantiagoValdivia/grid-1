@@ -40,6 +40,8 @@ import { pointInPolygon } from './innerPoint'
 import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
+import { kindFits, statedKind } from './openingKinds'
+import { DOOR_KINDS, WINDOW_KINDS } from '../types/floorplan'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
@@ -362,6 +364,8 @@ function validateOpening(
     ok = false
   }
 
+  validateOpeningKind(opening, issues)
+
   if (opening.sill < -overrun) {
     issues.push(
       issue(
@@ -377,6 +381,45 @@ function validateOpening(
   }
 
   return ok
+}
+
+/**
+ * CNT-14: a kind its type does not take (a window that is a garage door, a doorless opening with a
+ * kind), and a part that opens larger than the opening or in a window that is fixed. Each is worth
+ * a look and draws on: the kind is read as not stated, the part as no larger than the opening.
+ */
+function validateOpeningKind(opening: Opening, issues: Issue[]): void {
+  const word = opening.type === 'opening' ? 'a doorless opening' : `a ${opening.type}`
+  if (opening.kind !== undefined && !kindFits(opening.type, opening.kind)) {
+    const takes = opening.type === 'door' ? DOOR_KINDS.join(', ') : opening.type === 'window' ? WINDOW_KINDS.join(', ') : 'none'
+    issues.push(
+      issue(
+        'opening',
+        opening.id,
+        'opening/kind-not-for-type',
+        `Opening ${quoted(opening.id)} is ${word} of kind ${quoted(opening.kind)}, which ${word} cannot be, so it is drawn as one with no kind. The kinds ${word} takes: ${takes}`,
+        'warning'
+      )
+    )
+  }
+  const part = opening.opens
+  if (part === undefined) return
+  const overrun = tolerance('openingOverrun')
+  const kind = statedKind(opening.type, opening.kind)
+  const problem =
+    opening.type === 'opening'
+      ? 'a doorless opening has no part that opens'
+      : kind === 'fixed'
+        ? 'a fixed window has no part that opens'
+        : part.width > opening.width + overrun
+          ? `the part that opens is ${exactMetres(part.width)} m wide, wider than the ${exactMetres(opening.width)} m opening`
+          : part.height !== undefined && part.height > opening.height + overrun
+            ? `the part that opens is ${exactMetres(part.height)} m high, higher than the ${exactMetres(opening.height)} m opening`
+            : null
+  if (problem === null) return
+  issues.push(
+    issue('opening', opening.id, 'opening/part-too-large', `Opening ${quoted(opening.id)}: ${problem}, so it is drawn and measured as the whole opening`, 'warning')
+  )
 }
 
 /**

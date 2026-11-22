@@ -15,7 +15,8 @@
  */
 
 import type { Vec2 } from '../vec2'
-import type { SceneSlab, SceneSolid, SceneStair, SceneWall, Vec3 } from '../scene3d'
+import type { SceneOpening, SceneSlab, SceneSolid, SceneStair, SceneWall, Vec3 } from '../scene3d'
+import type { OpeningPartKind } from '../openingParts'
 import { alongFace } from '../scene3d'
 import { triangulate } from '../triangulate'
 
@@ -147,9 +148,14 @@ export function floorMesh(floor: SceneSlab): Mesh | null {
  * the mesh is a set of solids, not one skin.
  */
 export function stairMesh(stair: SceneStair): Mesh | null {
+  return blocksMesh(stair.blocks)
+}
+
+/** Upright blocks, each its outline (counter-clockwise) solid from its bottom to its top, as one mesh of closed solids. */
+function blocksMesh(blocks: readonly { readonly outline: readonly Vec2[]; readonly bottom: number; readonly top: number }[]): Mesh | null {
   const points: Vec3[] = []
   const faces: Face[] = []
-  for (const block of stair.blocks) {
+  for (const block of blocks) {
     const { vertices, triangles } = triangulate(block.outline)
     if (triangles.length === 0) continue
     const top = points.length
@@ -169,6 +175,17 @@ export function stairMesh(stair: SceneStair): Mesh | null {
   }
   return faces.length === 0 ? null : storable({ points, faces })
 }
+
+/**
+ * CNT-14: the boxes of one part of a door or window (its frame, its leaves or its glass) as one
+ * mesh, each a closed block like a stair's tread. Null when it has none of that part.
+ */
+export function openingPartMesh(opening: SceneOpening, part: OpeningPartKind): Mesh | null {
+  return blocksMesh(opening.parts.filter((p) => p.part === part && p.top > p.bottom))
+}
+
+/** The parts of a door or window, in the order the exports write them. */
+export const OPENING_PART_KINDS: readonly OpeningPartKind[] = ['frame', 'leaf', 'glass']
 
 /**
  * Flat solids of the shell (LVL-4: a slab, a roof, a parapet) as one mesh: every piece a closed

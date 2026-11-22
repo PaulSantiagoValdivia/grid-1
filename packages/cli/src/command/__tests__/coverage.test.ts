@@ -100,7 +100,8 @@ describe('every check says what it looked at (CH-1)', () => {
 
   it('the same walls with no rooms: one line says no check that looks at rooms ran, and no check is listed as run', () => {
     const result = checkPlan(plan(WALLS_ONLY), { country: 'US' })
-    expect(result.result.lines.filter((l) => l.kind === 'not-checked').map((l) => l.code)).toEqual(['plan/not-checked-no-rooms'])
+    // CNT-14: its doors state no swing, and the door check says so first, on a line of its own.
+    expect(result.result.lines.filter((l) => l.kind === 'not-checked').map((l) => l.code)).toEqual(['floor/not-checked-door-swings', 'plan/not-checked-no-rooms'])
     expect(result.report.rules).toEqual([])
     expect(result.result.coverage.every((c) => c.lookedAtCount === 0)).toBe(true)
     expect(checkText(result, 1)).toContain('Looked at by at least one check: no rooms: there are none to look at.')

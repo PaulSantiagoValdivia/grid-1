@@ -29,6 +29,7 @@ vi.mock('../mesh', async (original) => {
 describe('a mesh with more than 65,535 vertices', () => {
   const scene: Scene3D = {
     walls: [],
+    openings: [],
     slabs: [{ roomId: 'big', name: 'Big', polygon: [], holes: [] }],
     dividers: [],
     stairs: [],

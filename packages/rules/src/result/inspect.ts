@@ -19,7 +19,7 @@ import {
   marksWithNoPart,
   planFacing,
   planFloors,
-  validateDoorSweeps,
+  checkDoorSweeps,
   validatePlan,
   LIMITS as PLAN_LIMITS,
   GENERAL_GUIDANCE_LABEL,
@@ -409,7 +409,7 @@ const CAUSE_LINES = new WeakMap<ResultLine, ResultLine>()
 /** MSG-5: the reader's line for a plan's stated unit, which it reads as metres. */
 const UNITS_READ = new WeakSet<ResultLine>()
 /** MSG-5: what is measured against a size, and so follows from a plan that may not be in metres. */
-const SIZED = new Set(['plan/far-from-origin', 'wall/size-question', 'opening/size-question', 'room/size-question', 'floor/size-question', 'room/too-small', 'room/escape-window-too-small', 'room/escape-window-too-high'])
+const SIZED = new Set(['plan/far-from-origin', 'wall/size-question', 'opening/size-question', 'room/size-question', 'floor/size-question', 'room/too-small', 'room/escape-window-too-small', 'room/escape-window-too-high', 'opening/wide-single-leaf'])
 
 function issueLine(issue: Issue & { readonly hits?: readonly string[] }, names: Names): ResultLine {
   const { thing, also } = issueThing(issue)
@@ -691,11 +691,24 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
   })
   stage('door check', () => {
     const seen = new Set<string>()
-    for (const issue of validateDoorSweeps(plan, (opening) => opening)) {
+    const checked = checkDoorSweeps(plan, (opening) => opening)
+    for (const issue of checked.issues) {
       const key = `${issue.code}|${issue.id}|${issue.hits.join(',')}`
       if (seen.has(key)) continue
       seen.add(key)
       lines.push(issueLine(issue, names))
+    }
+    // CNT-14: the doors whose swing the plan does not state, floor by floor, as not checked.
+    for (const { floor, doors } of checked.notChecked) {
+      lines.push(
+        line('floor/not-checked-door-swings', 'not-checked', { kind: 'floor', id: floor }, floor, {
+          ...blank(names.thingOf('floor', floor).label),
+          name: names.floorName(floor),
+          floorName: names.floorName(floor),
+          also: doors,
+          floors: names.floors
+        })
+      )
     }
   })
   let report: RulesReport | null = null

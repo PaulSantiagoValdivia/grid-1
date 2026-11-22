@@ -35,6 +35,10 @@ import { planFloors, wholePlan } from './floors'
 import { floorEnvelope } from './envelope'
 import { piecesAsRings } from './polygons'
 import type { MultiPolygon } from 'polygon-clipping'
+import type { OpeningKind } from '../types/floorplan'
+import type { OpeningPartKind } from './openingParts'
+import { openingParts } from './openingParts'
+import { statedKind } from './openingKinds'
 
 /** A point in model space: XY is the plan, Z is height. */
 export interface Vec3 {
@@ -254,8 +258,57 @@ export function sceneShell(plan: FloorPlan): SceneShell | null {
   return { floor: id, slab, roof: roofSolid, parapet }
 }
 
+/** CNT-14: one box of a door or window (its frame, a leaf or its glass) on the plan, solid between two heights above the storey's floor. */
+export interface SceneOpeningPart {
+  readonly part: OpeningPartKind
+  /** On the model's XY plane, counter-clockwise. */
+  readonly outline: readonly Vec2[]
+  readonly bottom: number
+  readonly top: number
+}
+
+/**
+ * CNT-14: a door or window in 3D, its frame, leaves and glass (`openingParts`), its leaves closed
+ * and hung from the face of the wall the door opens toward. A doorless opening has none.
+ */
+export interface SceneOpening {
+  readonly id: string
+  readonly wallId: string
+  readonly type: 'door' | 'window'
+  /** Its kind as the plan states it, or null (a door then is one swinging leaf). */
+  readonly kind: OpeningKind | null
+  readonly parts: readonly SceneOpeningPart[]
+}
+
+/** CNT-14: a door's or window's boxes on the plan, from its wall's terms (`openingParts`). */
+export function sceneOpening(opening: Opening, wall: Wall): SceneOpening | null {
+  if (opening.type === 'opening') return null
+  const parts = openingParts(opening, wall)
+  if (parts.length === 0) return null
+  const axis = wallAxis(wall)
+  const point = (along: number, across: number): Vec2 => ({
+    x: axis.start.x + axis.dir.x * along + axis.normal.x * across,
+    y: axis.start.y + axis.dir.y * along + axis.normal.y * across
+  })
+  return {
+    id: opening.id,
+    wallId: wall.id,
+    type: opening.type,
+    kind: statedKind(opening.type, opening.kind),
+    parts: parts.map((p) => ({
+      part: p.part,
+      // The normal is the axis turned counter-clockwise, so this order winds counter-clockwise.
+      outline: [point(p.along[0], p.across[0]), point(p.along[1], p.across[0]), point(p.along[1], p.across[1]), point(p.along[0], p.across[1])],
+      bottom: p.up[0],
+      top: p.up[1]
+    }))
+  }
+}
+
 export interface Scene3D {
   readonly walls: readonly SceneWall[]
+  /** CNT-14: the frames, leaves and glass of the doors and windows the walls hold. */
+  readonly openings: readonly SceneOpening[]
   readonly slabs: readonly SceneSlab[]
   readonly dividers: readonly SceneDivider[]
   /** The stairs that rise from this floor (LVL-3); empty when the plan states none. */
@@ -367,6 +420,7 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
   const { issues, broken } = validatePlan(plan, index)
 
   const walls: SceneWall[] = []
+  const openings: SceneOpening[] = []
   const dividers: SceneDivider[] = []
   const extent: Vec2[] = []
   let height = 0
@@ -396,6 +450,10 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
       revision: wallRevision(wall, usable, ends)
     })
     if (wall.height > height) height = wall.height
+    for (const opening of usable) {
+      const parts = sceneOpening(opening, wall)
+      if (parts !== null) openings.push(parts)
+    }
   }
 
   const slabs: SceneSlab[] = []
@@ -425,5 +483,5 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
   // faces, which the bounds do not frame either.
   const shell = options.shell !== undefined ? options.shell : sceneShell(plan)
 
-  return { walls, slabs, dividers, stairs, shell, bounds: computeBounds(extent), height, issues }
+  return { walls, openings, slabs, dividers, stairs, shell, bounds: computeBounds(extent), height, issues }
 }

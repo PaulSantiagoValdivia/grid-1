@@ -17,6 +17,7 @@ import {
   buildDimensions,
   buildFloorPlan,
   floorAbove,
+  openingSymbol,
   planForFloor,
   resolveFloor,
   validateFloorDoorSweeps
@@ -24,7 +25,6 @@ import {
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import type { LabelStyle } from '../canvas2d/labelPlacement'
 import { doorHandingOf } from '../canvas2d/doorHanding'
-import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import type { Viewport } from '../canvas2d/viewport'
 import { fitTo, viewBoxOf } from '../canvas2d/viewport'
 import type { Look, LookName, PlanLook } from './look'
@@ -147,8 +147,8 @@ export function handingsOf(plan: FloorPlan): Map<string, DoorHanding> {
 
 /**
  * Doors whose swing runs into something (a wall, or another door), with what they say and
- * what they hit. The warnings that only say a value is missing are left out: that door has no
- * symbol, so there is nothing to point at.
+ * what they hit, and a wide door with no kind drawn as one leaf (CNT-14). The warnings that only
+ * say a value is missing are left out: that door has no symbol, so there is nothing to point at.
  *
  * Only for the floor shown (QAR-7): `slice` is its `planForFloor` and `drawing` the
  * `buildFloorPlan(slice)` the view draws, so nothing is built twice and no other floor is checked.
@@ -159,7 +159,8 @@ export function doorWarningsOf(
 ): Map<string, { messages: string[]; hits: Set<string> }> {
   const byDoor = new Map<string, { messages: string[]; hits: Set<string> }>()
   for (const issue of validateFloorDoorSweeps(slice, drawing, doorHandingOf)) {
-    if (issue.hits.length === 0) continue
+    // CNT-14: a wide door drawn as one leaf has its arc to point at, so its question is marked too.
+    if (issue.hits.length === 0 && issue.code !== 'opening/wide-single-leaf') continue
     const entry = byDoor.get(issue.id) ?? { messages: [], hits: new Set<string>() }
     if (!entry.messages.includes(issue.message)) entry.messages.push(issue.message)
     issue.hits.forEach((id) => entry.hits.add(id))
@@ -176,7 +177,8 @@ export function warningMessages(
 }
 
 function undecidedIn(drawing: PlanDrawing, handings: ReadonlyMap<string, DoorHanding>): string[] {
-  return drawing.openings.filter((o) => o.type === 'door' && doorSymbolOf(o, handings.get(o.id)) === null).map((o) => o.id)
+  // CNT-14: a door whose kind slides, rolls or lifts is drawn from its kind and is never undecided.
+  return drawing.openings.filter((o) => o.type === 'door' && openingSymbol(o, handings.get(o.id)) === null).map((o) => o.id)
 }
 
 /**

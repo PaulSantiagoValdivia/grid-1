@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { floorOf, itemFootprint, kindWords, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
 import { causeText, checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
@@ -604,7 +604,11 @@ function listSchedule(survey: Survey, of: 'rooms' | 'openings', floor: string | 
   const s = openingSchedule(survey, floors === undefined ? {} : { floors })
   const data = { rows: s.rows, counts: s.counts, rule: s.rule }
   if (asCsv) return { text: openingScheduleCsv(s), data }
-  const lines = s.rows.map((r) => `${r.number}. ${r.type} ${q(r.id)}, ${q(r.floorName)}: ${lengthText(r.width, units)} wide × ${lengthText(r.height, units)} high${r.type === 'window' ? `, sill ${lengthText(r.sill, units, 'height')}` : ''}, ${r.between[0]} ↔ ${r.between[1]}${Object.keys(r.properties).length === 0 ? '' : `; ${factsText(r.properties)}`}`)
+  // CNT-14: its kind, the part that opens and its handing, where the plan states them.
+  const kindOf = (r: (typeof s.rows)[number]): string => (r.type === 'opening' ? r.type : kindWords(r.type, r.kind))
+  const partOf = (r: (typeof s.rows)[number]): string =>
+    `${r.opens === null ? '' : `, opens ${lengthText(r.opens.width, units)} × ${lengthText(r.opens.height, units)}`}${r.handing === null ? '' : `, ${r.handing}`}`
+  const lines = s.rows.map((r) => `${r.number}. ${kindOf(r)} ${q(r.id)}, ${q(r.floorName)}: ${lengthText(r.width, units)} wide × ${lengthText(r.height, units)} high${r.type === 'window' ? `, sill ${lengthText(r.sill, units, 'height')}` : ''}${partOf(r)}, ${r.between[0]} ↔ ${r.between[1]}${Object.keys(r.properties).length === 0 ? '' : `; ${factsText(r.properties)}`}`)
   if (lines.length === 0) lines.push('The plan has no openings.')
   lines.push(`In all, each counted once: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
   return { text: lines.join('\n'), data }
@@ -616,8 +620,8 @@ const scheduleTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, or how many toilets, basins, showers, baths or kitchen runs there are and where. '
-    + 'It groups every door, window and doorless opening by type and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame or leaf, so a clear width is not known. '
-    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height and floor, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size and the rooms on its two sides. Both as text or CSV. '
+    + 'It groups every door, window and doorless opening by type, kind (sliding, double, fixed… when the plan states one) and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame, so a clear width is not known. '
+    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height and floor, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size, its kind, the part that opens and its handing where the plan states them, and the rooms on its two sides. Both as text or CSV. '
     + 'Do not use for wall or plaster quantities (grid_takeoff). Units are metres.',
   args: {
     plan: PLAN_ARG,
@@ -663,11 +667,13 @@ const scheduleTool: GridTool = {
     const fixtureData = f === null || f.rows.length === 0 ? {} : { fixtures: f.rows.map((r) => ({ id: r.id, kind: r.kind, label: r.label, floor: r.floor, room: r.room, size: r.size, height: r.height })), fixtureCounts: f.counts }
     const data = { rows: s.rows, counts: s.counts, rule: s.rule, ...fixtureData }
     if (args['format'] === 'csv') {
-      const rows = s.rows.flatMap((row) => row.items.map((item) => [row.type, item.id, row.width, row.height, row.sill, item.floor, name(item.between[0]).replace(/"/g, ''), name(item.between[1]).replace(/"/g, '')]))
-      for (const r of f?.rows ?? []) rows.push([r.kind, r.id, r.size[0], r.height, '', r.floor, r.room === null ? 'no room' : name(r.room).replace(/"/g, ''), ''])
-      return { text: csv(['type', 'id', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2'], rows), data }
+      // CNT-14: a kind column only when some opening states its kind, so a plan with none is as before.
+      const kinds = s.rows.some((row) => row.kind !== null)
+      const rows = s.rows.flatMap((row) => row.items.map((item) => [row.type, ...(kinds ? [row.kind ?? ''] : []), item.id, row.width, row.height, row.sill, item.floor, name(item.between[0]).replace(/"/g, ''), name(item.between[1]).replace(/"/g, '')]))
+      for (const r of f?.rows ?? []) rows.push([r.kind, ...(kinds ? [''] : []), r.id, r.size[0], r.height, '', r.floor, r.room === null ? 'no room' : name(r.room).replace(/"/g, ''), ''])
+      return { text: csv(['type', ...(kinds ? ['kind'] : []), 'id', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2'], rows), data }
     }
-    const lines = types?.length === 1 && types[0] === 'fixture' ? [] : s.rows.map((row) => `${row.count} × ${row.type} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units, 'height')}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
+    const lines = types?.length === 1 && types[0] === 'fixture' ? [] : s.rows.map((row) => `${row.count} × ${row.type === 'opening' ? row.type : kindWords(row.type, row.kind)} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units, 'height')}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
     const onlyFixtures = types !== undefined && types.every((t) => t === 'fixture')
     if (lines.length === 0 && !onlyFixtures) lines.push(args['narrower_than'] !== undefined ? `Nothing of that kind is narrower than ${m(args['narrower_than'] as number)} m.` : 'The plan has no openings of that kind.')
     if (!onlyFixtures) lines.push(`In all: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)

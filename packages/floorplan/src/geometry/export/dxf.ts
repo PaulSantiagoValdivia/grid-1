@@ -16,8 +16,9 @@
  */
 
 import type { Vec2 } from '../vec2'
-import type { PlanDrawing } from '../floorplan'
+import type { PlanDrawing, PlanOpening } from '../floorplan'
 import { doorSwing, type SwingArc } from '../door'
+import { openingSymbol, type OpeningSymbol } from '../openingSymbol'
 import { TOLERANCES } from '../tolerances'
 import { areaText } from '../rounding'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
@@ -50,7 +51,11 @@ export const DXF_LAYERS = {
   notes: 'GRID-NOTES',
   // CNT-9: the facts of the person's own, one TEXT each, `[id] name: value`, beside the part that
   // carries it. Listed only in a file that writes some, so every other file is as it was.
-  facts: 'GRID-FACTS'
+  facts: 'GRID-FACTS',
+  // CNT-14: what a door's or window's symbol shows above the plan's cut or hidden in its wall
+  // (a pocket, a garage door open overhead, a high-level window), dashed. Listed only in a drawing
+  // that has some.
+  openingsAbove: 'GRID-OPENINGS-ABOVE'
 } as const
 
 /**
@@ -185,7 +190,8 @@ const LAYER_LINE_TYPE: Readonly<Record<DxfLayer, (typeof LINE_TYPES)[number]['na
   'GRID-FIXTURES': 'CONTINUOUS',
   'GRID-LEFT-OUT': 'CONTINUOUS',
   'GRID-NOTES': 'CONTINUOUS',
-  'GRID-FACTS': 'CONTINUOUS'
+  'GRID-FACTS': 'CONTINUOUS',
+  'GRID-OPENINGS-ABOVE': 'DASHED'
 }
 
 function writeLineTypeTable(w: DxfWriter): void {
@@ -209,12 +215,19 @@ function writeLineTypeTable(w: DxfWriter): void {
   w.pair(0, 'ENDTAB')
 }
 
+/** CNT-14: the symbol of a door or window that states its kind or its part that opens; null for one drawn as before. */
+function kindSymbol(opening: PlanOpening): OpeningSymbol | null {
+  if (opening.type === 'opening' || (opening.kind === undefined && opening.opens === undefined)) return null
+  return openingSymbol(opening)
+}
+
 function writeTables(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly LeftOutPart[], facts: readonly FactLine[]): void {
   const shown = (name: string): boolean =>
     (name !== DXF_LAYERS.facts || facts.length > 0) &&
     (name !== DXF_LAYERS.fixtures || drawing.items.length > 0) &&
     (name !== DXF_LAYERS.leftOut || leftOut.length > 0) &&
-    (name !== DXF_LAYERS.notes || drawing.notes.some((note) => noteText(note) !== null))
+    (name !== DXF_LAYERS.notes || drawing.notes.some((note) => noteText(note) !== null)) &&
+    (name !== DXF_LAYERS.openingsAbove || drawing.openings.some((o) => kindSymbol(o)?.pieces.some((piece) => piece.shape === 'line' && piece.above) === true))
   // SHT-7: each sketch category on a layer of its own, after the fixed layers.
   const sketch = [...new Set(drawing.sketch.map((item) => sketchLayer(item.category)))]
   const names: string[] = [...Object.values(DXF_LAYERS).filter(shown), ...sketch]
@@ -474,11 +487,27 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Lef
   // The 2D plan's door symbol: the leaf open at 90° and the arc back to the far jamb. Only a
   // door that states both values has one; `doorSwing` returns null for any other.
   for (const opening of drawing.openings) {
-    if (opening.type !== 'door') continue
+    if (opening.type !== 'door' || kindSymbol(opening) !== null) continue
     const swing = doorSwing(opening, opening.hinge, opening.swing)
     if (swing === null) continue
     writeLine(w, DXF_LAYERS.doorSwings, swing.leaf[0], swing.leaf[1])
     writeArc(w, DXF_LAYERS.doorSwings, swing.arc)
+  }
+  // CNT-14: a door or window that states its kind or the part of it that opens, by its kind's
+  // symbol (`openingSymbol`), as the 2D plan draws it: its leaves, panels and swings with the
+  // door swings, its glass and faces with the openings, and what lies above the cut dashed.
+  for (const opening of drawing.openings) {
+    const symbol = kindSymbol(opening)
+    if (symbol === null) continue
+    const on = opening.type === 'door' ? DXF_LAYERS.doorSwings : DXF_LAYERS.openings
+    for (const piece of symbol.pieces) {
+      if (piece.shape === 'arc') {
+        const angle = (p: Vec2): number => Math.atan2(p.y - piece.center.y, p.x - piece.center.x)
+        writeArc(w, on, { center: piece.center, radius: piece.radius, from: angle(piece.far), to: angle(piece.tip), counterClockwise: piece.counterClockwise })
+      } else if (piece.part !== 'jamb' && writable(piece.from.x, piece.from.y, piece.to.x, piece.to.y)) {
+        writeLine(w, piece.above ? DXF_LAYERS.openingsAbove : on, piece.from, piece.to)
+      }
+    }
   }
 
   // CNT-12: each fixture's symbol as the 2D plan draws it, its rings closed and its lines open.

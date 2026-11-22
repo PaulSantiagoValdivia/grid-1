@@ -14,7 +14,7 @@ import {
   planForFloor,
   roomArea,
   roomPolygon,
-  validateDoorSweeps,
+  checkDoorSweeps,
   validatePlan,
 } from '@ongrid/floorplan/geometry'
 import { EXPORT_FORMATS, exportPlan } from '@ongrid/floorplan/export'
@@ -126,8 +126,13 @@ export function runGrid(raw: unknown, options: { exports?: boolean } = {}): Grid
   stage('validate', () => {
     run.issues = [...faults.map(faultLine), ...lines(validatePlan(plan, undefined, { leftOutWalls }).issues)]
   })
+  // CNT-14: the doors whose swing is not stated, as `grid check`'s "not checked" line says them.
+  let doorsNotChecked: string[] = []
   stage('sweeps', () => {
-    run.sweeps = lines(validateDoorSweeps(plan, (o) => ({ hinge: o.hinge, swing: o.swing })))
+    // CNT-14: the door's kind and the part that opens with its swing.
+    const checked = checkDoorSweeps(plan, (o) => o)
+    run.sweeps = lines(checked.issues)
+    doorsNotChecked = checked.notChecked.map((n) => `floor ${n.floor}: no swing stated, not checked: ${n.doors.join(', ')}`)
   })
   const areas: string[] = []
   stage('areas', () => {
@@ -162,7 +167,7 @@ export function runGrid(raw: unknown, options: { exports?: boolean } = {}): Grid
       run.reports[key] = {
         notes: view.notes.map((n) => `[${n.tag}] ${n.title.map((p) => p.text).join('')}`),
         details: view.notes.map((n) => `${n.tag}|${n.title.map((p) => p.text).join('')}|${n.detail.map((p) => p.text).join('')}`),
-        notChecked: [...view.notChecked],
+        notChecked: [...view.notChecked, ...doorsNotChecked],
         sha1: sha1(JSON.stringify(report)),
       }
     })

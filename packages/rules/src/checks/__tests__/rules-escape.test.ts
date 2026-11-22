@@ -332,3 +332,15 @@ describe('the escape window line in the record (MSG-7, lab MS-13)', () => {
     expect(inspectPlan(plan).label).toBe('General guidance, not your local rules')
   })
 })
+
+describe('CNT-14: the part of a window that opens', () => {
+  it('measures a window by the part that opens when the plan states one', () => {
+    // 1.0 × 1.2 m passes as a whole; a 0.4 m wide casement in it does not.
+    expect(escapes(bedroom([{ ...win('o1', 1.0, 1.2, 0.9), opens: { width: 0.4 } }])).map((f) => [f.code, f.width, f.height])).toEqual([['escape_window_too_small', 0.4, 1.2]])
+    expect(escapes(bedroom([{ ...win('o1', 1.0, 1.2, 0.9), opens: { width: 0.8, height: 1.0 } }]))).toEqual([])
+  })
+
+  it('takes a fixed window as opening nothing', () => {
+    expect(escapes(bedroom([{ ...win('o1', 1.0, 1.2, 0.9), kind: 'fixed' }])).map((f) => [f.code, f.area])).toEqual([['escape_window_too_small', 0]])
+  })
+})

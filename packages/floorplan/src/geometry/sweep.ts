@@ -6,6 +6,11 @@
  * other door swinging into the same spot. Every finding is a warning. The door still draws, and nothing here
  * marks anything as broken.
  *
+ * CNT-14: each door by its kind (`doorSweeps`). One leaf, a pair and a folding door sweep the
+ * floor; a sliding, pocket, roller or garage door sweeps nothing and needs no swing. A door that
+ * states nothing of its swing is not checked, and `checkDoorSweeps` lists it, floor by floor; a
+ * wide door that states no kind is asked about (`opening/wide-single-leaf`).
+ *
  * Like `doorSwing`, the values come from the caller. `OpeningSchema` carries
  * `hinge` and `swing`, so the call is
  * `validateDoorSweeps(plan, (opening) => opening)`, made beside
@@ -16,25 +21,27 @@
 
 import type { FloorPlan, Opening, Wall } from './plan'
 import type { Issue } from './validate'
-import type { DoorHinge, DoorSide, DoorSwing } from './door'
-import { doorSwing } from './door'
+import type { DoorSweep, DoorSwing, DoorValues } from './door'
+import { doorSweeps } from './door'
+import { doorKindOf, statedKind, sweepsFloor, swingNeeds } from './openingKinds'
 import type { PlanDrawing } from './floorplan'
 import { buildFloorPlan } from './floorplan'
 import { boxIndex, boxOfPoints, widenBox } from './boxIndex'
 import { planFloors, planForFloor } from './floors'
 import type { Vec2 } from './vec2'
-import { tolerance } from './tolerances'
+import { limit, tolerance } from './tolerances'
 import { add, cross, distance, dot, length, lerp, perp, scale, signedArea, sub, vec } from './vec2'
 import type { WallEnds } from './wall'
 import { wallParts, wallSlicePolygon } from './wall'
 import { wallJoints } from './joints'
 import { itemName } from './items'
 
-/** One door's swing, as the caller knows it. Either half may be missing. */
-export interface DoorSwingValues {
-  readonly hinge?: DoorHinge | null
-  readonly swing?: DoorSide | null
-}
+/**
+ * One door's swing, as the caller knows it: the end it hangs from, the face it opens to, and
+ * (CNT-14) its kind and the part of it that opens. Any may be missing; a door with no kind is one
+ * swinging leaf.
+ */
+export type DoorSwingValues = DoorValues
 
 /** An `Issue`, plus what the sweep runs into, so a marker can point at it. */
 export interface DoorSweepIssue extends Issue {
@@ -49,7 +56,8 @@ const MESSAGES = {
     "This door is missing which way it opens, so it's drawn without a swing.",
   'opening/door-blocked': 'This door hits a wall when it opens.',
   'opening/door-hits-item': 'This door hits a fixture when it opens.',
-  'opening/doors-collide': 'These two doors hit each other when they open.'
+  'opening/doors-collide': 'These two doors hit each other when they open.',
+  'opening/wide-single-leaf': 'This door states no kind, so it is drawn and checked as one swinging leaf; a leaf this wide is rare.'
 } as const
 
 type SweepCode = keyof typeof MESSAGES
@@ -233,10 +241,58 @@ export function validateDoorSweeps(
   plan: FloorPlan,
   swingOf: (opening: Opening) => DoorSwingValues | null | undefined
 ): readonly DoorSweepIssue[] {
-  return planFloors(plan).flatMap((floor) => {
+  return checkDoorSweeps(plan, swingOf).issues
+}
+
+/** CNT-14: the doors on one floor whose sweep was not checked because the plan states no swing for them. */
+export interface DoorsNotChecked {
+  readonly floor: string
+  /** In plan order. */
+  readonly doors: readonly string[]
+}
+
+/**
+ * The door-swing check on every floor, with the doors it could not check (CNT-14): those whose
+ * kind swings or folds and that state neither the end they hang from nor the face they open to.
+ * A door that states one of the two has its own warning instead; a sliding, pocket, roller or
+ * garage door sweeps nothing and needs neither. Each floor is built once.
+ */
+export function checkDoorSweeps(
+  plan: FloorPlan,
+  swingOf: (opening: Opening) => DoorSwingValues | null | undefined
+): { readonly issues: readonly DoorSweepIssue[]; readonly notChecked: readonly DoorsNotChecked[] } {
+  const issues: DoorSweepIssue[] = []
+  const notChecked: DoorsNotChecked[] = []
+  // Each door is asked about once.
+  const asked = new Map<Opening, DoorSwingValues | null | undefined>()
+  const once = (opening: Opening): DoorSwingValues | null | undefined => {
+    if (!asked.has(opening)) asked.set(opening, swingOf(opening))
+    return asked.get(opening)
+  }
+  for (const floor of planFloors(plan)) {
     const slice = planForFloor(plan, floor.id)
-    return validateFloorDoorSweeps(slice, buildFloorPlan(slice), swingOf)
-  })
+    const drawing = buildFloorPlan(slice)
+    issues.push(...validateFloorDoorSweeps(slice, drawing, once))
+    const doors = floorDoorsNotChecked(slice, drawing, once)
+    if (doors.length > 0) notChecked.push({ floor: floor.id, doors })
+  }
+  return { issues, notChecked }
+}
+
+/** Whether a door's sweep cannot be checked because the plan states nothing of its swing (CNT-14). */
+export function swingNotStated(values: DoorSwingValues | null | undefined): boolean {
+  const kind = doorKindOf(values?.kind)
+  return sweepsFloor(kind) && !values?.hinge && !values?.swing
+}
+
+/** The doors one floor draws whose sweep is not checked because the plan states nothing of their swing (CNT-14). */
+export function floorDoorsNotChecked(
+  slice: FloorPlan,
+  drawing: PlanDrawing,
+  swingOf: (opening: Opening) => DoorSwingValues | null | undefined
+): string[] {
+  const drawn = new Set(drawing.openings.map((o) => o.id))
+  return slice.openings.filter((o) => o.type === 'door' && drawn.has(o.id) && swingNotStated(swingOf(o))).map((o) => o.id)
 }
 
 /**
@@ -296,60 +352,77 @@ export function validateFloorDoorSweeps(
     const values = swingOf(opening)
     const hinge = values?.hinge ?? null
     const swing = values?.swing ?? null
+    const kind = doorKindOf(values?.kind)
 
+    // CNT-14 (lab EL-5): a wide door that states no kind is drawn as one leaf; ask.
+    if (statedKind('door', values?.kind) === null && drawn.width >= limit('wideSingleLeaf')) {
+      issues.push(warning('opening/wide-single-leaf', drawn.id))
+    }
+
+    // A door that slides, rolls or lifts sweeps nothing, and needs no swing.
+    if (!sweepsFloor(kind)) continue
+    const needs = swingNeeds(kind)
+    // Nothing stated: listed as not checked (`checkDoorSweeps`), never guessed.
     if (!hinge && !swing) continue
-    if (!hinge) {
+    if (needs.hinge && !hinge) {
       issues.push(warning('opening/swing-without-hinge', drawn.id))
       continue
     }
-    if (!swing) {
+    if (needs.swing && !swing) {
       issues.push(warning('opening/hinge-without-swing', drawn.id))
       continue
     }
 
-    const sweep = doorSwing(drawn, hinge, swing)
-    if (!sweep) continue
-    const frame = frameOf(sweep)
+    const shapes = doorSweeps(drawn, values ?? {})
+    if (shapes === null || shapes.length === 0) continue
+    const reached = (shape: DoorSweep, rectangle: readonly Vec2[]): boolean =>
+      shape.shape === 'arc' ? reachesInto(frameOf(shape.swing), rectangle) : narrowestWidth(overlapOf(shape.polygon, rectangle)) > tolerance('swingContact')
+    const reach = (shape: DoorSweep) =>
+      shape.shape === 'arc' ? widenBox(boxOfPoints([shape.swing.arc.center]), shape.swing.arc.radius) : boxOfPoints(shape.polygon)
 
-    // The sweep lies within its radius of the hinge: a wall whose box is further off cannot
-    // reach into it.
-    const hits = nearBlockers
-      .near(widenBox(boxOfPoints([frame.origin]), frame.radius))
+    // Each sweep lies within its box: a wall whose box is further off cannot reach into it.
+    const hits = [...new Set(shapes.flatMap((shape) => nearBlockers.near(reach(shape))))]
+      .sort((a, b) => a - b)
       .map((i) => blockers[i]!)
       .filter((b) => b.id !== drawn.wallId)
-      .filter((b) => b.parts.some((rectangle) => reachesInto(frame, rectangle)))
+      .filter((b) => b.parts.some((rectangle) => shapes.some((shape) => reached(shape, rectangle))))
       .map((b) => b.id)
     if (hits.length > 0) issues.push(warning('opening/door-blocked', drawn.id, hits))
 
-    const struck = nearFixtures
-      .near(widenBox(boxOfPoints([frame.origin]), frame.radius))
+    const struck = [...new Set(shapes.flatMap((shape) => nearFixtures.near(reach(shape))))]
       .sort((a, b) => a - b)
       .map((i) => fixtures[i]!)
-      .filter((f) => reachesInto(frame, f.outline))
+      .filter((f) => shapes.some((shape) => reached(shape, f.outline)))
     if (struck.length > 0) {
       const message = `This door hits ${struck.map((f) => f.name).join(', ')} when it opens.`
       issues.push(warning('opening/door-hits-item', drawn.id, struck.map((f) => f.id), message))
     }
 
-    sweeps.push({
-      id: drawn.id,
-      hinge: sweep.hinge,
-      radius: sweep.arc.radius,
-      polygon: sweepPolygon(sweep)
-    })
+    for (const shape of shapes) {
+      if (shape.shape === 'arc') {
+        sweeps.push({ id: drawn.id, hinge: shape.swing.hinge, radius: shape.swing.arc.radius, polygon: sweepPolygon(shape.swing) })
+      } else {
+        const middle = scale(shape.polygon.reduce((sum, p) => add(sum, p), vec(0, 0)), 1 / shape.polygon.length)
+        sweeps.push({ id: drawn.id, hinge: middle, radius: Math.max(...shape.polygon.map((p) => distance(p, middle))), polygon: shape.polygon })
+      }
+    }
   }
 
   // Two discs whose boxes do not meet are further apart than their radii: the test below would
   // skip them too.
   const nearSweeps = boxIndex(sweeps.map((s) => widenBox(boxOfPoints([s.hinge]), s.radius)))
+  // CNT-14: a pair's two leaves are one door, and two doors are named once however many of their leaves meet.
+  const named = new Set<string>()
   for (let i = 0; i < sweeps.length; i++) {
     const first = sweeps[i]!
     for (const j of nearSweeps.near(widenBox(boxOfPoints([first.hinge]), first.radius))) {
       if (j <= i) continue
       const second = sweeps[j]!
+      if (second.id === first.id || named.has(`${first.id}\u0000${second.id}`)) continue
       // Two discs this far apart cannot overlap: skip the clip.
       if (distance(first.hinge, second.hinge) >= first.radius + second.radius) continue
       if (narrowestWidth(overlapOf(first.polygon, second.polygon)) > tolerance('swingContact')) {
+        named.add(`${first.id}\u0000${second.id}`)
         issues.push(warning('opening/doors-collide', first.id, [second.id]))
       }
     }

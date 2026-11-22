@@ -223,6 +223,9 @@ label.
 | `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
 | `opening/door-hits-item` | {thing} hits {the fixtures, by kind and id} when it opens | floor clear of fixtures where its leaf swings |
 | `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
+| `opening/wide-single-leaf` | {thing} states no kind, so it is drawn and checked as one swinging leaf this wide | its kind: single, double, sliding, pocket, folding, roller or garage |
+| `opening/kind-not-for-type` | {thing} states a kind it cannot be, so it is drawn with no kind | a door kind on a door (single, double, sliding, pocket, folding, roller, garage) and a window kind on a window (single, double, sliding, fixed, high-level); none on a doorless opening |
+| `opening/part-too-large` | {thing} states a part that opens that cannot open there, so it is taken as the whole opening | a part that opens no wider and no higher than its opening, on a door or a window that is not fixed |
 | `opening/crosses-wall` | {thing} runs into a wall that meets its wall | an opening within the clear run of its wall, between the walls that meet it |
 | `opening/fills-wall` | {thing} is as long as its wall | some wall left beside an opening |
 | `opening/on-dividing-line` | {thing} is on a dividing line | a door or window in a wall |
@@ -285,6 +288,7 @@ label.
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", these rooms could not be drawn, so they and what rests on them were not checked: "{room}", … | rooms that can be drawn |
 | `floor/not-checked-doors-not-drawn` | On "{floor}", these doors or windows could not be drawn, so they and what rests on them were not checked: "{id}", … | doors and windows that can be drawn |
+| `floor/not-checked-door-swings` | On "{floor}", {count} doors state no swing, so whether they open clear was not checked: {doors} | the hinge ("start" or "end") and the swing ("left" or "right") of each door that swings or folds; a sliding, pocket, roller or garage door ("kind") needs neither |
 | `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
@@ -518,6 +522,42 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: kinds of door and window, their handing and the part that opens (CNT-14)
+
+- A door or window may state its `kind` and the part of it that opens (`opens`); see
+  [Kinds of door and window](plan-file.md#kinds-of-door-and-window-their-handing-and-the-part-that-opens).
+  A door with no kind is one swinging leaf, as before; nothing changes for a plan that states none.
+- The door-swing check knows the kinds: a pair sweeps a quarter disc from each jamb, a folding
+  door a strip one panel deep, and a sliding, pocket, roller or garage door sweeps nothing, so it
+  is never `opening/door-blocked`, `opening/door-hits-item` or `opening/doors-collide`, and needs
+  no swing. A pair needs only its `swing`: `opening/hinge-without-swing` is given for a pair that
+  states a hinge and no swing, never `opening/swing-without-hinge`.
+- New code, not checked: `floor/not-checked-door-swings`, one line per floor naming the doors
+  (in `also`) whose kind swings or folds and that state neither `hinge` nor `swing`. Before, they
+  were left out in silence. It follows from nothing and is no problem (`problems`).
+- New codes, worth a look: `opening/wide-single-leaf` (a door 1.5 m wide or more, `wideSingleLeaf`,
+  that states no kind; on a plan that may not be in metres it follows from `plan/units-question`),
+  `opening/kind-not-for-type` (a kind its type does not take, read as no kind) and
+  `opening/part-too-large` (a part that opens larger than the opening, or on a fixed window or a
+  doorless opening, read as the whole opening). They are door warnings in the drawing too.
+- The escape check measures a window by the part that opens when the plan states one, and a
+  `fixed` window as opening nothing. The limit it states now reads "Windows are measured by the
+  part that opens where the plan states it, else as drawn: the part that opens may be smaller".
+- `grid_change_opening` takes `kind`, `hinged` (`left` or `right`, as seen from a room) and
+  `seen_from` (a room id or `outside`; the room it opens into when left out). `grid_write_rooms`
+  reads a kind word, `hinged left|right [seen from <room>]` and `part <w> [x <h>]` on a door or
+  window line, and `grid_describe as=rooms` writes them back.
+- `grid_schedule`: grouped, a row has `kind` (null when not stated) and each kind and size is a
+  row of its own, `2 × sliding door …`; the CSV adds a `kind` column only when some opening
+  states one. With `of=openings`, each row has `kind`, `opens` (`width`, `height`, or null) and
+  `handing` (`opens into "Hall", hinged on the left`, or null), in the text too; the CSV adds
+  `kind`, `opens width m`, `opens height m` and `handing` columns only when some row has one.
+- The 3D files (OBJ, GLB) hold each door's and window's `frame_`, `leaf_` and `glass_` objects,
+  the glass in a material of its own; the IFC fills each door and window with its frame, leaves
+  and glass (the glass styled), and types it by kind (`door:sliding:2.2x2.1`, IFC operation
+  `DOUBLE_DOOR_SLIDING`, `ROLLINGUP`, …). A door's leaves hang closed from the face of the wall it
+  opens toward.
 
 ### 2026-11-22: facts of the person's own, and asking across them (CNT-9)
 

@@ -67,12 +67,14 @@ describe("W-7: E's 26 fault plans", () => {
   })
 
   // WRT-7 reads f01's millimetres and f02's feet as stated, one line each and no units question:
-  // 95 lines and 48 beneath became 90 and 43; the problems stay 30.
-  it('read as 30 problems, with 43 of their 90 lines filed under them', () => {
+  // 95 lines and 48 beneath became 90 and 43; the problems stay 30. CNT-14: f01b and f02b, in
+  // millimetres and feet but stating metres, read their six doors each as 800 m or 2.6 m leaves,
+  // and ask about each (`opening/wide-single-leaf`), filed under the units question: 102 and 55.
+  it('read as 30 problems, with 55 of their 102 lines filed under them', () => {
     const lines = results.reduce((sum, [, r]) => sum + r.count, 0)
     const problems = results.reduce((sum, [, r]) => sum + r.problems, 0)
     const following = results.reduce((sum, [, r]) => sum + r.lines.filter((l) => l.causedBy !== undefined).length, 0)
-    expect({ lines, problems, following }).toEqual({ lines: 90, problems: 30, following: 43 })
+    expect({ lines, problems, following }).toEqual({ lines: 102, problems: 30, following: 55 })
   })
 
   it('file each follow-on right under its cause, or under a line under it', () => {

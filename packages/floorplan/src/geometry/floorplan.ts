@@ -35,7 +35,8 @@ import { wholePlan } from './floors'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
 import { planMarks } from './marks'
-import type { MarkedPart } from '../types/floorplan'
+import type { MarkedPart, OpeningKind, OpeningPart } from '../types/floorplan'
+import { statedKind } from './openingKinds'
 
 export interface PlanWall {
   readonly id: string
@@ -95,6 +96,12 @@ export interface PlanOpening {
   readonly hinge?: Opening['hinge']
   /** The face a door opens toward, when the plan states it (`left` is the face `normal` points at). */
   readonly swing?: Opening['swing']
+  /** CNT-14: its kind, when the plan states one its type takes. A door with none is one swinging leaf. */
+  readonly kind?: OpeningKind
+  /** CNT-14: the part of it that opens, when the plan states one. */
+  readonly opens?: OpeningPart
+  /** CNT-14: how high it is, from its sill, for a symbol that shows what lies overhead (a garage door). */
+  readonly height?: number
   /** WRT-6: the plan marks the opening, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
 }
@@ -314,6 +321,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
 
     for (const opening of usable) {
       const span = openingSpan(opening)
+      const kind = statedKind(opening.type, opening.kind)
       openings.push({
         id: opening.id,
         wallId: wall.id,
@@ -328,6 +336,9 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
         // Only what the plan states: an undecided door has no key, so nothing downstream guesses.
         ...(opening.hinge !== undefined && { hinge: opening.hinge }),
         ...(opening.swing !== undefined && { swing: opening.swing }),
+        ...(kind !== null && { kind }),
+        ...(opening.opens !== undefined && { opens: opening.opens }),
+        height: opening.height,
         ...assumed('opening', opening.id)
       })
     }

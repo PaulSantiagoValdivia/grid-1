@@ -5,7 +5,7 @@
  * heights from `floorElevations`, stairs from `planFacts`, findings from `checkPlan`. The
  * pictures are named, not drawn: a floor and its frame, or the model.
  */
-import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geometry'
+import { floorElevations, kindWords, planFloors, type Bounds } from '@ongrid/floorplan/geometry'
 import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
 import { findingReadFor, GENERAL_GUIDANCE_LABEL, readForSentence } from '@ongrid/rules'
@@ -342,8 +342,9 @@ function scheduleBodies(loaded: LoadedPlan, name: string): Body[] {
     note: rooms.rules[0]!,
   }
   const openingRows: SheetRow[] = openings.rows.map((r) => ({
-    name: `${r.number}. ${r.type} ${r.id}`,
-    detail: `${metresText(r.width)} × ${metresText(r.height)} m${r.type === 'window' ? `, sill ${metresText(r.sill)} m` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
+    // CNT-14: its kind, as the plan states it.
+    name: `${r.number}. ${r.type === 'opening' ? r.type : kindWords(r.type, r.kind)} ${r.id}`,
+    detail: `${metresText(r.width)} × ${metresText(r.height)} m${r.type === 'window' ? `, sill ${metresText(r.sill)} m` : ''}${r.opens === null ? '' : `, opens ${metresText(r.opens.width)} × ${metresText(r.opens.height)} m`}${r.handing === null ? '' : `, ${r.handing}`}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
     area: '1',
   }))
   const c = openings.counts

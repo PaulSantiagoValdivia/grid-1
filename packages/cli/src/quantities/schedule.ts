@@ -3,8 +3,8 @@
  * listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no
  * frame, leaf or clear width.
  */
-import { compareIds, planForFloor, roomNumbers, tolerance } from '@ongrid/floorplan/geometry'
-import { factText, type Facts } from '@ongrid/floorplan/types/floorplan'
+import { compareIds, partHeight, partWidth, planForFloor, roomNumbers, sideSeenFrom, statedKind, tolerance } from '@ongrid/floorplan/geometry'
+import { factText, type Facts, type Opening, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import type { OpeningFacts } from '../describe/facts'
 import { AREA_RULES, planAreas } from './areas'
 import { HEIGHT_RULE, roomHeight } from './measure'
@@ -23,6 +23,8 @@ export interface ScheduleItem {
 
 export interface ScheduleRow {
   readonly type: 'door' | 'window' | 'opening'
+  /** CNT-14: the kind the plan states (`sliding`, `fixed`), or null; one type of each kind and size. */
+  readonly kind: OpeningKind | null
   readonly width: number
   readonly height: number
   readonly sill: number
@@ -38,25 +40,30 @@ export interface Schedule {
 
 const ORDER = { door: 0, window: 1, opening: 2 } as const
 
+/** CNT-14: openings that state no kind first, then by kind's word. */
+const kindOrder = (a: OpeningKind | null, b: OpeningKind | null): number => (a === b ? 0 : a === null ? -1 : b === null ? 1 : a < b ? -1 : 1)
+
 export function planSchedule(
   survey: Survey,
   options: { floors?: readonly string[]; types?: readonly ('door' | 'window' | 'opening')[]; narrowerThan?: number } = {},
 ): Schedule {
-  const groups = new Map<string, { type: ScheduleRow['type']; width: number; height: number; sill: number; items: ScheduleItem[] }>()
+  const groups = new Map<string, { type: ScheduleRow['type']; kind: OpeningKind | null; width: number; height: number; sill: number; items: ScheduleItem[] }>()
+  const stated = new Map(survey.plan.openings.map((o) => [o.id, o] as const))
   for (const floor of survey.facts.floors) {
     if (options.floors !== undefined && !options.floors.includes(floor.id)) continue
     for (const opening of floor.openings) {
       if (options.types !== undefined && !options.types.includes(opening.type)) continue
       if (options.narrowerThan !== undefined && !(opening.width < options.narrowerThan - tolerance('noLength'))) continue
-      const key = [opening.type, opening.width.toFixed(3), opening.height.toFixed(3), opening.sill.toFixed(3)].join('|')
-      const group = groups.get(key) ?? { type: opening.type, width: opening.width, height: opening.height, sill: opening.sill, items: [] }
+      const kind = statedKind(opening.type, stated.get(opening.id)?.kind)
+      const key = [opening.type, kind ?? '', opening.width.toFixed(3), opening.height.toFixed(3), opening.sill.toFixed(3)].join('|')
+      const group = groups.get(key) ?? { type: opening.type, kind, width: opening.width, height: opening.height, sill: opening.sill, items: [] }
       group.items.push({ id: opening.id, floor: floor.id, between: sideNames(opening) })
       groups.set(key, group)
     }
   }
   const rows = [...groups.values()]
     .map((group) => ({ ...group, count: group.items.length }))
-    .sort((a, b) => ORDER[a.type] - ORDER[b.type] || a.width - b.width || a.height - b.height || a.sill - b.sill)
+    .sort((a, b) => ORDER[a.type] - ORDER[b.type] || kindOrder(a.kind, b.kind) || a.width - b.width || a.height - b.height || a.sill - b.sill)
   const counts = { door: 0, window: 0, opening: 0 }
   for (const row of rows) counts[row.type] += row.count
   return { rows, counts, rule: SCHEDULE_RULE }
@@ -122,6 +129,12 @@ export interface OpeningScheduleRow {
   readonly width: number
   readonly height: number
   readonly sill: number
+  /** CNT-14: its kind as the plan states it, or null (a door with none is one swinging leaf). */
+  readonly kind: OpeningKind | null
+  /** CNT-14: the part of it that opens, when the plan states one: width, and height (the opening's when unstated). */
+  readonly opens: { readonly width: number; readonly height: number } | null
+  /** CNT-14: a door's handing in rooms, `opens into "Hall", hinged on the left`, when the plan states it. */
+  readonly handing: string | null
   /** A room's name, or what lies there when no room does (`outside`, `nothing drawn`, `a room left out`). */
   readonly between: readonly [string, string]
   /** CNT-9: the opening's facts of the person's own, by name, as the plan gives them. */
@@ -216,6 +229,7 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
     const stated = new Map(survey.plan.openings.map((o) => [o.id, o] as const))
     for (const opening of [...facts.openings].sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || compareIds(a.id, b.id))) {
       counts[opening.type] += 1
+      const own = stated.get(opening.id)
       rows.push({
         number: rows.length + 1,
         id: opening.id,
@@ -225,6 +239,9 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
         width: opening.width,
         height: opening.height,
         sill: opening.sill,
+        kind: statedKind(opening.type, own?.kind),
+        opens: own?.opens === undefined || opening.type === 'opening' ? null : { width: partWidth(opening.width, own.opens), height: partHeight(opening.height, own.opens) },
+        handing: own === undefined ? null : handingWords(own, opening.sides, side),
         between: [side(opening.sides[0]), side(opening.sides[1])],
         properties: stated.get(opening.id)?.properties ?? {},
       })
@@ -286,14 +303,38 @@ export function roomScheduleCsv(schedule: RoomSchedule): string {
 export function openingScheduleCsv(schedule: OpeningSchedule): string {
   const name = 'opening schedule'
   const columns = factColumns(schedule.rows)
+  // CNT-14: the kind, the part that opens and the handing, each only when some opening states it,
+  // so a schedule of a plan that states none is as before.
+  const kinds = schedule.rows.some((r) => r.kind !== null)
+  const parts = schedule.rows.some((r) => r.opens !== null)
+  const handings = schedule.rows.some((r) => r.handing !== null)
   const rows: Cell[][] = schedule.rows.map((r, i) => {
     const n = i + 1
     return [
       numberCell(name, n, 'number', r.number, false), textCell(name, n, 'id', r.id), textCell(name, n, 'type', r.type),
+      ...(kinds ? [r.kind] : []),
       numberCell(name, n, 'width', r.width, false), numberCell(name, n, 'height', r.height, false), numberCell(name, n, 'sill', r.sill, false),
+      ...(parts ? [r.opens?.width ?? null, r.opens?.height ?? null] : []),
+      ...(handings ? [r.handing] : []),
       textCell(name, n, 'floor', r.floorName), textCell(name, n, 'room on one side', r.between[0]), textCell(name, n, 'room on the other side', r.between[1]), 1,
       ...factCells(r.properties, columns),
     ]
   })
-  return csv(['number', 'id', 'type', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2', 'count', ...columns], rows)
+  return csv(
+    ['number', 'id', 'type', ...(kinds ? ['kind'] : []), 'width m', 'height m', 'sill m', ...(parts ? ['opens width m', 'opens height m'] : []), ...(handings ? ['handing'] : []), 'floor', 'side 1', 'side 2', 'count', ...columns],
+    rows,
+  )
+}
+
+/**
+ * CNT-14: a door's handing in rooms, as the plan states it: the room it opens into and the side it
+ * is hinged on as seen from there (`sideSeenFrom`); null when it states no swing. `sides` are what
+ * lies on the face the wall's normal points at, then the other.
+ */
+function handingWords(opening: Opening, sides: OpeningFacts['sides'], name: (side: OpeningFacts['sides'][number]) => string): string | null {
+  if (opening.type !== 'door' || opening.swing === undefined) return null
+  const into = opening.swing === 'left' ? sides[0] : sides[1]
+  // A room by its name; past a face with no room, what lies there.
+  const words = typeof into === 'object' ? `opens into ${name(into)}` : into === 'outside' ? 'opens outside' : `opens toward ${name(into)}`
+  return opening.hinge === undefined ? words : `${words}, hinged on the ${sideSeenFrom(opening.swing, opening.hinge)}`
 }

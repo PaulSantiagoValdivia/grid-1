@@ -37,6 +37,18 @@ window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
 - Rooms that overlap, that touch with no wall between them (unless one is `open` to the other),
   or that leave a gap that is neither a wall nor a room are refused in plain words naming both
   rooms. Every refusal has a code, such as `rooms/overlap`.
+- A door or window line may say its kind (CNT-14): `sliding`, `double`, `folding`, `pocket`,
+  `roller`, `garage` or `single` for a door, `single`, `double`, `sliding`, `fixed` or
+  `high-level` for a window; `part 0.9` (or `part 0.6 x 1.0`) for the part that opens. A door
+  is hinged on a side of the drawing (`hinged east`) or, as a person says it, on the left or
+  the right seen from the room it opens into, or from another (`hinged left`, `hinged right seen
+  from bedroom`). A sliding, pocket, roller or garage door needs no swing, and none is guessed
+  for it ([Kinds of door and window](plan-file.md#kinds-of-door-and-window-their-handing-and-the-part-that-opens)).
+
+  ```
+  door d-patio in living south, centred, 2.4 wide, sliding
+  door d-bed   between hall and bedroom, 0.1 from west, 0.8 wide, opens into bedroom, hinged left
+  ```
 - What rooms cannot say is written raw, one line of the plan file's own JSON:
   `raw wall {...}`, `raw room {...}`, `raw opening {...}`. Free-standing walls, curved or
   out-of-the-way walls and rooms with holes are written that way.

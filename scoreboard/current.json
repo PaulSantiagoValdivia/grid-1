@@ -5,7 +5,7 @@
   "damageSilent": 278,
   "turnsAnswered": 16,
   "mistakesNamed": 5,
-  "checksFed": 15,
+  "checksFed": 17,
   "roomsNotMeasured": 735,
   "soundPlansWithAlarm": 95
  },
@@ -58,7 +58,7 @@
   },
   "checks": {
    "checks": 42,
-   "fed": 15,
+   "fed": 17,
    "labYes": 5
   },
   "capabilities": {
@@ -85,7 +85,7 @@
    "roof": "no",
    "fixtures": "no",
    "furniture": "no",
-   "door-leaves": "no",
+   "door-leaves": "yes",
    "clear-width": "yes",
    "threshold": "no",
    "fire-rating": "no",
@@ -114,7 +114,7 @@
    "repeat-floor": "no",
    "local-rules": "no",
    "permission": "no",
-   "openable-part": "no",
+   "openable-part": "yes",
    "services": "no",
    "exit-side": "no",
    "lift": "yes",

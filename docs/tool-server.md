@@ -40,7 +40,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_mark_seen` | Sets a note of `grid_check` aside as seen, with the person's reason and the name or role they give, in `plan.seen.json` beside the plan; or takes the mark off (see below) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
-| `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
+| `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into, which side it is hinged on as seen from a room, its kind), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |
 | `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share |
