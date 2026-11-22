@@ -24,6 +24,11 @@ export interface LoadedPlan {
   readonly issues: readonly Issue[]
   /** Ids the views and exports leave out because they can't be drawn. */
   readonly broken: ReadonlySet<string>
+  /**
+   * The file as JSON, before the schema read it (MSG-4): `grid check` names from it the fields
+   * and uses Grid does not read. Absent for a plan made in memory.
+   */
+  readonly raw?: unknown
 }
 
 function oneLine(text: string): string {
@@ -114,7 +119,7 @@ export function loadPlan(project: Project, file: string): LoadedPlan {
   }
   const plan = parsed.data
   const { issues, broken } = validatePlan(plan)
-  return { file: real, plan, issues, broken }
+  return { file: real, plan, issues, broken, raw }
 }
 
 /**

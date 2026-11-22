@@ -22,7 +22,8 @@ import {
   type FloorPlan,
   type Issue
 } from '@ongrid/floorplan/geometry'
-import { DEFAULT_FLOOR_ID, FloorPlanSchema, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_FLOOR_ID, FloorPlanSchema, ROOM_USES, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
+import { readingNotes, type ReadingNote } from '@ongrid/floorplan/types/reading'
 import { FIGURE_LIMITS } from '../checks/catalogue'
 import { checkLocalRules, type CheckOptions } from '../checks/check'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from '../checks/types'
@@ -144,7 +145,53 @@ function refusalLines(raw: Record<string, unknown>, issues: readonly ZodIssue[])
   })
 }
 
-type Read = { plan: FloorPlan; lines: [] } | { plan: null; lines: ResultLine[] }
+/** What each place may hold, for a field Grid does not know there. */
+const FIELDS_OF: Record<string, string> = {
+  walls: 'a wall',
+  rooms: 'a room',
+  openings: 'an opening',
+  floors: 'a floor',
+  items: 'a fixture',
+  '': 'the plan',
+  referenceImage: 'the trace image',
+  written: 'the record of how the plan was written'
+}
+
+/**
+ * The words Grid does not read (MSG-4), one line each, about the part they are on: a field Grid
+ * does not know, a room use it does not know, and an empty plan. They are worth a look: the
+ * plan is read without them, and that may be what explains the other lines.
+ */
+function readingLines(raw: Record<string, unknown>, notes: readonly ReadingNote[], names: Names): ResultLine[] {
+  return notes.map((note) => {
+    if (note.kind === 'empty') return line('plan/empty', 'worth-a-look', { kind: 'plan', id: '' }, null, blank(NOUN.plan))
+    // The part by where it is in the file; named as every other line names it.
+    const at = note.part === null ? null : partAt(raw, [note.part.list, note.part.index])
+    const part = at === null || at.thing.kind === 'plan' ? null : { thing: at.thing, ...names.thingOf(at.thing.kind, at.thing.id) }
+    const thing = part?.thing ?? { kind: 'plan' as const, id: '' }
+    const subject = { ...blank(part?.label ?? NOUN.plan), name: part?.name ?? '', nearest: note.nearest }
+    if (note.kind === 'unknown-field') {
+      const word = note.field === null ? 'with a name Grid does not repeat' : quoted(note.field)
+      const what = FIELDS_OF[note.part?.list ?? note.at] ?? quoted(note.at)
+      return line('plan/unknown-field', 'worth-a-look', thing, part?.floor ?? null, {
+        ...subject,
+        word,
+        nearestWritten: note.nearestWritten,
+        known: `the fields of ${what}: ${note.known.join(', ')}`,
+        place: note.at || 'the top of the plan'
+      })
+    }
+    const word = note.use !== null ? quoted(note.use) : note.notText !== null ? `that is ${note.notText}` : 'that Grid does not repeat'
+    return line('plan/unknown-use', 'worth-a-look', thing, part?.floor ?? null, {
+      ...subject,
+      word,
+      known: `the uses Grid knows: ${ROOM_USES.join(', ')}`,
+      place: `${note.part.list}[${note.part.index}].use`
+    })
+  })
+}
+
+type Read = { plan: FloorPlan; raw: Record<string, unknown> } | { plan: null; lines: ResultLine[] }
 
 function readPlan(raw: unknown): Read {
   let value = raw
@@ -159,7 +206,7 @@ function readPlan(raw: unknown): Read {
     return { plan: null, lines: [line('plan/not-an-object', 'refused', { kind: 'plan', id: '' }, null, blank(NOUN.plan))] }
   }
   const parsed = FloorPlanSchema.safeParse(value)
-  if (parsed.success) return { plan: parsed.data, lines: [] }
+  if (parsed.success) return { plan: parsed.data, raw: value as Record<string, unknown> }
   return { plan: null, lines: refusalLines(value as Record<string, unknown>, parsed.error.issues) }
 }
 
@@ -330,7 +377,8 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
 }
 
 /** Every line about a plan that was read. */
-function inspectRead(plan: FloorPlan, options: CheckOptions): GridResult {
+function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOptions): GridResult {
+  const { plan } = read
   const lines: ResultLine[] = []
   const names = namesOf(plan)
   const stage = (name: string, body: () => void): void => {
@@ -340,6 +388,10 @@ function inspectRead(plan: FloorPlan, options: CheckOptions): GridResult {
       lines.push(checkFailed(name, error))
     }
   }
+  // What the file says that Grid does not read leads the lines of its kind: it may explain them.
+  stage('reading', () => {
+    lines.push(...readingLines(read.raw, readingNotes(read.raw), names))
+  })
   stage('drawing check', () => {
     lines.push(...validatePlan(plan).issues.map((issue) => issueLine(issue, names)))
   })
@@ -373,7 +425,7 @@ export function inspectPlan(raw: unknown, options: CheckOptions = {}): GridResul
   try {
     const read = readPlan(raw)
     if (read.plan === null) return record(read.lines, false, null)
-    return inspectRead(read.plan, options)
+    return inspectRead(read, options)
   } catch (error) {
     return record([checkFailed('reading', error)], false, null)
   }

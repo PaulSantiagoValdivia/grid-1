@@ -184,6 +184,16 @@ export const ROOM_USES = [
 
 export const RoomUseSchema = z.enum(ROOM_USES)
 
+/**
+ * A use as Grid reads it (MSG-4): whatever its capitals, so `Bedroom` is `bedroom`. Anything
+ * else is left as it is, for the schema to read as unstated and `readingNotes` to name.
+ */
+export function readUse(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const lower = value.toLowerCase()
+  return (ROOM_USES as readonly string[]).includes(lower) ? lower : value
+}
+
 /** A list of wall ids round a room or one of its holes, at most `BOUNDARY_MAX` long (MSG-9). */
 const wallList = () =>
   z.array(text('id')).superRefine((list, ctx) => {
@@ -210,8 +220,9 @@ export const RoomSchema = z.object({
   floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
   // unknown value is read as unstated instead of rejecting the whole plan: `use`
-  // only feeds advisory checks, and a parse error means no preview at all.
-  use: RoomUseSchema.optional().catch(undefined),
+  // only feeds advisory checks, and a parse error means no preview at all. MSG-4: a use is
+  // read whatever its capitals, and one Grid does not know is named (`readingNotes`).
+  use: z.preprocess(readUse, RoomUseSchema).optional().catch(undefined),
   // ARE-5: the room sits inside another room on its floor, as a wardrobe pod, a lift shaft or
   // an en-suite drawn inside a bedroom. The room it sits in is found from the outlines, never
   // named here: the smallest room on the same floor that holds it. Its floor, with its own

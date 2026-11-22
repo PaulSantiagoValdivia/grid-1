@@ -8,6 +8,7 @@
     "./geometry": "./src/geometry/index.ts",
     "./geometry/*": "./src/geometry/*.ts",
     "./types/floorplan": "./src/types/floorplan.ts",
+    "./types/reading": "./src/types/reading.ts",
     "./types/sheet": "./src/types/sheet.ts",
     "./export": "./src/export/planExport.ts",
     "./notes": "./src/notes/notes.ts",

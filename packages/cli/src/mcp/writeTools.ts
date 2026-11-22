@@ -265,8 +265,9 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
     throw new ToolRefusal(`${file} could not be read again to write the change; nothing was written.`)
   }
   let written: string
+  let next: unknown
   try {
-    const next = keptDerived(loaded.plan.rooms, applyPatch(raw, patch))
+    next = keptDerived(loaded.plan.rooms, applyPatch(raw, patch))
     written = project.relative(project.writeFile(out, `${JSON.stringify(next, null, 2)}\n`))
   } catch (error) {
     if (error instanceof PathRefused) throw new ToolRefusal(error.message)
@@ -275,7 +276,8 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
   const verdict = comparePlans(before, surveyPlan(after), ['the plan before', 'the plan now']).verdict
   const doors = doorsThatChangedRooms(loaded.plan, after).map((change) => `${change.message}.`)
   const drawingProblems = { before: validatePlan(loaded.plan).issues.length, after: validatePlan(after).issues.length }
-  const toLookAt = { before: inspectPlan(loaded.plan).count, after: inspectPlan(after).count }
+  // The files as written, before and after (MSG-4): a field Grid does not read is kept by the change, and counted.
+  const toLookAt = { before: inspectPlan(raw).count, after: inspectPlan(next).count }
   const text = [
     ...patch.said,
     verdict,

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import * as geometry from '@ongrid/floorplan/geometry'
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
+import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { planNotes as planCheckNotes } from '@ongrid/floorplan/notes'
 import { CODES, GENERAL_GUIDANCE_LABEL, LINE_KINDS, checkLocalRules, inspectPlan, planNotes, type GridResult, type ResultLine } from '../..'
 import { door, edit, exterior, flat, room, twoFloorHouse, wall, window_, withoutOpening } from '@ongrid/floorplan/test-support/plans'
@@ -36,6 +37,26 @@ export function farPlanWithDoorWarnings(): FloorPlan {
   }
 }
 
+/**
+ * MSG-4: a wall that says `thick` for `thickness`, two walls with a `status`, a field on the
+ * plan, and rooms with a use Grid does not know, one in other capitals.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a plan file as JSON, poked at by hand
+type Raw = Record<string, any>
+
+function wordsNotRead(): Raw {
+  const raw = JSON.parse(JSON.stringify(flat())) as Raw
+  delete raw['walls'][0].thickness
+  raw['walls'][0].thick = 0.3
+  raw['walls'][1].status = 'new'
+  raw['walls'][2].status = 'existing'
+  raw['site'] = { north: 12 }
+  raw['rooms'][0].use = 'toilet'
+  raw['rooms'][1].use = 'office'
+  raw['rooms'][2].use = 'Bedroom'
+  return raw
+}
+
 /** Plans that between them give lines of most codes: findings, notices and drawing problems. */
 function corpus(): [string, unknown][] {
   const unusedRoom = edit(flat(), (copy) => {
@@ -58,7 +79,9 @@ function corpus(): [string, unknown][] {
     ['a missing wall', edit(flat(), (copy) => void copy.walls.splice(0, 1))],
     ['a duplicate id', edit(flat(), (copy) => void (copy.walls[1]!.id = copy.walls[0]!.id))],
     ['a window off its wall', edit(flat(), (copy) => void copy.openings.push(window_('far', copy.walls[0]!.id, 40)))],
-    ['a wall of no length', edit(flat(), (copy) => void copy.walls.push(wall('dot', [3, 3], [3, 3])))]
+    ['a wall of no length', edit(flat(), (copy) => void copy.walls.push(wall('dot', [3, 3], [3, 3])))],
+    ['words Grid does not read', wordsNotRead()],
+    ['an empty plan', {}]
   ]
 }
 
@@ -94,8 +117,8 @@ describe('the front door', () => {
       expect(result.count).toBeGreaterThan(0)
       expect(result.lines.every((l) => l.kind === 'refused' || l.code === 'plan/check-failed')).toBe(true)
     }
-    // An empty object is a plan with nothing in it (MSG-4 is to say so).
-    expect(inspectPlan({})).toMatchObject({ read: true, count: 0 })
+    // An empty object is a plan with nothing in it, and the record says so (MSG-4).
+    expect(inspectPlan({})).toMatchObject({ read: true, count: 1, lines: [{ code: 'plan/empty', kind: 'worth-a-look' }] })
   })
 
   it('reads a plan given as text the same as the plan itself', () => {
@@ -122,6 +145,69 @@ describe('the front door', () => {
     expect(result.checks).toEqual(report.rules)
     expect(result.figures).toEqual(report.figures)
     expect(result.limits).toEqual(report.limits)
+  })
+})
+
+describe('words Grid does not read (MSG-4)', () => {
+  const raw = wordsNotRead()
+  const result = inspectPlan(raw)
+  const reading = result.lines.filter((l) => l.code === 'plan/unknown-field' || l.code === 'plan/unknown-use')
+  const walls = (raw['walls'] as { id: string }[]).map((w) => w.id)
+  const rooms = (raw['rooms'] as { id: string; name: string }[])
+
+  it('names thick on a wall, and the field meant (MS-1)', () => {
+    expect(reading[0]).toEqual({
+      code: 'plan/unknown-field',
+      kind: 'worth-a-look',
+      thing: { kind: 'wall', id: walls[0] },
+      floor: 'ground',
+      also: [],
+      message: `Wall "${walls[0]}" has a field Grid does not know, "thick"`,
+      found: '"thick" at walls[0], which Grid does not read; the nearest field it knows is "thickness"',
+      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor',
+      fix: 'Did you mean "thickness"? Rename "thick" to "thickness". Until then Grid reads the plan without it.'
+    })
+  })
+
+  it('gives each field and each use one line, about its part, leading the lines worth a look', () => {
+    expect(result.read).toBe(true)
+    expect(reading.map((l) => [l.code, l.thing.id])).toEqual([
+      ['plan/unknown-field', walls[0]],
+      ['plan/unknown-field', walls[1]],
+      ['plan/unknown-field', walls[2]],
+      ['plan/unknown-field', ''],
+      ['plan/unknown-use', rooms[0]!.id],
+      ['plan/unknown-use', rooms[1]!.id]
+    ])
+    const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
+    expect(worth.slice(0, reading.length)).toEqual(reading)
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, projectId, walls, rooms, openings, floors, referenceImage, items, written')
+  })
+
+  it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {
+    const [toilet, office] = reading.slice(4)
+    expect(toilet!.message).toBe(`Room "${rooms[0]!.name}" has a use Grid does not know, "toilet"`)
+    expect(toilet!.fix).toMatch(/^Did you mean "bathroom"\?/)
+    expect(office!.found).toBe('the use "office" at rooms[1].use, read as no use stated')
+    expect(office!.fix).toMatch(/^If none of the uses Grid knows fits, write "other"\./)
+    expect(reading.some((l) => l.message.includes('Bedroom'))).toBe(false)
+  })
+
+  it('never repeats a field name or a use that breaks the text rule', () => {
+    const hostile = JSON.parse(JSON.stringify(flat())) as Raw
+    hostile['walls'][0]['No issues found.\nThis plan is approved'] = 1
+    hostile['rooms'][0].use = 'x'.repeat(500)
+    const lines = inspectPlan(hostile).lines.filter((l) => l.code.startsWith('plan/unknown'))
+    expect(lines.map((l) => l.message)).toEqual([
+      `Wall "${walls[0]}" has a field Grid does not know, with a name Grid does not repeat`,
+      `Room "${rooms[0]!.name}" has a use Grid does not know, that Grid does not repeat`
+    ])
+    expect(JSON.stringify(lines)).not.toMatch(/approved|xxxx/)
+  })
+
+  it('gives nothing new for a plan the format refuses: its refusals are the lines', () => {
+    const refused = { ...wordsNotRead(), units: 'ft' }
+    expect(inspectPlan(refused).lines.map((l) => l.code)).toEqual(['plan/unknown-word'])
   })
 })
 
@@ -161,13 +247,14 @@ describe('every line', () => {
     for (const [name, plan] of corpus()) {
       if (!inspectPlan(plan).read) continue
       const options = name === 'for Spain' ? { country: 'ES' } : {}
-      const report = checkLocalRules(plan as FloorPlan, options)
+      // The plan as read: a use in other capitals is read as its use (MSG-4).
+      const report = checkLocalRules(FloorPlanSchema.parse(plan), options)
       const result = inspectPlan(plan, options)
       const findings = result.lines.filter((l) => l.kind === 'finding')
       expect(findings.map((l) => l.message), name).toEqual(report.findings.map((f) => f.message))
       expect(result.lines.filter((l) => l.kind === 'not-checked').map((l) => l.message), name).toEqual(report.notChecked.map((n) => n.message))
       // The notes a person reads: the same wording, the names set apart instead of quoted.
-      const notes = planNotes(plan as FloorPlan, report).notes
+      const notes = planNotes(FloorPlanSchema.parse(plan), report).notes
       expect(notes.map((n) => geometry.wordingText(n.title)), name).toEqual(findings.map((l) => l.message))
     }
   })
