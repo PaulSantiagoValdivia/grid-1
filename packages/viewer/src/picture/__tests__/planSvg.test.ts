@@ -50,7 +50,8 @@ describe('planToSvg', () => {
     const svg = planToSvg(house())
     expect(svg).not.toMatch(/var\(|vector-effect|<style|class=/)
     for (const tag of attrsOf(svg, 'room')) expect(tag).toContain(`fill="${LIGHT_LOOK.room}"`)
-    for (const tag of attrsOf(svg, 'wall')) expect(tag).toMatch(new RegExp(`fill="(${LIGHT_LOOK.wall}|${LIGHT_LOOK.wallExterior})"`))
+    // SHT-10: each kind of wall in its own fill.
+    for (const tag of attrsOf(svg, 'wall')) expect(tag).toMatch(new RegExp(`fill="(${LIGHT_LOOK.wallExterior}|${LIGHT_LOOK.wallInside}|${LIGHT_LOOK.wallPartition})"`))
     for (const tag of attrsOf(svg, 'label')) {
       expect(tag).toContain(`fill="${LIGHT_LOOK.label}"`)
       expect(tag).toContain('font-family="')

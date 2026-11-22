@@ -2349,6 +2349,9 @@ export const es: Messages = {
   'describe.column.round': '{label}redondo de {width} m en {at}{room}',
   'describe.column.label': '{label}, ',
   'describe.column.in': ', en {room}',
+  'drawing.key.partition': 'Tabique',
+  'drawing.key.material': 'Muro: {material}',
+  'drawing.key.finish': 'Suelo: {finish}',
 
   // --- Espacio exterior, cubierto o descubierto (CNT-7, C26)
   'areas.measure.outdoor.measures': 'La superficie exterior es el suelo de cada local que el plano marca como espacio exterior, cubierto o descubierto, medido hasta las caras de sus muros y bordes como se mide un local.',

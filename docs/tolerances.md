@@ -105,10 +105,11 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `aboveSameEdge` | tolerance | 0.02 m | A stretch of the outline of the floor above this close to the outline of the floor drawn, along it, is the same wall face, and is not drawn dashed (SHT-11) |
 | `wideSingleLeaf` | limit | 1.5 m | A door at least this wide that states no kind is taken as one swinging leaf and asked about (`opening/wide-single-leaf`, CNT-14) |
 | `foldingPanel` | limit | 0.6 m | The widest panel a folding door is drawn and checked with: it folds in as many panels as this needs, two at least, and sweeps a strip one panel deep (CNT-14) |
-| `frameFace` | limit | 0.05 m | How wide a door's or window's frame, and the frame round each part of a window that opens, is drawn in 3D (CNT-14) |
-| `frameDepth` | limit | 0.07 m | How deep a window's frame is drawn in 3D, in the middle of its wall; a door's frame lines the wall's whole depth (CNT-14) |
+| `frameFace` | limit | 0.05 m | How wide a door's or window's frame, and the frame round each part of a window that opens, is drawn in 3D (CNT-14), and each side's frame on a plan drawn in detail (SHT-10) |
+| `frameDepth` | limit | 0.07 m | How deep a window's frame is drawn in 3D and on a plan drawn in detail, in the middle of its wall; a door's frame lines the wall's whole depth (CNT-14, SHT-10) |
 | `leafThickness` | limit | 0.04 m | How thick a door leaf or panel is drawn in 3D, hung from the face of the wall it opens toward (CNT-14) |
-| `glassThickness` | limit | 0.02 m | How thick a window's glass is drawn in 3D, in the middle of its frame (CNT-14) |
+| `glassThickness` | limit | 0.02 m | How thick a window's glass is drawn in 3D, in the middle of its frame (CNT-14), and how far apart its two panes are on a plan drawn in detail (SHT-10) |
+| `sillProjection` | limit | 0.03 m | How far a window's sill stands out from each face of its wall, and past each side of its hole, on a plan drawn in detail (SHT-10) |
 | `facadeFacing` | tolerance | 0.0175 sine | A face of the building is drawn on a facade when it turns at least this much (about one degree) toward the side the facade is seen from (LVL-8) |
 | `facadeOnFace` | tolerance | 0.01 m | A wall whose outside face lies within this of a stretch of the floor's outline is the wall that stretch of a facade shows, with its height and openings (LVL-8) |
 | `facadeSameDepth` | tolerance | 0.05 m | Faces of a facade within this of each other, front to back, are one plane, drawn with one line weight; a face set back further is drawn lighter (LVL-8) |

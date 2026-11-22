@@ -22,8 +22,8 @@
  *
  * Pure: no DOM, no React.
  */
-import type { Dimension, Ghosts, OpeningSymbol, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, ScheduleMark, SymbolPart, Vec2 } from '@ongrid/floorplan/geometry'
-import { boundsWithDimensions, openingSymbol, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
+import type { Dimension, Ghosts, OpeningSymbol, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, ScheduleMark, SymbolPart, Vec2, WallDrawnKind } from '@ongrid/floorplan/geometry'
+import { boundsWithDimensions, hatchLines, openingDetail, openingSymbol, poleOfInaccessibility, traceWall, wallDrawnKind } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import { openingAt, stripAcross } from '../canvas2d/strip'
@@ -46,7 +46,7 @@ import {
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { Look, PlanLook } from './look'
-import { GRID_BUBBLE_PX, LINE_PX, TEXT_PX, UNDRAWN_TINT, USE_FILLS, lengthText, lineMetres, toLook } from './look'
+import { GRID_BUBBLE_PX, LINE_PX, TEXT_PX, UNDRAWN_TINT, detailShown, hatchSpacingMetres, lengthText, lineMetres, toLook, wallOutlineMetres } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 import type { NumberedFault } from './faults'
@@ -174,6 +174,13 @@ export interface SceneInput {
   readonly above?: PlanAbove
   /** SHT-7: each room's use by id, for `show.colourBy: 'use'`. */
   readonly uses?: ReadonlyMap<string, RoomUse>
+  /**
+   * SHT-10: each room's floor finish by id (CNT-15), for `show.colourBy: 'finish'`, and the plan's
+   * floor finishes in the order its rooms first name them: the n-th takes the look's n-th tint.
+   */
+  readonly finishes?: { readonly rooms: ReadonlyMap<string, string>; readonly order: readonly string[] }
+  /** SHT-10: the plan's wall materials in order (`planWallMaterials`): the n-th takes the look's n-th hatch. */
+  readonly materials?: readonly string[]
   /** ARE-15: the schedules' marks (`DrawingMarks.schedule`), drawn by the room labels where they are placed. None by default. */
   readonly scheduleMarks?: readonly ScheduleMark[]
   readonly live?: Partial<SceneLive>
@@ -189,8 +196,11 @@ export interface SceneShow {
   readonly warnings: boolean
   /** SHT-11: the dashed outline of the floor above. */
   readonly above: boolean
-  /** `use` fills each room by its use; null gives every room the look's one fill. */
-  readonly colourBy: 'use' | null
+  /**
+   * `use` fills each room by its use, SHT-10's `finish` by its floor finish, each from the look's
+   * tints; null gives every room the look's one fill.
+   */
+  readonly colourBy: 'use' | 'finish' | null
   /**
    * CNT-9: parts picked out, by id, each in its colour: a room's fill at half strength over its
    * own, a wall, door, window or opening laid over in the colour. Null for none.
@@ -216,10 +226,15 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
   })
   return {
     room: { fill: look.room } as Attrs,
-    wall: (exposure: PlanWall['exposure'] | undefined, phase?: PlanWall['phase']): Attrs => ({
+    // SHT-10: each kind of wall in its own fill; a wall hatched in a detailed drawing on the paper.
+    wall: (kind: WallDrawnKind, phase?: PlanWall['phase'], hatched = false): Attrs => ({
       // CNT-10: an existing wall in its tone and a new one filled, where the look says so.
-      fill: (phase === 'existing' ? named.phases.existing : phase === 'new' ? named.phases.new : null) ?? (exposure === 'exterior' || exposure === 'separating' ? look.wallExterior : look.wall)
+      fill: (phase === 'existing' ? named.phases.existing : phase === 'new' ? named.phases.new : null) ?? (hatched ? look.paper : named.walls.fill[kind])
     }),
+    // SHT-10: a wall material's hatch, a door's or window's frame and a window's sill, in a detailed drawing.
+    wallHatch: { fill: 'none', stroke: ink, 'stroke-width': width('hatch'), 'stroke-linecap': 'butt' } as Attrs,
+    frame: { fill: look.paper, stroke: ink, 'stroke-width': width('frame'), 'stroke-linejoin': 'miter' } as Attrs,
+    sill: { stroke: ink, 'stroke-width': width('sill'), 'stroke-linecap': 'butt' } as Attrs,
     // CNT-10: a wall or an opening to be demolished: a dashed outline, no fill.
     demolished: {
       fill: 'none',
@@ -231,34 +246,39 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     // Drawn under every wall's fill and twice as wide as the pen: the fill covers its inner
     // half, and where two walls meet, the seam, so what shows is one outline the pen's width
     // round the walls as a whole.
-    wallOutline:
-      named.wallOutline === null
+    // SHT-10: each kind of wall with its own pen.
+    wallOutline: ((stroke: string | null) =>
+      stroke === null
         ? null
-        : ({
+        : (kind: WallDrawnKind): Attrs => ({
             fill: 'none',
-            stroke: named.wallOutline,
-            'stroke-width': lengthText(2 * line.width('wallOutline')),
+            stroke,
+            'stroke-width': lengthText(wallOutlineMetres(named, kind, mpp, paperScale)),
             'stroke-linejoin': 'miter'
-          } as Attrs),
+          }))(named.wallOutline),
     virtual: {
       fill: 'none',
       stroke: look.virtual,
       'stroke-width': width('virtual'),
       'stroke-dasharray': dashes('virtual')
     } as Attrs,
-    opening: (type: PlanOpening['type'], swing: boolean): Attrs =>
+    opening: (type: PlanOpening['type'], swing: boolean, above = false): Attrs =>
       // A paper look leaves the gap open, so the walls' outline shows across their cut ends.
       named.wallOutline !== null
         ? { fill: 'none', stroke: 'none' }
         : {
             fill: type === 'window' ? look.window : look.paper,
-            ...(type === 'opening' || swing ? { stroke: 'none' } : { stroke: ink, 'stroke-width': width('opening') })
+            ...(type === 'opening' || swing ? { stroke: 'none' } : { stroke: ink, 'stroke-width': width('opening') }),
+            // SHT-10: a window above the plan's cut, its outline dashed.
+            ...(above && type === 'window' && named.aboveDashed ? { 'stroke-dasharray': dashes('above') } : {})
           },
     jamb: { stroke: ink, 'stroke-width': width('jamb') } as Attrs,
     step: { stroke: ink, 'stroke-width': width('step'), 'stroke-linecap': 'butt' } as Attrs,
     stair: { fill: 'none', stroke: ink, 'stroke-width': width('stair') } as Attrs,
     // SHT-11: a stair past its break line, dashed as what lies above the cut.
-    stairAbove: { fill: 'none', stroke: ink, 'stroke-width': width('stair'), 'stroke-dasharray': dashes('above') } as Attrs,
+    stairAbove: { fill: 'none', stroke: ink, 'stroke-width': width('stair'), ...(named.aboveDashed ? { 'stroke-dasharray': dashes('above') } : {}) } as Attrs,
+    /** SHT-10: the dash of what lies above the plan's cut, or none in a look that draws it solid. */
+    aboveDash: named.aboveDashed ? ({ 'stroke-dasharray': dashes('above') } as Attrs) : ({} as Attrs),
     stairArrow: { fill: ink, stroke: 'none' } as Attrs,
     above: { fill: 'none', stroke: ink, 'stroke-width': width('above'), 'stroke-dasharray': dashes('above') } as Attrs,
     // CNT-4: a flat's outline, a chain line as thin as the floor above's, in the paper's colour:
@@ -525,17 +545,41 @@ const lineEl = (part: string, [a, b]: Line, attrs: Attrs): SvgNode => el('line',
  * A window as the wall's break bridged by thin lines: one along each face of the wall and the
  * glass line along its middle. Drawing, not a target.
  */
-function windowSymbol(opening: PlanOpening, paint: Paints): SvgNode {
+function windowSymbol(opening: PlanOpening, paint: Paints, panes = false, above = false): SvgNode {
   const half = opening.thickness / 2
+  // SHT-10: a window above the plan's cut, every line dashed.
+  const dash = above ? paint.aboveDash : {}
+  const flip = ([a, b]: readonly [Vec2, Vec2]): Line => [
+    { x: a.x, y: -a.y },
+    { x: b.x, y: -b.y }
+  ]
+  // SHT-10: in a detailed drawing, its glass as the core lays out its two panes (`openingDetail`).
+  const glass = panes ? openingDetail(opening).glass.map((pane) => lineEl('window-glass', flip(pane), { ...paint.glass, ...dash })) : [lineEl('window-glass', across(opening, 0), { ...paint.glass, ...dash })]
   return el(
     'g',
-    { 'data-part': 'window-symbol', 'data-opening': opening.id, 'pointer-events': 'none', 'aria-hidden': 'true' },
-    [
-      lineEl('window-face', across(opening, half), paint.windowFace),
-      lineEl('window-face', across(opening, -half), paint.windowFace),
-      lineEl('window-glass', across(opening, 0), paint.glass)
-    ],
+    { 'data-part': 'window-symbol', 'data-opening': opening.id, 'data-above': above ? 'true' : undefined, 'pointer-events': 'none', 'aria-hidden': 'true' },
+    [lineEl('window-face', across(opening, half), { ...paint.windowFace, ...dash }), lineEl('window-face', across(opening, -half), { ...paint.windowFace, ...dash }), ...glass],
     `${opening.id}:window`
+  )
+}
+
+/**
+ * SHT-10: a door's or window's detail in a drawing at 1:50 or larger, as the core lays it out
+ * (`openingDetail`): a frame at each side of the hole and a window's sill on each face of the
+ * wall. Null for a doorless opening. Drawing, not a target.
+ */
+function detailNode(opening: PlanOpening, paint: Paints): SvgNode | null {
+  const detail = openingDetail(opening)
+  if (detail.frames.length === 0) return null
+  const dash = opening.above ? paint.aboveDash : {}
+  return el(
+    'g',
+    { 'data-part': 'opening-detail', 'data-opening': opening.id, 'pointer-events': 'none', 'aria-hidden': 'true' },
+    [
+      ...detail.frames.map((ring, index) => el('path', { 'data-part': 'frame', d: pathOf(ring), ...paint.frame, ...dash }, [], `f${index}`)),
+      ...detail.sills.map(([a, b], index) => el('line', { 'data-part': 'sill', x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, ...paint.sill, ...dash }, [], `s${index}`))
+    ],
+    `${opening.id}:detail`
   )
 }
 
@@ -569,13 +613,14 @@ function kindSymbolNode(opening: PlanOpening, symbol: OpeningSymbol, paint: Pain
     const attrs = pen(piece.part)
     return el('line', {
       'data-part': PIECE_PARTS[piece.part],
-      'data-above': piece.above ? 'true' : undefined,
+      'data-above': piece.above || opening.above ? 'true' : undefined,
       x1: a.x,
       y1: a.y,
       x2: b.x,
       y2: b.y,
       ...attrs,
-      ...(piece.above ? { 'stroke-dasharray': paint.above['stroke-dasharray'] } : {})
+      // SHT-10: a window wholly above the plan's cut is dashed whatever its kind.
+      ...(piece.above || opening.above ? paint.aboveDash : {})
     })
   })
   const door = opening.type === 'door'
@@ -617,6 +662,20 @@ function undecidedSymbol(opening: PlanOpening, mpp: number, paint: Paints): SvgN
   )
 }
 
+/** SHT-7, SHT-10: a room's tint, by its use or its floor finish, from the look's tints; none for the look's one fill. */
+function tintOf(look: Look, by: SceneShow['colourBy'], id: string, input: SceneInput): Attrs {
+  if (by === 'use') {
+    const use = input.uses?.get(id)
+    return use === undefined ? {} : { fill: look.tints.uses[use] }
+  }
+  if (by === 'finish' && look.tints.finishes.length > 0) {
+    const finish = input.finishes?.rooms.get(id)
+    const at = finish === undefined ? -1 : input.finishes!.order.indexOf(finish)
+    return at < 0 ? {} : { fill: look.tints.finishes[at % look.tints.finishes.length]! }
+  }
+  return {}
+}
+
 /** The plan's elements, back to front: what goes inside the `<svg>`. */
 export function planScene(input: SceneInput): SvgNode[] {
   return withDisplay(input.labels?.display, () => planSceneIn(input))
@@ -633,10 +692,13 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   const picked = show.paint ?? null
   const fillOf = (id: string): Attrs => {
     const colour = picked?.get(id)
-    const use = show.colourBy === 'use' ? input.uses?.get(id) : undefined
-    const base = use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+    const base = { ...paint.room, ...tintOf(look, show.colourBy, id, input) }
     return colour === undefined ? base : { ...base, fill: colour, 'fill-opacity': 0.45 }
   }
+  // SHT-10: the detail a drawing at 1:50 or larger shows, in a look that has it.
+  const detail = detailShown(look, mpp, input.paperScale) ? look.detail : null
+  const materials = input.materials ?? []
+  const hatched = (wall: PlanWall): boolean => detail !== null && !wall.virtual && wall.material !== undefined && materials.includes(wall.material)
   const out: SvgNode[] = []
 
   const selected = (id: string): boolean => id === live.selectedId
@@ -667,7 +729,8 @@ function planSceneIn(input: SceneInput): SvgNode[] {
               'data-part': 'wall',
               'data-id': wall.id,
               'data-exposure': wall.exposure,
-              ...paint.wall(wall.exposure)
+              'data-wall-kind': wallDrawnKind(wall),
+              ...paint.wall(wallDrawnKind(wall))
             },
             [],
             `${wall.id}:${index}`
@@ -833,7 +896,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
         'g',
         { 'data-part': 'wall-outlines', 'pointer-events': 'none', 'aria-hidden': 'true' },
         drawing.walls.flatMap((wall) =>
-          wall.virtual || wall.phase === 'demolished' ? [] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'wall-outline', 'data-wall': wall.id, ...outline }))
+          wall.virtual || wall.phase === 'demolished' ? [] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'wall-outline', 'data-wall': wall.id, ...outline(wallDrawnKind(wall)) }))
         ),
         'wall-outlines'
       )
@@ -890,12 +953,13 @@ function planSceneIn(input: SceneInput): SvgNode[] {
               'data-part': 'wall',
               'data-id': wall.id,
               'data-exposure': wall.exposure,
+              'data-wall-kind': wallDrawnKind(wall),
               'data-phase': wall.phase,
               'data-selectable': 'true',
               'data-selected': selected(wall.id),
               ...live.marks(wall.id),
               ...live.hit(wall.id),
-              ...paint.wall(wall.exposure, wall.phase)
+              ...paint.wall(wallDrawnKind(wall), wall.phase, hatched(wall))
             },
             [],
             String(index)
@@ -904,6 +968,22 @@ function planSceneIn(input: SceneInput): SvgNode[] {
         wall.id
       )
     )
+  }
+
+  // SHT-10: each wall of a material hatched across, at 1:50 and larger, with the material's hatch
+  // in turn (`planWallMaterials`), over the walls' paper and under the openings. Drawing, not a target.
+  if (detail !== null && detail.hatches.length > 0) {
+    const spacing = hatchSpacingMetres(look, mpp, input.paperScale)
+    const hatches: SvgNode[] = []
+    for (const wall of drawing.walls) {
+      if (!hatched(wall) || wall.phase === 'demolished') continue
+      const angles = detail.hatches[materials.indexOf(wall.material!) % detail.hatches.length]!
+      const lines = wall.slices.flatMap((slice) => angles.flatMap((angle) => hatchLines(slice, spacing, (angle * Math.PI) / 180)))
+      if (lines.length === 0) continue
+      const d = lines.map(([a, b]) => `M${lengthText(a.x)},${lengthText(-a.y)}L${lengthText(b.x)},${lengthText(-b.y)}`).join('')
+      hatches.push(el('path', { 'data-part': 'wall-hatch', 'data-wall': wall.id, 'data-material': wall.material, d, ...paint.wallHatch }, [], `hatch:${wall.id}`))
+    }
+    if (hatches.length > 0) out.push(el('g', { 'data-part': 'wall-hatches', 'pointer-events': 'none', 'aria-hidden': 'true' }, hatches, 'wall-hatches'))
   }
 
   // CNT-16: each column, cut through as the walls are, over them where it meets one. A round one
@@ -957,9 +1037,10 @@ function planSceneIn(input: SceneInput): SvgNode[] {
               d: pathOf(stripAcross(a, b, opening.normal, opening.thickness)),
               'data-part': 'wall',
               'data-exposure': exposure,
+              'data-wall-kind': host === undefined ? undefined : wallDrawnKind(host),
               'data-closing': 'true',
               'pointer-events': 'none',
-              ...paint.wall(exposure, host?.phase)
+              ...paint.wall(host === undefined ? 'inside' : wallDrawnKind(host), host?.phase, host !== undefined && hatched(host))
             },
             [],
             `${opening.id}:closing:${index}`
@@ -981,8 +1062,9 @@ function planSceneIn(input: SceneInput): SvgNode[] {
           ...live.marks(opening.id),
           'data-swing': opening.type === 'door' && drawn ? 'true' : undefined,
           ...(kinded !== null && { 'data-kind': kinded.kind }),
+          'data-above': opening.above ? 'true' : undefined,
           ...live.hit(opening.id),
-          ...paint.opening(opening.type, opening.type === 'door' && drawn)
+          ...paint.opening(opening.type, opening.type === 'door' && drawn, opening.above === true)
         },
         [],
         opening.id
@@ -1017,8 +1099,13 @@ function planSceneIn(input: SceneInput): SvgNode[] {
       )
     }
     if (kinded !== null && opening.type === 'door' && show.swings) out.push(kindSymbolNode(opening, kinded, paint, opened ?? undefined))
-    if (look.glass && opening.type === 'window') out.push(kinded !== null ? kindSymbolNode(opening, kinded, paint, undefined) : windowSymbol(opening, paint))
+    // SHT-10: in a detailed drawing a plain window's glass is two panes; a window above the cut is dashed.
+    if (look.glass && opening.type === 'window') out.push(kinded !== null ? kindSymbolNode(opening, kinded, paint, undefined) : windowSymbol(opening, paint, detail !== null, opening.above === true))
     if (look.undecidedDoors && opening.type === 'door' && !drawn) out.push(undecidedSymbol(opening, mpp, paint))
+    if (detail !== null && opened === null) {
+      const node = detailNode(opening, paint)
+      if (node !== null) out.push(node)
+    }
   }
   // CNT-10: each opening to be demolished, as a dashed outline across its wall where it stood,
   // over the walls and the openings that stand after the work: a blocked window shows on its

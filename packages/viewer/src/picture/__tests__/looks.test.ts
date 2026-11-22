@@ -27,7 +27,8 @@ const attr = (tag: string, name: string): string | undefined => tag.match(new Re
 const strokeOf = (svg: string, part: string): number[] => tagsOf(svg, part).map((tag) => Number(attr(tag, 'stroke-width')))
 
 /** Parts only a look's own symbols add: everything else is the drawing both looks share. */
-const LOOK_PARTS = new Set(['wall-outlines', 'window-symbol', 'door-undecided', 'dimension-tick'])
+// SHT-10: and the detail a paper look draws at 1:50 and larger: frames, sills and hatches.
+const LOOK_PARTS = new Set(['wall-outlines', 'window-symbol', 'door-undecided', 'dimension-tick', 'opening-detail', 'wall-hatches'])
 
 /** The drawing with its paint taken off and the look's own symbols left out: its geometry. */
 function geometryOf(nodes: readonly SvgChild[]): SvgChild[] {
@@ -82,7 +83,8 @@ describe('the technical look: line weights in millimetres on paper', () => {
     for (const width of strokeOf(svg, 'wall-outline')) expect(width).toBe(Number(lengthText((2 * pens.cut * scale) / 1000)))
     expect(strokeOf(svg, 'door-leaf')).toEqual([metres(pens.medium)])
     expect(strokeOf(svg, 'door-arc')).toEqual([metres(pens.finest)])
-    expect(strokeOf(svg, 'window-glass')).toEqual([metres(pens.fine)])
+    // SHT-10: at 1:50 a window's glass is two panes, each with the same pen.
+    expect(strokeOf(svg, 'window-glass')).toEqual(scale === 50 ? [metres(pens.fine), metres(pens.fine)] : [metres(pens.fine)])
     for (const width of strokeOf(svg, 'dimension-line')) expect(width).toBe(metres(pens.finest))
   })
 
@@ -147,10 +149,12 @@ describe('the technical look: its basics', () => {
     const others = [...svg.matchAll(/stroke-width="([^"]+)"/g)].map((m) => Number(m[1])).filter((w) => !outlines.includes(w))
     // What shows of the outline is half its stroke: still the heaviest line on the page.
     expect(Math.min(...outlines) / 2).toBeGreaterThan(Math.max(...others.filter((w) => w < 1)))
+    // SHT-10: each kind of wall its own tone: the outside walls darker than the inside one.
     for (const tag of tagsOf(svg, 'wall')) {
-      expect(attr(tag, 'fill')).toBe(TECHNICAL_LOOK.colors.wall)
+      expect(attr(tag, 'fill')).toBe(TECHNICAL_LOOK.walls.fill[attr(tag, 'data-wall-kind') as 'outside' | 'inside' | 'partition'])
       expect(attr(tag, 'stroke')).toBeUndefined()
     }
+    expect(new Set(tagsOf(svg, 'wall').map((tag) => attr(tag, 'fill'))).size).toBe(2)
     expect(svg.indexOf('data-part="wall-outlines"')).toBeLessThan(svg.indexOf('data-part="wall"'))
     // The gaps are left open, so the outline shows across each wall's cut end.
     for (const tag of tagsOf(svg, 'opening')) {

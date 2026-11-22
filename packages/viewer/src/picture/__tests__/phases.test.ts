@@ -31,8 +31,9 @@ describe('a plan with phases in the 2D picture', () => {
       for (const p of openings) expect(attr(p, 'stroke-dasharray')).toBeDefined()
       const walls = parts(svg, 'wall')
       const fillOf = (id: string) => walls.filter((p) => attr(p, 'data-id') === id).map((p) => [attr(p, 'data-phase'), attr(p, 'fill')])
-      const solid = name === 'technical' ? '#000000' : look.colors.wall
-      expect(fillOf('wst')[0]).toEqual(['new', look.phases.new ?? solid])
+      // SHT-10: a new wall in its kind's fill, where the look gives new work none of its own.
+      const kindOf = (id: string) => attr(walls.find((p) => attr(p, 'data-id') === id)!, 'data-wall-kind') as 'outside' | 'inside' | 'partition'
+      expect(fillOf('wst')[0]).toEqual(['new', look.phases.new ?? look.walls.fill[kindOf('wst')]])
       expect(fillOf('wx')[0]).toEqual(['existing', look.phases.existing ?? look.colors.wall])
       expect(fillOf('wst')[0]![1]).not.toBe(fillOf('wx')[0]![1])
       // The demolished wall is no wall of the drawing after the work, and has no sizes of its own.

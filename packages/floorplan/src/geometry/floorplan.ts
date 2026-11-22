@@ -10,7 +10,8 @@ import type { FloorPlan, Opening } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
 import { add, centroid, dot, fromTuple, intersectLines, scale, sub } from './vec2'
-import { tolerance } from './tolerances'
+import { limit, tolerance } from './tolerances'
+import { typeMaterial, wallTypeOf } from './partTypes'
 import type { SliceSide, WallAxis } from './wall'
 import { openingChord, openingSpan, wallAxis, wallCenterline, wallParts, wallPath, wallPlanSlices, wallSegments, wallSliceShape } from './wall'
 import { wallCurve } from './arc'
@@ -80,6 +81,13 @@ export interface PlanWall {
    * and `runs` each solid run's two faces exactly, one per slice and in the same order.
    */
   readonly curve?: PlanCurve
+  /**
+   * SHT-10: the plan states the wall a partition and it stands inside, so a drawing can draw it
+   * lighter than an inside wall (`wallDrawnKind`). Left out for every other wall.
+   */
+  readonly partition?: true
+  /** SHT-10: the material of the wall's type (CNT-15, C24), as the person names it, for a detailed drawing's hatch. Left out with none. */
+  readonly material?: string
 }
 
 /** CNT-18: a curved wall's arc in a drawing (`PlanWall.curve`). */
@@ -142,6 +150,11 @@ export interface PlanOpening {
   readonly assumed?: true
   /** CNT-10: what the work does to it, in a plan with phases; left out in one with none. */
   readonly phase?: Phase
+  /**
+   * SHT-10: a window that lies above the plan's cut (`planCutHeight`): its sill at or above it,
+   * or a high-level window (CNT-14). A drawing draws it dashed. Left out for every other opening.
+   */
+  readonly above?: true
 }
 
 /** A fixture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
@@ -429,11 +442,13 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
     const slices = wall.virtual ? [] : wallPlanSlices(wall, usable, ends)
     const curve = wallCurve(wall)
     const path = wallPath(wall)
+    const exposure = wallExposure(index, wall.id)
+    const material = typeMaterial(wallTypeOf(plan, wall))
 
     walls.push({
       id: wall.id,
       virtual: wall.virtual === true,
-      exposure: wallExposure(index, wall.id),
+      exposure,
       slices,
       centerline: wallCenterline(wall),
       thickness: wall.virtual ? 0 : wall.thickness,
@@ -452,7 +467,10 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
         }
       }),
       ...assumed('wall', wall.id),
-      ...phaseOf(wall.id)
+      ...phaseOf(wall.id),
+      // SHT-10: a stated partition standing inside, and its type's material, for the drawing's detail.
+      ...(wall.kind === 'partition' && !wall.virtual && exposure === 'interior' && { partition: true as const }),
+      ...(material !== null && !wall.virtual && { material })
     })
 
     for (const slice of slices) extent.push(...slice)
@@ -481,7 +499,9 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
         ...(opening.opens !== undefined && { opens: opening.opens }),
         height: opening.height,
         ...assumed('opening', opening.id),
-        ...phaseOf(opening.id)
+        ...phaseOf(opening.id),
+        // SHT-10: a window wholly above the plan's cut is drawn dashed.
+        ...(opening.type === 'window' && (kind === 'high-level' || (opening.sill !== undefined && opening.sill >= limit('planCutHeight'))) && { above: true as const })
       })
     }
   }

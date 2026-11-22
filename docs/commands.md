@@ -33,7 +33,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid write --scan <scan.json> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from a phone room scan, and keeps the scan beside it as `<plan>.scan.json` (see below) |
 | `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below). With `firm-standards.json` beside the plan, the firm's own standards are set against it too, under their own heading ([a firm's own standards](firm-standards.md)) |
 | `grid describe [<plan>] [--length line\|rooms\|walls\|walk] [--for person\|agent] [--as rooms] [--floor <id>] [--pictures <folder>]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, with `--length walls` its walls, and with `--length walk` the plan walked room by room, with `--pictures` a picture from each doorway (see below). `--as rooms` reads it back as rooms text |
-| `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation, section and schedule marks to a plan (see below) |
+| `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use\|finish] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working`; a file is always on light paper, so `--look dark` is refused ([below](#how-each-look-draws-a-plan)). `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation, section and schedule marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `type` (one named wall, door or window type, which every part of it takes; a list option such as `--parts` takes its items split at commas), `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
@@ -568,10 +568,50 @@ A floor plan picture shows the plan's title and key in a band under the drawing,
 and symbols, its sketch, the sizes, the room areas, the door swings and the warnings (the
 plan file's writing is in [plan-file.md](plan-file.md#writing-on-the-drawing-and-the-sketch-layer)).
 `--hide` leaves parts off, named and joined by commas: `title`, `key`, `notes`, `sketch`,
-`dimensions`, `areas`, `swings`, `warnings`, `above`. `--colour use` fills each room by its use and lists
-the uses in the key. `--key` adds a key where the plan asks for none. A word Grid does not know
+`dimensions`, `areas`, `swings`, `warnings`, `above`. `--colour use` fills each room by its use and
+`--colour finish` by its floor finish (each finish the plan's rooms name gets its own pale tint, in
+the order they first name it, the same on every floor), and either lists what each fill stands for
+in the key, which is then drawn whether or not the plan asks for one. `--key` adds a key where the
+plan asks for none, and `--hide key` leaves it off. A word Grid does not know
 is refused by name, and none of the three is taken with `--3d`. `grid_view` takes the same as
 `hide`, `colour` and `key`.
+
+## How each look draws a plan
+
+A plan is drawn in one of its looks: the technical look (black on white, lines in millimetres on
+paper, for files and sheets), the working look (the screen's colours, for every picture an agent
+gets) and the dark look (the working look on dark paper, for the app's and the preview page's
+dark theme only). Each look draws the same geometry; what follows is what each draws its own way
+(SHT-10).
+
+- Walls by kind. An outside wall (or a party wall, or one to the common parts), an inside wall and
+  a stated partition each have their own fill: in the working look near-black, a mid grey and a
+  lighter grey; in the technical look three grey tones inside the black outline, the partition
+  outlined with a lighter pen than the walls cut through. Which kind a wall is comes from what
+  lies on its two sides (`exterior`, `interior`, `separating`), and from its stated `kind` for a
+  partition. The key names each kind the drawing has.
+- Above the cut, dashed. A window whose sill is at or above the plan's cut (1.2 m, `planCutHeight`)
+  or that is a high-level window is drawn dashed in every look, as a stair past its break line and
+  the floor above already are.
+- Detail at 1:50 and larger. In the technical look, a drawing whose scale takes the 1:50 pens (up to
+  about 1:70) also draws: each wall whose wall type names a material hatched across, on the paper,
+  one hatch per material in the order the plan's wall types list them (diagonal, the other way,
+  crossed, level, upright, squared, then again), with each material in the key; a frame at each
+  side of every door and window (`frameFace`, `frameDepth`); a window's glass as two panes
+  (`glassThickness` apart); and a window's sill along each face of its wall (`sillProjection`).
+  The plan holds one material per wall type, not a wall's layers, so a wall is hatched as one
+  material. `grid sheet` draws its plans with no key band (each page has its own notes), so a
+  hatch there is not keyed.
+- Tints. `--colour use` and `--colour finish` fill rooms from the look's own tints: pale on light
+  paper, dark on dark paper, and listed in the key.
+- Contrast. Every colour a look draws text in stands at least 4.5 to 1 from the paper, a room and
+  every tint, and every colour it draws a line or mark in at least 3 to 1, by the relative
+  luminance of the Web Content Accessibility Guidelines (WCAG 2.2, success criteria 1.4.3 and
+  1.4.11). A test holds every look to it.
+- Always light in a file. Whatever the screen's theme, a picture written to a file or handed to an
+  agent is on light paper: `grid draw` refuses `--look dark`, `grid_view` draws the working look
+  when asked for `dark` (and says so), and a 3D picture is always light. Only the preview page's
+  own drawing follows the page's theme.
 
 ## The sizes on a drawing
 

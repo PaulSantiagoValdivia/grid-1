@@ -810,7 +810,8 @@ export const TOLERANCES = {
     unit: 'm',
     decides:
       'How wide the frame round a door or window, and round each part of a window that opens, is ' +
-      'drawn in 3D. The plan holds no frame: it only draws the model.',
+      'drawn in 3D, and each side\'s frame on a plan drawn in detail (SHT-10). The plan holds no ' +
+      'frame: it only draws the model and the plan.',
     basis: own
   },
   frameDepth: {
@@ -818,8 +819,9 @@ export const TOLERANCES = {
     value: 0.07,
     unit: 'm',
     decides:
-      'How deep a window\'s frame is drawn in 3D, in the middle of its wall (no deeper than the ' +
-      'wall). A door\'s frame lines the whole depth of its wall. It only draws the model.',
+      'How deep a window\'s frame is drawn in 3D and on a plan drawn in detail (SHT-10), in the ' +
+      'middle of its wall (no deeper than the wall). A door\'s frame lines the whole depth of its ' +
+      'wall. It only draws the model and the plan.',
     basis: own
   },
   leafThickness: {
@@ -835,7 +837,18 @@ export const TOLERANCES = {
     kind: 'limit',
     value: 0.02,
     unit: 'm',
-    decides: 'How thick a window\'s glass is drawn in 3D, in the middle of its frame. It only draws the model.',
+    decides:
+      'How thick a window\'s glass is drawn in 3D, in the middle of its frame, and how far apart its ' +
+      'two panes are drawn on a plan drawn in detail (SHT-10). It only draws the model and the plan.',
+    basis: own
+  },
+  sillProjection: {
+    kind: 'limit',
+    value: 0.03,
+    unit: 'm',
+    decides:
+      'How far a window\'s sill stands out from each face of its wall, and past each side of its ' +
+      'hole, on a plan drawn in detail (SHT-10). The plan holds no sill: it only draws the plan.',
     basis: own
   },
   // ── Facades and opening patterns (LVL-8) ──────────────────────────────────────────────────

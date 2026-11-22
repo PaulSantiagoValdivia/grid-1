@@ -2335,6 +2335,11 @@ export const en = {
   'describe.column.round': '{label}{width} m round at {at}{room}',
   'describe.column.label': '{label}, ',
   'describe.column.in': ', in {room}',
+  // SHT-10: the key of a drawing whose walls read by kind, whose walls of a material are hatched
+  // and whose rooms are tinted by their floor finish.
+  'drawing.key.partition': 'Partition',
+  'drawing.key.material': 'Wall: {material}',
+  'drawing.key.finish': 'Floor: {finish}',
 
   // --- Outdoor space, roofed or open (CNT-7, C26)
   'areas.measure.outdoor.measures': 'Outdoor area is the floor of each room the plan marks as outdoor space, roofed or open, measured to the faces of its walls and edges as a room is.',

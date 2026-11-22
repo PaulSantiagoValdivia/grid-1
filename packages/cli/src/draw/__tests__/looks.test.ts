@@ -56,7 +56,6 @@ describe('grid draw: a file to hand on', () => {
     expect(drawn.out).toContain('data-part="wall-outlines"')
     const working = await grid(dir, 'draw', 'flat.json', '--look', 'working')
     expect(working.out).toBe(await drawPlan(read(flat), { format: 'svg', faults }))
-    expect((await grid(dir, 'draw', 'flat.json', '--look', 'dark')).out).toBe(await drawPlan(read(flat), { format: 'svg', look: 'dark', faults }))
   })
 
   it('names the doors it draws as undecided, on standard error', async () => {
@@ -71,7 +70,8 @@ describe('grid draw: a file to hand on', () => {
     const dir = folder()
     const unknown = await grid(dir, 'draw', 'flat.json', '--look', 'sketch')
     expect(unknown.status).toBe(2)
-    expect(unknown.err).toContain('--look "sketch" is not a look Grid draws: use one of working, technical, dark')
+    // SHT-10: a file is always on light paper, so the dark look is no longer one of them.
+    expect(unknown.err).toContain('--look "sketch" is not a look Grid draws: use one of working, technical.')
     const still = await grid(dir, 'draw', 'flat.json', '--3d', '--look', 'technical')
     expect(still.status).toBe(2)
     expect(still.err).toContain('--look is for a floor plan, not the 3D model')

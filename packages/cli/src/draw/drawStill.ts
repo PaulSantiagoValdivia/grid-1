@@ -29,8 +29,8 @@ export interface StillDrawOptions extends Omit<StillOptions, 'width' | 'height'>
  * Draws the plan's 3D model and resolves to the PNG file's bytes.
  *
  * `focus` names a floor to show as a cutaway, as the app does when a floor is chosen; the
- * whole building is shown without it. `look` is `light` (the default), `dark` or your own
- * colours.
+ * whole building is shown without it. `look` is `light` (the default) or your own colours;
+ * SHT-10: a file is always light, so `dark` draws `light`.
  *
  * The plan is not checked here: parse and validate it first. Whatever part of a broken plan
  * cannot be built is left out, as in the app.
@@ -46,7 +46,7 @@ export async function drawStill(plan: FloorPlan, options: StillDrawOptions = {})
   const h = Math.round(height * scale)
   if (w < 1 || h < 1) throw new RangeError(`A scale of ${scale} leaves no pixels to draw`)
 
-  const image = planStill(plan, { ...still, width: w, height: h })
+  const image = planStill(plan, { ...still, ...(still.look === 'dark' ? { look: 'light' as const } : {}), width: w, height: h })
 
   // Loaded only for a picture: it is a native module.
   const { createCanvas, ImageData } = await loadCanvas()
