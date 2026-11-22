@@ -1053,8 +1053,8 @@ export const CODES = {
   'plan/read-after-work': {
     says: (s) => `${s.label} holds work: ${s.said}. Its sizes, areas and checks are for the building as it will be after the work`,
     found: (s) => s.said,
-    needed: fixed('nothing: the parts to be demolished are drawn dashed and checked as they stand before the work, and grid diff --phase lists what the work does'),
-    fix: fixed('Nothing to fix. To see the building before the work, compare by phase (grid diff --phase, or grid_diff with by=phase).')
+    needed: fixed('nothing: the parts to be demolished are drawn dashed and checked as they stand before the work, and grid diff --since phase lists what the work does'),
+    fix: fixed('Nothing to fix. To see what the work does, compare by phase (grid diff --since phase, or grid_diff with since: phase).')
   },
   'plan/value-assumed': {
     says: (s) => `${s.word ? `The ${s.word} of ${s.label}` : s.label} was assumed, not given or measured`,

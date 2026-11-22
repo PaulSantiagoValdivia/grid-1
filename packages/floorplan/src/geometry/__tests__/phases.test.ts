@@ -55,7 +55,12 @@ describe('existing, demolished and new (CNT-10)', () => {
     expect(errors(plan)).toEqual([])
     expect(validatePlan(plan).issues.map((i) => i.code)).not.toContain('opening/overlap')
     // The same two openings with no phase overlap, as before.
-    const unphased = parseFloorPlan({ ...refurbishmentRaw(), walls: plan.walls.map(({ phase: _, ...w }) => w), rooms: plan.rooms.filter((r) => r.phase !== 'demolished').map(({ phase: _, ...r }) => r), openings: plan.openings.filter((o) => o.id !== 'd-kitchen').map(({ phase: _, ...o }) => o) })
+    const strip = <T extends { phase?: unknown }>(part: T): T => {
+      const rest = { ...part }
+      delete rest.phase
+      return rest
+    }
+    const unphased = parseFloorPlan({ ...refurbishmentRaw(), walls: plan.walls.map(strip), rooms: plan.rooms.filter((r) => r.phase !== 'demolished').map(strip), openings: plan.openings.filter((o) => o.id !== 'd-kitchen').map(strip) })
     expect(validatePlan(unphased).issues.map((i) => i.code)).toContain('opening/overlap')
   })
 

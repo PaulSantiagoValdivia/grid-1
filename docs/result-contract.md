@@ -223,6 +223,7 @@ label.
 | `opening/above-roof` | {thing} reaches above the roof over its wall | its sill and height together no higher than the roof over that stretch of its wall |
 | `opening/negative-sill` | {thing} has its sill below the floor | a sill at 0 or above |
 | `opening/overlap` | {thing} overlaps another opening on its wall | openings on one wall that share no part of it |
+| `opening/phase-wall` | {thing} stands when its wall does not, so it is left out | an opening that stands only while its wall does: a new opening in an existing or new wall, an existing or demolished one in an existing wall |
 | `opening/size-question` | {thing} has a size that may not be meant | the size of a door or window in a building |
 | `opening/swing-without-hinge` | {thing} says which way it opens but not which side it hangs on | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
@@ -236,6 +237,7 @@ label.
 | `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
 | `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
+| `room/phase-wall` | {thing} stands when one of its walls does not, so it is left out | a room whose walls stand whenever it does: an existing room round existing walls, a new room round existing or new walls, a demolished room round existing or demolished walls |
 | `room/empty` | {thing} encloses no floor | walls that enclose some floor |
 | `room/unclosed` | {thing} cannot be closed from the walls it lists | at least three walls in the plan, each meeting the next, round the room |
 | `room/out-of-order` | {thing} lists its walls out of order | its walls in order round the room, each meeting the next |
@@ -310,6 +312,7 @@ label.
 | `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
+| `plan/read-after-work` | The plan holds work: {existing, demolished and new counts}. Its sizes, areas and checks are for the building as it will be after the work | nothing: the parts to be demolished are drawn dashed and checked as they stand before the work, and grid diff --since phase lists what the work does |
 | `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
 | `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
 
@@ -588,6 +591,37 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: existing, demolished and new, and a fit-out on a fixed shell (CNT-10)
+
+- A wall, an opening and a room may state `phase`: `existing`, `demolished` or `new`, and a plan
+  may name a `base` plan it is fitted out in ([phases](plan-file.md#existing-demolished-and-new)).
+  A plan with neither answers exactly as before.
+- In a plan with phases, every measuring tool (`grid_areas`, `grid_measure`, `grid_schedule`,
+  `grid_takeoff`, `grid_describe`, `grid_find`, `grid_count`, `grid_compare`) and every check
+  read the building as it will be after the work. `grid_areas` adds a first note saying so;
+  `grid_describe` adds a sentence (person) or a `WORK` clause (agent) with the counts by phase.
+- New codes: `plan/read-after-work` (`not-checked`, one line on a plan with phases, with the
+  counts and the base), `opening/phase-wall` and `room/phase-wall` (`left-out`: an opening or a
+  room that stands when its wall does not). The drawing check reads each state on its own, so a
+  widened door's old and new openings, or a wall rebuilt where one is demolished, are no
+  `opening/overlap` or `wall/duplicate`; a fault of a part to be demolished is reported as it
+  stands before the work. `resultVersion` stays 1.
+- `grid_diff` takes `since: "phase"`: the plan before its work against after it. `since` in its
+  data is `{ kind: "phase", name: null, at: null, commit: null }`.
+- `grid_takeoff` takes `for: "change"`: the work as three lists, each line with a new `list`
+  (`demolish`, `make good`, `new`) and keys a rates file prices (`demolish:wall:interior:0.1`,
+  `make_good:infill:exterior:0.3`, `new:door:0.9x2.1`). The answer's shape is `for=estimate`'s.
+- The tools that change a plan: in a plan with phases what they add is `new`, a door, window,
+  wall or room they take out of what stood before stays, `demolished`, and an opening they
+  change keeps its old self beside it as `<id>-before`, demolished; a wall or room that stood
+  before and is moved, cut or reshaped is changed in place and named in `couldNotKeep`. In a
+  fit-out, a change that touches a base wall or opening is refused, naming them, and nothing is
+  written.
+- `grid_view` and `grid_export`: walls and openings to be demolished are drawn dashed, new walls
+  filled, and the key lists the phases; the DXF puts each wall on `GRID-WALLS-EXISTING`,
+  `-NEW` or `-DEMOLISHED` and the openings to be demolished on `GRID-OPENINGS-DEMOLISHED`; the
+  IFC gives each element a `Grid_Phase` set.
 
 ### 2026-11-22: a DXF a drafter can keep working in (HND-1)
 

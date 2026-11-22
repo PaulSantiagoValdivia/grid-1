@@ -161,6 +161,7 @@ export function phasedPatch(plan: FloorPlan, patch: Patch): Patch {
 
 /** An opening as a file would state it: the fields the schema reads, without its phase. */
 function statedOpening(opening: Opening): RawRecord {
-  const { phase: _phase, ...rest } = opening
-  return { ...rest }
+  const rest: RawRecord = { ...opening }
+  delete rest['phase']
+  return rest
 }

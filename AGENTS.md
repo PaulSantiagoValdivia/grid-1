@@ -43,6 +43,14 @@ Notes for agents and people changing this repository.
   walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
   sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
+- `packages/floorplan/src/geometry/phases.ts` (CNT-10): a plan's phases, `existing`, `demolished`
+  and `new` on walls, openings and rooms (C13 in `types/floorplan.ts`). `planInState` gives the
+  building before or after the work; everything that measures or checks reads it after
+  (`surveyPlan`, `planAreaFigures`, `checkLocalRules` and the like), `validatePlan` checks each
+  state on its own, and the drawing and the exports read both, each part with its phase. A plan
+  with no phase is read as before. `mergeBase` reads a fit-out's `base` plan in as existing; the
+  command reads the base file in `command/plan.ts`, and `cli/src/edit/phases.ts` refuses an edit
+  that touches it and makes an edit of a plan with phases the work.
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,
