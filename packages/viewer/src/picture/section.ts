@@ -189,8 +189,8 @@ export function sectionPicture(plan: FloorPlan, line: SectionLine, options: Sect
   // What lies beyond, farthest first: each face hides what is behind it.
   const beyond: SvgNode[] = section.beyond.map((face) =>
     face.edge === null
-      ? el('path', { 'data-part': 'section-beyond', 'data-kind': face.kind, 'data-id': face.id, d: piecesPath(face.pieces), fill: paper, 'fill-rule': 'evenodd', stroke: look.colors.dimension, 'stroke-width': n(lines.width('beyond')), 'stroke-linejoin': 'round' })
-      : el('path', { 'data-part': 'section-beyond', 'data-kind': face.kind, 'data-id': face.id, 'data-edge': 'true', d: lineOf(face.edge[0], face.edge[1]), fill: 'none', stroke: look.colors.dimension, 'stroke-width': n(lines.width('beyond')) })
+      ? el('path', { 'data-part': 'section-beyond', 'data-kind': face.kind, 'data-id': face.id, d: piecesPath(face.pieces), fill: paper, 'fill-rule': 'evenodd', stroke: look.colors.dimension, 'stroke-width': n(lines.width('elevationBack')), 'stroke-linejoin': 'round' })
+      : el('path', { 'data-part': 'section-beyond', 'data-kind': face.kind, 'data-id': face.id, 'data-edge': 'true', d: lineOf(face.edge[0], face.edge[1]), fill: 'none', stroke: look.colors.dimension, 'stroke-width': n(lines.width('elevationBack')) })
   )
   nodes.push(el('g', { 'data-part': 'section-beyond-group' }, beyond))
 
@@ -211,11 +211,11 @@ export function sectionPicture(plan: FloorPlan, line: SectionLine, options: Sect
     nodes.push(el('g', { 'data-part': 'section-hatch-group' }, hatched.map((a) => el('path', { 'data-part': 'section-hatch', 'data-kind': a.kind, 'data-ids': a.ids.join(' '), d: piecesPath(a.pieces), fill: `url(#${HATCH_ID})`, 'fill-rule': 'evenodd' }))))
   }
 
-  // The ground, twice as heavy as the cut, outside the building.
+  // The ground outside the building, in a facade's ground line (LVL-8), so the two drawings match.
   const g = section.ground
   if (g.segments.length > 0) {
     const d = g.segments.map(([a, b]) => lineOf({ x: a, y: g.level }, { x: b, y: g.level })).join('')
-    nodes.push(el('path', { 'data-part': 'section-ground', 'data-stated': String(g.stated), d, fill: 'none', stroke: look.ink, 'stroke-width': n(2 * lines.width('ground')), 'stroke-linecap': 'butt' }))
+    nodes.push(el('path', { 'data-part': 'section-ground', 'data-stated': String(g.stated), d, fill: 'none', stroke: look.ink, 'stroke-width': n(lines.width('elevationGround')), 'stroke-linecap': 'butt' }))
   }
 
   // Each room: its name and height, where the line crosses it longest, when they fit.
@@ -241,7 +241,7 @@ export function sectionPicture(plan: FloorPlan, line: SectionLine, options: Sect
   const { left, right } = levelLabels(section)
   const leftX = section.bounds.min.x - GAP_PX * mpp
   const rightX = section.bounds.max.x + GAP_PX * mpp
-  const markStroke = lines.width('dimension')
+  const markStroke = lines.width('elevationLevel')
   nodes.push(el('g', { 'data-part': 'section-levels' }, [...left.map((l) => levelMark(l, leftX, 'left', mpp, look, markStroke)), ...right.map((l) => levelMark(l, rightX, 'right', mpp, look, markStroke))]))
 
   const key = sectionKey(section, label, width, look)

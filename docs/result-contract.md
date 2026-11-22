@@ -606,6 +606,8 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `lens`, `room`, `camera`, `view`, `turn`, `tilt_by`) by name, and `kind=3d` refuses `cut`,
   `toward` and `marks`; `grid draw` refuses `--section` and `--marks` with `--view`. A section's
   `data` has `view` null.
+- After LVL-8: `kind=facade` refuses `cut`, `toward` and `marks`, and `kind=section` refuses
+  `side`; `grid draw` refuses `--section` and `--marks` with `--facade`.
 - No new code in the result record: a section and its marks are pictures. `resultVersion`
   stays 1.
 

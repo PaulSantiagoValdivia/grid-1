@@ -3,7 +3,8 @@ import { labPlan } from '@ongrid/floorplan/test-support/lab'
 import { twoFloorHouse } from '@ongrid/floorplan/test-support/plans'
 import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { levelText, type SectionLine } from '@ongrid/floorplan/geometry'
-import { PAPER_PENS, lengthText } from '../look'
+import { ELEVATION_PX, PAPER_PENS, lengthText } from '../look'
+import { facadePicture } from '../facade'
 import { pictureToSvg, planPicture, planToSvg } from '../planSvg'
 import { sectionPicture } from '../section'
 
@@ -51,11 +52,11 @@ describe('a section in the technical look', () => {
     expect(Number(attr(outline[0]!, 'stroke-width'))).toBe(metres(2 * PAPER_PENS[100].cut))
   })
 
-  it('runs a heavier ground line past the building, and draws what lies beyond lighter', () => {
+  it('runs a heavy ground line past the building, and draws what lies beyond lighter', () => {
     const ground = tagsOf(svg, 'section-ground')
     expect(ground).toHaveLength(1)
-    // Twice the cut pen, none of it under a fill: twice as heavy as the cut's outline shows.
-    expect(Number(attr(ground[0]!, 'stroke-width'))).toBe(metres(2 * PAPER_PENS[100].cut))
+    // A facade's ground line (LVL-8): the cut pen, none of it under a fill.
+    expect(Number(attr(ground[0]!, 'stroke-width'))).toBe(metres(PAPER_PENS[100].cut))
     expect(attr(ground[0]!, 'd')).toBe('M0.0000,0.0000L1.8500,0.0000M13.1500,0.0000L15.0000,0.0000')
     const beyond = tagsOf(svg, 'section-beyond')
     expect(beyond.length).toBeGreaterThan(0)
@@ -92,13 +93,13 @@ describe('a section in the technical look', () => {
 })
 
 describe('a section in the working look', () => {
-  it('draws the cut solid with no outline, the ground at twice its screen width', () => {
+  it('draws the cut solid with no outline, the ground as a facade draws it on screen', () => {
     const picture = sectionPicture(townhouse(), THROUGH_STAIR)
     const svg = pictureToSvg(picture)
     const mpp = picture.view.width / picture.width
     expect(tagsOf(svg, 'section-cut-outline')).toEqual([])
     expect(attr(tagsOf(svg, 'section-cut')[0]!, 'fill')).toBe('#232320')
-    expect(Number(attr(tagsOf(svg, 'section-ground')[0]!, 'stroke-width'))).toBe(Number(lengthText(2 * 1.5 * mpp)))
+    expect(Number(attr(tagsOf(svg, 'section-ground')[0]!, 'stroke-width'))).toBe(Number(lengthText(ELEVATION_PX.ground * mpp)))
   })
 })
 
@@ -133,6 +134,8 @@ describe('the marks on a plan', () => {
     expect(tagsOf(svg, 'section-mark-head')).toHaveLength(2)
     expect(attr(tagsOf(svg, 'section-mark-line')[0]!, 'stroke-dasharray')).toBeDefined()
     expect(tagsOf(svg, 'elevation-mark').map((tag) => attr(tag, 'data-faces'))).toEqual(['south', 'east', 'north', 'west'])
+    // LVL-8: the facade that draws each side.
+    expect(tagsOf(svg, 'elevation-mark').map((tag) => attr(tag, 'data-facade'))).toEqual(['south', 'east', 'north', 'west'])
     const levels = tagsOf(svg, 'level-mark')
     expect(levels.length).toBe(5)
     for (const tag of levels) expect(attr(tag, 'data-level')).toBe('2.95')
@@ -146,3 +149,15 @@ describe('the marks on a plan', () => {
     }
   })
 })
+
+describe('a section and a facade of one plan (after LVL-8)', () => {
+  it('draw the ground line and the lines seen beyond with the same pens', () => {
+    const section = pictureToSvg(sectionPicture(townhouse(), THROUGH_STAIR, { look: 'technical', paperScale: 100 }))
+    const facade = pictureToSvg(facadePicture(townhouse(), { side: 'south', look: 'technical', paperScale: 100 }))
+    const width = (tag: string): number => Number(attr(tag, 'stroke-width'))
+    expect(width(tagsOf(section, 'section-ground')[0]!)).toBeCloseTo(width(tagsOf(facade, 'facade-ground')[0]!), 9)
+    // What a section sees beyond is drawn as a facade's faces set back (its second plane).
+    expect(width(tagsOf(section, 'section-beyond')[0]!)).toBeCloseTo((PAPER_PENS[100].finest * 100) / 1000, 9)
+  })
+})
+

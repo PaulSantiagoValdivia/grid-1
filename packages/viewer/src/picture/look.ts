@@ -222,13 +222,6 @@ export type LinePart =
   | 'elevationFar'
   | 'elevationOpening'
   | 'elevationLevel'
-  /**
-   * LVL-9: a section's ground line, written twice its width like the wall outline, none of it
-   * under a fill, so it reads twice as heavy as the cut.
-   */
-  | 'ground'
-  /** LVL-9: what a section sees beyond the cut, lighter than what it cuts. */
-  | 'beyond'
   /** LVL-9: the hatching over what a section takes that the plan does not state. */
   | 'hatch'
   /** LVL-9: a section's cut line on the plan, and the marks for elevations and levels. */
@@ -332,9 +325,8 @@ const SCREEN_LINES: ScreenLines = {
     elevationFar: ELEVATION_PX.far,
     elevationOpening: ELEVATION_PX.opening,
     elevationLevel: ELEVATION_PX.level,
-    // LVL-9: the section and the marks for it, which the app does not draw, so plan.css has none.
-    ground: 1.5,
-    beyond: 0.75,
+    // LVL-9: the section's hatch and the marks on a plan, which the app does not draw, so plan.css
+    // has none. A section's ground, what it sees beyond and its level marks are LVL-8's parts.
     hatch: 0.75,
     mark: 1
   },
@@ -381,8 +373,6 @@ const PAPER_LINES: PaperLines = {
     elevationFar: 'finest',
     elevationOpening: 'finest',
     elevationLevel: 'finest',
-    ground: 'cut',
-    beyond: 'finest',
     hatch: 'finest',
     mark: 'fine'
   },

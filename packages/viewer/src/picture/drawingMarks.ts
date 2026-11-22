@@ -53,7 +53,7 @@ export function drawingMarkNodes(marks: DrawingMarks, look: Look, mpp: number, p
 
   const cut = marks.section
   if (cut !== null) {
-    const heavy = Math.max(2 * lines.width('ground'), lines.width('mark'))
+    const heavy = Math.max(lines.width('elevationGround'), lines.width('mark'))
     const span = { x: cut.to.x - cut.from.x, y: cut.to.y - cut.from.y }
     const length = Math.hypot(span.x, span.y)
     const along = length === 0 ? { x: 1, y: 0 } : { x: span.x / length, y: span.y / length }
@@ -79,7 +79,7 @@ export function drawingMarkNodes(marks: DrawingMarks, look: Look, mpp: number, p
 
   for (const mark of marks.elevations) {
     nodes.push(
-      el('g', { 'data-part': 'elevation-mark', 'data-faces': mark.faces, transform: pixelGroup(mark.at, mpp) }, [
+      el('g', { 'data-part': 'elevation-mark', 'data-faces': mark.faces, 'data-facade': mark.facade, transform: pixelGroup(mark.at, mpp) }, [
         el('path', { d: arrow(mark.look, DISC_PX - 2, DISC_PX + 9, 7), fill: ink }),
         el('circle', { r: DISC_PX, fill: look.colors.paper, stroke: ink, 'stroke-width': n(lines.width('mark') / mpp) }),
         el('text', { y: '4', ...name, 'font-size': TEXT_PX.dimension }, [SHORT[mark.faces]])

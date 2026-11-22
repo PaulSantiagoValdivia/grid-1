@@ -10,6 +10,7 @@ import { parseFloorPlan } from '../../types/floorplan'
 import type { FloorPlan } from '../plan'
 import { levelText, planSection, sectionFrame, type PlanSection, type SectionLine } from '../section'
 import { drawingMarks } from '../drawingMarks'
+import { planFacade } from '../facade'
 import { buildFloorPlan } from '../floorplan'
 import { planForFloor } from '../floors'
 import { signedArea } from '../vec2'
@@ -222,6 +223,15 @@ describe('the marks on a plan', () => {
     // With north stated a quarter turn to the left, the top of the drawing faces east.
     const turned = drawingMarks({ ...plan, north: 90 }, 'first', drawing, around, { elevations: true })
     expect(turned.elevations.map((m) => m.faces)).toEqual(['west', 'south', 'east', 'north'])
+  })
+
+  it('names the facade that draws each side, the drawing\'s side whatever north the plan states (LVL-8)', () => {
+    const marks = drawingMarks(plan, 'first', drawing, around, { elevations: true })
+    expect(marks.elevations.map((m) => m.facade)).toEqual(['south', 'east', 'north', 'west'])
+    const turned = drawingMarks({ ...plan, north: 90 }, 'first', drawing, around, { elevations: true })
+    expect(turned.elevations.map((m) => m.facade)).toEqual(['south', 'east', 'north', 'west'])
+    // Each mark looks at the walls that facade draws: the one it names shows a wall the mark faces.
+    for (const mark of marks.elevations) expect(planFacade(plan, mark.facade).walls.length).toBeGreaterThan(0)
   })
 
   it('marks each room\'s floor level, worked out when the floor states none', () => {

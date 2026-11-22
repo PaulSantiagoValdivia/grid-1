@@ -7,7 +7,8 @@
  * - **An elevation mark** stands outside each of the plan's four main sides (`planAxes`, SHT-4: the
  *   way most of its outside walls run), `elevationMarkOffset` beyond the drawing and its
  *   dimensions, looking at the building. It is named by the way that side faces: by the north the
- *   plan states, else by the drawing's own, north at the top (CNT-3).
+ *   plan states, else by the drawing's own, north at the top (CNT-3). It also names the facade
+ *   that draws that side (LVL-8, `planFacade`): the side of the drawing it is seen from.
  * - **A level mark** is each drawn room's floor level: its storey's (LVL-1) and its own offset
  *   (LVL-7), with whether the plan states the storey's elevation.
  *
@@ -25,6 +26,7 @@ import { limit } from './tolerances'
 import type { Vec2 } from './vec2'
 import { add, dot, scale } from './vec2'
 import type { SectionLine } from './section'
+import type { FacadeSide } from './facade'
 import { sectionFrame } from './section'
 
 export interface SectionMark {
@@ -42,6 +44,11 @@ export interface ElevationMark {
   readonly faces: CompassPoint
   /** Whether that is the north the plan states, or the drawing's top taken as north. */
   readonly northStated: boolean
+  /**
+   * LVL-8: the facade that draws this side, `planFacade(plan, facade)` (`grid draw --facade`): the
+   * side of the drawing, north at its top, nearest the way the mark looks from.
+   */
+  readonly facade: FacadeSide
   /** The middle of the mark. */
   readonly at: Vec2
   /** The way it looks: at the building, a unit direction on the plan. */
@@ -90,7 +97,7 @@ export function drawingMarks(plan: FloorPlan, floor: string, drawing: PlanDrawin
     for (const side of [scale(axes.v, -1), axes.u, axes.v, scale(axes.u, -1)]) {
       const reach = Math.max(...corners.map((c) => dot(c, side))) - dot(centre, side)
       const bearing = bearingOf(side, orientation, orientation.north ?? 0) ?? 0
-      elevations.push({ faces: compassPoint(bearing), northStated: orientation.north !== null, at: add(centre, scale(side, reach + offset)), look: scale(side, -1) })
+      elevations.push({ faces: compassPoint(bearing), northStated: orientation.north !== null, facade: facadeSideOf(side), at: add(centre, scale(side, reach + offset)), look: scale(side, -1) })
     }
   }
 
@@ -107,6 +114,12 @@ export function drawingMarks(plan: FloorPlan, floor: string, drawing: PlanDrawin
   }
 
   return { section, elevations, levels }
+}
+
+/** The side of the drawing a direction on the plan points to most: +y is north, the drawing's top. */
+function facadeSideOf(out: Vec2): FacadeSide {
+  if (Math.abs(out.y) >= Math.abs(out.x)) return out.y >= 0 ? 'north' : 'south'
+  return out.x >= 0 ? 'east' : 'west'
 }
 
 /** The points the marks reach on the plan, for the picture to frame them too. */

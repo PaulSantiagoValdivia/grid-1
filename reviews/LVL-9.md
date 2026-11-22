@@ -282,3 +282,81 @@ On a loaded machine shared with other sessions, once each, at the end:
 | `npm run lint` | exit 0, no problems |
 | `timeout 1500 npx vitest run packages/floorplan/src/geometry packages/viewer packages/cli --maxWorkers=2 --minWorkers=1` | Test Files 231 passed (231); Tests 4491 passed, 2 skipped (4493); 481 s |
 | `npm run scoreboard` | "Same as the stored figures." |
+
+## After merging main (8b599e9)
+
+Main brought LVL-8: facades drawn from the model (`planFacade`, `facadePicture`, `grid draw
+--facade`, `grid_view kind=facade`) and opening patterns.
+
+- **Conflicts**, all kept both sides: `CHANGELOG.md` (LVL-9's line, then LVL-8's), `docs/commands.md`
+  (both contents lines; one `grid draw` row with `--facade` and `--section`; this section, then
+  LVL-8's facade section), `docs/result-contract.md` (LVL-9's entry above LVL-8's),
+  `docs/tool-server.md` (one `grid_view` row with the facade and the section), `command/draw.ts`
+  (LVL-8's facade check and drawing before the section's), `command/main.ts` (one usage line with
+  every option), `draw/views.ts` (the header names both), `mcp/readTools.ts` (`grid_view` takes
+  `plan`, `facade`, `3d`, `eye` and `section`, with `side`, `cut` and `marks`; LVL-8's
+  `facadeAnswer` beside LVL-9's cut and marks helpers; the output schema with `facade` and
+  `section`), `geometry/index.ts` (both sides' exports), `picture/look.ts` (both sides' line
+  parts) and `picture/planSvg.ts`: LVL-9's `Picture.description` and LVL-8's `Picture.title` were
+  the same field, the picture's accessible name, so the section now sets LVL-8's `title`.
+- **Refusals between the two**: `grid_view kind=facade` refuses `cut`, `toward` and `marks`, and
+  `kind=section` refuses `side`, through the one list of what each kind takes. `grid draw
+  --facade` refuses `--section` ("--facade draws one side of the building and --section a cut
+  through it: give one of them.") and `--marks` ("--marks is for a floor plan, not a facade").
+  Tested in `sectionView.test.ts` and two rows of the e2e options table.
+
+### Line weights shared with LVL-8 (follow-up commit)
+
+- **The ground line** is LVL-8's `elevationGround` (the cut pen on paper, 3 px on screen), drawn
+  once, as the facade draws it. LVL-9's own `ground` part is gone. On screen nothing changed (it
+  was twice 1.5 px). On paper the section's ground is now the cut pen, 0.5 mm at 1:100, where it
+  was twice that: it is as heavy as the visible edge of the cut's outline, not twice it, so
+  "heavier than the cut" now holds on screen only. The heavy ends of the section mark on a plan
+  follow it (the cut pen on paper, 3 px on screen; they were 1.0 mm on paper).
+- **What a section sees beyond** is LVL-8's `elevationBack`, the line of a facade's faces set back
+  from its front plane. LVL-9's `beyond` part is gone. Same pen and width as before (finest, 0.75
+  px), so no picture changed.
+- **The level marks beside a section** use LVL-8's `elevationLevel` (finest; 0.75 px on screen,
+  where `dimension` gave 1 px).
+- **Left apart**: `hatch` and `mark` stay LVL-9's own; a facade has no hatch and no plan marks.
+  A section's cut stays in the plan's wall pen (`wallOutline`), not LVL-8's `elevationOutline`
+  (the medium pen of a facade's outline against the sky), since a cut is not an outline seen. The
+  level text stays LVL-9's `±0.000` / `+2.950` (`levelText`), and a facade's floor marks keep their
+  own `+2.95`, each in its own module; making them one is a small follow-up if wanted.
+- Tested: viewer `section.test.ts` "a section and a facade of one plan … draw the ground line and
+  the lines seen beyond with the same pens" (the townhouse, technical at 1:100); the two existing
+  ground-width expectations were changed to the shared part (on paper from twice the cut pen to
+  once; on screen `ELEVATION_PX.ground`, the same 3 px).
+
+### Elevation marks linked to the facades
+
+- Each elevation mark (`drawingMarks.ts`) now carries `facade`: the side of the drawing whose
+  facade draws it (`planFacade(plan, side)`, `grid draw --facade <side>`), the drawing's side
+  nearest the way the mark looks from, north at the drawing's top. The mark is still named by the
+  way its side faces (stated north, else the drawing's top), so with a stated north the letter on
+  the disc and the facade's side differ, as LVL-8's own caption says. The SVG carries
+  `data-facade`, and `grid_view`'s text for `marks elevations` says kind=facade draws each.
+  Tested in the core (`section.test.ts`, the marks name the same facades whatever north is stated,
+  and each named facade shows walls) and in the viewer.
+- Cheap and safe: data and an attribute only; no mark moved and nothing new is drawn. A plan
+  turned near 45° can mark a side whose nearest drawing side differs from where LVL-8 draws most
+  of its walls (LVL-8 draws every face turned toward a side).
+
+### For the owner
+
+- **The ground line on paper is half what it was.** LVL-8's weight was shared as asked when
+  merging. Keeping a section's ground twice the cut pen (its own reading of SE-5's "heavier ground
+  line") would be one multiplier in `picture/section.ts`, at the cost of a section and a facade of
+  one plan no longer matching on paper.
+
+### Checks run
+
+On a loaded machine shared with other sessions, once each, at the end:
+
+| Check | Result |
+|---|---|
+| `npm run build` | exit 0; `grid.mjs` 498,483 bytes, under the 550 kB limit, which did not move |
+| `npm run typecheck` | exit 0, every workspace |
+| `npm run lint` | exit 0, no problems |
+| `timeout 1500 npx vitest run packages/floorplan/src/geometry packages/viewer packages/cli --maxWorkers=2 --minWorkers=1` | Test Files 236 passed (236); Tests 4547 passed, 2 skipped (4549); 460 s |
+| `npm run scoreboard` | "Same as the stored figures." |

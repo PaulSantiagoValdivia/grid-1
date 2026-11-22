@@ -1426,7 +1426,7 @@ function asToolArg<T>(read: () => T): T {
 function marksText(marks: DrawingMarksAsked): string {
   const said: string[] = []
   if (marks.section != null) said.push(`the section's cut line from (${m(marks.section.from.x)}, ${m(marks.section.from.y)}) to (${m(marks.section.to.x)}, ${m(marks.section.to.y)}) as a chain line named A, its arrows looking to the ${marks.section.toward}`)
-  if (marks.elevations === true) said.push('an elevation mark outside each main side of the building, its arrow at the side it shows, named by the way that side faces')
+  if (marks.elevations === true) said.push('an elevation mark outside each main side of the building, its arrow at the side it shows, named by the way that side faces; kind=facade draws each, with side the side of the drawing it is seen from (north at the top)')
   if (marks.levels === true) said.push('each room\'s floor level under its name, in metres from the ground floor\'s floor level')
   return `Marked on the plan: ${said.join('; ')}.`
 }

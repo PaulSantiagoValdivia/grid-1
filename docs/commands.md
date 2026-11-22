@@ -439,13 +439,15 @@ Everything on it is the model's own, as the 3D view, the IFC and the take-off re
   floor (open over a stair, a lift shaft or a void), the roof and any parapet, the treads and
   landings of a stair the plan states, and the floor of a raised room. Parts that touch are one
   shape, not a rectangle each.
-- **What lies beyond the cut** is drawn in a lighter line: the faces of walls, slab and roof edges
-  and stairs that face you, with their doors and windows open, each hiding what is behind it.
-- **The ground** is a line twice as heavy as the cut, outside the building, running 1 m past it on
-  each side (`sectionGroundRun` in [tolerances.md](tolerances.md)), at the site's ground level, or
-  at the ground floor's level when the site states none.
-- **The levels** stand beside the drawing: each floor's on the left, each roof's and the ground's
-  on the right, in metres from the ground floor's floor level, as `±0.000`, `+2.950`.
+- **What lies beyond the cut** is drawn in a lighter line, the one a facade draws its faces set
+  back in: the faces of walls, slab and roof edges and stairs that face you, with their doors and
+  windows open, each hiding what is behind it.
+- **The ground** is a facade's ground line, the heaviest pen, outside the building, running 1 m
+  past it on each side (`sectionGroundRun` in [tolerances.md](tolerances.md)), at the site's
+  ground level, or at the ground floor's level when the site states none.
+- **The levels** stand beside the drawing, in a facade's level-mark line: each floor's on the
+  left, each roof's and the ground's on the right, in metres from the ground floor's floor level,
+  as `±0.000`, `+2.950`.
 - **Each room cut** carries its name and its height, floor to ceiling: its own `height` when it
   states one, else up to the slab or roof over its storey.
 - **What the plan does not state and Grid takes** is listed under the drawing, and hatched where
@@ -459,15 +461,16 @@ Everything on it is the model's own, as the 3D view, the IFC and the take-off re
   at its eaves, hatched, and says so in the list.
 
 A section cuts every floor and writes its levels in metres, so `--floor`, `--hide`, `--colour`,
-`--key`, `--ids`, `--units` and `--decimal` are refused with it, by name; so are `--3d` and
-`--view`, and `--marks` with either.
+`--key`, `--ids`, `--units` and `--decimal` are refused with it, by name; so are `--3d`,
+`--view` and `--facade`, and `--marks` with any of them.
 
 `--marks` adds the marks for the plan's other drawings to a floor plan, joined by commas:
 
 - `levels`: each room's floor level under its name, worked out as for the section;
 - `elevations`: a mark outside each of the plan's four main sides, 1.2 m beyond the drawing and
   its dimensions (`elevationMarkOffset`), its arrow at the side it shows, named by the way that
-  side faces: by the north the plan states, else with north at the top of the drawing;
+  side faces: by the north the plan states, else with north at the top of the drawing. Each is
+  the side `grid draw --facade` draws from the drawing's side nearest it, north at its top;
 - `section`: the line of `--section` as a chain line, heavy at its ends, with an arrow at each end
   looking the way the section looks, named A. With `section` in `--marks`, `--section` marks the
   plan instead of drawing the section.
@@ -501,8 +504,9 @@ on the front plane, and lighter again the faces set back from it (by more than `
 hides what stands behind it.
 
 It takes `--png`, `--out`, `--look` and `--scale` (PNG only), as a plan does, and the label in its
-corner. It refuses `--3d`, `--view` and `--floor` (a facade shows every floor) and what belongs to
-a floor plan (`--ids`, `--hide`, `--colour`, `--key`, `--units`, `--decimal`), by name. Stairs
+corner. It refuses `--3d`, `--view`, `--section` and `--floor` (a facade shows every floor) and
+what belongs to a floor plan (`--ids`, `--hide`, `--colour`, `--key`, `--units`, `--decimal`,
+`--marks`), by name. Stairs
 stand inside and are not seen; a garden wall with no room behind it is not drawn. Under a roof a
 floor states (LVL-6), each wall is drawn to the top the roof leaves it, so a gable end is a
 gable, the roof's edges follow its slope, and each plane of it that comes down toward the side is
