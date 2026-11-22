@@ -101,6 +101,11 @@ No expected figure elsewhere changed with it.
 
 ## For the owner
 
+0. **The built file's size cap, 400 → 450 kB** (`command/__tests__/grid.e2e.test.ts`). The
+   edits take `dist/grid.mjs` to 400,863 bytes, just past the 400 kB VEW-7 set to catch a second
+   zod; no dependency was added. The reversible choice was to raise the cap; the other is to
+   shorten the new tools' descriptions, the bulk of the added text.
+
 1. **20 tools.** One tool per request (WR-2), against "about a dozen". I folded resize into
    `grid_move_room_side` (`to`) and moving an opening into `grid_change_opening` rather than
    adding two more. If 20 is too many, the next fold would be `grid_stretch` into
