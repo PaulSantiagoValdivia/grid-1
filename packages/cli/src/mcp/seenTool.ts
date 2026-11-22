@@ -26,7 +26,7 @@ export const markSeenTool: GridTool = {
     line: { type: 'number', required: true, minimum: 1, maximum: 1_000_000, description: 'The note\'s number, as grid_check gave it.', examples: [3] },
     code: { type: 'string', required: true, maxLength: 64, description: 'The note\'s code, as grid_check gave it: a number that now names another note is refused.', examples: ['room/too-small', 'opening/doors-collide'] },
     reason: { type: 'string', maxLength: REASON_MAX, description: 'Why the person sets the note aside, in their words, in one line. Needed unless unmark is true.', examples: ['A box room, kept small on purpose'] },
-    by: { type: 'string', maxLength: BY_MAX, description: 'Who marks it: the name or role the person gives. Kept only in the marks file beside the plan. Needed unless unmark is true.', examples: ['Owner', 'A. Architect'] },
+    by: { type: 'string', maxLength: BY_MAX, description: 'Who marks it: the name or role the person gives. Kept only with the seen marks beside the plan, never in an export. Needed unless unmark is true.', examples: ['Owner', 'A. Architect'] },
     unmark: { type: 'boolean', description: 'true to take the note\'s seen mark off. false when left out.', examples: [true] },
     country: { ...COUNTRY_ARG, description: 'The country grid_check was given, so the number names the same note.' },
   },
