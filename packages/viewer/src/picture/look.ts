@@ -95,10 +95,12 @@ export const LINE_PX = {
   jamb: 1,
   /** A step between rooms at different levels (LVL-7). */
   step: 1.5,
-  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  /** A stair's flights, landings, risers and walking line (LVL-3), its break line and a lift's cross (SHT-11). */
   stair: 0.75,
-  /** How long the head of a stair's arrow is. */
-  stairArrow: 8,
+  /** SHT-11: the outline of the floor above, dashed. */
+  above: 1,
+  /** SHT-11: the dashes of what lies above the cut: the floor above, and a stair past its break line. */
+  aboveDash: [4, 3],
   /** A fixture's symbol (CNT-12). */
   fixture: 0.75,
   doorLeaf: 1.5,
@@ -186,8 +188,10 @@ export type LinePart =
   | 'jamb'
   | 'step'
   | 'fixture'
-  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  /** A stair's flights, landings, risers and walking line (LVL-3), its break line and a lift's cross (SHT-11). */
   | 'stair'
+  /** SHT-11: the outline of the floor above. */
+  | 'above'
   | 'doorLeaf'
   | 'doorArc'
   | 'dimension'
@@ -200,7 +204,7 @@ export type LinePart =
   | 'undecided'
 
 /** The parts of the drawing a look gives a dash pattern. */
-export type DashPart = 'virtual' | 'roomDimension' | 'undecided'
+export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above'
 
 /** Lines for the screen: widths and dashes in screen pixels, whatever the zoom. */
 export interface ScreenLines {
@@ -265,6 +269,7 @@ const SCREEN_LINES: ScreenLines = {
     step: LINE_PX.step,
     fixture: LINE_PX.fixture,
     stair: LINE_PX.stair,
+    above: LINE_PX.above,
     doorLeaf: LINE_PX.doorLeaf,
     doorArc: LINE_PX.doorArc,
     dimension: LINE_PX.dimension,
@@ -275,7 +280,7 @@ const SCREEN_LINES: ScreenLines = {
     glass: LINE_PX.opening,
     undecided: LINE_PX.opening
   },
-  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3] }
+  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash }
 }
 
 /**
@@ -299,6 +304,7 @@ const PAPER_LINES: PaperLines = {
     step: 'medium',
     fixture: 'finest',
     stair: 'finest',
+    above: 'fine',
     doorLeaf: 'medium',
     doorArc: 'finest',
     dimension: 'finest',
@@ -309,7 +315,7 @@ const PAPER_LINES: PaperLines = {
     glass: 'fine',
     undecided: 'fine'
   },
-  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8] }
+  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1] }
 }
 
 /** Black on white: the technical look's colours. Walls are a grey tone inside a black outline. */
