@@ -100,7 +100,8 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
   let skirting = 0
   const leftOut: string[] = []
   for (const room of survey.rooms) {
-    if (!onFloor(room.facts.floor)) continue
+    // A zone's floor and walls are its room's (CNT-8): priced once.
+    if (!onFloor(room.facts.floor) || room.facts.zoneOf !== undefined) continue
     if (room.facts.shape === null || room.polygon.length < 3) {
       leftOut.push(JSON.stringify(room.facts.name))
       continue

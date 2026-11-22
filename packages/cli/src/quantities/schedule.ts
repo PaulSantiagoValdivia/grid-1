@@ -83,6 +83,19 @@ export interface RoomScheduleRow {
   readonly state: NumberState
   /** In metres, by ARE-10's rule; null when the plan gives none. */
   readonly height: number | null
+  /**
+   * CNT-8, only on a room with zones: each zone, measured, by id. A zone is no row of
+   * its own: its floor is in its room's area, so a column of areas adds up to the total.
+   */
+  readonly zones?: readonly RoomScheduleZone[]
+}
+
+/** A zone of a room in the room schedule (CNT-8). */
+export interface RoomScheduleZone {
+  readonly id: string
+  readonly name: string
+  readonly use: string | null
+  readonly area: number | null
 }
 
 /** A total of the room schedule: one floor's, or all floors'. */
@@ -154,7 +167,12 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
     const figures = areas.floors.find((f) => f.floor === floor.id)
     if (figures === undefined) continue
     const storey = planForFloor(survey.plan, floor.id)
-    for (const room of [...figures.rooms].sort((a, b) => compareIds(a.id, b.id))) {
+    const places = figures.rooms.filter((room) => room.zoneOf === undefined)
+    for (const room of [...places].sort((a, b) => compareIds(a.id, b.id))) {
+      const zones = figures.rooms
+        .filter((zone) => zone.zoneOf === room.id)
+        .sort((a, z) => compareIds(a.id, z.id))
+        .map((zone) => ({ id: zone.id, name: zone.name, use: zone.use, area: zone.net }))
       rows.push({
         number: rows.length + 1,
         id: room.id,
@@ -165,9 +183,10 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
         area: room.net,
         state: room.state,
         height: roomHeight(storey, room.id).value,
+        ...(zones.length === 0 ? {} : { zones }),
       })
     }
-    floors.push({ floor: floor.id, floorName: floor.name, rooms: figures.rooms.length, area: figures.net, state: figures.states.net })
+    floors.push({ floor: floor.id, floorName: floor.name, rooms: places.length, area: figures.net, state: figures.states.net })
   }
   return {
     rows,

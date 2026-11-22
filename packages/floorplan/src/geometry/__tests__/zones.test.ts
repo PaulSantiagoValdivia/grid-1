@@ -138,3 +138,13 @@ describe('zones inside one room (CNT-8)', () => {
     expect(planAreaFigures(bath).floors[0]!.rooms.find((r) => r.id === 'bath')?.zoneOf).toBeNull()
   })
 })
+
+describe('zones read back as rooms text (CNT-8, WRT-2)', () => {
+  it('loses nothing: written again, every zone still names its room', async () => {
+    const { readRoomsText } = await import('../../rooms/read')
+    const { compileRoomsText } = await import('../../rooms/compile')
+    const plan = zonedStudio()
+    const again = compileRoomsText(readRoomsText(plan).text).plan!
+    expect(again.rooms.filter((r) => r.partOf !== undefined).map((r) => [r.id, r.partOf])).toEqual(ZONES.map((id) => [id, 'studio']))
+  })
+})

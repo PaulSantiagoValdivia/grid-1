@@ -43,6 +43,8 @@ export interface RoomArea {
   /** CNT-12, only on a room with fixtures: the floor they stand on, and the net area less it. */
   readonly fixtures?: number
   readonly free?: number
+  /** CNT-8, only on a zone: the room it is part of. Measured, and in no total: its floor is its room's. */
+  readonly zoneOf?: string
 }
 
 export interface FloorAreas {
@@ -155,11 +157,19 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
         // Fixtures add no area and take none from the totals: only the room's free floor (CNT-12).
         // A room that could not be measured has no free floor either (MSG-2).
         ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
+        ...(figure === undefined || figure.zoneOf === null ? {} : { zoneOf: figure.zoneOf }),
       }
     })
-    const inside = rooms.filter((room) => !room.outside)
+    // CNT-8: a zone is in no total; its floor is counted in its room's, by the zone's use.
+    const inside = rooms.filter((room) => !room.outside && room.zoneOf === undefined)
+    const zones = rooms.filter((room) => !room.outside && room.zoneOf !== undefined)
+    const useOf = (room: RoomArea): string => room.use ?? (room.zoneOf === undefined ? null : rooms.find((r) => r.id === room.zoneOf)?.use) ?? NOT_SAID
     const byUseState: Record<string, AreaState> = {}
-    for (const use of [...new Set(inside.map((room) => room.use ?? NOT_SAID))]) byUseState[use] = sumState(inside.filter((room) => (room.use ?? NOT_SAID) === use))
+    const usesHere = [
+      ...inside.filter((room) => !zones.some((zone) => zone.zoneOf === room.id) || Object.hasOwn(f.byUse, useOf(room))).map(useOf),
+      ...zones.map(useOf),
+    ]
+    for (const use of [...new Set(usesHere)]) byUseState[use] = sumState([...inside, ...zones].filter((room) => useOf(room) === use))
     const circulating = inside.filter((room) => CIRCULATION.has(room.use ?? ''))
     // A use whose rooms could none be measured is still listed, at 0 and not looked at (MSG-2).
     const byUse: Record<string, number> = { ...f.byUse }

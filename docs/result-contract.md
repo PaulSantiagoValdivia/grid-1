@@ -301,7 +301,7 @@ Every area Grid gives carries a state (MSG-2, lab AA-12, AC-9), one of:
   A sum of no rooms is 0, and proven.
 - `not-proven`: a room it should hold could not be measured, or the drawing questions a room's
   outline (`room/not-enclosed`, `room/space-mismatch`, `room/overlap`, `room/overlap-unknown`,
-  `room/inside-no-host`). It names those rooms.
+  `room/inside-no-host`, `room/zone-not-in-room`). It names those rooms.
 - `not-looked-at`: nothing it would be made of could be measured. A room that cannot be drawn
   has no area (`net: null`), never 0.
 
