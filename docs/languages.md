@@ -14,10 +14,12 @@ language. Room names are never translated: they are the person's own words.
 - `packages/floorplan/src/messages/uses.ts`: the one fixed list of room uses (`ROOM_USES`), with
   its label in each language.
 
-A key names what it says: `label`; `join.*`, the words a list is joined with; `issue.<code>`, a
-drawing check's own sentence; `check.*`, a plan check's finding or notice; `line.<code>.<field>`,
-the result record's `message` (`says`), `found`, `needed` and `fix`; `report.*`, the words of a
-report around its lines; `describe.*`, `drawing.*` and `sheet.*` for those outputs. A last part
+A key names what it says: `label`; `join.*`, the words a list is joined with; `thing.*`, how a
+line names a part; `read.*`, what the reader found and what the format wants; `issue.<code>`, a
+drawing check's own sentence; `check.*`, a plan check's finding or notice, its title and its
+limits; `line.<code>.<field>`, the result record's `message` (`says`), `found`, `needed` and
+`fix`; `report.*` and `tool.check.*`, the words of a report around its lines; `describe.*`,
+`drawing.*` and `sheet.*` for those outputs. A last part
 after the field (`.one`, `.many`, `.none`) is one wording of several, chosen by the code.
 
 A wording holds named placeholders, `{width}`. `say(language, key, values)` fills them:
@@ -34,7 +36,9 @@ A wording holds named placeholders, `{width}`. `say(language, key, values)` fill
 ## The language setting
 
 A plan may state its language in its `display` (`"display": { "language": "es" }`), and a
-command or a tool call may ask for one (`--lang es`, `language: "es"`), which wins. English is the
+command or a tool call may ask for one (`--lang es` on `grid check`, `describe`, `draw` and
+`sheet`; `language: "es"` on `grid_check`, `grid_describe`, `grid_view` and `grid_sheet`), which
+wins. Spanish is loaded only when it is asked for (`loadLanguage`). English is the
 default. A language with a decimal comma (Spanish) writes one unless the display's `decimal`
 says otherwise. Lengths stay as the display states them; the check's figures stay in metres.
 
@@ -48,6 +52,20 @@ says otherwise. Lengths stay as the display states them; the check's figures sta
    will see it.
 3. Say it from the code with `say` (or `said` for a part of another sentence). A test fails on an
    English sentence written anywhere else in the user-facing sources.
+
+## Where words may be written
+
+A sentence Grid writes for a person is a key of the message files and nowhere else.
+`packages/cli/src/__tests__/ownWords.test.ts` reads every user-facing source of the four
+packages and counts the string literals that look like an English sentence. A file not on its
+list must have none, and a listed file must have exactly its count: a new sentence fails it, and
+a moved one asks for its count to come down. The list says why each file still holds English:
+agent-facing text (tool descriptions, English by design), the command line's help and refusals,
+texts for people who build Grid, and what is shown to the person and not moved yet.
+
+A record (`inspectPlan`) and a report keep every code, kind, id, figure and value the same in
+every language: only the words change. Each line's `values` holds the figures, names, ids and
+places its words were made with, so an agent can retell a line in any language from its code.
 
 ## Adding a language
 

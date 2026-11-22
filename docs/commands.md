@@ -267,6 +267,15 @@ on `grid edit` may carry its unit (`--by "12'6\""`, `--width "900 mm"`) and, wit
 `--decimal comma`, a decimal comma (`--by 0,3`). The plan file stays in metres either way; see
 [Units](plan-file.md#units).
 
+## Grid's words in your language: `--lang`
+
+`grid check`, `grid describe`, `grid draw` and `grid sheet` take `--lang en|es`: the language
+Grid writes its own words in, the label first. Left out, the plan's own `display.language`, or
+English. Spanish writes figures with a decimal comma unless the plan's `display.decimal` says
+`point`. Room names stay as the plan writes them, and the codes in brackets stay as they are. The
+Spanish words are a draft translation, not reviewed yet; see [Languages](languages.md). A
+language Grid does not write is refused by name.
+
 ## What a drawing shows: `--hide`, `--colour` and `--key`
 
 A floor plan picture shows the plan's title and key in a band under the drawing, its notes, tags

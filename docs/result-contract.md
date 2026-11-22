@@ -40,7 +40,8 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | Field | What it holds |
 |---|---|
 | `resultVersion` | `1`. Raised only when a field changes meaning or is taken away. |
-| `label` | "General guidance, not your local rules". |
+| `label` | "General guidance, not your local rules", in the record's language (MSG-11). |
+| `language` | Only when the record is not in English: `es`. See "Languages". |
 | `read` | `false` when the plan was refused. Then the lines are its refusals and nothing else ran. |
 | `count` | How many lines there are: the one number for how much there is to look at. |
 | `counts` | The same lines by kind. They add up to `count`. |
@@ -66,6 +67,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `needed` | What would be right. |
 | `fix` | What to change. A suggestion: the plan is the author's. |
 | `figures` | Only on a finding that compared the plan with a figure: those figures, as in `figures` above. |
+| `values` | Only when the line's words name a figure, a name, an id or a place (MSG-11): those values, by the names its wording gives them, the same in every language. A figure is a number, rounded as the words give it. |
 | `fixes` | Only where a change to one part would clear the line (MSG-7): each such change as data, `{ part: "opening", id, width \| offset \| height \| sill \| wall }`. Several when more than one would do. `width` keeps the opening's start; `wall` is the id most likely meant. In `grid_check`, each line with fixes also carries `calls`: the same changes as calls to `grid_change_opening`, with the plan argument, ready to send. A `wall` fix has no call: no tool sets an opening's wall. |
 
 ### The kinds, in list order
@@ -89,10 +91,13 @@ list them under the drawing (MSG-8). The numbers follow the record the drawing w
 
 ### One wording per code
 
-A line's `message` is made by its code's wording in `catalogue.ts`, and nowhere else. A
-finding's wording is its check's own (`checks/messages.ts`, and `planCheckWordings` in
-`@ongrid/floorplan`), so the report's `message`, the notes a person reads and the record say
-the same words. A test fails when one code is worded two ways (AU4-1).
+A line's `message` is made by its code's wording, and nowhere else: the words are keys of the
+message files (`line.<code>.says`, `.found`, `.needed`, `.fix` in
+`packages/floorplan/src/messages/`, one file per language, MSG-11), and `catalogue.ts` says which
+values each takes. A finding's wording is its check's own (`check.*` keys, said by
+`checks/messages.ts` and `planCheckSaids` in `@ongrid/floorplan`), so the report's `message`, the
+notes a person reads and the record say the same words. A test fails when one code is worded two
+ways (AU4-1).
 
 ### The label, and words no line uses
 
@@ -111,6 +116,17 @@ plan or the reader needs. A check that looked at nothing says "Nothing was check
 `scoreboard/__tests__/approvalWords.test.ts` holds the reports and the exports of the lab's
 plans to this, and `src/__tests__/label.test.ts` in `packages/cli` holds every output to the
 label.
+
+## Languages
+
+A record is said in one language (MSG-11): English unless the call asks for another
+(`inspectPlan(raw, { language: 'es' })`, `grid check --lang es`, `language` on `grid_check`) or
+the plan states one (`display.language`). The codes, the kinds, the things, the figures, `fixes`
+and `values` do not change with the language; `label`, `message`, `found`, `needed` and `fix`
+do, and so do the checks' titles, the coverage reasons and the limits. A wording comes from the
+message files, one per language (`docs/languages.md`), never written twice. Spanish is a draft
+translation no person has reviewed yet, and its figures have a decimal comma unless the plan's
+display chooses a point. Names from the plan are never translated.
 
 ## The codes
 
@@ -467,6 +483,24 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: every language, starting with Spanish (MSG-11)
+
+- `inspectPlan(raw, { language })`, `grid check --lang`, and a `language` argument on `grid_check`,
+  `grid_describe`, `grid_view` and `grid_sheet`: `en` (the default) or `es`. Left out, the plan's
+  own `display.language`. The codes, kinds, things, ids, figures, `fixes` and `values` are the
+  same in every language; the `label`, each line's `message`, `found`, `needed` and `fix`, the
+  checks' titles, the coverage reasons and the limits are said in the language. A Spanish record
+  writes figures with a decimal comma unless the plan's `display.decimal` says otherwise.
+- The record has `language` when it is not English. Each line has `values` when its words name a
+  figure, a name, an id or a place: the values its wording was made with, by the names the
+  wording gives them (`{width}` is `width`), a figure as a number rounded as the words give it.
+- A room's use may be written by its label in any language Grid writes: `dormitorio` is
+  `bedroom`, and is checked as one. A room's name is never translated.
+- The Spanish words are a draft translation, not reviewed by a person yet. Retell from the codes
+  and values when in doubt; the label is "Orientación general, no sus normas locales".
+- No line in Spanish uses cumple, aprobado, conforme, homologado, certificado, válido, autorizado
+  or their kin (`approvalWords`).
 
 ### 2026-11-22: what was given and what was assumed (WRT-6)
 
