@@ -111,3 +111,12 @@ Text that changed for every plan:
   `sheet/coverage.ts`.
 - Tests: `floorplan/.../__tests__/items.test.ts`, `viewer/.../picture/__tests__/fixtures.test.ts`,
   `cli/.../mcp/__tests__/fixtures.test.ts`, one line in `look.test.ts`.
+
+## Checks run (after merging main at 5db4bc6)
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
+- `npx vitest run --exclude '.claude/**'`: 4213 of 4214 pass. The one failure was the timing
+  guard in `geometry/__tests__/diff-size.test.ts` (19 s against a one-second limit, load
+  average about 215). Rerun alone it passes, all 4 tests.
+- `npm run scoreboard`: "Same as the stored figures."
