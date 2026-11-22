@@ -99,7 +99,7 @@ No expected figure elsewhere changed with it.
   to `flat-v06.json` (lab E's two-bedroom flat and its hand edits) and `block-588.json` (lab
   D's block with a basement, 588 parts).
 
-## Decisions for the owner to check
+## For the owner
 
 1. **20 tools.** One tool per request (WR-2), against "about a dozen". I folded resize into
    `grid_move_room_side` (`to`) and moving an opening into `grid_change_opening` rather than
