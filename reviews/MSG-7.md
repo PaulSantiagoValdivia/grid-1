@@ -99,3 +99,13 @@ words and sensible units." Lab evidence MS-13 (reproduced by AU1), F32, W-1.
 6. **"A window called a door"** (MS-13): I found no message that does it today. The opening
    noun comes from the opening's type in every line I read.
 7. **The bundle** is 1,689 bytes larger with MSG-7, under the 500 kB budget `main` now has.
+
+## Checks run
+
+On top of `main` 56ed9b5: `npm run build`, `npm run typecheck` and `npm run lint` pass;
+`npm run scoreboard`: "Same as the stored figures"; the one full run,
+`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,568 of 4,568.
+
+After merging `main` cae036c (SHT-7): build, typecheck and lint pass; the tests of
+`packages/floorplan`, `packages/rules`, `packages/cli`, the front door over the damage set and
+the W-5 test: 3,996 of 3,996; `npm run scoreboard`: "Same as the stored figures".
