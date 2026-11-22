@@ -135,6 +135,10 @@ Nothing was removed.
   the affected tests rerun (geometry, types, result, notes, checks, the tool server, draw,
   describe, edit, report, sheet, the commands' end-to-end tests, quantities, the viewer's
   picture and `scoreboard/__tests__`) pass, the two facing tests after the change above.
+- After merging `main` again (0b8b641, SHT-4's dimension chains): build, typecheck and lint
+  clean; the scoreboard "Same as the stored figures"; the viewer, draw, sheet, tool server and
+  geometry tests pass (161 files, 3,487 passed, 1 skipped). The north arrow sits in the view's
+  top-right corner, where SHT-4's outside chains may also run: see the arrow below.
 
 ## For the owner
 
