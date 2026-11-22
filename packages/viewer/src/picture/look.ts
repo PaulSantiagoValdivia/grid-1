@@ -210,9 +210,20 @@ export type LinePart =
   | 'windowFace'
   | 'glass'
   | 'undecided'
+  /**
+   * LVL-9: a section's ground line, written twice its width like the wall outline, none of it
+   * under a fill, so it reads twice as heavy as the cut.
+   */
+  | 'ground'
+  /** LVL-9: what a section sees beyond the cut, lighter than what it cuts. */
+  | 'beyond'
+  /** LVL-9: the hatching over what a section takes that the plan does not state. */
+  | 'hatch'
+  /** LVL-9: a section's cut line on the plan, and the marks for elevations and levels. */
+  | 'mark'
 
 /** The parts of the drawing a look gives a dash pattern. */
-export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above'
+export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'chain'
 
 /** Lines for the screen: widths and dashes in screen pixels, whatever the zoom. */
 export interface ScreenLines {
@@ -286,9 +297,14 @@ const SCREEN_LINES: ScreenLines = {
     leader: LINE_PX.leader,
     windowFace: LINE_PX.opening,
     glass: LINE_PX.opening,
-    undecided: LINE_PX.opening
+    undecided: LINE_PX.opening,
+    // LVL-9: the section and the marks for it, which the app does not draw, so plan.css has none.
+    ground: 1.5,
+    beyond: 0.75,
+    hatch: 0.75,
+    mark: 1
   },
-  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash }
+  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, chain: [12, 3, 2, 3] }
 }
 
 /**
@@ -321,9 +337,13 @@ const PAPER_LINES: PaperLines = {
     leader: 'finest',
     windowFace: 'fine',
     glass: 'fine',
-    undecided: 'fine'
+    undecided: 'fine',
+    ground: 'cut',
+    beyond: 'finest',
+    hatch: 'finest',
+    mark: 'fine'
   },
-  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1] }
+  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], chain: [6, 1.5, 0.8, 1.5] }
 }
 
 /** Black on white: the technical look's colours. Walls are a grey tone inside a black outline. */
