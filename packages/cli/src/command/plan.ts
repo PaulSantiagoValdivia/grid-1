@@ -7,10 +7,11 @@
  * and checked. A plan that passes the schema but has parts that can't be drawn is not refused
  * either: those parts are left out, as the app leaves them out, and `grid check` says which and
  * why. A command that writes the plan back reads it whole (`{ whole: true }`), so nothing the
- * reader left out is lost.
+ * reader left out is lost, and its opening patterns (LVL-8) stay patterns: every other command
+ * reads them as the plain openings they expand into.
  */
 import { planInMetres } from '@ongrid/floorplan/types/units'
-import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
+import { planFloors, validatePlan, withPatterns, type Issue } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, quoted, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type UnfinishedMerge } from '@ongrid/floorplan/types/jsonText'
 import { readPlanParts, type LeftOutPart, type ReadFault } from '@ongrid/floorplan/types/readParts'
@@ -27,7 +28,13 @@ export class PlanRefused extends Error {
 export interface LoadedPlan {
   /** The real path of the plan file, inside the project. */
   readonly file: string
+  /**
+   * The plan as Grid draws, measures, checks and exports it. LVL-8: with its opening patterns
+   * expanded into plain openings, except when read whole for a command that writes it back.
+   */
   readonly plan: FloorPlan
+  /** LVL-8: the plan as its file states it, patterns and all, when it has patterns and `plan` expands them. */
+  readonly stated?: FloorPlan
   readonly issues: readonly Issue[]
   /** Ids the views and exports leave out because they can't be drawn. */
   readonly broken: ReadonlySet<string>
@@ -211,8 +218,11 @@ export function loadPlanText(project: Project, file: string, text: string, real:
   }
   const plan = parts.plan
   traceImageCheck(project, file, plan)
+  // LVL-8: what kept a pattern's openings from being placed is checked on the plan as stated. A
+  // command that writes the plan back keeps it as stated, so its patterns stay patterns.
   const { issues, broken } = validatePlan(plan, undefined, { leftOutWalls: parts.leftOutWalls, leftOutParts: parts.leftOut })
-  return { file: real, plan, issues, broken, faults: parts.faults, leftOut: parts.leftOut, text }
+  const expanded = options.whole === true || plan.patterns === undefined ? null : withPatterns(plan)
+  return { file: real, plan: expanded ?? plan, ...(expanded === null ? {} : { stated: plan }), issues, broken, faults: parts.faults, leftOut: parts.leftOut, text }
 }
 
 /**

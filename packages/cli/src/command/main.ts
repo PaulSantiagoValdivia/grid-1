@@ -100,8 +100,8 @@ const COMMANDS = {
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d | --view <name>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
-    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG.',
+    usage: 'grid draw [<plan.json>] [--png | --3d | --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG. With --facade north (east, south or west), draws that side of the building in elevation, every floor at its level.',
     options: DRAW_OPTIONS,
   },
   export: {
@@ -359,6 +359,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       // VEW-3: a saved view is the 3D model through its camera.
       threeD: parsed.values.has('--3d') || parsed.values.has('--view'),
       view: textOf(parsed, '--view'),
+      facade: textOf(parsed, '--facade'),
       out: textOf(parsed, '--out'),
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
