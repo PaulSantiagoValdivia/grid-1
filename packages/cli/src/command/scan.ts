@@ -26,6 +26,8 @@ import { surveyPlan } from '../quantities/survey'
 import { loadPlan } from './plan'
 import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
 import { differenceLine, nothingToLose, oneLine, RoomsRefused } from './write'
+import type { TapedRow } from '@ongrid/floorplan/geometry'
+import { TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
 
 /** The evidence file of a plan: beside it, its name without `.json` and `.scan.json` after. */
 export const SCAN_SUFFIX = '.scan.json'
@@ -46,6 +48,8 @@ export interface ScanWriteDone {
   readonly drawingProblems: { readonly before: number; readonly after: number }
   readonly brief: BriefData
   readonly reminder: string | null
+  /** HND-11: each length taped on site the file keeps, against the plan written from the scan. */
+  readonly taped: readonly TapedRow[]
   readonly lines: readonly string[]
 }
 
@@ -161,6 +165,8 @@ export function writeScanIntoProject(project: Project, scanFile: string, planFil
   const reminder = first ? briefReminder(project, planFile) : null
   const verdict = before === null || nothingToLose(before) ? null : comparePlans(surveyPlan(before), surveyPlan(now), ['the plan before', 'the plan now']).verdict
   const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(now).issues.length }
+  // HND-11: what was taped on site stays beside the plan, and is held against the scan's walls.
+  const taped = tapedRows(now)
 
   const c = conversion
   const doors = c.plan.openings.length
@@ -177,10 +183,11 @@ export function writeScanIntoProject(project: Project, scanFile: string, planFil
     ...(carried === null || carried.kept === 0 ? [] : [`Facts of your own and room numbers kept by id on ${count(carried.kept, 'part')}.`]),
     ...(carried === null || carried.lost.length === 0 ? [] : [`Not in the scan, so their facts and numbers are gone with them: ${carried.lost.slice(0, 10).join(', ')}${carried.lost.length > 10 ? ` and ${carried.lost.length - 10} more` : ''}.`]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes; the assumed values are listed there to confirm. grid_square_scan squares the scanned walls, as its own step.`,
+    ...tapedTable(taped, { max: TAPED_ROWS_IN_AN_EDIT }),
     ...brief.text,
     ...(reminder === null ? [] : [reminder]),
   ]
-  return { written, evidence, conversion, plan: now, verdict, drawingProblems, brief: brief.data, reminder, lines }
+  return { written, evidence, conversion, plan: now, verdict, drawingProblems, brief: brief.data, reminder, taped, lines }
 }
 
 function count(n: number, one: string, many = `${one}s`): string {

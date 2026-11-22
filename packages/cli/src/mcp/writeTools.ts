@@ -30,6 +30,7 @@ import { surveyPlan, type Survey } from '../quantities/survey'
 import { openingBetween } from './readTools'
 import { briefAnswer } from '../brief/answer'
 import { BRIEF_OUTPUT } from './briefTool'
+import { TAPED_OUTPUT, TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
 import {
   asRefusal,
   FLOOR_ARG,
@@ -257,6 +258,8 @@ export const EDIT_OUTPUT = objectSchema({
   couldNotKeep: listSchema(STRING),
   // BRF-1: each line of the brief beside the plan, met or missed after the change.
   brief: BRIEF_OUTPUT,
+  // HND-11: each length taped on site against the plan as it now is; empty when it keeps none.
+  taped: TAPED_OUTPUT,
 })
 
 function errorsOf(plan: FloorPlan): Array<{ id: string; message: string }> {
@@ -316,6 +319,8 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
   const couldNotKeep = [...(patch.notKept ?? [])]
   // BRF-1: the brief beside the plan the change read, against the plan as it now is.
   const brief = briefAnswer(project, file, after)
+  // HND-11 (lab WR-14): the taped lengths against the plan as it now is.
+  const taped = tapedRows(after)
   const text = [
     ...patch.said,
     ...guessed.map((line) => `Guessed: ${line}`),
@@ -324,9 +329,10 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
     ...doors,
     `To look at: ${toLookAt.before} → ${toLookAt.after}, of them problems in the drawing ${drawingProblems.before} → ${drawingProblems.after}. grid_check lists them.`,
     ...brief.text,
+    ...tapedTable(taped, { max: TAPED_ROWS_IN_AN_EDIT }),
     `Wrote ${quoted(written)}.`,
   ].join('\n')
-  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, toLookAt, doors, guessed, couldNotKeep, brief: brief.data, ...(patch.extra ?? {}) } }
+  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, toLookAt, doors, guessed, couldNotKeep, brief: brief.data, taped, ...(patch.extra ?? {}) } }
 }
 
 const changeOpeningTool: GridTool = {
@@ -514,6 +520,8 @@ const writeRoomsTool: GridTool = {
       },
       required: ['evidence', 'paired', 'oneSided', 'areas', 'assumed', 'leftOut', 'match'],
     },
+    // HND-11: each length taped on site against the plan as written; empty when it keeps none.
+    taped: TAPED_OUTPUT,
   }),
   run(args, context) {
     const project = projectOf(context)
@@ -536,6 +544,7 @@ const writeRoomsTool: GridTool = {
             drawingProblems: done.drawingProblems,
             brief: done.brief,
             reminder: done.reminder,
+            taped: done.taped,
             scan: {
               evidence: done.evidence,
               paired: c.paired,
@@ -564,6 +573,7 @@ const writeRoomsTool: GridTool = {
           brief: done.brief,
           reminder: done.reminder,
           scan: null,
+          taped: done.taped,
         },
       }
     } catch (error) {

@@ -81,6 +81,7 @@ import type { Display } from '@ongrid/floorplan/types/units'
 import { PLACE_TEXT_MAX } from '@ongrid/floorplan/types/places'
 import { GROUP_COLOURS, HIGHLIGHT_COLOUR } from '@ongrid/viewer/src/picture/look'
 import { likelyId } from '@ongrid/floorplan/types/nearest'
+import { TAPED_OUTPUT, tapedTable } from '../taped/table'
 import {
   asRefusal,
   BOOLEAN,
@@ -1860,6 +1861,8 @@ const checkTool: GridTool = {
     place: { type: ['object', 'null'], properties: { country: STRING, name: STRING, from: STRING } },
     // COD-3: with no place, how many lines the US figures would have given.
     withoutPlace: objectSchema({ usLines: { type: 'number' } }, ['usLines']),
+    // HND-11: each length taped on site against the drawing; empty for a plan that keeps none.
+    taped: TAPED_OUTPUT,
     // COD-8: only with a firm's standards file beside the plan: each standard, what it looked at and its notes.
     firm: objectSchema({
       heading: STRING,
@@ -1877,7 +1880,7 @@ const checkTool: GridTool = {
         notes: { type: 'number' },
       }, ['measure', 'value', 'unit', 'name', 'note', 'uses', 'kinds', 'lookedAt', 'notes'])),
     }, ['heading', 'file', 'read', 'standards']),
-  }, ['label', 'count', 'problems', 'lines', 'seenCount', 'marksFile', 'marksProblem', 'findings', 'notChecked', 'drawing', 'coverage', 'limits', 'place', 'withoutPlace']),
+  }, ['label', 'count', 'problems', 'lines', 'seenCount', 'marksFile', 'marksProblem', 'findings', 'notChecked', 'drawing', 'coverage', 'limits', 'place', 'withoutPlace', 'taped']),
   run(args, context) {
     const { loaded, project, file } = readPlan(context, args['plan'])
     const floor = floorArg(loaded.plan, args['floor'])
@@ -1951,6 +1954,8 @@ const checkTool: GridTool = {
     // COD-8: a firm's file whose standards gave no note still says it was read.
     const firmNone = firmNoNoteText(record)
     if (firmNone !== null) lines.push(firmNone)
+    // HND-11 (lab WR-14): each length taped on site against the drawing, after every run.
+    lines.push(...tapedTable(record.taped ?? []))
     if (full) {
       // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
       const rooms = result.rooms
@@ -1987,6 +1992,7 @@ const checkTool: GridTool = {
         limits: record.limits,
         place: record.place,
         ...(record.withoutPlace ? { withoutPlace: record.withoutPlace } : {}),
+        taped: record.taped ?? [],
         ...(record.firm ? { firm: record.firm } : {}),
       },
     }

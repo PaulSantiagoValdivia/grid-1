@@ -16,7 +16,7 @@
  */
 import type { FloorPlan } from '../types/floorplan'
 import type { ReadFault } from '../types/readParts'
-import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, planFloors, planForFloor, resolveFloor, roomNumbers, shownRoomNumber, toDxf, toGlb, toIfc, toObj, withPatterns } from '../geometry'
+import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, nearOrigin, planFloors, planForFloor, resolveFloor, roomNumbers, shownRoomNumber, toDxf, toGlb, toIfc, toObj, withPatterns } from '../geometry'
 import type { DxfProfile } from '../geometry/export/dxfProfile'
 import type { LeftOutPart } from '../geometry/export/leftOut'
 import { exportContents } from './leftOut'
@@ -81,6 +81,17 @@ export function exportFileName(projectName: string, format: ExportFormat, floorN
   return `${floor ? `${base}-${floor}` : base}.${format}`
 }
 
+/**
+ * HND-11 (lab MS-12): the GLB of one floor. A 32-bit point holds about seven digits, so a floor at
+ * survey coordinates is built near zero, from the site's origin when the plan states one, and
+ * the file's one node is moved back by that offset (`nearOrigin`, `GlbOptions.origin`). DXF, IFC
+ * and OBJ write their numbers as text and keep them as they are.
+ */
+function glbOf(storey: FloorPlan, note: { readonly leftOut: readonly LeftOutPart[] }): Uint8Array {
+  const near = nearOrigin(storey)
+  return toGlb(buildScene(near.plan), { ...note, origin: near.at })
+}
+
 export function exportPlan(stated: FloorPlan, format: ExportFormat, options: PlanExportOptions): PlanExport {
   // LVL-8: every format reads plain openings; a pattern is expanded into them first, so a plan
   // with a pattern exports exactly what the same plan with those openings written out does.
@@ -104,7 +115,7 @@ export function exportPlan(stated: FloorPlan, format: ExportFormat, options: Pla
   const profile = options.dxfProfile === undefined ? {} : { profile: options.dxfProfile }
   const data = format === 'dxf' ? toDxf(buildFloorPlan(storey), { ...note, facts, roomNumbers: numbers(), ...profile })
     : format === 'obj' ? toObj(buildScene(storey), note)
-    : toGlb(buildScene(storey), note)
+    : glbOf(storey, note)
   const floors = planFloors(plan)
   const floor = floors.find((f) => f.id === floorId)
   const floorName = floors.length > 1 ? (floor?.name || floorId) : null

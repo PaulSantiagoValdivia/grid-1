@@ -13,8 +13,10 @@ nothing under AE-2, so the done-when is held by invented scans (below).
   confirm" (`plan/value-assumed`) and the drawing dashes them. Squaring is not run on import: the
   answer points to `grid_square_scan` / `grid edit square`, which works on the walls marked
   `scanned`, as its own step.
-- **HND-11 (face-placed walls): not on main** (`git log main | grep HND-11` is empty; it lives on
-  `claude/hnd-11`), so nothing of it is used. It was not needed either: a wall made from two
+- **HND-11 (face-placed walls): not on main while this was built** (`git log main | grep HND-11`
+  was empty; it lived on `claude/hnd-11`), so nothing of it is used. It landed on main at 90a933b
+  and was merged in last: a plan's `taped` lengths stay through a scan written over it, and the
+  scan's answer gives them against the new walls, as rooms text's does. It was not needed either: a wall made from two
   scanned faces has its centre line and thickness from them, and a one-sided wall is written on
   its centre line, half the assumed thickness out from its face. When HND-11 lands, a one-sided
   wall could be written by its face (`face: "left"`), so a later thickness grows away from the

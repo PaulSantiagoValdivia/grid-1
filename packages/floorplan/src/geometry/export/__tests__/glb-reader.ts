@@ -16,7 +16,7 @@ export interface GltfJson {
   asset: { version: string; generator?: string }
   scene?: number
   scenes?: { nodes?: number[] }[]
-  nodes?: { name?: string; mesh?: number }[]
+  nodes?: { name?: string; mesh?: number; children?: number[]; translation?: number[] }[]
   meshes?: {
     primitives: { attributes: Record<string, number>; indices?: number; material?: number }[]
   }[]
@@ -139,20 +139,30 @@ export interface ReadMesh {
   readonly triangles: readonly (readonly [number, number, number])[]
 }
 
-/** Every node's mesh, read back from the buffer: positions and triangles. */
+/**
+ * Every node's mesh, read back from the buffer: positions and triangles. A node that holds others
+ * (HND-11) moves them by its translation, the only transform Grid writes; the points come back
+ * where the file puts them in the world, summed in double precision as a viewer would place them.
+ */
 export function readMeshes(glb: Glb): ReadMesh[] {
-  const nodes: number[] = glb.json.scenes?.[glb.json.scene ?? 0]?.nodes ?? []
-  return nodes.map((nodeIndex) => {
+  const out: ReadMesh[] = []
+  const visit = (nodeIndex: number, at: readonly [number, number, number]): void => {
     const node = glb.json.nodes![nodeIndex]!
-    const primitive = glb.json.meshes![node.mesh!]!.primitives[0]!
+    const [tx, ty, tz] = node.translation ?? [0, 0, 0]
+    const here = [at[0] + tx!, at[1] + ty!, at[2] + tz!] as const
+    for (const child of node.children ?? []) visit(child, here)
+    if (node.mesh === undefined) return
+    const primitive = glb.json.meshes![node.mesh]!.primitives[0]!
     const points = readAccessor(glb, primitive.attributes.POSITION).map(
-      ([x, y, z]) => ({ x: x!, y: y!, z: z! }) as Vec3
+      ([x, y, z]) => ({ x: x! + here[0], y: y! + here[1], z: z! + here[2] }) as Vec3
     )
     const flat = readAccessor(glb, primitive.indices!).map((row) => row[0]!)
     const triangles: [number, number, number][] = []
     for (let i = 0; i < flat.length; i += 3) triangles.push([flat[i]!, flat[i + 1]!, flat[i + 2]!])
-    return { name: node.name!, points, triangles }
-  })
+    out.push({ name: node.name!, points, triangles })
+  }
+  for (const nodeIndex of glb.json.scenes?.[glb.json.scene ?? 0]?.nodes ?? []) visit(nodeIndex, [0, 0, 0])
+  return out
 }
 
 // ---------------------------------------------------------------------------

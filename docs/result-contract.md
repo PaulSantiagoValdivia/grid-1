@@ -57,6 +57,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `limits` | What these checks never look at, whatever the plan. The same lines every time. |
 | `place` | The place the figure checks were for (COD-3): `country`, its two-letter code; `name`, Grid's name for it; `from`, `request` (the caller's `country`), `plan` (`site.country`) or `assumed` (`withoutPlace: "us-figures"`). `null` when no place is stated, and then no figure was applied; `null` too when the plan was refused. |
 | `withoutPlace` | Only on a plan that was read and states no place: `{ usLines }`, how many lines the figure checks would have given with the US figures. |
+| `taped` | Only on a plan that keeps taped lengths (HND-11): each one, in the plan's order, taped against drawn. See "Taped against drawn". |
 | `firm` | Only when the plan has a firm's standards file beside it (COD-8): `{ heading, file, read, standards }`, each standard with its `measure`, `value`, `unit`, `name`, `note`, `uses`, `kinds`, `lookedAt` (the parts it was set against) and `notes` (those short of it). See "The firm's own standards". |
 
 ### A line
@@ -196,7 +197,7 @@ label.
 | `plan/similar-id` | {thing} is left out: its id differs from another part's only in capitals or spaces | ids that differ in more than capitals or spaces |
 | `plan/check-failed` | A check could not run on this plan: something went wrong inside Grid | the check to run to the end |
 | `plan/no-walls` | The plan has no walls, but its rooms and openings name walls | the walls the rooms and openings name |
-| `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin (0, 0) |
+| `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin: the site's origin where the plan states one, else (0, 0) |
 | `plan/duplicate-id` | Id {thing} names more than one wall, room or opening | every id on one wall, room or opening only |
 | `plan/similar-floor-id` | {thing} has an id that differs from another floor's only in capitals or spaces | floor ids that differ in more than capitals or spaces |
 | `plan/duplicate-floor` | {thing} is listed more than once | each floor listed once |
@@ -327,6 +328,8 @@ label.
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 | `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
 | `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
+| `room/taped-differs` | {The side along wall "w1"} taped in {thing} is not the length drawn | the drawing within {0.010 m} of the length taped |
+| `plan/taped-not-measured` | A length taped in {thing} cannot be set against the drawing: {why} | a taped length that names a room the plan has, and one of its walls or two of its corners, each corner by the two walls that meet there |
 
 ### Words Grid does not read
 
@@ -452,6 +455,32 @@ The first line of every report after the label says the place and the figures ap
 the plan; Grid carries no figures for it, so none was applied.", or with no place "No place is
 stated, so no figure was applied: the US figures would have given 2 lines. State it in the plan
 as site.country, or give --country."
+
+## Taped against drawn
+
+A plan may keep the lengths taped on site in `taped` (HND-11, lab WR-14;
+[plan-file.md](plan-file.md#lengths-taped-on-site)). Every run sets each one against the drawing:
+`grid check` and `grid_check` print the table after the notes, and the answer of every change to
+the plan (the edit tools, `grid edit`, `grid_write_rooms`, `grid write`) prints it too, at most 12
+rows, the ones that differ first. A row in `taped` (the record's, and `taped` in `grid_check`'s
+and every change's receipt, empty there for a plan that keeps none) holds:
+
+| Field | What it holds |
+|---|---|
+| `index` | Its place in the plan's `taped` list, from 0 |
+| `id` | The plan's id for it, or null |
+| `room`, `roomName`, `floor` | The room it was taped in, its name and its floor |
+| `what` | `side` (along one wall) or `corners` (corner to corner) |
+| `walls` | The side's wall, or the four walls that name its two corners |
+| `taped` | The length taped, in metres |
+| `drawn` | The same length on the drawing's inside faces, or null when it cannot be measured |
+| `off` | Drawn less taped, positive when the drawing is longer; null with no drawn length |
+| `within` | How far apart they may be and agree: the taped length's own `tolerance`, else `tapedAgree` (0.01 m) |
+| `state` | `agrees`, `differs` or `not-measured` |
+| `missing`, `missingWalls` | Only when not measured: `no-room`, `no-wall`, `not-the-rooms`, `no-corner` or `not-drawn`, and the walls it is about |
+
+A row that differs is also a line, `room/taped-differs`, and one that cannot be measured is
+`plan/taped-not-measured`; both are worth a look. A row that agrees is no line.
 
 ## The firm's own standards
 
@@ -610,7 +639,7 @@ its text, which says the same.
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was) and `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
 
 A line of the brief (BRF-1, [brief.md](brief.md)) has a `state` (`met`, `missed`, `open`, or
 `differs` for a size in a room's name), `wish` (`room`, `rooms`, `footprint`, `touch`, a figure's
@@ -644,8 +673,8 @@ A change that would add a problem that leaves a part out is refused, and nothing
   beside the scan's `scanArea`, `from` `floor outline` or `wall faces`, and `difference`, a
   fraction), `assumed` (`text`, `parts` with `part` and `id`, and `value` or null), `leftOut` and
   `match` (`kept`, `fresh`, and `gone` with `scanId`, `part` and `id`). `rooms`, `walls`,
-  `openings`, `warnings`, `verdict`, `drawingProblems`, `brief` and `reminder` are as for rooms
-  text; `guesses` is empty.
+  `openings`, `warnings`, `verdict`, `drawingProblems`, `brief`, `reminder` and HND-11's `taped`
+  are as for rooms text; `guesses` is empty.
 - A plan written from a scan marks every part `scanned` and each assumed value `assumed`, so
   `grid_check` gives one `plan/value-assumed` line (`to-confirm`) for each outside wall's
   thickness and each fixture's turn. No new message code and no new tool.
@@ -653,6 +682,24 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `scan/no-walls`, `scan/same-id`, `scan/not-closed`, `scan/outline`, `scan/plan-changed`,
   `scan/same-file`, or a rooms-writing code such as `scan/gap`), and names the part and the
   limit, never the scan's text.
+
+### 2026-11-22: a survey drawn from its own numbers (HND-11)
+
+- A wall may be placed by a face (`face`, `left` or `right` walking from start to end), with its
+  thickness stated or left out; Grid reads it on its centre line and writes it back by its face.
+  Nothing in the record changes for a plan with no `face`.
+- A plan may keep lengths taped on site in `taped`. The record gains `taped`, only on a plan
+  that keeps some: each one taped against drawn ("Taped against drawn"). Two new codes, both
+  worth a look: `room/taped-differs` and `plan/taped-not-measured`. `grid_check`'s receipt, every
+  change's and `grid_write_rooms`' gain `taped`, empty for a plan that keeps none; their text adds
+  the table.
+- `plan/far-from-origin` measures from `site.origin` where the plan states one, else from (0, 0)
+  as before; its message then names the site's origin, and its `needed` and `fix` say to keep
+  survey coordinates with a stated origin rather than move them.
+- The exports of a plan far from (0, 0) write it from `site.origin` where one is stated: the IFC
+  puts its building on the site's point, and the GLB holds the model in one node, `origin`,
+  moved by that offset, with `asset.extras.gridOrigin`. A plan near (0, 0) exports as before.
+  `resultVersion` stays 1.
 
 ### 2026-11-22: a firm's own standards as checks (COD-8)
 
