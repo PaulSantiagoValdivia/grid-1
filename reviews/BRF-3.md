@@ -160,3 +160,15 @@ Run once each, in order, on a laptop shared with other sessions, `--maxWorkers=2
 - A key entry for the site's things, and `--hide site`.
 - A plan-wide line's mark sits in the drawing's top-left corner over the label (existing MSG-8
   layout); seen on the site picture, not changed here.
+
+## After merging main at 8b599e9 and 8a433801
+
+Merged VEW-3, LVL-8 and BRF-5 (bc1f746), then HND-1 (632dda3). Conflicts: both changelogs (every
+entry kept), `docs/plan-file.md` (the list limit names opening patterns, saved views and things on
+the site), `docs/tool-server.md` (BRF-3's `grid_measure` row, main's `grid_view` row),
+`grid.e2e.test.ts` (the 550 kB cap with both reasons), `edits.ts` (`grid_mirror` mirrors the plot,
+the things and the saved views), `look.ts` (the plot's lines beside LVL-8's facade lines) and
+`types/floorplan.ts`, where the plot's convention is now C13, since VEW-3 and LVL-8 took C11 and
+C12. After the merges: build, typecheck and lint clean; the tests either side touched, 95 files
+(1,176 passed, 1 skipped) after the first merge and 77 files (1,256 passed, 1 skipped) after
+HND-1; scoreboard "Same as the stored figures".
