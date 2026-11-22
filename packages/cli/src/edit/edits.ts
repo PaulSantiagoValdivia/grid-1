@@ -11,7 +11,7 @@
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
 import { dot, sub, tolerance, wallAxis, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
-import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, wallWithEnds } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { EditRefused } from './refused'
@@ -36,7 +36,11 @@ export type RoomChange = {
 
 /** What a change does, by id. */
 export interface Patch {
-  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind'] }>
+  /**
+   * Walls changed, by id: their centre line's new ends, as Grid reads the plan, and their kind.
+   * HND-11: `mirrored` turns a wall placed by its face over to its other face, as a mirror does.
+   */
+  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind']; mirrored?: boolean }>
   readonly openings: ReadonlyMap<string, OpeningChange>
   readonly removeOpenings: ReadonlySet<string>
   readonly rooms: ReadonlyMap<string, RoomChange>
@@ -112,7 +116,14 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
       continue
     }
     const change = patch.walls.get(wall['id'] as string)
-    walls.push(change ? merged(wall, change) : wall)
+    if (!change) {
+      walls.push(wall)
+      continue
+    }
+    // HND-11: the ends are centre points; a wall its file places by its face keeps that face.
+    const { start, end, mirrored, ...rest } = change
+    const moved = start !== undefined || end !== undefined || mirrored === true ? wallWithEnds(wall, { start, end }, mirrored === true) : wall
+    walls.push(merged(moved, rest))
   }
   if (!placed) walls.push(...(patch.addWalls ?? []))
   const openings = list('openings')
@@ -485,7 +496,7 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     how === 'left-right'
       ? [r3(Math.min(...xs) + Math.max(...xs) - p[0]), p[1]]
       : [p[0], r3(Math.min(...ys) + Math.max(...ys) - p[1])]
-  const walls = new Map(plan.walls.map((w) => [w.id, { start: flip(w.start), end: flip(w.end) }]))
+  const walls = new Map(plan.walls.map((w) => [w.id, { start: flip(w.start), end: flip(w.end), mirrored: true }]))
   const turns = (side: string): boolean => (how === 'left-right' ? side === 'east' || side === 'west' : side === 'north' || side === 'south')
   const openings = new Map<string, OpeningChange>()
   for (const o of plan.openings) {

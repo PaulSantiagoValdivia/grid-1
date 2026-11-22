@@ -7,7 +7,7 @@
  * no lines only means these checks found nothing.
  */
 
-import type { PlanFix } from '@ongrid/floorplan/geometry'
+import type { PlanFix, TapedRow } from '@ongrid/floorplan/geometry'
 import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
 import type { PlaceUsed } from '../checks/place'
 
@@ -159,4 +159,9 @@ export interface GridResult {
   readonly place: PlaceUsed | null
   /** COD-3: only when the plan was read and states no place: how many lines the US figures would have given. */
   readonly withoutPlace?: { readonly usLines: number }
+  /**
+   * HND-11 (lab WR-14): only on a plan that keeps taped lengths: each one, taped against drawn,
+   * in the plan's order (`tapedLengths`). One that differs, or cannot be measured, is a line too.
+   */
+  readonly taped?: readonly TapedRow[]
 }

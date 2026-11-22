@@ -19,12 +19,18 @@ import {
   marksWithNoPart,
   planFacing,
   planFloors,
+  tapedFiguresText,
+  tapedLengths,
+  tapedMissingText,
+  tapedWhatText,
+  tapedWithinText,
   validateDoorSweeps,
   validatePlan,
   LIMITS as PLAN_LIMITS,
   GENERAL_GUIDANCE_LABEL,
   type FloorPlan,
-  type Issue
+  type Issue,
+  type TapedRow
 } from '@ongrid/floorplan/geometry'
 import { DEFAULT_FLOOR_ID, FloorPlanSchema, ROOM_USES, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
 import { readPlanText, type TextMark, type TextRead } from '@ongrid/floorplan/types/jsonText'
@@ -646,7 +652,7 @@ function causeId(l: ResultLine): Cause {
   return { code: l.code, id: l.thing.kind === 'plan' && l.code === 'plan/duplicate-id' ? l.also[0] ?? '' : l.thing.id }
 }
 
-function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null): GridResult {
+function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null, taped: readonly TapedRow[] | null = null): GridResult {
   const sorted = filed(lines)
   const counts = Object.fromEntries(LINE_KINDS.map((kind) => [kind, sorted.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
   return {
@@ -664,7 +670,8 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
     figures: report?.figures ?? [],
     limits: report?.limits ?? [...PLAN_LIMITS, ...FIGURE_LIMITS],
     place: report?.place ?? null,
-    ...(report?.withoutPlace ? { withoutPlace: report.withoutPlace } : {})
+    ...(report?.withoutPlace ? { withoutPlace: report.withoutPlace } : {}),
+    ...(taped === null ? {} : { taped })
   }
 }
 
@@ -767,6 +774,25 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       )
     }
   })
+  // HND-11 (lab WR-14): each length taped on site against the drawing. One that differs, or that
+  // cannot be measured, is a line; the whole table rides on the record.
+  let taped: readonly TapedRow[] | null = null
+  stage('taped', () => {
+    if ((plan.taped ?? []).length === 0) return
+    taped = tapedLengths(plan)
+    for (const row of taped) {
+      if (row.state === 'agrees') continue
+      const room = names.thingOf('room', row.room)
+      const said = { what: tapedWhatText(row), figures: tapedFiguresText(row), within: tapedWithinText(row) }
+      const also = [...new Set([row.room, ...row.walls])]
+      if (row.state === 'differs') {
+        lines.push(line('room/taped-differs', 'worth-a-look', { kind: 'room', id: row.room }, room.floor, { ...blank(room.label), name: room.name, floorName: room.floor === null ? '' : names.floorName(room.floor), also: row.walls, floors: names.floors, taped: said }))
+      } else {
+        const label = row.missing === 'no-room' ? `room ${quoted(row.room)}` : room.label
+        lines.push(line('plan/taped-not-measured', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(label), also, floors: names.floors, said: tapedMissingText(row) ?? '', taped: said }))
+      }
+    }
+  })
   // MSG-5: a plan that may not be in metres (`plan/units-question`): what is measured against a
   // size follows from it, and it follows from the unit the plan states, which is read as metres.
   const units = lines.find((l) => l.code === 'plan/units-question')
@@ -775,7 +801,7 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     if (stated !== undefined) CAUSE_LINES.set(units, stated)
     for (const l of lines) if (SIZED.has(l.code)) CAUSE_LINES.set(l, units)
   }
-  return record(lines, true, report)
+  return record(lines, true, report, taped)
 }
 
 /** WRT-6: a marked value as a line names it. */

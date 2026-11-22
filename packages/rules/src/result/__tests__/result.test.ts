@@ -180,7 +180,7 @@ describe('words Grid does not read (MSG-4)', () => {
       also: [],
       message: `Wall "${walls[0]}" has a field Grid does not know, "thick"`,
       found: '"thick" at walls[0], which Grid does not read; the nearest field it knows is "thickness"',
-      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor, properties',
+      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor, properties, face',
       fix: 'Did you mean "thickness"? Rename "thick" to "thickness". Until then Grid reads the plan without it.'
     })
   })
@@ -198,7 +198,7 @@ describe('words Grid does not read (MSG-4)', () => {
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
     // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-6 `marks`, WRT-7 `display`.
-    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, marks, display, written')
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, marks, taped, display, written')
   })
 
   it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {

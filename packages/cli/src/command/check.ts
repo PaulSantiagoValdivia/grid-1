@@ -36,6 +36,7 @@ import type { LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 import type { Project } from '../fs/projectFiles'
 import { markDay, markSeen, partText, seenStates, unmarkSeen, type SeenMark, type SeenRead, type SeenState } from '../seen/marks'
+import { tapedTable } from '../taped/table'
 
 export const CHECK_OPTIONS: OptionSpecs = {
   '--floor': { takesValue: true, help: 'Only show what was found on this floor (a floor id from the plan).' },
@@ -280,7 +281,16 @@ export function checkOnFloor(loaded: LoadedPlan, whole: CheckResult, floor: stri
 export function resultOnFloor(result: GridResult, floor: string): GridResult {
   const lines = result.lines.filter((line) => line.floor === null || line.floor === floor)
   const counts = Object.fromEntries(Object.keys(result.counts).map((kind) => [kind, lines.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
-  return { ...result, lines, count: lines.length, counts, problems: problemsIn(lines), coverage: coverageOnFloor(result.coverage, floor) }
+  return {
+    ...result,
+    lines,
+    count: lines.length,
+    counts,
+    problems: problemsIn(lines),
+    coverage: coverageOnFloor(result.coverage, floor),
+    // HND-11: the taped lengths of the floor's rooms.
+    ...(result.taped === undefined ? {} : { taped: result.taped.filter((row) => row.floor === floor) }),
+  }
 }
 
 /**
@@ -444,6 +454,10 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
       })
     }
   }
+
+  // HND-11 (lab WR-14): each length taped on site against the drawing, after every run.
+  const taped = tapedTable(record.taped ?? [])
+  if (taped.length > 0) lines.push('', ...taped)
 
   if (full) {
     lines.push(...coverageText(result))
