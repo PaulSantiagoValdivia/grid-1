@@ -55,6 +55,8 @@ function allowed(property: Record<string, unknown>): boolean {
   if (Array.isArray(property['enum'])) return true
   if (property['type'] === 'boolean') return true
   if (property['type'] === 'number') return typeof property['minimum'] === 'number' && typeof property['maximum'] === 'number'
+  // WRT-7: a length takes metres, or text with its unit, of at most a few characters.
+  if (Array.isArray(property['type']) && property['type'].includes('number')) return typeof property['minimum'] === 'number' && typeof property['maximum'] === 'number' && typeof property['maxLength'] === 'number'
   if (property['type'] === 'string') return typeof property['pattern'] === 'string' || typeof property['maxLength'] === 'number'
   if (property['type'] === 'object') return typeof property['properties'] === 'object'
   if (property['type'] === 'array') {
@@ -133,6 +135,27 @@ function conforms(schema: Record<string, unknown>, value: unknown, at = '$'): st
   if (typeOf === 'array' && schema['items']) (value as unknown[]).forEach((item, i) => problems.push(...conforms(schema['items'] as Record<string, unknown>, item, `${at}[${i}]`)))
   return problems
 }
+
+describe('lengths typed with their unit (WRT-7)', () => {
+  it('moves a side by 12\'6", 3810 mm, 381 cm or 3,81 with the decimal comma, all as 3.81 m', async () => {
+    const b = bench({ 'plan.json': twoBedFlat() })
+    try {
+      const written: string[] = []
+      for (const [i, by] of [`12'6"`, '3810 mm', '381 cm', '3,81', 3.81].entries()) {
+        const reply = await b.call('grid_move_room_side', { room: 'bed2', side: 'north', by, ...(by === '3,81' ? { decimal: 'comma' } : {}), out: `by${i}.json` })
+        expect(reply.isError, reply.text).toBe(false)
+        expect(reply.text, String(by)).toMatch(/3\.81 m north/)
+        written.push(readFileSync(join(b.folder, `by${i}.json`), 'utf8'))
+      }
+      expect(new Set(written).size).toBe(1)
+      const comma = await b.call('grid_move_room_side', { room: 'bed2', side: 'north', by: '3,81', out: 'comma.json' })
+      expect(comma).toMatchObject({ isError: true })
+      expect(comma.text).toMatch(/^by has a decimal comma: write 3\.81, or choose the decimal comma/)
+    } finally {
+      b.close()
+    }
+  })
+})
 
 describe('the tools on a two-bedroom flat', () => {
   let b: Bench

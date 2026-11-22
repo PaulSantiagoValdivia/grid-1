@@ -381,6 +381,17 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - `grid_split_room` refuses a new wall whose end would land inside a door or window of the wall
   it meets, and names the nearest place along the room where it would not.
 
+### 2026-11-22: units at the edge (WRT-7)
+
+- Every length argument takes a number in metres, or text with its unit (`"12'6\""`, `"900 mm"`,
+  `"381 cm"`); with `decimal: "comma"`, a decimal comma (`"3,81"`). Its schema is
+  `["number", "string"]`. A length Grid cannot read is refused by the argument's name.
+- `grid_areas`, `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view` take `units`
+  `m`, `cm`, `mm` or `ft-in` (`ft` is the same as `ft-in`) and `decimal`; left out, the plan's
+  `display`. Feet and inches are written `12'-6"` (they were `12' 6"`), a window's sill in inches.
+- A plan file with `"units": "mm"`, `"cm"`, `"ft"` or `"in"` is read in that unit, with a
+  `plan/read-as-meant` line, and a change writes it in metres. No new code.
+
 ### 2026-11-22: what would be right (MSG-7)
 
 - A line gets `fixes` where a change to one part would clear it, and in `grid_check` the
