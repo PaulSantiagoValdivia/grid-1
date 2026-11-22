@@ -253,7 +253,7 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // (handing.ts 6), kinds and handing in rooms text (compile.ts 7, read.ts 2), the opening edits'
     // receipts (edits.ts 7), the IFC's kinds (5), the diff's change lines (building.ts 3, compare.ts
     // 1) and the opening schedule's new CSV columns (2) (reviews/CNT-14.md); and ARE-15 3: the
-    // door and window types' rule and their CSV's columns (schedule.ts) (reviews/ARE-15.md).
+    // door and window types' rule and their CSV's two opens columns (schedule.ts) (reviews/ARE-15.md).
     expect(left).toBeLessThanOrEqual(1510)
   })
 
