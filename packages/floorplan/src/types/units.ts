@@ -10,6 +10,7 @@
  * Pure: text and numbers in, text and numbers out.
  */
 import { limit, tolerance } from '../geometry/tolerances'
+import { LANGUAGE_DECIMAL, type Language } from '../messages/languages'
 
 export const LENGTH_UNITS = ['m', 'cm', 'mm', 'ft-in'] as const
 export type LengthUnit = (typeof LENGTH_UNITS)[number]
@@ -28,6 +29,8 @@ export interface Display {
    * inches, the inch is split into 2 ** precision parts (0: whole inches, 1: halves, 3: eighths).
    */
   readonly precision?: number
+  /** MSG-11: the language Grid's words are written in; English when not given. */
+  readonly language?: Language
 }
 
 export const METRES: Display = { length: 'm', area: 'm2', decimal: 'point' }
@@ -159,6 +162,17 @@ export function showArea(squareMetres: number, display: Display = METRES, decima
 /** The display a word names, for an option or an argument: `m`, `cm`, `mm`, `ft-in`, each with `comma` for the decimal comma. */
 export function displayOf(length: LengthUnit, decimal: DecimalMark = 'point', area?: AreaUnit, precision?: number): Display {
   return { length, area: area ?? (length === 'ft-in' ? 'ft2' : 'm2'), decimal, ...(precision !== undefined ? { precision } : {}) }
+}
+
+/**
+ * MSG-11: the display a plan's own `display` states: metres when it names no length unit, and a
+ * language's own decimal mark (a comma for Spanish) unless it names one.
+ */
+export function statedDisplay(stated: { readonly length?: LengthUnit | undefined; readonly area?: AreaUnit | undefined; readonly decimal?: DecimalMark | undefined; readonly precision?: number | undefined; readonly language?: Language | undefined }): Display {
+  const length = stated.length ?? 'm'
+  const decimal = stated.decimal ?? LANGUAGE_DECIMAL[stated.language ?? 'en']
+  const display = displayOf(length, decimal, stated.area, stated.precision)
+  return stated.language === undefined ? display : { ...display, language: stated.language }
 }
 
 /** The units a plan file may state for its lengths, with metres per unit. Grid writes metres. */

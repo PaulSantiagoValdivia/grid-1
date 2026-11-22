@@ -23,7 +23,8 @@ import { floorOf, planFloors, wallsOnFloor } from './floors'
 import { multiArea } from './polygons'
 import { TOLERANCES, tolerance } from './tolerances'
 import { metresText } from './rounding'
-import { quoted } from '../types/planText'
+import { english, joined, name, num, said, type Said, type Value } from '../messages/say'
+import { withSaid } from './issueWords'
 
 const levelOf = (floor: Floor): number => (Number.isFinite(floor.level) ? floor.level : 0)
 
@@ -107,9 +108,6 @@ function past(a: MultiPolygon, b: MultiPolygon, frame: { x0: number; y0: number;
   return found.sort((p, q) => q.area - p.area)
 }
 
-const at = (x: number, y: number): string => `(${metresText(x)}, ${metresText(y)})`
-const m = (value: number): string => `${metresText(value)} m`
-
 /** The most stretches one line names; the rest are counted. */
 const NAMED = 3
 
@@ -148,25 +146,32 @@ export function stackingIssues(plan: FloorPlan, spaces: readonly FloorSpaces[]):
       const over = past(upper, lowerUnion, frame, walls)
       const back = past(lowerUnion, upper, frame, walls)
       if (over === null || back === null || (over.length === 0 && back.length === 0)) continue
-      const said = (list: readonly Stretch[], verb: string): string => {
-        const named = list.slice(0, NAMED).map((s) => `${m(s.depth)} ${s.side === 'all round' ? 'all round' : `on the ${s.side}`}, from ${at(s.x0, s.y0)} to ${at(s.x1, s.y1)}`)
-        const more = list.length > NAMED ? `, and in ${list.length - NAMED} more ${list.length - NAMED === 1 ? 'place' : 'places'}` : ''
-        return `${verb} ${named.join('; ')}${more}`
+      // MSG-11: by key (`issue.floor/out-of-line`, `issue.part.lineUp.*`), each stretch with its figures.
+      const at = (value: number): Value => num(metresText(value))
+      const stretches = (list: readonly Stretch[], verb: 'over' | 'back'): Said => {
+        const named = list
+          .slice(0, NAMED)
+          .map((s) =>
+            said(s.side === 'all round' ? 'issue.part.lineUp.stretch.all' : 'issue.part.lineUp.stretch', {
+              depth: at(s.depth),
+              ...(s.side === 'all round' ? {} : { side: said(`describe.way.${s.side}`) }),
+              x0: at(s.x0),
+              y0: at(s.y0),
+              x1: at(s.x1),
+              y1: at(s.y1)
+            })
+          )
+        const extra = list.length - NAMED
+        const more = extra > 0 ? said(extra === 1 ? 'issue.part.lineUp.more.one' : 'issue.part.lineUp.more.many', { count: extra }) : ''
+        return said(`issue.part.lineUp.${verb}`, { stretches: joined(named, 'join.semicolon'), more })
       }
-      const parts = [
-        over.length > 0 ? said(over, 'it reaches past it by') : null,
-        back.length > 0 ? said(back, 'it sits back from it by') : null
-      ].filter((p): p is string => p !== null)
-      const lowerNames = below.map((f) => quoted(f.name || f.id))
-      issues.push({
-        entity: 'floor',
-        id: floor.id,
-        code: 'floor/out-of-line',
-        severity: 'warning',
-        message:
-          `Floor ${quoted(floor.name || floor.id)} does not line up with ${lowerNames.join(' and ')} below it: ${parts.join('; and ')}. ` +
-          'If that is meant, mark the floor with overhang "meant"; if not, move its outside walls over the floor below, or make a wall that both floors share rise through them (through).'
+      const parts = [over.length > 0 ? stretches(over, 'over') : null, back.length > 0 ? stretches(back, 'back') : null].filter((p): p is Said => p !== null)
+      const sentence = said('issue.floor/out-of-line', {
+        floor: name(floor.name || floor.id),
+        lower: joined(below.map((f) => name(f.name || f.id)), 'join.and'),
+        parts: joined(parts, 'join.semicolonAnd')
       })
+      issues.push(withSaid({ entity: 'floor', id: floor.id, code: 'floor/out-of-line', severity: 'warning', message: english(sentence) }, sentence))
     }
   }
   return issues

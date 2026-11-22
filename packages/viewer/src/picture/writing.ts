@@ -17,6 +17,7 @@ import type { PhaseLook, PlanLook } from './look'
 import { LINE_PX, TEXT_PX, USE_FILLS, lengthText } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
+import { ENGLISH_WORDS, drawingText, roomUseWord, type DrawingWords } from './words'
 
 const n = (value: number): string => lengthText(value)
 const pixelGroup = (at: Vec2, mpp: number, turn = 0): string =>
@@ -113,44 +114,54 @@ export interface KeyEntry {
   readonly words: string
 }
 
-/** What the key lists: only what this drawing shows. */
+/** What the key lists: only what this drawing shows, in `words`' language. */
 export function keyEntries(
   drawing: PlanDrawing,
   look: PlanLook,
-  shown: { readonly swings: boolean; readonly sketch: boolean; readonly uses: readonly RoomUse[]; readonly marks: boolean; readonly above?: boolean; readonly painted?: readonly { readonly colour: string; readonly words: string }[]; readonly phases?: PhaseLook }
+  shown: {
+    readonly swings: boolean
+    readonly sketch: boolean
+    readonly uses: readonly RoomUse[]
+    readonly marks: boolean
+    readonly above?: boolean
+    readonly painted?: readonly { readonly colour: string; readonly words: string }[]
+    readonly phases?: PhaseLook
+  },
+  words: DrawingWords = ENGLISH_WORDS
 ): KeyEntry[] {
+  const say = (key: Parameters<typeof drawingText>[1], values?: Parameters<typeof drawingText>[2]): string => drawingText(words, key, values)
   const entries: KeyEntry[] = []
   const solid = drawing.walls.filter((wall) => !wall.virtual && wall.phase === undefined)
-  if (solid.some((wall) => wall.exposure === 'exterior')) entries.push({ swatch: 'fill', color: look.wallExterior, words: 'Outside wall' })
-  if (solid.some((wall) => wall.exposure !== 'exterior')) entries.push({ swatch: 'fill', color: look.wall, words: 'Inside wall' })
+  if (solid.some((wall) => wall.exposure === 'exterior')) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.outsideWall') })
+  if (solid.some((wall) => wall.exposure !== 'exterior')) entries.push({ swatch: 'fill', color: look.wall, words: say('drawing.key.insideWall') })
   // CNT-10: a plan with phases keys its walls by what the work does to them.
   const phased = drawing.walls.filter((wall) => !wall.virtual && wall.phase !== undefined)
   const phases = shown.phases
   if (phases !== undefined && phased.length > 0) {
-    if (phased.some((wall) => wall.phase === 'existing')) entries.push({ swatch: 'fill', color: phases.existing ?? look.wall, words: 'Existing wall' })
-    if (phased.some((wall) => wall.phase === 'new')) entries.push({ swatch: 'fill', color: phases.new ?? look.wall, words: 'New wall' })
+    if (phased.some((wall) => wall.phase === 'existing')) entries.push({ swatch: 'fill', color: phases.existing ?? look.wall, words: say('drawing.key.existingWall') })
+    if (phased.some((wall) => wall.phase === 'new')) entries.push({ swatch: 'fill', color: phases.new ?? look.wall, words: say('drawing.key.newWall') })
   }
-  if (phases !== undefined && [...drawing.walls, ...drawing.openings].some((part) => part.phase === 'demolished')) entries.push({ swatch: 'dash', color: phases.demolished, words: 'To be demolished' })
-  if (drawing.walls.some((wall) => wall.virtual)) entries.push({ swatch: 'dash', color: look.virtual, words: 'Open to the next room' })
-  if (drawing.openings.some((o) => o.type === 'window')) entries.push({ swatch: 'fill', color: look.window, words: 'Window' })
+  if (phases !== undefined && [...drawing.walls, ...drawing.openings].some((part) => part.phase === 'demolished')) entries.push({ swatch: 'dash', color: phases.demolished, words: say('drawing.key.demolished') })
+  if (drawing.walls.some((wall) => wall.virtual)) entries.push({ swatch: 'dash', color: look.virtual, words: say('drawing.key.virtual') })
+  if (drawing.openings.some((o) => o.type === 'window')) entries.push({ swatch: 'fill', color: look.window, words: say('drawing.key.window') })
   if (shown.swings && drawing.openings.some((o) => o.type === 'door' && o.hinge !== undefined && o.swing !== undefined)) {
-    entries.push({ swatch: 'door', color: look.wall, words: 'Door, and the way it opens' })
+    entries.push({ swatch: 'door', color: look.wall, words: say('drawing.key.door') })
   }
   // SHT-11: the floor above's outline, and a stair past its cut, drawn dashed.
-  if (shown.above === true) entries.push({ swatch: 'dash', color: look.wall, words: 'Above: the floor over this one' })
-  for (const use of shown.uses) entries.push({ swatch: 'fill', color: USE_FILLS[use], words: `Room: ${use}` })
+  if (shown.above === true) entries.push({ swatch: 'dash', color: look.wall, words: say('drawing.key.above') })
+  for (const use of shown.uses) entries.push({ swatch: 'fill', color: USE_FILLS[use], words: say('drawing.key.use', { use: roomUseWord(words, use) }) })
   // CNT-9: the parts picked out, by what each colour stands for.
   for (const entry of shown.painted ?? []) entries.push({ swatch: 'fill', color: entry.colour, words: entry.words })
   if (shown.sketch) {
     for (const category of new Set(drawing.sketch.map((item) => item.category))) {
-      entries.push({ swatch: 'line', color: look.labelSoft, words: `Sketch: ${category}, drawn only` })
+      entries.push({ swatch: 'line', color: look.labelSoft, words: say('drawing.key.sketch', { category }) })
     }
   }
   // WRT-6: drawn dashed in the warning colour (`paints.assumed`).
   if ([...drawing.walls, ...drawing.rooms, ...drawing.openings, ...drawing.items].some((part) => part.assumed === true)) {
-    entries.push({ swatch: 'dash', color: look.warning, words: 'Assumed, to confirm with the person' })
+    entries.push({ swatch: 'dash', color: look.warning, words: say('drawing.key.assumed') })
   }
-  if (shown.marks) entries.push({ swatch: 'mark', color: look.warning, words: 'Something to look at, numbered as in the check' })
+  if (shown.marks) entries.push({ swatch: 'mark', color: look.warning, words: say('drawing.key.marks') })
   return entries
 }
 
@@ -161,8 +172,9 @@ const SWATCH = { width: 22, height: 10 }
 /**
  * The band under the drawing for its title and its key, in pixels from its top-left corner:
  * the title on the first line, then the key's entries side by side, wrapping. Null with neither.
+ * The title is the plan's own, as written; the key's heading is in `words`' language.
  */
-export function writingBand(title: string | null, entries: readonly KeyEntry[], width: number, look: PlanLook): PictureKey | null {
+export function writingBand(title: string | null, entries: readonly KeyEntry[], width: number, look: PlanLook, words: DrawingWords = ENGLISH_WORDS): PictureKey | null {
   if (title === null && entries.length === 0) return null
   const nodes: SvgNode[] = []
   let y = MARGIN_PX
@@ -176,12 +188,15 @@ export function writingBand(title: string | null, entries: readonly KeyEntry[], 
   }
   if (entries.length > 0) {
     y += 8
-    nodes.push(el('text', { 'data-part': 'key-title', x: MARGIN_PX, y: n(y + 9), fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.warning }, ['Key']))
-    let x = MARGIN_PX + 40
+    const heading = drawingText(words, 'drawing.key')
+    nodes.push(el('text', { 'data-part': 'key-title', x: MARGIN_PX, y: n(y + 9), fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.warning }, [heading]))
+    // The entries start after the heading: 40 px, or more for a longer word ("Leyenda").
+    const indent = Math.max(40, Math.ceil(estimateTextWidth(heading, TEXT_PX.warning) + 12))
+    let x = MARGIN_PX + indent
     for (const entry of entries) {
       const span = SWATCH.width + 6 + estimateTextWidth(entry.words, TEXT_PX.warning) + 18
-      if (x + span > width - MARGIN_PX && x > MARGIN_PX + 40) {
-        x = MARGIN_PX + 40
+      if (x + span > width - MARGIN_PX && x > MARGIN_PX + indent) {
+        x = MARGIN_PX + indent
         y += LINE_PX_KEY
       }
       nodes.push(el('g', { 'data-part': 'key-entry', transform: `translate(${n(x)} ${n(y)})` }, [swatchOf(entry, look), el('text', { x: SWATCH.width + 6, y: '9', fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.warning }, [entry.words])]))

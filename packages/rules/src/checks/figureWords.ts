@@ -5,49 +5,55 @@
  * The report, the result record and the notes a person reads all word a figure from here.
  */
 import { figureText } from '@ongrid/floorplan/geometry'
-import { buildingKindsText, type FigureKey, type VerificationStatus } from './figures'
+import { english, joined, num, said, type MessageKey, type Said, type Value } from '@ongrid/floorplan/messages'
+import { buildingKindsSaid, FIGURE_KEYS, VERIFICATION_STATUSES, type FigureKey, type VerificationStatus } from './figures'
 import type { AppliedFigure } from './types'
 
-/** How far a figure has been checked, as a reader is told. */
-export const FIGURE_STATUS_WORDS: Readonly<Record<VerificationStatus, string>> = {
-  'ai-found': 'found by an AI and not yet checked by a person',
-  'human-entered': 'entered by a person and not yet checked against the source',
-  'checked-once': 'checked once against the source',
-  'checked-twice': 'checked twice against the source',
-  disputed: 'disputed'
-}
+/** How far a figure has been checked, as a reader is told (MSG-11: `check.status.*`), in English. */
+export const FIGURE_STATUS_WORDS: Readonly<Record<VerificationStatus, string>> = Object.fromEntries(
+  VERIFICATION_STATUSES.map((status) => [status, english(said(`check.status.${status}`))])
+) as Record<VerificationStatus, string>
 
-/** What each figure is, in plain words. */
-export const FIGURE_NAMES: Readonly<Record<FigureKey, string>> = {
-  habitableRoomMinArea: 'the smallest floor area of a room people live or sleep in',
-  escapeOpeningMinArea: 'the smallest clear area of an escape opening',
-  escapeOpeningMinAreaGrade: 'the smallest clear area of an escape opening at ground level',
-  escapeOpeningMinWidth: 'the narrowest clear width of an escape opening',
-  escapeOpeningMinHeight: 'the lowest clear height of an escape opening',
-  escapeOpeningMaxSill: 'the highest sill of an escape opening',
-  routeMinWidth: 'the narrowest width of a route',
-  exitDoorClearWidth: 'the narrowest clear width of a door out'
+/** What each figure is, in plain words (MSG-11: `check.figure.*`), in English. */
+export const FIGURE_NAMES: Readonly<Record<FigureKey, string>> = Object.fromEntries(FIGURE_KEYS.map((key) => [key, english(said(`check.figure.${key}`))])) as Record<
+  FigureKey,
+  string
+>
+
+/** "6.5 m²", by its values. */
+export function figureValueSaid(figure: Pick<AppliedFigure, 'value' | 'unit'>): Said {
+  return said('line.part.figureValue', { value: num(figureText(figure.value)), unit: figure.unit })
 }
 
 /** "6.5 m²". */
 export function figureValueText(figure: Pick<AppliedFigure, 'value' | 'unit'>): string {
-  return `${figureText(figure.value)} ${figure.unit}`
+  return english(figureValueSaid(figure))
 }
+
+/** The documents a figure cites, as "IBC 2024 1208.4; IRC 2024 R312.1": their names, as the documents give them. */
+const citedText = (figure: { readonly citations: readonly { readonly document: string; readonly edition: string; readonly clause: string }[] }): string => figure.citations.map((c) => `${c.document} ${c.edition} ${c.clause}`).join('; ')
 
 /**
  * "US model codes, IBC 2024 1208.4; IRC 2024 R312.1, read 2026-11-14 for homes (…)", or
  * "looked up for this place, <url>, read for …" (COD-2: the kind of building it was read for).
  */
+export function figureBasisSaid(figure: AppliedFigure): Said {
+  const kinds = buildingKindsSaid([figure.readFor])
+  if (figure.origin === 'lookup') return figure.source ? said('line.part.basis.lookupAt', { url: figure.source.url, kinds }) : said('line.part.basis.lookup', { kinds })
+  return said('line.part.basis.code', { jurisdiction: figure.jurisdiction, cited: citedText(figure), day: figure.readOn, kinds })
+}
+
 export function figureBasisText(figure: AppliedFigure): string {
-  const kinds = buildingKindsText([figure.readFor])
-  if (figure.origin === 'lookup') return `looked up for this place${figure.source ? `, ${figure.source.url}` : ''}, read for ${kinds}`
-  const cited = figure.citations.map((c) => `${c.document} ${c.edition} ${c.clause}`).join('; ')
-  return `${figure.jurisdiction}, ${cited}, read ${figure.readOn} for ${kinds}`
+  return english(figureBasisSaid(figure))
 }
 
 /** "status ai-found: found by an AI and not yet checked by a person". */
+export function figureStatusSaid(figure: AppliedFigure, first = false): Said {
+  return said(first ? 'check.status.first' : 'check.status', { status: figure.status, words: said(`check.status.${figure.status}`) })
+}
+
 export function figureStatusText(figure: AppliedFigure): string {
-  return `status ${figure.status}: ${FIGURE_STATUS_WORDS[figure.status]}`
+  return english(figureStatusSaid(figure))
 }
 
 /**
@@ -56,10 +62,18 @@ export function figureStatusText(figure: AppliedFigure): string {
  * 1208.4; IRC 2024 R312.1, read 2026-11-14 for homes (…). Status ai-found: found by an AI and not yet checked
  * by a person."
  */
+export function figureUsedSaid(figure: AppliedFigure): Said {
+  return said('check.figureUsed', {
+    what: said(`check.figure.${figure.key}` as MessageKey),
+    value: figureValueSaid(figure),
+    key: figure.key,
+    basis: figureBasisSaid(figure),
+    status: figureStatusSaid(figure, true)
+  })
+}
+
 export function figureUsedText(figure: AppliedFigure): string {
-  const basis = figureBasisText(figure)
-  const status = figureStatusText(figure)
-  return `The figure used here for ${FIGURE_NAMES[figure.key]} is ${figureValueText(figure)} (${figure.key}). Basis: ${basis}. ${status.charAt(0).toUpperCase()}${status.slice(1)}.`
+  return english(figureUsedSaid(figure))
 }
 
 /**
@@ -67,9 +81,26 @@ export function figureUsedText(figure: AppliedFigure): string {
  * 6.5 m² (US model codes, IBC 2024 1208.4; IRC 2024 R312.1, status ai-found)". `what` is the
  * figure as the finding compares it ("at least 6.5 m²").
  */
-export function figureNeededText(what: string, figures: readonly AppliedFigure[]): string {
+export function figureNeededSaid(what: Value, figures: readonly AppliedFigure[]): Value {
   if (figures.length === 0) return what
-  const bases = [...new Set(figures.map((f) => (f.origin === 'lookup' ? figureBasisText(f) : `${f.jurisdiction}, ${f.citations.map((c) => `${c.document} ${c.edition} ${c.clause}`).join('; ')}`)))]
+  const bases: Value[] = []
+  const seen = new Set<string>()
+  for (const f of figures) {
+    const basis: Value = f.origin === 'lookup' ? figureBasisSaid(f) : said('line.part.basis.short', { jurisdiction: f.jurisdiction, cited: citedText(f) })
+    const key = JSON.stringify(basis)
+    if (seen.has(key)) continue
+    seen.add(key)
+    bases.push(basis)
+  }
   const statuses = [...new Set(figures.map((f) => f.status))]
-  return `the figure${figures.length === 1 ? '' : 's'} used here, ${what} (${bases.join('; ')}, status ${statuses.join(', ')})`
+  return said(figures.length === 1 ? 'line.part.figureUsed.one' : 'line.part.figureUsed.many', {
+    what,
+    bases: joined(bases, 'join.semicolon'),
+    statuses: statuses.join(', ')
+  })
+}
+
+export function figureNeededText(what: string, figures: readonly AppliedFigure[]): string {
+  const value = figureNeededSaid(what, figures)
+  return typeof value === 'string' ? value : english(value as Said)
 }

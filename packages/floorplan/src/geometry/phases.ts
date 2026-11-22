@@ -20,18 +20,16 @@ import type { FloorPlan, Opening, Room, Wall } from './plan'
 import type { WallEnds } from './wall'
 import { wallJoints } from './joints'
 import type { Phase } from '../types/floorplan'
-import { quoted } from '../types/planText'
+import { english, name, said, type Said } from '../messages/say'
+import type { MessageKey } from '../messages/en'
 
 /** A state of the building: as it stands before the work, or as it will be after it. */
 export type PlanState = 'before' | 'after'
 
 export const PLAN_STATES: readonly PlanState[] = ['before', 'after']
 
-/** A phase in words, as a sentence writes it. */
-export const PHASE_WORDS: Readonly<Record<Phase, string>> = { existing: 'existing', demolished: 'to be demolished', new: 'new' }
-
-/** A state in words: "before the work", "after the work". */
-export const STATE_WORDS: Readonly<Record<PlanState, string>> = { before: 'before the work', after: 'after the work' }
+/** A phase in words, as a sentence writes it (MSG-11: `issue.part.phase.*`, "existing", "to be demolished", "new"). */
+export const PHASE_WORDS: Readonly<Record<Phase, MessageKey>> = { existing: 'issue.part.phase.existing', demolished: 'issue.part.phase.demolished', new: 'issue.part.phase.new' }
 
 /** Whether the plan states a phase on any wall, opening or room, or names a base plan. */
 export function planHasPhases(plan: Pick<FloorPlan, 'walls' | 'openings' | 'rooms' | 'base'>): boolean {
@@ -121,12 +119,20 @@ export interface PhaseClash {
   readonly code: 'opening/phase-wall' | 'room/phase-wall'
   readonly id: string
   readonly wall: string
+  /** In English, as every drawing issue's message is; `said` is the sentence by key (MSG-11). */
   readonly message: string
+  readonly said: Said
 }
 
-const statesText = (phase: Phase): string => {
+/** The states a phase stands in, in words (`issue.part.states.*`): "before and after the work", "only before the work". */
+const statesSaid = (phase: Phase): Said => {
   const states = statesOf(phase)
-  return states.length === 2 ? 'before and after the work' : states[0] === 'before' ? 'only before the work' : 'only after the work'
+  return said(states.length === 2 ? 'issue.part.states.both' : states[0] === 'before' ? 'issue.part.states.before' : 'issue.part.states.after')
+}
+
+/** A part that stands when its wall does not, as its issue says it (`issue.opening/phase-wall`, `issue.room/phase-wall`). */
+function clashSaid(code: PhaseClash['code'], part: string, phase: Phase, wall: string, wallPhase: Phase): Said {
+  return said(`issue.${code}`, { part: name(part), phase: said(PHASE_WORDS[phase]), states: statesSaid(phase), wall: name(wall), wallPhase: said(PHASE_WORDS[wallPhase]), wallStates: statesSaid(wallPhase) })
 }
 
 /**
@@ -146,24 +152,16 @@ export function phaseClashes(plan: FloorPlan): PhaseClash[] {
     if (wall === undefined) continue
     const phase = read.opening(opening)
     if (!missing(phase, wall)) continue
-    clashes.push({
-      code: 'opening/phase-wall',
-      id: opening.id,
-      wall: wall.id,
-      message: `Opening ${quoted(opening.id)} is ${PHASE_WORDS[phase]}, so it stands ${statesText(phase)}, but its wall ${quoted(wall.id)} is ${PHASE_WORDS[read.wall(wall)]} and stands ${statesText(read.wall(wall))}`,
-    })
+    const sentence = clashSaid('opening/phase-wall', opening.id, phase, wall.id, read.wall(wall))
+    clashes.push({ code: 'opening/phase-wall', id: opening.id, wall: wall.id, message: english(sentence), said: sentence })
   }
   for (const room of plan.rooms) {
     const phase = read.room(room)
     const ids = [...new Set([...room.boundary, ...(room.holes ?? []).flat()])]
     const wall = ids.map((id) => walls.get(id)).find((w): w is Wall => w !== undefined && missing(phase, w))
     if (wall === undefined) continue
-    clashes.push({
-      code: 'room/phase-wall',
-      id: room.id,
-      wall: wall.id,
-      message: `Room ${quoted(room.id)} is ${PHASE_WORDS[phase]}, so it stands ${statesText(phase)}, but its wall ${quoted(wall.id)} is ${PHASE_WORDS[read.wall(wall)]} and stands ${statesText(read.wall(wall))}`,
-    })
+    const sentence = clashSaid('room/phase-wall', room.id, phase, wall.id, read.wall(wall))
+    clashes.push({ code: 'room/phase-wall', id: room.id, wall: wall.id, message: english(sentence), said: sentence })
   }
   return clashes
 }

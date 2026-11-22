@@ -36,6 +36,7 @@ import {
   dimensionText,
   dimensionTextBox,
   doorSwingBox,
+  drawingWords,
   formatArea,
   labelName,
   lineBox,
@@ -51,6 +52,7 @@ import { el } from './svgNode'
 import type { NumberedFault } from './faults'
 import { faultMarks, undrawnRoomText } from './faults'
 import { noteNodes, sketchNodes } from './writing'
+import { drawingText } from './words'
 import { siteNodes, sitePaints } from './site'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 
@@ -572,7 +574,7 @@ function undecidedSymbol(opening: PlanOpening, mpp: number, paint: Paints): SvgN
   const at = { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }
   return el(
     'g',
-    { 'data-part': 'door-undecided', 'data-opening': opening.id, 'pointer-events': 'none', role: 'img', 'aria-label': 'Door with no stated swing' },
+    { 'data-part': 'door-undecided', 'data-opening': opening.id, 'pointer-events': 'none', role: 'img', 'aria-label': drawingText(drawingWords(), 'drawing.undecidedDoor') },
     [
       lineEl('door-undecided-line', across(opening, 0), paint.undecided),
       el('g', { transform: labelTransform(at, mpp) }, [
@@ -962,7 +964,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   }
   for (const opening of drawing.openings) if (opening.assumed) assumed.push(lineEl('assumed-opening', across(opening, 0), { 'data-id': opening.id, ...paint.assumed }))
   for (const item of drawing.items) if (item.assumed) assumed.push(el('path', { d: pathOf(item.outline), 'data-part': 'assumed-item', 'data-id': item.id, ...paint.assumed }, [], `item:${item.id}`))
-  if (assumed.length > 0) out.push(el('g', { 'data-part': 'assumed', 'pointer-events': 'none', role: 'img', 'aria-label': 'Assumed, to confirm' }, assumed, 'assumed'))
+  if (assumed.length > 0) out.push(el('g', { 'data-part': 'assumed', 'pointer-events': 'none', role: 'img', 'aria-label': drawingText(drawingWords(), 'drawing.assumed') }, assumed, 'assumed'))
   // CNT-9: the walls, doors, windows and openings picked out, over the drawing, each in its
   // colour. Drawing, not a target: clicks reach the part underneath.
   if (picked !== null && picked.size > 0) {
@@ -1170,7 +1172,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
       el(
         'g',
         { transform: labelTransform(poleOfInaccessibility(room.polygon, undefined, room.holes).point, mpp), ...live.ghostAttrs(room.id) },
-        [el('text', { 'data-part': 'label' }, [`${room.name} · ${formatArea(room.area, decimals)} · removed`])],
+        [el('text', { 'data-part': 'label' }, [`${room.name} · ${formatArea(room.area, decimals)} · ${drawingText(drawingWords(), 'drawing.removed')}`])],
         `ghost-label-${room.id}`
       )
     )

@@ -13,6 +13,9 @@
  * skipped and reported, and the rest of the plan still gets drawn.
  */
 
+import type { Said, Value } from '../messages/say'
+import { english, joined, name, num, said } from '../messages/say'
+import { groupedNum, namesSaid, pointSaid, withSaid } from './issueWords'
 import { boundariesEdited } from '../rooms/stamp'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
@@ -29,7 +32,6 @@ import { MAX_CUTS, roomOverlaps } from './overlaps'
 import type { ToleranceChanges } from './tolerances'
 import { tolerance, withTolerances } from './tolerances'
 import { fixedText, metresText } from './rounding'
-import { quoted, quotedList } from '../types/planText'
 import { likelyId } from '../types/nearest'
 import { validatePlausibility } from './plausible'
 import { wallFaults } from './wallFaults'
@@ -49,7 +51,7 @@ import type { PlanState } from './phases'
 import { idsInPhase, phaseClashes, planHasPhases, planInState } from './phases'
 import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
 import { roomZones } from './zones'
-import { plotBoundary } from './plot'
+import { plotBoundary, ringFault } from './plot'
 import { flatIssues } from './flats'
 
 /**
@@ -70,7 +72,14 @@ export interface Issue {
   readonly code: string
   readonly entity: EntityKind
   readonly id: string
+  /** The sentence in English, made from `said`. */
   readonly message: string
+  /**
+   * MSG-11: the sentence by its key and values (`messages/en.ts`, `issue.<code>`), so it can be
+   * said in any language and its figures read as data. Not enumerable (`withSaid`): the record
+   * compares and prints as it did before it had one.
+   */
+  readonly said: Said
   readonly severity: Severity
   /**
    * MSG-7: each change to one part that would clear this problem, as data, when there is one. The
@@ -118,15 +127,16 @@ function issue(
   entity: EntityKind,
   id: string,
   code: string,
-  message: string,
+  sentence: Said,
   severity: Severity = 'error',
   fixes: readonly PlanFix[] = []
 ): Issue {
-  return fixes.length > 0 ? { entity, id, code, message, severity, fixes } : { entity, id, code, message, severity }
+  const message = english(sentence)
+  return withSaid(fixes.length > 0 ? { entity, id, code, message, severity, fixes } : { entity, id, code, message, severity }, sentence)
 }
 
-/** MSG-5: an issue that follows from another, by that one's id. */
-const followOn = (found: Issue, cause: string | null): Issue => (cause === null ? found : { ...found, causedBy: cause })
+/** MSG-5: an issue that follows from another, by that one's id. MSG-11: it keeps its sentence. */
+const followOn = (found: Issue, cause: string | null): Issue => (cause === null ? found : withSaid({ ...found, causedBy: cause }, found.said))
 
 /**
  * How far from the origin the farthest point of the plan sits.
@@ -154,14 +164,13 @@ function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
   }
 
   if (farthest > tolerance('farFromOrigin')) {
-    const from = origin === null ? 'the origin' : `its site's origin (${fixedText(ox, 2)}, ${fixedText(oy, 2)})`
+    const from = origin === null ? said('issue.part.origin') : said('issue.part.origin.site', { point: pointSaid(fixedText(ox, 2), fixedText(oy, 2)) })
     issues.push(
       issue(
         'plan',
         'plan',
         'plan/far-from-origin',
-        `The plan reaches ${fixedText(farthest, 0)} m from ${from}. The origin is where the ` +
-          `3D rises from; at this distance there is most likely a scale or unit error.`,
+        said('issue.plan/far-from-origin', { distance: num(fixedText(farthest, 0)), from }),
         'warning'
       )
     )
@@ -181,7 +190,7 @@ function validateBoundary(plan: FloorPlan, issues: Issue[]): void {
       'plan',
       'plan',
       'plan/boundary-crosses',
-      `The site's boundary is not one closed shape: ${boundary.problem}. No distance to it and no plot coverage is measured.`,
+      said('issue.plan/boundary-crosses', { problem: ringFault(boundary.points) ?? boundary.problem }),
       'warning'
     )
   )
@@ -199,12 +208,9 @@ export function exactMetres(value: number): string {
 
 /**
  * LVL-6 (lab VE-5): an opening names a wall, and a window in the roof is no opening in a wall. Said
- * when an opening names the roof, a room or a floor for its wall, as the lab's agents tried.
+ * (`issue.opening/missing-wall.roof`) when an opening names the roof, a room or a floor for its
+ * wall, as the lab's agents tried.
  */
-const ROOF_OPENINGS =
-  'An opening sits in a wall; a window in the roof is a rooflight, stated in its floor\'s roof ' +
-  '(floors[].roof.rooflights). Dormers are not supported yet'
-
 function inTheRoof(plan: FloorPlan, id: string): boolean {
   return /roof|sky|dormer/i.test(id) || plan.rooms.some((r) => r.id === id) || (plan.floors ?? []).some((f) => f.id === id)
 }
@@ -212,16 +218,21 @@ function inTheRoof(plan: FloorPlan, id: string): boolean {
 /** Whether a number is one Grid accepts: finite, and no larger than `largest`. */
 const held = (value: number): boolean => Math.abs(value) <= tolerance('largest')
 
-const kilometres = (metres: number): string => `${(metres / 1000).toLocaleString('en')} km`
+const kilometres = (metres: number): Value => groupedNum((metres / 1000).toLocaleString('en'))
 
-function tooLarge(what: string, value: number): string {
+/** The number of a part, as a line names it. */
+type NumberPart = 'startCoordinate' | 'endCoordinate' | 'thickness' | 'height' | 'offset' | 'width' | 'sill'
+
+function tooLarge(what: NumberPart, value: number): Said {
+  const part = said(`issue.part.number.${what}`)
   return Number.isFinite(value)
-    ? `${what} is ${String(value)} m, past the ${kilometres(tolerance('largest'))} Grid accepts`
-    : `${what} is not a finite number`
+    ? said('issue.part.tooLarge.past', { what: part, value, largest: kilometres(tolerance('largest')) })
+    : said('issue.part.tooLarge.infinite', { what: part })
 }
 
-const REFUSED_NUMBER =
-  'A number this large is no building: most likely a digit or a unit slipped. Give every size in metres.'
+/** The line for a part refused for a number past `largest`. */
+const refusedNumber = (key: 'issue.wall/too-large' | 'issue.opening/too-large', id: string, what: NumberPart, value: number): Said =>
+  said(key, { id: name(id), why: tooLarge(what, value), advice: said('issue.part.tooLarge') })
 
 /**
  * Coordinates and sizes past `largest`, and numbers that are not finite (a plan built in code
@@ -229,32 +240,30 @@ const REFUSED_NUMBER =
  * loses the precision the checks need, and a sum of two such numbers can stop being a number.
  */
 function validateWallNumbers(wall: Wall, issues: Issue[]): boolean {
-  const named: [string, number][] = [
-    ['a coordinate of its start', wall.start[0]],
-    ['a coordinate of its start', wall.start[1]],
-    ['a coordinate of its end', wall.end[0]],
-    ['a coordinate of its end', wall.end[1]],
-    ['its thickness', wall.thickness],
-    ['its height', wall.height]
+  const named: [NumberPart, number][] = [
+    ['startCoordinate', wall.start[0]],
+    ['startCoordinate', wall.start[1]],
+    ['endCoordinate', wall.end[0]],
+    ['endCoordinate', wall.end[1]],
+    ['thickness', wall.thickness],
+    ['height', wall.height]
   ]
   const bad = named.find(([, value]) => !held(value))
   if (bad === undefined) return true
-  issues.push(issue('wall', wall.id, 'wall/too-large', `Wall ${quoted(wall.id)}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`))
+  issues.push(issue('wall', wall.id, 'wall/too-large', refusedNumber('issue.wall/too-large', wall.id, bad[0], bad[1])))
   return false
 }
 
 function validateOpeningNumbers(opening: Opening, issues: Issue[]): boolean {
-  const named: [string, number][] = [
-    ['its offset', opening.offset],
-    ['its width', opening.width],
-    ['its height', opening.height],
-    ['its sill', opening.sill]
+  const named: [NumberPart, number][] = [
+    ['offset', opening.offset],
+    ['width', opening.width],
+    ['height', opening.height],
+    ['sill', opening.sill]
   ]
   const bad = named.find(([, value]) => !held(value))
   if (bad === undefined) return true
-  issues.push(
-    issue('opening', opening.id, 'opening/too-large', `Opening ${quoted(opening.id)}: ${tooLarge(bad[0], bad[1])}. ${REFUSED_NUMBER}`)
-  )
+  issues.push(issue('opening', opening.id, 'opening/too-large', refusedNumber('issue.opening/too-large', opening.id, bad[0], bad[1])))
   return false
 }
 
@@ -266,7 +275,7 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
 
   if (sx === ex && sy === ey) {
     issues.push(
-      issue('wall', wall.id, 'wall/zero-length', `Wall ${quoted(wall.id)} starts and ends at the same point, (${exactMetres(sx)}, ${exactMetres(sy)}), so it has no length`)
+      issue('wall', wall.id, 'wall/zero-length', said('issue.wall/zero-length', { wall: name(wall.id), at: pointSaid(exactMetres(sx), exactMetres(sy)) }))
     )
     return false
   }
@@ -280,7 +289,7 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
         'wall',
         wall.id,
         'wall/no-thickness',
-        `Wall ${quoted(wall.id)} has thickness ${wall.thickness}; only a virtual wall may be zero`
+        said('issue.wall/no-thickness', { wall: name(wall.id), thickness: wall.thickness })
       )
     )
     ok = false
@@ -291,7 +300,7 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
         'wall',
         wall.id,
         'wall/no-height',
-        `Wall ${quoted(wall.id)} has height ${wall.height}; only a virtual wall may be zero`
+        said('issue.wall/no-height', { wall: name(wall.id), height: wall.height })
       )
     )
     ok = false
@@ -311,13 +320,8 @@ function validateOpening(
   // If the wall is already broken there is nothing to measure against, and its
   // geometry cannot be built either.
   if (brokenWalls.has(opening.wall)) {
-    const why = leftOut.has(opening.wall) ? 'which was left out when the plan was read' : 'which is invalid'
-    issues.push(
-      followOn(
-        issue('opening', opening.id, 'opening/broken-wall', `Opening ${quoted(opening.id)} hangs off wall ${quoted(opening.wall)}, ${why}`),
-        opening.wall
-      )
-    )
+    const key = leftOut.has(opening.wall) ? 'issue.opening/broken-wall.leftOut' : 'issue.opening/broken-wall'
+    issues.push(followOn(issue('opening', opening.id, 'opening/broken-wall', said(key, { opening: name(opening.id), wall: name(opening.wall) })), opening.wall))
     return false
   }
 
@@ -331,8 +335,11 @@ function validateOpening(
           'opening',
           opening.id,
           'opening/missing-wall',
-          `Opening ${quoted(opening.id)} points at wall ${quoted(opening.wall)}, which is not in the plan` +
-            (meant === null ? (inTheRoof(index.plan, opening.wall) ? `. ${ROOF_OPENINGS}` : '') : `: did you mean ${quoted(meant)}?`),
+          meant === null
+            ? inTheRoof(index.plan, opening.wall)
+              ? said('issue.opening/missing-wall.roof', { opening: name(opening.id), wall: name(opening.wall) })
+              : said('issue.opening/missing-wall', { opening: name(opening.id), wall: name(opening.wall) })
+            : said('issue.opening/missing-wall.meant', { opening: name(opening.id), wall: name(opening.wall), meant: name(meant) }),
           'error',
           meant === null ? [] : [{ part: 'opening', id: opening.id, wall: meant }]
         ),
@@ -352,7 +359,7 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/degenerate',
-        `Opening ${quoted(opening.id)} measures ${opening.width} × ${opening.height} m`
+        said('issue.opening/degenerate', { opening: name(opening.id), width: opening.width, height: opening.height })
       )
     )
     return false
@@ -367,7 +374,7 @@ function validateOpening(
   const after = span.to - wallLength
 
   if (before > overrun || after > overrun) {
-    const past = after >= before ? `${millimetres(after)} past the end of the wall` : `${millimetres(before)} before its start`
+    const past = after >= before ? said('issue.opening/out-of-wall.pastEnd', { by: millimetres(after) }) : said('issue.opening/out-of-wall.beforeStart', { by: millimetres(before) })
     const fits = wallLength - opening.width
     // MSG-7 (lab MS-13): what would be right, not only what is wrong. Keeping its width, the
     // offsets that fit; keeping its offset, the widest that fits there.
@@ -375,16 +382,26 @@ function validateOpening(
     const fixes: PlanFix[] = []
     if (fits >= 0) fixes.push({ part: 'opening', id: opening.id, offset: down(fits) })
     if (room > 0 && opening.offset >= 0) fixes.push({ part: 'opening', id: opening.id, width: down(room) })
-    const keepWidth = fits >= 0 ? `An offset from 0.00 to ${exactMetres(fits)} m fits` : `It is ${millimetres(-fits)} wider than the wall is long`
-    const keepOffset = room > 0 && opening.offset >= 0 ? `; at its offset of ${exactMetres(opening.offset)} m, a width up to ${exactMetres(room)} m fits` : ''
+    const keepWidth =
+      fits >= 0 ? said('issue.opening/out-of-wall.offsets', { to: num(exactMetres(fits)) }) : said('issue.opening/out-of-wall.wider', { by: millimetres(-fits) })
+    const keepOffset =
+      room > 0 && opening.offset >= 0 ? said('issue.opening/out-of-wall.widths', { offset: num(exactMetres(opening.offset)), width: num(exactMetres(room)) }) : ''
     issues.push(
       issue(
         'opening',
         opening.id,
         'opening/out-of-wall',
-        `Opening ${quoted(opening.id)} runs from ${exactMetres(span.from)} to ${exactMetres(span.to)} m ` +
-          `on wall ${quoted(wall.id)}, which is ${exactMetres(wallLength)} m long: it runs ${past}, more ` +
-          `than the ${millimetres(overrun)} Grid allows. ${keepWidth}${keepOffset}.`,
+        said('issue.opening/out-of-wall', {
+          opening: name(opening.id),
+          from: num(exactMetres(span.from)),
+          to: num(exactMetres(span.to)),
+          wall: name(wall.id),
+          length: num(exactMetres(wallLength)),
+          past,
+          overrun: millimetres(overrun),
+          keepWidth,
+          keepOffset
+        }),
         'error',
         fixes
       )
@@ -407,9 +424,15 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/too-tall',
-        `Opening ${quoted(opening.id)} reaches ${exactMetres(head)} m on a wall ` +
-          `${exactMetres(rise)} m high` +
-          (tallest > 0 ? `: at its sill of ${exactMetres(opening.sill)} m, a height up to ${exactMetres(tallest)} m fits` : ''),
+        tallest > 0
+          ? said('issue.opening/too-tall.fits', {
+              opening: name(opening.id),
+              head: num(exactMetres(head)),
+              height: num(exactMetres(rise)),
+              sill: num(exactMetres(opening.sill)),
+              tallest: num(exactMetres(tallest))
+            })
+          : said('issue.opening/too-tall', { opening: name(opening.id), head: num(exactMetres(head)), height: num(exactMetres(rise)) }),
         'error',
         tallest > 0 ? [{ part: 'opening', id: opening.id, height: down(tallest) }] : []
       )
@@ -422,16 +445,25 @@ function validateOpening(
     if (under !== null && head > under.low + overrun) {
       const tallest = under.low - Math.max(opening.sill, 0)
       const floor = (index.plan.floors ?? []).find((f) => f.id === floorOf(wall))
-      const range = under.high - under.low > tolerance('joint') ? `${metresText(under.low)} to ${metresText(under.high)} m` : `${metresText(under.low)} m`
+      const range =
+        under.high - under.low > tolerance('joint')
+          ? said('issue.opening/above-roof.range', { low: num(metresText(under.low)), high: num(metresText(under.high)) })
+          : said('issue.opening/above-roof.at', { low: num(metresText(under.low)) })
       const wholly = opening.sill >= under.high - overrun
       issues.push(
         issue(
           'opening',
           opening.id,
           'opening/above-roof',
-          `Opening ${quoted(opening.id)} reaches ${exactMetres(head)} m on wall ${quoted(wall.id)}, where the roof over ` +
-            `floor ${quoted(floor?.name || floorOf(wall))} cuts the wall to ${range}: ${wholly ? 'it lies wholly above the roof' : 'its top is above the roof'}` +
-            (tallest > 0 ? `; at its sill of ${exactMetres(opening.sill)} m, a height up to ${exactMetres(tallest)} m fits` : ''),
+          said('issue.opening/above-roof', {
+            opening: name(opening.id),
+            head: num(exactMetres(head)),
+            wall: name(wall.id),
+            floor: name(floor?.name || floorOf(wall)),
+            range,
+            where: said(wholly ? 'issue.opening/above-roof.wholly' : 'issue.opening/above-roof.top'),
+            fits: tallest > 0 ? said('issue.opening/above-roof.fits', { sill: num(exactMetres(opening.sill)), tallest: num(exactMetres(tallest)) }) : ''
+          }),
           'error',
           tallest > 0 ? [{ part: 'opening', id: opening.id, height: down(tallest) }] : []
         )
@@ -448,7 +480,7 @@ function validateOpening(
         'opening',
         opening.id,
         'opening/negative-sill',
-        `Opening ${quoted(opening.id)} has its sill ${exactMetres(-opening.sill)} m below the floor: a sill of 0.00 m, at the floor, or above fits`,
+        said('issue.opening/negative-sill', { opening: name(opening.id), below: num(exactMetres(-opening.sill)) }),
         'error',
         [{ part: 'opening', id: opening.id, sill: 0 }]
       )
@@ -465,15 +497,15 @@ function validateOpening(
  * a look and draws on: the kind is read as not stated, the part as no larger than the opening.
  */
 function validateOpeningKind(opening: Opening, issues: Issue[]): void {
-  const word = opening.type === 'opening' ? 'a doorless opening' : `a ${opening.type}`
+  const word = said(`issue.part.kindOf.${opening.type}`)
   if (opening.kind !== undefined && !kindFits(opening.type, opening.kind)) {
-    const takes = opening.type === 'door' ? DOOR_KINDS.join(', ') : opening.type === 'window' ? WINDOW_KINDS.join(', ') : 'none'
+    const takes = opening.type === 'door' ? joined(DOOR_KINDS, 'join.comma') : opening.type === 'window' ? joined(WINDOW_KINDS, 'join.comma') : said('issue.part.kindOf.none')
     issues.push(
       issue(
         'opening',
         opening.id,
         'opening/kind-not-for-type',
-        `Opening ${quoted(opening.id)} is ${word} of kind ${quoted(opening.kind)}, which ${word} cannot be, so it is drawn as one with no kind. The kinds ${word} takes: ${takes}`,
+        said('issue.opening/kind-not-for-type', { opening: name(opening.id), word, kind: name(opening.kind), takes }),
         'warning'
       )
     )
@@ -485,20 +517,18 @@ function validateOpeningKind(opening: Opening, issues: Issue[]): void {
   // LVL-5 (C19): a floor's slice holds only its stretch of an opening in a wall through floors;
   // the part that opens is measured against the whole opening, as the plan states it.
   const whole = statedOpening(opening)
-  const problem =
+  const problem: Said | null =
     opening.type === 'opening'
-      ? 'a doorless opening has no part that opens'
+      ? said('issue.opening/part-too-large.doorless')
       : kind === 'fixed'
-        ? 'a fixed window has no part that opens'
+        ? said('issue.opening/part-too-large.fixed')
         : part.width > whole.width + overrun
-          ? `the part that opens is ${exactMetres(part.width)} m wide, wider than the ${exactMetres(whole.width)} m opening`
+          ? said('issue.opening/part-too-large.wider', { width: num(exactMetres(part.width)), whole: num(exactMetres(whole.width)) })
           : part.height !== undefined && part.height > whole.height + overrun
-            ? `the part that opens is ${exactMetres(part.height)} m high, higher than the ${exactMetres(whole.height)} m opening`
+            ? said('issue.opening/part-too-large.higher', { height: num(exactMetres(part.height)), whole: num(exactMetres(whole.height)) })
             : null
   if (problem === null) return
-  issues.push(
-    issue('opening', opening.id, 'opening/part-too-large', `Opening ${quoted(opening.id)}: ${problem}, so it is drawn and measured as the whole opening`, 'warning')
-  )
+  issues.push(issue('opening', opening.id, 'opening/part-too-large', said('issue.opening/part-too-large', { opening: name(opening.id), problem }), 'warning'))
 }
 
 /**
@@ -530,7 +560,7 @@ function validateOverlaps(index: PlanIndex, broken: Set<string>, issues: Issue[]
           kept.push(current)
           continue
         }
-        issues.push(issue('opening', o.id, 'opening/overlap', `Openings ${quoted(clash.opening.id)} and ${quoted(o.id)} overlap on wall ${quoted(wall.id)}`))
+        issues.push(issue('opening', o.id, 'opening/overlap', said('issue.opening/overlap', { first: name(clash.opening.id), second: name(o.id), wall: name(wall.id) })))
         broken.add(o.id)
       }
       continue
@@ -543,7 +573,7 @@ function validateOverlaps(index: PlanIndex, broken: Set<string>, issues: Issue[]
             'opening',
             current.opening.id,
             'opening/overlap',
-            `Openings ${quoted(kept!.opening.id)} and ${quoted(current.opening.id)} overlap on wall ${quoted(wall.id)}`
+            said('issue.opening/overlap', { first: name(kept!.opening.id), second: name(current.opening.id), wall: name(wall.id) })
           )
         )
         broken.add(current.opening.id)
@@ -577,9 +607,9 @@ function validateDuplicateIds(
   const seen = new Set<string>()
   const duplicated = new Set<string>()
   const parts = [
-    ...plan.walls.map(({ id }) => ({ id, noun: 'wall' })),
-    ...plan.rooms.map(({ id }) => ({ id, noun: 'room' })),
-    ...plan.openings.map(({ id }) => ({ id, noun: 'opening' }))
+    ...plan.walls.map(({ id }) => ({ id, noun: 'wall' as const })),
+    ...plan.rooms.map(({ id }) => ({ id, noun: 'room' as const })),
+    ...plan.openings.map(({ id }) => ({ id, noun: 'opening' as const }))
   ]
 
   for (const { id } of parts) {
@@ -592,7 +622,7 @@ function validateDuplicateIds(
     const named = parts.filter((part) => part.id === id).map((part) => part.noun)
     const counts = [...new Set(named)].map((noun) => {
       const n = named.filter((m) => m === noun).length
-      return n === 1 ? `a ${noun}` : `${n} ${noun}s`
+      return n === 1 ? said(`issue.part.count.${noun}.one`) : said(`issue.part.count.${noun}.many`, { n })
     })
     let free = 2
     while (seen.has(`${id}-${free}`)) free++
@@ -601,8 +631,7 @@ function validateDuplicateIds(
         'plan',
         id,
         'plan/duplicate-id',
-        `Id ${quoted(id)} names ${counts.join(' and ')}. Every lookup resolves to only one of them, so ` +
-          `all of them are skipped. Rename one, for example to ${quoted(`${id}-${free}`)}, and update what points at it`
+        said('issue.plan/duplicate-id', { id: name(id), parts: joined(counts, 'join.and'), free: name(`${id}-${free}`) })
       )
     )
     broken.add(id)
@@ -620,17 +649,17 @@ function validateDuplicateIds(
  * id are `plan/duplicate-id`'s.
  */
 function validateIdSpelling(plan: FloorPlan, issues: Issue[], broken: Set<string>): void {
-  const parts: [EntityKind, string, string][] = [
-    ...plan.walls.map((p): [EntityKind, string, string] => ['wall', 'Wall', p.id]),
-    ...plan.rooms.map((p): [EntityKind, string, string] => ['room', 'Room', p.id]),
-    ...plan.openings.map((p): [EntityKind, string, string] => ['opening', 'Opening', p.id])
+  type Part = 'wall' | 'room' | 'opening'
+  const parts: [Part, string][] = [
+    ...plan.walls.map((p): [Part, string] => ['wall', p.id]),
+    ...plan.rooms.map((p): [Part, string] => ['room', p.id]),
+    ...plan.openings.map((p): [Part, string] => ['opening', p.id])
   ]
-  const shapes = new Map<string, { noun: string; id: string }>()
-  for (const [entity, noun, id] of parts) {
+  const shapes = new Map<string, { noun: Part; id: string }>()
+  for (const [entity, id] of parts) {
+    const noun = entity
     if (id.trim() === '') {
-      issues.push(
-        issue(entity, id, 'plan/blank-id', `${noun} ${quoted(id)} has a blank id. Every part needs an id of its own, so it is skipped`)
-      )
+      issues.push(issue(entity, id, 'plan/blank-id', said('issue.plan/blank-id', { part: said(`issue.part.Named.${noun}`, { id: name(id) }) })))
       broken.add(id)
       continue
     }
@@ -646,8 +675,11 @@ function validateIdSpelling(plan: FloorPlan, issues: Issue[], broken: Set<string
         entity,
         id,
         'plan/similar-id',
-        `${noun} ${quoted(id)} has an id that differs from the id of ${first.noun.toLowerCase()} ${quoted(first.id)} only in ` +
-          `capitals or spaces, so it is skipped. If it is ${quoted(first.id)}, use that id letter for letter; if not, rename it`
+        said('issue.plan/similar-id', {
+          part: said(`issue.part.Named.${noun}`, { id: name(id) }),
+          first: said(`issue.part.named.${first.noun}`, { id: name(first.id) }),
+          firstId: name(first.id)
+        })
       )
     )
     broken.add(id)
@@ -679,8 +711,7 @@ function validateFloorIdSpelling(plan: FloorPlan, issues: Issue[]): void {
         'plan',
         ids[0]!,
         'plan/similar-floor-id',
-        `Floors ${ids.map((id) => JSON.stringify(id)).join(' and ')} differ only in ` +
-          `capitalisation or spacing, and are treated as separate floors`,
+        said('issue.plan/similar-floor-id', { floors: joined(ids.map(name), 'join.and') }),
         'warning'
       )
     )
@@ -711,7 +742,7 @@ function validateFloors(
           'plan',
           floor.id,
           'plan/duplicate-floor',
-          `Floor ${quoted(floor.id)} is listed more than once; the first entry is the one used`,
+          said('issue.plan/duplicate-floor', { floor: name(floor.id) }),
           'warning'
         )
       )
@@ -746,7 +777,7 @@ function validateFloors(
         'room',
         room.id,
         'room/cross-floor',
-        `Room ${quoted(room.id)} is on floor ${quoted(floor)} but rests on ${quotedList(strays)}, on another floor`
+        said('issue.room/cross-floor', { room: name(room.id), floor: name(floor), walls: joined(strays.map(name), 'join.comma') })
       )
     )
     broken.add(room.id)
@@ -758,27 +789,20 @@ function validateFloors(
  * area of exactly 13.585 that the arithmetic left at 13.58499999… still reads 13.59.
  */
 /** A length in millimetres, to a tenth where that is what tells it apart. */
-function millimetres(metres: number): string {
+function millimetres(metres: number): Said {
   const mm = metres * 1000
-  return `${mm >= 10 ? fixedText(mm, 0) : Number(mm.toPrecision(2)).toString()} mm`
+  return said('issue.part.mm', { n: num(mm >= 10 ? fixedText(mm, 0) : Number(mm.toPrecision(2)).toString()) })
 }
 
 const two = (value: number): string => fixedText(value, 2)
-const m2 = (value: number): string => `${two(value)} m²`
-const at = (p: { readonly x: number; readonly y: number }): string => `(${metresText(p.x)}, ${metresText(p.y)})`
+/** Square metres to two decimals, as a figure: the sentence writes the unit. */
+const m2 = (value: number): Value => num(two(value))
+const at = (p: { readonly x: number; readonly y: number }): Said => pointSaid(metresText(p.x), metresText(p.y))
+const names = (ids: readonly string[], most?: number): Value => namesSaid(ids.map(name), most)
 
-/** `a, b and c`, or the first few and how many more. */
-function names(ids: readonly string[], most = 6): string {
-  const shown = ids.length > most ? [...ids.slice(0, most), `${ids.length - most} more`] : [...ids]
-  return shown.length <= 1 ? shown.join('') : `${shown.slice(0, -1).join(', ')} and ${shown.at(-1)}`
-}
-
-function unclaimedMessage(floor: string, piece: FloorPiece): string {
-  const walls = piece.walls.length > 0 ? `, between walls ${names(piece.walls.map(quoted))}` : ''
-  return (
-    `Floor ${quoted(floor)} has ${m2(piece.area)} of enclosed floor that no room claims, around ` +
-    `${at(piece.at)}${walls}. It is in no room's area. If it is a room, draw it as one.`
-  )
+function unclaimedMessage(floor: string, piece: FloorPiece): Said {
+  const walls = piece.walls.length > 0 ? said('issue.floor/unclaimed.walls', { walls: names(piece.walls) }) : ''
+  return said('issue.floor/unclaimed', { floor: name(floor), area: m2(piece.area), at: at(piece.at), walls })
 }
 
 /**
@@ -818,41 +842,30 @@ function unclaimedCause(piece: FloorPiece, plan: FloorPlan, broken: ReadonlySet<
   return leftOut.find((part) => part.kind === 'room' && part.id !== null && lists(part.walls))?.id ?? null
 }
 
-function mismatchMessage(m: RoomMismatch): string {
-  if (m.enclosed < tolerance('areaReported')) {
-    return (
-      `Room ${quoted(m.room)} is not enclosed by its walls: none of its ${m2(m.area)} is floor that ` +
-      `walls close off. Its outline is closed only by carrying the walls' lines on until they ` +
-      `meet. Check that its walls reach each other.`
-    )
-  }
-  const parts: string[] = []
+/** `.one` for one, `.many` for more. */
+const oneOrMany = (n: number): 'one' | 'many' => (n === 1 ? 'one' : 'many')
+
+function mismatchMessage(m: RoomMismatch): Said {
+  if (m.enclosed < tolerance('areaReported')) return said('issue.room/not-enclosed', { room: name(m.room), area: m2(m.area) })
+  const parts: Said[] = []
   const unlisted = m.onWalls.filter((w) => !w.listed)
   const listed = m.onWalls.filter((w) => w.listed)
   const sum = (list: readonly { area: number }[]): number => list.reduce((s, w) => s + w.area, 0)
   if (unlisted.length > 0) {
-    parts.push(`${m2(sum(unlisted))} of it lies on ${unlisted.length === 1 ? 'wall' : 'walls'} ${names(unlisted.map((w) => quoted(w.wall)))}, which its wall list leaves out`)
+    parts.push(said(`issue.room/space-mismatch.unlisted.${oneOrMany(unlisted.length)}`, { area: m2(sum(unlisted)), walls: names(unlisted.map((w) => w.wall)) }))
   }
   if (listed.length > 0) {
-    parts.push(`${m2(sum(listed))} lies on its own ${listed.length === 1 ? 'wall' : 'walls'} ${names(listed.map((w) => quoted(w.wall)))}`)
+    parts.push(said(`issue.room/space-mismatch.listed.${oneOrMany(listed.length)}`, { area: m2(sum(listed)), walls: names(listed.map((w) => w.wall)) }))
   }
-  if (m.outside >= tolerance('areaReported')) parts.push(`${m2(m.outside)} lies outside the walls`)
+  if (m.outside >= tolerance('areaReported')) parts.push(said('issue.room/space-mismatch.outside', { area: m2(m.outside) }))
   if (m.spaces.length > 1) {
-    const lines = m.lines.length > 0
-      ? `, split by ${m.lines.length === 1 ? 'dividing line' : 'dividing lines'} ${names(m.lines.map(quoted))}, which its wall list leaves out`
-      : ''
-    parts.push(`it covers parts of ${m.spaces.length} enclosed spaces (${names(m.spaces.map(two), 4)} m²)${lines}`)
+    const lines = m.lines.length > 0 ? said(`issue.room/space-mismatch.lines.${oneOrMany(m.lines.length)}`, { lines: names(m.lines) }) : ''
+    parts.push(said('issue.room/space-mismatch.spaces', { n: m.spaces.length, areas: namesSaid(m.spaces.map(m2), 4), lines }))
   }
   if (m.sharedWith.length > 0) {
-    parts.push(
-      `it lies in one enclosed space with ${m.sharedWith.length === 1 ? 'room' : 'rooms'} ` +
-        `${names(m.sharedWith.map(quoted))}, and no wall or dividing line divides that space between them`
-    )
+    parts.push(said(`issue.room/space-mismatch.shared.${oneOrMany(m.sharedWith.length)}`, { rooms: names(m.sharedWith) }))
   }
-  return (
-    `Room ${quoted(m.room)} does not match the space its walls enclose. Its outline measures ` +
-    `${m2(m.area)}: ${parts.join('; ')}. Its area counts all of it. Check its wall list.`
-  )
+  return said('issue.room/space-mismatch', { room: name(m.room), area: m2(m.area), parts: joined(parts, 'join.semicolon') })
 }
 
 /**
@@ -873,8 +886,7 @@ function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<s
           'floor',
           result.floor,
           'floor/spaces-unknown',
-          `The spaces the walls enclose on floor ${quoted(result.floor)} could not be worked out: ` +
-            `${result.reason}. Floor that no room claims is not looked for there.`,
+          said('issue.floor/spaces-unknown', { floor: name(result.floor), reason: result.reasonSaid }),
           'warning'
         )
       )
@@ -920,8 +932,7 @@ function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<
         'floor',
         result.floor,
         'floor/past-outline',
-        `Floor ${quoted(result.floor)}'s walls reach ${result.pastOutline.toFixed(2)} m² past the outline it states. ` +
-          'The slab, the roof and the gross area take in both, so the floor is larger than its outline.',
+        said('issue.floor/past-outline', { floor: name(result.floor), area: num(result.pastOutline.toFixed(2)) }),
         'warning'
       )
     )
@@ -948,19 +959,17 @@ function validateNesting(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<
     if (inner.host !== null || broken.has(inner.room)) continue
     const floor = floors.get(inner.room) ?? ''
     const why =
-      inner.reason !== undefined
-        ? `the room it sits in could not be worked out: ${inner.reason}`
+      inner.reasonSaid !== undefined
+        ? said('issue.room/inside-no-host.unknown', { reason: inner.reasonSaid })
         : inner.nearest !== null
-          ? `${m2(inner.nearest.outside)} of it lies outside room ${quoted(inner.nearest.room)}, the room that holds most of it`
-          : `no room on floor ${quoted(floor)} covers any of it`
+          ? said('issue.room/inside-no-host.nearest', { area: m2(inner.nearest.outside), nearest: name(inner.nearest.room) })
+          : said('issue.room/inside-no-host.none', { floor: name(floor) })
     issues.push(
       issue(
         'room',
         inner.room,
         'room/inside-no-host',
-        `Room ${quoted(inner.room)} is marked as inside another room, but no room on floor ${quoted(floor)} holds ` +
-          `it: ${why}. Its floor is counted on its own and taken off no room. Draw it within the ` +
-          `room it sits in, or leave out ${quoted('inside')}.`,
+        said('issue.room/inside-no-host', { room: name(inner.room), floor: name(floor), why }),
         'warning'
       )
     )
@@ -980,40 +989,33 @@ function validateZones(index: PlanIndex, broken: ReadonlySet<string>, issues: Is
         'room',
         fault.zone,
         'room/zone-not-in-room',
-        `Room ${quoted(fault.zone)} is marked as a zone of room ${quoted(fault.room)}, but ${fault.why}. It is counted ` +
-          `as a room of its own. Draw it within the room it is part of, on the same floor, or leave out ${quoted('partOf')}.`,
+        said('issue.room/zone-not-in-room', { zone: name(fault.zone), room: name(fault.room), why: fault.why, partOf: name('partOf') }),
         'warning'
       )
     )
   }
 }
 
-function overlapMessage(o: RoomOverlap): string {
+function overlapMessage(o: RoomOverlap): Said {
   const [a, b] = o.rooms
   const [areaA, areaB] = o.areas
   if (o.kind === 'same') {
-    const walls = o.sameWalls ? ' and list the same walls' : ''
-    return (
-      `Rooms ${quoted(a)} and ${quoted(b)} cover the same ${m2(o.shared)} of floor${walls}, so that floor is counted ` +
-      `twice, once in each. If one is a copy of the other, remove it; if not, check their wall lists.`
-    )
+    const walls = o.sameWalls ? said('issue.room/overlap.sameWalls') : ''
+    return said('issue.room/overlap.same', { a: name(a), b: name(b), area: m2(o.shared), walls })
   }
   if (o.kind === 'inside') {
     const [inner, outer] = areaA <= areaB ? [a, b] : [b, a]
     const [innerArea, outerArea] = areaA <= areaB ? [areaA, areaB] : [areaB, areaA]
-    return (
-      `Room ${quoted(inner)} (${m2(innerArea)}) lies wholly inside room ${quoted(outer)} (${m2(outerArea)}), so ` +
-      `${m2(o.shared)} of floor around ${at(o.at)} is counted twice, once in each. If ${quoted(inner)} ` +
-      `sits inside ${quoted(outer)}, as a wardrobe pod or an en-suite does, mark ${quoted(inner)} with ` +
-      `${quoted('inside')}: true and its floor is taken off ${quoted(outer)}. If not, check the wall list ` +
-      `of ${quoted(outer)}: it most likely names a wall it should not.`
-    )
+    return said('issue.room/overlap.inside', {
+      inner: name(inner),
+      innerArea: m2(innerArea),
+      outer: name(outer),
+      outerArea: m2(outerArea),
+      area: m2(o.shared),
+      at: at(o.at)
+    })
   }
-  return (
-    `Rooms ${quoted(a)} (${m2(areaA)}) and ${quoted(b)} (${m2(areaB)}) overlap: ${m2(o.shared)} of floor around ` +
-    `${at(o.at)} lies in both, so it is counted twice. Check their wall lists: one of them most ` +
-    `likely names a wall of the other.`
-  )
+  return said('issue.room/overlap', { a: name(a), areaA: m2(areaA), b: name(b), areaB: m2(areaB), area: m2(o.shared), at: at(o.at) })
 }
 
 /**
@@ -1036,9 +1038,7 @@ function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: Readonl
         'floor',
         floor,
         'floor/overlaps-unknown',
-        `The rooms on floor ${quoted(floor)} were not all compared to see whether they overlap: the plan has ` +
-          `more than ${MAX_CUTS.toLocaleString('en')} pairs of rooms lying over each other, and Grid ` +
-          `stopped there. The overlaps it found are listed.`,
+        said('issue.floor/overlaps-unknown', { floor: name(floor), most: groupedNum(MAX_CUTS.toLocaleString('en')) }),
         'warning'
       )
     )
@@ -1050,7 +1050,8 @@ function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: Readonl
         'room',
         b,
         'room/overlap-unknown',
-        `Rooms ${quoted(a)} and ${quoted(b)} could not be compared to see whether they overlap: ${u.reason}.`,
+        // The reason is the polygon library's own error, in its words.
+        said('issue.room/overlap-unknown', { a: name(a), b: name(b), reason: u.reason }),
         'warning'
       )
     )
@@ -1090,7 +1091,7 @@ function validateWallFaults(plan: FloorPlan, index: PlanIndex, broken: ReadonlyS
           onRoom ? 'room' : 'wall',
           onRoom ? fault.rooms[0]! : fault.walls[0]!,
           onRoom ? 'room/wall-listed-twice' : `wall/${fault.kind}`,
-          fault.message,
+          fault.said,
           'warning'
         ),
         cause
@@ -1107,15 +1108,13 @@ function validateWallFaults(plan: FloorPlan, index: PlanIndex, broken: ReadonlyS
 function validateKinds(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
   for (const sides of kindDisagreements(plan, index)) {
     if (broken.has(sides.wall) || sides.differs === null) continue
-    const length = `${metresText(sides.differs.length)} m`
+    const length = num(metresText(sides.differs.length))
     const inside = [...new Set(sides.stretches.filter((s) => s.worked === 'interior').flatMap((s) => [...s.left, ...s.right]))]
     const facing = [...new Set(sides.stretches.filter((s) => s.worked === 'exterior').flatMap((s) => [...s.left, ...s.right]))]
     const message =
       sides.differs.stands === 'kept'
-        ? `Wall ${quoted(sides.wall)} is stated exterior, but rooms lie on both its sides along ${length} ` +
-          `(${names(inside.map(quoted))}). It is kept as an outside wall, as stated; if it is an inside wall, leave out its kind.`
-        : `Wall ${quoted(sides.wall)} is stated a partition, but faces outside along ${length}: room ` +
-          `${names(facing.map(quoted))} lies on one side and no room on the other. It is treated as an outside wall.`
+        ? said('issue.wall/kind-differs.kept', { wall: name(sides.wall), length, rooms: names(inside) })
+        : said('issue.wall/kind-differs', { wall: name(sides.wall), length, rooms: names(facing) })
     issues.push(issue('wall', sides.wall, 'wall/kind-differs', message, 'warning'))
   }
 }
@@ -1129,7 +1128,7 @@ function validateStairs(plan: FloorPlan, broken: ReadonlySet<string>, issues: Is
   // A slice keeps the plan's stairs (`planForFloor`), so this costs nothing in a plan with none.
   if ((plan.stairs ?? []).length === 0) return
   for (const problem of planStairs(plan, isFloorSlice(plan) ? brokenOnFloor : () => broken).problems) {
-    issues.push(issue('stair', problem.stair, problem.code, problem.message, problem.severity))
+    issues.push(issue('stair', problem.stair, problem.code, problem.said, problem.severity))
   }
 }
 
@@ -1183,7 +1182,7 @@ export interface ValidateOptions {
  */
 function validatePhases(plan: FloorPlan, options: ValidateOptions): ValidationResult {
   const clashes = phaseClashes(plan)
-  const issues: Issue[] = clashes.map((c) => followOn(issue(c.code === 'room/phase-wall' ? 'room' : 'opening', c.id, c.code, c.message), c.wall))
+  const issues: Issue[] = clashes.map((c) => followOn(issue(c.code === 'room/phase-wall' ? 'room' : 'opening', c.id, c.code, c.said), c.wall))
   const clashing = new Set(clashes.map((c) => c.id))
   const run = (state: PlanState): ValidationResult => {
     const inState = planInState(plan, state)
@@ -1212,7 +1211,7 @@ function validateDerived(plan: FloorPlan, issues: Issue[], broken: Set<string>):
         'room',
         room.id,
         'room/derived-edited',
-        `Room ${quoted(room.id)}'s boundary was changed by hand, but this plan was written rooms first and Grid works out each room's walls from where the rooms are. Change the rooms text and write it again (grid write), or take "written" out of the plan to keep it as a hand-written one`
+        said('issue.room/derived-edited', { room: name(room.id) })
       )
     )
     broken.add(room.id)
@@ -1233,11 +1232,13 @@ function validateRoofs(plan: FloorPlan, issues: Issue[]): void {
     if (floor.roof === undefined || !plan.walls.some((wall) => floorOf(wall) === floor.id)) continue
     const shape = floorRoofShape(plan, floor.id)
     if (shape === null) continue
-    const name = quoted(floor.name || floor.id)
+    const floorName = name(floor.name || floor.id)
     for (const rooflight of floor.roof.rooflights ?? []) {
       const place = rooflightPlace(shape, rooflight)
       if (!('problem' in place)) continue
-      issues.push(issue('floor', floor.id, 'floor/rooflight-misplaced', `Rooflight ${quoted(rooflight.id)} in the roof over floor ${name} ${place.problem}: it is left out`))
+      issues.push(
+        issue('floor', floor.id, 'floor/rooflight-misplaced', said('issue.floor/rooflight-misplaced', { rooflight: name(rooflight.id), floor: floorName, problem: place.problem }))
+      )
     }
     const dormers = (floor.roof.dormers ?? []).length
     if (dormers > 0) {
@@ -1246,8 +1247,7 @@ function validateRoofs(plan: FloorPlan, issues: Issue[]): void {
           'floor',
           floor.id,
           'floor/dormers-not-drawn',
-          `The roof over floor ${name} lists ${dormers === 1 ? 'a dormer' : `${dormers} dormers`}: dormers are not supported yet, so the roof is drawn ` +
-            'and measured without them, and the headroom under one is the roof\'s',
+          said(`issue.floor/dormers-not-drawn.${oneOrMany(dormers)}`, { floor: floorName, n: dormers }),
           'warning'
         )
       )
@@ -1295,7 +1295,10 @@ export function validatePlan(
         'plan',
         'plan',
         'plan/no-walls',
-        `The plan has no walls, but ${plan.rooms.length} ${plan.rooms.length === 1 ? 'room' : 'rooms'} and ${plan.openings.length} ${plan.openings.length === 1 ? 'opening' : 'openings'} name walls. Nothing can be drawn or measured until the walls are in the plan`
+        said('issue.plan/no-walls', {
+          rooms: said(`issue.plan/no-walls.room.${oneOrMany(plan.rooms.length)}`, { n: plan.rooms.length }),
+          openings: said(`issue.plan/no-walls.opening.${oneOrMany(plan.openings.length)}`, { n: plan.openings.length })
+        })
       )
     )
   }
@@ -1327,8 +1330,8 @@ export function validatePlan(
       const gone = roomWallIds(room).filter((wallId) => leftOut.has(wallId))
       const message =
         gone.length > 0
-          ? `Room ${quoted(room.id)} rests on ${gone.length === 1 ? 'wall' : 'walls'} ${quotedList([...new Set(gone)])}, left out when the plan was read`
-          : `Room ${quoted(room.id)} rests on an invalid wall`
+          ? said(`issue.room/broken-wall.leftOut.${oneOrMany(gone.length)}`, { room: name(room.id), walls: joined([...new Set(gone)].map(name), 'join.comma') })
+          : said('issue.room/broken-wall', { room: name(room.id) })
       // MSG-5: it follows from the first of those walls, a wall left out first.
       const cause = gone[0] ?? roomWallIds(room).find((wallId) => broken.has(wallId))!
       issues.push(followOn(issue('room', room.id, 'room/broken-wall', message), cause))
@@ -1339,7 +1342,7 @@ export function validatePlan(
     try {
       const polygon = roomPolygon(room, index)
       if (area(polygon) < tolerance('areaEqual')) {
-        issues.push(issue('room', room.id, 'room/empty', `Room ${quoted(room.id)} encloses zero area`))
+        issues.push(issue('room', room.id, 'room/empty', said('issue.room/empty', { room: name(room.id) })))
         broken.add(room.id)
       }
     } catch (error) {
@@ -1351,7 +1354,8 @@ export function validatePlan(
             // The outline says why it failed: not closable, out of order, inside out, or a hole
             // that does not lie inside it (ARE-6).
             error instanceof RoomOutlineError ? error.code : 'room/unclosed',
-            error instanceof Error ? error.message : String(error)
+            // Any other error is one the outline did not expect, said in its own words.
+            error instanceof RoomOutlineError ? error.said : said('issue.part.error', { error: error instanceof Error ? error.message : String(error) })
           ),
           noWalls ? 'plan' : null
         )

@@ -808,3 +808,100 @@ feed 20 to 22 (`openable-part`), both CNT-14's own; damage that passes in silenc
   stored ("Better than the stored figures", turns 22 against `main`'s 21); after
   `--write-current` the file alone, 19 of 19 passed.
 - `npm run scoreboard`: 197, 277, 22, 5, 22, 735, 95, "Same as the stored figures."
+
+### Again after merging main cc60df1c (MSG-11)
+
+`main` moved again: Grid speaks every language, starting with Spanish (MSG-11). Every sentence
+Grid writes for a person is a key in one message file per language
+(`packages/floorplan/src/messages/en.ts`, `es.ts`), said with `say`; the result catalogue is
+logic only (which values each code's wording takes, and which wording a line gets);
+`packages/cli/src/__tests__/ownWords.test.ts` counts the English sentences left in each source
+file, holds the moved parts at none and ratchets the rest.
+
+**Conflicts and how each was kept**
+
+- `packages/floorplan/src/geometry/sweep.ts`: MSG-11's sentences by key (`warning` takes a
+  `Said`, `issue.<code>` in the message files) with CNT-14's sweeps by kind (`doorSweeps`: a
+  sliding, pocket, roller or garage door sweeps nothing; a pair and a folding door sweep their
+  leaves, each shape checked against walls, fixtures and the other doors). The sweep's codes are
+  MSG-11's union type plus CNT-14's `opening/wide-single-leaf`; CNT-14's inline `MESSAGES` table
+  is gone.
+- `packages/rules/src/result/catalogue.ts`: MSG-11's file whole, with CNT-14's four codes as
+  entries of its form: `opening/wide-single-leaf` (value `wide`, the `wideSingleLeaf` figure),
+  `opening/kind-not-for-type` and `opening/part-too-large` (no values; their found is the drawing
+  check's own sentence), and `floor/not-checked-door-swings` (values `doors`, joined by name, and
+  `count`; a `one` wording of `says` and `found` for one door), before `floor/sketch-drawn-only`
+  as before.
+- `packages/rules/src/checks/catalogue.ts`: MSG-11's `FIGURE_LIMIT_KEYS`; CNT-14's new first
+  limit ("Windows are measured by the part that opens where the plan states it, else as drawn…")
+  is now the wording of `check.limit.figure.0`.
+- `packages/rules/src/result/inspect.ts`: imports of both sides (`checkDoorSweeps` with MSG-11's
+  `siteThingsSaid` and `tapedMissingSaid`; `validateDoorSweeps` is no longer imported there).
+  The stage keeps MSG-11's name (`door`) and CNT-14's body: the sweep's issues, then one
+  `floor/not-checked-door-swings` line per floor. `SIZED` keeps `opening/wide-single-leaf`.
+- `packages/cli/src/sheet/pages.ts`: MSG-11's words by key with CNT-14's row content: the kind in
+  the opening's name (`sheet.kind.<type>.<kind>`, else `sheet.type.<type>`), the sizes in display
+  units with the language's decimal mark (`units.mark`) for the opening and for its part that
+  opens (`sheet.opens`), the sill by `sheet.sill`, and a door's handing said in the sheet's
+  language. `kindWords` is no longer imported by the sheet.
+- `CHANGELOG.md`: every Unreleased entry, CNT-14's first, then MSG-11's, BRF-6's and the rest.
+- `docs/result-contract.md`: the agents' changelog keeps CNT-14's section first, with one more
+  line on its codes in every language, then MSG-11's; the code table already lists CNT-14's four
+  codes and matches the catalogue (its test passes).
+
+**CNT-14's wordings moved into the message files** (English unchanged word for word; each with a
+Spanish draft in `es.ts`, marked as MSG-11 marks the whole file: draft translation, not reviewed)
+
+- The drawing checks: `issue.opening/wide-single-leaf` (from `sweep.ts`),
+  `issue.opening/kind-not-for-type` with `issue.part.kindOf.door|window|opening|none`, and
+  `issue.opening/part-too-large` with its four problems `.doorless`, `.fixed`, `.wider`,
+  `.higher` (from `validate.ts`'s `validateOpeningKind`, which now builds them with `said`).
+- The result record: `line.<code>.says|found|needed|fix` for `opening/wide-single-leaf`,
+  `opening/kind-not-for-type` and `opening/part-too-large` (says, needed, fix), and
+  `floor/not-checked-door-swings` (`says`, `says.one`, `found`, `found.one`, `needed`, `fix`).
+- The figure checks' limit: `check.limit.figure.0`, now CNT-14's wording.
+- The sheet: `sheet.kind.door.*` (single-leaf, double, sliding, pocket, folding, roller, garage
+  door), `sheet.kind.window.*` (single, double, sliding, fixed, high-level window),
+  `sheet.opens`, and the handing, `sheet.handing.into|outside|toward|hinged|side.left|side.right`.
+  The handing is made once in `quantities/schedule.ts` (`handingSaid`): a row keeps `handing` in
+  English for `grid_schedule` and its CSV, and gains `handingSaid`, the same sentence by key,
+  which the sheet says in its language. What lies past a face with no room (`nothing drawn`) and
+  the rooms between stay as `schedule.ts` gives them, as MSG-11 left `between`.
+
+**Left of the kinds MSG-11 leaves for later** (`ownWords.test.ts`, each by its kind; the ratchet
+1,474 → 1,507, the 33 below): a door's handing refused in rooms (`geometry/handing.ts` 6, a new
+file, the refusals `grid_change_opening` answers), kinds, `hinged` and `part` in rooms text
+(`rooms/compile.ts` 118 → 125, `rooms/read.ts` 21 → 23), the opening edits' receipts
+(`edit/edits.ts` 49 → 56), the IFC's kind texts (`export/ifc.ts` 31 → 36), the diff's change lines
+(`diff/building.ts` 25 → 28, `quantities/compare.ts` 19 → 20) and the opening schedule's new CSV
+columns (`quantities/schedule.ts` 10 → 12). Outside the ratchet: the six tolerances'
+descriptions (`tolerances.ts` 223 → 235, for people who build Grid) and the new tool arguments
+(`mcp/writeTools.ts` 100 → 103, agent-facing). The moved parts stay at none: `validate.ts`,
+`sweep.ts` (not listed), the result catalogue and front door, the sheet and the viewer's scene.
+
+**Expectations changed**
+
+- `packages/cli/src/__tests__/ownWords.test.ts`: the counts and the ratchet above, with the reason
+  beside the ratchet.
+- `packages/cli/src/command/__tests__/grid.e2e.test.ts`: the bundle cap 650,000 → 700,000.
+  `dist/grid.mjs` is 655,506 bytes merged (main's was 648,688, 1,312 under its cap), with no new
+  dependency; the reason is beside the cap.
+- No English output, golden file or snapshot changed: every CNT-14 sentence reads as before.
+
+**Scoreboard.** 197, 277, 22, 5, 22, 735, 95: "Same as the stored figures." No count moved, so
+`current.json` and `scoreboard/README.md` are not touched.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- The affected tests in three parts with the same options (`--exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`): `packages/floorplan`, 135 of 135 files, 3,363 passed (3,363);
+  `packages/cli`, 106 of 107 files, 1,403 passed, 1 failed, 1 skipped (1,405). The one failure
+  was the bundle cap in `grid.e2e.test.ts` (655,506 bytes against 650,000), a size guard, not a
+  timing test; after the cap was raised (above) the file alone, 96 of 96 passed.
+  `packages/rules packages/viewer scoreboard/__tests__`, 111 of 111 files, 1,064 passed, 2
+  skipped (1,066). No timing test failed.
+- `npm run scoreboard`: as above, 149.8 s.
+- By hand: `grid check --lang es --full` on a plan with a wide door with no kind, a window of
+  kind `garage`, a fixed window with a part, a door whose part is wider than it and two doors with
+  no swing gives each of CNT-14's four codes in Spanish, with decimal commas.

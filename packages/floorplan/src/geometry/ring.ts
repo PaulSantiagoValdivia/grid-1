@@ -6,6 +6,7 @@
 import { tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
+import { english, said, type Said } from '../messages/say'
 
 const orient = (a: Vec2, b: Vec2, c: Vec2): number => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
 
@@ -22,21 +23,29 @@ export function segmentsMeet(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
   return on(c, d, a, d1) || on(c, d, b, d2) || on(a, b, c, d3) || on(a, b, d, d4)
 }
 
-/** Why a ring of corners cannot be a plot: it crosses itself or encloses no ground. Null when sound. */
-export function ringProblem(points: readonly Vec2[]): string | null {
-  if (points.length < 3) return 'it has fewer than three corners'
-  if (Math.abs(signedArea(points)) <= tolerance('noArea')) return 'it encloses no ground'
+/**
+ * Why a ring of corners cannot be a plot or an outline, as a sentence by its key (MSG-11): it
+ * crosses itself or encloses no ground. Null when sound.
+ */
+export function ringFault(points: readonly Vec2[]): Said | null {
+  if (points.length < 3) return said('issue.part.boundary.fewCorners')
+  if (Math.abs(signedArea(points)) <= tolerance('noArea')) return said('issue.part.boundary.noGround')
   const n = points.length
   for (let i = 0; i < n; i++) {
     const a = points[i]!
     const b = points[(i + 1) % n]!
-    if (Math.hypot(b.x - a.x, b.y - a.y) <= tolerance('noLength')) return `edge ${i + 1} has no length`
+    if (Math.hypot(b.x - a.x, b.y - a.y) <= tolerance('noLength')) return said('issue.part.boundary.noLength', { edge: i + 1 })
     for (let j = i + 1; j < n; j++) {
       // Neighbouring edges share a corner, and the last edge neighbours the first.
       if (j === i + 1 || (i === 0 && j === n - 1)) continue
-      if (segmentsMeet(a, b, points[j]!, points[(j + 1) % n]!)) return `edges ${i + 1} and ${j + 1} cross or touch`
+      if (segmentsMeet(a, b, points[j]!, points[(j + 1) % n]!)) return said('issue.part.boundary.cross', { edge: i + 1, other: j + 1 })
     }
   }
   return null
 }
 
+/** Why a ring of corners cannot be a plot, in English: it crosses itself or encloses no ground. Null when sound. */
+export function ringProblem(points: readonly Vec2[]): string | null {
+  const fault = ringFault(points)
+  return fault === null ? null : english(fault)
+}

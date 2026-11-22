@@ -542,7 +542,9 @@ describe('the built file', () => {
     // 650 kB since HND-12: its phone room scan (the reader, the face pairing and the evidence
     // beside the plan, about 34,000 bytes), merged with WRT-7, CNT-10 and VEW-9 from main, makes it
     // 607,030 bytes, again with no new dependency. BRF-6's first layout from the brief adds about
-    // 11,800 more, also with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(650_000)
+    // 11,800 more, also with no new dependency. 700 kB since CNT-14: its kinds of door and window
+    // (the symbols, the parts in 3D and the IFC, the handing), merged with MSG-11's languages from
+    // main (648,688 bytes there), make it 655,506 bytes, again with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(700_000)
   })
 })

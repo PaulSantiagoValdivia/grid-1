@@ -20,6 +20,7 @@ import type { Scene3D } from '../scene3d'
 import { OPENING_PART_KINDS, floorMesh, makeNamer, openingPartMesh, shellMesh, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
+import { english, name, said } from '../../messages/say'
 import { leftOutLines, leftOutSummary, type LeftOutPart } from './leftOut'
 
 const MAGIC = 0x46546c67 // "glTF"
@@ -171,7 +172,8 @@ function assetOf(leftOut: readonly LeftOutPart[], origin: readonly [number, numb
     extras['gridOrigin'] = {
       x: origin[0],
       y: origin[1],
-      note: `The points are from the plan's (${origin[0]}, ${origin[1]}); the node "${GLB_ORIGIN_NODE}" moves the model there. Plan x is glTF x, plan y is glTF -z.`
+      // MSG-11: a file's own words are its English (`drawing.glb.origin`).
+      note: english(said('drawing.glb.origin', { x: origin[0], y: origin[1], node: name(GLB_ORIGIN_NODE) }))
     }
   }
   if (leftOut.length > 0) {

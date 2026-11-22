@@ -9,14 +9,22 @@
  * `--length walk` (VEW-9) is the long form: the plan walked room by room, standing in each
  * doorway (`describe/walk.ts`), one floor with `--floor`, and with `--pictures <folder>` a
  * picture at eye height from each doorway, written there.
+ *
+ * `--lang` (MSG-11) writes the person's form in a language, with its decimal mark unless the
+ * plan's display states one. Names from the plan stay as written. The agent's form is a format
+ * of codes and ids that stays as it is; only its label is in the language.
  */
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/floorplan/geometry'
+import { ITEM_KINDS } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_LANGUAGE, say, type Language, type MessageKey } from '@ongrid/floorplan/messages'
 import { readRoomsText } from '@ongrid/floorplan/rooms'
-import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength } from '../describe/card'
+import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength, type Words } from '../describe/card'
 import { planFacts } from '../describe/facts'
+import { personFacing } from '../describe/facing'
+import { personSite } from '../describe/site'
 import { facingDescription } from '../quantities/facing'
+import { fixtureCountText, planFixtures, type Fixtures } from '../quantities/fixtures'
 import { siteDescription } from '../quantities/site'
-import { fixtureCountText, planFixtures } from '../quantities/fixtures'
+import { askedLanguage, LANG_OPTION } from './language'
 import { planWalk, walkText, type PlanWalk, type WalkStop } from '../describe/walk'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import type { LoadedPlan } from './plan'
@@ -43,6 +51,7 @@ export const DESCRIBE_OPTIONS: OptionSpecs = {
     takesValue: true,
     help: 'rooms: the plan as rooms text, to change and write again with grid write. It takes no --length or --for.',
   },
+  ...LANG_OPTION,
   ...PROJECT_OPTION,
 }
 
@@ -52,6 +61,13 @@ export interface DescribeRequest {
   readonly as?: string | undefined
   readonly floor?: string | undefined
   readonly pictures?: string | undefined
+  /** `--lang`: the language asked for, resolved with the plan's by `languageFor` once it is read. */
+  readonly lang?: string | undefined
+}
+
+export interface DescribeOptions {
+  /** MSG-11: the language to write in, its messages loaded (`languageFor`). English when left out. */
+  readonly language?: Language | undefined
 }
 
 function oneOf<T extends string>(option: string, value: string | undefined, allowed: readonly T[], fallback: T): T {
@@ -62,7 +78,7 @@ function oneOf<T extends string>(option: string, value: string | undefined, allo
 }
 
 /** The length and audience asked for, checked before the plan is read. */
-export function checkDescribeRequest(request: DescribeRequest): { length: DescribeLength; audience: DescribeAudience; as: 'words' | 'rooms' } {
+export function checkDescribeRequest(request: DescribeRequest): { length: DescribeLength; audience: DescribeAudience; as: 'words' | 'rooms'; language: Language | undefined } {
   const as = oneOf('--as', request.as, ['rooms'] as const, 'rooms')
   if (request.as !== undefined && (request.length !== undefined || request.for !== undefined)) {
     throw new UsageError(`--as ${as} reads the plan back as rooms text, which has no ${request.length !== undefined ? '--length' : '--for'}: leave it out.`)
@@ -75,6 +91,7 @@ export function checkDescribeRequest(request: DescribeRequest): { length: Descri
     length,
     audience: oneOf('--for', request.for, DESCRIBE_AUDIENCES, 'person'),
     as: request.as === undefined ? 'words' : as,
+    language: askedLanguage(request.lang),
   }
 }
 
@@ -82,22 +99,25 @@ export function checkDescribeRequest(request: DescribeRequest): { length: Descri
  * The plan as rooms text, losing nothing: what `grid write` writes back as it is. Its first line
  * is the label as a comment (MSG-3), which writing it back ignores.
  */
-export function describeRooms(loaded: LoadedPlan): string {
+export function describeRooms(loaded: LoadedPlan, options: DescribeOptions = {}): string {
   // LVL-8: the openings the file states, not the ones its patterns place: `grid write` keeps the
   // patterns as the file has them, so their openings written here would be placed twice.
   const plan = loaded.stated ?? loaded.plan
   const patterns = plan.patterns?.length ?? 0
-  const kept = patterns === 0 ? '' : `# The plan's ${patterns === 1 ? 'opening pattern is' : `${patterns} opening patterns are`} not rooms text: grid write keeps ${patterns === 1 ? 'it' : 'them'} as the file has ${patterns === 1 ? 'it' : 'them'}, and ${patterns === 1 ? 'its' : 'their'} openings are not written here.\n`
-  return `# ${GENERAL_GUIDANCE_LABEL}\n${kept}${readRoomsText(plan).text}`
+  const language = options.language ?? DEFAULT_LANGUAGE
+  const kept = patterns === 0 ? '' : `# ${say(language, patterns === 1 ? 'describe.rooms.patterns.one' : 'describe.rooms.patterns.many', { count: patterns })}\n`
+  return `# ${say(language, 'label')}\n${kept}${readRoomsText(plan).text}`
 }
 
-export function describePlan(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience): string {
+/** The description, in the language of `options` (MSG-11; English when left out), ending in a new line. */
+export function describePlan(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience, options: DescribeOptions = {}): string {
+  const w: Words = { language: options.language ?? DEFAULT_LANGUAGE, options: { decimal: loaded.plan.display?.decimal } }
   // MSG-3: the label is the first line of every description, the one-line one too.
   if (length === 'walk') {
     const { survey, walk } = walkOf(loaded)
-    return describeWalk(survey, walk, audience)
+    return describeWalk(survey, walk, audience, new Map(), options)
   }
-  return `${GENERAL_GUIDANCE_LABEL}\n${describeBody(loaded, length, audience)}`
+  return `${say(w.language, 'label')}\n${describeBody(loaded, length, audience, w)}`
 }
 
 /** VEW-9: the plan surveyed and walked, every floor or the one given (an id already checked). */
@@ -106,17 +126,26 @@ export function walkOf(loaded: LoadedPlan, floor?: string): { survey: Survey; wa
   return { survey, walk: planWalk(survey, floor) }
 }
 
-/** VEW-9: the walk in words, after the label, naming each stop's picture when it has one. */
-export function describeWalk(survey: Survey, walk: PlanWalk, audience: DescribeAudience, pictures: ReadonlyMap<WalkStop, string> = new Map()): string {
-  return `${GENERAL_GUIDANCE_LABEL}\n${walkText(survey, walk, audience, pictures)}`
+/** VEW-9: the walk in words, after the label, naming each stop's picture when it has one; in the language of `options` (MSG-11). */
+export function describeWalk(survey: Survey, walk: PlanWalk, audience: DescribeAudience, pictures: ReadonlyMap<WalkStop, string> = new Map(), options: DescribeOptions = {}): string {
+  const w: Words = { language: options.language ?? DEFAULT_LANGUAGE, options: { decimal: survey.plan.display?.decimal } }
+  return `${say(w.language, 'label')}\n${walkText(survey, walk, audience, pictures, w)}`
 }
 
-function describeBody(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience): string {
-  const described = describeText(planFacts(loaded.plan), length, audience)
+/** The fixtures counted, in the person's words: `1 toilet, 2 basins`. */
+function personFixtures(counts: Fixtures['counts'], w: Words): string {
+  const list = ITEM_KINDS.filter((kind) => counts[kind] > 0)
+    .map((kind) => say(w.language, `describe.fixture.${kind}.${counts[kind] === 1 ? 'one' : 'many'}` as MessageKey, { count: counts[kind] }, w.options))
+  return say(w.language, 'describe.fixtures', { list: list.join(say(w.language, 'join.comma')) }, w.options)
+}
+
+function describeBody(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience, w: Words): string {
+  const described = describeText(planFacts(loaded.plan), length, audience, w)
   // CNT-3: north, the ways the rooms face and the front, on the longer descriptions of a plan
   // that states any of them.
   // BRF-3: and the plot, its coverage and the edge the building comes nearest.
-  const facing = length === 'line' ? [] : [...facingDescription(loaded.plan, audience), ...siteDescription(loaded.plan, audience)]
+  const facing =
+    length === 'line' ? [] : audience === 'person' ? [...personFacing(loaded.plan, w), ...personSite(loaded.plan, w)] : [...facingDescription(loaded.plan, audience), ...siteDescription(loaded.plan, audience)]
   // They go before the closing line, which says the description checks nothing.
   const close = described.lastIndexOf('\n', described.length - 2) + 1
   const gap = audience === 'person' ? '\n' : ''
@@ -125,6 +154,6 @@ function describeBody(loaded: LoadedPlan, length: DescribeLength, audience: Desc
   if (length === 'line' || (loaded.plan.items ?? []).length === 0) return text
   const fixtures = planFixtures(loaded.plan)
   if (fixtures.rows.length === 0) return text
-  const where = audience === 'agent' ? ' grid_schedule lists each with its room and size.' : ''
-  return `${text}Fixtures: ${fixtureCountText(fixtures.counts)}.${where}\n`
+  if (audience === 'person') return `${text}${personFixtures(fixtures.counts, w)}\n`
+  return `${text}Fixtures: ${fixtureCountText(fixtures.counts)}. grid_schedule lists each with its room and size.\n`
 }

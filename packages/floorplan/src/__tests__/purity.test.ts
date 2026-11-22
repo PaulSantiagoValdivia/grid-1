@@ -65,8 +65,11 @@ function impurities(source: string): string[] {
     if (specifier.startsWith('.')) continue
     if (!(specifier in ALLOWED)) found.push(`imports ${specifier}`)
   }
+  // MSG-11: a global is looked for in the code, not in its text: a message key such as
+  // `line.item/blocks-window.says` names a window and reaches for none.
+  const bare = code.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
   for (const name of FORBIDDEN_GLOBALS) {
-    if (new RegExp(`(?<![.\\w])${name}\\s*[.([]`).test(code)) found.push(`uses ${name}`)
+    if (new RegExp(`(?<![.\\w])${name}\\s*[.([]`).test(bare)) found.push(`uses ${name}`)
   }
   return found
 }

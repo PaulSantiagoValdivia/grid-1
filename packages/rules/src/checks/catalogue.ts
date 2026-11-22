@@ -7,6 +7,7 @@
  */
 
 import { RULES as PLAN_RULES } from '@ongrid/floorplan/geometry'
+import { english, said, type MessageKey } from '@ongrid/floorplan/messages'
 import type { BuildingType, RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { ESCAPE_TOP_LEVEL, FIGURES, READ_FOR_BUILDINGS, US_MODEL_CODES, readForCovers, type BuildingKind, type FigureKey, type SourceCitation } from './figures'
 import type { Rule, RuleCitation } from './types'
@@ -42,7 +43,7 @@ export type FigureRuleId = keyof typeof RULE_FIGURES
 export const FIGURE_RULES: readonly (Rule & { readonly id: FigureRuleId })[] = [
   {
     id: 'habitable-room-area',
-    title: 'Rooms people live or sleep in have a minimum floor area',
+    title: english(said('check.title.habitable-room-area')),
     source: {
       kind: 'building-code',
       label: SOURCE_LABEL,
@@ -51,7 +52,7 @@ export const FIGURE_RULES: readonly (Rule & { readonly id: FigureRuleId })[] = [
   },
   {
     id: 'escape-opening',
-    title: 'Bedrooms have a window or door to the outside someone can escape through',
+    title: english(said('check.title.escape-opening')),
     source: {
       kind: 'building-code',
       label: SOURCE_LABEL,
@@ -110,11 +111,13 @@ export function rulesForUse(use: RoomUse | undefined, building?: BuildingType): 
   return FIGURE_RULES.filter((rule) => RULE_USES[rule.id].includes(use) && ruleReadsBuilding(rule.id, building))
 }
 
+// Until a ceiling-height check exists, which needs each room's own height and the roof plane over a slope (the last limit).
+export const FIGURE_LIMIT_KEYS = [
+  'check.limit.figure.0',
+  'check.limit.figure.1',
+  'check.limit.figure.2',
+  'check.limit.figure.3'
+] as const satisfies readonly MessageKey[]
+
 /** What the figure checks never look at. Shown with every report, after the core's own. */
-export const FIGURE_LIMITS: readonly string[] = [
-  'Windows are measured by the part that opens where the plan states it, else as drawn: the part that opens may be smaller',
-  'Where an escape window or door leads, and basements without a bedroom, are not checked',
-  'The shortest side of a room, and the total size of a home, are not checked',
-  // Until a ceiling-height check exists, which needs each room's own height and the roof plane over a slope.
-  'Ceiling height is not checked, in any room or under a sloping roof'
-]
+export const FIGURE_LIMITS: readonly string[] = FIGURE_LIMIT_KEYS.map((key) => english(said(key)))

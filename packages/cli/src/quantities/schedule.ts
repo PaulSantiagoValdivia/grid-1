@@ -5,6 +5,7 @@
  */
 import { compareIds, partHeight, partWidth, planForFloor, roomNumbers, sideSeenFrom, statedKind, tolerance } from '@ongrid/floorplan/geometry'
 import { factText, type Facts, type Opening, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
+import { english, said, type Said } from '@ongrid/floorplan/messages'
 import type { OpeningFacts } from '../describe/facts'
 import { AREA_RULES, FLAT_RULE, planAreas } from './areas'
 import { flatOfRoom, planFlatTypes, planFlats } from '@ongrid/floorplan/geometry'
@@ -153,6 +154,8 @@ export interface OpeningScheduleRow {
   readonly opens: { readonly width: number; readonly height: number } | null
   /** CNT-14: a door's handing in rooms, `opens into "Hall", hinged on the left`, when the plan states it. */
   readonly handing: string | null
+  /** MSG-11: the same handing as a sentence by key, for the sheet to say in its language; null with `handing`. */
+  readonly handingSaid: Said | null
   /** A room's name, or what lies there when no room does (`outside`, `nothing drawn`, `a room left out`). */
   readonly between: readonly [string, string]
   /** CNT-9: the opening's facts of the person's own, by name, as the plan gives them. */
@@ -270,7 +273,7 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
         sill: opening.sill,
         kind: statedKind(opening.type, own?.kind),
         opens: own?.opens === undefined || opening.type === 'opening' ? null : { width: partWidth(opening.width, own.opens), height: partHeight(opening.height, own.opens) },
-        handing: own === undefined ? null : handingWords(own, opening.sides, side),
+        ...handingOf(own === undefined ? null : handingSaid(own, opening.sides, side)),
         between: [side(opening.sides[0]), side(opening.sides[1])],
         properties: stated.get(opening.id)?.properties ?? {},
       })
@@ -363,13 +366,16 @@ export function openingScheduleCsv(schedule: OpeningSchedule): string {
  * is hinged on as seen from there (`sideSeenFrom`); null when it states no swing. `sides` are what
  * lies on the face the wall's normal points at, then the other.
  */
-function handingWords(opening: Opening, sides: OpeningFacts['sides'], name: (side: OpeningFacts['sides'][number]) => string): string | null {
+function handingSaid(opening: Opening, sides: OpeningFacts['sides'], name: (side: OpeningFacts['sides'][number]) => string): Said | null {
   if (opening.type !== 'door' || opening.swing === undefined) return null
   const into = opening.swing === 'left' ? sides[0] : sides[1]
   // A room by its name; past a face with no room, what lies there.
-  const words = typeof into === 'object' ? `opens into ${name(into)}` : into === 'outside' ? 'opens outside' : `opens toward ${name(into)}`
-  return opening.hinge === undefined ? words : `${words}, hinged on the ${sideSeenFrom(opening.swing, opening.hinge)}`
+  const words = typeof into === 'object' ? said('sheet.handing.into', { room: name(into) }) : into === 'outside' ? said('sheet.handing.outside') : said('sheet.handing.toward', { what: name(into) })
+  return opening.hinge === undefined ? words : said('sheet.handing.hinged', { opens: words, side: said(`sheet.handing.side.${sideSeenFrom(opening.swing, opening.hinge)}`) })
 }
+
+/** A row's handing, in English and by key. */
+const handingOf = (sentence: Said | null): { readonly handing: string | null; readonly handingSaid: Said | null } => ({ handing: sentence === null ? null : english(sentence), handingSaid: sentence })
 
 // ---------------------------------------------------------------------------------------------
 // CNT-4: the flat schedule and the mix by type, from the plan's flats list (lab EL-1, AR-7).

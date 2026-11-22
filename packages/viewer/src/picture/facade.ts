@@ -17,9 +17,12 @@ import { fitTo } from '../canvas2d/viewport'
 import type { LinePart, Look } from './look'
 import { TEXT_PX, lengthText, lineMetres } from './look'
 import type { Picture, PictureOptions } from './planSvg'
-import { DEFAULT_WIDTH, lookOf, pictureToSvg } from './planSvg'
+import { DEFAULT_WIDTH, displayOfPicture, lookOf, pictureToSvg } from './planSvg'
 import type { SvgNode } from './svgNode'
 import { el } from './svgNode'
+import type { Language } from '@ongrid/floorplan/messages'
+import { said } from '@ongrid/floorplan/messages'
+import { ENGLISH_WORDS, drawingText, wordsOf, type DrawingWords } from './words'
 
 export interface FacadePictureOptions {
   /** Which side of the drawing: north is the top of the drawing (+y), as `grid describe` says. */
@@ -32,14 +35,14 @@ export interface FacadePictureOptions {
   readonly look?: PictureOptions['look']
   /** N in 1:N, for a look whose lines are in millimetres on paper. The picture's own when left out. */
   readonly paperScale?: number
+  /** MSG-11: the language of its words; the plan's own display language when left out. */
+  readonly language?: Language
 }
 
 /** A facade laid out as a picture, with the facade it draws. */
 export interface FacadePicture extends Picture {
   readonly facade: Facade
 }
-
-const SIDE_NAMES: Readonly<Record<FacadeSide, string>> = { north: 'North', east: 'East', south: 'South', west: 'West' }
 
 /** The line part of a face's edges, by how far back it stands. */
 const TIER_PARTS: readonly LinePart[] = ['elevationNear', 'elevationBack', 'elevationFar']
@@ -76,26 +79,28 @@ function textNode(look: Look, x: number, y: number, unitsPerPixel: number, words
   ])
 }
 
-/** The way a facade is named under it: its side, and the way that side faces when the plan says. */
-export function facadeCaption(facade: Facade): string {
-  const side = `${SIDE_NAMES[facade.side]} facade, the ${facade.side} side of the drawing`
-  const compass = facade.compass === null ? '' : `, facing ${facade.compass.faces} by the plan's north`
-  const ground = facade.ground.stated ? '' : '; ground level not stated, drawn at the ground floor'
-  return `${side}${compass}${ground}`
+/** The way a facade is named under it: its side, and the way that side faces when the plan says (MSG-11: `drawing.facade.*`). */
+export function facadeCaption(facade: Facade, words: DrawingWords = ENGLISH_WORDS): string {
+  return drawingText(words, 'drawing.facade.caption', {
+    facade: said(`drawing.facade.name.${facade.side}`),
+    side: said(`drawing.facade.side.${facade.side}`),
+    compass: facade.compass === null ? '' : said('drawing.facade.compass', { faces: said(`describe.way.${facade.compass.faces}`) }),
+    ground: facade.ground.stated ? '' : said('drawing.facade.noGround')
+  })
 }
 
 /**
  * The elements of a facade, in plan screen terms: `x` is `u`, across the facade, and `y` is minus
  * the height, as SVG runs down the page. Widths in metres from the look's lines at this zoom.
  */
-export function facadeScene(facade: Facade, look: Look, metresPerPixel: number, paperScale?: number): SvgNode[] {
+export function facadeScene(facade: Facade, look: Look, metresPerPixel: number, paperScale?: number, words: DrawingWords = ENGLISH_WORDS): SvgNode[] {
   const lines = lineMetres(look, metresPerPixel, paperScale)
   const width = (part: LinePart): string => lengthText(lines.width(part))
   const nodes: SvgNode[] = []
   const frame = framingOf(facade)
   const extent = facade.extent
   if (extent === null) {
-    nodes.push(textNode(look, frame.min.x + frame.width / 2, -(facade.ground.level + 1.5), metresPerPixel, `Nothing of the plan faces ${facade.side}.`, 'facade-empty', 'start'))
+    nodes.push(textNode(look, frame.min.x + frame.width / 2, -(facade.ground.level + 1.5), metresPerPixel, drawingText(words, 'drawing.facade.empty', { side: said(`drawing.facade.side.${facade.side}`) }), 'facade-empty', 'start'))
     return nodes
   }
 
@@ -188,7 +193,7 @@ export function facadeScene(facade: Facade, look: Look, metresPerPixel: number, 
     ])
   )
   nodes.push(el('g', { 'data-part': 'facade-levels' }, levels))
-  nodes.push(textNode(look, extent.u0 - run, -ground + metresPerPixel * 18, metresPerPixel, facadeCaption(facade), 'facade-caption'))
+  nodes.push(textNode(look, extent.u0 - run, -ground + metresPerPixel * 18, metresPerPixel, facadeCaption(facade, words), 'facade-caption'))
   return nodes
 }
 
@@ -209,10 +214,12 @@ export function facadePicture(plan: Parameters<typeof planFacade>[0], options: F
   if (options.paperScale !== undefined && !(Number.isFinite(options.paperScale) && options.paperScale > 0)) {
     throw new RangeError(`The paper scale is N in 1:N, a number above 0: got ${options.paperScale}`)
   }
-  const nodes = facadeScene(facade, look, view.width / width, options.paperScale)
+  const words: DrawingWords = wordsOf(displayOfPicture(plan, options.language === undefined ? {} : { language: options.language }))
+  const nodes = facadeScene(facade, look, view.width / width, options.paperScale, words)
   const floors = facade.levels.length
-  const title = `${SIDE_NAMES[facade.side]} facade of the plan, ${floors} floor${floors === 1 ? '' : 's'} at their levels`
-  return { width, height, view, look, rooms: 0, undecidedDoors: [], nodes, key: null, title, facade }
+  const title = drawingText(words, floors === 1 ? 'drawing.facade.title.one' : 'drawing.facade.title.many', { facade: said(`drawing.facade.name.${facade.side}`), count: floors })
+  const picture = { width, height, view, look, rooms: 0, undecidedDoors: [], nodes, key: null, title, facade }
+  return words.language === 'en' ? picture : { ...picture, language: words.language }
 }
 
 /** One facade of a plan as an SVG file, with the label (MSG-3). */

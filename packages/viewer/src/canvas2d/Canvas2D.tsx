@@ -43,6 +43,7 @@ import { progressOf, removalProgress } from '../preview/progress'
 import { pulseAt } from '../preview/pulse'
 import { CLICK_SLOP } from '../preview/click'
 import { useReducedMotion } from '../preview/useReducedMotion'
+import { drawingText, wordsOf } from '../picture/words'
 import './plan.css'
 
 /**
@@ -553,7 +554,7 @@ export function Canvas2D({
   const removedRooms = ghosts?.rooms.filter((room) => diffStatus?.[room.id] === 'removed') ?? []
 
   if (!view) {
-    return <svg ref={hostRef} className={CANVAS_CLASS} role="img" aria-label="Floor plan" />
+    return <svg ref={hostRef} className={CANVAS_CLASS} role="img" aria-label={drawingText(wordsOf(labels?.display), 'drawing.picture.empty')} />
   }
 
   // The viewBox is in meters, so a font-size in pixels would come out the size
@@ -610,7 +611,7 @@ export function Canvas2D({
       viewBox={viewBoxOf(view)}
       preserveAspectRatio="xMidYMid meet"
       role="img"
-      aria-label={`Floor plan with ${drawing.rooms.length} rooms`}
+      aria-label={drawingText(wordsOf(labels?.display), 'drawing.picture', { count: drawing.rooms.length })}
       tabIndex={0}
       data-panning={panning}
       // The reference image (a backdrop to trace over) is not part of this viewer yet.

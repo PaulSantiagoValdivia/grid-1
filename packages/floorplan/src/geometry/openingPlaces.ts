@@ -33,7 +33,9 @@ import { tolerance } from './tolerances'
 import { metresText } from './rounding'
 import { wallSides } from './exposure'
 import { boxIndex, boxOfPoints, widenBox } from './boxIndex'
-import { quoted } from '../types/planText'
+import type { Said } from '../messages/say'
+import { english, name, num, said } from '../messages/say'
+import { withSaid } from './issueWords'
 
 /** An `Issue`, plus the other things it names, so the result can list them. */
 export interface PlaceIssue extends Issue {
@@ -134,25 +136,17 @@ function clearRuns(length: number, covers: readonly { from: number; to: number }
 }
 
 /** What to say about where an opening of `width` fits on its wall, clear of `covers`. */
-function whereItFits(length: number, covers: readonly Cover[], width: number, middle: number): string {
+function whereItFits(length: number, covers: readonly Cover[], width: number, middle: number): Said {
   const fits = clearRuns(length, covers).filter((run) => run.to - run.from >= width)
-  if (fits.length === 0) return 'No stretch of the wall clear of the walls that meet it is that wide.'
+  if (fits.length === 0) return said('issue.opening/crosses-wall.noStretch')
   const best = fits.reduce((x, y) =>
     Math.abs((x.from + x.to) / 2 - middle) <= Math.abs((y.from + y.to) / 2 - middle) ? x : y
   )
-  return `An offset from ${metresText(best.from)} to ${metresText(best.to - width)} m keeps it clear.`
+  return said('issue.opening/crosses-wall.fits', { from: num(metresText(best.from)), to: num(metresText(best.to - width)) })
 }
 
-const WORD: Record<Opening['type'], string> = { door: 'Door', window: 'Window', opening: 'Opening' }
-
-const warning = (entity: Issue['entity'], id: string, code: string, message: string, hits: readonly string[]): PlaceIssue => ({
-  entity,
-  id,
-  code,
-  message,
-  severity: 'warning',
-  hits
-})
+const warning = (entity: Issue['entity'], id: string, code: string, sentence: Said, hits: readonly string[]): PlaceIssue =>
+  withSaid({ entity, id, code, message: english(sentence), severity: 'warning', hits }, sentence)
 
 /**
  * The checks on where each opening stands, for the walls and openings that are not broken.
@@ -177,7 +171,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
       const here = covers.get(wall.id) ?? []
       for (const opening of openingsOf(index, wall.id)) {
         if (broken.has(opening.id)) continue
-        const what = `${WORD[opening.type]} ${quoted(opening.id)}`
+        const what = said(`issue.part.Named.${opening.type}`, { id: name(opening.id) })
         const span = openingSpan(opening)
 
         if (wall.virtual && opening.type !== 'opening') {
@@ -186,8 +180,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
               'opening',
               opening.id,
               'opening/on-dividing-line',
-              `${what} is on dividing line ${quoted(wall.id)}, which has no wall to ${opening.type === 'door' ? 'hang it in' : 'set it in'}. ` +
-                `If the rooms are open to each other there, make it a doorless opening; otherwise put it on a wall.`,
+              said(opening.type === 'door' ? 'issue.opening/on-dividing-line.door' : 'issue.opening/on-dividing-line', { opening: what, line: name(wall.id) }),
               [wall.id]
             )
           )
@@ -199,7 +192,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
               'opening',
               opening.id,
               'opening/fills-wall',
-              `${what} is as long as wall ${quoted(wall.id)} (${metresText(axis.length)} m): nothing of the wall is left either side of it.`,
+              said('issue.opening/fills-wall', { opening: what, wall: name(wall.id), length: num(metresText(axis.length)) }),
               [wall.id]
             )
           )
@@ -217,8 +210,15 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
                 'wall',
                 cover.wall,
                 'wall/ends-in-opening',
-                `Wall ${quoted(cover.wall)} ends on wall ${quoted(wall.id)} inside ${what.toLowerCase()}, which runs from ` +
-                  `${metresText(span.from)} to ${metresText(span.to)} m along it. Move the wall or the ${opening.type} so they do not meet.`,
+                said('issue.wall/ends-in-opening', {
+                  wall: name(cover.wall),
+                  on: name(wall.id),
+                  // As the line has always written it: the opening's id in small letters.
+                  inside: said(`issue.part.inside.${opening.type}`, { id: name(opening.id.toLowerCase()) }),
+                  from: num(metresText(span.from)),
+                  to: num(metresText(span.to)),
+                  it: said(`issue.part.the.${opening.type}`)
+                }),
                 [opening.id, wall.id]
               )
             )
@@ -228,9 +228,13 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
                 'opening',
                 opening.id,
                 'opening/crosses-wall',
-                `${what} on wall ${quoted(wall.id)} runs ${metresText(into)} m into wall ${quoted(cover.wall)}, which meets it there: ` +
-                  `it is cut through its own wall only, so wall ${quoted(cover.wall)} stands across it. ` +
-                  whereItFits(axis.length, here, opening.width, (span.from + span.to) / 2),
+                said('issue.opening/crosses-wall', {
+                  opening: what,
+                  wall: name(wall.id),
+                  into: num(metresText(into)),
+                  other: name(cover.wall),
+                  fits: whereItFits(axis.length, here, opening.width, (span.from + span.to) / 2)
+                }),
                 [cover.wall, wall.id]
               )
             )
@@ -256,8 +260,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
                 'opening',
                 opening.id,
                 'opening/window-between-rooms',
-                `${what} in wall ${quoted(wall.id)} has rooms on both sides, ${quoted(a)} and ${quoted(b)}: ` +
-                  `it may be a borrowed light. If it is meant to look outside, the wall is not an outside wall.`,
+                said('issue.opening/window-between-rooms', { opening: what, wall: name(wall.id), a: name(a), b: name(b) }),
                 [wall.id, a, b]
               )
             )

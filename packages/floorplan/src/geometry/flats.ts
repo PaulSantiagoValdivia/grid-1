@@ -26,7 +26,8 @@ import type { Polygon } from 'polygon-clipping'
 import { tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 import type { Issue } from './validate'
-import { quoted, quotedList } from '../types/planText'
+import { english, joined, name, said, type Said } from '../messages/say'
+import { withSaid } from './issueWords'
 import { likelyId } from '../types/nearest'
 import { compareIds } from './order'
 
@@ -115,7 +116,8 @@ export function flatOfRoom(flats: readonly PlanFlat[]): ReadonlyMap<string, stri
   return new Map(flats.flatMap((flat) => flat.rooms.map((room) => [room.id, flat.id] as const)))
 }
 
-const flatIssue = (id: string, code: string, message: string): Issue => ({ entity: 'flat', id, code, message, severity: 'warning' })
+/** MSG-11: an issue says its sentence by key (`issue.flat/*`); its `message` is the English. */
+const flatIssue = (id: string, code: string, sentence: Said, entity: Issue['entity'] = 'flat'): Issue => withSaid({ entity, id, code, message: english(sentence), severity: 'warning' }, sentence)
 
 /**
  * What the drawing's check says about the flats list (CNT-4): a flat listed twice, a room it names
@@ -130,13 +132,13 @@ export function flatIssues(plan: FloorPlan, index: PlanIndex = indexPlan(plan)):
   const typeIds = new Set<string>()
   for (const type of plan.flatTypes ?? []) {
     if (typeIds.has(type.id)) {
-      issues.push({ entity: 'plan', id: type.id, code: 'flat/duplicate-type', message: `Flat type ${quoted(type.id)} is stated more than once; the first is read`, severity: 'warning' })
+      issues.push(flatIssue(type.id, 'flat/duplicate-type', said('issue.flat/duplicate-type', { type: name(type.id) }), 'plan'))
     }
     typeIds.add(type.id)
   }
   const flatIds = new Set<string>()
   for (const flat of plan.flats ?? []) {
-    if (flatIds.has(flat.id)) issues.push(flatIssue(flat.id, 'flat/duplicate-id', `Flat ${quoted(flat.id)} is listed more than once; the first is read and the others are left out`))
+    if (flatIds.has(flat.id)) issues.push(flatIssue(flat.id, 'flat/duplicate-id', said('issue.flat/duplicate-id', { flat: name(flat.id) })))
     flatIds.add(flat.id)
   }
   const roomIds = plan.rooms.map((room) => room.id)
@@ -144,26 +146,27 @@ export function flatIssues(plan: FloorPlan, index: PlanIndex = indexPlan(plan)):
   for (const flat of planFlats(plan)) {
     for (const id of flat.unknown) {
       const meant = likelyId(id, roomIds)
-      issues.push(flatIssue(flat.id, 'flat/unknown-room', `Flat ${quoted(flat.id)} names room ${quoted(id)}, which the plan does not have, so it is not counted in the flat${meant === null ? '' : `; ${quoted(meant)} is the room most likely meant`}`))
+      const values = { flat: name(flat.id), room: name(id) }
+      issues.push(flatIssue(flat.id, 'flat/unknown-room', meant === null ? said('issue.flat/unknown-room', values) : said('issue.flat/unknown-room.meant', { ...values, meant: name(meant) })))
     }
     for (const { room, flat: first } of flat.elsewhere) {
-      issues.push(flatIssue(flat.id, 'flat/room-in-two', `Flat ${quoted(flat.id)} names room ${quoted(room)}, which flat ${quoted(first)} names too, so it is counted in ${quoted(first)} only, the flat whose id comes first`))
+      issues.push(flatIssue(flat.id, 'flat/room-in-two', said('issue.flat/room-in-two', { flat: name(flat.id), room: name(room), first: name(first) })))
     }
     if (flat.type !== null && !flat.typeKnown) {
       const meant = likelyId(flat.type, [...typeIds])
-      issues.push(
-        flatIssue(
-          flat.id,
-          'flat/unknown-type',
-          `Flat ${quoted(flat.id)} is of type ${quoted(flat.type)}, which the plan's flat types do not state${typeIds.size === 0 ? ' (it states none)' : meant === null ? `: they are ${quotedList([...typeIds])}` : `; ${quoted(meant)} is the type most likely meant`}`
-        )
-      )
+      const more =
+        typeIds.size === 0
+          ? said('issue.part.flatTypes.none')
+          : meant === null
+            ? said('issue.part.flatTypes.list', { types: joined([...typeIds].map(name), 'join.comma') })
+            : said('issue.part.flatTypes.meant', { meant: name(meant) })
+      issues.push(flatIssue(flat.id, 'flat/unknown-type', said('issue.flat/unknown-type', { flat: name(flat.id), type: name(flat.type), more })))
     }
     const held = new Set(flat.rooms.map((room) => room.id))
     for (const { id } of flat.rooms) {
       const host = zones.zoneOf.get(id)
       if (host !== undefined && !held.has(host)) {
-        issues.push(flatIssue(flat.id, 'flat/zone-without-room', `Flat ${quoted(flat.id)} names ${quoted(id)}, a zone of room ${quoted(host)}, but not that room: a zone's floor is counted in its room, so it adds nothing to the flat`))
+        issues.push(flatIssue(flat.id, 'flat/zone-without-room', said('issue.flat/zone-without-room', { flat: name(flat.id), zone: name(id), room: name(host) })))
       }
     }
   }
