@@ -17,6 +17,11 @@ Notes for agents and people changing this repository.
   `src/geometry/__tests__/tolerances.test.ts` fails on a tolerance literal anywhere else in the
   geometry, validation or schema, and when the README's table no longer matches it. Its figures
   are Grid's own drawing checks and cite no document.
+- `packages/floorplan/src/geometry/areas.ts` (ARE-9): net, gross internal and gross external
+  area per floor and per use, from the spaces and the worked-out outside walls. Every figure
+  carries its rule from `MEASURES`, in Grid's own words; the README's "Measuring areas" table
+  must match it, and no measuring standard is named anywhere but in a figure record (a test
+  checks both). The CLI's `quantities/areas.ts` only adds room sizes and circulation.
 - `packages/floorplan/src/rooms/` (WRT-2): writing a plan rooms first and reading any plan back
   as rooms text. `compile.ts` works out the walls, their kinds, the room boundaries and the
   openings' places from rooms text (the language is in its header); `read.ts` reads a plan back

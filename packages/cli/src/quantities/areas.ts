@@ -1,28 +1,25 @@
 /**
- * Floor areas with the rule each one is measured by, said in the answer.
+ * Floor areas with the rule each one follows, said in the answer (ARE-9).
  *
- * - Net: each room between its wall faces, as Grid measures it everywhere (`roomArea`).
- * - Gross internal: the floor inside the inner face of the walls marked `exterior`, inner
- *   walls and partitions included, worked out by `floorSpaces` from those walls alone.
- * - Gross external: the floor inside the outer face of the walls marked `exterior`.
- * - Circulation: rooms whose `use` is corridor or stair, as a share of the gross internal area.
+ * The figures are the library's (`planAreaFigures`): net, gross internal and gross external,
+ * per floor and per use, each described in Grid's own words (`MEASURES`). This file adds what
+ * the measuring tools show beside them: each room's inside size, and circulation (rooms whose
+ * `use` is corridor or stair) as a share of the gross internal area.
  *
- * Rooms the caller names as outside (a balcony, a terrace) are listed apart and are not in
- * the net or the gross internal area.
+ * Rooms the caller names as outside (a balcony, a terrace) are listed apart and are not in the
+ * net or the gross internal area. Rooms Grid could not draw are named, and are in no figure.
  */
-import { planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { floorSpaces, spacesKnown } from '@ongrid/floorplan/geometry/spaces'
+import { MEASURES, type GrossMeasure, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
+import { planAreaFigures } from '@ongrid/floorplan/geometry/areas'
 import type { Survey } from './survey'
 
+/** What each measure measures, in one sentence each. */
 export const AREA_RULES = {
-  net: 'Net area is each room measured between the faces of its walls, as Grid measures it everywhere.',
-  grossInternal: 'Gross internal area is the floor inside the inner face of the walls marked exterior, inner walls and partitions included.',
-  grossExternal: 'Gross external area is the floor inside the outer face of the walls marked exterior.',
+  net: MEASURES.net.measures,
+  grossInternal: MEASURES.grossInternal.measures,
+  grossExternal: MEASURES.grossExternal.measures,
   circulation: 'Circulation is the rooms whose use is corridor or stair, as a share of the gross internal area.',
 } as const
-
-/** Why a plan has no gross areas, said wherever the figures would be. */
-export const GROSS_NOT_KNOWN = 'No gross areas: on some floor the walls marked exterior do not close a floor.'
 
 export interface RoomArea {
   readonly id: string
@@ -38,15 +35,20 @@ export interface RoomArea {
 export interface FloorAreas {
   readonly floor: string
   readonly rooms: readonly RoomArea[]
+  /** Rooms on this floor Grid could not draw: in no figure. */
+  readonly leftOut: readonly RoomLeftOut[]
   readonly net: number
   readonly byUse: Readonly<Record<string, number>>
   readonly circulation: number
-  /** Null when the walls marked exterior close no floor. */
+  /** Null when it cannot be worked out on this floor (`why`). */
   readonly grossInternal: number | null
   readonly grossExternal: number | null
   readonly outsideRooms: number
+  /** Every solid wall; null with the gross figures. */
+  readonly walls: number | null
   /** Enclosed floor that no room covers, on the whole floor. */
   readonly unclaimed: number
+  readonly why: string | null
 }
 
 export interface PlanAreas {
@@ -59,78 +61,81 @@ export interface PlanAreas {
   readonly circulationShare: number | null
   /** Net over gross internal, 0 to 1; null without a gross internal area. */
   readonly netToGross: number | null
+  readonly byUse: Readonly<Record<string, number>>
+  readonly leftOut: readonly RoomLeftOut[]
+  /** Which gross measure to give first, and why. */
+  readonly reader: ReaderMeasure
+  /** Why a gross figure is not known, in a sentence; null when both are. */
+  readonly grossWhy: string | null
+  /** The three measures, each with what it measures, does not take off and cannot say. */
+  readonly measures: readonly MeasureRule[]
   readonly rules: readonly string[]
   readonly notes: readonly string[]
 }
 
+export interface AreasRequest {
+  readonly outside?: ReadonlySet<string>
+  readonly floors?: readonly string[]
+  readonly country?: string
+  readonly gross?: GrossMeasure | 'both'
+}
+
 const CIRCULATION = new Set(['corridor', 'stair'])
-
-function gross(plan: FloorPlan, floor: string): { internal: number; external: number } | null {
-  const storey = planForFloor(plan, floor)
-  const outer = { ...storey, rooms: [], openings: [], walls: storey.walls.filter((w) => w.kind === 'exterior' && w.virtual !== true) }
-  if (outer.walls.length === 0) return null
-  const spaces = floorSpaces(outer, floor)
-  if (!spacesKnown(spaces) || spaces.floorArea < 0.01) return null
-  return { internal: spaces.floorArea, external: spaces.outlineArea }
-}
-
-function unclaimedOn(plan: FloorPlan, floor: string): number {
-  const spaces = floorSpaces(planForFloor(plan, floor), floor)
-  return spacesKnown(spaces) ? spaces.unclaimedArea : 0
-}
 
 const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0)
 
-export function planAreas(survey: Survey, outside: ReadonlySet<string> = new Set(), floors?: readonly string[]): PlanAreas {
-  const result: FloorAreas[] = []
-  const notes: string[] = []
-  for (const floor of survey.facts.floors) {
-    if (floors !== undefined && !floors.includes(floor.id)) continue
-    const rooms: RoomArea[] = floor.rooms.map((room) => ({
-      id: room.id,
-      name: room.name,
-      use: room.use ?? null,
-      floor: floor.id,
-      net: room.shape?.area ?? 0,
-      size: room.shape?.rectangle ? [room.shape.across, room.shape.up] : null,
-      outside: outside.has(room.id),
-    }))
-    const inside = rooms.filter((room) => !room.outside)
-    const byUse: Record<string, number> = {}
-    for (const room of inside) byUse[room.use ?? 'not said'] = (byUse[room.use ?? 'not said'] ?? 0) + room.net
-    const outsideRooms = sum(rooms.filter((room) => room.outside).map((room) => room.net))
-    const g = gross(survey.plan, floor.id)
-    result.push({
-      floor: floor.id,
-      rooms,
-      net: sum(inside.map((room) => room.net)),
-      byUse,
-      circulation: sum(inside.filter((room) => CIRCULATION.has(room.use ?? '')).map((room) => room.net)),
-      grossInternal: g === null ? null : Math.max(0, g.internal - outsideRooms),
-      grossExternal: g === null ? null : g.external,
-      outsideRooms,
-      unclaimed: unclaimedOn(survey.plan, floor.id),
-    })
-    if (floor.leftOut.length > 0) notes.push(`Floor ${JSON.stringify(floor.id)}: ${floor.leftOut.length} part(s) can't be measured and are left out; grid_check says why.`)
-  }
-  const net = sum(result.map((f) => f.net))
-  const known = result.every((f) => f.grossInternal !== null)
-  const grossInternal = known ? sum(result.map((f) => f.grossInternal!)) : null
-  const grossExternal = known ? sum(result.map((f) => f.grossExternal!)) : null
-  const circulation = sum(result.map((f) => f.circulation))
-  if (!known) notes.push(GROSS_NOT_KNOWN)
-  const unclaimed = sum(result.map((f) => f.unclaimed))
-  if (unclaimed >= 0.01) notes.push(`${unclaimed.toFixed(2)} m² of floor inside the walls belongs to no room; it is in the gross figures only.`)
-  if (result.some((f) => f.outsideRooms > 0)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure.')
+export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas {
+  const figures = planAreaFigures(survey.plan, {
+    ...(request.outside ? { outside: request.outside } : {}),
+    ...(request.floors ? { floors: request.floors } : {}),
+    ...(request.country ? { country: request.country } : {}),
+    ...(request.gross ? { gross: request.gross } : {}),
+  })
+  // Lab plans repeat room ids from floor to floor, so a room is found by its floor too.
+  const shapes = new Map(survey.rooms.map((room) => [`${room.facts.floor}\u0000${room.facts.id}`, room.facts.shape] as const))
+  const floors: FloorAreas[] = figures.floors.map((f) => ({
+    floor: f.floor,
+    rooms: f.rooms.map((room) => {
+      const shape = shapes.get(`${room.floor}\u0000${room.id}`)
+      return {
+        id: room.id,
+        name: room.name,
+        use: room.use,
+        floor: room.floor,
+        net: room.area,
+        size: shape?.rectangle ? [shape.across, shape.up] : null,
+        outside: room.outside,
+      }
+    }),
+    leftOut: f.leftOut,
+    net: f.net,
+    byUse: f.byUse,
+    circulation: sum(f.rooms.filter((room) => !room.outside && CIRCULATION.has(room.use ?? '')).map((room) => room.area)),
+    grossInternal: f.grossInternal,
+    grossExternal: f.grossExternal,
+    outsideRooms: f.outsideRooms,
+    walls: f.walls,
+    unclaimed: f.unclaimed ?? 0,
+    why: f.why,
+  }))
+  const grossInternal = figures.grossInternal.area
+  const circulation = sum(floors.map((f) => f.circulation))
+  const unknown = [figures.grossInternal, figures.grossExternal].filter((g) => g.area === null)
+  const grossWhy = unknown.length === 0 ? null : `No ${unknown.map((g) => g.rule.name.toLowerCase()).join(' or ')}: ${unknown[0]!.why}`
   return {
-    floors: result,
-    net,
+    floors,
+    net: figures.net.area ?? 0,
     grossInternal,
-    grossExternal,
+    grossExternal: figures.grossExternal.area,
     circulation,
     circulationShare: grossInternal ? circulation / grossInternal : null,
-    netToGross: grossInternal ? net / grossInternal : null,
+    netToGross: grossInternal ? (figures.net.area ?? 0) / grossInternal : null,
+    byUse: figures.byUse,
+    leftOut: figures.leftOut,
+    reader: figures.reader,
+    grossWhy,
+    measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal],
     rules: Object.values(AREA_RULES),
-    notes,
+    notes: [...(grossWhy ? [grossWhy] : []), ...figures.notes],
   }
 }

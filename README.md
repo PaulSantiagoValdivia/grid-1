@@ -116,7 +116,7 @@ the same facts as data; a view also returns its picture. Units are metres.
 | Tool | Answers |
 |---|---|
 | `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
-| `grid_areas` | Each room's size and net area, totals by use, gross areas, in metres or feet, as text or CSV, with the measuring rule stated |
+| `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks), in metres or feet, as text or CSV, each figure with its rule stated |
 | `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; text or CSV |
 | `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; and what is narrower than the person's own figure |
@@ -484,6 +484,31 @@ states no kind reads as. Where they disagree, one warning says so:
 
 In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
 worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.
+
+### Measuring areas
+
+Grid gives three areas, per floor and per use, from the spaces the walls enclose. Each is
+described in Grid's own words by what it measures, and no figure is said to follow a published
+standard: a standard's rule would come in only as a figure record, with its document, edition,
+clause, place, day read and status, and none is carried yet.
+
+| Measure | What it measures | Not taken off | What the plan cannot say |
+|---|---|---|---|
+| Net area | Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it. | Nothing inside a room is taken off: fixed units, a column drawn without walls and floor under a low ceiling all count. | The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside. |
+| Gross internal area | Gross internal area is the floor inside the inside face of the walls that face outside, with the inner walls and partitions counted. | Inner walls, partitions, stairs and floor no room claims are not taken off. | Which walls face outside is worked out from the rooms beside them; the plan cannot say whether floor no room claims, such as a courtyard or a light well, is covered, so it counts. |
+| Gross external area | Gross external area is the floor inside the outside face of the walls, every wall counted. | Outer walls, inner walls and floor no room claims are not taken off. | The plan cannot say which walls are shared with a neighbour, so a shared wall counts in full, and a wall standing apart counts too. |
+
+On every floor the gross external area is the net area, plus the rooms named outside, the walls
+and the floor no room claims, to a millionth of a square metre. Where rooms overlap, or run over
+walls or outside them, the answer says how much floor that is, and the sum takes it off. The
+gross internal area leaves out the walls that face outside, stretch by stretch, as Grid works
+them out from the rooms beside them, with the corners between them; a floor with no such wall
+has none. A room Grid could not draw is named and left out of every figure.
+
+Which gross area comes first follows the country the plan will be built in: the inside face of
+the outer walls in the UK and most of Europe, the outside face for homes in the US. With no
+country, or one Grid has no usual measure for, both are given; either or both can be asked for.
+In the library: `planAreaFigures(plan, options)`, `MEASURES` and `usualGross(country)`.
 
 ### Tolerances and limits
 

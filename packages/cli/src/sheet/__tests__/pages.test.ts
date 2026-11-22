@@ -8,7 +8,7 @@ import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkOnFloor, checkPlan, NOTHING_FOUND } from '../../command/check'
 import type { LoadedPlan } from '../../command/plan'
-import { GROSS_NOT_KNOWN, planAreas } from '../../quantities/areas'
+import { planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { buildFloorPlan, planForFloor } from '@ongrid/floorplan/geometry'
@@ -372,19 +372,27 @@ describe('small things a sheet says (VEW-7)', () => {
   })
 
   it('shows a gross area it cannot work out as not known, with the reason', () => {
+    // ARE-9: which walls face outside is worked out from the rooms beside them (MSG-13), so a
+    // plan whose walls all say interior still has both gross areas. With no rooms, no wall faces
+    // outside, and the inside face of the outer walls is not known.
     const plan = structuredClone(house.plan)
+    plan.rooms = []
     for (const wall of plan.walls) wall.kind = 'interior'
     const { issues, broken } = validatePlan(plan)
     const open: LoadedPlan = { file: 'open', plan, issues, broken }
-    expect(planAreas(surveyPlan(plan)).grossInternal).toBeNull()
+    const areas = planAreas(surveyPlan(plan))
+    expect(areas.grossInternal).toBeNull()
+    expect(areas.grossExternal).not.toBeNull()
+    expect(areas.grossWhy).toMatch(/^No gross internal area: Floor .*no wall on this floor faces outside/)
     const client = sheetPages(open, null, 'client', { name: 'x', date }).pages[0]!
     expect(client.figures.find((f) => f.label === 'gross internal area')!.value).toBe('not known')
-    expect(client.notes).toContain(GROSS_NOT_KNOWN)
+    expect(client.notes).toContain(areas.grossWhy)
     const summary = sheetPages(open, null, 'check', { name: 'x', date }).pages[0]!
     expect(summary.figures.find((f) => f.label === 'gross internal area')!.value).toBe('not known')
-    expect(summary.figures.find((f) => f.label === 'gross external area')!.value).toBe('not known')
-    expect(summary.notes).toContain(GROSS_NOT_KNOWN)
-    expect(sheetPages(house, null, 'check', { name: 'x', date }).pages[0]!.notes).not.toContain(GROSS_NOT_KNOWN)
+    expect(summary.figures.find((f) => f.label === 'gross external area')!.value).not.toBe('not known')
+    expect(summary.notes).toContain(areas.grossWhy)
+    expect(planAreas(surveyPlan(house.plan)).grossWhy).toBeNull()
+    expect(sheetPages(house, null, 'check', { name: 'x', date }).pages[0]!.notes.some((n) => n.startsWith('No gross'))).toBe(false)
   })
 
   it('says a floor with no findings found nothing, even with notices, and so does the summary', () => {
