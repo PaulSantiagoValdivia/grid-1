@@ -37,6 +37,7 @@ import { FIGURE_LIMITS } from '../checks/catalogue'
 import { checkLocalRules, type CheckOptions } from '../checks/check'
 import type { FindingCode, NotChecked, RuleFinding, RulesReport } from '../checks/types'
 import { CODES, isLineCode, type CodeEntry, type Subject } from './catalogue'
+import { FIRM_MEASURES, firmShort, firmUsed, type FirmInput } from './firm'
 import { LINE_KINDS, RESULT_VERSION, type Cause, type GridResult, type HeldNote, type LineKind, type ResultLine, type Thing, type ThingKind } from './types'
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
@@ -74,7 +75,7 @@ function errorText(error: unknown): string {
 }
 
 /** One line from its code and what the code is told. */
-function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures' | 'fixes' | 'each' | 'held'>> = {}): ResultLine {
+function line(code: string, kind: LineKind, thing: Thing, floor: string | null, subject: Subject, extra: Partial<Pick<ResultLine, 'figures' | 'fixes' | 'each' | 'held' | 'firm'>> = {}): ResultLine {
   // A code missing from the catalogue still gives a line: the check's own words, and a test fails.
   const entry: CodeEntry | null = isLineCode(code) ? CODES[code] : null
   const found = entry?.found ? entry.found(subject) : subject.said
@@ -662,7 +663,7 @@ function causeId(l: ResultLine): Cause {
   return { code: l.code, id: l.thing.kind === 'plan' && l.code === 'plan/duplicate-id' ? l.also[0] ?? '' : l.thing.id }
 }
 
-function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null): GridResult {
+function record(lines: readonly ResultLine[], read: boolean, report: RulesReport | null, firm: FirmInput | null = null): GridResult {
   const sorted = filed(lines)
   const counts = Object.fromEntries(LINE_KINDS.map((kind) => [kind, sorted.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
   return {
@@ -680,7 +681,8 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
     figures: report?.figures ?? [],
     limits: report?.limits ?? [...PLAN_LIMITS, ...FIGURE_LIMITS],
     place: report?.place ?? null,
-    ...(report?.withoutPlace ? { withoutPlace: report.withoutPlace } : {})
+    ...(report?.withoutPlace ? { withoutPlace: report.withoutPlace } : {}),
+    ...(firm === null ? {} : { firm: firmUsed(firm) })
   }
 }
 
@@ -689,8 +691,44 @@ export function problemsIn(lines: readonly ResultLine[]): number {
   return lines.filter((l) => l.causedBy === undefined && l.kind !== 'not-checked').length
 }
 
+/**
+ * COD-8: the firm's own standards as lines: each part measured short of the firm's figure is a
+ * finding with its `firm/` code, after the code figures' findings, and a file that could not be
+ * read is one `firm/not-read` line. The firm's figures are not tied to a place, so they are set
+ * against the plan whatever place it states, or none.
+ */
+function firmLines(firm: FirmInput, names: Names): ResultLine[] {
+  if (firm.problem !== null) {
+    return [line('firm/not-read', 'not-checked', { kind: 'plan', id: '' }, null, { ...blank(quoted(firm.file)), said: firm.problem, floors: names.floors, firm: { value: 0, name: null, file: firm.file, measured: null, said: '' } })]
+  }
+  const out: ResultLine[] = []
+  for (const measured of firm.measured) {
+    const standard = firm.standards[measured.standard]
+    if (standard === undefined || !firmShort(measured, standard)) continue
+    const at = names.thingOf(measured.thing.kind, measured.thing.id)
+    const unit = FIRM_MEASURES[standard.measure].unit
+    out.push(
+      line(FIRM_MEASURES[standard.measure].code, 'finding', measured.thing, measured.floor ?? at.floor, {
+        ...blank(at.label),
+        name: at.name,
+        floorName: at.floor === null ? '' : names.floorName(at.floor),
+        also: [...measured.also],
+        floors: names.floors,
+        firm: { value: standard.value, name: standard.name, file: firm.file, measured: measured.measured, said: measured.said }
+      }, { firm: { standard: measured.standard, measure: standard.measure, value: standard.value, unit, name: standard.name, file: firm.file } })
+    )
+  }
+  return out
+}
+
+/** COD-8: the front door's options: the full check's, and the firm's own standards beside the plan, measured. */
+export interface InspectOptions extends CheckOptions {
+  readonly firm?: FirmInput
+}
+
 /** Every line about a plan that was read. */
-function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOptions): GridResult {
+function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: InspectOptions): GridResult {
+  const { firm, ...options } = inspectOptions
   // LVL-8: the checks read the plain openings a pattern expands into, so a window placed by a
   // pattern counts for escape like one placed by hand. The drawing check reads the plan as stated,
   // and says first what kept any pattern's openings from being placed (`validatePlan`).
@@ -731,6 +769,12 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     lines.push(...groupedFindings(report.findings, names, wayOutNotDrawn))
     lines.push(...report.notChecked.map((notice) => noticeLine(notice, names, country, wayOutNotDrawn)))
   })
+  // COD-8: the firm's own standards, after the code figures' findings, apart from them.
+  if (firm !== undefined) {
+    stage('firm standards', () => {
+      lines.push(...firmLines(firm, names))
+    })
+  }
   // SHT-7: what is written on the drawing. The sketch is drawn and never measured or checked,
   // and the record says so, floor by floor. A note in a room the plan lacks is not drawn.
   stage('writing', () => {
@@ -819,7 +863,7 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     if (stated !== undefined) CAUSE_LINES.set(units, stated)
     for (const l of lines) if (SIZED.has(l.code)) CAUSE_LINES.set(l, units)
   }
-  return record(lines, true, report)
+  return record(lines, true, report, firm ?? null)
 }
 
 /** WRT-6: a marked value as a line names it. */
@@ -831,7 +875,7 @@ const VALUE_WORDS: Readonly<Record<string, string>> = { floorOffset: 'floor offs
  * `raw` is the plan as parsed JSON, or its text. A plan the format refuses gives a record with
  * `read: false` whose lines say where and why; nothing else is checked then.
  */
-export function inspectPlan(raw: unknown, options: CheckOptions = {}): GridResult {
+export function inspectPlan(raw: unknown, options: InspectOptions = {}): GridResult {
   try {
     const read = readPlan(raw)
     if (read.plan === null) return record(read.lines, false, null)
