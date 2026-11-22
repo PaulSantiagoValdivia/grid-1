@@ -42,6 +42,7 @@ const FINDING_CODES: Record<FindingCode, string> = {
   no_route_to_exit: 'room/no-route-out',
   door_to_undrawn_space: 'opening/to-undrawn-space',
   door_to_outside_above_ground: 'opening/door-out-above-ground',
+  opening_too_small_to_pass: 'opening/too-small-to-pass',
   room_too_small: 'room/too-small',
   no_escape_opening: 'room/no-escape-opening',
   escape_window_too_small: 'room/escape-window-too-small',
@@ -242,7 +243,10 @@ function findingLine(finding: RuleFinding, names: Names, wayOutNotDrawn: Readonl
   const thing: Thing =
     finding.code === 'no_exit'
       ? { kind: 'floor', id: finding.floor }
-      : (finding.code === 'door_to_undrawn_space' || finding.code === 'door_to_outside_above_ground') && finding.openings[0] !== undefined
+      : (finding.code === 'door_to_undrawn_space' ||
+          finding.code === 'door_to_outside_above_ground' ||
+          finding.code === 'opening_too_small_to_pass') &&
+        finding.openings[0] !== undefined
       ? { kind: 'opening', id: finding.openings[0] }
       : { kind: 'room', id: finding.rooms[0] ?? '' }
   const room = finding.rooms[0]
