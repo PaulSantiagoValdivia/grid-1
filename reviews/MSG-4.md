@@ -81,7 +81,7 @@ look at (lab MS-1, AU3-3, W-5).
   kind says it now leads with these lines.
 - Scoreboard counts: none moved (`npm run scoreboard`: "Same as the stored figures"). Its runner reads plans with the schema and counts the drawing's issues, not the record (see the follow-ups); reading `Bedroom` as `bedroom` in the two lab plans that write it moved none.
 
-## Decisions for the owner
+## For the owner
 
 1. **`Bedroom` gives no line.** The card says both "a room use is accepted whatever its capitals"
    and "each of the 20 unknown uses gives a warning". I read `Bedroom` as a use Grid knows, so it
