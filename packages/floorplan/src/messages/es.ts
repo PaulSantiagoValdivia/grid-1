@@ -1830,6 +1830,7 @@ export const es: Messages = {
   'describe.count.zone.many': '{count} zonas',
   'describe.roomsAndZones': '{rooms} y {zones}',
   'describe.room.zoneOf': ' (una zona de {room})',
+  'describe.room.outdoor': ' (espacio exterior: {kind}, en ningún total)',
 
   // ── Tras fusionar main en 8b599e9: los patrones de huecos en el texto de estancias (LVL-8) ──
   'describe.rooms.patterns.one': 'El patrón de huecos del plano no es texto de estancias: grid write lo conserva como lo tiene el archivo, y sus huecos no se escriben aquí.',
@@ -1933,6 +1934,7 @@ export const es: Messages = {
   'sheet.rooms': 'Estancias / {unit}',
   'sheet.notMeasured': 'sin medir',
   'sheet.countedBelow': 'contada abajo',
+  'sheet.outdoor': '{area}, exterior',
   'sheet.netArea': 'Superficie útil',
   'sheet.notKnown': 'sin dato',
   'sheet.figure.clearHeight': 'altura libre',
@@ -2349,5 +2351,24 @@ export const es: Messages = {
   'describe.column.in': ', en {room}',
   'drawing.key.partition': 'Tabique',
   'drawing.key.material': 'Muro: {material}',
-  'drawing.key.finish': 'Suelo: {finish}'
+  'drawing.key.finish': 'Suelo: {finish}',
+
+  // --- Espacio exterior, cubierto o descubierto (CNT-7, C26)
+  'areas.measure.outdoor.measures': 'La superficie exterior es el suelo de cada local que el plano marca como espacio exterior, cubierto o descubierto, medido hasta las caras de sus muros y bordes como se mide un local.',
+  'areas.measure.outdoor.notTakenOff': 'No está en la superficie útil ni en la construida, interior o exterior, ni lo está un muro que solo limita espacio exterior, como una valla o un antepecho.',
+  'areas.measure.outdoor.cannotSay': 'El plano no puede decir qué parte de un espacio exterior cuenta una norma local, como parte de un balcón: Grid no cuenta nada de él salvo que quien lo pide indique esa regla y de dónde viene.',
+  'areas.note.outdoor': '{area} m² de espacio exterior se dan aparte: no están en la superficie útil ni en la construida, interior o exterior.',
+  'outdoor.kind.garden': 'jardín',
+  'outdoor.kind.courtyard': 'patio',
+  'outdoor.kind.terrace': 'terraza',
+  'outdoor.kind.balcony': 'balcón',
+  'outdoor.kind.light-well': 'patio de luces',
+  'outdoor.kind.porch': 'porche',
+  'outdoor.kind.carport': 'cochera',
+  'outdoor.kind.other': 'espacio exterior',
+  'outdoor.roofed': 'cubierto',
+  'outdoor.open': 'descubierto',
+  'areas.room.outdoor': ', {kind}, {roofed}: espacio exterior, aparte',
+  'areas.outdoor': 'Espacio exterior, aparte: {area} ({kinds}), {roofed} cubiertos y {open} descubiertos. {rule}',
+  'areas.outdoor.kind': '{kind} {area}'
 }

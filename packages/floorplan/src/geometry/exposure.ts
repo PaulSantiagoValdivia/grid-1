@@ -22,6 +22,11 @@
  * must not read every wall as an inside wall (MS-11). Where the stated kind and the worked-out
  * one disagree, `wallSides` says so, and validation prints one line.
  *
+ * CNT-7 (C26): a room marked as outdoor space is the outside to the building. A wall between a room
+ * and an outdoor space faces outside, and a wall with outdoor space beside it and no room (a fence,
+ * a parapet round a terrace) stands in the open and faces outside too. The stretches still name
+ * the outdoor spaces on their faces.
+ *
  * Every consumer reads this one answer: the 2D drawing and the 3D scene (`exposure`), the DXF
  * layers, the IFC `IsExternal` mark, the order a plan is built in, and the route and escape
  * checks (which also tell outside from enclosed floor no room claims, `rules/graph.ts`).
@@ -38,6 +43,7 @@ import type { Vec2 } from './vec2'
 import { dot, sub } from './vec2'
 import { wallFrameAt, wallLength, wallSegments } from './wall'
 import { curveFault } from './arc'
+import { outdoorIds } from './outdoor'
 
 /**
  * Whether the wall separates two rooms or faces the outside, as every view and export shows it.
@@ -269,7 +275,7 @@ const inBody = (p: Vec2, b: Body): boolean => {
 /** Whether a point lies in floor the walls enclose: a room, or a space no room claims. */
 type Enclosed = (p: Vec2) => boolean
 
-function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>, bodies: Buckets<Body>, enclosed: Enclosed): WallSides {
+function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>, bodies: Buckets<Body>, enclosed: Enclosed, outdoor: ReadonlySet<string>): WallSides {
   const detached: WallSides = { wall: wall.id, stated: wall.kind, stretches: [], worked: 'detached', exposure: wall.kind === 'exterior' ? 'exterior' : 'detached', differs: null }
   // A curve that cannot be built (CNT-18) has no length to work its sides out along.
   if (curveFault(wall) !== null) return detached
@@ -304,7 +310,11 @@ function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>,
       // not the outside (ARE-4). Asked only for a wall not stated exterior, which faces outside anyway.
       if (held === null && !blocked[k] && wall.kind !== 'exterior' && (left.length > 0 || right.length > 0)) blocked[k] = enclosed(probe)
     }
-    const worked = workedOf(left.length + (blocked[0] ? 1 : 0), right.length + (blocked[1] ? 1 : 0))
+    // CNT-7 (C26): an outdoor space beside a face is the outside to the building. A wall with
+    // outdoor space beside it and no room (a fence, a parapet) stands in the open: it faces outside.
+    const indoor = (side: readonly string[]): number => (outdoor.size === 0 ? side.length : side.filter((id) => !outdoor.has(id)).length)
+    const found = workedOf(indoor(left) + (blocked[0] ? 1 : 0), indoor(right) + (blocked[1] ? 1 : 0))
+    const worked = found === 'detached' && left.length + right.length > 0 ? 'exterior' : found
     // CNT-6 (C23): a room on one side and more of the building stated beyond the other.
     const one = worked === 'exterior' && separates(wall) ? 'separating' : worked
     raw.push({ from, to, left, right, worked: left.length + right.length === 0 ? 'detached' : one })
@@ -351,6 +361,7 @@ export function planWallSides(index: PlanIndex): ReadonlyMap<string, WallSides> 
   if (found === undefined) {
     found = new Map()
     const rooms = traceRooms(index)
+    const outdoor = outdoorIds(index.plan)
     const tracedById = new Map([...rooms.values()].flat().map((t) => [t.room.id, t] as const))
     const roomBuckets = new Map<string, Buckets<Traced>>()
     for (const [floor, list] of rooms) {
@@ -401,7 +412,7 @@ export function planWallSides(index: PlanIndex): ReadonlyMap<string, WallSides> 
         const t = tracedById.get(r.id)
         return t !== undefined && floorOf(r) === floor ? [t] : []
       })
-      found.set(wall.id, sidesOf(wall, listing, roomBuckets.get(floor) ?? new Buckets(), bodies.get(floor)!, enclosedOn(floor)))
+      found.set(wall.id, sidesOf(wall, listing, roomBuckets.get(floor) ?? new Buckets(), bodies.get(floor)!, enclosedOn(floor), outdoor))
     }
     if (stated) cache.set(index, found)
   }

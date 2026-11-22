@@ -39,7 +39,8 @@ import {
   type Vec2,
   type Wall,
 } from '@ongrid/floorplan/geometry'
-import { DEFAULT_FLOOR_ID, heightByDefault, WALL_DEFAULTS, type BuildingType, type RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_FLOOR_ID, heightByDefault, WALL_DEFAULTS, type BuildingType, type OutdoorKind, type RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { outdoorKind } from '@ongrid/floorplan/geometry/outdoor'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { openingSides, roomOutlines, sidesAt, type RoomOutline } from '@ongrid/floorplan/geometry/rules/graph'
 
@@ -75,6 +76,8 @@ export interface RoomFacts {
   readonly neighbours: readonly string[]
   /** CNT-8, only on a zone: the room it is part of. A zone is measured, and counted in no total. */
   readonly zoneOf?: string
+  /** CNT-7 (C26), only on an outdoor space: its kind. It is measured, and counted in no total. */
+  readonly outdoor?: OutdoorKind
 }
 
 /** How far an opening's edge is from the inside corner at one end of the room's side. */
@@ -494,6 +497,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
       shape: outline === undefined ? null : shapeOf(outline.polygon, roomArea(room, index), roomColumnArea(room, index)),
       neighbours: [...(next.get(room.id) ?? [])].sort(byText),
       ...(of === undefined ? {} : { zoneOf: of }),
+      ...(outdoorKind(room) === null ? {} : { outdoor: outdoorKind(room)! }),
     }
   })
 
@@ -548,7 +552,8 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     openSides,
     repeats: null,
     // A zone's floor is its room's (CNT-8): counted once.
-    area: rooms.reduce((sum, room) => sum + (room.zoneOf === undefined ? (room.shape?.area ?? 0) : 0), 0),
+    // CNT-7: an outdoor space is listed apart, in no total.
+    area: rooms.reduce((sum, room) => sum + (room.zoneOf === undefined && room.outdoor === undefined ? (room.shape?.area ?? 0) : 0), 0),
     wallHeight: usualHeight(plan, storey.walls),
     leftOut: [...leftOut.rooms, ...leftOut.openings].sort(byText),
     ...(storey.columns === undefined ? {} : { columns: columnFacts(storey, index) }),

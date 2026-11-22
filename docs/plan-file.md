@@ -716,6 +716,55 @@ so neighbours drawn for context add 0 m² (lab EL-17).
 All of these are optional and never defaulted, so a plan written before them reads exactly as
 before (version 1).
 
+## Outdoor space, roofed or open
+
+Read this when a plan draws a garden, a courtyard, a terrace, a balcony, a light well, a porch or
+a carport. A room may be marked as outdoor space (CNT-7, C26), so the drawing shows it and the
+figures leave it out.
+
+```json
+"rooms": [
+  { "id": "garden", "name": "Back garden", "boundary": ["back-line", "plot-e", "plot-n", "plot-w"], "outdoor": "garden" },
+  { "id": "porch", "name": "Porch", "boundary": ["ext-s", "por-e", "por-s", "por-w"], "outdoor": "porch" },
+  { "id": "terrace", "name": "Terrace", "boundary": ["ext-n", "ter-w", "ter-n", "ter-e"], "outdoor": "terrace", "roofed": true }
+]
+```
+
+| Field | What it states |
+|---|---|
+| a room's `outdoor` | That the room is outdoor space, and its kind: `garden`, `courtyard`, `terrace`, `balcony`, `light-well`, `porch`, `carport` or `other` (a driveway, a side passage). `true` is outdoor space of no named kind, read as `other` |
+| a room's `roofed` | Whether a roof covers it. Unstated, a porch and a carport are roofed and every other kind is open. Read only with `outdoor` |
+
+An outdoor space is drawn and measured as a room is, and to the building it is the outside:
+
+- **Areas.** It is in no net, gross internal or gross external area, no area by use and no flat's
+  area. It is listed apart, by kind and roofed or open ([areas.md](areas.md#outdoor-space)).
+- **Walls.** A wall between a room and an outdoor space faces outside ([inside and outside
+  walls](#inside-and-outside-walls)), and is external in the IFC. A wall that bounds outdoor space
+  and no room (a fence, a parapet round a terrace, a balcony's edge, the plot drawn as dividing
+  lines, a porch's or a carport's posts) is no part of the building: it is in no area and sets no
+  storey height, so a tall garden wall leaves the house at its own height.
+- **Checks.** It needs no door and no route of its own: a courtyard with no door, or a garden
+  fenced in, gets no note. A route may pass through it, so a door onto a terrace or a garden is a
+  way out when the space leads on to the outside, through an open edge or a door or gate in its
+  fence; a door onto a terrace closed all round is not, and the floor's way out is said missing as
+  before. A door onto a balcony above the ground is never a way out. No figure check reads an
+  outdoor space, whatever its `use` says, and a bedroom window onto one is a window to the open air.
+- **Slabs and roofs.** On the lowest level an outdoor space stands on the ground: the slab is the
+  building's alone. Above it (a balcony, a roof terrace) it stands on a slab, as the floor does. Only
+  a roofed one is roofed: the 3D view, the GLB, the OBJ and the IFC put a roof over a porch or a
+  carport and none over an open terrace, a garden or a courtyard (lab EL-18).
+- **Exports.** The IFC writes it as an external space (`EXTERNAL`, `IsExternal` true), and
+  `Grid_Space` holds its kind and whether it is roofed; its area there is outdoor area. In the GLB
+  its floor's node carries `extras.gridOutdoor` and `extras.gridRoofed`; in the OBJ a comment
+  `# grid-outdoor <kind> roofed=<true|false>` comes before its floor.
+- **Rooms text.** A room line may end `outdoor <kind>` and then `roofed` or `unroofed`
+  ([rooms-first.md](rooms-first.md)). A room marked `outdoor: true` has no words of its own there,
+  so its floor is read back raw.
+
+Both fields are optional and never defaulted, so a plan with no outdoor space reads, checks and
+exports exactly as before (version 1).
+
 ## Rooms with holes
 
 A ring gallery round a courtyard, or a car park round a core, is one room with a hole in it. Its

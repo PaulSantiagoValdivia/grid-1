@@ -25,6 +25,13 @@
  * share: the plan does not say where the flights are, so the whole stair room is open. A lift
  * shaft is open over the floor its rooms share.
  *
+ * Outdoor space (CNT-7, C26) is the outside to the building. The outline is the building's: the
+ * walls that bound outdoor space and no room are not in it, and an outdoor space inside the walls (a
+ * courtyard, a light well) is open in it. An outdoor space on the lowest level stands on the ground,
+ * so it has no slab; one above it (a balcony, a roof terrace) stands on a slab, as a floor does. Only
+ * an outdoor space marked roofed (`outdoorRoofed`) has a roof: a porch or a carport is roofed with
+ * the floor, an open terrace is not.
+ *
  * Every figure is worked out from the walls: the plan states no roof, no slab outline and no
  * opening, so each is Grid's reading, and the quantities say so (AC-6).
  *
@@ -49,6 +56,7 @@ import { roomFloorOffset } from './steps'
 import { brokenOnFloor } from './validate'
 import { tolerance } from './tolerances'
 import { roomZones } from './zones'
+import { buildingPlan, isOutdoor, outdoorRoofed } from './outdoor'
 import type { Vec2 } from './vec2'
 import type { RoofShape } from './plan'
 import { floorRoofShape, regionAtLeast, roofFacets, rooflightPlace, type RoofPlane, type RooflightPlace, type RoofShapeOverFloor } from './roofs'
@@ -230,11 +238,20 @@ export function planEnvelope(stated: FloorPlan, options: EnvelopeOptions = {}): 
   // CNT-8: a zone of a room, on its floor.
   const isZone = (floorId: string, room: string): boolean => roomZones(sliceOf(floorId).index).zoneOf.has(room)
   const outlines = new Map<string, ReturnType<typeof slabOutline>>()
+  // CNT-7 (C26): on a floor with outdoor space, what its roof covers, beside what its slab does.
+  const roofs = new Map<string, MultiPolygon>()
   const outlineOf = (id: string) => {
     let found = outlines.get(id)
     if (found === undefined) {
       const { slice, index, broken } = sliceOf(id)
-      found = openToTheSky(slabOutline(slice, id, broken), slice, index, broken)
+      const floor = floors.find((f) => f.id === id)
+      const base = floor !== undefined && levelOf(floor) === lowest && (floor.below === undefined || floor.below === 'ground')
+      const outdoor = outdoorOutlines(slice, id, index, broken, base)
+      if (outdoor === null) found = openToTheSky(slabOutline(slice, id, broken), slice, index, broken)
+      else {
+        found = outdoor.slab
+        if (outlineKnown(outdoor.slab)) roofs.set(id, outdoor.roof)
+      }
       outlines.set(id, found)
     }
     return found
@@ -279,7 +296,8 @@ export function planEnvelope(stated: FloorPlan, options: EnvelopeOptions = {}): 
       return { floor: floor.id, outline: own.pieces, outlineArea: own.area, slab, roof: null, roofKnown: false, why: `the roof is not known: the outline of ${unknown.map((f) => JSON.stringify(f.name || f.id)).join(', ')} above it could not be worked out` }
     }
     const covers = aboveOutlines.flatMap((o) => (outlineKnown(o) ? o.pieces : []))
-    const pieces = covers.length === 0 ? own.pieces : cutOutline('difference', own.pieces, [covers])
+    const roofed = roofs.get(floor.id) ?? own.pieces
+    const pieces = covers.length === 0 ? roofed : cutOutline('difference', roofed, [covers])
     if (pieces === null) {
       return { floor: floor.id, outline: own.pieces, outlineArea: own.area, slab, roof: null, roofKnown: false, why: 'the floors above could not be cut from its outline' }
     }
@@ -352,6 +370,36 @@ function roofPieces(shape: RoofShapeOverFloor | null, pieces: MultiPolygon, clea
     return [{ plane: facet.plane, pieces: under, area, slopeArea: area * Math.sqrt(1 + rise * rise) }]
   })
   return { facets, rooflights }
+}
+
+/**
+ * CNT-7 (C26): a floor's outline on a plan with outdoor space on that floor: what its slab covers and
+ * what its roof covers. The building's outline (`buildingPlan`: no wall that bounds outdoor space
+ * alone, and any outdoor space inside the walls open in it) is in both. Every outdoor space is in
+ * the slab off the lowest level; on it, none is, as the ground is under it. Only the roofed ones are
+ * in the roof. Null on a floor with no outdoor space, which is read as before.
+ */
+function outdoorOutlines(
+  slice: FloorPlan,
+  id: string,
+  index: PlanIndex,
+  broken: ReadonlySet<string>,
+  base: boolean
+): { slab: FloorOutline | FloorOutlineUnknown; roof: MultiPolygon } | null {
+  const outdoor = slice.rooms.filter((room) => isOutdoor(room) && floorOf(room) === id && !broken.has(room.id))
+  if (outdoor.length === 0) return null
+  const building = buildingPlan(slice, index)
+  const buildingIndex = building === slice ? index : indexPlan(building)
+  const known = openToTheSky(slabOutline(building, id, broken), building, buildingIndex, broken)
+  if (!outlineKnown(known)) return { slab: known, roof: [] }
+  const shapes = outdoor.map((room) => ({ room, pieces: roomPieces(room, index) })).filter((s): s is { room: Room; pieces: MultiPolygon } => s.pieces !== null)
+  // An outdoor space inside the building's walls is open in its outline.
+  const inside = known.spaces.filter((space) => shapes.some((s) => s.pieces.some((polygon) => inRing(space.at, polygon[0]!) && !polygon.slice(1).some((hole) => inRing(space.at, hole))))).map((space) => space.pieces)
+  const own = inside.length === 0 ? known.pieces : cutOutline('difference', known.pieces, inside) ?? known.pieces
+  const join = (extra: readonly MultiPolygon[]): MultiPolygon => (extra.length === 0 ? own : cutOutline('union', own, extra) ?? own)
+  const slab = base ? own : join(shapes.map((s) => s.pieces))
+  const roof = join(shapes.filter((s) => outdoorRoofed(s.room) === true).map((s) => s.pieces))
+  return { slab: { ...known, pieces: slab, area: multiArea(slab) }, roof }
 }
 
 /** One floor's slab and roof, from the whole plan: `planEnvelope` for that floor alone. */

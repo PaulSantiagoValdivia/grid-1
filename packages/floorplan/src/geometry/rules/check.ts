@@ -20,6 +20,7 @@ import type { FloorGraph } from './graph'
 import { floorJoins } from '../floorJoins'
 import { flatOfRoom, planFlats } from '../flats'
 import { indexPlan } from '../plan'
+import { isOutdoor } from '../outdoor'
 import type { Vec2 } from '../vec2'
 import { english, name, said, withSentence, type MessageKey } from '../../messages/say'
 import { messages, saids, shiftedBoxSaid, shiftedHowSaid, shiftWays } from './messages'
@@ -95,7 +96,7 @@ function floorFindings(
   joined: ReadonlySet<string>,
   roomName: (id: string) => string,
   loneRoomReached: boolean,
-  /** Rooms marked as a void (LVL-4): no room to stand in, so they need no door and no route. */
+  /** Rooms marked as a void (LVL-4): no room to stand in, so they need no door and no route; and outdoor spaces (CNT-7). */
   voids: ReadonlySet<string>,
   /** The floor's openings, by id: a way through that is none of them is an open side (CNT-6). */
   openings: ReadonlySet<string>
@@ -446,7 +447,9 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
   const doorless = new Set<string>()
   for (const floor of floors) {
     const checked = checkedGroups.has(find(floor.id))
-    const voids = new Set(planForFloor(plan, floor.id).rooms.filter((room) => room.void === true).map((room) => room.id))
+    // CNT-7 (C26): an outdoor space is the outside to the building: it needs no door and no route
+    // of its own, as a void needs none, though a route may pass through it.
+    const voids = new Set(planForFloor(plan, floor.id).rooms.filter((room) => room.void === true || isOutdoor(room)).map((room) => room.id))
     const own = floorFindings(routes.get(floor.id)!, joined, roomName, !checked, voids, openingIds)
     findings.push(...own.findings)
     for (const room of own.doorless) doorless.add(at(floor.id, room))

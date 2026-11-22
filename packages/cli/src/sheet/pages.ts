@@ -280,7 +280,8 @@ function areaTable(floor: FloorAreas, withUse: boolean, units: SheetUnits, w: Wo
   // up to the net. The plan draws each zone with its name and area.
   const places = floor.rooms.filter((r) => r.zoneOf === undefined)
   // SHT-11: a stair room over the stair below is counted there, so it is in no part of the sum.
-  const counted = places.filter((r) => r.countedWith === undefined)
+  // CNT-7: an outdoor space is listed with its area, apart from the sum.
+  const counted = places.filter((r) => r.countedWith === undefined && r.outdoor === undefined)
   const shown = units.sum(counted.map((r) => r.net ?? 0), floor.net)
   const parts = new Map(counted.map((room, i) => [room, shown.parts[i]!] as const))
   return {
@@ -291,7 +292,7 @@ function areaTable(floor: FloorAreas, withUse: boolean, units: SheetUnits, w: Wo
       return {
         name: room.name,
         detail: withUse && room.use !== null ? w.use(room.use) : null,
-        area: room.net === null ? w.say('sheet.notMeasured') : part === undefined ? w.say('sheet.countedBelow') : part,
+        area: room.net === null ? w.say('sheet.notMeasured') : room.outdoor !== undefined ? w.say('sheet.outdoor', { area: units.area(room.net) }) : part === undefined ? w.say('sheet.countedBelow') : part,
       }
     }),
     total: { name: w.say('sheet.netArea'), detail: null, area: shown.total },
