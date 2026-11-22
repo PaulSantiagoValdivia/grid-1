@@ -155,7 +155,7 @@ added here):
 The first run had 9 exports that threw: the lab's large grids (500 to 5,000 pieces, 30 × 30)
 overflowed the stack where a section's lines were pushed as arguments. Fixed (one at a time), and
 the second run is the table. ezdxf, the lab's third reader, is not installed on this machine, and
-no file was opened in AutoCAD, BricsCAD or LibreCAD.
+no file was opened in AutoCAD, BricsCAD or LibreCAD. The run was repeated after merging main, with the same result.
 
 ## Goldens
 
@@ -264,4 +264,26 @@ profile naming each part with nothing written, not JSON, two pens on one layer, 
 
 ## Checks run
 
-(filled in below)
+On `claude/hnd-1` from `main` at 5039f12, on a heavily loaded machine, then after merging `main`
+at d058d4d (BRF-1, CNT-8, VEW-3, LVL-6 and the rest):
+
+- `npm run build`: passed. `packages/cli/dist/grid.mjs` 466,102 bytes before the merge (main at
+  5039f12 was 462,477); 520,831 bytes after it, under the bundle test's cap, which main raised to
+  550 kB with VEW-3 (main alone about 512 kB). No new dependency.
+- `npm run typecheck`, `npm run lint`: passed, before and after the merge.
+- `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
+- Full suite before the merge, `timeout 1500 npx vitest run --exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`: 284 files, 5,205 tests: 5,199 passed, 4 skipped, 2 failed, both
+  in `scoreboard/__tests__/causes.test.ts` (W-7 and MS-14). They failed again alone, read no
+  export, and are the two tests main fixed in 7b90435 ("MSG-5's cause tests state a place, as
+  COD-3 now needs"); after the merge they pass.
+- `npm run scoreboard` before the merge: the same as the stored figures (rooms measured wrong
+  197, damage that passes in silence 278, turns 18, mistakes 5, checks 15, guards 735 and 95).
+  Nothing stored.
+- After the merge, the affected tests (the DXF, export, profile, tool, zone-facts, writing,
+  occupancy, safety, file-access, `grid.e2e`, `paths.e2e`, `everyPath.e2e`, `causes` and QAR-5's
+  `fileOrder` tests): 37 files, 829 tests, all passed.
+- `npm run scoreboard` after the merge: the same as the stored figures (197, 278, 18, 5, 16 with
+  main's BRF-1, 735, 95). Nothing stored: the DXF's new bytes move no count.
+- The lab DXF run (above) was repeated after the merge: the same 1,573 files, 0 with an error.
+- No full suite was run after the merge; the affected tests above were.
