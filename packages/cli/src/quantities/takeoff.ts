@@ -21,7 +21,11 @@ import {
   planForFloor,
   roomCeiling,
   wallAxis,
+  faceUnderTop,
+  wallTopProfile,
   type FloorEnvelope,
+  type FloorPlan,
+  type RoofShape,
   type SlabOpeningKind,
   type Wall,
 } from '@ongrid/floorplan/geometry'
@@ -76,8 +80,19 @@ export interface EnvelopeLine {
   readonly outline: number | null
   /** The slab it stands on, as built: less its openings. Null when the floor has no outline. */
   readonly slab: { readonly kind: 'base' | 'floor'; readonly area: number; readonly thickness: number; readonly openings: readonly SlabOpeningLine[] } | null
-  /** The roof over every part of it with nothing above, flat, and its parapet's height. Null when it has none. */
-  readonly roof: { readonly area: number; readonly parapet: number | null } | null
+  /**
+   * The roof over every part of it with nothing above, and its parapet's height. Null when it has
+   * none. LVL-6: the shape the floor states (null: flat, as Grid lays it), its pitch in degrees, its
+   * area on the slope and how many rooflights it holds.
+   */
+  readonly roof: {
+    readonly area: number
+    readonly parapet: number | null
+    readonly shape: RoofShape | null
+    readonly pitch: number
+    readonly slopeArea: number
+    readonly rooflights: number
+  } | null
   /** Always: the plan states no slab and no roof, so Grid's are an assumption. */
   readonly state: 'assumed'
   /** What Grid assumed, in words. */
@@ -107,14 +122,28 @@ export interface Takeoff {
 const KINDS: readonly Wall['kind'][] = ['exterior', 'interior', 'partition']
 
 /** One room's take-off; `ceiling` gives its stated ceiling height and lowered zones (none stated when left out). */
-export function roomTakeoff(room: SurveyRoom, ceiling: (room: SurveyRoom) => Pick<RoomTakeoff, 'lowered'> & { readonly stated: number | null } = () => ({ stated: null, lowered: [] })): RoomTakeoff {
+export function roomTakeoff(
+  room: SurveyRoom,
+  ceiling: (room: SurveyRoom) => Pick<RoomTakeoff, 'lowered'> & { readonly stated: number | null } = () => ({ stated: null, lowered: [] }),
+  plan?: FloorPlan
+): RoomTakeoff {
   const perimeter = room.edges.reduce((sum, edge) => sum + edge.length, 0)
   let face = 0
   const heights: number[] = []
   for (const edge of room.edges) {
     if (edge.wall === null || edge.wall.virtual === true) continue
-    face += edge.length * edge.wall.height
-    heights.push(edge.wall.height)
+    // LVL-6: a wall the floor's roof cuts has its face under the top the roof leaves it.
+    const top = plan === undefined ? null : wallTopProfile(plan, edge.wall)
+    if (top === null) {
+      face += edge.length * edge.wall.height
+      heights.push(edge.wall.height)
+      continue
+    }
+    const axis = wallAxis(edge.wall)
+    const along = (p: { x: number; y: number }): number => (p.x - axis.start.x) * axis.dir.x + (p.y - axis.start.y) * axis.dir.y
+    const under = faceUnderTop(top, along(edge.from), along(edge.to))
+    face += under
+    heights.push(edge.length > 0 ? under / edge.length : edge.wall.height)
   }
   // Openings in this room's sides: in a dividing line there is nothing to take off.
   let openingsOff = 0
@@ -155,7 +184,9 @@ function assumptions(env: FloorEnvelope, thicknessStated: boolean): string[] {
     if (!thicknessStated) out.push(`the slab is ${SLAB_THICKNESS.toFixed(2)} m thick: the floor states no slab thickness`)
     if (env.slab.openings.some((o) => o.kind === 'stair-room')) out.push('the opening over a stair room is the floor it shares with the stair room below: the plan states no stair there')
   }
-  if (env.roof !== null) out.push('the roof is flat, over every part with nothing above, with no overhang and no fall: the plan states no roof')
+  if (env.roof !== null && env.roof.shape === null) out.push('the roof is flat, over every part with nothing above, with no overhang and no fall: the plan states no roof')
+  // LVL-6: the floor states its roof's shape and slope, but not where it ends or what it is made of.
+  if (env.roof !== null && env.roof.shape !== null) out.push(`the roof is the ${env.roof.shape} roof the floor states, over every part with nothing above, with no overhang: the plan states its shape and slope, not its build-up`)
   return out
 }
 
@@ -172,7 +203,10 @@ export function envelopeTakeoff(survey: Survey, floors?: readonly string[]): Env
       env.slab === null
         ? null
         : { kind: env.slab.kind, area: env.slab.area, thickness: env.slab.thickness, openings: env.slab.openings.map((o) => ({ kind: o.kind, via: o.via, area: o.area })) },
-    roof: env.roof === null ? null : { area: env.roof.area, parapet: env.roof.parapet?.height ?? null },
+    roof:
+      env.roof === null
+        ? null
+        : { area: env.roof.area, parapet: env.roof.parapet?.height ?? null, shape: env.roof.shape, pitch: env.roof.pitch, slopeArea: env.roof.slopeArea, rooflights: env.roof.rooflights.length },
     state: 'assumed',
     assumed: assumptions(env, stated.get(env.floor) ?? false),
     why: env.why,
@@ -215,7 +249,7 @@ export function planTakeoff(survey: Survey, floors?: readonly string[], rooms?: 
   const ceilingOf = ceilings(survey)
   const list = survey.rooms
     .filter((room) => onFloor(room.facts.floor) && (rooms === undefined ? room.facts.zoneOf === undefined : rooms.includes(room.facts.id)))
-    .map((room) => roomTakeoff(room, ceilingOf))
+    .map((room) => roomTakeoff(room, ceilingOf, survey.plan))
   const total = (key: 'floorArea' | 'ceiling' | 'skirting' | 'wallFace'): number => list.reduce((sum, room) => sum + room[key], 0)
   return {
     walls: runs,

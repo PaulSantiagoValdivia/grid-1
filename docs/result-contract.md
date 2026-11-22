@@ -220,6 +220,7 @@ label.
 | `opening/degenerate` | {thing} has no size | a width and a height above 0 |
 | `opening/out-of-wall` | {thing} runs off its wall | its offset and width within the wall's length |
 | `opening/too-tall` | {thing} reaches above the top of its wall | its sill and height together no higher than the wall |
+| `opening/above-roof` | {thing} reaches above the roof over its wall | its sill and height together no higher than the roof over that stretch of its wall |
 | `opening/negative-sill` | {thing} has its sill below the floor | a sill at 0 or above |
 | `opening/overlap` | {thing} overlaps another opening on its wall | openings on one wall that share no part of it |
 | `opening/size-question` | {thing} has a size that may not be meant | the size of a door or window in a building |
@@ -270,6 +271,8 @@ label.
 | `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
+| `floor/rooflight-misplaced` | {thing} has a rooflight that does not lie on one slope of its roof | a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips |
+| `floor/dormers-not-drawn` | {thing} lists dormers, which are not supported yet | a roof Grid can draw: dormers are not supported yet |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
 | `floor/spaces-unknown` | The spaces the walls enclose on {thing} could not be worked out | walls Grid can join into spaces |
 | `floor/overlaps-unknown` | The rooms on {thing} were not all compared to see whether they overlap | fewer pairs of rooms lying over each other |
@@ -579,6 +582,29 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: sloped ceilings and roofs (LVL-6)
+
+- A floor may state its `roof` (flat, mono-pitch, gable or hip, with `eaves` and a `pitch` or a
+  `ridge`). Its walls are cut to it, so a wall's top may slope: the new refusal
+  `opening/above-roof` names a door or window whose top lies above the roof over its stretch of
+  wall, with the height that fits at its sill as its fix (`height`), as `opening/too-tall` does.
+- New refusal `floor/rooflight-misplaced`: a rooflight (`floors[].roof.rooflights`) outside the roof
+  or across a ridge or a hip is left out. New warning `floor/dormers-not-drawn`: a roof that lists
+  `dormers` is drawn and measured without them; dormers are not supported yet.
+- `opening/missing-wall` on an opening whose wall names the roof, a room or a floor adds that a
+  window in the roof is a rooflight in its floor's roof, and that dormers are not supported yet.
+- `grid_areas` answers `headroom`: the floor by headroom band (at least `headroomLow`, 1.5 m, and
+  `headroomFull`, 2.2 m, Grid's own figures) over the floors that state their roof, else null;
+  such a floor's rooms carry `headroom` (`bands`, `lowest`, `highest`), and `measures` holds the
+  rule `headroom`.
+- `grid_takeoff`'s roof lines gain `shape` (null for the flat roof Grid lays on the walls), `pitch`,
+  `slopeArea` and `rooflights`; a room's `wallFace` is measured under the top the roof leaves each
+  wall. `grid_measure`'s room height under a stated roof comes `from: "roof"`, with `roof`
+  (`lowest`, `highest`).
+- The IFC writes a wall the roof cuts, and a space under the roof, as a clipped solid
+  (`Clipping`), and a sloped roof as an `IfcRoof` of its type over one clipped `ROOF` slab, with
+  each rooflight an `IfcOpeningElement` filled by an `IfcWindow`.
 
 ### 2026-11-22: the brief beside the plan, met or missed after every change (BRF-1)
 

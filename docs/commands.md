@@ -180,12 +180,18 @@ the file says that too.
   - doors and windows: width, height and area of the hole in the wall; a doorless opening the
     same, with its depth; an opening in a slab its depth and area;
   - ceilings (`Qto_CoveringBaseQuantities`): their area; parapets: height, footprint and volume.
+  - under a roof the floor states (LVL-6), each is measured as written, cut to the roof: a wall's
+    and a space's height is its highest point, and their side area and volume are under the
+    slope; a sloped roof slab's area is on the slope, its thickness measured upright, and with
+    rooflights its net area and volume are the roof less them.
 - **Slabs.** They are the ones the 3D view draws ([Slabs, roofs, ceilings and the
   ground](plan-file.md#slabs-roofs-ceilings-and-the-ground)): one per floor over its outline, a
   piece of its own under a room set above or below its storey, and a flat roof over every part
   with nothing above. The plan states no slab or roof outline, so each is Grid's and says so in
   `Grid_Slab`: `Assumed`, `ThicknessStated` (whether the floor states its slab's thickness) and
-  a `Note` on what Grid took.
+  a `Note` on what Grid took. A roof the floor states is still laid out by Grid (its outline, its eaves on the
+  outside walls' lines, its thickness), so it is `Assumed` too, and its `Note` says which parts
+  are the plan's.
 - **Walls** are typed by the kind the plan states and their thickness (`Exterior wall 0.3 m`),
   the same grouping the estimate prices (`wall:exterior:0.3` is the type's tag). Each type
   carries a one-layer material set, with one material per kind; its walls carry the set's

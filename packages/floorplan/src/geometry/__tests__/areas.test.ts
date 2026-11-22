@@ -2,7 +2,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parseFloorPlan, type FloorPlan } from '../../types/floorplan'
-import { MEASURES, planAreaFigures, usualGross, type FloorAreaFigures, type Measure } from '../areas'
+import { MEASURES, planAreaFigures, usualGross, type FloorAreaFigures } from '../areas'
 import { edit, madeVirtual, stairRoomHouse } from '../../test-support/plans'
 
 /**
@@ -97,7 +97,7 @@ describe('ARE-9 per-use and per-floor figures add up to the totals (AC-9)', () =
   it('adds the floors up to each total', () => {
     expect(areas.floors).toHaveLength(2)
     for (const [measure, pick] of [['net', (f: FloorAreaFigures) => f.net], ['grossInternal', (f: FloorAreaFigures) => f.grossInternal!], ['grossExternal', (f: FloorAreaFigures) => f.grossExternal!]] as const) {
-      expect(areas[measure as Measure].area).toBeCloseTo(areas.floors.reduce((s, f) => s + pick(f), 0), 9)
+      expect(areas[measure].area).toBeCloseTo(areas.floors.reduce((s, f) => s + pick(f), 0), 9)
     }
   })
 
@@ -166,7 +166,7 @@ describe('ARE-8 the measures table', () => {
     const section = readFileSync(join(ROOT, 'docs', 'areas.md'), 'utf8')
     const rows = section
       .split('\n')
-      .filter((line) => /^\| (Net|Gross)/.test(line))
+      .filter((line) => /^\| (Net|Gross|Area by headroom)/.test(line))
       .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()))
     expect(rows).toEqual(Object.values(MEASURES).map((m) => [m.name, m.measures, m.notTakenOff, m.cannotSay]))
   })

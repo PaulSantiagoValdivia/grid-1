@@ -92,6 +92,7 @@ import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
 import { factKey } from './facts'
 import { placeProblem } from './places'
+import { roofFrame, roofTop } from './roofFrame'
 
 export * from './planText'
 export * from './facts'
@@ -216,6 +217,65 @@ export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = {
   other: 'another kind of building',
 }
 
+/** The four sides of the drawing: north is +Y (C4). */
+export const COMPASS_SIDES = ['north', 'east', 'south', 'west'] as const
+
+/** LVL-6: the shapes a roof over a floor can take. */
+export const ROOF_SHAPES = ['flat', 'mono-pitch', 'gable', 'hip'] as const
+
+/** LVL-6: the two ways a gable's ridge can run, along the sides of the drawing (C4). */
+export const RIDGE_RUNS = ['east-west', 'north-south'] as const
+
+/**
+ * LVL-6: a window in the roof's slope. `at` is its middle on the plan (C4); `width` runs along the
+ * slope's eaves and `length` up the slope, both measured on the slope, as a rooflight's size is
+ * given. It lies in one plane of the roof, wholly inside the roof.
+ */
+export const RooflightSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  at: Vec2,
+  width: finite().positive(),
+  length: finite().positive(),
+})
+
+/**
+ * LVL-6: the roof over a floor, as planes its walls and rooms are cut to. Heights are metres
+ * above the floor's level, to the roof's underside (the ceiling under it), measured on the lines
+ * of the floor's outside walls: the roof's eaves lie along the sides of the smallest rectangle
+ * that holds those lines, turned to the floor's longest outside wall.
+ *
+ * - `flat`: the underside is level at `eaves`.
+ * - `mono-pitch`: one plane, from `eaves` on the side opposite `highSide`, rising to that side.
+ * - `gable`: two planes from `eaves` on the two sides along `ridgeRuns` (unstated, along the
+ *   rectangle's longer sides), meeting at the ridge over the middle.
+ * - `hip`: four planes from `eaves` on all four sides, at one pitch.
+ *
+ * A sloped roof states its `pitch` in degrees, or its `ridge`, the underside's height at the top
+ * (the high side of a mono-pitch roof), never both. `rooflights` are its windows. `dormers` are
+ * not drawn yet: a roof that lists any is drawn without them, and the check says so.
+ */
+export const RoofSchema = z
+  .object({
+    shape: z.enum(ROOF_SHAPES),
+    eaves: finite().positive(),
+    pitch: finite().gt(0).lt(90).optional(),
+    ridge: finite().positive().optional(),
+    ridgeRuns: z.enum(RIDGE_RUNS).optional(),
+    highSide: z.enum(COMPASS_SIDES).optional(),
+    rooflights: parts(RooflightSchema, 'rooflights in one roof').optional(),
+    dormers: z.array(z.unknown()).optional(),
+  })
+  .superRefine((roof, ctx) => {
+    const add = (path: string, message: string): void => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message })
+    const sloped = roof.shape !== 'flat'
+    if (!sloped && (roof.pitch !== undefined || roof.ridge !== undefined)) add(roof.pitch !== undefined ? 'pitch' : 'ridge', 'belongs to a sloped roof: a flat roof states only its eaves, the height of its underside')
+    if (sloped && (roof.pitch === undefined) === (roof.ridge === undefined)) add('pitch', 'needs the pitch in degrees or the ridge height in metres, one of the two: either gives the slope')
+    if (roof.ridge !== undefined && !(roof.ridge > roof.eaves)) add('ridge', 'must be higher than the eaves: the roof rises from its eaves to its ridge')
+    if (roof.ridgeRuns !== undefined && roof.shape !== 'gable') add('ridgeRuns', 'belongs to a gable roof: only a gable says which way its ridge runs')
+    if (roof.shape === 'mono-pitch' && roof.highSide === undefined) add('highSide', 'is needed on a mono-pitch roof: the side of the drawing it rises to, north, east, south or west')
+    if (roof.highSide !== undefined && roof.shape !== 'mono-pitch') add('highSide', 'belongs to a mono-pitch roof: only it has one high side')
+  })
+
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
   name: text('name').pipe(z.string().min(1)),
@@ -234,6 +294,10 @@ export const FloorSchema = z.object({
   // (every part of the floor with nothing above it). Optional and never defaulted: unstated, the
   // roof has no parapet (version 1).
   parapet: finite().positive().optional(),
+  // LVL-6: the roof over this floor (RoofSchema): flat, mono-pitch, gable or hip, which its walls
+  // and rooms are cut to. Optional and never defaulted: unstated, the roof is flat on the floor's
+  // walls, as LVL-4 made it (version 1).
+  roof: RoofSchema.optional(),
   // CNT-5: what kind of building this floor is, when it is not the plan's (`FloorPlan.building`):
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
@@ -613,9 +677,6 @@ export const RoomSchema = z.object({
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
 
-/** The four sides of the drawing: north is +Y (C4). */
-export const COMPASS_SIDES = ['north', 'east', 'south', 'west'] as const
-
 /** What an opening's anchor measures from: an end of its wall, or a side of the drawing. */
 export const ANCHOR_FROM = ['start', 'end', ...COMPASS_SIDES] as const
 
@@ -951,30 +1012,57 @@ export const MarkSchema = z
  * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
  * stated 2.7 can still be told from one that said nothing. A floor that states no height, or a
  * plan with no floor list, leaves every wall as it was.
+ *
+ * LVL-6: on a floor that states its `roof`, such a wall rises to the roof instead: it takes the
+ * roof's top (its ridge, or a flat roof's eaves), and the roof cuts it to its slope. A gable drawn
+ * with no height is then the gable's shape. Its height is recorded as not stated all the same.
  */
 function withFloorHeights(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
   const plan = raw as Record<string, unknown>
   if (!Array.isArray(plan.floors) || !Array.isArray(plan.walls)) return raw
   const heights = new Map<string, number>()
+  const roofs = new Map<string, Roof>()
+  const seen = new Set<string>()
   for (const floor of plan.floors as unknown[]) {
     if (typeof floor !== 'object' || floor === null) continue
-    const { id, height } = floor as Record<string, unknown>
+    const { id, height, roof } = floor as Record<string, unknown>
     // The first entry wins, as in `planFloors`; a height the schema refuses is left to refuse.
-    if (typeof id !== 'string' || heights.has(id)) continue
+    if (typeof id !== 'string' || seen.has(id)) continue
+    seen.add(id)
     if (typeof height === 'number' && Number.isFinite(height) && height > 0) heights.set(id, height)
+    if (roof !== undefined) {
+      const read = RoofSchema.safeParse(roof)
+      if (read.success) roofs.set(id, read.data)
+    }
   }
-  if (heights.size === 0) return raw
+  if (heights.size === 0 && roofs.size === 0) return raw
+  const floorOfRaw = (w: Record<string, unknown>): string => (typeof w.floor === 'string' ? w.floor : DEFAULT_FLOOR_ID)
+  const tops = new Map<string, number>()
+  for (const [id, roof] of roofs) {
+    const lines = (plan.walls as unknown[]).flatMap((wall) => {
+      if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return []
+      const w = wall as Record<string, unknown>
+      if (w.virtual === true || floorOfRaw(w) !== id || !isPair(w.start) || !isPair(w.end)) return []
+      return [{ start: w.start, end: w.end, outside: w.kind === 'exterior' }]
+    })
+    const outside = lines.filter((l) => l.outside)
+    const frame = roofFrame(outside.length > 0 ? outside : lines)
+    if (frame !== null) tops.set(id, roofTop(roof, frame))
+  }
   const walls = (plan.walls as unknown[]).map((wall) => {
     if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return wall
     const w = wall as Record<string, unknown>
     if (w.height !== undefined || w.virtual === true) return wall
-    const floor = typeof w.floor === 'string' ? w.floor : DEFAULT_FLOOR_ID
-    const height = heights.get(floor)
+    const floor = floorOfRaw(w)
+    const height = tops.get(floor) ?? heights.get(floor)
     return height === undefined ? wall : { ...w, height, [HEIGHT_FROM_FLOOR]: true }
   })
   return { ...plan, walls }
 }
+
+const isPair = (value: unknown): value is [number, number] =>
+  Array.isArray(value) && value.length === 2 && value.every((v) => typeof v === 'number' && Number.isFinite(v))
 
 /** The plan's fields, as an object. Read a plan with `FloorPlanSchema`, which also applies `withFloorHeights`. */
 export const FloorPlanFieldsSchema = z.object({
@@ -1056,6 +1144,9 @@ export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
 export type Stair = z.infer<typeof StairSchema>
 export type Ceiling = z.infer<typeof CeilingSchema>
+export type Roof = z.infer<typeof RoofSchema>
+export type Rooflight = z.infer<typeof RooflightSchema>
+export type RoofShape = (typeof ROOF_SHAPES)[number]
 export type LoweredZone = z.infer<typeof LoweredZoneSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
