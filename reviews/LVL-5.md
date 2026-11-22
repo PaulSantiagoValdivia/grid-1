@@ -12,7 +12,7 @@ room) and LVL-9 (sections).
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C15):
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C16):
    - a wall's `through`: the highest floor it rises through, the word rooms text already uses
      (WRT-4). It stands on its own floor and on every floor above it up to that one, by `level`.
      Its `height` is how high it stands above the `through` floor's level, as a wall of that floor
