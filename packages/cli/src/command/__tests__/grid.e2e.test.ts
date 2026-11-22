@@ -436,7 +436,10 @@ describe('grid serve', () => {
 })
 
 describe('speed', () => {
-  it('answers grid check on the sample flat in under half a second (median of 7)', () => {
+  // QAR-4: a new process starts about three times slower on a Windows runner, with its virus
+  // scanner, so the budget there is a second and a half.
+  const budget = process.platform === 'win32' ? 1500 : 500
+  it(`answers grid check on the sample flat in under ${budget} ms (median of 7)`, () => {
     const times: number[] = []
     for (let i = 0; i < 7; i++) {
       const start = performance.now()
@@ -444,7 +447,7 @@ describe('speed', () => {
       times.push(performance.now() - start)
     }
     times.sort((a, b) => a - b)
-    expect(times[3]).toBeLessThan(500)
+    expect(times[3]).toBeLessThan(budget)
   }, 30_000)
 })
 

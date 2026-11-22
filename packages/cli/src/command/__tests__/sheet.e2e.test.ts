@@ -53,7 +53,8 @@ describe('grid sheet (VEW-7)', () => {
     const run = grid(['sheet', 'two-floor-house.json', '--layout', 'client'])
     expect(run.err).toBe('')
     expect(run.status).toBe(0)
-    expect(run.out).toMatch(/Wrote exports\/two-floor-house-client\.pdf/)
+    // QAR-4: the command prints the path as the system writes it, `exports\…` on Windows.
+    expect(run.out).toContain(`Wrote ${join('exports', 'two-floor-house-client.pdf')}`)
     expect(readFileSync(join(dir, 'exports', 'two-floor-house-client.pdf')).subarray(0, 5).toString('latin1')).toBe('%PDF-')
   })
   it('writes a check sheet to --out', () => {

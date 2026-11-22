@@ -1,5 +1,10 @@
 name: CI
 
+# QAR-4: the gates every change passes before it lands, on every pull request and on every push
+# to main, on Linux and on Windows. A failing step is a red check on the pull request; making the
+# check required before merging is a branch protection setting of the repository (RELEASING.md,
+# "The checks on GitHub"). The run reads the repository and nothing else: no secret, no token
+# beyond reading, and no step writes anywhere but the runner.
 on:
   pull_request:
   push:
@@ -16,15 +21,22 @@ jobs:
   check:
     name: Typecheck, lint and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        # Windows is where the file-name rules of T-4 (CON, NUL, a name ending in a dot) and
+        # back-slash paths are real, not only text.
         os: [ubuntu-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # Actions are pinned to a commit, with the release it is in beside it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # .nvmrc holds 22: Node 22, as AGENTS.md says.
           node-version-file: .nvmrc
           cache: npm
 
@@ -39,6 +51,6 @@ jobs:
       # The lab data in scoreboard/ holds no machine paths and no personal data.
       - run: npm run check:data
       # The five counts of scoreboard/README.md. Fails when any count is worse than the
-      # figures stored in scoreboard/current.json. A full run takes seconds.
+      # figures stored in scoreboard/current.json.
       - run: npm run scoreboard
-        timeout-minutes: 10
+        timeout-minutes: 15

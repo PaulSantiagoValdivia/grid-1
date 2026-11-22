@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { GATES } from '../release/gates.mjs'
 import {
@@ -178,7 +178,8 @@ function packing(manifest: Record<string, unknown>) {
     writeFileSync(join(stage, 'package.json'), JSON.stringify(manifest))
     writeFileSync(join(stage, 'grid.mjs'), '')
     const file = join(folder, `ongrid-${String(manifest['version'])}.tgz`)
-    const tar = spawnSync('tar', ['-czf', file, '-C', join(folder, 'stage'), 'package'])
+    // Relative names, from the folder: GNU tar on Windows reads the `C:` of a path as a host (QAR-4).
+    const tar = spawnSync('tar', ['-czf', basename(file), '-C', 'stage', 'package'], { cwd: folder })
     expect(tar.status, tar.stderr?.toString()).toBe(0)
     rmSync(join(folder, 'stage'), { recursive: true, force: true })
     return file
