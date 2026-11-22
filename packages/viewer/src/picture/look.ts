@@ -93,6 +93,8 @@ export const LINE_PX = {
   jamb: 1,
   /** A step between rooms at different levels (LVL-7). */
   step: 1.5,
+  /** A fixture's symbol (CNT-12). */
+  fixture: 0.75,
   doorLeaf: 1.5,
   doorArc: 0.75,
   dimension: 1,
@@ -127,6 +129,7 @@ export type LinePart =
   | 'opening'
   | 'jamb'
   | 'step'
+  | 'fixture'
   | 'doorLeaf'
   | 'doorArc'
   | 'dimension'
@@ -195,6 +198,7 @@ const SCREEN_LINES: ScreenLines = {
     opening: LINE_PX.opening,
     jamb: LINE_PX.jamb,
     step: LINE_PX.step,
+    fixture: LINE_PX.fixture,
     doorLeaf: LINE_PX.doorLeaf,
     doorArc: LINE_PX.doorArc,
     dimension: LINE_PX.dimension,
@@ -226,6 +230,7 @@ const PAPER_LINES: PaperLines = {
     opening: 'fine',
     jamb: 'fine',
     step: 'medium',
+    fixture: 'finest',
     doorLeaf: 'medium',
     doorArc: 'finest',
     dimension: 'finest',

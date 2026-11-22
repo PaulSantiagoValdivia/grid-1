@@ -80,7 +80,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 ## The codes
 
 `{thing}` is the part as a line names it: `Wall "w1"`, `Door "d1"`, `Room "Kitchen"`, `Floor
-"Ground floor"` or `The plan`. Names in quotes are the plan's own text.
+"Ground floor"`, a fixture by its kind (`Toilet "wc1"`, CNT-12) or `The plan`. Names in quotes are the plan's own text.
 
 | Code | Wording | Needed |
 |---|---|---|
@@ -145,6 +145,14 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `room/wall-listed-twice` | {thing} lists a wall more than once | each wall once in its list |
 | `room/size-question` | {thing} has a size that may not be meant | the size of a room in a building |
 | `room/offset-question` | {thing} stands far above or below its storey's floor | a room's step within what a storey holds, or a floor of its own |
+| `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
+| `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
+| `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
+| `item/duplicate-id` | {thing} has an id another part of the plan has too | an id of its own on every item |
+| `item/unknown-floor` | {thing} is on a floor the plan does not have | a floor of the plan |
+| `item/outside-rooms` | {thing} stands in no room | its middle inside a room on its floor |
+| `item/into-wall` | {thing} runs into a wall | its footprint clear of the walls, against their faces at most |
+| `item/too-tall` | {thing} is taller than the room it stands in | a fixture no higher than its room |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
@@ -228,6 +236,16 @@ A change that would add a problem that leaves a part out is refused, and nothing
   what it falls short of, its size there as drawn and the passable size.
 - The limits line "Which way a door opens, and how wide doors and corridors are, are not
   checked" now ends ", beyond whether a person fits through a door at all".
+
+### 2026-11-22: fixtures (CNT-12)
+
+- A line can be about a fixture: `thing.kind` is `item`, its id the item's id, and `{thing}` its
+  kind and id (`Toilet "wc1"`). Version 1 still: a kind of thing was added, none changed.
+- New codes, all from the plan's `items`: `item/too-large`, `item/no-size`, `item/unknown-kind`,
+  `item/duplicate-id` and `item/unknown-floor` leave the fixture out; `item/outside-rooms`,
+  `item/into-wall` and `item/too-tall` are worth a look. A kind the plan does not hold yet (a
+  table, a chair) is `item/unknown-kind`: the fixture is left out and nothing else changes.
+- A refusal inside `items` names the item (`thing.kind` `item`) when its id can be read.
 
 ### 2026-11-21: version 1 (MSG-1)
 

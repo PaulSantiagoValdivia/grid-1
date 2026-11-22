@@ -202,7 +202,7 @@ describe('the catalogue', () => {
         if (entry === '__tests__' || entry === 'node_modules') continue
         if (statSync(path).isDirectory()) walk(path)
         else if (entry.endsWith('.ts')) {
-          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor)\/[a-z-]+)'/g)) found.add(match[1]!)
+          for (const match of readFileSync(path, 'utf8').matchAll(/'((?:plan|wall|room|opening|floor|item)\/[a-z-]+)'/g)) found.add(match[1]!)
         }
       }
     }

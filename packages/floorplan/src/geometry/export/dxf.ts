@@ -34,7 +34,10 @@ export const DXF_LAYERS = {
   labels: 'GRID-LABELS',
   // Last, so no existing layer moves. A door's leaf and arc get their own layer because
   // architects give swings a thinner pen than the walls.
-  doorSwings: 'GRID-DOOR-SWINGS'
+  doorSwings: 'GRID-DOOR-SWINGS',
+  // CNT-12: fixtures, on a layer of their own and never with the walls. Listed only in a drawing
+  // that has fixtures, so the file of a plan without any is as it was.
+  fixtures: 'GRID-FIXTURES'
 } as const
 
 export type DxfLayer = (typeof DXF_LAYERS)[keyof typeof DXF_LAYERS]
@@ -157,7 +160,8 @@ const LAYER_LINE_TYPE: Readonly<Record<DxfLayer, (typeof LINE_TYPES)[number]['na
   'GRID-ROOMS': 'CONTINUOUS',
   'GRID-OPENINGS': 'CONTINUOUS',
   'GRID-LABELS': 'CONTINUOUS',
-  'GRID-DOOR-SWINGS': 'CONTINUOUS'
+  'GRID-DOOR-SWINGS': 'CONTINUOUS',
+  'GRID-FIXTURES': 'CONTINUOUS'
 }
 
 function writeLineTypeTable(w: DxfWriter): void {
@@ -181,8 +185,8 @@ function writeLineTypeTable(w: DxfWriter): void {
   w.pair(0, 'ENDTAB')
 }
 
-function writeTables(w: DxfWriter): void {
-  const names = Object.values(DXF_LAYERS)
+function writeTables(w: DxfWriter, drawing: PlanDrawing): void {
+  const names = Object.values(DXF_LAYERS).filter((name) => name !== DXF_LAYERS.fixtures || drawing.items.length > 0)
 
   w.pair(0, 'SECTION')
   w.pair(2, 'TABLES')
@@ -336,6 +340,18 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing): void {
     writeArc(w, DXF_LAYERS.doorSwings, swing.arc)
   }
 
+  // CNT-12: each fixture's symbol as the 2D plan draws it, its rings closed and its lines open.
+  for (const item of drawing.items) {
+    for (const ring of item.rings) if (writablePoints(ring)) writePolygon(w, DXF_LAYERS.fixtures, ring)
+    for (const line of item.lines) {
+      for (let i = 1; i < line.length; i++) {
+        const from = line[i - 1]!
+        const to = line[i]!
+        if (writable(from.x, from.y, to.x, to.y)) writeLine(w, DXF_LAYERS.fixtures, from, to)
+      }
+    }
+  }
+
   w.pair(0, 'ENDSEC')
 }
 
@@ -350,7 +366,7 @@ export function toDxf(drawing: PlanDrawing): string {
   const w = new DxfWriter()
 
   writeHeader(w, drawing)
-  writeTables(w)
+  writeTables(w, drawing)
   writeEntities(w, drawing)
 
   w.pair(0, 'EOF')
