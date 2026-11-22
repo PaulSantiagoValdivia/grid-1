@@ -13,6 +13,7 @@
 
 import {
   floorOf,
+  itemName,
   itemNoun,
   planFacing,
   planFloors,
@@ -314,6 +315,8 @@ interface Names {
   floorName(id: string): string
   roomName(id: string): string
   thingOf(kind: ThingKind, id: string): { label: string; name: string; floor: string | null }
+  /** CNT-13: a fixture inside a sentence, `kitchen run "k1"` (`itemName`). */
+  itemName(id: string): string
 }
 
 function namesOf(plan: FloorPlan): Names {
@@ -335,6 +338,10 @@ function namesOf(plan: FloorPlan): Names {
     floors: floors.length,
     floorName,
     roomName,
+    itemName: (id) => {
+      const item = items.get(id)
+      return item ? itemName(item) : `item ${quoted(id)}`
+    },
     thingOf(kind, id) {
       switch (kind) {
         case 'plan':
@@ -391,6 +398,7 @@ function issueLine(issue: Issue & { readonly hits?: readonly string[] }, names: 
     said: oneLine(issue.message),
     also: [...also, ...(issue.hits ?? [])],
     floors: names.floors,
+    ...(issue.code === 'opening/door-hits-item' ? { items: (issue.hits ?? []).map(names.itemName) } : {}),
     ...(issue.fixes ? { fixes: issue.fixes } : {})
   }
   return line(issue.code, issue.severity === 'error' ? 'left-out' : 'worth-a-look', thing, at.floor, subject, issue.fixes ? { fixes: issue.fixes } : {})

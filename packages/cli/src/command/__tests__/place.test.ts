@@ -109,6 +109,38 @@ describe('the place the plan states', () => {
   })
 })
 
+describe('a place and a kind of building (COD-3 with CNT-5)', () => {
+  const office = (country?: string): string => JSON.stringify({ ...(JSON.parse(FLAT) as object), building: 'office', ...(country ? { site: { country } } : {}) })
+
+  it('the US stated and an office: no figure, and the place line and the lines say why, each its own reason', async () => {
+    writeFileSync(join(dir, 'office.json'), office('US'))
+    const run = await grid(['check', 'office.json'])
+    expect(run.out.split('\n')[1]).toBe('Place: United States, from the plan; no figure was applied: its figures were read for homes, and the plan says this is an office.')
+    expect(run.out).toContain('[plan/not-checked-sizes-for-building]')
+    expect(run.out).toContain('[plan/not-checked-escapes-for-building]')
+    expect(run.out).not.toMatch(/for-place\]|no place is stated/)
+    const json = JSON.parse((await grid(['check', 'office.json', '--json'])).out) as { result: { coverage: Array<{ ruleId: string; skipped: Array<{ reason: string }> }>; place: unknown } }
+    expect(json.result.place).toEqual({ country: 'US', name: 'United States', from: 'plan' })
+    for (const id of ['habitable-room-area', 'escape-opening']) expect(json.result.coverage.find((c) => c.ruleId === id)!.skipped.map((k) => k.reason)).toEqual(['not_for_building'])
+    expect(approvalWords(run.out)).toEqual([])
+  })
+
+  it('no place stated and an office: the place line says no place, the lines say the kind of building', async () => {
+    writeFileSync(join(dir, 'office.json'), office())
+    const run = await grid(['check', 'office.json'])
+    expect(run.out.split('\n')[1]).toMatch(/^No place is stated, so no figure was applied: /)
+    expect(run.out).toContain('[plan/not-checked-sizes-for-building]')
+    expect(run.out).toContain('[plan/not-checked-escapes-for-building]')
+  })
+
+  it('Spain stated and an office: the place line says Grid has no figures for Spain, and the lines say the kind of building', async () => {
+    writeFileSync(join(dir, 'office.json'), office('Spain'))
+    const run = await grid(['check', 'office.json'])
+    expect(run.out.split('\n')[1]).toBe('Place: Spain, from the plan; Grid carries no figures for it, so none was applied.')
+    expect(run.out).toContain('[plan/not-checked-sizes-for-building]')
+  })
+})
+
 describe('US, USA and United States (lab CH-3)', () => {
   it('in any case and trimmed, give the same report, naming the United States', async () => {
     const reports = await Promise.all(['US', 'usa', ' United States ', 'UNITED STATES', 'United States of America'].map((country) => grid(['check', 'loft.json', '--country', country])))

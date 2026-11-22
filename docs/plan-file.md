@@ -14,7 +14,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
-- [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`
+- [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
@@ -243,17 +243,22 @@ Grid works out the rise, the number of risers and their height, the going and th
 which room the stair leaves from and arrives in (`planStairs`). For the stair above: a 2.95 m
 rise in 14 risers of 0.211 m, treads of 0.215 m. `grid describe` says them. The 2D drawing
 shows the stair on both floors, with a line at every riser and its walking line ending in an
-arrow pointing up; 3D, the OBJ and glTF files and the IFC file (an `IfcStair` of
-`IfcStairFlight`s and landing slabs) draw a block per tread. The stair adds no floor of its own:
-its area is counted once, in the rooms it stands in. Nothing here judges a riser, a going or a
-width.
+arrow pointing up. On the floor it rises from, the plan is cut 1.2 m above the floor
+(`planCutHeight`): the stair is solid up to where its flight reaches that height, a break line
+crosses it there, and the rest is dashed; on the floor it arrives on it is drawn whole (SHT-11).
+3D, the OBJ and glTF files and the IFC file (an `IfcStair` of `IfcStairFlight`s and landing
+slabs) draw a block per tread. The stair adds no floor of its own: its area is counted once, in
+the rooms it stands in. Rooms used as a stair on floor after floor, one over the other, are
+counted once too, on the floor the stair rises from ([areas.md](areas.md)). Nothing here judges a
+riser, a going or a width.
 
 The way-out check follows routes up and down the stair, so an upper floor or a basement is
 checked through it down to a door. Rooms used as a stair on neighbouring floors that lie one over
 the other (sharing at least half of the smaller one) are taken as a stair too, as agents already
 draw them; where both floors have stair rooms and none lies over another, they are named as out
 of line (`stair_out_of_line`), and so are lift shafts (rooms used as a `lift`,
-`lift_out_of_line`). A lift is never taken as a way out. A floor no stair joins to the ground floor
+`lift_out_of_line`). A lift shaft is drawn with a cross in it, corner to corner, on every floor
+(SHT-11). A lift is never taken as a way out. A floor no stair joins to the ground floor
 is said not to be checked. A stair that cannot be laid out is said and left out
 (`stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`,
 `stair/too-few-risers`, `stair/duplicate-id`), and one whose end stands in no room joins nothing
@@ -347,7 +352,10 @@ it stands in is the one that holds its middle. The 2D drawing, the sheet and the
 `IfcFurnishingElement` on its storey. `grid_schedule` counts the fixtures by kind with their
 rooms, `grid_areas` gives each room with fixtures its free floor (its net area less the floor
 they stand on), `grid_measure` measures between fixtures and fits a box clear of them, and
-`grid check` names a fixture that runs into a wall or is taller than its room. This version holds
+`grid check` names a fixture that runs into a wall or is taller than its room. A fixture is an
+obstacle (CNT-13): a door whose leaf swings into it names it, and `grid_measure what=use` and
+`what=route` with a width measure the turning circle, the way through and the floor round each
+fixture clear of them ([use indicators](tool-server.md#use-indicators-will-it-fit-can-you-turn-is-the-window-blocked)). This version holds
 fixtures only: loose furniture, points (a hydrant, a camera) and seats come later, in the same
 shape. A kind it does not hold yet is left out with a note, and the rest of the plan is drawn.
 
@@ -359,6 +367,9 @@ shape. A kind it does not hold yet is left out with a note, and the rest of the 
 | `item/outside-rooms` | Its middle is in no room on its floor |
 | `item/into-wall` | It reaches more than 5 mm into a solid wall |
 | `item/too-tall` | It is higher than the room it stands in |
+| `opening/door-hits-item` | A door's leaf swings into the fixture: the line names it by its label, kind and id, `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens` |
+| `item/blocks-doorway` | It stands within 0.3 m (`useApproachDepth`) in front of a doorway's hole: the line says how much of the hole it covers and the clear width left, as an indicator |
+| `item/blocks-window` | It is higher than a window's sill and stands within 0.3 m in front of it: the line says how much of the window it covers, as an indicator |
 
 ## Writing on the drawing, and the sketch layer
 

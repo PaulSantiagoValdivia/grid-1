@@ -7,10 +7,13 @@
  * plan complies, passes or is approved: no findings only means these checks found nothing.
  */
 import { floorOf, type FloorPlan, type Issue } from '@ongrid/floorplan/geometry'
+import { BUILDING_TYPE_TEXT } from '@ongrid/floorplan/types/floorplan'
 import {
   buildingKindsText,
   checkLocalRules,
   FIGURE_CHECK_SUBJECTS,
+  FIGURE_RULES,
+  RULE_READ_FOR,
   noPlaceText,
   PlaceRefused,
   requestedPlace,
@@ -213,7 +216,7 @@ const COMMAND_PLACE: PlaceWords = { request: '--country', give: 'give --country'
  * Grid's list, where it came from and which figures were applied; or, with no place, that no
  * figure was applied and how many lines the US figures would have given.
  */
-export function placeText(report: Pick<RulesReport, 'place' | 'withoutPlace' | 'figures'>, words: PlaceWords = COMMAND_PLACE): string {
+export function placeText(report: Pick<RulesReport, 'place' | 'withoutPlace' | 'figures' | 'notChecked'>, words: PlaceWords = COMMAND_PLACE): string {
   const { place } = report
   if (place === null) {
     return `${noPlaceText(report.withoutPlace?.usLines ?? 0)}. State it in the plan as site.country, or ${words.give}.`
@@ -224,9 +227,21 @@ export function placeText(report: Pick<RulesReport, 'place' | 'withoutPlace' | '
   const applied = [...where.map((w) => `from ${w}`), ...(lookedUp ? ['looked up for it'] : [])]
   // COD-2: the kind of building the figures were read for, by its word alone: the notes that used one give it in full.
   const kinds = [...new Set(report.figures.map((figure) => figure.readFor))]
+  // CNT-5: the place has figures, and the kind of building the plan states is not one they were read for.
+  const notFor = report.notChecked.filter((n) => n.reason === 'not_for_building' && n.building !== undefined)
+  const readFor = [...new Set(FIGURE_RULES.flatMap((rule) => RULE_READ_FOR[rule.id]))].join(' and ')
+  const building = notFor.length === 0
+    ? null
+    : notFor.some((n) => n.floor === '')
+      ? `the plan says this is ${BUILDING_TYPE_TEXT[notFor.find((n) => n.floor === '')!.building!]}`
+      : 'the plan says each of its floors is a kind of building they were not read for'
   const figures = applied.length > 0
     ? `figures ${applied.join(' and ')}, read for ${kinds.join(' and ')}`
-    : place.country === 'US' ? 'no figure was applied: the checks that use figures had nothing to look at' : 'Grid carries no figures for it, so none was applied'
+    : place.country !== 'US'
+      ? 'Grid carries no figures for it, so none was applied'
+      : building !== null
+        ? `no figure was applied: its figures were read for ${readFor}, and ${building}`
+        : 'no figure was applied: the checks that use figures had nothing to look at'
   return `Place: ${place.name}, ${from}; ${figures}.`
 }
 

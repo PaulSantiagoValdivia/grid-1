@@ -271,3 +271,43 @@ for, and the no-figures-for-place notice is skipped with no place):
   files, 1,291 passed, 1 skipped.
 - The full suite, `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 252
   files passed, 4,889 tests passed, 2 skipped, none failed.
+
+## Merging main again, at 25747b7 (SHT-11, CNT-13)
+
+Conflicts, each resolved by keeping both sides:
+
+- `CHANGELOG.md`, "Unreleased": COD-3's line and CNT-13's line, COD-3's first.
+- `docs/result-contract.md`, the agents changelog: COD-3's entry on top, then CNT-13's and
+  SHT-11's, then the rest as on `main`.
+- `packages/floorplan/src/test-support/pinned-tests.md`, the fixed-failures table: the CH-3 row
+  (COD-3) and the S-8 row (CNT-13).
+
+No code conflicted: CNT-5's gate on the kind of building was already merged at 56458e5, and the
+figure checks run only where both hold (a place with figures, and a home or no kind stated).
+
+One change made in this merge, for the case the coordinator asked about: the US stated, and a
+building that is not a home. The place line said "no figure was applied: the checks that use
+figures had nothing to look at", which hid the reason. `placeText` now says "Place: United
+States, from the plan; no figure was applied: its figures were read for homes, and the plan says
+this is an office." (or, when each floor is another kind, "the plan says each of its floors is a
+kind of building they were not read for"). The `…-for-building` lines and the coverage reason
+`not_for_building` are CNT-5's, unchanged, so the two reasons are distinct: the place in the
+first line and `place`, the kind of building in its own lines and coverage. With no place and an
+office, the first line is the no-place line and the two `…-for-building` lines follow; with Spain
+and an office, "Grid carries no figures for it" and the same two lines. Three new cases in
+`packages/cli/src/command/__tests__/place.test.ts` ("a place and a kind of building"), and a
+paragraph in the contract's "The place". No existing test changed in this merge.
+
+The flat states no building and no place, so its short report is as before: 983 bytes from
+`grid check`, 968 from `grid_check`, 987 with `--country US` (the pins in `shortReport.test.ts`
+pass unchanged).
+
+Checks run after merging `main` at 25747b7:
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean.
+- `npm run scoreboard`: "Same as the stored figures" (checks fed 14 of 42, as stored on `main`);
+  `scoreboard/current.json` unchanged.
+- `npx vitest run packages/cli packages/rules packages/floorplan packages/viewer scoreboard
+  --maxWorkers=2 --minWorkers=1` (every package the merge touched, the scoreboard's
+  approval-words and retell tests among them): 251 files passed, 4,849 tests passed, 4 skipped,
+  none failed.
