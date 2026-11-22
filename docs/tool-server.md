@@ -8,6 +8,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 - [Asking across the parts: fields, find and count](#asking-across-the-parts-fields-find-and-count)
 - [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [A camera you can set, and saved views](#a-camera-you-can-set-and-saved-views)
+- [The preview, shared with the person](#the-preview-shared-with-the-person)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [What a change did](#what-a-change-did)
 - [A note set aside as seen](#a-note-set-aside-as-seen)
@@ -18,7 +19,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker, the seen mark and the brief, and last the eleven that
+requests people make most, with the problem report last of them, then the preview and the preview page's own call, the export, the sheet, the start marker, the seen mark and the brief, and last the eleven that
 change the plan, writing it rooms first leading and saving a view last. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. A length argument is metres, or text with its unit (`12'6"`, `360 cm`); the measuring tools, the views and the sheet write in `units` and `decimal`, or the plan's `display`, the person's own units, and in metres when neither says (see [Units](plan-file.md#units)). The check and the edit answers are in metres.
@@ -38,7 +39,8 @@ the same facts as data; a view also returns its picture. A length argument is me
 | `grid_describe` | The plan in room terms, as `grid describe`; with `length=walk`, walked room by room from its way in, standing in each doorway, with `pictures` a picture at eye height from each ([below](#a-routes-length-and-a-walk-through)); with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules", then the place the figures were for (the plan's `site.country`, or `country`; with none, no figure is applied); the notes the person set aside are listed under Seen; with `firm-standards.json` beside the plan, the firm's own standards' notes (`firm/…`) under their own heading, apart from the code figures ([firm-standards.md](firm-standards.md)) |
 | `grid_report_problem` | A draft issue about a failure the agent met, for the person to file or not: Grid sends nothing (see below) |
-| `grid_preview` | Points the live preview at a floor or room of the plan |
+| `grid_preview` | Shows the person a floor in 2d or 3d in Grid's preview, a room framed, parts picked out and a note, and answers with the picture the preview shows; with no argument but `plan`, reads what the person selected by clicking (see [below](#the-preview-shared-with-the-person)) |
+| `grid_preview_sync` | The preview page's own call, which a host that shows MCP Apps lists for the page only: the drawing, the shared record, and what the person did there. Not for an agent |
 | `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/`, and says what the file leaves out of the plan (the file says it too); a file that would hold nothing of the plan is refused. A DXF takes its layers and pens from `dxf-layers.json` in the project folder when there is one, and answers with it as `dxfProfile` ([what the DXF holds](commands.md#what-the-dxf-holds-hnd-1)) |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_mark_start` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside the plan, for `grid_diff` to compare with; or takes one off. At most 5 |
@@ -171,6 +173,63 @@ name the person gives; `grid_view view=<name>` and `grid draw --view <name>` cal
 same record. A name already saved is refused unless `replace` is true. The app's 3D view opens
 at a record handed to it (`Canvas3D`'s `camera`), and the stills are taken with the same
 settings (`recordCamera`), so the person and the agent see the same picture.
+
+## The preview, shared with the person
+
+Read this when the person should see the plan while you talk ("show me", "where is that?"), or
+says "this", "here" or "the one I clicked" (VEW-4). Grid's preview is one page with the plan in
+2D and 3D. A host that shows MCP Apps shows it beside the chat: `grid_preview` names it as its
+app (`_meta.ui.resourceUri`, `ui://grid/preview`), and the server lists it as a resource of type
+`text/html;profile=mcp-app` that loads nothing from anywhere else. Anywhere else the person runs
+`grid preview` and opens the page it prints in a browser on the same computer
+([commands.md](commands.md#the-preview-in-a-browser-grid-preview)). Both pages show the same
+thing, and draw again within 2 s of the plan file changing.
+
+The person and the agent meet in one record beside the plan, `<plan>.preview.json`
+(`plan.preview.json` beside `plan.json`), which the plan knows nothing of and no export, sheet
+or drawing reads. It holds the same camera record as `grid_view`'s ([above](#a-camera-you-can-set-and-saved-views)):
+
+| Field | What it holds | Written by |
+|---|---|---|
+| `view` | `2d` or `3d` | both |
+| `floor` | The floor shown, or null for the lowest (in 3d, the whole building) | both |
+| `camera` | In 3d, the camera record the preview looks through, or null for Grid's own view | both |
+| `selected` | What the person clicked last: `id`, `kind` (`room`, `wall`, `door`, `window`, `opening`, `fixture`) and `floor`, or null | the page |
+| `highlight` | The ids the agent picked out | `grid_preview` |
+| `frame` | The room the agent framed, or null | `grid_preview` |
+| `note` | The agent's note, at most 120 characters | `grid_preview` |
+| `revision`, `changedBy` | One higher on every write, and who wrote it last (`agent` or `person`) | both |
+
+`grid_preview` takes `floor`, `room` (framed, and its floor shown), `view`, `highlight` (ids, an
+empty list for none), `camera` (a record `grid_view` returned; the view becomes 3d) and `note`.
+It checks each against the plan, writes the record and answers with what the preview now shows,
+what the person has selected, and the picture: `grid_view`'s plan with the parts picked out and
+cropped to the room, or the model through the preview's camera, as an image with its text. A
+host without the page loses nothing. Called with no argument but `plan`, it writes nothing and
+answers with what the person selected and what the preview shows, without a picture. Its data:
+`floor`, `view`, `room` (the frame), `note`, `highlight`, `selected` (`id`, `kind`, `name`,
+`floor`, or null), `camera`, `revision`, `planFile`, `previewFile` and `shown` (false for a read).
+
+On the page a click on the 2D drawing returns the id of the part under it (each part of the
+viewer's SVG carries its `data-id`); a click on the 3D picture is turned into a ray through the
+camera record and meets the nearest wall, door or window in its wall, or room floor
+(`pickInModel`). Either becomes `selected`. In an MCP App the page also tells the host
+(`ui/update-model-context`), so the selection reaches the agent's next turn without a call.
+Dragging the 3D picture turns the camera and the wheel moves it nearer or further; both are
+written as `camera`.
+
+`grid_preview_sync` is the page's call (`_meta.ui.visibility` `app`). It takes `plan`, `since`
+(the revision the page has), `look` (`working` or `dark`), and what the person did: `floor`,
+`view`, `select` (an id), `clear`, `pick` (`x` and `y` on the 3D picture, 0 to 1 from its
+top-left corner) and `camera`. It answers `changed`, `revision` (the drawing's key and the
+record's revision), `planFile`, `record`, `selected` and `picked`; when the drawing changed,
+`floors`, `parts` and `drawing` (2d: `svg` and each part's `box` in the SVG's frame; 3d: its
+`camera`) with the picture as a PNG; when only the record changed, `drawing` is null; when
+nothing changed, `changed` is false. Where the canvas a PNG needs is not installed, both tools
+say so and still move the preview.
+
+Which hosts show an MCP App from a local tool server is not settled here: Grid follows the
+MCP Apps standard of 2026-01-26 and has been tried against a stand-in host, not a real one.
 
 ## Measuring from faces, and a room's height
 

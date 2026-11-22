@@ -166,6 +166,8 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
   ],
   // HND-9: its occupancy file is the plan's name beside the plan, never a path of its own.
   occupancy: [{ label: 'the plan', args: (p) => ['occupancy', p], given: asIs }],
+  // VEW-4: the plan is refused before the page's server starts; its preview record is the plan's name beside it.
+  preview: [{ label: 'the plan', args: (p) => ['preview', p, '--port', '0'], given: asIs }],
   // The tool server: its tools' paths are below. --project is the project folder itself.
   serve: [],
   mcp: [],
@@ -229,6 +231,8 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_check: [{ arg: 'plan', call: tool('grid_check', { plan: '@' }), given: asIs }],
   grid_report_problem: [{ arg: 'plan', call: tool('grid_report_problem', { plan: '@', tool: 'grid_check', expected: 'The plan read.' }), given: asIs }],
   grid_preview: [{ arg: 'plan', call: tool('grid_preview', { plan: '@', view: '2d', note: 'A look' }), given: asIs }],
+  // VEW-4: the page's own call; its record is the plan's name beside the plan, never a path of its own.
+  grid_preview_sync: [{ arg: 'plan', call: tool('grid_preview_sync', { plan: '@' }), given: asIs }],
   grid_export: [{ arg: 'plan', call: tool('grid_export', { plan: '@', format: 'glb' }), given: asIs }],
   grid_sheet: [{ arg: 'plan', call: tool('grid_sheet', { plan: '@', layout: 'check' }), given: asIs }],
   grid_mark_start: [{ arg: 'plan', call: tool('grid_mark_start', { plan: '@' }), given: asIs }],

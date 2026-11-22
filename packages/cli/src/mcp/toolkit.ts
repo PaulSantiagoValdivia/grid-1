@@ -121,6 +121,11 @@ export interface GridTool {
   readonly hint: Hint
   readonly args: ArgSpecs
   readonly outputSchema: Record<string, unknown>
+  /**
+   * VEW-4: the MCP App that shows this tool's answers, and who may call it: `model` (the agent)
+   * and `app` (the page), both when left out. A host that shows no MCP App ignores it.
+   */
+  readonly ui?: { readonly resourceUri: string; readonly visibility?: readonly ('model' | 'app')[] }
   run(args: Record<string, unknown>, context: ToolContext): Answer | Promise<Answer>
 }
 
@@ -200,6 +205,8 @@ export function toolDefinition(tool: GridTool): Record<string, unknown> & { name
     },
     outputSchema: labelledSchema(tool.outputSchema),
     annotations: { title: tool.title, ...HINTS[tool.hint] },
+    // VEW-4: the MCP Apps standard's link to the page, and the older key hosts still read.
+    ...(tool.ui === undefined ? {} : { _meta: { ui: { resourceUri: tool.ui.resourceUri, ...(tool.ui.visibility ? { visibility: [...tool.ui.visibility] } : {}) }, 'ui/resourceUri': tool.ui.resourceUri } }),
   }
 }
 

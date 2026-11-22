@@ -639,7 +639,7 @@ its text, which says the same.
 |---|---|
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`, `dxfProfile` (HND-1: for a DXF, the project's profile file its layers and pens came from, `dxf-layers.json`; null for Grid's own layers and for the other formats). An export that would hold no wall, room or fixture is refused, and so is a DXF whose project profile is wrong. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
-| `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
+| `grid_preview` | `floor`, `view`, `room` (the room framed), `note`, `highlight`, `selected`, `camera`, `revision`, `planFile`, `previewFile` (the record beside the plan, inside the project) and `shown` (false when it only read the selection and wrote nothing). It never writes the plan ([The preview, shared with the person](tool-server.md#the-preview-shared-with-the-person)). |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
 | `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
@@ -665,6 +665,24 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: the preview, shared with the person (VEW-4)
+
+- `grid_preview` writes the preview record beside the plan (`<plan>.preview.json`), so its hint
+  is now write-file (`readOnlyHint` false, `destructiveHint` false). It takes `highlight` (ids,
+  an empty list for none) and `camera` (a record `grid_view` returned), and `room` now frames the
+  room. Its answer carries the picture the preview shows, as `grid_view` draws it, and its data
+  gains `highlight`, `selected`, `camera`, `revision`, `planFile`, `previewFile` and `shown`;
+  `view` is now the view shown (`2d` when none was set) where it was null when left out. With no
+  argument but `plan` it no longer refuses: it reads what the person selected and writes nothing.
+- A new tool after it, `grid_preview_sync`, the preview page's own call, which an MCP Apps host
+  lists for the page only (`_meta.ui.visibility: ["app"]`). 31 tools.
+- The server offers resources: `resources/list` and `resources/read` give the preview page,
+  `ui://grid/preview`, of type `text/html;profile=mcp-app`. `initialize` and `server/discover`
+  say `resources: {}` and `extensions: { "io.modelcontextprotocol/ui": { "mimeTypes": [...] } }`.
+  An unknown resource is refused with -32002, without repeating its address.
+- `@ongrid/floorplan/geometry` exports `pickInModel` and `pictureRay`: the part of the model a
+  point on a 3D picture shows, through its camera record.
 
 ### 2026-11-22: a route's length, and the walk-through (VEW-9)
 

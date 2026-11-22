@@ -76,7 +76,7 @@ Notes for agents and people changing this repository.
   and every picture an agent gets, `technical` for sheets and `grid draw`, black on white with
   line weights in millimetres on paper from a pen set chosen by scale (1:50, 1:100, 1:200).
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `edit`, `mark`, `diff`, `check`,
-  `describe`, `draw`, `export`, `sheet`, `tidy`, `serve` and `mcp`, in `src/command/`. `write`
+  `describe`, `draw`, `export`, `sheet`, `tidy`, `preview`, `serve` and `mcp`, in `src/command/`. `write`
   (WRT-2) writes a plan from rooms text, the main way to write one; `describe --as rooms` reads
   it back. `tidy` (MSG-12) lists the
   library's wall faults and makes the chosen fixes on the plan file as read. `describe` (VEW-5, `src/describe/`)
@@ -92,12 +92,13 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 30 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 31 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
-  last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
+  last of them (CMD-13, `src/report/`, which sends nothing), then the preview and the preview
+  page's own call (VEW-4, `previewTools.ts`), the
   export, the sheet, the start marker (WRT-8), the seen mark (MSG-10, `seenTool.ts`), the brief (BRF-1,
   `briefTool.ts`), and the tools that change the plan, the saved views last (VEW-3, `viewTool.ts`)).
-  Each is written once in `readTools.ts`, `writeTools.ts`, `reportTool.ts`, `seenTool.ts`, `briefTool.ts` or `viewTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
+  Each is written once in `readTools.ts`, `writeTools.ts`, `previewTools.ts`, `reportTool.ts`, `seenTool.ts`, `briefTool.ts` or `viewTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
   check. The measuring is in `src/quantities/` (CNT-9's asking across parts by their fields and
   facts, for `grid_fields`, `grid_find` and `grid_count`, in `query.ts`), the changes in `src/edit/`, the views in
   `src/draw/views.ts`. A 3D picture is taken from one camera record (VEW-3,
@@ -132,6 +133,14 @@ Notes for agents and people changing this repository.
   project's own `.git` without running git (`git.ts`). The comparison is the core's
   `compareBuildings` (`packages/floorplan/src/geometry/diff/building.ts`), which pairs by place
   first (`place.ts`); the picture is the viewer's `comparisonPicture`.
+- The preview (VEW-4): one viewer page, `packages/viewer/src/page/previewPage.ts`, that shows the
+  plan in 2D (the viewer's SVG) and 3D (a still through the camera record) and draws only what the
+  page's tool, `grid_preview_sync`, gives it. The tool server serves it as an MCP App resource
+  (`ui://grid/preview`, `projectResources` in `serveTools.ts`); `grid preview`
+  (`packages/cli/src/preview/localServer.ts`) serves it on 127.0.0.1 for hosts that show none.
+  Page and agent share one record beside the plan, `<plan>.preview.json` (`src/preview/record.ts`):
+  what is shown, the camera, what the person selected, the ids picked out and the room framed. A
+  click on the 3D picture is met in the core (`pickInModel`, `geometry/pick.ts`).
 - `grid mcp` is the same server under the name agents start it by: `npx -y ongrid mcp` (CMD-9).
   `src/mcp/protocol.ts` answers both eras of the protocol: `initialize` for older clients, and
   for 2026-07-28 clients the version in each request's `_meta` and `server/discover`; a version

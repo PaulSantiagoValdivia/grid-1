@@ -537,6 +537,8 @@ describe('the built file', () => {
     // still under it, so the cap stays.
     // BRF-3's plot adds about 7,000 more. 600 kB since CNT-17: its accessibility measurements,
     // merged with BRF-3 and WRT-4 from main, make it 555,889 bytes, again with no new dependency.
+    // VEW-4's preview tools, record, 3D pick and page server add about 17,000 bytes (the page
+    // itself is a chunk of its own); merged with COD-8 and HND-11, 559,890 bytes, under the same cap.
     expect(statSync(bundle).size).toBeLessThan(600_000)
   })
 })

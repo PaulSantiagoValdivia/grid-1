@@ -69,9 +69,11 @@ describe('the tool server', () => {
     expect(replies.map((reply) => reply['id'])).toEqual([0, 1, 2, 3, 4])
     expect(replies[0]).toMatchObject({ result: { serverInfo: { name: 'grid' } } })
     expect(replies[1]).toMatchObject({ result: { structuredContent: { net: expect.any(Number) } } })
-    expect(replies[2]).toMatchObject({ result: { content: [{ type: 'text', text: 'General guidance, not your local rules\nShowing floor "ground" in 3d.' }] } })
+    // VEW-4: the preview writes its record beside the plan and answers with the picture it shows;
+    // this server is bundled alone, without the canvas a PNG needs, so it says so and still moves.
+    expect(replies[2]).toMatchObject({ result: { content: [{ type: 'text', text: expect.stringMatching(/^General guidance, not your local rules\nShowing floor "ground" in 3d\. [^]*@napi-rs\/canvas/) }] } })
     expect(replies[3]).toMatchObject({ result: { isError: true, content: [{ type: 'text', text: 'That floor is not in this plan. Its floors: "ground".' }] } })
-    expect((replies[4] as { result: { tools: unknown[] } }).result.tools).toHaveLength(30)
+    expect((replies[4] as { result: { tools: unknown[] } }).result.tools).toHaveLength(31)
   }, 30_000)
 
   // npm test builds the command first; the picture needs the native canvas from node_modules.
