@@ -4,6 +4,8 @@ import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { cameraRecord, storedView } from '@ongrid/floorplan/geometry'
+import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { twoBedFlat } from '../../draw/__tests__/twoBedFlat'
 import { GRID_TOOLS } from '../../mcp/serveTools'
 
@@ -210,6 +212,18 @@ describe('grid draw --out: writing a picture', () => {
     expect(size('two.png')).toEqual([width * 2, height * 2])
   })
 
+  it('draws a view saved with the plan with --view, by its name in any capitals (VEW-3)', () => {
+    const plan = parseFloorPlan(JSON.parse(readFileSync(sample, 'utf8')))
+    const view = storedView('Garden corner', cameraRecord(plan, { target: { room: 'lounge', point: [7, 5, 1.3] }, bearing: 200, tilt: 25, distance: 12, focalLength: 35, cut: null }))
+    writeFileSync(join(dir, 'viewed.json'), JSON.stringify({ ...JSON.parse(readFileSync(sample, 'utf8')), views: [view] }))
+    const run = grid('draw', 'viewed.json', '--view', 'garden CORNER', '--out', 'view.png')
+    expect([run.status, run.err, run.out]).toEqual([0, '', 'Wrote view.png\n'])
+    const bytes = readFileSync(join(dir, 'view.png'))
+    expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual([1200, 800])
+    expectRefusal(grid('draw', 'viewed.json', '--view', 'Street'), 2, '--view names no view saved with this plan. Its views: "Garden corner".')
+    expectRefusal(grid('draw', 'viewed.json', '--view', 'Garden corner', '--floor', 'ground', '--out', 'v.png'), 2, '--view draws the floors its camera was saved with')
+  })
+
   it('writes a 3D still as a PNG with --3d, twice as large with --scale 2', () => {
     const one = grid('draw', 'two-bed-flat.json', '--3d', '--out', 'model.png')
     const two = grid('draw', 'two-bed-flat.json', '--3d', '--scale', '2', '--out', 'model-2.png')
@@ -233,7 +247,8 @@ describe('grid draw --out: writing a picture', () => {
 
 describe('grid check', () => {
   it('prints the report with its label first, and says no plan meets any rule', () => {
-    const run = grid('check', 'two-bed-flat.json')
+    // COD-3: the US stated, so the figure checks run and say what they could not look at.
+    const run = grid('check', 'two-bed-flat.json', '--country', 'US')
     expect(run.err).toBe('')
     expect(run.status).toBe(0)
     const lines = run.out.split('\n')
@@ -246,7 +261,7 @@ describe('grid check', () => {
     expect(run.out).toContain('Looked at by at least one check: 5 of 5 rooms.')
     expect(run.out).toContain('Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms; not looked at 5: no use stated.')
     expect(run.out).not.toMatch(/\b(compl(y|ies|iant|iance)|approved?|passe[sd])\b/i)
-    const full = grid('check', 'two-bed-flat.json', '--full')
+    const full = grid('check', 'two-bed-flat.json', '--full', '--country', 'US')
     expect(full.out.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
     expect(full.out).toContain('Checks run (4):')
     expect(full.out).toContain('Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it looked at no rooms.')
@@ -392,7 +407,7 @@ describe('options: each command refuses what it does not take, by name', () => {
     [['check', 'two-bed-flat.json', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['draw', 'two-bed-flat.json', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['export', 'two-bed-flat.json', '--format', 'obj', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
-    [['check', 'two-bed-flat.json', '--country', 'Spain'], '--country takes a two-letter country code'],
+    [['check', 'two-bed-flat.json', '--country', 'the moon'], '--country names no place Grid knows'],
     [['check'], 'check needs a plan file'],
     [['check', 'two-bed-flat.json', 'other.json'], 'check takes one plan file'],
     [['serve', 'two-bed-flat.json'], 'serve takes no arguments'],
@@ -478,7 +493,9 @@ describe('the built file', () => {
     // 400 kB since VEW-7, to catch a second zod; 450 kB since WRT-3, whose edits and their tools
     // take the file just past 400 kB (400,863 bytes) with no new dependency. 500 kB since SHT-7:
     // the writing on the drawing, with HND-6, COD-2, ARE-12, CMD-13 and QAR-7 on main, made it
-    // 463,249 bytes, again with no new dependency.
-    expect(statSync(bundle).size).toBeLessThan(500_000)
+    // 463,249 bytes, again with no new dependency. 550 kB since VEW-3: the camera and saved
+    // views, with BRF-1's brief and CNT-8's zones from main, made it 512,435 bytes, again with no
+    // new dependency.
+    expect(statSync(bundle).size).toBeLessThan(550_000)
   })
 })

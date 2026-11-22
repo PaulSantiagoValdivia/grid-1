@@ -118,7 +118,14 @@ export interface KeyEntry {
 export function keyEntries(
   drawing: PlanDrawing,
   look: PlanLook,
-  shown: { readonly swings: boolean; readonly sketch: boolean; readonly uses: readonly RoomUse[]; readonly marks: boolean; readonly above?: boolean },
+  shown: {
+    readonly swings: boolean
+    readonly sketch: boolean
+    readonly uses: readonly RoomUse[]
+    readonly marks: boolean
+    readonly above?: boolean
+    readonly painted?: readonly { readonly colour: string; readonly words: string }[]
+  },
   words: DrawingWords = ENGLISH_WORDS
 ): KeyEntry[] {
   const say = (key: Parameters<typeof drawingText>[1], values?: Parameters<typeof drawingText>[2]): string => drawingText(words, key, values)
@@ -134,6 +141,8 @@ export function keyEntries(
   // SHT-11: the floor above's outline, and a stair past its cut, drawn dashed.
   if (shown.above === true) entries.push({ swatch: 'dash', color: look.wall, words: say('drawing.key.above') })
   for (const use of shown.uses) entries.push({ swatch: 'fill', color: USE_FILLS[use], words: say('drawing.key.use', { use: roomUseWord(words, use) }) })
+  // CNT-9: the parts picked out, by what each colour stands for.
+  for (const entry of shown.painted ?? []) entries.push({ swatch: 'fill', color: entry.colour, words: entry.words })
   if (shown.sketch) {
     for (const category of new Set(drawing.sketch.map((item) => item.category))) {
       entries.push({ swatch: 'line', color: look.labelSoft, words: say('drawing.key.sketch', { category }) })

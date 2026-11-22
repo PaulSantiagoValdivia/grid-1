@@ -21,6 +21,7 @@ import { SQUARE_ENDS, openingSpan, wallAxis } from './wall'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { tryRoomShape } from './room'
+import { roomZones } from './zones'
 import { roomFloorOffset } from './steps'
 import { wallExposure } from './exposure'
 import { wallRevision } from './revision'
@@ -32,7 +33,8 @@ import type { StairLayout } from './stairs'
 import { planStairs } from './stairs'
 import { floorElevations } from './elevations'
 import { planFloors, wholePlan } from './floors'
-import { floorEnvelope } from './envelope'
+import { floorEnvelope, type FloorRoof } from './envelope'
+import { wallTopProfile, type RoofPlane, type WallTopPoint } from './roofs'
 import { piecesAsRings } from './polygons'
 import type { MultiPolygon } from 'polygon-clipping'
 
@@ -194,6 +196,12 @@ export function stairBlocks(stair: StairLayout, floorLevel: number): SceneStair 
 export interface ScenePiece {
   readonly outline: readonly Vec2[]
   readonly holes: readonly (readonly Vec2[])[]
+  /**
+   * LVL-6: a piece of a sloped roof is not level: its bottom and its top are raised, over each
+   * point, by this plane's height there (`z0 + gx·x + gy·y`), so the piece lies on the roof's
+   * slope, as thick as the solid. Absent on a level piece.
+   */
+  readonly rise?: RoofPlane
 }
 
 /**
@@ -245,13 +253,26 @@ export function sceneShell(plan: FloorPlan): SceneShell | null {
     }
   }
   const roof = envelope.roof
-  const roofSolid: SceneSolid | null =
-    roof === null ? null : { pieces: scenePieces(roof.pieces), bottom: roof.bottom - base, top: roof.bottom - base + roof.thickness }
+  const roofSolid: SceneSolid | null = roof === null ? null : roofSolidOf(roof, base)
   const parapet: SceneSolid | null =
     roof?.parapet == null || roofSolid === null
       ? null
       : { pieces: scenePieces(roof.parapet.pieces), bottom: roofSolid.top, top: roofSolid.top + roof.parapet.height }
   return { floor: id, slab, roof: roofSolid, parapet }
+}
+
+/**
+ * The roof as a solid of the storey: level pieces at its underside, or (LVL-6) each plane's pieces
+ * raised onto that plane, as thick as the roof.
+ */
+function roofSolidOf(roof: FloorRoof, base: number): SceneSolid {
+  const sloped = roof.facets.some((f) => f.plane.gx !== 0 || f.plane.gy !== 0)
+  if (!sloped) {
+    const pieces = roof.facets.length === 1 ? roof.facets[0]!.pieces : roof.pieces
+    return { pieces: scenePieces(pieces), bottom: roof.bottom - base, top: roof.bottom - base + roof.thickness }
+  }
+  const pieces = roof.facets.flatMap((facet) => scenePieces(facet.pieces).map((piece) => ({ ...piece, rise: facet.plane })))
+  return { pieces, bottom: 0, top: roof.thickness }
 }
 
 export interface Scene3D {
@@ -294,20 +315,25 @@ function holeFrom(opening: Opening): Vec2[] {
 export function wallElevation(
   wall: Wall,
   openings: readonly Opening[] = [],
-  ends: WallEnds = SQUARE_ENDS
+  ends: WallEnds = SQUARE_ENDS,
+  top: readonly WallTopPoint[] | null = null
 ): WallElevation | null {
   if (wall.virtual) return null
 
   const length = wallAxis(wall).length
-  const height = wall.height
 
-  // Counter-clockwise, starting at the foot of `start`.
-  const outline: Vec2[] = [
-    { x: 0, y: 0 },
-    { x: length, y: 0 },
-    { x: length, y: height },
-    { x: 0, y: height }
-  ]
+  // Counter-clockwise, starting at the foot of `start`. LVL-6: a wall the roof cuts has the top the
+  // roof leaves it (`wallTopProfile`), walked back from the far end.
+  const outline: Vec2[] =
+    top === null
+      ? [
+          { x: 0, y: 0 },
+          { x: length, y: 0 },
+          { x: length, y: wall.height },
+          { x: 0, y: wall.height }
+        ]
+      : [{ x: 0, y: 0 }, { x: length, y: 0 }, ...[...top].reverse().map((p) => ({ x: p.u, y: p.z }))]
+  const height = top === null ? wall.height : Math.max(...top.map((p) => p.z))
 
   return {
     wallId: wall.id,
@@ -385,7 +411,8 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
 
     const usable = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
     const ends = joints.get(wall.id)
-    const elevation = wallElevation(wall, usable, ends)
+    const top = wallTopProfile(plan, wall)
+    const elevation = wallElevation(wall, usable, ends, top)
     if (!elevation) continue
 
     walls.push({
@@ -393,14 +420,16 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
       elevation,
       basis: wallBasis(wall),
       exposure: wallExposure(index, wall.id),
-      revision: wallRevision(wall, usable, ends)
+      revision: wallRevision(wall, usable, ends, top)
     })
-    if (wall.height > height) height = wall.height
+    if (elevation.height > height) height = elevation.height
   }
 
   const slabs: SceneSlab[] = []
+  // A zone's floor is its room's (CNT-8): one slab, the room's.
+  const zones = roomZones(index)
   for (const room of plan.rooms) {
-    if (broken.has(room.id)) continue
+    if (broken.has(room.id) || zones.zoneOf.has(room.id)) continue
     const slab = roomSlab(room, index)
     if (!slab) continue
     slabs.push(slab)

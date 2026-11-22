@@ -98,7 +98,7 @@ function wallDiffers(a: Wall, b: Wall, statesNone: (wall: Wall) => boolean): str
   if (a.kind !== b.kind) return 'is of another kind'
   if ((a.virtual === true) !== (b.virtual === true)) return 'is solid in one and a dividing line in the other'
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
-  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', 'unstated'])
+  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', 'unstated', ...FACTS_CARRIED])
 }
 
 function roomDiffers(a: Room, b: Room): string | null {
@@ -108,8 +108,14 @@ function roomDiffers(a: Room, b: Room): string | null {
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
   if ((a.inside === true) !== (b.inside === true)) return 'sits inside another room in one only'
   if (!sameNumber(a.height, b.height)) return 'has another height'
-  return otherKeys(a, b, ['id', 'name', 'use', 'boundary', 'floor', 'inside', 'height'])
+  return otherKeys(a, b, ['id', 'name', 'use', 'boundary', 'floor', 'inside', 'height', ...FACTS_CARRIED, 'number'])
 }
+
+/**
+ * CNT-9: the facts of the person's own, and a room's stated number, are kept by id when the text
+ * is written again (`carryFacts`), so they are no difference here: the read-back stays rooms first.
+ */
+const FACTS_CARRIED = ['properties'] as const
 
 /**
  * Any other key of a part, as the schema reads it: a key rooms text does not write (one a later
@@ -134,7 +140,7 @@ function openingDiffers(a: Opening, b: Opening): string | null {
   if (!sameNumber(a.offset, b.offset) || !sameNumber(a.width, b.width)) return 'stands elsewhere along its wall'
   if (!sameNumber(a.sill, b.sill) || !sameNumber(a.height, b.height)) return 'has another sill or height'
   if (a.hinge !== b.hinge || a.swing !== b.swing) return 'hangs or swings another way'
-  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing'])
+  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing', ...FACTS_CARRIED])
 }
 
 interface Difference {
@@ -177,7 +183,8 @@ function floorsDiffer(original: FloorPlan, written: FloorPlan): boolean {
   if (a.length !== b.length) return true
   return a.some((f, i) => {
     const g = b[i]!
-    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab) || f.building !== g.building
+    // LVL-4's parapet and LVL-6's roof are not rooms text: a floor that states one is given in Grid's own terms.
+    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab) || f.building !== g.building || !sameNumber(f.parapet, g.parapet) || JSON.stringify(f.roof) !== JSON.stringify(g.roof)
   })
 }
 
@@ -495,6 +502,11 @@ function textOf(plan: FloorPlan, rule: Rule, name: string | undefined, floors: r
     lines.push('')
     const fl = floorLine(plan, d.id)
     if (fl !== null) lines.push(fl)
+    // LVL-6: the floor's roof and parapet, which rooms text has no words for, as the plan holds them.
+    const f = (plan.floors ?? []).find((x) => x.id === d.id)
+    if (f !== undefined && (f.roof !== undefined || f.parapet !== undefined)) {
+      lines.push(`raw floor ${JSON.stringify({ ...(f.roof !== undefined ? { roof: f.roof } : {}), ...(f.parapet !== undefined ? { parapet: f.parapet } : {}) })}`)
+    }
     if (raw.has(d.id)) {
       lines.push(`# Written in Grid's own terms: rooms text does not give back this floor's walls as they are.`)
       for (const w of plan.walls.filter((x) => floorOf(x) === d.id)) lines.push(rawLine('wall', w))

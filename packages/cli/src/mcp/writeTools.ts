@@ -27,6 +27,8 @@ import { ROOM_NAMES_TRAVEL } from './protocol'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { LANGUAGE_ARG, openingBetween } from './readTools'
+import { briefAnswer } from '../brief/answer'
+import { BRIEF_OUTPUT } from './briefTool'
 import {
   asRefusal,
   FLOOR_ARG,
@@ -249,6 +251,8 @@ export const EDIT_OUTPUT = objectSchema({
   // WRT-3: what the request left open and Grid chose, and what the change could not keep.
   guessed: listSchema(STRING),
   couldNotKeep: listSchema(STRING),
+  // BRF-1: each line of the brief beside the plan, met or missed after the change.
+  brief: BRIEF_OUTPUT,
 })
 
 function errorsOf(plan: FloorPlan): Array<{ id: string; message: string }> {
@@ -306,6 +310,8 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
   const toLookAt = { before: inspectPlan(raw).count, after: inspectPlan(next).count }
   const guessed = [...(patch.guessed ?? [])]
   const couldNotKeep = [...(patch.notKept ?? [])]
+  // BRF-1: the brief beside the plan the change read, against the plan as it now is.
+  const brief = briefAnswer(project, file, after)
   const text = [
     ...patch.said,
     ...guessed.map((line) => `Guessed: ${line}`),
@@ -313,9 +319,10 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
     verdict,
     ...doors,
     `To look at: ${toLookAt.before} → ${toLookAt.after}, of them problems in the drawing ${drawingProblems.before} → ${drawingProblems.after}. grid_check lists them.`,
+    ...brief.text,
     `Wrote ${quoted(written)}.`,
   ].join('\n')
-  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, toLookAt, doors, guessed, couldNotKeep, ...(patch.extra ?? {}) } }
+  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, toLookAt, doors, guessed, couldNotKeep, brief: brief.data, ...(patch.extra ?? {}) } }
 }
 
 const changeOpeningTool: GridTool = {
@@ -476,6 +483,9 @@ const writeRoomsTool: GridTool = {
     warnings: listSchema(STRING),
     verdict: { type: ['string', 'null'] },
     drawingProblems: objectSchema({ before: { type: 'number' }, after: { type: 'number' } }),
+    // BRF-1: the brief's lines, and the one reminder when a first plan has no brief beside it.
+    brief: BRIEF_OUTPUT,
+    reminder: NULLABLE_STRING,
   }),
   run(args, context) {
     const project = projectOf(context)
@@ -494,6 +504,8 @@ const writeRoomsTool: GridTool = {
           warnings: r.warnings.map((w) => `${w.code}: ${w.message}`),
           verdict: done.verdict,
           drawingProblems: done.drawingProblems,
+          brief: done.brief,
+          reminder: done.reminder,
         },
       }
     } catch (error) {

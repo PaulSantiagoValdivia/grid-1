@@ -6,7 +6,7 @@ import * as geometry from '@ongrid/floorplan/geometry'
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { planNotes as planCheckNotes } from '@ongrid/floorplan/notes'
-import { CODES, GENERAL_GUIDANCE_LABEL, LINE_KINDS, checkLocalRules, inspectPlan, planNotes, type GridResult, type ResultLine } from '../..'
+import { CODES, GENERAL_GUIDANCE_LABEL, LINE_KINDS, PLURALS, checkLocalRules, inspectPlan, planNotes, type GridResult, type ResultLine } from '../..'
 import { door, edit, exterior, flat, room, twoFloorHouse, wall, window_, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
 const SRC = fileURLToPath(new URL('../../../../', import.meta.url))
@@ -91,8 +91,9 @@ function corpus(): [string, unknown][] {
 const run = (name: string, plan: unknown): GridResult => inspectPlan(plan, name === 'for Spain' ? { country: 'ES' } : {})
 
 /** A message with the plan's names and every figure taken out: what is left is its wording. */
+// MSG-5: a line for several rooms is read back to its one room's words (`PLURALS`).
 const wordingOf = (message: string): string =>
-  message
+  PLURALS.reduce((text, [one, many]) => text.replace(many, one), message)
     .replace(/"(?:[^"\\]|\\.)*"(?:, "(?:[^"\\]|\\.)*")*/g, 'NAME')
     .replace(/-?\d+(?:\.\d+)?/g, 'N')
     // The thing a line is about is one part of its wording, whichever kind of opening it is.
@@ -179,7 +180,7 @@ describe('words Grid does not read (MSG-4)', () => {
       also: [],
       message: `Wall "${walls[0]}" has a field Grid does not know, "thick"`,
       found: '"thick" at walls[0], which Grid does not read; the nearest field it knows is "thickness"',
-      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor',
+      needed: 'one of the fields of a wall: id, start, end, thickness, height, kind, virtual, floor, properties',
       fix: 'Did you mean "thickness"? Rename "thick" to "thickness". Until then Grid reads the plan without it.',
       // MSG-11: the names and places its words were made with, as data.
       values: { name: walls[0], nearest: 'thickness', place: 'walls[0]', word: 'thick' }
@@ -198,8 +199,8 @@ describe('words Grid does not read (MSG-4)', () => {
     ])
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
-    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-6 `marks`, WRT-7 `display`.
-    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, marks, display, written')
+    // LVL-3 added `stairs` to the plan's fields, SHT-7 `title`, `annotations` and `sketch`, CNT-5 `building`, CNT-3 `north`, `yAxis`, `front` and `site` (LVL-4 adds `ground` to it), WRT-6 `marks`, WRT-7 `display`, VEW-3 `views`.
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, building, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, marks, views, display, written')
   })
 
   it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {

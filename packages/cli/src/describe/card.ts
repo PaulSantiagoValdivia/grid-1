@@ -85,6 +85,20 @@ function listed(w: Words, items: readonly string[]): string {
   return sayValue(w.language, joined(items, 'join.comma', 'join.and'), w.options)
 }
 
+/** "3 rooms", or "2 rooms and 3 zones" on a floor with zones (CNT-8), for the agent's form. */
+function roomCount(floor: FloorFacts): string {
+  const zones = floor.rooms.filter((room) => room.zoneOf !== undefined).length
+  const rooms = plural(floor.rooms.length - zones, 'room')
+  return zones === 0 ? rooms : `${rooms} and ${plural(zones, 'zone')}`
+}
+
+/** The same in the person's language. */
+function roomCountSaid(w: Words, floor: FloorFacts): string {
+  const zones = floor.rooms.filter((room) => room.zoneOf !== undefined).length
+  const rooms = countOf(w, 'describe.count.room', floor.rooms.length - zones)
+  return zones === 0 ? rooms : t(w, 'describe.roomsAndZones', { rooms, zones: countOf(w, 'describe.count.zone', zones) })
+}
+
 /** At most `most` items, and how many more. */
 function capped(w: Words, items: readonly string[], most: number): string[] {
   return items.length <= most ? [...items] : [...items.slice(0, most - 1), t(w, 'describe.more', { count: items.length - most + 1 })]
@@ -426,7 +440,9 @@ function personRoom(floor: FloorFacts, room: RoomFacts, names: PersonNames, w: W
   const across = `${fig(w, shape.across)} × ${fig(w, shape.up)}`
   const size = shape.rectangle ? across : t(w, 'describe.room.odd', { size: across })
   const next = nextOnly(floor, room)
-  const lines = [`${t(w, 'describe.room', { room: name, size, area: area(w, shape.area), at: point(w, shape.at.x, shape.at.y) })}${next.length > 0 ? t(w, 'describe.room.next', { rooms: listed(w, next.map((id) => names.room(id))) }) : ''}`]
+  // CNT-8: a zone is named as part of its room, and its floor is in its room's.
+  const of = room.zoneOf === undefined ? '' : t(w, 'describe.room.zoneOf', { room: names.room(room.zoneOf) })
+  const lines = [`${t(w, 'describe.room', { room: `${name}${of}`, size, area: area(w, shape.area), at: point(w, shape.at.x, shape.at.y) })}${next.length > 0 ? t(w, 'describe.room.next', { rooms: listed(w, next.map((id) => names.room(id))) }) : ''}`]
   const { openings, open } = roomOpenings(floor, room.id)
   for (const side of open) lines.push(`  ${t(w, 'describe.room.open', { room: names.room(side.other) })}`)
   for (const { opening, here, there } of openings) {
@@ -446,7 +462,7 @@ function agentRoomHead(room: RoomFacts): string {
   const use = room.use ?? '-'
   if (room.shape === null) return `${room.id} ${JSON.stringify(room.name)} ${use} LEFT OUT (grid check says why)`
   const { shape } = room
-  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}`
+  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}${room.zoneOf === undefined ? '' : ` zone-of:${room.zoneOf}`}`
 }
 
 function agentRoom(floor: FloorFacts, room: RoomFacts): string {
@@ -535,12 +551,12 @@ const AGENT_CLOSE = 'CHECKS none here: grid check.'
 
 function personFloorHead(floor: FloorFacts, names: PersonNames, w: Words): string {
   const left = floor.leftOut.length > 0 ? countOf(w, 'describe.floor.left', floor.leftOut.length, { parts: countOf(w, 'describe.count.part', floor.leftOut.length) }) : ''
-  return `${t(w, 'describe.floor', { floor: names.floor(floor.id), rooms: countOf(w, 'describe.count.room', floor.rooms.length), area: area(w, floor.area) })}${left}`
+  return `${t(w, 'describe.floor', { floor: names.floor(floor.id), rooms: roomCountSaid(w, floor), area: area(w, floor.area) })}${left}`
 }
 
 function agentFloorHead(floor: FloorFacts): string {
   const left = floor.leftOut.length > 0 ? `; left out ${floor.leftOut.join(' ')}` : ''
-  return `FLOOR ${floor.id} ${floor.name === null ? '(no name)' : JSON.stringify(floor.name)} level ${floor.level}: ${plural(floor.rooms.length, 'room')}, ${m(floor.area)} m2${left}`
+  return `FLOOR ${floor.id} ${floor.name === null ? '(no name)' : JSON.stringify(floor.name)} level ${floor.level}: ${roomCount(floor)}, ${m(floor.area)} m2${left}`
 }
 
 function personCard(facts: PlanFacts, withWalls: boolean, w: Words): string[] {

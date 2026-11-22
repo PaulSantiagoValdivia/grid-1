@@ -8,7 +8,7 @@ import { edit, flat, twoFloorHouse, withoutOpening } from '@ongrid/floorplan/tes
 import { checkLocalRules, LOOKS_AT, RULES, skipWhy } from '..'
 import type { SkipReason } from '../types'
 
-const REASONS: SkipReason[] = ['cannot_be_drawn', 'no_stairs', 'way_out_not_drawn', 'no_use', 'no_figures_for_place', 'above_escape_storeys', 'no_rooms', 'alone_off_ground', 'use_not_covered']
+const REASONS: SkipReason[] = ['no_place', 'cannot_be_drawn', 'no_stairs', 'way_out_not_drawn', 'no_use', 'no_figures_for_place', 'above_escape_storeys', 'no_rooms', 'alone_off_ground', 'use_not_covered']
 
 describe('what each check looked at', () => {
   it('knows what every check looks at, the core plan checks among them', () => {
@@ -36,6 +36,17 @@ describe('what each check looked at', () => {
     }
   })
 
+  it('with no place stated, says every room was skipped by the figure checks for that reason (COD-3)', () => {
+    const report = checkLocalRules(flat())
+    for (const id of ['habitable-room-area', 'escape-opening']) {
+      const c = report.coverage.find((x) => x.ruleId === id)!
+      expect(c.lookedAtCount).toBe(0)
+      expect(c.skipped.map((s) => [s.reason, s.why])).toEqual([['no_place', 'no place is stated, so no figure was applied']])
+      expect(c.skippedCount).toBe(flat().rooms.length)
+      expect(c.readFor).toBeUndefined()
+    }
+  })
+
   it('upstairs with no stairs: the routes skip the floor, the doors are still looked at', () => {
     const report = checkLocalRules(withoutOpening(twoFloorHouse(), 'd_up'))
     const routes = report.coverage.find((c) => c.ruleId === 'room-reaches-exit')!
@@ -48,7 +59,8 @@ describe('what each check looked at', () => {
     const broken = edit(flat(), (copy) => {
       copy.walls.find((w) => w.id === 'bb')!.thickness = 0
     })
-    const report = checkLocalRules(broken)
+    // COD-3: the US stated, so the figure checks run and skip the room too.
+    const report = checkLocalRules(broken, { country: 'US' })
     const left = report.notChecked.find((n) => n.reason === 'cannot_be_drawn')!.rooms
     expect(left.length).toBeGreaterThan(0)
     for (const c of report.coverage.filter((x) => x.looksAt === 'room')) {

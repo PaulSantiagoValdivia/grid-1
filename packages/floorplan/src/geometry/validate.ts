@@ -38,8 +38,12 @@ import { levelIssues, unknownFloorIssues } from './levels'
 import { buildingKind } from './plausible'
 import { planStairs } from './stairs'
 import { itemIssues } from './items'
+import { pointInPolygon } from './innerPoint'
+import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
+import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
+import { roomZones } from './zones'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
@@ -72,6 +76,15 @@ export interface Issue {
    * tool server turns each into the call that makes it.
    */
   readonly fixes?: readonly PlanFix[]
+  /**
+   * MSG-5: the id of the issue this one follows from, set where it is raised: the wall a door
+   * hangs off or a room rests on, the room a piece of unclaimed floor most likely belongs to (and
+   * a fixture said to stand in no room, whose middle is on that floor), or
+   * `plan` (the id of the plan's own issues) for a plan with no walls. The cause may be a part the
+   * reader left out (`leftOutWalls`, `leftOutParts`), whose line is the reader's. Fixing the cause
+   * clears this issue too.
+   */
+  readonly causedBy?: string
 }
 
 /**
@@ -112,6 +125,9 @@ function issue(
   return withSaid(fixes.length > 0 ? { entity, id, code, message, severity, fixes } : { entity, id, code, message, severity }, sentence)
 }
 
+/** MSG-5: an issue that follows from another, by that one's id. MSG-11: it keeps its sentence. */
+const followOn = (found: Issue, cause: string | null): Issue => (cause === null ? found : withSaid({ ...found, causedBy: cause }, found.said))
+
 /**
  * How far from the origin the farthest point of the plan sits.
  *
@@ -151,6 +167,15 @@ export function exactMetres(value: number): string {
   const fixed = value.toFixed(6).replace(/0+$/, '')
   const [whole, decimals = ''] = fixed.split('.')
   return `${whole}.${decimals.padEnd(2, '0')}`
+}
+
+/**
+ * LVL-6 (lab VE-5): an opening names a wall, and a window in the roof is no opening in a wall. Said
+ * (`issue.opening/missing-wall.roof`) when an opening names the roof, a room or a floor for its
+ * wall, as the lab's agents tried.
+ */
+function inTheRoof(plan: FloorPlan, id: string): boolean {
+  return /roof|sky|dormer/i.test(id) || plan.rooms.some((r) => r.id === id) || (plan.floors ?? []).some((f) => f.id === id)
 }
 
 /** Whether a number is one Grid accepts: finite, and no larger than `largest`. */
@@ -251,13 +276,15 @@ function validateOpening(
   index: PlanIndex,
   brokenWalls: ReadonlySet<string>,
   issues: Issue[],
-  leftOut: ReadonlySet<string> = new Set()
+  leftOut: ReadonlySet<string> = new Set(),
+  /** MSG-5: the plan has no walls, so an opening on one that is not in the plan follows from that. */
+  noWalls = false
 ): boolean {
   // If the wall is already broken there is nothing to measure against, and its
   // geometry cannot be built either.
   if (brokenWalls.has(opening.wall)) {
     const key = leftOut.has(opening.wall) ? 'issue.opening/broken-wall.leftOut' : 'issue.opening/broken-wall'
-    issues.push(issue('opening', opening.id, 'opening/broken-wall', said(key, { opening: name(opening.id), wall: name(opening.wall) })))
+    issues.push(followOn(issue('opening', opening.id, 'opening/broken-wall', said(key, { opening: name(opening.id), wall: name(opening.wall) })), opening.wall))
     return false
   }
 
@@ -266,15 +293,20 @@ function validateOpening(
     // MSG-7: the wall most likely meant, from the one nearest-id helper.
     const meant = likelyId(opening.wall, [...index.wallsById.keys()])
     issues.push(
-      issue(
-        'opening',
-        opening.id,
-        'opening/missing-wall',
-        meant === null
-          ? said('issue.opening/missing-wall', { opening: name(opening.id), wall: name(opening.wall) })
-          : said('issue.opening/missing-wall.meant', { opening: name(opening.id), wall: name(opening.wall), meant: name(meant) }),
-        'error',
-        meant === null ? [] : [{ part: 'opening', id: opening.id, wall: meant }]
+      followOn(
+        issue(
+          'opening',
+          opening.id,
+          'opening/missing-wall',
+          meant === null
+            ? inTheRoof(index.plan, opening.wall)
+              ? said('issue.opening/missing-wall.roof', { opening: name(opening.id), wall: name(opening.wall) })
+              : said('issue.opening/missing-wall', { opening: name(opening.id), wall: name(opening.wall) })
+            : said('issue.opening/missing-wall.meant', { opening: name(opening.id), wall: name(opening.wall), meant: name(meant) }),
+          'error',
+          meant === null ? [] : [{ part: 'opening', id: opening.id, wall: meant }]
+        ),
+        noWalls ? 'plan' : null
       )
     )
     return false
@@ -365,6 +397,38 @@ function validateOpening(
       )
     )
     ok = false
+  } else if (!wall.virtual) {
+    // LVL-6: a wall the floor's roof cuts is no higher than the roof over its line.
+    const profile = wallTopProfile(index.plan, wall)
+    const under = profile === null ? null : topBetween(profile, Math.max(0, span.from), Math.min(wallLength, span.to))
+    if (under !== null && head > under.low + overrun) {
+      const tallest = under.low - Math.max(opening.sill, 0)
+      const floor = (index.plan.floors ?? []).find((f) => f.id === floorOf(wall))
+      const range =
+        under.high - under.low > tolerance('joint')
+          ? said('issue.opening/above-roof.range', { low: num(metresText(under.low)), high: num(metresText(under.high)) })
+          : said('issue.opening/above-roof.at', { low: num(metresText(under.low)) })
+      const wholly = opening.sill >= under.high - overrun
+      issues.push(
+        issue(
+          'opening',
+          opening.id,
+          'opening/above-roof',
+          said('issue.opening/above-roof', {
+            opening: name(opening.id),
+            head: num(exactMetres(head)),
+            wall: name(wall.id),
+            floor: name(floor?.name || floorOf(wall)),
+            range,
+            where: said(wholly ? 'issue.opening/above-roof.wholly' : 'issue.opening/above-roof.top'),
+            fits: tallest > 0 ? said('issue.opening/above-roof.fits', { sill: num(exactMetres(opening.sill)), tallest: num(exactMetres(tallest)) }) : ''
+          }),
+          'error',
+          tallest > 0 ? [{ part: 'opening', id: opening.id, height: down(tallest) }] : []
+        )
+      )
+      ok = false
+    }
   }
 
   if (opening.sill < -overrun) {
@@ -643,13 +707,33 @@ function unclaimedMessage(floor: string, piece: FloorPiece): Said {
  * of order, or with a wall too many).
  */
 function refusedRoomFor(floor: string, piece: FloorPiece, plan: FloorPlan, broken: ReadonlySet<string>): boolean {
+  return refusedRoomOf(floor, piece, plan, broken) !== null
+}
+
+/** The refused room `refusedRoomFor` finds, by id, or null. */
+function refusedRoomOf(floor: string, piece: FloorPiece, plan: FloorPlan, broken: ReadonlySet<string>): string | null {
   const around = new Set(piece.walls)
-  if (around.size === 0) return false
-  return plan.rooms.some((room) => {
+  if (around.size === 0) return null
+  const room = plan.rooms.find((room) => {
     if (!broken.has(room.id) || floorOf(room) !== floor || room.boundary.length === 0) return false
     const listed = new Set(room.boundary)
     return [...listed].every((id) => around.has(id)) || [...around].every((id) => listed.has(id))
   })
+  return room?.id ?? null
+}
+
+/**
+ * MSG-5: the room a piece of unclaimed floor most likely belongs to, when that room could not be
+ * drawn or was left out when the plan was read: one that lists at least two of the walls around
+ * it. Its line says why it is not there, and the piece goes with it.
+ */
+function unclaimedCause(piece: FloorPiece, plan: FloorPlan, broken: ReadonlySet<string>, leftOut: readonly LeftOutPart[]): string | null {
+  const around = new Set(piece.walls)
+  const lists = (walls: readonly string[]): boolean => new Set(walls.filter((id) => around.has(id))).size >= 2
+  // A room on another floor may name this floor's walls (`room/cross-floor`): the walls tell.
+  const room = plan.rooms.find((r) => broken.has(r.id) && lists(r.boundary))
+  if (room !== undefined) return room.id
+  return leftOut.find((part) => part.kind === 'room' && part.id !== null && lists(part.walls))?.id ?? null
 }
 
 /** `.one` for one, `.many` for more. */
@@ -682,12 +766,12 @@ function mismatchMessage(m: RoomMismatch): Said {
  * The spaces the walls enclose, floor by floor (`spaces.ts`): floor no room claims, and rooms
  * whose outline is not the space their walls enclose. Warnings only: nothing is skipped.
  */
-function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): FloorSpaces[] {
   let floors: ReturnType<typeof planSpaces>
   try {
     floors = planSpaces(plan, { index, broken })
   } catch {
-    return
+    return []
   }
   for (const result of floors) {
     if (!spacesKnown(result)) {
@@ -702,14 +786,40 @@ function validateSpaces(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<s
       )
       continue
     }
-    reportSpaces(plan, result, broken, issues)
+    reportSpaces(plan, result, broken, issues, leftOut)
+  }
+  return floors.filter(spacesKnown)
+}
+
+/**
+ * MSG-5: a fixture said to stand in no room (`item/outside-rooms`, CNT-12) whose middle is on
+ * enclosed floor no room claims, when the room meant to claim that floor could not be drawn or
+ * was left out when the plan was read: the room `floor/unclaimed` would follow from. Its line
+ * says why the room is not there, and the fixture's line goes with it. The fixture's other lines
+ * (`item/blocks-doorway`, `item/blocks-window`, CNT-13) are measured from the wall, the opening
+ * and the fixture alone, never the room, so they follow from nothing here; and they are not
+ * given at all for an opening or a wall that cannot be drawn (`itemUseIssues` skips them).
+ */
+function traceItemRooms(plan: FloorPlan, spaces: readonly FloorSpaces[], broken: ReadonlySet<string>, leftOut: readonly LeftOutPart[], issues: Issue[]): void {
+  for (const [i, found] of issues.entries()) {
+    if (found.code !== 'item/outside-rooms' || found.causedBy !== undefined) continue
+    const item = (plan.items ?? []).find((it) => it.id === found.id)
+    if (item === undefined) continue
+    const floor = floorOf(item)
+    const at = { x: item.at[0], y: item.at[1] }
+    const piece = spaces
+      .find((result) => result.floor === floor)
+      ?.unclaimed.find((p) => p.rings[0] !== undefined && pointInPolygon(at, p.rings[0], p.rings.slice(1)))
+    if (piece === undefined) continue
+    issues[i] = followOn(found, refusedRoomOf(floor, piece, plan, broken) ?? unclaimedCause(piece, plan, broken, leftOut))
   }
 }
 
-function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<string>, issues: Issue[]): void {
+function reportSpaces(plan: FloorPlan, result: FloorSpaces, broken: ReadonlySet<string>, issues: Issue[], leftOut: readonly LeftOutPart[]): void {
   for (const piece of result.unclaimed) {
     if (refusedRoomFor(result.floor, piece, plan, broken)) continue
-    issues.push(issue('floor', result.floor, 'floor/unclaimed', unclaimedMessage(result.floor, piece), 'warning'))
+    const found = issue('floor', result.floor, 'floor/unclaimed', unclaimedMessage(result.floor, piece), 'warning')
+    issues.push(followOn(found, unclaimedCause(piece, plan, broken, leftOut)))
   }
   for (const m of result.mismatches) {
     const code = m.enclosed < tolerance('areaReported') ? 'room/not-enclosed' : 'room/space-mismatch'
@@ -739,6 +849,26 @@ function validateNesting(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<
         inner.room,
         'room/inside-no-host',
         said('issue.room/inside-no-host', { room: name(inner.room), floor: name(floor), why }),
+        'warning'
+      )
+    )
+  }
+}
+
+/**
+ * Rooms that state `partOf` but are not zones of that room (CNT-8, `zones.ts`): it is not on
+ * their floor, is a zone itself, or does not hold them. They are counted as rooms of their own,
+ * which is what the plan said not to do.
+ */
+function validateZones(index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
+  for (const fault of roomZones(index).faults) {
+    if (broken.has(fault.zone)) continue
+    issues.push(
+      issue(
+        'room',
+        fault.zone,
+        'room/zone-not-in-room',
+        said('issue.room/zone-not-in-room', { zone: name(fault.zone), room: name(fault.room), why: fault.why, partOf: name('partOf') }),
         'warning'
       )
     )
@@ -812,16 +942,38 @@ function validateRoomOverlaps(plan: FloorPlan, index: PlanIndex, broken: Readonl
  * walls on top of walls, a wall listed twice, a wall across a room that does not list it. One
  * warning each, on the wall (on the room for a wall it lists twice), ending with its fix.
  */
+/** MSG-5: what is wrong with a room measured as if it were closed, and so follows from the wall that leaves it open. */
+const OUTLINE_CODES = new Set(['room/space-mismatch', 'room/not-enclosed', 'room/overlap'])
+
 function validateWallFaults(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>, issues: Issue[]): void {
-  for (const fault of wallFaults(plan, { index, broken })) {
+  const faults = wallFaults(plan, { index, broken })
+  // MSG-5: a wall that stops short of its corner, or leaves a gap, leaves its rooms open; Grid
+  // measures each as if it were closed. What is then wrong with those rooms' outlines, and the
+  // walls found standing in them, follows from that wall: the first such wall of each room.
+  const openedBy = new Map<string, string>()
+  for (const fault of faults) {
+    if (fault.kind !== 'short' && fault.kind !== 'gap') continue
+    for (const room of fault.rooms) if (!openedBy.has(room)) openedBy.set(room, fault.walls[0]!)
+  }
+  for (const [i, found] of issues.entries()) {
+    if (found.causedBy !== undefined || !OUTLINE_CODES.has(found.code)) continue
+    const cause = openedBy.get(found.id)
+    if (cause !== undefined) issues[i] = followOn(found, cause)
+  }
+  for (const fault of faults) {
     const onRoom = fault.kind === 'listed-twice'
+    const inRoom = fault.kind === 'crosses-room' || fault.kind === 'stands-in-room'
+    const cause = inRoom ? fault.rooms.map((room) => openedBy.get(room)).find((wall) => wall !== undefined && wall !== fault.walls[0]) ?? null : null
     issues.push(
-      issue(
-        onRoom ? 'room' : 'wall',
-        onRoom ? fault.rooms[0]! : fault.walls[0]!,
-        onRoom ? 'room/wall-listed-twice' : `wall/${fault.kind}`,
-        fault.said,
-        'warning'
+      followOn(
+        issue(
+          onRoom ? 'room' : 'wall',
+          onRoom ? fault.rooms[0]! : fault.walls[0]!,
+          onRoom ? 'room/wall-listed-twice' : `wall/${fault.kind}`,
+          fault.said,
+          'warning'
+        ),
+        cause
       )
     )
   }
@@ -887,6 +1039,11 @@ export interface ValidateOptions {
    * wall the plan does not have.
    */
   readonly leftOutWalls?: ReadonlySet<string>
+  /**
+   * MSG-5: every wall, room and opening the reader left out (`readPlanParts`), for the issues that
+   * follow from one to name it as their cause: floor no room claims where a left-out room was.
+   */
+  readonly leftOutParts?: readonly LeftOutPart[]
 }
 
 /**
@@ -911,6 +1068,43 @@ function validateDerived(plan: FloorPlan, issues: Issue[], broken: Set<string>):
 }
 
 /**
+ * LVL-6: what a floor's stated roof holds that cannot be drawn. A rooflight that does not lie on
+ * the roof, or lies across a ridge or a hip, is left out; dormers are not drawn yet, and a roof that
+ * lists any says so. Each floor once, and only where its walls are: a floor's slice keeps the whole
+ * floor list.
+ */
+function validateRoofs(plan: FloorPlan, issues: Issue[]): void {
+  const seen = new Set<string>()
+  for (const floor of plan.floors ?? []) {
+    if (seen.has(floor.id)) continue
+    seen.add(floor.id)
+    if (floor.roof === undefined || !plan.walls.some((wall) => floorOf(wall) === floor.id)) continue
+    const shape = floorRoofShape(plan, floor.id)
+    if (shape === null) continue
+    const floorName = name(floor.name || floor.id)
+    for (const rooflight of floor.roof.rooflights ?? []) {
+      const place = rooflightPlace(shape, rooflight)
+      if (!('problem' in place)) continue
+      issues.push(
+        issue('floor', floor.id, 'floor/rooflight-misplaced', said('issue.floor/rooflight-misplaced', { rooflight: name(rooflight.id), floor: floorName, problem: place.problem }))
+      )
+    }
+    const dormers = (floor.roof.dormers ?? []).length
+    if (dormers > 0) {
+      issues.push(
+        issue(
+          'floor',
+          floor.id,
+          'floor/dormers-not-drawn',
+          said(`issue.floor/dormers-not-drawn.${oneOrMany(dormers)}`, { floor: floorName, n: dormers }),
+          'warning'
+        )
+      )
+    }
+  }
+}
+
+/**
  * Checks the whole plan. Never throws, except for a `tolerances` change that is not one
  * (`withTolerances`).
  */
@@ -930,8 +1124,24 @@ export function validatePlan(
   const present = new Set([...plan.walls, ...plan.rooms, ...plan.openings].map((part) => part.id))
   const leftOut = new Set([...(options.leftOutWalls ?? [])].filter((id) => !present.has(id)))
   for (const id of leftOut) broken.add(id)
+  // MSG-5: a plan with no walls whose rooms and openings name walls. Every one of them is left
+  // out for that one reason, and its line follows from this one.
+  const noWalls = plan.walls.length === 0 && leftOut.size === 0 && plan.rooms.length + plan.openings.length > 0
 
   validateOrigin(plan, issues)
+  if (noWalls) {
+    issues.push(
+      issue(
+        'plan',
+        'plan',
+        'plan/no-walls',
+        said('issue.plan/no-walls', {
+          rooms: said(`issue.plan/no-walls.room.${oneOrMany(plan.rooms.length)}`, { n: plan.rooms.length }),
+          openings: said(`issue.plan/no-walls.opening.${oneOrMany(plan.openings.length)}`, { n: plan.openings.length })
+        })
+      )
+    )
+  }
   // First: every check below resolves entities by id, so it has to know which
   // ids cannot be resolved at all.
   const duplicated = validateDuplicateIds(plan, issues, broken)
@@ -944,10 +1154,11 @@ export function validatePlan(
   }
 
   for (const opening of plan.openings) {
-    if (!validateOpening(opening, index, broken, issues, leftOut)) broken.add(opening.id)
+    if (!validateOpening(opening, index, broken, issues, leftOut, noWalls)) broken.add(opening.id)
   }
 
   validateOverlaps(index, broken, issues)
+  validateRoofs(plan, issues)
 
   for (const room of plan.rooms) {
     // Already faulted (e.g. it reaches across floors) — one fault, one issue.
@@ -959,7 +1170,9 @@ export function validatePlan(
         gone.length > 0
           ? said(`issue.room/broken-wall.leftOut.${oneOrMany(gone.length)}`, { room: name(room.id), walls: joined([...new Set(gone)].map(name), 'join.comma') })
           : said('issue.room/broken-wall', { room: name(room.id) })
-      issues.push(issue('room', room.id, 'room/broken-wall', message))
+      // MSG-5: it follows from the first of those walls, a wall left out first.
+      const cause = gone[0] ?? roomWallIds(room).find((wallId) => broken.has(wallId))!
+      issues.push(followOn(issue('room', room.id, 'room/broken-wall', message), cause))
       broken.add(room.id)
       continue
     }
@@ -972,14 +1185,17 @@ export function validatePlan(
       }
     } catch (error) {
       issues.push(
-        issue(
-          'room',
-          room.id,
-          // The outline says why it failed: not closable, out of order, inside out, or a hole
-          // that does not lie inside it (ARE-6).
-          error instanceof RoomOutlineError ? error.code : 'room/unclosed',
-          // Any other error is one the outline did not expect, said in its own words.
-          error instanceof RoomOutlineError ? error.said : said('issue.part.error', { error: error instanceof Error ? error.message : String(error) })
+        followOn(
+          issue(
+            'room',
+            room.id,
+            // The outline says why it failed: not closable, out of order, inside out, or a hole
+            // that does not lie inside it (ARE-6).
+            error instanceof RoomOutlineError ? error.code : 'room/unclosed',
+            // Any other error is one the outline did not expect, said in its own words.
+            error instanceof RoomOutlineError ? error.said : said('issue.part.error', { error: error instanceof Error ? error.message : String(error) })
+          ),
+          noWalls ? 'plan' : null
         )
       )
       broken.add(room.id)
@@ -997,8 +1213,10 @@ export function validatePlan(
   if (options.spaces !== false) validateStairs(plan, broken, issues)
 
   if (options.spaces !== false) {
-    validateSpaces(plan, index, broken, issues)
+    const spaces = validateSpaces(plan, index, broken, issues, options.leftOutParts ?? [])
+    traceItemRooms(plan, spaces, broken, options.leftOutParts ?? [], issues)
     validateNesting(plan, index, broken, issues)
+    validateZones(index, broken, issues)
     validateRoomOverlaps(plan, index, broken, issues)
     validateWallFaults(plan, index, broken, issues)
     // MSG-16: where each opening stands, against the walls that meet its wall.

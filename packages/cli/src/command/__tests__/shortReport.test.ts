@@ -3,7 +3,8 @@
  *
  * The default `grid check` and `grid_check` give the label, the notes, what was not checked and
  * what each check looked at, in counts, and no fixed table of rules or figures: the lab's 62.65
- * m² flat gets under 1,000 bytes (lab AD-2: 6,161 for every plan before). A note marked seen
+ * m² flat gets under 1,000 bytes (lab AD-2: 6,161 for every plan before), with no place stated and
+ * with the US stated (COD-3). A note marked seen
  * stays listed, under Seen, with its reason and who marked it, and is new again when one of its
  * parts changes.
  */
@@ -11,6 +12,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { edit, flat } from '@ongrid/floorplan/test-support/plans'
 import { approvalWords, figureUsedText, GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { planAreas } from '../../quantities/areas'
 import { surveyPlan } from '../../quantities/survey'
@@ -62,52 +64,72 @@ describe('the default report of the 62.65 m² flat', () => {
     expect(planAreas(surveyPlan(loadPlan(project, 'flat.json').plan)).net).toBeCloseTo(62.65, 6)
   })
 
-  it('grid check: the label, the notes, what was not checked and the coverage counts, and no fixed tables, in 1,201 bytes (988 without LVL-4\'s ground line)', async () => {
+  // COD-3: the flat states no place, so no figure is applied, and the line after the label says so.
+  it('grid check: the label, the place, the notes and the coverage counts, and no fixed tables, in 1,196 bytes (984 without LVL-4\'s ground line)', async () => {
     const run = await grid(['check', 'flat.json'])
     expect(run.code).toBe(0)
     const text = run.out
     expect(text.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
+    expect(text.split('\n')[1]).toBe('No place is stated, so no figure was applied: the US figures would have given no lines. State it in the plan as site.country, or give --country.')
     expect(text).toContain('To look at: nothing. That only means these checks found nothing, not that the plan meets any rule.')
     expect(text).toContain('Looked at by at least one check: 6 of 6 rooms.')
     expect(text).toContain('What each check looked at (8):')
     expect(text).toContain('  - Every room has a door or an opening to another space: 6 rooms.')
     expect(text).toContain('  - Nothing was checked for "A stair or a lift shaft drawn as a room on each floor lies over itself from floor to floor": it looked at no rooms.')
-    expect(text).toContain('Both checks that use figures read them for homes (houses and flats people live in).')
-    expect(text).toContain(`  - ${GROUND_LINE}`)
-    expect(text).toContain('Checks run: 6. --full lists the checks, the figures, the parts looked at and what is never looked at (10).')
+    expect(text).toContain('  - Room sizes and escape openings: not run: no place is stated, so no figure was applied.')
+    expect(text).toContain('Checks run: 4. --full lists the checks, the figures, the parts looked at and what is never looked at (10).')
     // No fixed table of rules, figures or limits.
     expect(text).not.toMatch(/Checks run \(|Figures used|The figure used here|What these checks never look at \(|Ceiling height/)
     expect(approvalWords(text)).toEqual([])
-    expect(bytes(text)).toBe(1201)
-    expect(bytes(text) - bytes(`  - ${GROUND_LINE}\n`)).toBeLessThan(1000)
+    expect(text).toContain(`  - ${GROUND_LINE}`)
+    expect(bytes(text)).toBe(1196)
+    // LVL-4's ground line puts the report over MSG-10's 1,000 bytes; without it, it is under.
+    expect(bytes(text) - bytes(`  - ${GROUND_LINE}\n`)).toBe(984)
   })
 
-  it('grid_check: the same, in 1,184 bytes of text (973 without the ground line)', async () => {
+  it('grid check with the US stated: the place line names the figures, in 1,200 bytes (988 without the ground line)', async () => {
+    const run = await grid(['check', 'flat.json', '--country', 'US'])
+    const text = run.out
+    expect(text.split('\n')[1]).toBe('Place: United States, from --country; figures from US model codes, read for homes.')
+    expect(text).toContain('  - Rooms people live or sleep in have a minimum floor area: 3 rooms.')
+    expect(text).toContain('Checks run: 6. --full lists the checks, the figures, the parts looked at and what is never looked at (10).')
+    expect(approvalWords(text)).toEqual([])
+    // The same report as before COD-3, with the place line for the line on the kind of building.
+    expect(bytes(text)).toBe(1200)
+    expect(bytes(text) - bytes(`  - ${GROUND_LINE}\n`)).toBe(988)
+  })
+
+  it('grid_check: the same, in 1,179 bytes of text (969 without the ground line)', async () => {
     const answer = await tool('grid_check').run({ plan: 'flat.json' }, { project })
     const text = answer.text
     expect(text.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
-    expect(text).toContain('To look at: nothing. That only means these checks found nothing, not that the plan meets any rule. Checks run: 6.')
+    expect(text.split('\n')[1]).toBe('No place is stated, so no figure was applied: the US figures would have given no lines. State it in the plan as site.country, or give country.')
+    expect(text).toContain('To look at: nothing. That only means these checks found nothing, not that the plan meets any rule. Checks run: 4.')
     expect(text).toContain('Looked at by at least one check: 6 of 6 rooms.')
-    expect(text).toContain('  Rooms people live or sleep in have a minimum floor area: 3 rooms.')
-    expect(text).toContain(`  ${GROUND_LINE}`)
+    expect(text).toContain('  Room sizes and escape openings: not run: no place is stated, so no figure was applied.')
     expect(text).toContain('full=true lists the checks, the figures, the parts looked at and what is never looked at (10).')
     expect(text).not.toMatch(/The figure used here|Never looked at, whatever the plan|Ceiling height/)
     expect(approvalWords(text)).toEqual([])
-    expect(bytes(text)).toBe(1184)
-    expect(bytes(text) - bytes(`  ${GROUND_LINE}\n`)).toBeLessThan(1000)
+    expect(text).toContain(`  ${GROUND_LINE}`)
+    expect(bytes(text)).toBe(1179)
+    expect(bytes(text) - bytes(`  ${GROUND_LINE}\n`)).toBe(969)
     // The data keeps the whole record: coverage and limits are there either way.
     const data = answer.data as { coverage: unknown[]; limits: string[]; seenCount: number; marksProblem: string | null }
     expect(data.coverage).toHaveLength(8)
     expect(data.limits).toContain('Ceiling height is not checked, in any room or under a sloping roof')
     expect([data.seenCount, data.marksProblem]).toEqual([0, null])
+    const us = await tool('grid_check').run({ plan: 'flat.json', country: 'US' }, { project })
+    expect(us.text).toContain('  Rooms people live or sleep in have a minimum floor area: 3 rooms.')
+    expect(bytes(us.text) - bytes(`  ${GROUND_LINE}\n`)).toBeLessThan(1000)
   })
 
   it('--full and full=true give the whole report, as before', async () => {
-    const full = (await grid(['check', 'flat.json', '--full'])).out
-    expect(full).toBe(checkText(check('flat.json'), 1, { full: true }))
+    // COD-3: with the US stated, so every figure is there.
+    const full = (await grid(['check', 'flat.json', '--full', '--country', 'US'])).out
+    expect(full).toBe(checkText(check('flat.json', { country: 'US' }), 1, { full: true }))
     for (const heading of ['Checks run (6):', 'Figures used (6):', 'What these checks never look at (10):', 'What each check looked at (8):']) expect(full).toContain(heading)
     expect(full).toContain('      looked at: "bath", "bed1", "bed2", "hall", "kitchen", "living"')
-    const answer = await tool('grid_check').run({ plan: 'flat.json', full: true }, { project })
+    const answer = await tool('grid_check').run({ plan: 'flat.json', full: true, country: 'US' }, { project })
     expect(answer.text).toContain('Never looked at, whatever the plan (10):')
     expect(answer.text).toContain('Figures used (6):')
     expect(answer.text).toContain('  - Rooms people live or sleep in have a minimum floor area (US model codes: IBC 2024 and IRC 2024)')
@@ -243,6 +265,66 @@ describe('a note set aside as seen', () => {
     const state = again.seen!.states[index]!
     expect(state.state).toBe('back')
     expect(checkText(again, 1)).toContain(`but ${part} changed since, so it is new again.`)
+  })
+
+  // MSG-5: identical notes are one line that lists the rooms (`each`). Its thing is the first
+  // room and `also` the others, so the mark is keyed to the line and holds every room's parts.
+  describe('a line for several rooms (MSG-5)', () => {
+    // The flat's bathroom loses its only door; then the bedroom loses its own: the same note.
+    const bathroomOnly = () =>
+      edit(flat(), (copy) => {
+        copy.openings = copy.openings.filter((o) => o.id !== 'd_bb')
+        copy.walls.find((w) => w.id === 'bb')!.kind = 'exterior'
+      })
+    const both = () => edit(bathroomOnly(), (copy) => { copy.openings = copy.openings.filter((o) => o.id !== 'd_hb') })
+    const write = (plan: unknown): void => writeFileSync(join(dir, 'pair.json'), JSON.stringify(plan))
+    const doorless = (result: CheckResult): number => result.result.lines.findIndex((l) => l.code === 'room/no-door')
+
+    it('is seen as one note on the next check, and back when one of its rooms changes', async () => {
+      write(both())
+      const first = check('pair.json')
+      const index = doorless(first)
+      expect(first.result.lines[index]!.each).toEqual([{ kind: 'room', id: 'bathroom' }, { kind: 'room', id: 'bedroom' }])
+      const run = await grid(['check', 'pair.json', '--seen', String(index + 1), '--reason', 'Doors come later', '--by', 'Owner'])
+      expect(run.code, run.err).toBe(0)
+      const [mark] = readSeen(project, 'pair.json').marks
+      expect(mark!.parts.filter((p) => p.kind === 'room').map((p) => p.id)).toEqual(['bathroom', 'bedroom'])
+
+      const again = check('pair.json')
+      expect(again.seen!.states[doorless(again)]!.state).toBe('seen')
+      expect(checkText(again, 1)).toMatch(/Seen \(1\): .*\n {2}\d+\. finding, rooms? .*"Bathroom", "Bedroom" have no door/)
+
+      // A wall of the bedroom only: the line is back, naming it.
+      const taller = edit(both(), (copy) => { copy.walls.find((w) => w.id === 'w2')!.height = 2.9 })
+      write(taller)
+      const changed = check('pair.json')
+      const state = changed.seen!.states[doorless(changed)]!
+      expect(state.state).toBe('back')
+      expect(checkText(changed, 1)).toContain('but wall "w2" changed since, so it is new again.')
+    })
+
+    it('a mark made on one room\'s note finds the line it joins, but never holds: the line is new again', async () => {
+      write(bathroomOnly())
+      const single = check('pair.json')
+      expect(single.result.lines[doorless(single)]!.each).toBeUndefined()
+      await grid(['check', 'pair.json', '--seen', String(doorless(single) + 1), '--reason', 'Doors come later', '--by', 'Owner'])
+      expect(check('pair.json').seen!.states[doorless(single)]!.state).toBe('seen')
+
+      write(both())
+      const grouped = check('pair.json')
+      const index = doorless(grouped)
+      const state = grouped.seen!.states[index]!
+      expect(state.state).toBe('back')
+      expect(checkText(grouped, 1)).toMatch(/seen before, by "Owner" on \d{4}-\d{2}-\d{2}: "Doors come later"; but room "bedroom".* changed since, so it is new again\./)
+
+      // Marking the line replaces the room's mark; taking it off leaves none behind.
+      await grid(['check', 'pair.json', '--seen', String(index + 1), '--reason', 'Both, later', '--by', 'Owner'])
+      expect(readSeen(project, 'pair.json').marks.map((m) => m.reason)).toEqual(['Both, later'])
+      expect(check('pair.json').seen!.states[index]!.state).toBe('seen')
+      await grid(['check', 'pair.json', '--unseen', String(index + 1)])
+      expect(readSeen(project, 'pair.json').marks).toEqual([])
+      expect(check('pair.json').seen!.states[index]!.state).toBe('new')
+    })
   })
 
   it('unmarking takes the mark off; marking again replaces it', async () => {

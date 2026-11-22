@@ -14,9 +14,10 @@
  * The tool server's `grid_write_rooms` does the same through `writeRoomsIntoProject`.
  */
 import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
+import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
+import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan } from '../quantities/survey'
@@ -57,6 +58,10 @@ export interface WriteDone {
   /** The comparison with the plan before, or null when there was none. */
   readonly verdict: string | null
   readonly drawingProblems: { readonly before: number; readonly after: number }
+  /** BRF-1: the brief beside the plan, line by line against the plan written. */
+  readonly brief: BriefData
+  /** BRF-1: one line when this is the plan's first write and no brief is kept beside it; never a refusal. */
+  readonly reminder: string | null
   readonly lines: readonly string[]
 }
 
@@ -116,7 +121,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     const first = parsed.error.issues[0]
     throw new RoomsRefused('rooms/schema', `The rooms text was not written: the plan it makes does not fit the plan's format at ${first?.path.join('.') ?? 'its top'} (${first?.message ?? 'invalid'}).`)
   }
-  const plan = parsed.data
+  let plan = parsed.data
 
   // The plan now, if there is one, and whether writing over it would lose a change.
   let before: FloorPlan | null = null
@@ -147,6 +152,9 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     }
   }
 
+  // CNT-9: the facts of the person's own and the rooms' numbers stay with their parts, by id.
+  const carried = before === null ? null : carryFacts(before, plan)
+  if (carried !== null) plan = carried.plan
   // Everything the rooms text does not hold stays as the file has it: its id, its picture.
   const next: Record<string, unknown> = { ...raw, version: '1', units: 'm' }
   delete next['floors']
@@ -157,7 +165,11 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings
   next['written'] = stampFor(plan)
+  // BRF-1: whether this is the plan's first write, before it is written.
+  const first = before === null || nothingToLose(before)
   const written = project.relative(project.writeFile(planFile, `${JSON.stringify(next, null, 2)}\n`))
+  const brief = briefAnswer(project, planFile, plan)
+  const reminder = first ? briefReminder(project, planFile) : null
 
   const verdict = before === null || nothingToLose(before) ? null : comparePlans(surveyPlan(before), surveyPlan(plan), ['the plan before', 'the plan now']).verdict
   const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(plan).issues.length }
@@ -165,7 +177,11 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     `Wrote ${written} from rooms text: the walls, their kinds, the room boundaries and the openings' places are worked out by Grid.`,
     ...roomsAnswer(result, options.brief !== true || result.rooms.length <= ROOMS_LISTED_MAX),
     ...(verdict === null ? [] : [verdict]),
+    ...(carried === null || carried.kept === 0 ? [] : [`Facts of your own and room numbers kept by id on ${carried.kept} part${carried.kept === 1 ? '' : 's'}.`]),
+    ...(carried === null || carried.lost.length === 0 ? [] : [`Not in the text, so their facts and numbers are gone with them: ${carried.lost.slice(0, 10).join(', ')}${carried.lost.length > 10 ? ` and ${carried.lost.length - 10} more` : ''}.`]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
+    ...brief.text,
+    ...(reminder === null ? [] : [reminder]),
   ]
-  return { written, result, plan, verdict, drawingProblems, lines }
+  return { written, result, plan, verdict, drawingProblems, brief: brief.data, reminder, lines }
 }

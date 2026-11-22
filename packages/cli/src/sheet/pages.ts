@@ -14,12 +14,13 @@ import { findingReadFor, readForSentence } from '@ongrid/rules'
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 import { pictureView, undecidedDoorsOf, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
-import { checkOnFloor, checkPlan, floorIssues } from '../command/check'
+import { checkOnFloor, checkPlan, floorIssues, placeText } from '../command/check'
+import { inLanguage } from '../command/words'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
-import { openingSchedule, roomSchedule } from '../quantities/schedule'
+import { factsText, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
 import { surveyPlan } from '../quantities/survey'
 import { sqFt } from '../quantities/units'
 
@@ -212,14 +213,17 @@ function undecidedNote(loaded: LoadedPlan, floor: string, w: Words): string[] {
 }
 
 function areaTable(floor: FloorAreas, withUse: boolean, w: Words): SheetTable {
+  // CNT-8: a zone's floor is its room's, so the table has one row per room, and the column adds
+  // up to the net. The plan draws each zone with its name and area.
+  const places = floor.rooms.filter((r) => r.zoneOf === undefined)
   // SHT-11: a stair room over the stair below is counted there, so it is in no part of the sum.
-  const counted = floor.rooms.filter((r) => r.countedWith === undefined)
+  const counted = places.filter((r) => r.countedWith === undefined)
   const shown = sumText(counted.map((r) => r.net ?? 0), floor.net, 1)
   const parts = new Map(counted.map((room, i) => [room, shown.parts[i]!] as const))
   return {
     heading: w.say('sheet.rooms'),
     // MSG-2: a room that could not be measured has no area, never 0.
-    rows: floor.rooms.map((room) => {
+    rows: places.map((room) => {
       const part = parts.get(room)
       return {
         name: room.name,
@@ -338,6 +342,8 @@ function checkBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
     paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person', { language: w.language, options: {} }).trim()],
     figures, table: null, picture: null,
     notes: [
+      // COD-3: the place the figures were for, or that none was stated and no figure applied.
+      inLanguage(w.language, undefined, () => placeText(whole.report, 'sheet')),
       ...(whole.report.findings.length === 0 ? [w.say('sheet.findings.none', { why })] : []),
       AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
       ...(areas.grossWhy === null ? [] : [areas.grossWhy]),
@@ -381,8 +387,14 @@ function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
   const openings = openingSchedule(survey)
   const several = rooms.floors.length > 1
   const roomRows: SheetRow[] = rooms.rows.map((r) => ({
-    name: `${r.number}. ${r.name}`,
-    detail: [r.use === null ? w.say('sheet.useNotSaid') : w.use(r.use), r.height === null ? w.say('sheet.heightNotKnown') : w.say('sheet.high', { height: num(metresText(r.height)) }), ...(several ? [r.floorName] : [])].join(w.say('join.comma')),
+    // CNT-9: a stated room number wins over Grid's, and the room's own facts close the detail.
+    name: `${shownNumber(r)}. ${r.name}`,
+    detail: [
+      r.use === null ? w.say('sheet.useNotSaid') : w.use(r.use),
+      r.height === null ? w.say('sheet.heightNotKnown') : w.say('sheet.high', { height: num(metresText(r.height)) }),
+      ...(several ? [r.floorName] : []),
+      ...(Object.keys(r.properties).length > 0 ? [factsText(r.properties)] : []),
+    ].join(w.say('join.comma')),
     area: r.area === null ? w.say('sheet.notMeasured') : w.n(areaText(r.area, 1)),
   }))
   for (const t of rooms.floors) if (several) roomRows.push({ name: w.say('sheet.total.floor', { floor: String(t.floorName) }), detail: w.say('sheet.roomCount', { count: t.rooms }), area: w.n(areaText(t.area, 1)) })
@@ -395,7 +407,7 @@ function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
   }
   const openingRows: SheetRow[] = openings.rows.map((r) => ({
     name: `${r.number}. ${w.say(`sheet.type.${r.type}`)} ${r.id}`,
-    detail: `${w.n(metresText(r.width))} × ${w.n(metresText(r.height))} m${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: num(metresText(r.sill)) })}` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}`,
+    detail: `${w.n(metresText(r.width))} × ${w.n(metresText(r.height))} m${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: num(metresText(r.sill)) })}` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
     area: '1',
   }))
   const c = openings.counts

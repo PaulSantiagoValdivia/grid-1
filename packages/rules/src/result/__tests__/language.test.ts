@@ -111,8 +111,9 @@ describe('the record in Spanish (MSG-11)', () => {
     const bedroom = flat.rooms.find((room) => room.use === 'bedroom')!
     bedroom.use = 'dormitorio'
     bedroom.name = 'dormitorio'
-    const asSpanish = inspectPlan(JSON.stringify(flat), { language: 'es' })
-    const asEnglish = inspectPlan(JSON.stringify({ ...flat, rooms: flat.rooms.map((r) => (r.id === bedroom.id ? { ...r, use: 'bedroom' } : r)) }))
+    // COD-3: the room sizes are checked only with a place stated.
+    const asSpanish = inspectPlan(JSON.stringify(flat), { language: 'es', country: 'US' })
+    const asEnglish = inspectPlan(JSON.stringify({ ...flat, rooms: flat.rooms.map((r) => (r.id === bedroom.id ? { ...r, use: 'bedroom' } : r)) }), { country: 'US' })
     expect(asSpanish.lines.map((l) => l.code)).toEqual(asEnglish.lines.map((l) => l.code))
     expect(asSpanish.lines.some((l) => l.code === 'plan/unknown-use')).toBe(false)
     const coverage = asSpanish.coverage.find((c) => c.ruleId === 'habitable-room-area')!

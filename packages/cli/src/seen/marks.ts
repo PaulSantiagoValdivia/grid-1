@@ -36,6 +36,11 @@
  *
  * Reading a check never writes: a mark whose parts changed stays in the file, and holds no
  * more. Marking the same note again replaces it; unmarking takes it out.
+ *
+ * MSG-5: a line for several rooms (`each`) is one note: its thing is the first room and `also`
+ * names the others, so its parts are every room with its outline walls, and a change to any of
+ * them brings the line back. A mark made on one of those rooms' notes before they were one line,
+ * or on the line when it named other rooms, finds the line but never holds (`earlierNote`).
  */
 import { createHash } from 'crypto'
 import path from 'path'
@@ -265,10 +270,23 @@ function markOf(line: ResultLine, lines: readonly ResultLine[], marks: readonly 
   return marks.find((m) => sameNote(m, line) && (m.message !== undefined || !several))
 }
 
+/**
+ * MSG-5: a mark made on a note that one line now gives for several rooms (`each`), or on that
+ * line when it named other rooms: the same code, and one of the line's rooms is the mark's thing
+ * or among the parts it names. Such a mark never holds as seen, since the rooms differ; the line
+ * is new again, saying which parts changed. Marking or unmarking the line replaces it.
+ */
+export function earlierNote(mark: Pick<SeenMark, 'code' | 'thing' | 'also'>, line: Pick<ResultLine, 'code' | 'each'>): boolean {
+  if (line.each === undefined || mark.code !== line.code) return false
+  return line.each.some((part) => part.kind === mark.thing.kind && (part.id === mark.thing.id || mark.also.includes(part.id)))
+}
+
 /** How each line stands against the marks, in the order of the lines. */
 export function seenStates(source: SeenSource, lines: readonly ResultLine[], marks: readonly SeenMark[]): SeenState[] {
   return lines.map((line): SeenState => {
-    const mark = markOf(line, lines, marks)
+    // WRT-6's exact mark (one with a message when several lines share a key), else MSG-5's earlier note.
+    const exact = markOf(line, lines, marks)
+    const mark = exact ?? marks.find((m) => earlierNote(m, line))
     if (mark === undefined) return { state: 'new' }
     const now = partsOf(source, line)
     const key = (p: MarkedPart): string => `${p.kind}\u0000${p.id}`
@@ -278,6 +296,7 @@ export function seenStates(source: SeenSource, lines: readonly ResultLine[], mar
       ...now.filter((p) => before.get(key(p)) !== p.hash),
       ...mark.parts.filter((p) => !now.some((n) => key(n) === key(p))),
     ]
+    if (exact === undefined) return { state: 'back', mark, changed: changed.length > 0 ? changed : now.slice(0, 1) }
     return changed.length === 0 ? { state: 'seen', mark } : { state: 'back', mark, changed }
   })
 }
@@ -448,7 +467,7 @@ export function markSeen(project: Project, planFile: string, source: SeenSource,
     by: request.by,
     at: request.at ?? new Date().toISOString(),
   }
-  const marks = [...read.marks.filter((m) => !sameNote(m, line)), mark]
+  const marks = [...read.marks.filter((m) => !sameNote(m, line) && !earlierNote(m, line)), mark]
   writeSeen(project, planFile, marks)
   return { file: read.file, mark }
 }
@@ -457,8 +476,8 @@ export function markSeen(project: Project, planFile: string, source: SeenSource,
 export function unmarkSeen(project: Project, planFile: string, line: ResultLine, lines: readonly ResultLine[] = [line]): { readonly file: string; readonly removed: SeenMark | null } {
   const read = readSeen(project, planFile)
   if (read.problem !== null) throw new SeenRefused(`Nothing was changed: ${read.problem}. Correct the file, or take it out to start again.`)
-  const removed = markOf(line, lines, read.marks) ?? read.marks.find((m) => sameNote(m, line)) ?? null
-  if (removed !== null) writeSeen(project, planFile, read.marks.filter((m) => m !== removed))
+  const removed = markOf(line, lines, read.marks) ?? read.marks.find((m) => sameNote(m, line)) ?? read.marks.find((m) => earlierNote(m, line)) ?? null
+  if (removed !== null) writeSeen(project, planFile, read.marks.filter((m) => m !== removed && !earlierNote(m, line)))
   return { file: read.file, removed }
 }
 

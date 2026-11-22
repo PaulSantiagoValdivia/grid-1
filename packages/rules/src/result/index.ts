@@ -1,6 +1,7 @@
 export * from './types'
 export { CODES, isLineCode, wordLine } from './catalogue'
+export { PLURALS } from './plurals'
 export type { CodeEntry, LineCode, LineWords, Subject } from './catalogue'
-export { inspectPlan } from './inspect'
+export { inspectPlan, problemsIn } from './inspect'
 export type { InspectOptions } from './inspect'
 export { approvalWords } from './approvalWords'

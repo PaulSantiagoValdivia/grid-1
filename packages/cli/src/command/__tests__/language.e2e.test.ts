@@ -21,6 +21,7 @@ let dir: string
 interface Plan {
   rooms: { id: string; name: string; use?: string }[]
   display?: Record<string, unknown>
+  site?: Record<string, unknown>
 }
 
 /** The two-bed flat with its uses written in Spanish, one bedroom named "dormitorio" and one shrunk name, and a use Grid does not know. */
@@ -33,6 +34,8 @@ function spanishPlan(): Plan {
     }
     if (room.use === 'living') room.use = 'salón'
   }
+  // COD-3: the room sizes are checked only where the plan states its place.
+  plan.site = { ...plan.site, country: 'US' }
   return plan
 }
 

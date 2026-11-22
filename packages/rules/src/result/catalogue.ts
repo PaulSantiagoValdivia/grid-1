@@ -14,7 +14,7 @@
  */
 
 import { figureText, metresText, planCheckSaids, tolerance, type PlanFix } from '@ongrid/floorplan/geometry'
-import { en, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
+import { en, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type Said, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
 import { buildingKindsSaid, buildingTypeSaid, findingReadFor, type BuildingKind } from '../checks/figures'
@@ -42,7 +42,7 @@ export interface Subject {
   readonly floors: number
   readonly finding?: RuleFinding
   readonly notice?: NotChecked
-  /** The country the check was asked about, as stated. Empty when none was. */
+  /** Grid's name for the place the check was for, as a sentence writes it (`the United States`; COD-3), from its list, never as stated. Empty when there is none. */
   readonly country: string
   /** On a refusal: the place in the file, as `walls[2].thickness`. */
   readonly place?: Value
@@ -68,6 +68,13 @@ export interface Subject {
   readonly rename?: string
   /** MSG-6, on an unfinished merge: what each side adds or changes, in words. */
   readonly sides?: Value
+  /**
+   * MSG-5, on a line that stands for the same note on several rooms (lab MS-14): their names, in
+   * order, the first being `name`. The wording lists them where the one name goes.
+   */
+  readonly group?: readonly string[]
+  /** MSG-5, on a "could not be drawn" line: the notes it holds back, in words; '' when none. */
+  readonly heldSaid?: Value
 }
 
 export type Field = 'says' | 'found' | 'needed' | 'fix'
@@ -79,6 +86,21 @@ export interface CodeEntry {
   readonly variant?: Partial<Record<Field, (s: Subject) => string>>
 }
 
+/**
+ * CNT-8: on a finding about a room with zones, the use the whole room was checked as, and the
+ * zone it was read from when it is not the room's own (`line.room/too-small.found.whole`).
+ */
+const wholeRoom = (s: Subject, language: Language): Values => {
+  const use = s.finding?.use
+  if (use === undefined) return {}
+  const as =
+    use === 'bedroom' || use === 'living' || use === 'dining'
+      ? said(`line.part.useAs.${use}`)
+      : said('line.part.useAs', { use: language === 'en' ? use : labelOfUse(language, use) })
+  const zone = s.finding?.zone
+  return zone === undefined ? { as } : { as, zone: name(s.names[1] ?? zone) }
+}
+const wholeVariant = (s: Subject): string => (s.finding?.use === undefined ? '' : s.finding.zone === undefined ? 'whole' : 'whole.zone')
 /** A figure from a line's fixes (MSG-7), or null. */
 const fixOf = (s: Subject, key: 'width' | 'offset' | 'height' | 'sill'): number | null => s.fixes?.find((f) => f[key] !== undefined)?.[key] ?? null
 /** A fix's figure as a value, by its name, when the line has it. */
@@ -94,6 +116,16 @@ const meantWall = (s: Subject): string | null => s.fixes?.find((f) => f.wall !==
 const FAR = tolerance('farFromOrigin')
 
 const isRoomUse = (word: string): word is RoomUse => (ROOM_USES as readonly string[]).includes(word)
+
+/**
+ * MSG-5 (lab MS-14): a finding's wording for its room, or, on a line for several rooms, its
+ * `.many` wording, with their names listed where the one name goes (`rooms`).
+ */
+const grouped = (s: Subject, one: Said): Value => {
+  const group = s.group ?? []
+  if (group.length < 2) return one
+  return said(`${one.key}.many` as MessageKey, { ...one.values, rooms: joined(group.map(name), 'join.comma') })
+}
 
 /**
  * COD-2: after what a figure finding needed, the kind of building its figures were read for, as
@@ -223,6 +255,7 @@ export const CODES = {
   // --- Grid itself ----------------------------------------------------------------------------
   'plan/check-failed': {},
   // --- The plan as a whole --------------------------------------------------------------------
+  'plan/no-walls': {},
   'plan/far-from-origin': {
     values: (): Values => ({ far: num(String(FAR)) })
   },
@@ -265,6 +298,10 @@ export const CODES = {
     values: (s): Values => fixValue(s, 'height'),
     variant: { needed: (s) => (fixOf(s, 'height') === null ? '' : 'height'), fix: (s) => (fixOf(s, 'height') === null ? '' : 'height') }
   },
+  'opening/above-roof': {
+    values: (s): Values => fixValue(s, 'height'),
+    variant: { needed: (s) => (fixOf(s, 'height') === null ? '' : 'height'), fix: (s) => (fixOf(s, 'height') === null ? '' : 'height') }
+  },
   'opening/negative-sill': {},
   'opening/overlap': {},
   'opening/size-question': {},
@@ -299,6 +336,7 @@ export const CODES = {
   'room/not-enclosed': {},
   'room/space-mismatch': {},
   'room/inside-no-host': {},
+  'room/zone-not-in-room': {},
   'room/overlap': {},
   'room/overlap-unknown': {},
   'room/wall-listed-twice': {},
@@ -334,6 +372,8 @@ export const CODES = {
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {},
   'floor/empty-top': {},
+  'floor/rooflight-misplaced': {},
+  'floor/dormers-not-drawn': {},
   'floor/size-question': {},
   'floor/spaces-unknown': {},
   'floor/overlaps-unknown': {},
@@ -342,19 +382,22 @@ export const CODES = {
     values: (s): Values => ({ wording: planCheckSaids.noExit(s.floorName) })
   },
   'room/no-door': {
-    values: (s): Values => ({ wording: planCheckSaids.roomWithoutDoor(s.name) })
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.roomWithoutDoor(s.name)) })
   },
   'room/no-route-out': {
-    values: (s): Values => ({ wording: planCheckSaids.noRoute(s.name), through: through(s.finding) })
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.noRoute(s.name)), through: through(s.finding) })
   },
   'room/no-route-to-door-out': {
-    values: (s): Values => ({ wording: planCheckSaids.noRouteToAnyDoorOut(s.name), through: through(s.finding) })
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.noRouteToAnyDoorOut(s.name)), through: through(s.finding) })
   },
   'opening/to-undrawn-space': {
-    values: (s): Values => ({ wording: planCheckSaids.doorToUndrawnSpace(s.name) })
+    values: (s): Values => ({ wording: grouped(s, planCheckSaids.doorToUndrawnSpace(s.name)) })
   },
   'opening/door-out-above-ground': {
-    values: (s): Values => ({ wording: planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0)), height: num(metresText(s.finding?.elevation ?? 0)) })
+    values: (s): Values => ({
+      wording: grouped(s, planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
+      height: num(metresText(s.finding?.elevation ?? 0))
+    })
   },
   'opening/below-ground': {
     values: (s): Values => {
@@ -373,7 +416,7 @@ export const CODES = {
     values: (s): Values => {
       const p = s.finding?.passage
       return {
-        wording: planCheckSaids.openingTooSmall(s.name),
+        wording: grouped(s, planCheckSaids.openingTooSmall(s.name)),
         size: num(metresText(p?.passable ?? 0)),
         ...(p === undefined ? {} : { passage: said(`line.part.passage.${p.kind}.${p.short}`, { size: num(metresText(p.drawn, 2, p.passable)) }) })
       }
@@ -384,23 +427,25 @@ export const CODES = {
     }
   },
   'room/too-small': {
-    values: (s): Values => ({
-      wording: figureSaids.roomTooSmall(s.name, s.finding?.minimum ?? 0),
+    values: (s, language): Values => ({
+      wording: grouped(s, figureSaids.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
       area: area(s.finding?.area),
+      ...wholeRoom(s, language),
       figure: figureNeededSaid(said('line.part.atLeast', { what: area(s.finding?.minimum) }), figuresOf(s.finding, ['habitableRoomMinArea'])),
       readFor: readFor(s)
-    })
+    }),
+    variant: { found: wholeVariant }
   },
   'room/no-escape-opening': {
-    values: (s): Values => ({ wording: figureSaids.noEscapeOpening(s.name), readFor: readFor(s) })
+    values: (s): Values => ({ wording: grouped(s, figureSaids.noEscapeOpening(s.name)), readFor: readFor(s) })
   },
   'room/escape-window-too-small': {
-    values: (s): Values => ({ wording: figureSaids.escapeWindowTooSmall(s.name), ...escapeWindowFound(s), ...escapeWindowNeeded(s) }),
+    values: (s): Values => ({ wording: grouped(s, figureSaids.escapeWindowTooSmall(s.name)), ...escapeWindowFound(s), ...escapeWindowNeeded(s) }),
     variant: { found: escapeWindowVariant, needed: (s) => (escapeWindowParts(s).length === 0 ? 'none' : '') }
   },
   'room/escape-window-too-high': {
     values: (s): Values => ({
-      wording: figureSaids.escapeWindowTooHigh(s.name),
+      wording: grouped(s, figureSaids.escapeWindowTooHigh(s.name)),
       sill: metres(s.finding?.sill),
       readFor: readFor(s),
       ...(s.finding?.maximum === undefined
@@ -416,11 +461,14 @@ export const CODES = {
   'floor/not-checked-way-out-not-drawn': {
     values: (s): Values => ({ wording: planCheckSaids.wayOutNotDrawn(s.floorName) })
   },
+  // MSG-5: with the notes held back because they rest on what could not be drawn.
   'floor/not-checked-rooms-not-drawn': {
-    values: (s): Values => ({ wording: planCheckSaids.roomsNotDrawn(s.floorName, s.names) })
+    values: (s): Values => ({ wording: planCheckSaids.roomsNotDrawn(s.floorName, s.names), ...(s.heldSaid ? { held: s.heldSaid } : {}) }),
+    variant: { found: (s) => (s.heldSaid ? 'held' : '') }
   },
   'floor/not-checked-doors-not-drawn': {
-    values: (s): Values => ({ wording: planCheckSaids.doorsNotDrawn(s.floorName) })
+    values: (s): Values => ({ wording: planCheckSaids.doorsNotDrawn(s.floorName, s.also), ...(s.heldSaid ? { held: s.heldSaid } : {}) }),
+    variant: { found: (s) => (s.heldSaid ? 'held' : '') }
   },
   'floor/sketch-drawn-only': {
     values: (s): Values => ({ categories: s.names.join(', ') })

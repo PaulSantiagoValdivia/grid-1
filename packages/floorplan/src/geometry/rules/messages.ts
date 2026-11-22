@@ -51,9 +51,13 @@ export const saids = {
       lowerFloors: joined(lowerFloors.map(name), 'join.and')
     }),
   wayOutNotDrawn: (floor: string): Said => said('check.wayOutNotDrawn', { floor: name(floor) }),
-  /** `rooms` holds at least one name. One wording for one room or many (MSG-1). */
+  /**
+   * `rooms` holds at least one name. One wording for one room or many (MSG-1). MSG-5: what rests
+   * on them (a door beside them, the floor's way out) was not checked either.
+   */
   roomsNotDrawn: (floor: string, rooms: readonly string[]): Said => said('check.roomsNotDrawn', { floor: name(floor), rooms: joined(rooms.map(name), 'join.comma') }),
-  doorsNotDrawn: (floor: string): Said => said('check.doorsNotDrawn', { floor: name(floor) }),
+  /** MSG-5: `openings` holds at least one id, and names them. */
+  doorsNotDrawn: (floor: string, openings: readonly string[]): Said => said('check.doorsNotDrawn', { floor: name(floor), openings: joined(openings.map(name), 'join.comma') }),
   doorToUndrawnSpace: (room: string): Said => said('check.doorToUndrawnSpace', { room: name(room) }),
   /** `height` as the check prints it, in metres. */
   doorOutAboveGround: (room: string, height: string): Said => said('check.doorOutAboveGround', { room: name(room), height: num(height) }),
@@ -82,7 +86,7 @@ export const wordings = {
   outOfLine: (...args: Parameters<typeof saids.outOfLine>): WordingPart[] => parts(saids.outOfLine(...args)),
   wayOutNotDrawn: (floor: string): WordingPart[] => parts(saids.wayOutNotDrawn(floor)),
   roomsNotDrawn: (floor: string, rooms: readonly string[]): WordingPart[] => parts(saids.roomsNotDrawn(floor, rooms)),
-  doorsNotDrawn: (floor: string): WordingPart[] => parts(saids.doorsNotDrawn(floor)),
+  doorsNotDrawn: (floor: string, openings: readonly string[]): WordingPart[] => parts(saids.doorsNotDrawn(floor, openings)),
   doorToUndrawnSpace: (room: string): WordingPart[] => parts(saids.doorToUndrawnSpace(room)),
   doorOutAboveGround: (room: string, height: string): WordingPart[] => parts(saids.doorOutAboveGround(room, height)),
   belowGround: (...args: Parameters<typeof saids.belowGround>): WordingPart[] => parts(saids.belowGround(...args)),
@@ -111,7 +115,8 @@ export const messages = {
   noStairs: (floor: string): string => english(saids.noStairs(floor)),
   outOfLine: (...args: Parameters<typeof saids.outOfLine>): string => english(saids.outOfLine(...args)),
   wayOutNotDrawn: (floor: string): string => english(saids.wayOutNotDrawn(floor)),
-  cannotBeDrawn: (floor: string, rooms: readonly string[]): string => english(rooms.length > 0 ? saids.roomsNotDrawn(floor, rooms) : saids.doorsNotDrawn(floor)),
+  cannotBeDrawn: (floor: string, rooms: readonly string[], openings: readonly string[]): string =>
+    english(rooms.length > 0 ? saids.roomsNotDrawn(floor, rooms) : saids.doorsNotDrawn(floor, openings)),
   doorToUndrawnSpace: (room: string): string => english(saids.doorToUndrawnSpace(room)),
   doorOutAboveGround: (room: string, height: string): string => english(saids.doorOutAboveGround(room, height)),
   belowGround: (...args: Parameters<typeof saids.belowGround>): string => english(saids.belowGround(...args)),

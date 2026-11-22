@@ -181,3 +181,114 @@ the results, and the choices taken while you were away.
    could bring some back; an enumerable field (a record change) would be the sturdier choice.
 10. **`grid describe --for agent`** keeps its fixed English format; only its label follows the
     language (the agent retells it).
+
+## After merging main at c05d051
+
+Main brought MSG-5 (notes traced to their cause, held notes, lines for several rooms), CNT-9
+(facts of your own), CNT-8 (zones), COD-3 (the place), WRT-8 (`grid diff`), BRF-1 (the brief),
+LVL-6 (sloped roofs), BRF-5 (the sun table) and VEW-3 (the camera and saved views). 30 files
+conflicted. Main's English output is kept word for word; where main wrote words in a part MSG-11
+had moved, they moved into the message files with a Spanish draft.
+
+### How the conflicts were resolved
+
+- **Drawing checks** (`validate.ts`, `wallFaults.ts`, `spaces.ts`, `zones.ts`, `roofs.ts`): MSG-5's
+  `followOn` wraps MSG-11's worded issues, and now keeps their sentence (`withSaid` on the copy:
+  a spread drops the property that is not enumerable). Main's new sentences are keys:
+  `issue.plan/no-walls`, `issue.opening/missing-wall.roof`, `issue.opening/above-roof` (with its
+  range, where and fit), `issue.floor/rooflight-misplaced` (its two problems, which `roofs.ts` now
+  gives as sentences), `issue.floor/dormers-not-drawn.one|many`, `issue.room/zone-not-in-room`
+  (its five reasons, which `zones.ts` now gives as sentences) and CNT-9's
+  `issue.wall/duplicate.movingFacts|facts`. CNT-8's zone lines are left out of the spaces.
+- **Reading** (`readParts.ts`): MSG-5's `leftOut` parts are worked out from the faults in
+  English; both sides kept.
+- **Plan checks** (`rules/check.ts`, `rules/messages.ts`): MSG-5's held notes and
+  `cannotBeDrawnNotices` with MSG-11's saids; `check.roomsNotDrawn` and `check.doorsNotDrawn` take
+  main's new wording (the doors' names listed).
+- **Figure checks** (`checks/messages.ts`, `coverage.ts`, `figures.ts`, `place.ts`): COD-3's
+  `noPlace` is `check.noPlace.none|one|many` (`noPlaceSaid` beside `noPlaceText`); the new skip
+  reasons are `check.skip.no_place|waits_for_part|part_of_room`; `heldCoverage` gives its skips
+  their sentence.
+- **The record** (`result/catalogue.ts`, `inspect.ts`, `types.ts`, `index.ts`): every new code has
+  its catalogue entry and its `line.<code>.*` keys (`plan/no-walls`, `opening/above-roof`,
+  `room/zone-not-in-room`, `floor/rooflight-misplaced`, `floor/dormers-not-drawn`); main's rows for
+  them were already in the contract's code table. MSG-5's lines for several rooms use a `.many`
+  wording per language (`check.roomWithoutDoor.many` and nine more) instead of English made
+  plural; `PLURALS`, which main's test reads lines back with, moved to `result/plurals.ts` and is
+  exported as before. MSG-5's held notes are `line.part.held.*` and the `found.held` variants;
+  CNT-8's "the whole room with its zones" is `line.room/too-small.found.whole[.zone]`. MSG-5's
+  causes, `filed`, `problems`, COD-3's `place` and `withoutPlace` are kept; the place is named
+  with its article in English (`the United States`) and by Grid's name in other languages.
+- **The report** (`command/check.ts`, `mcp/readTools.ts`): COD-3's first line (`placeText`) is
+  `report.place.*`; `PlaceWords` is now which caller asks (`command`, `tool`, `sheet`) instead of
+  English text. MSG-5's problems count, "follows from", "held back" and the held lines are
+  `report.problems*`, `report.follow*`, `report.cause*`, `report.held`, `report.followsFrom`,
+  `report.heldBack` and `tool.check.line.follows`; COD-3's "not run" line is `report.notRun`. The
+  coverage summary's "read them for" line goes, as main took it out (the place line says it), so
+  `report.who.*` and `report.readThemFor` are removed.
+- **Description, drawing, sheet** (`describe/card.ts`, `draw/views.ts`, `sheet/pages.ts`,
+  viewer `planSvg.ts`, `scene.ts`, `writing.ts`): CNT-8's zone counts are
+  `describe.count.zone.*`, `describe.roomsAndZones`, `describe.room.zoneOf` (the agent's form keeps
+  its English). VEW-3's `cameraView` replaces `modelView` and `eyeView` and stamps the label in
+  the language asked. The sheet takes CNT-8's zones, CNT-9's numbers and facts and COD-3's place
+  line, said in the sheet's language. CNT-9's paint key and picked parts are drawn as main draws
+  them; their words are the person's own values.
+- **Commands and tools**: main's `--view`, `grid diff`, `grid mark` and MSG-11's `--lang` are all
+  kept (`grid draw`'s usage lists both). The tools are main's 30, in main's order; MSG-11 adds
+  none. `language` stays on `grid_check`, `grid_describe`, `grid_view` and `grid_sheet`.
+- **Docs**: `CHANGELOG.md` keeps every Unreleased line; the contract keeps MSG-11's row and
+  main's three (`causedBy`, `each`, `held`) and every agents' changelog section, MSG-11's first of
+  the day, with a line on the new codes in Spanish. `docs/tool-server.md` keeps both sections.
+
+### The ownWords guard
+
+The moved parts stay at none. New files and new sentences of the kinds MSG-11 left for later
+were listed (`ownWords.test.ts`), each by its kind:
+
+- *Shown to the person, not moved yet* (+223): `diff/building.ts` 22, `types/places.ts` 7,
+  `brief/lines.ts` 20, `brief/answer.ts` 2, `quantities/sun.ts` 13, `versions/diff.ts` 8,
+  `versions/git.ts` 19, `versions/markers.ts` 18, and more in `geometry/areas.ts` (28 → 32),
+  `export/ifc.ts` (23 → 31), `rooms/compile.ts` (106 → 108), `types/floorplan.ts` (22 → 37),
+  `edit/edits.ts` (40 → 42), `edit/merge.ts` (10 → 23), `edit/split.ts` (18 → 20),
+  `quantities/compare.ts` (18 → 19), `quantities/takeoff.ts` (9 → 10).
+- *Command line* (+33, −1): `command/diff.ts` 13, `rules/checks/place.ts` 1 (the refusal of a
+  place), `draw.ts` 25 → 28, `main.ts` 46 → 52, `planText.ts` 10 → 14, `write.ts` 21 → 23,
+  `projectFiles.ts` 44 → 49; `check.ts` 11 → 10 (its report words moved).
+- *Agent-facing* (not in the ratchet): `briefTool.ts` 36, `diffTools.ts` 20, `viewTool.ts` 15,
+  `quantities/query.ts` 26, `brief/brief.ts` 40, `draw/cameraAsk.ts` 12, `geometry/camera.ts` 1,
+  `readTools.ts` 204 → 261, `editTools.ts` 66 → 69, `protocol.ts` 15 → 16.
+- *For people who build Grid* (not in the ratchet): `tolerances.ts` 169 → 186, `listing.ts`
+  27 → 33, `sheet/coverage.ts` 15 → 21, `result/plurals.ts` 6.
+
+The ratchet on what is shown to the person and not moved went from 913 to 1103. 2,070 literals
+in 114 files are listed in all.
+
+### Results
+
+- `npm run build`: `dist/grid.mjs` 527,620 bytes; the Spanish chunk 127,343 bytes.
+- `npm run typecheck`, `npm run lint`: clean.
+- Floorplan `messages/`, `geometry/`, `types/` and all of `rules/src`: 129 files, 3,385 tests
+  pass (1 skipped). One expectation of MSG-11's own changed: `rules/.../language.test.ts`
+  ("dormitorio" is checked as a bedroom) now states a place, as COD-3 needs for the room sizes to
+  be checked.
+- Viewer `picture/` and the CLI's guard, `describe/`, `draw/`, `sheet/`, `mcp/` (tools, server,
+  replay), `command/` (everyPath, grid.e2e, language.e2e), `brief/`, `versions/`, `quantities/`,
+  `edit/` and `distribution/`: 96 files, 1,157 tests pass (1 skipped). `language.e2e.test.ts`'s plan
+  now states its place (`site.country: "US"`), for the same reason. Main's tests and golden files
+  pass unchanged.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner
+
+11. **The ratchet was raised, 913 to 1103.** Main's nine features added 190 unmoved sentences of
+    the kinds MSG-11 left for later (edit receipts, the diff, the brief's lines, git and marker
+    errors, the sun table, schema refusals). Moving them is follow-up work; the guard still fails
+    on any new one.
+12. **The bundle cap.** `dist/grid.mjs` is 527,620 bytes: under the 550,000 main's
+    `grid.e2e` test holds it to since VEW-3 (main alone: 512,435), over the 500,000 MSG-11's review
+    named. The cap was not raised here.
+13. **Places are named in English.** COD-3's list of places has English names; a Spanish report
+    says "Lugar: Spain" and "este plano es para United Kingdom" (without the English article).
+    Names per language would be a row of Spanish names in `places.ts`.
+14. **Facts of your own** (CNT-9) print as the person wrote them, in every language; a yes or no
+    fact keeps Grid's English word for it in the sheet's schedules.

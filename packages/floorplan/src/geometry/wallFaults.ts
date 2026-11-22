@@ -38,11 +38,13 @@ import { floorOf } from './floors'
 import type { RoomOutline } from './room'
 import { roomNesting, roomOutline } from './room'
 import { sitsWithin } from './nesting'
+import { roomZones } from './zones'
 import { tolerance } from './tolerances'
 import { areaText, metresText } from './rounding'
 import type { Said, Value } from '../messages/say'
 import { english, joined, name, num, said } from '../messages/say'
 import { pointSaid } from './issueWords'
+import { factKey } from '../types/facts'
 import type { Vec2 } from './vec2'
 import { area, cross, dot, sub } from './vec2'
 import { wallAxis } from './wall'
@@ -61,7 +63,11 @@ export type WallFaultKind =
 export type WallEdit =
   /** Move one end of a wall. Openings keep their place: a fix that moves `start` resets their offsets. */
   | { readonly op: 'move-end'; readonly wall: string; readonly end: 'start' | 'end'; readonly to: [number, number] }
-  | { readonly op: 'remove-wall'; readonly wall: string }
+  /**
+   * Take a wall out. CNT-9: with `factsTo`, the facts of the person's own it carries go onto that
+   * wall first, where that wall carries none of the same name, so taking out a copy loses none.
+   */
+  | { readonly op: 'remove-wall'; readonly wall: string; readonly factsTo?: string }
   | { readonly op: 'set-boundary'; readonly room: string; readonly boundary: readonly string[] }
   | { readonly op: 'add-room'; readonly room: Room }
   /** Put an opening on a wall at an offset; `hinge` and `swing` are set when the wall runs the other way. */
@@ -254,9 +260,21 @@ export function applyWallEdits<P extends EditablePlan>(plan: P, edits: readonly 
       case 'move-end':
         walls = walls.map((w) => (w.id === edit.wall ? { ...w, [edit.end]: [...edit.to] } : w))
         break
-      case 'remove-wall':
+      case 'remove-wall': {
+        const gone = walls.find((w) => w.id === edit.wall)
+        const facts = gone?.['properties']
+        if (edit.factsTo !== undefined && typeof facts === 'object' && facts !== null) {
+          walls = walls.map((w) => {
+            if (w.id !== edit.factsTo) return w
+            const own = (typeof w['properties'] === 'object' && w['properties'] !== null ? w['properties'] : {}) as Record<string, unknown>
+            const keys = new Set(Object.keys(own).map(factKey))
+            const added = Object.entries(facts as Record<string, unknown>).filter(([name]) => !keys.has(factKey(name)))
+            return added.length === 0 ? w : { ...w, properties: { ...own, ...Object.fromEntries(added) } }
+          })
+        }
         walls = walls.filter((w) => w.id !== edit.wall)
         break
+      }
       case 'set-boundary':
         rooms = rooms.map((r) => (r.id === edit.room ? { ...r, boundary: [...edit.boundary] } : r))
         break
@@ -688,10 +706,20 @@ function overlapFaults(ctx: Context, out: Map<string, WallFault>): void {
     if (whole(shared, gone)) {
       const rooms = listing(ctx, gone.wall.id).map((r) => r.id)
       const hasOpenings = openingsOf(ctx.index, gone.wall.id).length > 0
-      edits = kind === 'line-on-wall' && hasOpenings ? null : [...relist(ctx, gone.wall.id, kept.wall.id), ...moveOpenings(ctx, gone, kept), { op: 'remove-wall', wall: gone.wall.id }]
+      // CNT-9: a copy's facts of the person's own go onto the wall kept.
+      const facts = gone.wall.properties !== undefined && Object.keys(gone.wall.properties).length > 0 ? { factsTo: kept.wall.id } : {}
+      const givesFacts = 'factsTo' in facts
+      edits = kind === 'line-on-wall' && hasOpenings ? null : [...relist(ctx, gone.wall.id, kept.wall.id), ...moveOpenings(ctx, gone, kept), { op: 'remove-wall', wall: gone.wall.id, ...facts }]
       const relisted =
         rooms.length === 0 ? '' : said(rooms.length > 1 ? 'issue.wall/duplicate.relist.many' : 'issue.wall/duplicate.relist.one', { kept: keptName, rooms: list(rooms.map(name)) })
-      says = said('issue.wall/duplicate.remove', { gone: named(gone, 'named'), relisted, then: !hasOpenings ? '.' : said('issue.wall/duplicate.moving') })
+      const then = hasOpenings
+        ? givesFacts
+          ? said('issue.wall/duplicate.movingFacts', { kept: keptName })
+          : said('issue.wall/duplicate.moving')
+        : givesFacts
+          ? said('issue.wall/duplicate.facts', { kept: keptName })
+          : '.'
+      says = said('issue.wall/duplicate.remove', { gone: named(gone, 'named'), relisted, then })
     } else if (shared[0] <= tolerance('noLength') || shared[1] >= 1 - tolerance('noLength')) {
       // The shared stretch is at one end of the wall: take that end back to where the other ends.
       const end: 'start' | 'end' = shared[0] <= tolerance('noLength') ? 'start' : 'end'
@@ -814,6 +842,8 @@ function splitAlong(ctx: Context, room: Room, s: Seg, stretch: [number, number])
         // The new part says nothing about its use, nor that it sits inside another room: that is for the person to say.
         const part: Room = { id: other, name: `${room.name} (part)`, boundary: small }
         if (room.floor !== undefined) part.floor = room.floor
+        // CNT-9: the part keeps the room's facts of the person's own; its number stays with the room.
+        if (room.properties !== undefined && Object.keys(room.properties).length > 0) part.properties = { ...room.properties }
         return {
           edits: [
             { op: 'set-boundary', room: room.id, boundary: big },
@@ -833,6 +863,7 @@ function splitAlong(ctx: Context, room: Room, s: Seg, stretch: [number, number])
 /** Walls in a room that does not list them: `crosses-room` and `stands-in-room`. */
 function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
   const nesting = roomNesting(ctx.index)
+  const zones = roomZones(ctx.index)
   for (const { room, outline } of ctx.traced) {
     if (outline.fault !== null) continue
     // The walls round its holes are its own too (ARE-6).
@@ -848,6 +879,8 @@ function crossingFaults(ctx: Context, out: Map<string, WallFault>): void {
       if (s.box.x0 > box.x1 || s.box.x1 < box.x0 || s.box.y0 > box.y1 || s.box.y1 < box.y0) continue
       // The walls of a room that sits inside this one stand in it by right (ARE-5).
       if (listing(ctx, s.wall.id).some((r) => r.id !== room.id && sitsWithin(nesting, r.id, room.id))) continue
+      // So do the dividing lines of its zones (CNT-8): they mark where a use is, not a wall.
+      if (s.wall.virtual === true && listing(ctx, s.wall.id).some((r) => zones.zoneOf.get(r.id) === room.id)) continue
       const stretches = insideStretches(s, polygon)
       const length = (list: readonly [number, number][]): number => list.reduce((sum, [d0, d1]) => sum + d1 - d0, 0)
       // What stands in a hole (ARE-6) stands in no part of the room: the holes lie inside the

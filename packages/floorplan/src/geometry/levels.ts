@@ -264,11 +264,14 @@ function emptyTop(plan: FloorPlan, floors: readonly Floor[], issues: Issue[]): v
 
 /**
  * A floor that states its height, and a wall on it that rises past it (lab S-2: 11 m racking in a
- * 10 m shed lifted the roof to 11 m, with no message). The storey keeps the height it states.
+ * 10 m shed lifted the roof to 11 m, with no message). The storey keeps the height it states. A
+ * floor that states its roof (LVL-6) is left out: the roof cuts its walls to it.
  */
 function wallsAboveStorey(plan: FloorPlan, floors: readonly Floor[], broken: ReadonlySet<string>, issues: Issue[]): void {
   const stated = new Map<string, number>()
   for (const floor of floors) {
+    // LVL-6: under a stated roof the roof bounds the walls, and cuts them to it.
+    if (floor.roof !== undefined) continue
     if (floor.height !== undefined && Number.isFinite(floor.height) && floor.height > 0) stated.set(floor.id, floor.height)
   }
   if (stated.size === 0) return

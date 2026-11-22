@@ -104,6 +104,12 @@ export interface PictureShow {
   readonly warnings?: boolean
   readonly above?: boolean
   readonly colourBy?: 'use' | null
+  /**
+   * CNT-9: parts picked out, by id, each in its colour (`GROUP_COLOURS`, `HIGHLIGHT_COLOUR`), and
+   * what each colour stands for in the key, which is then drawn.
+   */
+  readonly paint?: ReadonlyMap<string, string>
+  readonly paintKey?: readonly { readonly colour: string; readonly words: string }[]
 }
 
 /** A picture before it is written out. */
@@ -275,7 +281,7 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const faults = faultsOnFloor(all, floor, new Map(slice.openings.map((opening) => [opening.id, opening.wall])))
   const handings = handingsOf(slice)
   const show = options.show ?? {}
-  const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key'>): boolean => show[part] !== false
+  const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key' | 'paint' | 'paintKey'>): boolean => show[part] !== false
   const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
   // SHT-11: the floor above, worked out only when it is shown.
   const above = on('above') ? floorAbove(slice) : undefined
@@ -299,17 +305,19 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
       swings: on('swings'),
       warnings: on('warnings'),
       above: on('above'),
-      colourBy: show.colourBy ?? null
+      colourBy: show.colourBy ?? null,
+      paint: show.paint ?? null
     }
   })
   // CNT-3: a plan that states its north gets a north arrow in the corner of the view.
   const nodes = drawing.north === null ? scene : [...scene, northArrowNode(drawing.north, view, view.width / width, look.colors)]
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
-  const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))
+  const painted = show.paintKey ?? []
+  const keyed = show.key === true || (show.key !== false && (painted.length > 0 || drawing.notes.some((note) => note.kind === 'key')))
   const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
   const marked = on('warnings') && faults.length > 0
-  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0 }, words) : []
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0, painted }, words) : []
   const writing = writingBand(title, entries, width, look.colors, words)
   const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors, words)
   const key = stackBands(writing, listed)

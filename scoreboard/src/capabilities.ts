@@ -59,7 +59,8 @@ export const CAPABILITIES = {
   // LVL-3: the lab's names (from, to, width, risers), and the walking line a stair is drawn along.
   stairs: { what: 'holds stairs', probe: schema('stairs', [{ id: 's1', from: 'ground', to: 'first', width: 0.9, run: [[1, 1], [1, 4.5]], risers: 16 }]) },
   ramps: { what: 'holds ramps', probe: schema('ramps', [{ id: 'r1', rise: 0.3, slope: 0.08 }]) },
-  roof: { what: 'holds a roof', probe: schema('roof', { type: 'gable', pitch: 35 }) },
+  // LVL-6: a floor's roof, with its shape, eaves and pitch, which its walls and rooms are cut to.
+  roof: { what: 'holds a roof', probe: schema('floors', [{ id: 'ground', name: 'Ground', level: 0, roof: { shape: 'gable', eaves: 2.7, pitch: 35 } }]) },
   fixtures: { what: 'holds fixtures (WC, basin, kitchen units)', probe: schema('rooms.0.fixtures', [{ type: 'wc' }]) },
   furniture: { what: 'holds furniture', probe: schema('furniture', [{ type: 'table', at: [1, 1], size: [1.8, 0.9] }]) },
   'door-leaves': { what: 'holds doors with several leaves (bifold, double)', probe: schema('openings.0.leaves', 2) },
@@ -118,7 +119,15 @@ export const CAPABILITIES = {
   'imperial-units': { what: 'shows sizes in feet and inches', probe: none },
   'marks-on-plan': { what: 'marks notes and changes on the drawing', probe: none },
   'note-reasons': { what: 'says why each note was given and what to change', probe: none },
-  'compare-notes': { what: 'compares the notes of two versions', probe: none },
+  'compare-notes': {
+    what: 'compares the notes of two versions',
+    // WRT-8: the comparison says which notes of the drawing check came and went.
+    probe: lib((s) => {
+      const plan = parseFloorPlan(s)
+      const note = { code: 'plan/probe', thing: { kind: 'plan', id: 'plan' }, also: [], message: 'A note' }
+      return geometry.compareBuildings(plan, plan, { notes: { before: [], after: [note] } }).issues.some((issue) => issue.code === 'note_added')
+    }),
+  },
   'layout-help': { what: 'works out a layout (how many flats fit)', probe: none },
   'repeat-floor': { what: 'repeats a floor', probe: none },
   'local-rules': { what: 'checks the rules of the place named', probe: none },

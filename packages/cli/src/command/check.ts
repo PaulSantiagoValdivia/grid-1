@@ -9,22 +9,31 @@
 import { floorOf, LIMITS as PLAN_LIMITS, PLAN_LIMIT_KEYS, type FloorPlan, type Issue } from '@ongrid/floorplan/geometry'
 import {
   buildingKindsSaid,
+  buildingTypeSaid,
   checkLocalRules,
+  FIGURE_CHECK_SUBJECTS,
+  FIGURE_RULES,
+  RULE_READ_FOR,
+  noPlaceSaid,
+  PlaceRefused,
+  requestedPlace,
   coverageOnFloor,
   figureUsedSaid,
   inspectPlan,
+  problemsIn,
   roomsLookedAt,
   FIGURE_LIMIT_KEYS,
   FIGURE_LIMITS,
   LINE_KINDS,
   type AppliedFigure,
+  type Cause,
   type CheckCoverage,
   type GridResult,
   type LineKind,
   type ResultLine,
   type RulesReport,
 } from '@ongrid/rules'
-import { en, english, joined, name, said, type Language, type MessageKey, type Said } from '@ongrid/floorplan/messages'
+import { en, english, joined, name, said, type Language, type MessageKey, type Said, type Value } from '@ongrid/floorplan/messages'
 import { floorOption } from './plan'
 import { inLanguage, t, tv } from './words'
 import type { LoadedPlan } from './plan'
@@ -37,7 +46,7 @@ export const CHECK_OPTIONS: OptionSpecs = {
   '--floor': { takesValue: true, help: 'Only show what was found on this floor (a floor id from the plan).' },
   '--country': {
     takesValue: true,
-    help: 'Where the plan will be built, as a two-letter code such as US or ES.',
+    help: 'Where the plan will be built, for this check, in place of the plan\'s site.country: a country\'s name or its two- or three-letter code, such as US, USA, United States or Spain.',
   },
   '--json': { takesValue: false, help: 'Print the report as JSON.' },
   // MSG-10: the report is short by default; this gives every section.
@@ -168,8 +177,6 @@ export function markNote(project: Project, planFile: string, loaded: LoadedPlan,
 /** What the Seen part says of itself: never that a note is dealt with. */
 export const SEEN_HEADING_NOTE = english(said('report.seenNote'))
 
-const COUNTRY = /^[A-Za-z]{2}$/
-
 /** What no findings means, said wherever a check reports none. */
 export const NOTHING_FOUND = english(said('report.nothingFound'))
 /** MSG-3: what a report says when no check looked at anything. */
@@ -200,15 +207,70 @@ function floorsById(plan: FloorPlan): Map<string, string> {
   return floors
 }
 
-export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'>): CheckResult {
-  const { plan } = loaded
-  const country = request.country
-  if (country !== undefined && !COUNTRY.test(country)) {
-    throw new UsageError(`--country takes a two-letter country code, such as US or ES: got ${JSON.stringify(country)}.`)
+/**
+ * COD-3: the place a caller named, as its two-letter code, or undefined when none was named. A
+ * place not on Grid's list is refused, naming `argument` and never the text given (T-2, MSG-9).
+ */
+export function countryOption(country: string | undefined, argument = '--country'): string | undefined {
+  try {
+    return requestedPlace(country, argument)?.country
+  } catch (error) {
+    if (error instanceof PlaceRefused) throw new UsageError(`${error.message}.`)
+    throw error
   }
+}
+
+/**
+ * What a request to check is told about where the place came from, for the report's first line:
+ * from the command (`--country`), the tool (`the country argument`) or the sheet, by its words
+ * (`report.place.request.*`, `report.place.give.*`; never "pass": MSG-3).
+ */
+export type PlaceWords = 'command' | 'tool' | 'sheet'
+
+/**
+ * COD-3: the report's first line after the label: the place the figure checks were for, from
+ * Grid's list, where it came from and which figures were applied; or, with no place, that no
+ * figure was applied and how many lines the US figures would have given.
+ */
+export function placeText(report: Pick<RulesReport, 'place' | 'withoutPlace' | 'figures' | 'notChecked'>, words: PlaceWords = 'command'): string {
+  const { place } = report
+  if (place === null) return t('report.place.none', { noPlace: noPlaceSaid(report.withoutPlace?.usLines ?? 0), give: said(`report.place.give.${words}`) })
+  const from =
+    place.from === 'request'
+      ? said('report.place.from.request', { request: said(`report.place.request.${words}`) })
+      : said(place.from === 'plan' ? 'report.place.from.plan' : 'report.place.from.assumed')
+  const where = [...new Set(report.figures.flatMap((figure) => (figure.origin === 'baseline' ? [figure.jurisdiction] : [])))]
+  const lookedUp = report.figures.some((figure) => figure.origin === 'lookup')
+  const applied: Value[] = [...where.map((w) => said('report.place.appliedFrom', { where: w })), ...(lookedUp ? [said('report.place.lookedUp')] : [])]
+  // COD-2: the kind of building the figures were read for, by its word alone: the notes that used one give it in full.
+  const kinds = [...new Set(report.figures.map((figure) => figure.readFor))].map((kind) => said(`check.kindWord.${kind}`))
+  // CNT-5: the place has figures, and the kind of building the plan states is not one they were read for.
+  const notFor = report.notChecked.filter((n) => n.reason === 'not_for_building' && n.building !== undefined)
+  const readFor = [...new Set(FIGURE_RULES.flatMap((rule) => RULE_READ_FOR[rule.id]))].map((kind) => said(`check.kindWord.${kind}`))
+  const building =
+    notFor.length === 0
+      ? null
+      : notFor.some((n) => n.floor === '')
+        ? said('report.place.building.plan', { building: buildingTypeSaid(notFor.find((n) => n.floor === '')!.building!) })
+        : said('report.place.building.floors')
+  const figures =
+    applied.length > 0
+      ? said('report.place.figures', { applied: joined(applied, 'join.and'), kinds: joined(kinds, 'join.and') })
+      : place.country !== 'US'
+        ? said('report.place.noFigures')
+        : building !== null
+          ? said('report.place.notForBuilding', { readFor: joined(readFor, 'join.and'), building })
+          : said('report.place.nothingToLook')
+  return t('report.place', { place: place.name, from, figures })
+}
+
+export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'>, argument = '--country'): CheckResult {
+  const { plan } = loaded
+  const country = countryOption(request.country, argument)
   const floor = floorOption(plan, request.floor)
-  const options = country === undefined ? {} : { country: country.toUpperCase() }
-  const full = checkLocalRules(plan, options)
+  const options = country === undefined ? {} : { country }
+  // MSG-5: with what the reader left out, so the report holds back what the record holds back.
+  const full = checkLocalRules(plan, { ...options, leftOut: loaded.leftOut ?? [] })
   // MSG-11: the language asked for, else the plan's, with the plan's decimal mark when it states one.
   const language = request.language ?? plan.display?.language
   const decimal = plan.display?.decimal
@@ -240,7 +302,35 @@ export function checkOnFloor(loaded: LoadedPlan, whole: CheckResult, floor: stri
 export function resultOnFloor(result: GridResult, floor: string): GridResult {
   const lines = result.lines.filter((line) => line.floor === null || line.floor === floor)
   const counts = Object.fromEntries(Object.keys(result.counts).map((kind) => [kind, lines.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
-  return { ...result, lines, count: lines.length, counts, coverage: coverageOnFloor(result.coverage, floor) }
+  return { ...result, lines, count: lines.length, counts, problems: problemsIn(lines), coverage: coverageOnFloor(result.coverage, floor) }
+}
+
+/**
+ * MSG-5 (lab W-7): how many of the lines are problems of their own, when some follow from
+ * others: " 1 problem; 19 lines follow from it." Empty when every line stands alone.
+ */
+export function problemsText(result: GridResult): string {
+  const following = result.lines.filter((line) => line.causedBy !== undefined).length
+  if (following === 0) return ''
+  const problems = t(result.problems === 1 ? 'report.problems.one' : 'report.problems.many', { count: result.problems })
+  const follow = t(following === 1 ? 'report.follow.one' : 'report.follow.many', { count: following })
+  return t(result.problems === 1 ? 'report.problemsFollow.one' : 'report.problemsFollow.many', { problems, follow })
+}
+
+/** The line a line follows from, as `wall "w1" (wall/zero-length)` or `the plan (plan/no-walls)`. */
+export function causeText(cause: Cause): string {
+  return cause.id === '' ? t('report.cause.plan', { code: cause.code }) : t('report.cause', { id: name(cause.id), code: cause.code })
+}
+
+/** MSG-5: the notes a "could not be drawn" line holds back, one line each: `room "p01" (room/no-door), waits for "corridor"`. */
+export function heldText(line: ResultLine): string[] {
+  return (line.held ?? []).map((note) =>
+    t('report.held', {
+      thing: note.thing.kind === 'plan' ? t('report.thing.plan') : t(`report.thing.${note.thing.kind}`, { id: name(note.thing.id) }),
+      code: note.code,
+      waitsFor: joined(note.waitsFor.map(name), 'join.comma')
+    })
+  )
 }
 
 /** What each kind of line is called in a list, in English (`report.kind.*`). */
@@ -297,8 +387,19 @@ export function limitsText(limits: readonly string[]): string[] {
 function lineText(result: CheckResult, index: number, floorCount: number, details: boolean): string[] {
   const line = result.result.lines[index]!
   const where = floorCount > 1 && line.floor !== null && line.thing.kind !== 'floor' ? t('report.on', { floor: name(line.floor) }) : ''
-  const head = `  ${result.numbers[index]}. ${t('report.line', { kind: kindWord(line.kind), thing: thingText(line), where, message: line.message, code: line.code })}`
-  return details ? [head, `      ${t('report.found')}: ${line.found}`, `      ${t('report.needed')}: ${line.needed}`, `      ${t('report.fix')}: ${line.fix}`] : [head]
+  // MSG-5: a line that follows from another is set under it, says which, and names the notes it holds back.
+  const indent = line.causedBy === undefined ? '' : '    '
+  const head = `${indent}  ${result.numbers[index]}. ${t('report.line', { kind: kindWord(line.kind), thing: thingText(line), where, message: line.message, code: line.code })}`
+  const cause = line.causedBy === undefined ? [] : [`${indent}      ${t('report.followsFrom')}: ${causeText(line.causedBy)}`]
+  if (!details) return [head, ...cause]
+  return [
+    head,
+    ...cause,
+    `${indent}      ${t('report.found')}: ${line.found}`,
+    `${indent}      ${t('report.needed')}: ${line.needed}`,
+    `${indent}      ${t('report.fix')}: ${line.fix}`,
+    ...heldText(line).map((held) => `${indent}      ${t('report.heldBack')}: ${held}`),
+  ]
 }
 
 /** MSG-10: the figures the lines used, once each, as the figure used here with its basis and status. */
@@ -339,7 +440,8 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
 function reportText(result: CheckResult, floorCount: number, options: TextOptions): string {
   const full = options.full === true
   const { report } = result
-  const lines: string[] = [result.label]
+  // COD-3: right after the label, the place and the figures applied, or that none was.
+  const lines: string[] = [result.label, placeText(report)]
   if (report.lookupNotice) lines.push(t('check.lookupNotice'))
   if (result.floor !== undefined) lines.push(t('report.floorOnly', { floor: result.floor }))
 
@@ -358,8 +460,9 @@ function reportText(result: CheckResult, floorCount: number, options: TextOption
   if (record.count === 0) {
     lines.push('', t('report.toLook.none'))
   } else {
-    lines.push('', t('report.toLook', { count: record.count, counts: countsText(record), seen: seen > 0 ? t('report.ofThemSeen', { count: seen }) : '' }))
+    lines.push('', t('report.toLook', { count: record.count, counts: countsText(record), seen: seen > 0 ? t('report.ofThemSeen', { count: seen }) : '' }) + problemsText(record))
     // Numbered by place in the whole plan's record: `grid draw` marks each with its number (MSG-8).
+    // MSG-5: a line that follows from another is set under it, and says which (`lineText`).
     // WRT-6 (lab WR-15): what was assumed comes last, under its own heading, for the person. A
     // seen one is under Seen with the others (MSG-10), so the heading comes before the first open one.
     const confirmSeen = record.lines.filter((line, index) => line.kind === 'to-confirm' && states[index]?.state === 'seen').length
@@ -372,7 +475,7 @@ function reportText(result: CheckResult, floorCount: number, options: TextOption
         lines.push('', t('report.toConfirm', { count: record.counts['to-confirm'], seen: confirmSeen > 0 ? t('report.ofThemSeen', { count: confirmSeen }) : '' }))
       }
       lines.push(...lineText(result, index, floorCount, true))
-      if (state?.state === 'back') lines.push(`      ${seenBeforeText(state)}.`)
+      if (state?.state === 'back') lines.push(`${line.causedBy === undefined ? '' : '    '}      ${seenBeforeText(state)}.`)
     })
     if (record.counts.finding === 0) lines.push('', t('report.noFindings'))
     if (seen > 0) {
@@ -469,7 +572,16 @@ export function coverageSummary(result: CheckResult): string[] {
   const kinds = [...new Set(withFigures.map((check) => tv(buildingKindsSaid(check.readFor!))))]
   const once = kinds.length === 1
   const lines = ['', t('report.lookedAtByOne', { summary: roomsSummary(result) }), t('report.eachCheck', { count: coverage.length })]
+  // COD-3: the checks that did not run because no place is stated, in one line.
+  const unplaced = coverage.filter((check) => check.lookedAtCount === 0 && check.skipped.length > 0 && check.skipped.every((skip) => skip.reason === 'no_place'))
   for (const check of coverage) {
+    if (unplaced.includes(check)) {
+      if (check === unplaced[0]) {
+        const names = unplaced.map((c, i) => subjectOf(c, i > 0))
+        lines.push(t('report.notRun', { names: joined(names, 'join.comma', 'join.and'), why: whyText(check.skipped[0]!) }))
+      }
+      continue
+    }
     const gaps = check.skipped.filter((skip) => skip.reason !== 'use_not_covered')
     const gap = gaps.length === 0 ? '' : t('report.gap', { count: gaps.reduce((n, skip) => n + skip.ids.length, 0), whys: [...new Set(gaps.map(whyText))].join('; ') })
     const findings = check.findings === 0 ? '' : `; ${findingsText(check.findings)}`
@@ -477,11 +589,17 @@ export function coverageSummary(result: CheckResult): string[] {
       ? `  - ${nothingCheckedText(checkTitle(check), check.looksAt)}${gap}.`
       : `  - ${checkTitle(check)}: ${partsText(check.lookedAtCount, check.looksAt)}${gap}${findings}${once ? '' : readForText(check)}.`)
   }
-  if (once) {
-    const who = withFigures.length === 1 ? t('report.who.one') : withFigures.length === 2 ? t('report.who.two') : t('report.who.many', { count: withFigures.length })
-    lines.push(t('report.readThemFor', { who, kinds: kinds[0]! }))
-  }
+  // COD-3: when every check that used figures read them for the same kind of building, the
+  // report's first line says it (`placeText`), so it is not said again here.
   return lines
+}
+
+/** What a figure check is called in one word or two: `Room sizes`; any other check by its title. */
+function subjectOf(check: CheckCoverage, inner: boolean): string {
+  const subject = Object.hasOwn(FIGURE_CHECK_SUBJECTS, check.ruleId) ? FIGURE_CHECK_SUBJECTS[check.ruleId as keyof typeof FIGURE_CHECK_SUBJECTS] : null
+  if (subject === null) return inner ? checkTitle(check).toLowerCase() : checkTitle(check)
+  const key = subject === 'Room sizes' ? 'sizes' : 'escapes'
+  return t(inner ? `check.subject.${key}.inner` : `check.subject.${key}`)
 }
 
 /** "6 of 6 rooms", with the rooms no check looked at. */

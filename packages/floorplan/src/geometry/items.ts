@@ -24,6 +24,7 @@ import { floorOf, planFloors } from './floors'
 import type { Vec2 } from './vec2'
 import { area } from './vec2'
 import { tryRoomShape, type RoomShape } from './room'
+import { roomZones } from './zones'
 import { pointInPolygon } from './innerPoint'
 import { intersectionArea, union } from './polygons'
 import { tolerance } from './tolerances'
@@ -126,10 +127,14 @@ export function itemRoom(item: Item, rooms: readonly { readonly room: Room; read
   return best?.room ?? null
 }
 
-/** Every room of the plan whose outline closes, with its shape. Broken rooms are left out. */
+/**
+ * Every room of the plan whose outline closes, with its shape. Broken rooms are left out, and so
+ * are zones (CNT-8): a fixture stands in the room, whichever of its zones it is in.
+ */
 export function roomShapes(index: PlanIndex, broken: ReadonlySet<string> = new Set()): { room: Room; shape: RoomShape }[] {
+  const zones = roomZones(index)
   return index.plan.rooms.flatMap((room) => {
-    if (broken.has(room.id)) return []
+    if (broken.has(room.id) || zones.zoneOf.has(room.id)) return []
     const shape = tryRoomShape(room, index)
     return shape === null ? [] : [{ room, shape }]
   })

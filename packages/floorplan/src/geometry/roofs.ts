@@ -1,0 +1,502 @@
+/**
+ * Sloped roofs and the ceilings under them (LVL-6, lab VE-5).
+ *
+ * A floor may state its roof (`Floor.roof`): flat, mono-pitch, gable or hip, from an eaves height,
+ * with a pitch or a ridge height. Here it becomes planes: the roof's underside over a point of the
+ * plan is the lowest of its sloped planes there, and never higher than its top (the ridge). Every
+ * height is in metres above the floor's level, as a wall's is.
+ *
+ * Where the roof stands: its eaves run round the smallest rectangle that holds the lines of the
+ * floor's outside walls (every solid wall when none is stated outside), turned to the longest of
+ * them (`types/roofFrame.ts`). Each sloped plane rises from one side of that rectangle, inward, at
+ * the roof's slope: the two long sides of a gable (or the two along `ridgeRuns`), all four of a hip,
+ * the side opposite `highSide` of a mono-pitch roof. On a rectangle that is the roof as built; over
+ * an L or a T it is one roof over the whole rectangle, with no valleys (see the review's "Not built").
+ *
+ * What the roof cuts:
+ *
+ * - **a wall** standing inside that rectangle: its top, along its line, is the lower of its own
+ *   height and the roof's underside over that line (`wallTopProfile`). A gable is then a gable, and
+ *   the views, the IFC, the check of an opening's top against its wall and the storey's height all
+ *   read that top. A wall with no part of it under its height is left a rectangle.
+ * - **a room**: its ceiling is the roof's underside, under its own height when it states one, and
+ *   its floor area is reported by headroom band (`roomHeadroom`): the floor with at least
+ *   `headroomLow` and at least `headroomFull` of height over it, both Grid's own figures.
+ *
+ * Pure, and never throws on a plan the schema read.
+ */
+
+import type { FloorPlan, PlanIndex, Roof, Rooflight, Room, Wall } from './plan'
+import { indexPlan } from './plan'
+import { floorOf, planForFloor } from './floors'
+import { floorElevations, DEFAULT_STOREY_HEIGHT } from './elevations'
+import { tryRoomShape } from './room'
+import { roomFloorOffset } from './steps'
+import { cutOutline, multiArea, ringOf } from './polygons'
+import { limit, tolerance } from './tolerances'
+import { wallAxis } from './wall'
+import type { Vec2 } from './vec2'
+import { roofFrame, roofSlope, roofTop, ridgeRunsOf, type RoofFrame } from '../types/roofFrame'
+import type { MultiPolygon } from 'polygon-clipping'
+import { said, type Said } from '../messages/say'
+
+/** A plane of the roof's underside: its height over (x, y) is `z0 + gx·x + gy·y`, above the floor's level. */
+export interface RoofPlane {
+  readonly z0: number
+  readonly gx: number
+  readonly gy: number
+}
+
+export const planeAt = (plane: RoofPlane, p: Vec2): number => plane.z0 + plane.gx * p.x + plane.gy * p.y
+
+/** A floor's stated roof, as planes. */
+export interface RoofShapeOverFloor {
+  readonly floor: string
+  readonly roof: Roof
+  readonly frame: RoofFrame
+  /** The rectangle its eaves run round, on the outside walls' lines, counter-clockwise. */
+  readonly footprint: readonly Vec2[]
+  /** Its sloped planes, each rising from its eaves; none on a flat roof. */
+  readonly planes: readonly RoofPlane[]
+  /** The underside's highest point: the ridge, or a flat roof's eaves. It never rises above it. */
+  readonly top: number
+  /** Rise per metre on plan, and the pitch in degrees; both 0 on a flat roof. */
+  readonly slope: number
+  readonly pitch: number
+}
+
+/** Every plane that bounds the underside: the sloped ones, then the top as a level plane. */
+export const boundingPlanes = (shape: RoofShapeOverFloor): readonly RoofPlane[] => [...shape.planes, { z0: shape.top, gx: 0, gy: 0 }]
+
+/** The roof's underside over a point: the lowest plane there. */
+export function roofHeightAt(shape: RoofShapeOverFloor, p: Vec2): number {
+  let h = shape.top
+  for (const plane of shape.planes) h = Math.min(h, planeAt(plane, p))
+  return h
+}
+
+const shapes = new WeakMap<FloorPlan, Map<string, RoofShapeOverFloor | null>>()
+
+/** The walls a floor's roof stands on: those stated outside, else every solid wall. */
+function roofWalls(plan: FloorPlan, floor: string): Wall[] {
+  const solid = plan.walls.filter((w) => floorOf(w) === floor && w.virtual !== true)
+  const outside = solid.filter((w) => w.kind === 'exterior')
+  return outside.length > 0 ? outside : solid
+}
+
+/**
+ * The roof a floor states, as planes, or null when it states none or has no walls to stand it on.
+ * The first entry of a floor id wins, as in `planFloors`.
+ */
+export function floorRoofShape(plan: FloorPlan, floor: string): RoofShapeOverFloor | null {
+  let byFloor = shapes.get(plan)
+  if (byFloor === undefined) {
+    byFloor = new Map()
+    shapes.set(plan, byFloor)
+  }
+  if (byFloor.has(floor)) return byFloor.get(floor)!
+  const found = shapeOf(plan, floor)
+  byFloor.set(floor, found)
+  return found
+}
+
+function shapeOf(plan: FloorPlan, floor: string): RoofShapeOverFloor | null {
+  const roof = (plan.floors ?? []).find((f) => f.id === floor)?.roof
+  if (roof === undefined) return null
+  const frame = roofFrame(roofWalls(plan, floor))
+  if (frame === null) return null
+  const { east, north } = frame
+  const at = (u: number, v: number): Vec2 => ({ x: u * east.x + v * north.x, y: u * east.y + v * north.y })
+  const footprint = [at(frame.west, frame.south), at(frame.eastEdge, frame.south), at(frame.eastEdge, frame.northEdge), at(frame.west, frame.northEdge)]
+  const slope = roofSlope(roof, frame)
+  // A plane rising inward from one side: `inward` points into the rectangle, `edge` is the side's
+  // place along it.
+  const from = (inward: Vec2, edge: number): RoofPlane => ({ z0: roof.eaves - slope * edge, gx: slope * inward.x, gy: slope * inward.y })
+  const southSide = from(north, frame.south)
+  const northSide = from({ x: -north.x, y: -north.y }, -frame.northEdge)
+  const westSide = from(east, frame.west)
+  const eastSide = from({ x: -east.x, y: -east.y }, -frame.eastEdge)
+  let planes: RoofPlane[] = []
+  if (roof.shape === 'gable') planes = ridgeRunsOf(roof, frame) === 'east-west' ? [southSide, northSide] : [westSide, eastSide]
+  else if (roof.shape === 'hip') planes = [southSide, eastSide, northSide, westSide]
+  else if (roof.shape === 'mono-pitch') {
+    // The plane rises from the side opposite the high one.
+    planes = [{ north: southSide, south: northSide, east: westSide, west: eastSide }[roof.highSide ?? 'north']]
+  }
+  if (!(slope > 0)) planes = []
+  return {
+    floor,
+    roof,
+    frame,
+    footprint,
+    planes,
+    top: roofTop(roof, frame),
+    slope: planes.length === 0 ? 0 : slope,
+    pitch: planes.length === 0 ? 0 : (Math.atan(slope) * 180) / Math.PI
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Convex pieces of the plan, cut by planes
+
+/** A convex polygon less the part where `f` is negative: Sutherland and Hodgman's clip by one line. */
+function clipConvex(polygon: readonly Vec2[], f: (p: Vec2) => number): Vec2[] {
+  const out: Vec2[] = []
+  for (let i = 0; i < polygon.length; i++) {
+    const a = polygon[i]!
+    const b = polygon[(i + 1) % polygon.length]!
+    const fa = f(a)
+    const fb = f(b)
+    if (fa >= 0) out.push(a)
+    if ((fa >= 0) !== (fb >= 0)) {
+      const t = fa / (fa - fb)
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
+    }
+  }
+  return out
+}
+
+const ringArea = (ring: readonly Vec2[]): number => {
+  let sum = 0
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!
+    const b = ring[(i + 1) % ring.length]!
+    sum += a.x * b.y - b.x * a.y
+  }
+  return sum / 2
+}
+
+/**
+ * The roof's rectangle widened all round by its own width and depth: far enough to hold the walls'
+ * outer faces and anything drawn against them, near enough to stay a number.
+ */
+function reach(shape: RoofShapeOverFloor): Vec2[] {
+  const { frame } = shape
+  const grow = frame.eastEdge - frame.west + (frame.northEdge - frame.south)
+  const { east, north } = frame
+  const at = (u: number, v: number): Vec2 => ({ x: u * east.x + v * north.x, y: u * east.y + v * north.y })
+  return [
+    at(frame.west - grow, frame.south - grow),
+    at(frame.eastEdge + grow, frame.south - grow),
+    at(frame.eastEdge + grow, frame.northEdge + grow),
+    at(frame.west - grow, frame.northEdge + grow)
+  ]
+}
+
+/** One plane of the underside and the part of the plan under it, a convex polygon, counter-clockwise. */
+export interface RoofFacet {
+  readonly plane: RoofPlane
+  readonly polygon: readonly Vec2[]
+}
+
+/**
+ * The underside as convex pieces, each under one plane (the top too, where the roof is level):
+ * where a plane is the lowest of them. Over the rectangle and well round it, so any part of the
+ * floor's outline falls in one. A piece with no area (a gable's ridge line) is left out.
+ */
+export function roofFacets(shape: RoofShapeOverFloor): RoofFacet[] {
+  const planes = boundingPlanes(shape)
+  const facets: RoofFacet[] = []
+  planes.forEach((plane, i) => {
+    let polygon: Vec2[] = reach(shape)
+    planes.forEach((other, j) => {
+      if (j === i || polygon.length < 3) return
+      polygon = clipConvex(polygon, (p) => planeAt(other, p) - planeAt(plane, p))
+    })
+    if (polygon.length >= 3 && ringArea(polygon) > tolerance('noArea')) facets.push({ plane, polygon })
+  })
+  return facets
+}
+
+/** The part of the plan, round the roof, with at least `height` under the roof: convex, possibly empty. */
+export function regionAtLeast(shape: RoofShapeOverFloor, height: number): Vec2[] {
+  if (shape.top < height - tolerance('lengthEqual')) return []
+  let polygon: Vec2[] = reach(shape)
+  for (const plane of shape.planes) {
+    if (polygon.length < 3) return []
+    polygon = clipConvex(polygon, (p) => planeAt(plane, p) - height)
+  }
+  return polygon.length >= 3 ? polygon : []
+}
+
+// ---------------------------------------------------------------------------------------------
+// Walls cut to the roof
+
+/** A point of a wall's top: `u` metres along it from its start, `z` above the floor's level. */
+export interface WallTopPoint {
+  readonly u: number
+  readonly z: number
+}
+
+const profiles = new WeakMap<Wall, { readonly shape: RoofShapeOverFloor; readonly profile: readonly WallTopPoint[] | null }>()
+
+/** Whether a point lies in the roof's rectangle, give or take `gap`. */
+function underRoof(shape: RoofShapeOverFloor, p: Vec2): boolean {
+  const { frame } = shape
+  const u = p.x * frame.east.x + p.y * frame.east.y
+  const v = p.x * frame.north.x + p.y * frame.north.y
+  const slack = tolerance('gap')
+  return u >= frame.west - slack && u <= frame.eastEdge + slack && v >= frame.south - slack && v <= frame.northEdge + slack
+}
+
+/**
+ * The top of a wall the floor's roof cuts, along its line from its start: the lower of the wall's
+ * height and the underside over its line, as the points where it turns, first at 0 and last at the
+ * wall's length. Null when the roof cuts nothing off it: no roof stated, a dividing line, a wall
+ * standing outside the roof's rectangle, or one no higher anywhere than the roof over it.
+ */
+export function wallTopProfile(plan: FloorPlan, wall: Wall): readonly WallTopPoint[] | null {
+  if (wall.virtual === true || !(wall.height > 0)) return null
+  const shape = floorRoofShape(plan, floorOf(wall))
+  if (shape === null) return null
+  const cached = profiles.get(wall)
+  if (cached !== undefined && cached.shape === shape) return cached.profile
+  const profile = profileOf(shape, wall)
+  profiles.set(wall, { shape, profile })
+  return profile
+}
+
+function profileOf(shape: RoofShapeOverFloor, wall: Wall): readonly WallTopPoint[] | null {
+  let axis: ReturnType<typeof wallAxis>
+  try {
+    axis = wallAxis(wall)
+  } catch {
+    return null
+  }
+  if (!underRoof(shape, axis.start) || !underRoof(shape, axis.end)) return null
+  const length = axis.length
+  // Each bound as a line along the wall: a + b·u.
+  const lines = [...boundingPlanes(shape).map((plane) => ({ a: planeAt(plane, axis.start), b: plane.gx * axis.dir.x + plane.gy * axis.dir.y })), { a: wall.height, b: 0 }]
+  const at = (u: number): number => Math.min(...lines.map((l) => l.a + l.b * u))
+  const cuts = new Set<number>([0, length])
+  for (let i = 0; i < lines.length; i++) {
+    for (let j = i + 1; j < lines.length; j++) {
+      const db = lines[i]!.b - lines[j]!.b
+      if (Math.abs(db) < tolerance('noSlope')) continue
+      const u = (lines[j]!.a - lines[i]!.a) / db
+      if (u > tolerance('noLength') && u < length - tolerance('noLength')) cuts.add(u)
+    }
+  }
+  // Where lines cross at one place, rounding gives several places a hair apart: one is kept.
+  const places: number[] = []
+  for (const u of [...cuts].sort((a, b) => a - b)) {
+    if (places.length > 0 && u - places[places.length - 1]! < tolerance('joint') && u !== length) continue
+    if (u === length && places.length > 0 && length - places[places.length - 1]! < tolerance('joint')) places.pop()
+    places.push(u)
+  }
+  const points = places.map((u) => ({ u, z: at(u) }))
+  if (points.every((p) => p.z >= wall.height - tolerance('joint'))) return null
+  // Only the points where the top turns: each kept point is checked against the last one kept.
+  const turns: WallTopPoint[] = [points[0]!]
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = turns[turns.length - 1]!
+    const p = points[i]!
+    const b = points[i + 1]!
+    const expected = a.z + ((b.z - a.z) * (p.u - a.u)) / (b.u - a.u)
+    if (Math.abs(expected - p.z) > tolerance('joint')) turns.push(p)
+  }
+  turns.push(points[points.length - 1]!)
+  return turns
+}
+
+/** The wall's top at `u` along it, on a profile. */
+export function topAt(profile: readonly WallTopPoint[], u: number): number {
+  if (u <= profile[0]!.u) return profile[0]!.z
+  for (let i = 1; i < profile.length; i++) {
+    const a = profile[i - 1]!
+    const b = profile[i]!
+    if (u <= b.u) return b.u === a.u ? b.z : a.z + ((b.z - a.z) * (u - a.u)) / (b.u - a.u)
+  }
+  return profile[profile.length - 1]!.z
+}
+
+/** The lowest and highest the top stands between `from` and `to` along the wall. */
+export function topBetween(profile: readonly WallTopPoint[], from: number, to: number): { readonly low: number; readonly high: number } {
+  const values = [topAt(profile, from), topAt(profile, to), ...profile.filter((p) => p.u > from && p.u < to).map((p) => p.z)]
+  return { low: Math.min(...values), high: Math.max(...values) }
+}
+
+/** The area of the wall's face under its top between `from` and `to` along it, in square metres. */
+export function faceUnderTop(profile: readonly WallTopPoint[], from: number, to: number): number {
+  const a = Math.min(from, to)
+  const b = Math.max(from, to)
+  const us = [a, ...profile.map((p) => p.u).filter((u) => u > a && u < b), b]
+  let area = 0
+  for (let i = 1; i < us.length; i++) area += ((topAt(profile, us[i - 1]!) + topAt(profile, us[i]!)) / 2) * (us[i]! - us[i - 1]!)
+  return area
+}
+
+/** A wall's highest point: its height, or the highest point of the top the roof leaves it. */
+export function wallPeak(plan: FloorPlan, wall: Wall): number {
+  const profile = wallTopProfile(plan, wall)
+  return profile === null ? wall.height : Math.max(...profile.map((p) => p.z))
+}
+
+/**
+ * LVL-6 with HND-2: the volume of `pieces` swept up from 0 to the lowest of `planes`, in cubic
+ * metres: each plane over the part of the pieces where it is the lowest, its height there
+ * integrated exactly (a plane's mean over a polygon is its height at the centroid). This is the
+ * volume of an extrusion clipped by those planes, as the IFC writes a wall or a space under the
+ * roof. The planes are in the pieces' frame and stay above 0 over them.
+ */
+export function volumeUnder(planes: readonly RoofPlane[], pieces: MultiPolygon): number {
+  if (planes.length === 0 || pieces.length === 0) return 0
+  const xs = pieces.flatMap((polygon) => polygon.flatMap((ring) => ring.map(([x]) => x)))
+  const ys = pieces.flatMap((polygon) => polygon.flatMap((ring) => ring.map(([, y]) => y)))
+  const grow = 1 + Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys)
+  const [x0, x1, y0, y1] = [Math.min(...xs) - grow, Math.max(...xs) + grow, Math.min(...ys) - grow, Math.max(...ys) + grow]
+  // A plane given twice would count its part twice.
+  const distinct = planes.filter((plane, i) => planes.findIndex((p) => p.z0 === plane.z0 && p.gx === plane.gx && p.gy === plane.gy) === i)
+  let volume = 0
+  distinct.forEach((plane, i) => {
+    let region: Vec2[] = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+    distinct.forEach((other, j) => {
+      if (j === i || region.length < 3) return
+      region = clipConvex(region, (p) => planeAt(other, p) - planeAt(plane, p))
+    })
+    if (region.length < 3 || ringArea(region) <= 0) return
+    const under = cutOutline('intersection', pieces, [[ringOf(region)]])
+    for (const polygon of under ?? []) {
+      polygon.forEach((ring, k) => {
+        let a = 0
+        let mx = 0
+        let my = 0
+        for (let n = 0; n < ring.length; n++) {
+          const [px, py] = ring[n]!
+          const [qx, qy] = ring[(n + 1) % ring.length]!
+          const cross = px * qy - qx * py
+          a += cross / 2
+          mx += ((px + qx) * cross) / 6
+          my += ((py + qy) * cross) / 6
+        }
+        // The outer ring counts, its holes are taken off, whichever way each runs.
+        const sign = (k === 0 ? 1 : -1) * Math.sign(a)
+        volume += sign * (plane.z0 * a + plane.gx * mx + plane.gy * my)
+      })
+    }
+  })
+  return volume
+}
+
+// ---------------------------------------------------------------------------------------------
+// Rooflights
+
+/** Where a rooflight lies: on one plane of the roof, as a rectangle on the plan. */
+export interface RooflightPlace {
+  readonly rooflight: Rooflight
+  readonly plane: RoofPlane
+  /** Its rectangle on the plan, counter-clockwise. */
+  readonly outline: readonly Vec2[]
+  /** Unit directions on the plan: along its width, and up the slope (its length). */
+  readonly across: Vec2
+  readonly up: Vec2
+  /** Its length as the plan shows it: its length on the slope, foreshortened. */
+  readonly planLength: number
+}
+
+/**
+ * A rooflight's place on the roof, or why it has none: it must lie inside the roof's rectangle and
+ * wholly on one plane of it, so it does not cross a ridge or a hip.
+ */
+export function rooflightPlace(shape: RoofShapeOverFloor, rooflight: Rooflight): RooflightPlace | { readonly problem: Said } {
+  const at = { x: rooflight.at[0], y: rooflight.at[1] }
+  const planes = boundingPlanes(shape)
+  let plane = planes[planes.length - 1]!
+  for (const candidate of planes) if (planeAt(candidate, at) < planeAt(plane, at) - tolerance('joint')) plane = candidate
+  const rise = Math.hypot(plane.gx, plane.gy)
+  const flat = rise < tolerance('noSlope')
+  const up = flat ? shape.frame.north : { x: plane.gx / rise, y: plane.gy / rise }
+  const across = { x: up.y, y: -up.x }
+  const planLength = rooflight.length / Math.sqrt(1 + rise * rise)
+  const w = rooflight.width / 2
+  const l = planLength / 2
+  const corner = (a: number, b: number): Vec2 => ({ x: at.x + across.x * a + up.x * b, y: at.y + across.y * a + up.y * b })
+  let outline = [corner(-w, -l), corner(w, -l), corner(w, l), corner(-w, l)]
+  if (ringArea(outline) < 0) outline = outline.reverse()
+  if (!outline.every((p) => underRoof(shape, p))) return { problem: said('issue.floor/rooflight-misplaced.outside') }
+  const onPlane = outline.every((p) => planes.every((other) => planeAt(plane, p) <= planeAt(other, p) + tolerance('joint')))
+  if (!onPlane) return { problem: said('issue.floor/rooflight-misplaced.acrossSlopes') }
+  return { rooflight, plane, outline, across, up, planLength }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Headroom
+
+/** The floor of a room with at least `height` over it. */
+export interface HeadroomBand {
+  readonly height: number
+  readonly area: number
+}
+
+export interface RoomHeadroom {
+  readonly room: string
+  readonly floor: string
+  /** The room's floor area (net, as `roomArea` measures it). */
+  readonly area: number
+  /** At least `headroomLow`, then at least `headroomFull`. */
+  readonly bands: readonly HeadroomBand[]
+  /** The lowest and highest height over its floor. */
+  readonly lowest: number
+  readonly highest: number
+  /** Whether a stated roof bounds its ceiling. */
+  readonly underRoof: boolean
+}
+
+/** The headroom bands Grid reports: its own two figures, in metres. */
+export const headroomBands = (): readonly number[] => [limit('headroomLow'), limit('headroomFull')]
+
+/**
+ * A room's floor by headroom band (LVL-6): how much of it has at least `headroomLow`, and at least
+ * `headroomFull`, of height over it, measured from the room's floor to its ceiling. The ceiling is
+ * the room's own height when it states one, else its storey's clear height, under the floor's roof
+ * where it states one (then the roof's top, not the storey's, is the most it can be), and under each
+ * lowered zone (LVL-4). Null when the room is not in the plan or cannot be drawn.
+ */
+export function roomHeadroom(plan: FloorPlan, which: string | Room, index?: PlanIndex): RoomHeadroom | null {
+  const room = typeof which === 'string' ? plan.rooms.find((r) => r.id === which) : which
+  if (room === undefined) return null
+  const floor = floorOf(room)
+  const own = index ?? indexPlan(planForFloor(plan, floor))
+  const shape = tryRoomShape(room, own)
+  if (shape === null || shape.polygon.length < 3) return null
+  const pieces: MultiPolygon = [[ringOf(shape.polygon), ...shape.holes.map(ringOf)]]
+  const roof = floorRoofShape(plan, floor)
+  const offset = roomFloorOffset(room)
+  const stated = room.height !== undefined && Number.isFinite(room.height) && room.height > 0 ? room.height : null
+  const storey = floorElevations(plan).floors.get(floor)?.clearHeight ?? DEFAULT_STOREY_HEIGHT
+  const cap = stated ?? (roof !== null ? roof.top : storey) - offset
+  const zones = loweredZones(room, pieces)
+  const area = multiArea(pieces)
+
+  const bands = headroomBands().map((height): HeadroomBand => {
+    if (cap < height - tolerance('lengthEqual')) return { height, area: 0 }
+    let region: MultiPolygon | null = pieces
+    if (roof !== null) {
+      const enough = regionAtLeast(roof, height + offset)
+      region = enough.length < 3 ? [] : cutOutline('intersection', pieces, [[[ringOf(enough)]]])
+    }
+    const low = zones.filter((z) => z.height < height - tolerance('lengthEqual')).map((z) => z.pieces)
+    if (region !== null && region.length > 0 && low.length > 0) region = cutOutline('difference', region, low)
+    return { height, area: region === null ? 0 : multiArea(region) }
+  })
+
+  // The ceiling over each corner of the room's floor cut into the roof's planes: a plane's lowest
+  // and highest points over a piece of floor are at its corners.
+  const heights: number[] = []
+  const facets = roof === null ? [] : roofFacets(roof)
+  if (facets.length === 0) heights.push(cap)
+  for (const facet of facets) {
+    const under = cutOutline('intersection', pieces, [[[ringOf(facet.polygon)]]]) ?? []
+    for (const polygon of under) for (const ring of polygon) for (const [x, y] of ring) heights.push(Math.min(cap, planeAt(facet.plane, { x, y }) - offset))
+  }
+  const lowest = Math.min(...heights, ...zones.map((z) => z.height))
+  const highest = Math.max(...heights)
+  return { room: room.id, floor, area, bands, lowest, highest, underRoof: roof !== null }
+}
+
+function loweredZones(room: Room, pieces: MultiPolygon): { height: number; pieces: MultiPolygon }[] {
+  return (room.ceiling?.lowered ?? []).flatMap((zone) => {
+    const cut = cutOutline('intersection', pieces, [[[ringOf(zone.points.map(([x, y]) => ({ x, y })))]]])
+    return cut === null || cut.length === 0 ? [] : [{ height: zone.height, pieces: cut }]
+  })
+}

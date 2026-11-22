@@ -12,7 +12,8 @@ import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import { floorElevations } from '@ongrid/floorplan/geometry'
 import { BuildingScene } from '../canvas3d/BuildingScene'
 import { buildingFrame, buildingLayout, type BuildingFrame, type BuildingLayout } from '../canvas3d/building'
-import { openingCamera } from '../canvas3d/camera'
+import type { CameraRecord } from '@ongrid/floorplan/geometry'
+import { openingCamera, recordCamera } from '../canvas3d/camera'
 import type { PlanColors3D } from '../canvas3d/usePlanColors'
 
 export interface StillSceneOptions {
@@ -22,11 +23,13 @@ export interface StillSceneOptions {
   /** The picture's size in pixels, which sets the camera's aspect. */
   readonly width: number
   readonly height: number
+  /** VEW-3: the camera to take it with, as the app opens at it. The app's opening camera when left out. */
+  readonly camera?: CameraRecord
 }
 
 export interface StillScene {
   readonly scene: THREE.Scene
-  /** The camera as the app opens it, pointed at the pivot as its orbit controls point it. */
+  /** The camera as the app opens it, pointed at the pivot as its orbit controls point it (or at the record's target). */
   readonly camera: THREE.PerspectiveCamera
   readonly frame: BuildingFrame
   readonly layout: BuildingLayout
@@ -67,7 +70,7 @@ export function stillScene(plan: FloorPlan, options: StillSceneOptions): StillSc
     frameloop: 'never',
     dpr: 1,
     size: { width: options.width, height: options.height, top: 0, left: 0 },
-    camera: openingCamera(frame)
+    camera: options.camera ? recordCamera(options.camera) : openingCamera(frame)
   })
 
   let store: ReturnType<typeof root.render> | undefined
@@ -80,7 +83,10 @@ export function stillScene(plan: FloorPlan, options: StillSceneOptions): StillSc
 
   const camera = state.camera as THREE.PerspectiveCamera
   camera.aspect = options.width / options.height
-  camera.lookAt(...frame.target)
+  // A record's camera looks at its target, as the app's orbit controls point it there. Three's
+  // own up (+y) and the record's (in the upright plane through the line of sight) turn the
+  // camera the same way: neither rolls it.
+  camera.lookAt(...(options.camera ? recordCamera(options.camera).target : frame.target))
   camera.updateProjectionMatrix()
   camera.updateMatrixWorld()
 
