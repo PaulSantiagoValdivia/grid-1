@@ -84,13 +84,13 @@ Y-4, RT-8, U-4 (and U-5 for the issues), CP1 for the picture.
 ## The lab cases, before and after
 
 "Before" is `diffPlans` alone on main 6ba4fb9 (what the lab's bench ran, same counts as the lab
-recorded); "after" is `compareBuildings` on this branch. Plans from the lab folders named, run
+recorded); "after" is `compareBuildings` on this branch. Plans from the lab's folders, run
 locally and not committed. Rooms text was compiled and stamped with `stampFor`, as `grid write`
 does.
 
 | Case | Before | After |
 |---|---|---|
-| WR-8: the flat against its DXF rebuild (`I/…/flat-original.json`, `flat-from-dxf.json`) | 56 changes, 12 area changes, 28 issues | 13 lines, 0 issues, "28 ids renamed (9 walls, 13 openings, 6 rooms)". The 13 are what the DXF really lost: 6 room uses, "9 walls height 2.60 → 2.70 m" (one line), 6 window heights or sills |
+| WR-8: the flat against its DXF rebuild (the I lab's flat and its DXF rebuild) | 56 changes, 12 area changes, 28 issues | 13 lines, 0 issues, "28 ids renamed (9 walls, 13 openings, 6 rooms)". The 13 are what the DXF really lost: 6 room uses, "9 walls height 2.60 → 2.70 m" (one line), 6 window heights or sills |
 | Y-4: architect's option A against its read-back (`option-a.json`, `a-roundtrip.json`) | 41 changes, 10 issues | 1 line, "10 walls height 2.60 → 2.70 m", 10 ids renamed: the read-back really changed the height |
 | Y-4: J's flat against the estate agent's (`j-t1.json`, `flat.json`), origin 0.15 m away | 35 changes | 2 lines, the drawing's shift said once and no change; 9 ids renamed. The 2 are real: window `w-bath` 0.10 m and `w-lounge` 0.05 m further along their walls |
 | RT-8: living room 30 cm wider, rooms first | 23 changes, kitchen door "moved to another wall; moved 4.40 m" | 2 lines (the living room 18.48 → 19.74 m², 4.40 × 4.20 → 4.70 × 4.20 m; four rooms moved 0.30 m east as they were); `door-kitchen` "stayed where it was, in "Hall" and "Kitchen", on the wall that replaced its own" |
