@@ -196,6 +196,13 @@ const LENGTH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   patterns: ['spacing', 'opening.width', 'opening.sill', 'opening.height', 'opening.opens.width', 'opening.opens.height', 'margins.start', 'margins.end'],
 }
 
+/** CNT-15: every length a named type holds, by its list in `types`. A wall type's height may be a word, left as it is. */
+const TYPE_LENGTH_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  walls: ['thickness', 'height'],
+  doors: ['width', 'height', 'opens.width', 'opens.height'],
+  windows: ['width', 'height', 'sill', 'opens.width', 'opens.height'],
+}
+
 /** `part` with the length at `path` (a field, or a field inside a field) scaled, when it is there. */
 function scaledAt(part: Record<string, unknown>, path: readonly string[], scaled: (v: unknown) => unknown): Record<string, unknown> {
   const [head, ...rest] = path as [string, ...string[]]
@@ -229,6 +236,21 @@ export function planInMetres<T>(raw: T): { raw: T; from: string | null } {
       for (const field of fields) next = scaledAt(next, field.split('.'), scaled)
       return next
     })
+  }
+  // CNT-15 (C24): the named types' lengths, in the same unit.
+  const types = plan['types']
+  if (typeof types === 'object' && types !== null && !Array.isArray(types)) {
+    const next: Record<string, unknown> = { ...(types as Record<string, unknown>) }
+    for (const [list, fields] of Object.entries(TYPE_LENGTH_FIELDS)) {
+      if (!Array.isArray(next[list])) continue
+      next[list] = (next[list] as unknown[]).map((part) => {
+        if (typeof part !== 'object' || part === null || Array.isArray(part)) return part
+        let scaledPart: Record<string, unknown> = { ...(part as Record<string, unknown>) }
+        for (const field of fields) scaledPart = scaledAt(scaledPart, field.split('.'), scaled)
+        return scaledPart
+      })
+    }
+    out['types'] = next
   }
   return { raw: out as T, from: stated }
 }

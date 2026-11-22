@@ -1890,9 +1890,9 @@ describe('wall material layer set usage', () => {
     expect(ofType(doc, 'IFCMATERIALLAYERSETUSAGE')).toHaveLength(2)
     expect(ofType(doc, 'IFCMATERIALLAYERSET')).toHaveLength(2)
     expect(ofType(doc, 'IFCMATERIALLAYER')).toHaveLength(2)
-    // HND-2: one material per stated kind, named after it.
+    // HND-2: one material for the walls. CNT-15 (lab AU3-4): the plan states none, so it is "Not stated".
     expect(ofType(doc, 'IFCMATERIAL')).toHaveLength(1)
-    expect(str(only(doc, 'IFCMATERIAL').args[0])).toBe('Interior wall')
+    expect(str(only(doc, 'IFCMATERIAL').args[0])).toBe('Not stated')
     expect(byWall.has('virtual')).toBe(false)
   })
 
@@ -1913,7 +1913,8 @@ describe('wall material layer set usage', () => {
       ['Interior wall 0.3 m', 'wall:interior:0.3', 'STANDARD'],
       ['Exterior wall 0.2 m', 'wall:exterior:0.2', 'STANDARD']
     ])
-    expect(ofType(doc, 'IFCMATERIAL').map((m) => str(m.args[0]))).toEqual(['Interior wall', 'Exterior wall'])
+    // CNT-15 (lab AU3-4): no material is stated, so one material says so, for every kind.
+    expect(ofType(doc, 'IFCMATERIAL').map((m) => str(m.args[0]))).toEqual(['Not stated'])
 
     const typed = new Map<string, string>()
     for (const rel of ofType(doc, 'IFCRELDEFINESBYTYPE')) {

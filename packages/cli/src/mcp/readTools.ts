@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, kindWords, limit, planFloors, planOrientation, planStoreys, buildingHeights, tolerance, viewSetting, wallPointAt, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
+import { FACADE_SIDES, MEASURES, planHasFinishes, planHasTypes, compassPoint, drawingBearing, findView, floorOf, itemFootprint, kindWords, limit, planFloors, planOrientation, planStoreys, buildingHeights, tolerance, viewSetting, wallPointAt, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
 import { CameraRefused, cameraFor, eyeCamera, lensProblem, settingOfCamera, type CameraAsk } from '../draw/cameraAsk'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, isFirmLine, type ResultLine } from '@ongrid/rules'
@@ -63,6 +63,7 @@ import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantiti
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
 import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
+import { FINISH_RULE, FINISH_SURFACES, FINISH_UNITS, WALL_TYPE_RULE, planFinishes, wallTypeRuns, type FinishSurface } from '../quantities/finishes'
 import {
   askPlan,
   checkSums,
@@ -561,6 +562,19 @@ function estimateAnswer(estimate: Estimate, pricing: Pricing | null, units: Disp
   return { text: lines.join('\n'), data }
 }
 
+/** CNT-15: one line per surface with each finish's quantity, a finish not stated last. */
+function finishLines(totals: readonly { readonly surface: FinishSurface; readonly finish: string | null; readonly quantity: number; readonly rooms: readonly string[] }[], units: Display): string[] {
+  const words: Record<FinishSurface, string> = { floor: 'Floor', walls: 'Wall faces', ceiling: 'Ceilings', skirting: 'Skirting' }
+  const amount = (surface: FinishSurface, quantity: number): string => (FINISH_UNITS[surface] === 'm' ? lengthText(quantity, units) : areaText(quantity, units))
+  return [
+    'Finishes:',
+    ...FINISH_SURFACES.flatMap((surface) => {
+      const of = totals.filter((total) => total.surface === surface)
+      return of.length === 0 ? [] : [`  ${words[surface]}: ${of.map((total) => `${total.finish === null ? 'not stated' : q(total.finish)} ${amount(surface, total.quantity)} (${total.rooms.length} room${total.rooms.length === 1 ? '' : 's'})`).join('; ')}.`]
+    }),
+  ]
+}
+
 const takeoffTool: GridTool = {
   name: 'grid_takeoff',
   title: 'Quantities for pricing',
@@ -572,7 +586,8 @@ const takeoffTool: GridTool = {
     + `A cost comes only from the person's own rates file (rates, or ${RATES_FILE} beside the plan), which must name its currency; with none, the answer is a rate card to fill in and holds no money. Lines with no rate and rates in the wrong unit are listed apart. Grid has no prices. `
     + 'Every figure is worked out from the plan\'s walls and openings by a rule stated in the answer. '
     + 'It also gives each floor\'s slab and the roof over every part with nothing above, worked out from the outlines and marked assumed. '
-    + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). The plan holds no finishes. Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
+    + 'On a plan that names wall types or room finishes (types and finishes in the plan), it also gives the walls of each named type (length and face, with its material) and each finish\'s quantity (floor, walls and ceiling by area, skirting by length), a zone\'s finish taking its part of its room; the estimate then prices them by type and by finish. '
+    + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
@@ -590,6 +605,9 @@ const takeoffTool: GridTool = {
   },
   outputSchema: objectSchema({
     walls: listSchema(objectSchema({ kind: STRING, count: NUMBER, gross: NUMBER, net: NUMBER })),
+    // CNT-15, on a plan that names wall types or finishes: the walls of each named type, and each finish's total.
+    wallTypes: listSchema(objectSchema({ type: STRING, name: STRING, kind: NULLABLE_STRING, material: NULLABLE_STRING, glazed: BOOLEAN, count: NUMBER, gross: NUMBER, net: NUMBER, face: NUMBER })),
+    finishes: listSchema(objectSchema({ surface: STRING, finish: NULLABLE_STRING, unit: STRING, quantity: NUMBER, rooms: listSchema(STRING) })),
     rooms: listSchema(objectSchema({ id: STRING, name: STRING, floor: STRING, floorArea: NUMBER, ceiling: NUMBER, perimeter: NUMBER, skirting: NUMBER, wallFace: NUMBER, openingsOff: NUMBER, height: NULLABLE_NUMBER, ceilingHeight: NULLABLE_NUMBER, lowered: listSchema(objectSchema({ name: STRING, height: NUMBER, area: NUMBER })) })),
     totals: objectSchema({ floorArea: NUMBER, ceiling: NUMBER, skirting: NUMBER, wallFace: NUMBER }),
     envelope: objectSchema({
@@ -645,7 +663,18 @@ const takeoffTool: GridTool = {
     for (const id of rooms ?? []) roomArg(survey.plan, id, 'rooms item')
     const units = displayFor(args['units'], args['decimal'], survey.plan)
     const t = planTakeoff(survey, floor === undefined ? undefined : [floor], rooms)
-    const data = { walls: t.walls, rooms: t.rooms, totals: t.totals, envelope: t.envelope, rules: t.rules }
+    // CNT-15 (C24): the named wall types' walls and the finishes, on a plan that names any.
+    const wallTypes = planHasTypes(survey.plan) ? wallTypeRuns(survey, floor === undefined ? undefined : [floor]) : []
+    const finishes = rooms === undefined && planHasFinishes(survey.plan) ? planFinishes(survey, floor === undefined ? undefined : [floor]).totals : null
+    const data = {
+      walls: t.walls,
+      ...(wallTypes.length === 0 ? {} : { wallTypes }),
+      ...(finishes === null ? {} : { finishes }),
+      rooms: t.rooms,
+      totals: t.totals,
+      envelope: t.envelope,
+      rules: [...t.rules, ...(wallTypes.length === 0 ? [] : [WALL_TYPE_RULE]), ...(finishes === null ? [] : [FINISH_RULE])],
+    }
     const several = survey.facts.floors.length > 1
     if (args['format'] === 'csv') {
       const rows = [
@@ -658,6 +687,9 @@ const takeoffTool: GridTool = {
           ...(f.roof ? [['roof', `roof over ${f.floorName}, where nothing is above`, f.roof.area, null, null, null, null, null, 'assumed']] : []),
         ]),
         ...(t.envelope.roof === null ? [] : [['total', 'roof, all floors', t.envelope.roof, null, null, null, null, null, 'assumed']]),
+        // CNT-15: the named wall types (gross and net length, face in the wall face column) and the finishes.
+        ...wallTypes.map((w) => ['wall type', `${w.name} (${w.count})`, null, null, null, w.face, w.gross, w.net, null]),
+        ...(finishes ?? []).map((f) => ['finish', `${f.surface}: ${f.finish ?? 'not stated'}`, f.surface === 'floor' ? f.quantity : null, f.surface === 'ceiling' ? f.quantity : null, f.surface === 'skirting' ? f.quantity : null, f.surface === 'walls' ? f.quantity : null, null, null, null]),
       ]
       return { text: csv(['row', 'what', 'floor m2', 'ceiling m2', 'skirting m', 'wall face m2', 'length or perimeter m', 'net length m', 'state'], rows), data }
     }
@@ -680,7 +712,13 @@ const takeoffTool: GridTool = {
       ...envelopeLines,
       ...(t.envelope.roof === null ? [] : [`Roof in all: ${areaText(t.envelope.roof, units)}, assumed.`]),
       ...(assumed.length === 0 ? [] : [`Assumed: ${assumed.join('; ')}.`]),
+      ...(wallTypes.length === 0
+        ? []
+        : [`Walls by type: ${wallTypes.map((w) => `${q(w.name)} ${lengthText(w.gross, units)} (${w.count} wall${w.count === 1 ? '' : 's'}; face ${areaText(w.face, units)}${w.material === null ? ', material not stated' : `, ${w.material}`}${w.glazed ? ', glazed' : ''})`).join('; ')}.`]),
+      ...(finishes === null ? [] : finishLines(finishes, units)),
       ...Object.values(TAKEOFF_RULES),
+      ...(wallTypes.length === 0 ? [] : [WALL_TYPE_RULE]),
+      ...(finishes === null ? [] : [FINISH_RULE]),
       'For a first estimate (finishes, reveals, walls by thickness, doors and windows by size, slab, roof) and a cost from the person\'s rates, ask with for=estimate.',
     ]
     return { text: lines.join('\n'), data }
@@ -691,12 +729,31 @@ const takeoffTool: GridTool = {
 // grid_schedule
 
 /** What grid_schedule's `of` names. */
-type ScheduleOf = 'rooms' | 'openings' | 'flats' | 'doors' | 'windows'
+type ScheduleOf = 'rooms' | 'openings' | 'flats' | 'doors' | 'windows' | 'finishes'
 
 /** ARE-12: the room schedule or the opening schedule, from one set of rows, as text or CSV. */
 function listSchedule(survey: Survey, of: ScheduleOf, floor: string | undefined, units: Display, asCsv: boolean): Answer {
   const floors = floor === undefined ? undefined : [floor]
   const several = survey.facts.floors.length > 1
+  if (of === 'finishes') {
+    // CNT-15 (C24): the finishes room by room, a zone with its own after its room, and each finish's total.
+    const s = planFinishes(survey, floors)
+    const data = { rows: s.rows, totals: s.totals, rule: s.rule }
+    const amount = (surface: FinishSurface, quantity: number): string => (FINISH_UNITS[surface] === 'm' ? lengthText(quantity, units) : areaText(quantity, units))
+    if (asCsv) {
+      const cells = s.rows.map((r) => [r.id, r.name, r.floor, r.zoneOf, ...FINISH_SURFACES.flatMap((surface) => [r.surfaces[surface].finish, r.surfaces[surface].quantity])])
+      return { text: csv(['id', 'name', 'floor', 'zone of', 'floor finish', 'floor m2', 'wall finish', 'wall face m2', 'ceiling finish', 'ceiling m2', 'skirting finish', 'skirting m'], cells), data }
+    }
+    const floorName = new Map(survey.facts.floors.map((f) => [f.id, f.name] as const))
+    const lines = [planHasFinishes(survey.plan) ? 'Finishes by room:' : 'The plan names no finishes: every surface is not stated. Name a room\'s or a zone\'s in its finishes (floor, walls, ceiling, skirting).']
+    for (const r of s.rows) {
+      const shown = FINISH_SURFACES.filter((surface) => r.zoneOf === null || r.surfaces[surface].finish !== null)
+      const parts = shown.map((surface) => `${surface} ${r.surfaces[surface].finish === null ? 'not stated' : q(r.surfaces[surface].finish!)} ${amount(surface, r.surfaces[surface].quantity)}`)
+      lines.push(`${r.zoneOf === null ? '' : '  '}${q(r.name)}${r.zoneOf === null ? '' : ` (a zone of ${q(r.zoneOf)})`}${several ? `, ${q(floorName.get(r.floor) ?? r.floor)}` : ''}: ${parts.join(', ')}`)
+    }
+    lines.push(...finishLines(s.totals, units), s.rule)
+    return { text: lines.join('\n'), data }
+  }
   if (of === 'doors' || of === 'windows') {
     // ARE-15: the door or window schedule by type (kind and size), each type with its openings' marks.
     const type = of === 'doors' ? 'door' : 'window'
@@ -708,7 +765,10 @@ function listSchedule(survey: Survey, of: ScheduleOf, floor: string | undefined,
     for (const r of s.rows) {
       const sills = type === 'window' ? `, sill ${r.sills.map((sill) => lengthText(sill, units, 'height')).join(' or ')}` : ''
       const part = r.opens === null ? '' : `, opens ${lengthText(r.opens.width, units)} × ${lengthText(r.opens.height, units)}`
-      lines.push(`${r.number}. ${r.count} × ${kindWords(type, r.kind)} ${size(r.width, r.height)}${part}${sills} (type ${r.key}): ${r.marks.join(', ')}`)
+      // CNT-15: a type the plan names is said by its name, with its material.
+      const named = r.basis === 'named' ? `${q(r.name!)}, ` : ''
+      const material = r.basis === 'named' ? `, ${r.material === null ? 'material not stated' : r.material}${r.glazed === true ? ', glazed' : ''}` : ''
+      lines.push(`${r.number}. ${r.count} × ${named}${kindWords(type, r.kind)} ${size(r.width, r.height)}${part}${sills}${material} (type ${r.key}): ${r.marks.join(', ')}`)
     }
     if (s.rows.length === 0) lines.push(`The plan has no ${of}${floor === undefined ? '' : ' on that floor'}.`)
     lines.push(s.rule)
@@ -766,12 +826,12 @@ const scheduleTool: GridTool = {
   description:
     'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, how many toilets, basins, showers, baths or kitchen runs there are and where, or for the flats, the area of each flat or the unit mix. '
     + 'It groups every door, window and doorless opening by type, kind (sliding, double, fixed… when the plan states one) and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame, so a clear width is not known. '
-    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height, floor and, on a plan that lists flats, its flat, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size, its kind, the part that opens and its handing where the plan states them, and the rooms on its two sides; with of=flats, every flat the plan lists with its type, rooms, bedrooms and net area, and the unit mix by type (how many of each, how many mirrored, their bedrooms and area); with of=doors or of=windows, the door or window schedule a supplier needs: the doors, or the windows, grouped into types by kind and size (and the part that opens), each type with its count and the marks of its openings. Every room and opening has a mark (the room\'s number; D1, W1, O1 for openings) that grid_view kind=plan with marks schedule draws on the plan, one mark for each row. All as text or CSV. '
+    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height, floor and, on a plan that lists flats, its flat, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size, its kind, the part that opens and its handing where the plan states them, and the rooms on its two sides; with of=flats, every flat the plan lists with its type, rooms, bedrooms and net area, and the unit mix by type (how many of each, how many mirrored, their bedrooms and area); with of=doors or of=windows, the door or window schedule a supplier needs: the doors, or the windows, grouped into types (the plan\'s own named types first, with their names and materials, then by kind and size and the part that opens), each type with its count and the marks of its openings; with of=finishes, the finishes plan: each room\'s floor, wall, ceiling and skirting finish with its quantity, a zone with its own finish as its part of its room, and each finish\'s total. Every room and opening has a mark (the room\'s number; D1, W1, O1 for openings) that grid_view kind=plan with marks schedule draws on the plan, one mark for each row. All as text or CSV. '
     + 'Do not use for wall or plaster quantities (grid_takeoff). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
-    of: { type: 'string', enum: ['rooms', 'openings', 'flats', 'doors', 'windows'], description: 'rooms for the room schedule, openings for one row per door, window and opening, flats for the flats and the unit mix by type, doors or windows for the door or window schedule by type with each type\'s marks. Grouped by type and size when left out.', examples: ['rooms', 'openings', 'flats', 'doors'] },
+    of: { type: 'string', enum: ['rooms', 'openings', 'flats', 'doors', 'windows', 'finishes'], description: 'rooms for the room schedule, openings for one row per door, window and opening, flats for the flats and the unit mix by type, doors or windows for the door or window schedule by type with each type\'s marks, finishes for each room\'s floor, wall, ceiling and skirting finishes with their quantities and each finish\'s total. Grouped by type and size when left out.', examples: ['rooms', 'openings', 'flats', 'doors', 'finishes'] },
     types: { type: 'array', description: 'Only these kinds: door, window, opening, or fixture for the toilets, basins, showers, baths and kitchen runs. All of them when left out.', examples: [['door'], ['door', 'opening'], ['fixture']], items: { enum: ['door', 'window', 'opening', 'fixture'] }, minItems: 1, maxItems: 4 },
     narrower_than: { type: 'number', length: true, description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
     units: UNITS_ARG,
@@ -793,6 +853,8 @@ const scheduleTool: GridTool = {
     notInFlats: NUMBER,
     // ARE-15, with of=doors or of=windows: how many of them, each counted once.
     count: NUMBER,
+    // CNT-15, with of=finishes: each finish's total over the rooms listed.
+    totals: { type: 'array' },
   }, ['rows']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])

@@ -57,6 +57,12 @@ Notes for agents and people changing this repository.
   `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
   CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind
   needs its symbol there and a decision first. A fixture is never a wall or a room.
+- `packages/floorplan/src/geometry/partTypes.ts` (CNT-15): named wall, door and window types
+  (`types`, C24 in `types/floorplan.ts`) and room finishes. `withTypes` fills each part from its
+  type when the plan is read, records it in `typed` and `statedWall` and `statedOpening` leave it
+  out of the file, so a reader reads the part and a change to the type reaches every part of it.
+  The quantities by type and finish are the CLI's `quantities/finishes.ts`; the change is
+  `edit/types.ts` (`grid_change_type`, `grid edit type`).
 - `packages/floorplan/src/types/facts.ts` (CNT-9): facts of the person's own, in `properties` on
   walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
@@ -111,7 +117,7 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 31 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 32 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview and the preview
   page's own call (VEW-4, `previewTools.ts`), the

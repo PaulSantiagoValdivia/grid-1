@@ -226,6 +226,22 @@
  *   in), each an outline on a floor, with a name and a height. A context shape is never a wall, a
  *   room or a part of any building: it is drawn and is in no measure, check or count. All optional
  *   and never defaulted (version 1): a plan that states none reads exactly as before.
+ *
+ * C24 · Named wall, door and window types, and room finishes (CNT-15)
+ *   A plan MAY hold a short list of named types in `types`: `walls` (each a name, and any of a
+ *   thickness, a height rule, a kind, whether it is glazed and a material), `doors` and `windows`
+ *   (a name, and any of a width, a height, a window's sill, a kind (C20), the part that opens, whether
+ *   it is glazed and a material). A wall names its type in `wallType`, a door in `doorType` and a
+ *   window in `windowType`, by id. A value the part states itself wins over its type's: the type
+ *   fills only what the part leaves out, and the reading records which in `typed`, which is never
+ *   written back (`statedWall`, `statedOpening`), so one change to a type changes every part that
+ *   takes it. A type's height is metres, or `floor`: as high as a wall on its floor that states none
+ *   (C5, LVL-6). `types.defaults` names the type a wall of each kind, a door or a window takes when
+ *   it names none: the template an office keeps. A dividing line takes no type. A room or a zone
+ *   (CNT-8) MAY name its `finishes`: floor, walls, ceiling and skirting, by the person's own names;
+ *   a zone's finish is its part of its room. Grid checks no finish and no material. An id a part
+ *   names that no type has is said and read as no type, never refused. Optional and never
+ *   defaulted: a plan with none reads exactly as before (version 1).
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -522,6 +538,17 @@ export type UnstatedWallValue = (typeof UNSTATED_WALL_VALUES)[number]
 const HEIGHT_FROM_FLOOR = Symbol('height from the floor')
 
 /**
+ * CNT-15 (C24): set by `withTypes` on a wall or an opening, the values it took from its type, so
+ * that its schema records them in `typed`. A symbol, so no file can write it, and a part read
+ * twice is filled once.
+ */
+const FROM_TYPE = Symbol('values from its type')
+
+/** CNT-15: the values of a wall, a door or a window that its type may fill, and `typed` may name. */
+export const TYPED_VALUES = ['wallType', 'doorType', 'windowType', 'thickness', 'height', 'kind', 'width', 'sill', 'opens'] as const
+export type TypedValue = (typeof TYPED_VALUES)[number]
+
+/**
  * Fills the thickness and height a wall leaves out, by whether it is virtual, and records what a
  * solid wall left out in `unstated` (WRT-6). A file's own `unstated` is not read: it is the
  * reading's, and `readingNotes` names it as a field Grid does not know.
@@ -530,6 +557,10 @@ function withWallDefaults(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
   const wall: Record<string, unknown> = { ...(raw as Record<string, unknown>) }
   delete wall.unstated
+  // CNT-15 (C24): what the wall's type filled in (`withTypes`), as the reading's own `typed`.
+  delete wall.typed
+  const typed = (raw as Record<symbol, unknown>)[FROM_TYPE]
+  if (Array.isArray(typed) && typed.length > 0) wall.typed = typed
   const virtual = wall.virtual === true
   const defaults = virtual ? WALL_DEFAULTS.virtual : WALL_DEFAULTS.solid
   const left: UnstatedWallValue[] = []
@@ -688,11 +719,13 @@ export function wallWithEnds<T extends Record<string, unknown>>(wall: T, ends: {
  * A wall as its file states it (WRT-6): without the values the reading filled in and without
  * `unstated`, for whatever writes a wall back, so a default never lands in a file that stated
  * none. HND-11: a wall Grid read from its face (`placedBy`) is given back by that face, with
- * `face`, as its file gave it. A wall that left nothing out is returned as it is.
+ * `face`, as its file gave it. CNT-15 (C24): without the values its type filled in (`typed`), so a
+ * change to the type still reaches it. A wall that left nothing out is returned as it is.
  */
-export function statedWall<T extends { readonly unstated?: readonly UnstatedWallValue[]; readonly placedBy?: WallFace | undefined }>(wall: T): Omit<T, 'unstated' | 'placedBy'> {
-  if (wall.unstated === undefined && wall.placedBy === undefined) return wall
-  const { unstated, placedBy, ...rest } = wall
+export function statedWall<T extends { readonly unstated?: readonly UnstatedWallValue[]; readonly placedBy?: WallFace | undefined; readonly typed?: readonly TypedValue[] | undefined }>(wall: T): Omit<T, 'unstated' | 'placedBy' | 'typed'> {
+  if (wall.unstated === undefined && wall.placedBy === undefined && wall.typed === undefined) return wall
+  const { unstated, placedBy, typed, ...rest } = wall
+  const left: readonly string[] = [...(unstated ?? []), ...(typed ?? [])]
   const out: Record<string, unknown> = { ...rest }
   if (placedBy !== undefined && isEndPair(out['start']) && isEndPair(out['end'])) {
     const [start, end] = faceFromCentre(out['start'], out['end'], placedBy, movingThickness(out))
@@ -701,11 +734,23 @@ export function statedWall<T extends { readonly unstated?: readonly UnstatedWall
       ordered[key] = key === 'start' ? start : key === 'end' ? end : value
       if (key === 'end') ordered['face'] = placedBy
     }
-    for (const key of unstated ?? []) delete ordered[key]
-    return ordered as Omit<T, 'unstated' | 'placedBy'>
+    for (const key of left) delete ordered[key]
+    return ordered as Omit<T, 'unstated' | 'placedBy' | 'typed'>
   }
-  for (const key of unstated ?? []) delete out[key]
-  return out as Omit<T, 'unstated' | 'placedBy'>
+  for (const key of left) delete out[key]
+  return out as Omit<T, 'unstated' | 'placedBy' | 'typed'>
+}
+
+/**
+ * CNT-15 (C24): an opening as its file states it: without the values its door or window type
+ * filled in (`typed`), for whatever writes an opening back. One that took nothing is returned as it is.
+ */
+export function statedOpening<T extends { readonly typed?: readonly TypedValue[] | undefined }>(opening: T): Omit<T, 'typed'> {
+  if (opening.typed === undefined) return opening
+  const { typed, ...rest } = opening
+  const out: Record<string, unknown> = { ...rest }
+  for (const key of typed) delete out[key]
+  return out as Omit<T, 'typed'>
 }
 
 /** Whether a wall's height was left out of its file, so the reading filled it (WRT-6). */
@@ -781,6 +826,11 @@ export const WallSchema = z.preprocess(
       // WRT-6: what the file left out and the reading filled in (`withWallDefaults`). Grid's
       // reading only: never in a file, and written back by `statedWall` without those values.
       unstated: z.array(z.enum(UNSTATED_WALL_VALUES)).optional(),
+      // CNT-15 (C24): the wall type it takes, by id in `types.walls`: it fills what the wall leaves
+      // out. Optional and never defaulted (version 1); `types.defaults` may give one in the reading.
+      wallType: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-15: what its type filled in (`withTypes`). Grid's reading only, never written back.
+      typed: z.array(z.enum(TYPED_VALUES)).optional(),
     })
     .superRefine((wall, ctx) => {
       // A solid wall needs some thickness and height; a dividing line may have none.
@@ -985,6 +1035,23 @@ export const CeilingSchema = z.object({
   lowered: parts(LoweredZoneSchema, 'lowered zones in one ceiling').optional(),
 })
 
+/**
+ * CNT-15 (C24): the four finishes a room or a zone may name, each by the person's own name for it
+ * ("Oak boards", "Porcelain tile"): the floor, the walls' inside faces, the ceiling and the
+ * skirting. Grid checks none of them; it measures each and groups the quantities by name.
+ */
+export const FINISH_SURFACES = ['floor', 'walls', 'ceiling', 'skirting'] as const
+export type FinishSurface = (typeof FINISH_SURFACES)[number]
+
+const finishName = () => text('name').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the finish out instead' }))
+
+export const FinishesSchema = z.object({
+  floor: finishName().optional(),
+  walls: finishName().optional(),
+  ceiling: finishName().optional(),
+  skirting: finishName().optional(),
+})
+
 export const RoomSchema = z.object({
   id: text('id'),
   name: text('name'),
@@ -1051,6 +1118,9 @@ export const RoomSchema = z.object({
   properties: PropertiesSchema.optional(),
   // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
   phase: PhaseSchema.optional(),
+  // CNT-15 (C24): its floor, wall, ceiling and skirting finishes, by the person's own names. A
+  // zone's are its part of its room. Optional and never defaulted (version 1).
+  finishes: FinishesSchema.optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -1104,7 +1174,20 @@ export const OpeningPartSchema = z.object({
   height: finite().positive().optional(),
 })
 
-export const OpeningSchema = z.object({
+/** CNT-15 (C24): an opening's own `typed` from what `withTypes` marked; a file's own is not read. */
+function withOpeningTyped(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const typed = (raw as Record<symbol, unknown>)[FROM_TYPE]
+  const record = raw as Record<string, unknown>
+  if (!Object.hasOwn(record, 'typed') && !(Array.isArray(typed) && typed.length > 0)) return raw
+  const opening: Record<string, unknown> = { ...record }
+  delete opening.typed
+  if (Array.isArray(typed) && typed.length > 0) opening.typed = typed
+  return opening
+}
+
+/** An opening's fields, as an object. Read an opening with `OpeningSchema`, which also records `typed`. */
+export const OpeningFieldsSchema = z.object({
   id: text('id'),
   wall: text('id'),
   type: OpeningTypeSchema,
@@ -1134,7 +1217,15 @@ export const OpeningSchema = z.object({
   // CNT-10 (C16): what the work does to it; unstated, its wall's when that is demolished or new.
   // Optional and never defaulted (version 1).
   phase: PhaseSchema.optional(),
+  // CNT-15 (C24): a door's type, by id in `types.doors`, and a window's, by id in `types.windows`:
+  // each fills what the opening leaves out. Optional and never defaulted (version 1).
+  doorType: text('id').pipe(z.string().min(1)).optional(),
+  windowType: text('id').pipe(z.string().min(1)).optional(),
+  // CNT-15: what its type filled in (`withTypes`). Grid's reading only, never written back.
+  typed: z.array(z.enum(TYPED_VALUES)).optional(),
 })
+
+export const OpeningSchema = z.preprocess(withOpeningTyped, OpeningFieldsSchema)
 
 /** LVL-8: the most floors above its own that one opening pattern may be repeated on. */
 export const PATTERN_FLOORS_MAX = 200
@@ -1153,6 +1244,10 @@ export const PatternOpeningSchema = z.object({
   // CNT-14 (C20): its kind and the part of it that opens, carried into every opening it makes.
   kind: z.enum(OPENING_KINDS).optional(),
   opens: OpeningPartSchema.optional(),
+  // CNT-15 (C24): its door or window type, carried into every opening it makes; the type fills
+  // what the pattern's opening leaves out.
+  doorType: text('id').pipe(z.string().min(1)).optional(),
+  windowType: text('id').pipe(z.string().min(1)).optional(),
 })
 
 /**
@@ -1688,6 +1783,165 @@ export const FlatSchema = z.object({
   mirrored: z.boolean().optional(),
 })
 
+/** CNT-15 (C24): the one word a wall type's height may be instead of metres: as high as a wall on its floor that states none. */
+export const WALL_TYPE_HEIGHTS = ['floor'] as const
+
+/** CNT-15: a material, by the person's own name for it ("Brick", "Glass", "Limestone"). */
+const materialName = () => text('name').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the material out instead' }))
+
+/**
+ * CNT-15 (C24): a named wall type. It fills what a wall that names it leaves out: its thickness,
+ * its height (metres, or `floor`: as high as a wall on its floor that states none) and its kind.
+ * `glazed` says the wall is glass (a glazed partition, a curtain wall); `material` is what it is
+ * made of, which the IFC writes, as one layer. Layered build-ups are not held.
+ */
+export const WallTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').pipe(z.string().min(1)),
+  thickness: finite().positive().optional(),
+  height: z.union([finite().positive(), z.enum(WALL_TYPE_HEIGHTS)]).optional(),
+  kind: WallKindSchema.optional(),
+  glazed: z.boolean().optional(),
+  material: materialName().optional(),
+})
+
+/**
+ * CNT-15 (C24): a named door type. It fills what a door that names it leaves out: its width and
+ * height (the hole in the wall, as a door states them), its kind (C20) and the part that opens.
+ */
+export const DoorTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').pipe(z.string().min(1)),
+  width: finite().positive().optional(),
+  height: finite().positive().optional(),
+  kind: z.enum(DOOR_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
+  glazed: z.boolean().optional(),
+  material: materialName().optional(),
+})
+
+/** CNT-15 (C24): a named window type: a door type's fields, a window's kinds, and its sill. */
+export const WindowTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').pipe(z.string().min(1)),
+  width: finite().positive().optional(),
+  height: finite().positive().optional(),
+  sill: finite().nonnegative().optional(),
+  kind: z.enum(WINDOW_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
+  glazed: z.boolean().optional(),
+  material: materialName().optional(),
+})
+
+const typeId = () => text('id').pipe(z.string().min(1))
+
+/**
+ * CNT-15 (C24): the types a part takes when it names none: a wall by its kind (unstated, the
+ * kind a wall reads as, interior), a door and a window. The template an office keeps.
+ */
+export const TypeDefaultsSchema = z.object({
+  walls: z.object(Object.fromEntries(WallKindSchema.options.map((kind) => [kind, typeId().optional()])) as Record<WallKind, z.ZodOptional<ReturnType<typeof typeId>>>).optional(),
+  door: typeId().optional(),
+  window: typeId().optional(),
+})
+
+/** CNT-15 (C24): the plan's named types, and the defaults. */
+export const PartTypesSchema = z.object({
+  walls: parts(WallTypeSchema, 'wall types').optional(),
+  doors: parts(DoorTypeSchema, 'door types').optional(),
+  windows: parts(WindowTypeSchema, 'window types').optional(),
+  defaults: TypeDefaultsSchema.optional(),
+})
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+/** CNT-15: the types of one list that the schema reads, by id; the first of an id wins, as `validatePlan` says. */
+function typesById<T extends { id: string }>(list: unknown, schema: z.ZodType<T>): Map<string, T> {
+  const out = new Map<string, T>()
+  if (!Array.isArray(list)) return out
+  for (const entry of list) {
+    const read = schema.safeParse(entry)
+    if (read.success && !out.has(read.data.id)) out.set(read.data.id, read.data)
+  }
+  return out
+}
+
+/**
+ * CNT-15 (C24): each wall, door and window filled from its type, done on the file as read before
+ * anything else, so every reader sees a wall's thickness and a door's size wherever they came from.
+ * A value the part states is kept; what the type filled is marked (`FROM_TYPE`), and the part's
+ * schema records it in `typed`. A part that names no type takes the default for it, and its type's
+ * id is then filled too. A type that cannot be read, or an id no type has, fills nothing, and
+ * `validatePlan` says so. A dividing line takes no type. An opening pattern's opening is filled the
+ * same way, so every opening it makes is.
+ */
+export function withTypes(raw: unknown): unknown {
+  if (!isRecord(raw) || !isRecord(raw['types'])) return raw
+  const types = raw['types']
+  const walls = typesById(types['walls'], WallTypeSchema)
+  const doors = typesById(types['doors'], DoorTypeSchema)
+  const windows = typesById(types['windows'], WindowTypeSchema)
+  const read = TypeDefaultsSchema.safeParse(types['defaults'])
+  const defaults = read.success ? read.data : {}
+  if (walls.size === 0 && doors.size === 0 && windows.size === 0) return raw
+  const out: Record<string, unknown> = { ...raw }
+  if (Array.isArray(raw['walls']) && walls.size > 0) {
+    out['walls'] = raw['walls'].map((wall) => {
+      if (!isRecord(wall) || (wall as Record<symbol, unknown>)[FROM_TYPE] !== undefined || wall['virtual'] === true) return wall
+      const named = typeof wall['wallType'] === 'string' ? wall['wallType'] : undefined
+      const kind = typeof wall['kind'] === 'string' && (WallKindSchema.options as readonly string[]).includes(wall['kind']) ? (wall['kind'] as WallKind) : 'interior'
+      const id = named ?? defaults.walls?.[kind]
+      const type = id === undefined ? undefined : walls.get(id)
+      if (type === undefined) return wall
+      const filled: TypedValue[] = []
+      const next: Record<string | symbol, unknown> = { ...wall }
+      const fill = (key: TypedValue, value: unknown): void => {
+        if (value === undefined || wall[key] !== undefined) return
+        next[key] = value
+        filled.push(key)
+      }
+      fill('wallType', type.id)
+      fill('thickness', type.thickness)
+      fill('height', typeof type.height === 'number' ? type.height : undefined)
+      fill('kind', type.kind)
+      next[FROM_TYPE] = filled
+      return next
+    })
+  }
+  const fillOpening = (opening: Record<string, unknown>, mark: boolean): Record<string, unknown> => {
+    const door = opening['type'] === 'door'
+    const window = opening['type'] === 'window'
+    if (!door && !window) return opening
+    const field = door ? 'doorType' : 'windowType'
+    const named = typeof opening[field] === 'string' ? (opening[field] as string) : undefined
+    const id = named ?? (door ? defaults.door : defaults.window)
+    const type = id === undefined ? undefined : door ? doors.get(id) : windows.get(id)
+    if (type === undefined) return opening
+    const filled: TypedValue[] = []
+    const next: Record<string | symbol, unknown> = { ...opening }
+    const fill = (key: TypedValue, value: unknown): void => {
+      if (value === undefined || opening[key] !== undefined) return
+      next[key] = value
+      filled.push(key)
+    }
+    fill(field, type.id)
+    fill('width', type.width)
+    fill('height', type.height)
+    if ('sill' in type) fill('sill', type.sill)
+    fill('kind', type.kind)
+    fill('opens', type.opens)
+    if (mark) next[FROM_TYPE] = filled
+    return next
+  }
+  if (Array.isArray(raw['openings']) && (doors.size > 0 || windows.size > 0)) {
+    out['openings'] = raw['openings'].map((opening) => (!isRecord(opening) || (opening as Record<symbol, unknown>)[FROM_TYPE] !== undefined ? opening : fillOpening(opening, true)))
+  }
+  if (Array.isArray(raw['patterns']) && (doors.size > 0 || windows.size > 0)) {
+    out['patterns'] = raw['patterns'].map((pattern) => (!isRecord(pattern) || !isRecord(pattern['opening']) ? pattern : { ...pattern, opening: fillOpening(pattern['opening'], false) }))
+  }
+  return out
+}
+
 /**
  * CNT-6 (C23): a building of the plan: an id, a name, and the floors that are its own, by id. A
  * floor is in one building at most; a floor no building names is in none. A named group of
@@ -1850,6 +2104,9 @@ export const FloorPlanFieldsSchema = z.object({
   // never defaulted (version 1).
   buildings: parts(PlanBuildingSchema, 'buildings').optional(),
   context: parts(ContextShapeSchema, 'context shapes').optional(),
+  // CNT-15 (C24): the named wall, door and window types the parts name, and the defaults
+  // (`PartTypesSchema`). Optional and never defaulted (version 1).
+  types: PartTypesSchema.optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -1880,7 +2137,8 @@ export const FloorPlanFieldsSchema = z.object({
     .catch(undefined),
 })
 
-export const FloorPlanSchema = z.preprocess(withFloorHeights, FloorPlanFieldsSchema)
+// CNT-15: the types fill first, so a wall's type height is stated before its floor's is taken.
+export const FloorPlanSchema = z.preprocess((raw) => withFloorHeights(withTypes(raw)), FloorPlanFieldsSchema)
 
 export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
@@ -1921,6 +2179,11 @@ export type Flat = z.infer<typeof FlatSchema>
 export type PlanBuilding = z.infer<typeof PlanBuildingSchema>
 export type ContextShape = z.infer<typeof ContextShapeSchema>
 export type BeyondWall = (typeof BEYOND_WALL)[number]
+export type WallType = z.infer<typeof WallTypeSchema>
+export type DoorType = z.infer<typeof DoorTypeSchema>
+export type WindowType = z.infer<typeof WindowTypeSchema>
+export type PartTypes = z.infer<typeof PartTypesSchema>
+export type Finishes = z.infer<typeof FinishesSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

@@ -22,6 +22,8 @@ export class EditCommandRefused extends Error {
 /** The verbs, each with the tool it runs. */
 export const EDIT_VERBS = {
   opening: 'grid_change_opening',
+  // CNT-15: one named wall, door or window type, which every part of it takes.
+  type: 'grid_change_type',
   'move-side': 'grid_move_room_side',
   merge: 'grid_merge_rooms',
   split: 'grid_split_room',
@@ -46,7 +48,7 @@ function verbOptions(tool: GridTool): OptionSpecs {
   return { ...specs, '--json': { takesValue: false, help: 'Print the answer as JSON.' }, ...PROJECT_OPTION, '--help': { takesValue: false, help: 'Show this help.' } }
 }
 
-export const EDIT_SUMMARY = 'Changes the plan: one sentence of request is one command. Verbs: opening, move-side, merge, split, add-room, stretch, rename, mirror, square.'
+export const EDIT_SUMMARY = 'Changes the plan: one sentence of request is one command. Verbs: opening, type, move-side, merge, split, add-room, stretch, rename, mirror, square.'
 export const EDIT_USAGE = 'grid edit <verb> [<plan.json>] [options] [--json] [--project <folder>]'
 
 function editHelp(): string {
@@ -67,6 +69,8 @@ function editHelp(): string {
 /** An option's text as the argument its tool takes. */
 function valueOf(name: string, spec: ArgSpec, text: string | true): unknown {
   if (spec.type === 'boolean') return true
+  // CNT-15: a list is given as one option, its items split at commas: --parts w1,w2.
+  if (spec.type === 'array' && typeof text === 'string') return text.split(',').map((item) => item.trim()).filter((item) => item.length > 0)
   // WRT-7: a length goes to the tool as typed, and its reader takes the unit or the decimal comma.
   if (spec.type === 'number' && spec.length === true && typeof text === 'string') return text
   if (spec.type === 'number') {
