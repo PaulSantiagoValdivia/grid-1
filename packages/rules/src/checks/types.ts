@@ -152,6 +152,8 @@ export type SkipReason =
   | 'alone_off_ground'
   /** The check's figure is for rooms of other uses. */
   | 'use_not_covered'
+  /** LVL-4: the plan states no ground level for the site, so no door or window is set against it. */
+  | 'no_ground_level'
 
 /** Parts of one floor, by id. `floor` is empty for parts of the whole plan. */
 export interface CoverageGroup {

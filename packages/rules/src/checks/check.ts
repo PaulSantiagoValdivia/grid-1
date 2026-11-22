@@ -7,7 +7,7 @@
  * network.
  */
 
-import { checkPlanSanity, groundLevel, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity, groundLevel, planFloors, planForFloor, statedGround, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { FIGURE_LIMITS, FIGURE_RULES, RULE_FIGURES, type FigureRuleId } from './catalogue'
 import { allSkipped, coverageOf, LOOKS_AT, planCheckScopes, type FloorScope } from './coverage'
@@ -65,9 +65,8 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   const base = checkPlanSanity(plan)
   const floors = planFloors(plan)
   // LVL-4: the floor at grade is the ground floor, restated against the site's ground level.
-  const ground = groundLevel(plan)
   const atGround = new Set(
-    ground.stated ? ground.groundFloors.map((f) => f.id) : floors.filter((f) => f.level === 0).map((f) => f.id)
+    statedGround(plan) === null ? floors.filter((f) => f.level === 0).map((f) => f.id) : groundLevel(plan).groundFloors.map((f) => f.id)
   )
   const level = new Map(floors.map((f) => [f.id, f.level] as const))
   const names = new Map(plan.rooms.map((r) => [r.id, r.name || r.id] as const))

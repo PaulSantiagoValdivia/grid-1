@@ -259,6 +259,7 @@ found in them. A `reason` is one of:
 | `way_out_not_drawn` | the floor's only door out leads to a space that is not drawn |
 | `alone_off_ground` | the only room on a floor off the ground, reached by a stair the plan does not draw |
 | `above_escape_storeys` | above the third storey, where the figures here stop |
+| `no_ground_level` | the plan states no ground level for the site (LVL-4: the check of doors and windows below the ground) |
 | `no_use` | no use stated |
 | `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
 
@@ -366,8 +367,9 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - New finding `opening/below-ground`, under the new plan check `openings-above-ground`: a door,
   window or doorless opening in an outside wall that lies below the ground level the site states
   (`site.ground`), wholly or in part. The finding carries `belowGround` (`foot`, `top`, in metres
-  under the ground, and `wholly`). With no ground stated the check looks at nothing and is not
-  among the checks run; every report's limits gain one line saying so.
+  under the ground, and `wholly`). With no ground stated the check skips every door and window with
+  the new reason `no_ground_level` and is not among the checks run; every report's limits gain one
+  line saying so.
 - With a ground level stated, the ground floor is the floor nearest it, and a floor stands above the
   ground by its height over that level: `opening/door-out-above-ground` gives that height.
   Unstated, both are as before.

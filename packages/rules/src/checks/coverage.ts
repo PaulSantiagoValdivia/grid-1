@@ -32,6 +32,7 @@ const SKIP_ORDER: readonly SkipReason[] = [
   'way_out_not_drawn',
   'alone_off_ground',
   'above_escape_storeys',
+  'no_ground_level',
   'no_use',
   'use_not_covered'
 ]
@@ -65,6 +66,8 @@ export function skipWhy(reason: SkipReason, ruleId: string): string {
       return 'the only room on a floor off the ground, reached by a stair the plan does not draw'
     case 'above_escape_storeys':
       return 'above the third storey, where the figures here stop'
+    case 'no_ground_level':
+      return 'the plan states no ground level for the site'
     case 'no_use':
       return 'no use stated'
     case 'use_not_covered':
@@ -164,10 +167,11 @@ export function planCheckScopes(
     })
 
     // No door or window below the ground (LVL-4): every door, window and opening that can be
-    // drawn, when the site states its ground level; with none stated the check looks at nothing.
+    // drawn, when the site states its ground level; with none stated each is skipped for want of it.
+    const sound = slice.openings.filter((o) => !leftOut.openings.has(o.id)).map((o) => o.id)
     add('openings-above-ground', floor.id, {
-      lookedAt: ground ? slice.openings.filter((o) => !leftOut.openings.has(o.id)).map((o) => o.id) : [],
-      skipped: ground ? { cannot_be_drawn: slice.openings.filter((o) => leftOut.openings.has(o.id)).map((o) => o.id) } : {}
+      lookedAt: ground ? sound : [],
+      skipped: { cannot_be_drawn: slice.openings.filter((o) => leftOut.openings.has(o.id)).map((o) => o.id), ...(ground ? {} : { no_ground_level: sound }) }
     })
 
     // Every door leads somewhere: every door and opening that can be drawn, on every floor with

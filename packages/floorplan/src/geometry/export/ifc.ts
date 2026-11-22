@@ -495,11 +495,6 @@ function deriveLevels(models: readonly FloorModel[]): Map<string, StoreyLevel> {
   )
 }
 
-/** The slab a floor stands on: its stated thickness, else `SLAB_THICKNESS`. */
-function slabUnder(floor: Floor): number {
-  return floor.slab !== undefined && Number.isFinite(floor.slab) && floor.slab >= 0 ? floor.slab : SLAB_THICKNESS
-}
-
 interface Storey {
   readonly id: number
   readonly placement: number
