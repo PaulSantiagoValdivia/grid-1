@@ -260,6 +260,14 @@ probe, rooms text that copies a floor from its floor line and gets the second fl
 walls and rooms (`scoreboard/src/capabilities.ts`). The developer's "times six floors" needed only
 it and the area table. No other count moved.
 
+CNT-4 (flats and flat types in the plan, the areas per flat and the mix) moved one count. Turns
+answered, 19 to 21: the `flats` capability's probe (a plan with `flats`, each a list of rooms) now
+holds, so the developer's "the mix and net to gross" (with the gross and area table already
+there) and "a schedule of accommodation" are answered. The developer's "how many flats of about
+50 and 70 m2 fit" still needs layout help, and "colour by flat type" the drawing styles. Checks
+the plan can feed stays 20: the size of a whole home also needs its occupancy. No other count
+moved. The stored figures were set by hand from the run's printout, as the run reads them.
+
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The
 reference commit ignores the argument.

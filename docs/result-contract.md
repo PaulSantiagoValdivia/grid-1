@@ -66,7 +66,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes, or `firm/<what>` for the firm's own standards (COD-8). One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
-| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3) or an opening pattern (`pattern`, LVL-8). |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3), an opening pattern (`pattern`, LVL-8) or a flat (`flat`, CNT-4). A flat is on the floor of its first room. |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
 | `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
@@ -273,6 +273,12 @@ label.
 | `pattern/no-wall-above` | {thing} finds no wall above to repeat on | on each floor it is repeated on, a wall in the same line as its own, holding the opening's whole width |
 | `pattern/overlaps-opening` | {thing} would place an opening over another | each opening of the pattern clear of the other openings on its wall |
 | `pattern/id-clash` | {thing} would give an opening an id another part has | an id of its own for each opening a pattern places: the pattern's id, the floor and the number |
+| `flat/unknown-room` | {thing} names a room the plan does not have | rooms of the plan, by id |
+| `flat/room-in-two` | {thing} names a room another flat names too | each room in one flat at most |
+| `flat/unknown-type` | {thing} is of a type the plan's flat types do not state | a type stated in the plan's flat types, by id |
+| `flat/duplicate-id` | {thing} is listed more than once | an id of its own on every flat |
+| `flat/duplicate-type` | The plan states flat type "{id}" more than once | each flat type stated once |
+| `flat/zone-without-room` | {thing} names a zone but not the room it is part of | the room a zone is part of, in the flat with it |
 | `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
 | `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
@@ -666,6 +672,33 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: flats, flat types and the mix (CNT-4)
+
+- The plan format takes `flatTypes` (each `id` and `name`) and `flats` (each `id`, `name`,
+  `type`, `rooms` by id, at least one, on one floor or several, and `mirrored`), C18. Both are
+  optional and never defaulted; `plan/unknown-field`'s list of the plan's fields now names them
+  after `taped`.
+- A new kind of thing, `flat`, and six codes, all worth a look and none leaving out more than the
+  ids they name: `flat/unknown-room`, `flat/room-in-two` (the room stays in the flat whose
+  id comes first), `flat/unknown-type`, `flat/duplicate-id` (the first flat with the id is read),
+  `flat/duplicate-type` (about the plan, its `also` naming the type) and
+  `flat/zone-without-room`. A plan with no flats gets no new line. `resultVersion` stays 1.
+- `grid_areas`, only on a plan that lists flats: `data.flats`, each flat's `id`, `name`, `type`,
+  `typeName`, `mirrored`, `floors`, `net`, `byFloor`, `rooms` (counted), `notCounted` (`id`,
+  `why`: `zone`, `outside` or `stair-below`), `leftOut` and `state`; and `data.notInFlats`, the
+  net area of the rooms in no flat. The text adds "Flats, as the plan lists them:" with a line
+  per flat and "In no flat", and the rule for a flat's area. The CSV adds a row per flat
+  (`counted` is `flat`) and one for the rooms in no flat, before the totals.
+- `grid_schedule` takes `of=flats`: `rows` (each flat numbered in id order, with `type`,
+  `typeName`, `mirrored`, `floors` by name, `rooms`, `bedrooms`, `area`, `state`), `mix` (each
+  type: `type`, `name`, `flats`, `mirrored`, `share`, `area`, `each`), `total`, `notInFlats` and
+  `rules`. With `of=rooms` on a plan that lists flats, each row has `flat` (the flat's id, or
+  null), the text says the flat, and the CSV gains a `flat` column after `state`.
+- The drawing (`grid_view`, `grid draw`, the sheet) draws each flat's outline, a chain line in
+  the paper's colour along the middle of the walls round its rooms (`data-part="flat"`). The IFC
+  writes an `IfcZone` per flat with an `IfcRelAssignsToGroup` of its spaces and a `Grid_Flat`
+  property set. `grid sheet --layout check` ends with a flat schedule page on such a plan.
 
 ### 2026-11-22: a plan from a phone room scan (HND-12)
 
