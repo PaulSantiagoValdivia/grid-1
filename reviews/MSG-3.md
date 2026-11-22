@@ -166,6 +166,8 @@ All of these change because the output changed on purpose, as the card asks. Non
   digits are unchanged (ARE-7).
 - `floorplan/src/geometry/__tests__/passable.test.ts` and `rules/src/result/__tests__/result.test.ts`:
   "get through" instead of "pass through".
+- Merging main at 666bb01 (SHT-7, LVL-3, MSG-7, QAR-4, QAR-3) changed no test: main's new
+  tests pass as they are, with the label first and the figure wordings above.
 
 New tests: `floorplan/src/export/__tests__/label.test.ts` (one per file type: DXF, IFC, GLB and
 OBJ, for a plan and an empty plan); `cli/src/__tests__/label.test.ts` (the SVG of every fixture
@@ -221,7 +223,9 @@ GRID_SCAN_ALL=1 npx vitest run scoreboard/__tests__/approvalWords.test.ts
 
 ## Checks run
 
-After merging main (3634cae, QAR-7): `npm run build`, `npm run typecheck`, `npm run lint` and
-`npm run scoreboard` pass, and the scoreboard matches the stored figures. The full suite,
-`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`, passes: 230 files,
-4,609 tests, 2 skipped.
+After merging main (666bb01, QAR-3): `npm run build`, `npm run typecheck`, `npm run lint` and
+`npm run scoreboard` pass, and the scoreboard prints "Same as the stored figures". The affected
+tests, `npx vitest run packages/cli packages/viewer/src/picture packages/rules packages/floorplan
+scoreboard/__tests__/approvalWords.test.ts scoreboard/__tests__/retell.test.ts --exclude
+'.claude/**' --maxWorkers=2 --minWorkers=1`, pass: 183 files, 4,155 tests, 1 skipped. The full
+suite was not run in this round.
