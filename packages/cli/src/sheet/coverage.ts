@@ -13,6 +13,7 @@ export type Coverage =
   | { readonly shown: 'drawn' }
   | { readonly shown: 'drawn and tabled' }
   | { readonly shown: 'a page each' }
+  | { readonly shown: 'tabled' }
   | { readonly shown: 'not shown'; readonly why: string }
 
 export const SHEET_COVERAGE = {
@@ -60,6 +61,11 @@ export const SHEET_COVERAGE = {
   views: { shown: 'not shown', why: 'A saved view is a camera for grid_view and grid draw --view (VEW-3); the sheet takes its own pictures.' },
   // CNT-17: what needs to be accessible is a mark for the measurements, not part of the drawing.
   accessible: { shown: 'not shown', why: 'It marks the rooms and routes that need to be accessible (CNT-17), which grid_measure what=access measures; the sheet draws no mark and states no figure for them.' },
+  // CNT-4: each flat's outline is drawn on each floor's plan by `drawPlan` (a chain line along the
+  // middle of the walls round its rooms), and the check set has the flat schedule and the mix by
+  // type as a table, from the same rows as grid_schedule of=flats. A flat type is in that table.
+  flats: { shown: 'drawn and tabled' },
+  flatTypes: { shown: 'tabled' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**

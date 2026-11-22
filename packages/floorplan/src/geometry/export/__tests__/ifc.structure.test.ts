@@ -6,7 +6,8 @@
  * each file is read with the strict STEP reader, and then every reference must point at an
  * entity that exists, every relationship must join entities of the kinds IFC allows there, and
  * every room, wall, slab, door, window and opening must carry what HND-2 writes on it: a number,
- * a use and an area with its rule, base quantities, and a wall type with its material.
+ * a use and an area with its rule, base quantities, and a wall type with its material; and every
+ * flat the plan lists is a zone that groups its spaces (CNT-4).
  */
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -17,7 +18,9 @@ import { planAreaFigures, MEASURES } from '../../areas'
 import { roomNumbers, shownRoomNumber } from '../../roomNumbers'
 import { limit } from '../../tolerances'
 import { toIfc } from '../ifc'
-import { ballroomWithStage, edit, flat, genkanFlat, stairHouse } from '../../../test-support/plans'
+import { ballroomWithStage, duplexHouse, edit, flat, genkanFlat, stairHouse } from '../../../test-support/plans'
+import { compileRoomsText } from '../../../rooms/compile'
+import { planFlats } from '../../flats'
 import { entity, num, nums, ofType, parseDoc, ref, refs, str, walk, type Doc, type Entity, type Value } from './step-reader'
 
 const FLOORPLAN_FIXTURES = resolve(__dirname, '../../../../fixtures')
@@ -70,7 +73,10 @@ PLANS.push(
   ['test-support ballroomWithStage', () => ballroomWithStage()],
   ['test-support flat with a fixture', flatWithFixture],
   ['two-bed flat at survey coordinates', farFlat],
-  ['test-support flat with a parapet, ceilings, a void and a sunken room', shellFlat]
+  ['test-support flat with a parapet, ceilings, a void and a sunken room', shellFlat],
+  // CNT-4: flats, placed from flat types in rooms text, and a duplex on two floors.
+  ['floorplan/rooms/four-flats.rooms, with its flat types', () => parseFloorPlan(compileRoomsText(readFileSync(join(FLOORPLAN_FIXTURES, 'rooms', 'four-flats.rooms'), 'utf8')).plan)],
+  ['test-support duplex house', duplexHouse]
 )
 
 const OPTIONS = { projectId: 'structure', projectName: 'Structure', timestamp: new Date('2026-11-22T00:00:00Z') } as const
@@ -91,9 +97,12 @@ const RELATIONS = new Set([
   'IFCRELASSOCIATESMATERIAL',
   'IFCRELVOIDSELEMENT',
   'IFCRELFILLSELEMENT',
-  'IFCRELCOVERSSPACES'
+  'IFCRELCOVERSSPACES',
+  'IFCRELASSIGNSTOGROUP'
 ])
 const PROPERTY_SETS = new Set(['IFCPROPERTYSET', 'IFCELEMENTQUANTITY'])
+/** CNT-4: a flat is a zone, a group of spaces. */
+const GROUPS = new Set(['IFCZONE'])
 const QUANTITIES = new Set(['IFCQUANTITYLENGTH', 'IFCQUANTITYAREA', 'IFCQUANTITYVOLUME'])
 
 /** Which parts each kind of whole may aggregate. */
@@ -196,7 +205,7 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
   }
 
   // 2. Identities are unique.
-  const rooted = doc.order.filter((e) => ELEMENTS.has(e.type) || SPATIAL.has(e.type) || TYPES.has(e.type) || RELATIONS.has(e.type) || PROPERTY_SETS.has(e.type))
+  const rooted = doc.order.filter((e) => ELEMENTS.has(e.type) || SPATIAL.has(e.type) || TYPES.has(e.type) || RELATIONS.has(e.type) || PROPERTY_SETS.has(e.type) || GROUPS.has(e.type))
   const guids = rooted.map((e) => str(e.args[0]))
   expect(new Set(guids).size, 'unique GlobalIds').toBe(guids.length)
   for (const guid of guids) expect(guid).toMatch(/^[0-3][0-9A-Za-z_$]{21}$/)
@@ -219,7 +228,7 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
     expect(PROPERTY_SETS.has(set.type), set.type).toBe(true)
     for (const id of refs(rel.args[4])) {
       const object = entity(doc, id)
-      expect(ELEMENTS.has(object.type) || SPATIAL.has(object.type), `properties on ${object.type}`).toBe(true)
+      expect(ELEMENTS.has(object.type) || SPATIAL.has(object.type) || GROUPS.has(object.type), `properties on ${object.type}`).toBe(true)
     }
     if (set.type === 'IFCPROPERTYSET') {
       for (const id of refs(set.args[4])) expect(entity(doc, id).type).toBe('IFCPROPERTYSINGLEVALUE')
@@ -256,6 +265,12 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
   for (const rel of ofType(doc, 'IFCRELFILLSELEMENT')) {
     expect(entity(doc, ref(rel.args[4])).type).toBe('IFCOPENINGELEMENT')
     expect(['IFCDOOR', 'IFCWINDOW']).toContain(entity(doc, ref(rel.args[5])).type)
+  }
+  // CNT-4: a zone groups spaces, and only spaces.
+  for (const rel of ofType(doc, 'IFCRELASSIGNSTOGROUP')) {
+    expect(entity(doc, ref(rel.args[6])).type).toBe('IFCZONE')
+    expect(refs(rel.args[4]).length).toBeGreaterThan(0)
+    for (const id of refs(rel.args[4])) expect(entity(doc, id).type).toBe('IFCSPACE')
   }
   for (const rel of ofType(doc, 'IFCRELCOVERSSPACES')) {
     expect(entity(doc, ref(rel.args[4])).type).toBe('IFCSPACE')
@@ -380,6 +395,29 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
     expect(typedNumber(qto!.get('Height'))).toBeCloseTo(typedNumber(filler.args[8]), 9)
     expect(on(filler).types.map((t) => t.type)).toEqual([filler.type === 'IFCDOOR' ? 'IFCDOORSTYLE' : 'IFCWINDOWSTYLE'])
   }
+  // 9. CNT-4: each flat the plan lists is one zone, grouping the spaces of its rooms once each,
+  //    on whatever storeys they are on, with its id, type and net area as the areas give it.
+  const zones = ofType(doc, 'IFCZONE')
+  const flatAreas = new Map(planAreaFigures(measured).flats.map((f) => [f.id, f] as const))
+  const resolved = new Map(planFlats(measured).map((f) => [f.id, f] as const))
+  expect(zones.length).toBe([...flatAreas.keys()].length)
+  for (const zone of zones) {
+    const groups = ofType(doc, 'IFCRELASSIGNSTOGROUP').filter((rel) => ref(rel.args[6]) === zone.id)
+    expect(groups, str(zone.args[2])).toHaveLength(1)
+    const grid = on(zone).sets.get('Grid_Flat')
+    expect(grid, str(zone.args[2])).toBeDefined()
+    const id = typedText(grid!.get('Id'))
+    const figure = flatAreas.get(id)!
+    expect(str(zone.args[2])).toBe(figure.name)
+    expect(typedNumber(grid!.get('Area'))).toBeCloseTo(figure.net, 6)
+    expect(typedText(grid!.get('AreaMeasure'))).toBe(MEASURES.net.name)
+    const spacesOf = refs(groups[0]!.args[4]).map((sid) => typedText(on(entity(doc, sid)).sets.get('Grid_Space')!.get('Id')))
+    expect(spacesOf.sort()).toEqual(resolved.get(id)!.rooms.map((r) => r.id).sort())
+    // A duplex's spaces are on more than one storey.
+    const storeysOf = new Set(refs(groups[0]!.args[4]).map((sid) => on(entity(doc, sid)).aggregatedBy[0]!.id))
+    expect(storeysOf.size).toBe(figure.floors.length)
+  }
+
   const filled = new Set(ofType(doc, 'IFCRELFILLSELEMENT').map((r) => ref(r.args[4])))
   const holes = ofType(doc, 'IFCOPENINGELEMENT').filter((o) => !filled.has(o.id))
   for (const hole of holes) expect(on(hole).sets.has('Qto_OpeningElementBaseQuantities'), str(hole.args[2])).toBe(true)
@@ -394,6 +432,7 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
     roofs: roofs.length,
     coverings: coverings.length,
     parapets: parapets.length,
+    zones: zones.length,
     slabHoles: ofType(doc, 'IFCRELVOIDSELEMENT').filter((r) => entity(doc, ref(r.args[4])).type === 'IFCSLAB').length
   }
 }
@@ -414,7 +453,7 @@ describe('HND-2 every IFC Grid writes for the repository\'s plans is whole', () 
 
   it('looked at rooms, walls, slabs, doors and windows, and doorless openings across them', () => {
     // Runs after the files above: the sums are of everything they checked.
-    for (const key of ['spaces', 'walls', 'slabs', 'fillers', 'holes', 'roofs', 'coverings', 'parapets', 'slabHoles']) expect(totals[key] ?? 0, key).toBeGreaterThan(0)
+    for (const key of ['spaces', 'walls', 'slabs', 'fillers', 'holes', 'roofs', 'coverings', 'parapets', 'slabHoles', 'zones']) expect(totals[key] ?? 0, key).toBeGreaterThan(0)
   })
 })
 
@@ -519,9 +558,26 @@ describe('HND-2 the bench\'s two-bed flat, room by room (lab EX-2: name only, 0 
     expect(typedNumber(set(door, 'Qto_DoorBaseQuantities').get('Area'))).toBeCloseTo(1.89, 9)
   })
 
-  it('gives the doorless pass between kitchen and living room its own quantities, and writes no zone: the plan holds no flats', () => {
+  it('gives the doorless pass between kitchen and living room its own quantities, and writes no zone: the plan lists no flats (CNT-4)', () => {
     const pass = named('IFCOPENINGELEMENT', 'pass-kitchen-living')
     expect(typedNumber(set(pass, 'Qto_OpeningElementBaseQuantities').get('Width'))).toBeCloseTo(1.2, 9)
     expect(ofType(doc, 'IFCZONE')).toHaveLength(0)
+    expect(ofType(doc, 'IFCRELASSIGNSTOGROUP')).toHaveLength(0)
+  })
+
+  it('writes a zone per flat once the plan lists them, grouping its spaces, and changes nothing else (CNT-4)', () => {
+    const plain = read(join(FLOORPLAN_FIXTURES, 'two-bed-flat.json'))
+    const rooms = plain.rooms.map((r) => r.id)
+    const listed: FloorPlan = { ...plain, flatTypes: [{ id: 'two-bed', name: 'Two bedrooms' }], flats: [{ id: 'flat-1', name: 'Flat 1', type: 'two-bed', rooms }] }
+    const zoned = parseDoc(toIfc(listed, OPTIONS))
+    const [zone] = ofType(zoned, 'IFCZONE')
+    expect([str(zone!.args[2]), str(zone!.args[4])]).toEqual(['Flat 1', 'Two bedrooms'])
+    const [group] = ofType(zoned, 'IFCRELASSIGNSTOGROUP')
+    expect(refs(group!.args[4])).toHaveLength(ofType(zoned, 'IFCSPACE').length)
+    // Everything before the zones is the file as it was: the zones come after the storeys' contents.
+    const before = toIfc(plain, OPTIONS).split('\n').filter((line) => line.startsWith('#'))
+    const after = toIfc(listed, OPTIONS).split('\n').filter((line) => line.startsWith('#'))
+    const first = after.findIndex((line) => line.includes('IFCZONE('))
+    expect(after.slice(0, first)).toEqual(before.slice(0, first))
   })
 })

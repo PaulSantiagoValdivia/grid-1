@@ -119,6 +119,25 @@ export function twoFloorHouse(): FloorPlan {
 }
 
 /**
+ * CNT-4: the two-floor house as two flats: a duplex of the hall and kitchen below and the landing
+ * and study above, and a studio of the bedroom and bathroom on the ground floor. Each of its own
+ * type.
+ */
+export function duplexHouse(): FloorPlan {
+  return {
+    ...twoFloorHouse(),
+    flatTypes: [
+      { id: 'duplex', name: 'Two-storey flat' },
+      { id: 'studio', name: 'Studio' }
+    ],
+    flats: [
+      { id: 'D1', name: 'Duplex 1', type: 'duplex', rooms: ['hall', 'kitchen', 'landing', 'study'] },
+      { id: 'S1', name: 'Studio 1', type: 'studio', rooms: ['bedroom', 'bathroom'] }
+    ]
+  }
+}
+
+/**
  * Three 4 × 4 rooms side by side above one 12 m exterior wall; only the middle
  * one has a door on it. The dividers have doors between neighbours.
  */

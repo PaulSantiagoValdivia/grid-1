@@ -36,6 +36,10 @@
  *       <place>: centred | <m> from <north|south|east|west> [of <room>]
  *       then:    sill <m>, height <m>, opens into <room>|in|out, hinged <direction>, no-swing
  *   unit <name> [setting=default ...] ... end      rooms and openings written once
+ *   unit <name> flat "<type name>" ["<flat name>"] [setting=default ...] ... end
+ *       a flat type (CNT-4): every placement of it is a flat of that type in the plan's flats,
+ *       with its label as id, the flat name with {n} as the label, its rooms, and mirrored
+ *       when it is placed mirrored; the type is in the plan's flat types, by the unit's name
  *   place <unit> as <label> <where> [mirror east-west|north-south] [gap <t>] [setting=value ...]
  *   repeat <unit> <n> <direction> of <room or unit> as <first label> [...]
  *   repeat <unit> <n> <direction> as <first label> <where the first goes> [mirror ...] [gap <t>] [setting=value ...]
@@ -247,6 +251,8 @@ interface FloorDraft {
   extover: Array<{ room: string; side: string; say: WallSay }>
   openings: OpeningLine[]
   raw: { walls: unknown[]; rooms: unknown[]; openings: unknown[] }
+  /** CNT-4: each placement of a flat type on this floor: its label, its unit, its rooms and whether it is mirrored. */
+  flats: Array<{ label: string; unit: string; mirrored: boolean; rooms: RoomDraft[] }>
 }
 
 interface Unit {
@@ -388,6 +394,8 @@ class Compiler {
   /** One wall per stretch between two rooms, never one long wall past several. */
   split = false
   private units = new Map<string, Unit>()
+  /** CNT-4: the units that are flat types, in the order written: the type's name and the flats' name. */
+  private flatTypes = new Map<string, { name: string; flatName: string | null }>()
   /** WRT-4: rooms that rise through the floors written after their own, up to `through`. */
   private risers: Array<{ room: string; from: string; through: string; line: number; done?: boolean }> = []
   private cur: FloorDraft | null = null
@@ -449,7 +457,16 @@ class Compiler {
       if (t[0] === 'unit') {
         if (t.length < 2) this.stop('rooms/syntax', at, `line ${at}: write 'unit <name> [setting=default ...]', its lines, then 'end'.`)
         const params = new Map<string, string>()
-        for (const p of t.slice(2)) {
+        let settings = t.slice(2)
+        if (settings[0] === 'flat') {
+          // CNT-4: `unit <name> flat "<type name>" ["<flat name>"]`: the unit is a flat type.
+          const typeName = settings[1]
+          if (typeName === undefined || typeName.includes('=')) this.stop('rooms/syntax', at, `line ${at}: a flat type is written 'unit <name> flat "<type name>" ["<flat name>"] [setting=default ...]'.`)
+          const flatName = settings[2] !== undefined && !settings[2].includes('=') ? settings[2] : null
+          this.flatTypes.set(t[1]!, { name: typeName, flatName })
+          settings = settings.slice(flatName === null ? 2 : 3)
+        }
+        for (const p of settings) {
           const eq = p.indexOf('=')
           if (eq < 0) this.stop('rooms/syntax', at, `line ${at}: a unit's settings are written name=value, found '${p}'.`)
           params.set(p.slice(0, eq), p.slice(eq + 1))
@@ -1124,6 +1141,8 @@ class Compiler {
       this.addRoom(r, null)
     }
     fl.inst.set(label, rooms.map((r) => r.id))
+    // CNT-4: a placement of a flat type is a flat, mirrored when it is placed mirrored (WRT-4).
+    if (this.flatTypes.has(name)) fl.flats.push({ label, unit: name, mirrored: mx !== my, rooms })
     fl.openings.push(...pending)
   }
 
@@ -1240,6 +1259,11 @@ class Compiler {
     // A room that rose through to this floor is here already (WRT-4).
     for (const r of src.rooms.values()) if (!(fl.rooms.get(r.id)?.risenFrom === (r.risenFrom ?? src.id))) this.addRoom({ ...r, poly: [...r.poly], through: null, risenFrom: r.risenFrom }, null)
     for (const [k, v] of src.inst) fl.inst.set(k, [...v])
+    // CNT-4: the flats placed on the floor copied are flats here too, of the copied rooms.
+    for (const flat of src.flats) {
+      const rooms = flat.rooms.flatMap((r) => (src.rooms.get(r.id) === r && fl.rooms.has(r.id) ? [fl.rooms.get(r.id)!] : []))
+      fl.flats.push({ ...flat, rooms })
+    }
     for (const [k, v] of src.between) fl.between.set(k, { ...v })
     for (const [k, v] of src.betweenSide) fl.betweenSide.set(k, { ...v })
     for (const k of src.open) fl.open.add(k)
@@ -2076,6 +2100,7 @@ class Compiler {
       plan.openings.push(...(fl.raw.openings as Opening[]))
     }
     this.checkOpeningClash(plan.openings)
+    this.emitFlats(plan, idOf)
     const all = [...plan.walls, ...plan.rooms, ...plan.openings].map((x) => x.id)
     const twice = [...new Set(all.filter((x, k) => all.indexOf(x) !== k))].sort()
     for (const id of twice) this.problem('rooms/duplicate-id', null, `The id '${id}' would name two things in the plan (walls, rooms and openings share one set of ids). Rename one.`)
@@ -2095,6 +2120,35 @@ class Compiler {
       }
     }
     return plan
+  }
+
+  /**
+   * CNT-4: the flat types, and each placement of one as a flat. A label placed on more than one
+   * floor takes its floor's id in front, as a room's id does. A room removed after it was placed
+   * is not in its flat; a flat with no room left is not written.
+   */
+  private emitFlats(plan: { flatTypes?: FloorPlan['flatTypes']; flats?: FloorPlan['flats'] }, idOf: (fl: FloorDraft, id: string) => string): void {
+    if (this.flatTypes.size === 0) return
+    plan.flatTypes = [...this.flatTypes].map(([id, type]) => ({ id, name: type.name }))
+    const labels = new Map<string, number>()
+    for (const fl of this.floors) for (const label of new Set(fl.flats.map((f) => f.label))) labels.set(label, (labels.get(label) ?? 0) + 1)
+    const flats: NonNullable<FloorPlan['flats']> = []
+    for (const fl of this.floors) {
+      for (const flat of fl.flats) {
+        const rooms = flat.rooms.filter((r) => fl.rooms.get(r.id) === r).map((r) => idOf(fl, r.id))
+        if (rooms.length === 0) continue
+        const type = this.flatTypes.get(flat.unit)!
+        const id = (labels.get(flat.label) ?? 0) > 1 ? `${fl.id}-${flat.label}` : flat.label
+        flats.push({
+          id,
+          ...(type.flatName === null ? {} : { name: type.flatName.split('{n}').join(flat.label) }),
+          type: flat.unit,
+          rooms,
+          ...(flat.mirrored ? { mirrored: true } : {}),
+        })
+      }
+    }
+    plan.flats = flats
   }
 
   private checkOpeningClash(openings: readonly Opening[]): void {
@@ -2144,6 +2198,7 @@ function newFloor(id: string, name: string, level: number): FloorDraft {
     extover: [],
     openings: [],
     raw: { walls: [], rooms: [], openings: [] },
+    flats: [],
   }
 }
 

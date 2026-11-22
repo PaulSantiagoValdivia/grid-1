@@ -126,6 +126,17 @@
  *   (`grid_measure what=access`) and holds no figure they are checked against. Ids the mark names
  *   that are no room are said and not measured, never refused. Optional and never defaulted
  *   (version 1).
+ *
+ * C15 · Flats (CNT-4, lab EL-1, WR-6, AR-7, CP3-6)
+ *   A plan MAY say which rooms make each flat (a dwelling, a unit), in `flats`: each with an id, a
+ *   name, the `type` it is, by id, and its `rooms`, by id, on one floor or several (a duplex). A
+ *   flat type is stated once, in `flatTypes` (an id and a name), and placed many times: a flat
+ *   that is its type's mirror image says so (`mirrored`). A flat is a named group of rooms, never
+ *   a room: it adds no floor and closes no outline, and a room is in one flat at most. The areas
+ *   per flat, the mix by type, the flat's outline on the drawing and the IFC's zones are worked
+ *   out from the list (`geometry/flats.ts`), never from the rooms' names. Ids a flat names that
+ *   are no room or no type are named and left out of its figures, never refused. Both optional
+ *   and never defaulted (version 1).
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -1258,6 +1269,28 @@ export const AccessibleSchema = z.object({
 })
 
 /**
+ * CNT-4 (C15): a kind of flat, stated once and placed many times: an id the flats name in their
+ * `type`, and a name to read it by ("One bedroom"). Optional and never defaulted (version 1).
+ */
+export const FlatTypeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+})
+
+/**
+ * CNT-4 (C15): a flat (a dwelling, a unit): an id, a name, the type it is (an id in `flatTypes`),
+ * its rooms by id (on one floor or several: a duplex), and whether it is its type's mirror image.
+ * A group of rooms, never a room. Optional and never defaulted (version 1).
+ */
+export const FlatSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  type: text('id').pipe(z.string().min(1)).optional(),
+  rooms: parts(text('id').pipe(z.string().min(1)), 'rooms').pipe(z.array(z.string()).min(1, { message: 'A flat lists at least one room' })),
+  mirrored: z.boolean().optional(),
+})
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
  * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
@@ -1365,6 +1398,10 @@ export const FloorPlanFieldsSchema = z.object({
   // CNT-17 (C14): the rooms and routes that need to be accessible (`AccessibleSchema`). Optional
   // and never defaulted (version 1).
   accessible: AccessibleSchema.optional(),
+  // CNT-4 (C15): the flat types, each stated once (`FlatTypeSchema`), and the flats, each a group
+  // of rooms by id (`FlatSchema`). Optional and never defaulted (version 1).
+  flatTypes: parts(FlatTypeSchema, 'flat types').optional(),
+  flats: parts(FlatSchema, 'flats').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -1423,6 +1460,8 @@ export type Mark = z.infer<typeof MarkSchema>
 export type View = z.infer<typeof ViewSchema>
 export type Accessible = z.infer<typeof AccessibleSchema>
 export type AccessibleRoute = z.infer<typeof AccessibleRouteSchema>
+export type FlatType = z.infer<typeof FlatTypeSchema>
+export type Flat = z.infer<typeof FlatSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

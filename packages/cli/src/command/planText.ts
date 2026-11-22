@@ -73,6 +73,9 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   patterns: { id: 'id', wall: 'id' },
   // VEW-3: a saved view's name, and the floor it shows cut away.
   views: { name: 'name', cut: 'id' },
+  // CNT-4: a flat type, and a flat with the type it names; its rooms are ids (below).
+  flatTypes: { id: 'id', name: 'name' },
+  flats: { id: 'id', name: 'name', type: 'id' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -125,6 +128,16 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
           const value = facts[name]
           const problem = typeof value === 'string' ? textProblem(value, 'name') : null
           if (problem) return `${list}[${i}].properties, fact ${n + 1}, has a value that ${problem}`
+        }
+      }
+      // CNT-4: the rooms a flat holds, each an id.
+      const held = part['rooms']
+      if (list === 'flats' && Array.isArray(held)) {
+        if (held.length > PARTS_MAX) return `flats[${i}].rooms lists ${held.length.toLocaleString('en-US')} rooms; a flat may list at most ${PARTS_MAX.toLocaleString('en-US')}`
+        for (let k = 0; k < held.length; k++) {
+          const id: unknown = held[k]
+          const problem = typeof id === 'string' ? textProblem(id, 'id') : null
+          if (problem) return `flats[${i}].rooms[${k}] ${problem}`
         }
       }
       // LVL-8: the floors an opening pattern is repeated on, each an id.

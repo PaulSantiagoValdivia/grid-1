@@ -18,7 +18,7 @@ import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { quoted } from '../fs/projectFiles'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
-import { factsText, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
+import { factsText, flatSchedule, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
 import { surveyPlan } from '../quantities/survey'
 import { sqFt } from '../quantities/units'
 
@@ -358,11 +358,30 @@ function scheduleBodies(loaded: LoadedPlan, name: string): Body[] {
     total: { name: 'In all', detail: `${c.door} doors, ${c.window} windows, ${c.opening} doorless openings, each once`, area: String(c.door + c.window + c.opening) },
     note: openings.rule,
   }
-  const body = (title: string, table: SheetTable): Body => ({
+  const body = (title: string, table: SheetTable, notes: readonly string[] = []): Body => ({
     kind: 'summary', floor: null, topLine: `${name} / ${title}`, title, subtitle: null,
-    paragraphs: [], figures: [], table, picture: null, notes: [],
+    paragraphs: [], figures: [], table, picture: null, notes: [...notes],
   })
-  return [body('Room schedule', roomTable), body('Door and window schedule', openingTable)]
+  const bodies = [body('Room schedule', roomTable), body('Door and window schedule', openingTable)]
+  // CNT-4: on a plan that lists flats, the flats and the mix by type, from grid_schedule of=flats's rows.
+  if ((loaded.plan.flats ?? []).length > 0) {
+    const flats = flatSchedule(survey)
+    const flatRows: SheetRow[] = flats.rows.map((r) => ({
+      name: `${r.number}. ${r.name}`,
+      detail: [r.typeName ?? 'no type', ...(r.mirrored ? ['mirrored'] : []), `${r.rooms} rooms`, `${r.bedrooms} bedroom${r.bedrooms === 1 ? '' : 's'}`, ...(several ? [r.floors.join(' and ')] : [])].join(', '),
+      area: areaText(r.area, 1),
+    }))
+    flatRows.push({ name: 'In no flat', detail: 'the rooms no flat lists', area: areaText(flats.notInFlats, 1) })
+    const flatTable: SheetTable = {
+      heading: 'Flat schedule / m²',
+      rows: flatRows,
+      total: { name: 'All flats', detail: `${flats.total.flats} flats`, area: areaText(flats.total.area, 1) },
+      note: flats.rules[1]!,
+    }
+    const mix = flats.mix.map((m) => `${m.name}: ${m.flats} flat${m.flats === 1 ? '' : 's'}${m.mirrored === 0 ? '' : `, ${m.mirrored} mirrored`}, ${areaText(m.area, 1)} m² in all.`)
+    bodies.push(body('Flat schedule', flatTable, [`Mix by type. ${mix.join(' ')}`, flats.rules[0]!]))
+  }
+  return bodies
 }
 
 export function sheetPages(loaded: LoadedPlan, words: SheetWords | null, layout: SheetLayout, options: SheetOptions): Sheet {

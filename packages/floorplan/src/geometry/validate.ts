@@ -44,12 +44,14 @@ import { expandPatterns } from './patterns'
 import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
 import { roomZones } from './zones'
 import { plotBoundary } from './plot'
+import { flatIssues } from './flats'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
- * (CNT-12); `stair` (LVL-3), a stated stair; `pattern` (LVL-8), an opening pattern.
+ * (CNT-12); `stair` (LVL-3), a stated stair; `pattern` (LVL-8), an opening pattern; `flat`
+ * (CNT-4), a flat of the plan's `flats`.
  */
-export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair' | 'pattern'
+export type EntityKind = 'wall' | 'room' | 'opening' | 'plan' | 'floor' | 'item' | 'stair' | 'pattern' | 'flat'
 
 /**
  * `error` is something that cannot be drawn, or sits on a floor the plan does not know, and gets
@@ -1230,6 +1232,8 @@ export function validatePlan(
   issues.push(...itemIssues(plan, index, broken))
   // CNT-13: a fixture standing in front of a doorway, or of a window higher than its sill.
   issues.push(...itemUseIssues(plan, index, broken))
+  // CNT-4: the flats list, on the whole plan: a slice holds one floor of a duplex.
+  issues.push(...flatIssues(plan, index))
 
   if (options.spaces !== false) issues.push(...levelIssues(plan, broken, buildingKind(plan)))
   if (options.spaces !== false) validateStairs(plan, broken, issues)

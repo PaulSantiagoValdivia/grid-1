@@ -37,6 +37,7 @@ import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomS
 import { planMarks } from './marks'
 import { planSite, siteExtent, type PlanSite } from './plot'
 import { siteFloors } from './site'
+import { flatOutlines, type PlanFlatOutline } from './flats'
 import type { MarkedPart } from '../types/floorplan'
 
 export interface PlanWall {
@@ -203,6 +204,12 @@ export interface PlanDrawing {
   readonly stairs: readonly PlanStair[]
   /** SHT-11: the rooms used as a lift that could be drawn, each with its cross. Empty with none. */
   readonly lifts: readonly PlanLift[]
+  /**
+   * SHT-11 with CNT-4: each flat of the plan's flats list with a room on this floor that could be
+   * drawn, as its outline: its rooms grown to the middle of the walls round them, joined. Empty
+   * when the plan lists no flats.
+   */
+  readonly flats: readonly PlanFlatOutline[]
   /**
    * The rooms that could not be drawn, each as the box round the walls it lists that the plan
    * holds (MSG-8). A room none of whose walls can be found has no box and is not here.
@@ -404,7 +411,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   // BRF-3: the site on the ground floor's plan, and on a plan that is no slice.
   const site = floor === null || siteFloors(wholePlan(plan).whole).includes(floor) ? planSite(plan) : null
   const siteBounds = site === null ? null : computeBounds(siteExtent(site))
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, sketch, notes, north, sketchBounds, site, siteBounds, bounds: computeBounds(extent), issues }
+  const flats = flatOutlines(plan, index, broken)
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds, bounds: computeBounds(extent), issues }
 }
 
 /**

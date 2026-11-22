@@ -186,6 +186,8 @@ export interface PlanFacts {
   readonly connections: Connections
   /** Whether the plan states its north (CNT-3). The descriptions' sides stay the drawing's either way. */
   readonly northStated: boolean
+  /** CNT-4: whether the plan lists its flats, so which rooms make each is something it says. */
+  readonly flatsListed: boolean
 }
 
 export interface StairFacts {
@@ -552,5 +554,6 @@ export function planFacts(plan: FloorPlan): PlanFacts {
     },
     connections: connectionsOf(plan, floors),
     northStated: typeof plan.north === 'number',
+    flatsListed: (plan.flats ?? []).length > 0,
   }
 }
