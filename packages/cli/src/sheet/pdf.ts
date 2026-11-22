@@ -52,8 +52,34 @@ function breakWord(ctx: Ctx, word: string, width: number): string[] {
   return parts
 }
 
+/**
+ * Lines already wrapped, by font, width and text. `layoutSheet` measures a block that flows
+ * over pages again on every page it reaches, and draws it once more; without this a long note
+ * was wrapped word by word many times over. The wrapping is greedy, so the lines after a cut
+ * are the rest of the lines before it (`rememberLines`).
+ */
+const WRAPPED = new Map<string, readonly string[]>()
+const WRAPPED_MAX = 2000
+
+function wrapKey(ctx: Ctx, text: string, width: number): string {
+  return `${ctx.font}\u0000${width}\u0000${text}`
+}
+
+function rememberLines(ctx: Ctx, text: string, width: number, lines: readonly string[]): void {
+  if (WRAPPED.size >= WRAPPED_MAX) WRAPPED.clear()
+  WRAPPED.set(wrapKey(ctx, text, width), lines)
+}
+
 /** Wraps text to a width, by the current font's own measure. */
 export function wrapLines(ctx: Ctx, text: string, width: number): string[] {
+  const known = WRAPPED.get(wrapKey(ctx, text, width))
+  if (known) return [...known]
+  const lines = wrapWords(ctx, text, width)
+  rememberLines(ctx, text, width, lines)
+  return [...lines]
+}
+
+function wrapWords(ctx: Ctx, text: string, width: number): string[] {
   const lines: string[] = []
   let line = ''
   for (const word of text.split(' ')) {
@@ -207,7 +233,11 @@ export async function layoutSheet(sheet: Sheet): Promise<Sheet> {
           const fit = Math.max(1, Math.floor((LIMIT - y - (piece.type === 'tableNote' ? 6 : 0)) / step) - 1)
           if (fit < lines.length) {
             piece = { type: piece.type, text: lines.slice(0, fit).join(' ') }
-            queue = [...queue.slice(0, i), piece, { type: piece.type, text: lines.slice(fit).join(' ') }, ...queue.slice(i + 1)]
+            const rest = { type: piece.type, text: lines.slice(fit).join(' ') }
+            // measurePiece left this piece's font set: both halves wrap to the lines they came from.
+            rememberLines(ctx, piece.text, area.width, lines.slice(0, fit))
+            rememberLines(ctx, rest.text, area.width, lines.slice(fit))
+            queue = [...queue.slice(0, i), piece, rest, ...queue.slice(i + 1)]
           }
         }
         if (carried.length > 0) placed.push(...carried)
