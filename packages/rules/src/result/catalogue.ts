@@ -896,6 +896,11 @@ export const CODES = {
     needed: fixed('every enclosed floor in a room'),
     fix: fixed("If it is a room, draw it as one. If it is part of a room, list the walls that take it into that room's outline.")
   },
+  'floor/past-outline': {
+    says: (s) => `${s.label}'s walls reach past the outline it states`,
+    needed: fixed('walls inside the outline the floor states, the outside face of the floor'),
+    fix: fixed("If the walls are where the building is, widen the floor's outline to their outside face; if the outline is, move the walls inside it. Until then the slab, the roof and the gross area take in both.")
+  },
   'floor/empty-top': {
     says: (s) => `${s.label} is the top floor and has nothing drawn on it`,
     needed: fixed('a top floor with something on it'),

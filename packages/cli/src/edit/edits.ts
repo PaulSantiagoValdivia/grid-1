@@ -581,6 +581,9 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
       ...(site.things === undefined ? {} : { things: site.things.map((thing) => ({ ...thing, ...(thing.points === undefined ? {} : { points: thing.points.map(flip) }), ...(thing.at === undefined ? {} : { at: flip(thing.at) }) })) }),
     }
   }
+  // BRF-4 (C17): a floor's outline is mirrored with the walls it holds.
+  const floors = movedOutlines(plan, flip)
+  if (floors !== null) top['floors'] = floors
   // VEW-3: each saved view is mirrored with the building, so it still frames what it framed.
   const views = mirroredViews(plan, how, flip, top['north'] as number | undefined)
   if (views !== null) top['views'] = views
@@ -641,6 +644,9 @@ export function turnPlanBy(survey: Survey, turn: Turn): Patch {
   const items = new Map((plan.items ?? []).map((item) => [item.id, { at: map(item.at), turn: r3((((item.turn ?? 0) + turn) % 360 + 360) % 360) }]))
   const top: Record<string, unknown> = {}
   if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: map(plan.site.origin) }
+  // BRF-4 (C17): a floor's outline turns with the walls it holds.
+  const floors = movedOutlines(plan, map)
+  if (floors !== null) top['floors'] = floors
   const north = plan.north === undefined ? '' : ` The plan's north is kept at ${wrapDegrees(r3(plan.north))}°, so the building faces new ways: what faced south now faces ${turn === 90 ? 'east' : turn === 180 ? 'north' : 'west'}.`
   const down = plan.yAxis === 'down' ? ' The plan says its y runs down the page, so on that page it turned the other way.' : ''
   return {
@@ -652,6 +658,12 @@ export function turnPlanBy(survey: Survey, turn: Turn): Patch {
     ...(Object.keys(top).length === 0 ? {} : { plan: top }),
     said: [`Turned the plan ${TURN_WORDS[turn]} about the middle of its walls: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}${down}${patternsFollow(plan)}`],
   }
+}
+
+/** BRF-4: the floors with every stated outline moved as `move` moves a point; null when no floor states one, or no wall moves. */
+function movedOutlines(plan: FloorPlan, move: (p: readonly [number, number]) => Pair): FloorPlan['floors'] | null {
+  if (plan.walls.length === 0 || !(plan.floors ?? []).some((floor) => floor.outline !== undefined)) return null
+  return plan.floors!.map((floor) => (floor.outline === undefined ? floor : { ...floor, outline: floor.outline.map(move) }))
 }
 
 /** VEW-3: the plan's saved views, mirrored: what each is pointed at, and the side it stands on. Null when it has none. */

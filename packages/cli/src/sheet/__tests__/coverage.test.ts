@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FACT_FIELDS, PHASE_FIELDS, FloorPlanFieldsSchema, FloorSchema, OpeningSchema, RoomSchema, WallSchema } from '@ongrid/floorplan/types/floorplan'
-import { FACT_COVERAGE, PHASE_COVERAGE, SHEET_COVERAGE } from '../coverage'
+import { FACT_COVERAGE, OUTLINE_COVERAGE, PHASE_COVERAGE, SHEET_COVERAGE } from '../coverage'
 
 describe('the sheet covers every part of a plan (VEW-7)', () => {
   it('has one entry for each top-level part of the schema, and no other', () => {
@@ -37,6 +37,14 @@ describe('the sheet covers every part of a plan (VEW-7)', () => {
     for (const field of PHASE_FIELDS) {
       const [list, key] = field.split('.') as [string, string]
       expect(Object.hasOwn(shapes[list]!, key), field).toBe(true)
+    }
+  })
+  it('says what it does with the floor outline and the counts BRF-4 adds, and each is a floor field', () => {
+    for (const [field, coverage] of Object.entries(OUTLINE_COVERAGE)) {
+      const [list, key] = field.split('.') as [string, string]
+      expect(list).toBe('floors')
+      expect(Object.hasOwn(FloorSchema.shape, key), field).toBe(true)
+      if (coverage.shown === 'not shown') expect(coverage.why.length, field).toBeGreaterThan(10)
     }
   })
 })

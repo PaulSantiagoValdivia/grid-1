@@ -19,7 +19,7 @@ import { planFloors } from '../geometry/floors'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
 import { doorKindOf, kindFits, sweepsFloor, swingNeeds } from '../geometry/openingKinds'
-import { compileRoomsText, type RoomsResult } from './compile'
+import { compileRoomsText, RAW_FLOOR_KEYS, type RoomsResult } from './compile'
 import { planRevision } from './stamp'
 import { metres } from './words'
 
@@ -520,11 +520,11 @@ function textOf(plan: FloorPlan, rule: Rule, name: string | undefined, floors: r
     lines.push('')
     const fl = floorLine(plan, d.id)
     if (fl !== null) lines.push(fl)
-    // LVL-6: the floor's roof and parapet, which rooms text has no words for, as the plan holds them.
+    // LVL-6: the floor's roof and parapet, which rooms text has no words for, as the plan holds
+    // them; BRF-4: its outline and the homes and parking spaces it states.
     const f = (plan.floors ?? []).find((x) => x.id === d.id)
-    if (f !== undefined && (f.roof !== undefined || f.parapet !== undefined)) {
-      lines.push(`raw floor ${JSON.stringify({ ...(f.roof !== undefined ? { roof: f.roof } : {}), ...(f.parapet !== undefined ? { parapet: f.parapet } : {}) })}`)
-    }
+    const extra = f === undefined ? {} : Object.fromEntries(RAW_FLOOR_KEYS.flatMap((key) => (f[key as keyof typeof f] === undefined ? [] : [[key, f[key as keyof typeof f]]])))
+    if (Object.keys(extra).length > 0) lines.push(`raw floor ${JSON.stringify(extra)}`)
     if (raw.has(d.id)) {
       lines.push(`# Written in Grid's own terms: rooms text does not give back this floor's walls as they are.`)
       for (const w of plan.walls.filter((x) => floorOf(x) === d.id)) lines.push(rawLine('wall', w))

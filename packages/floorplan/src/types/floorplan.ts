@@ -152,7 +152,19 @@
  *   own work, are read into the plan as existing and are never written back to it; the plan's own
  *   parts that state no phase are new. Both optional and never defaulted (version 1).
  *
- * C17 · Kinds of door and window (CNT-14)
+ * C17 · Floor outlines (BRF-4, lab FD-1)
+ *   A floor MAY state its `outline`: its outside face, its corners in plan metres in order round
+ *   it, either way round, as `site.boundary` is written (C13). It is the one shape a floor's slab
+ *   covers, its roof is cut from and its gross external area is measured to: joined with what
+ *   the floor's walls enclose, so a floor with walls and no outline reads exactly as before. A
+ *   floor with an outline and no walls is massing: its level, height (C5) and kind of building
+ *   (`building`, CNT-5) give its gross area and its storey, and nothing inside it is checked.
+ *   Floor inside the outline that no room claims is floor no room claims. A floor MAY also state
+ *   how many `homes` it holds and how many `parking` spaces: the agent's proposal, which Grid
+ *   counts against the person's own limits and never brings a figure for. All three are optional
+ *   and never defaulted (version 1).
+ *
+ * C20 · Kinds of door and window (CNT-14)
  *   A door or window MAY state its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that
  *   opens (`opens`). Its handing stays in the wall's terms (`hinge`, `swing`, C2): the person's
  *   terms, the room it opens into and the side it is hinged on as seen from a room, are turned
@@ -166,6 +178,7 @@ import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } f
 import { factKey } from './facts'
 import { placeProblem } from './places'
 import { roofFrame, roofTop } from './roofFrame'
+import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
 export * from './facts'
@@ -377,6 +390,23 @@ export const FloorSchema = z.object({
   building: BuildingTypeSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
+  // last point on the first closes it. Joined with what the walls enclose for the slab, the roof
+  // and the gross external area. Optional and never defaulted (version 1).
+  outline: z
+    .array(Vec2)
+    .min(3)
+    .max(BOUNDARY_MAX)
+    .superRefine((points, ctx) => {
+      const open = boundaryEdgeCount(points) === points.length ? points : points.slice(0, -1)
+      const problem = ringProblem(open.map(([x, y]) => ({ x, y })))
+      if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
+    })
+    .optional(),
+  // BRF-4 (C17): how many homes the floor holds, and how many parking spaces: the agent's
+  // proposal, counted against the person's own limits. Optional and never defaulted (version 1).
+  homes: z.number().int().min(0).max(PARTS_MAX).optional(),
+  parking: z.number().int().min(0).max(PARTS_MAX).optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -905,7 +935,7 @@ export const OpeningAnchorSchema = z
   })
 
 /**
- * CNT-14 (C17): the kinds of door, and of window, a plan may state. A door with no kind is a
+ * CNT-14 (C20): the kinds of door, and of window, a plan may state. A door with no kind is a
  * single swinging leaf, as every door was before (version 1). `single` and `double` are one or
  * two hinged leaves; `sliding` slides along its wall, `pocket` into it; `folding` folds to one
  * side in panels; `roller` rolls up and `garage` lifts overhead. A window may be `single` or
@@ -948,7 +978,7 @@ export const OpeningSchema = z.object({
   // geometry/wall.ts `wallFaces`.
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
-  // CNT-14 (C17): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
+  // CNT-14 (C20): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
   // (`OpeningPartSchema`). Optional and never defaulted (version 1): a door that states no kind is
   // one swinging leaf, and the whole of an opening opens.
   kind: z.enum(OPENING_KINDS).optional(),
@@ -976,7 +1006,7 @@ export const PatternOpeningSchema = z.object({
   height: finite().positive(),
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
-  // CNT-14 (C17): its kind and the part of it that opens, carried into every opening it makes.
+  // CNT-14 (C20): its kind and the part of it that opens, carried into every opening it makes.
   kind: z.enum(OPENING_KINDS).optional(),
   opens: OpeningPartSchema.optional(),
 })

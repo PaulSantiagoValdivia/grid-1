@@ -9,7 +9,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C17), version 1,
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C20), version 1,
    nothing defaulted:
    - `kind` on an opening: `DOOR_KINDS` (`single`, `double`, `sliding`, `pocket`, `folding`,
      `roller`, `garage`) and `WINDOW_KINDS` (`single`, `double`, `sliding`, `fixed`,
@@ -679,4 +679,57 @@ walk-through (VEW-9); and the preview the person and the agent both point at (VE
   skipped (3,269); `packages/cli`, 98 of 98 files, 1,349 passed, 1 skipped (1,350);
   `packages/rules packages/viewer scoreboard/__tests__`, 104 of 104 files, 1,026 passed, 2
   skipped (1,028). No timing test failed, so none was rerun.
+- `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures." Nothing stored.
+
+### Again after merging main 65e37ca1 (BRF-4, HND-12)
+
+`main` moved again: massing before walls and how much fits on a plot (BRF-4), and a plan from a
+phone room scan, read from each wall's two faces and kept beside the plan as evidence (HND-12).
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: every Unreleased entry, CNT-14's first, then HND-12's and BRF-4's, then VEW-4's,
+  VEW-9's, CNT-10's and WRT-7's.
+- `docs/result-contract.md`: every agents' changelog entry, CNT-14's at the top, then HND-12's and
+  BRF-4's. The code table merged on its own and keeps CNT-14's four codes beside BRF-4's
+  `floor/past-outline`; the contract test holds it to the catalogue.
+- `docs/tool-server.md`: `grid_write_rooms` as main has it (with `scan`), `grid_change_opening` as
+  CNT-14 has it (the side it is hinged on as seen from a room, its kind).
+- `packages/cli/src/mcp/readTools.ts`: one import line with CNT-14's `kindWords` and BRF-4's
+  `planStoreys`.
+- `packages/floorplan/src/rooms/read.ts`: both imports, CNT-14's `openingKinds` and BRF-4's
+  `RAW_FLOOR_KEYS`. The read-back writes both: CNT-14's kind, `hinged`, `seen from` and `part`
+  words on door and window lines, BRF-4's `outline`, `homes` and `parking` on `raw floor` lines;
+  the words do not meet, and the read-back still writes again losslessly (rooms tests pass).
+- `packages/floorplan/src/types/floorplan.ts`: BRF-4 holds C17 for floor outlines on `main`. The
+  coordinator assigned CNT-14 **C20** (C18 and C19 are kept for CNT-4 and LVL-5, not yet on
+  `main`, so the header goes C17, then C20). Renamed in the header, its three comments,
+  `openingKinds.ts` and point 1 above; BRF-4's own C17 comments and docs are untouched.
+
+**Where the features meet.**
+
+- HND-12: a scan makes doors, windows and openings with no `kind`, no `opens` and no `hinge` or
+  `swing` (it says which way none opens, and lists that as assumed). Each door is therefore one
+  swinging leaf, and CNT-14's `floor/not-checked-door-swings` now names the scanned doors as not
+  checked, instead of leaving them out in silence. A scanned door 1.5 m wide or more would also
+  get `opening/wide-single-leaf`; the lab's scan has none. A re-scan over a plan changed since is
+  refused, as before; with `--replace` it carries a part's facts and room numbers by id, not a
+  door's kind or handing, which is the same as writing rooms text over a plan with `--replace`.
+  Carrying a door's kind and handing across a re-scan would be a follow-up of its own.
+- BRF-4: a massing floor has no walls and so no openings; the outline mirrors and turns with the
+  walls, and CNT-14's handing is mirrored with them, as before. Nothing else meets.
+
+**Expectations changed.** One. `packages/cli/src/command/__tests__/scan.test.ts`, "writes the
+plan with no issue but the values to confirm…": `grid check` on the scanned flat now has one
+not-checked line, `floor/not-checked-door-swings` for `door-1` to `door-4` (was 0), beside the six
+`plan/value-assumed` lines; the test also holds that no scanned opening states `kind` or `opens`.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- The affected tests in three parts with the same options (`--exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`): `packages/floorplan`, 129 of 129 files, 3,297 passed, 1
+  skipped (3,298); `packages/rules packages/viewer scoreboard/__tests__`, 105 of 105 files, 1,028
+  passed, 2 skipped (1,030); `packages/cli`, 100 of 100 files, 1,362 passed, 1 skipped (1,363).
+  No timing test failed, so none was rerun.
 - `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures." Nothing stored.
