@@ -1,0 +1,7080 @@
+{
+ "version": "1",
+ "units": "m",
+ "floors": [
+  {
+   "id": "B1",
+   "name": "Basement car park",
+   "level": -1
+  },
+  {
+   "id": "ground",
+   "name": "Ground floor",
+   "level": 0
+  },
+  {
+   "id": "L1",
+   "name": "Floor 1",
+   "level": 1
+  },
+  {
+   "id": "L2",
+   "name": "Floor 2",
+   "level": 2
+  },
+  {
+   "id": "L3",
+   "name": "Floor 3",
+   "level": 3
+  },
+  {
+   "id": "L4",
+   "name": "Floor 4",
+   "level": 4
+  },
+  {
+   "id": "L5",
+   "name": "Floor 5",
+   "level": 5
+  }
+ ],
+ "walls": [
+  {
+   "id": "B1-ext-s",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    26.0,
+    0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "exterior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-ext-e",
+   "start": [
+    26.0,
+    0
+   ],
+   "end": [
+    26.0,
+    18.0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "exterior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-ext-n",
+   "start": [
+    26.0,
+    18.0
+   ],
+   "end": [
+    0,
+    18.0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "exterior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-ext-w",
+   "start": [
+    0,
+    18.0
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "exterior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-core-w",
+   "start": [
+    10,
+    0
+   ],
+   "end": [
+    10,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-stair-e",
+   "start": [
+    13,
+    0
+   ],
+   "end": [
+    13,
+    7.6
+   ],
+   "thickness": 0.2,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-core-e",
+   "start": [
+    16,
+    0
+   ],
+   "end": [
+    16,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-lift-s",
+   "start": [
+    13,
+    5.0
+   ],
+   "end": [
+    16,
+    5.0
+   ],
+   "thickness": 0.2,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-core-n",
+   "start": [
+    10,
+    7.6
+   ],
+   "end": [
+    16,
+    7.6
+   ],
+   "thickness": 0.25,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-ramp-e",
+   "start": [
+    3.6,
+    9.0
+   ],
+   "end": [
+    3.6,
+    18.0
+   ],
+   "thickness": 0.2,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-ramp-s",
+   "start": [
+    0,
+    9.0
+   ],
+   "end": [
+    3.6,
+    9.0
+   ],
+   "thickness": 0.2,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-aisle-s",
+   "start": [
+    3.6,
+    7.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-aisle-n",
+   "start": [
+    3.6,
+    13.0
+   ],
+   "end": [
+    26.0,
+    13.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bays-back-s",
+   "start": [
+    0,
+    2.6
+   ],
+   "end": [
+    10,
+    2.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bays-back-e",
+   "start": [
+    16,
+    2.6
+   ],
+   "end": [
+    26.0,
+    2.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-1",
+   "start": [
+    6.1,
+    13.0
+   ],
+   "end": [
+    6.1,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-2",
+   "start": [
+    8.6,
+    13.0
+   ],
+   "end": [
+    8.6,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-3",
+   "start": [
+    11.1,
+    13.0
+   ],
+   "end": [
+    11.1,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-4",
+   "start": [
+    13.6,
+    13.0
+   ],
+   "end": [
+    13.6,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-5",
+   "start": [
+    16.1,
+    13.0
+   ],
+   "end": [
+    16.1,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-6",
+   "start": [
+    18.6,
+    13.0
+   ],
+   "end": [
+    18.6,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-7",
+   "start": [
+    21.1,
+    13.0
+   ],
+   "end": [
+    21.1,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-n-8",
+   "start": [
+    23.6,
+    13.0
+   ],
+   "end": [
+    23.6,
+    18.0
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-se-1",
+   "start": [
+    18.5,
+    2.6
+   ],
+   "end": [
+    18.5,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-se-2",
+   "start": [
+    21.0,
+    2.6
+   ],
+   "end": [
+    21.0,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-se-3",
+   "start": [
+    23.5,
+    2.6
+   ],
+   "end": [
+    23.5,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-se-4",
+   "start": [
+    26.0,
+    2.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-sw-1",
+   "start": [
+    2.5,
+    2.6
+   ],
+   "end": [
+    2.5,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-sw-2",
+   "start": [
+    5.0,
+    2.6
+   ],
+   "end": [
+    5.0,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bayline-sw-3",
+   "start": [
+    7.5,
+    2.6
+   ],
+   "end": [
+    7.5,
+    7.6
+   ],
+   "thickness": 0.05,
+   "height": 3.0,
+   "kind": "interior",
+   "virtual": true,
+   "floor": "B1"
+  },
+  {
+   "id": "B1-col-1",
+   "start": [
+    8.4,
+    13.0
+   ],
+   "end": [
+    8.8,
+    13.0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-col-2",
+   "start": [
+    13.4,
+    13.0
+   ],
+   "end": [
+    13.8,
+    13.0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-col-3",
+   "start": [
+    18.4,
+    13.0
+   ],
+   "end": [
+    18.8,
+    13.0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-col-4",
+   "start": [
+    23.4,
+    13.0
+   ],
+   "end": [
+    23.8,
+    13.0
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-col-5",
+   "start": [
+    18.3,
+    7.6
+   ],
+   "end": [
+    18.7,
+    7.6
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-col-6",
+   "start": [
+    23.3,
+    7.6
+   ],
+   "end": [
+    23.7,
+    7.6
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-col-7",
+   "start": [
+    4.8,
+    7.6
+   ],
+   "end": [
+    5.2,
+    7.6
+   ],
+   "thickness": 0.4,
+   "height": 3.0,
+   "kind": "interior",
+   "floor": "B1"
+  },
+  {
+   "id": "G-ext-s",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    26.0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 3.5,
+   "kind": "exterior"
+  },
+  {
+   "id": "G-ext-e",
+   "start": [
+    26.0,
+    0
+   ],
+   "end": [
+    26.0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 3.5,
+   "kind": "exterior"
+  },
+  {
+   "id": "G-ext-n",
+   "start": [
+    26.0,
+    18.0
+   ],
+   "end": [
+    0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 3.5,
+   "kind": "exterior"
+  },
+  {
+   "id": "G-ext-w",
+   "start": [
+    0,
+    18.0
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 3.5,
+   "kind": "exterior"
+  },
+  {
+   "id": "G-corr-s",
+   "start": [
+    0,
+    7.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.25,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "G-corr-n",
+   "start": [
+    26.0,
+    9.6
+   ],
+   "end": [
+    0,
+    9.6
+   ],
+   "thickness": 0.25,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "G-core-w",
+   "start": [
+    10.0,
+    0
+   ],
+   "end": [
+    10.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "G-stair-e",
+   "start": [
+    13.0,
+    0
+   ],
+   "end": [
+    13.0,
+    7.6
+   ],
+   "thickness": 0.2,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "G-core-e",
+   "start": [
+    16.0,
+    0
+   ],
+   "end": [
+    16.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "G-lift-s",
+   "start": [
+    13.0,
+    5.0
+   ],
+   "end": [
+    16.0,
+    5.0
+   ],
+   "thickness": 0.2,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "G-lobby-w",
+   "start": [
+    9,
+    9.6
+   ],
+   "end": [
+    9,
+    18.0
+   ],
+   "thickness": 0.25,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "G-lobby-e",
+   "start": [
+    17,
+    9.6
+   ],
+   "end": [
+    17,
+    18.0
+   ],
+   "thickness": 0.25,
+   "height": 3.5,
+   "kind": "interior"
+  },
+  {
+   "id": "L1-ext-s",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    26.0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-ext-e",
+   "start": [
+    26.0,
+    0
+   ],
+   "end": [
+    26.0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-ext-n",
+   "start": [
+    26.0,
+    18.0
+   ],
+   "end": [
+    0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-ext-w",
+   "start": [
+    0,
+    18.0
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-corr-s",
+   "start": [
+    0,
+    7.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-corr-n",
+   "start": [
+    26.0,
+    9.6
+   ],
+   "end": [
+    0,
+    9.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-core-w",
+   "start": [
+    10.0,
+    0
+   ],
+   "end": [
+    10.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-stair-e",
+   "start": [
+    13.0,
+    0
+   ],
+   "end": [
+    13.0,
+    7.6
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-core-e",
+   "start": [
+    16.0,
+    0
+   ],
+   "end": [
+    16.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-lift-s",
+   "start": [
+    13.0,
+    5.0
+   ],
+   "end": [
+    16.0,
+    5.0
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-party-n",
+   "start": [
+    13,
+    9.6
+   ],
+   "end": [
+    13,
+    18.0
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-mid",
+   "start": [
+    0,
+    4.6
+   ],
+   "end": [
+    10.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-s5.5",
+   "start": [
+    5.5,
+    0
+   ],
+   "end": [
+    5.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-n4",
+   "start": [
+    4.0,
+    4.6
+   ],
+   "end": [
+    4.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-n7.5",
+   "start": [
+    7.5,
+    4.6
+   ],
+   "end": [
+    7.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-mid",
+   "start": [
+    26.0,
+    4.6
+   ],
+   "end": [
+    16.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-s5.5",
+   "start": [
+    20.5,
+    0
+   ],
+   "end": [
+    20.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-n4",
+   "start": [
+    22.0,
+    4.6
+   ],
+   "end": [
+    22.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-n7.5",
+   "start": [
+    18.5,
+    4.6
+   ],
+   "end": [
+    18.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-mid",
+   "start": [
+    0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-s5",
+   "start": [
+    5.0,
+    18.0
+   ],
+   "end": [
+    5.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-s8.5",
+   "start": [
+    8.5,
+    18.0
+   ],
+   "end": [
+    8.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-n3.5",
+   "start": [
+    3.5,
+    13.4
+   ],
+   "end": [
+    3.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-n9.7",
+   "start": [
+    9.7,
+    13.4
+   ],
+   "end": [
+    9.7,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-mid",
+   "start": [
+    26.0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-s5",
+   "start": [
+    21.0,
+    18.0
+   ],
+   "end": [
+    21.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-s8.5",
+   "start": [
+    17.5,
+    18.0
+   ],
+   "end": [
+    17.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-n3.5",
+   "start": [
+    22.5,
+    13.4
+   ],
+   "end": [
+    22.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-n9.7",
+   "start": [
+    16.3,
+    13.4
+   ],
+   "end": [
+    16.3,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L1"
+  },
+  {
+   "id": "L2-ext-s",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    26.0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-ext-e",
+   "start": [
+    26.0,
+    0
+   ],
+   "end": [
+    26.0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-ext-n",
+   "start": [
+    26.0,
+    18.0
+   ],
+   "end": [
+    0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-ext-w",
+   "start": [
+    0,
+    18.0
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-corr-s",
+   "start": [
+    0,
+    7.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-corr-n",
+   "start": [
+    26.0,
+    9.6
+   ],
+   "end": [
+    0,
+    9.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-core-w",
+   "start": [
+    10.0,
+    0
+   ],
+   "end": [
+    10.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-stair-e",
+   "start": [
+    13.0,
+    0
+   ],
+   "end": [
+    13.0,
+    7.6
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-core-e",
+   "start": [
+    16.0,
+    0
+   ],
+   "end": [
+    16.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-lift-s",
+   "start": [
+    13.0,
+    5.0
+   ],
+   "end": [
+    16.0,
+    5.0
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-party-n",
+   "start": [
+    13,
+    9.6
+   ],
+   "end": [
+    13,
+    18.0
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-mid",
+   "start": [
+    0,
+    4.6
+   ],
+   "end": [
+    10.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-s5.5",
+   "start": [
+    5.5,
+    0
+   ],
+   "end": [
+    5.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-n4",
+   "start": [
+    4.0,
+    4.6
+   ],
+   "end": [
+    4.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-n7.5",
+   "start": [
+    7.5,
+    4.6
+   ],
+   "end": [
+    7.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-mid",
+   "start": [
+    26.0,
+    4.6
+   ],
+   "end": [
+    16.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-s5.5",
+   "start": [
+    20.5,
+    0
+   ],
+   "end": [
+    20.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-n4",
+   "start": [
+    22.0,
+    4.6
+   ],
+   "end": [
+    22.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-n7.5",
+   "start": [
+    18.5,
+    4.6
+   ],
+   "end": [
+    18.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-mid",
+   "start": [
+    0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-s5",
+   "start": [
+    5.0,
+    18.0
+   ],
+   "end": [
+    5.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-s8.5",
+   "start": [
+    8.5,
+    18.0
+   ],
+   "end": [
+    8.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-n3.5",
+   "start": [
+    3.5,
+    13.4
+   ],
+   "end": [
+    3.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-n9.7",
+   "start": [
+    9.7,
+    13.4
+   ],
+   "end": [
+    9.7,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-mid",
+   "start": [
+    26.0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-s5",
+   "start": [
+    21.0,
+    18.0
+   ],
+   "end": [
+    21.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-s8.5",
+   "start": [
+    17.5,
+    18.0
+   ],
+   "end": [
+    17.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-n3.5",
+   "start": [
+    22.5,
+    13.4
+   ],
+   "end": [
+    22.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-n9.7",
+   "start": [
+    16.3,
+    13.4
+   ],
+   "end": [
+    16.3,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L2"
+  },
+  {
+   "id": "L3-ext-s",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    26.0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-ext-e",
+   "start": [
+    26.0,
+    0
+   ],
+   "end": [
+    26.0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-ext-n",
+   "start": [
+    26.0,
+    18.0
+   ],
+   "end": [
+    0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-ext-w",
+   "start": [
+    0,
+    18.0
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-corr-s",
+   "start": [
+    0,
+    7.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-corr-n",
+   "start": [
+    26.0,
+    9.6
+   ],
+   "end": [
+    0,
+    9.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-core-w",
+   "start": [
+    10.0,
+    0
+   ],
+   "end": [
+    10.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-stair-e",
+   "start": [
+    13.0,
+    0
+   ],
+   "end": [
+    13.0,
+    7.6
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-core-e",
+   "start": [
+    16.0,
+    0
+   ],
+   "end": [
+    16.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-lift-s",
+   "start": [
+    13.0,
+    5.0
+   ],
+   "end": [
+    16.0,
+    5.0
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-party-n",
+   "start": [
+    13,
+    9.6
+   ],
+   "end": [
+    13,
+    18.0
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-mid",
+   "start": [
+    0,
+    4.6
+   ],
+   "end": [
+    10.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-s5.5",
+   "start": [
+    5.5,
+    0
+   ],
+   "end": [
+    5.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-n4",
+   "start": [
+    4.0,
+    4.6
+   ],
+   "end": [
+    4.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-n7.5",
+   "start": [
+    7.5,
+    4.6
+   ],
+   "end": [
+    7.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-mid",
+   "start": [
+    26.0,
+    4.6
+   ],
+   "end": [
+    16.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-s5.5",
+   "start": [
+    20.5,
+    0
+   ],
+   "end": [
+    20.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-n4",
+   "start": [
+    22.0,
+    4.6
+   ],
+   "end": [
+    22.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-n7.5",
+   "start": [
+    18.5,
+    4.6
+   ],
+   "end": [
+    18.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-mid",
+   "start": [
+    0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-s5",
+   "start": [
+    5.0,
+    18.0
+   ],
+   "end": [
+    5.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-s8.5",
+   "start": [
+    8.5,
+    18.0
+   ],
+   "end": [
+    8.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-n3.5",
+   "start": [
+    3.5,
+    13.4
+   ],
+   "end": [
+    3.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-n9.7",
+   "start": [
+    9.7,
+    13.4
+   ],
+   "end": [
+    9.7,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-mid",
+   "start": [
+    26.0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-s5",
+   "start": [
+    21.0,
+    18.0
+   ],
+   "end": [
+    21.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-s8.5",
+   "start": [
+    17.5,
+    18.0
+   ],
+   "end": [
+    17.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-n3.5",
+   "start": [
+    22.5,
+    13.4
+   ],
+   "end": [
+    22.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-n9.7",
+   "start": [
+    16.3,
+    13.4
+   ],
+   "end": [
+    16.3,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L3"
+  },
+  {
+   "id": "L4-ext-s",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    26.0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-ext-e",
+   "start": [
+    26.0,
+    0
+   ],
+   "end": [
+    26.0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-ext-n",
+   "start": [
+    26.0,
+    18.0
+   ],
+   "end": [
+    0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-ext-w",
+   "start": [
+    0,
+    18.0
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-corr-s",
+   "start": [
+    0,
+    7.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-corr-n",
+   "start": [
+    26.0,
+    9.6
+   ],
+   "end": [
+    0,
+    9.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-core-w",
+   "start": [
+    10.0,
+    0
+   ],
+   "end": [
+    10.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-stair-e",
+   "start": [
+    13.0,
+    0
+   ],
+   "end": [
+    13.0,
+    7.6
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-core-e",
+   "start": [
+    16.0,
+    0
+   ],
+   "end": [
+    16.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-lift-s",
+   "start": [
+    13.0,
+    5.0
+   ],
+   "end": [
+    16.0,
+    5.0
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-party-n",
+   "start": [
+    13,
+    9.6
+   ],
+   "end": [
+    13,
+    18.0
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-mid",
+   "start": [
+    0,
+    4.6
+   ],
+   "end": [
+    10.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-s5.5",
+   "start": [
+    5.5,
+    0
+   ],
+   "end": [
+    5.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-n4",
+   "start": [
+    4.0,
+    4.6
+   ],
+   "end": [
+    4.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-n7.5",
+   "start": [
+    7.5,
+    4.6
+   ],
+   "end": [
+    7.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-mid",
+   "start": [
+    26.0,
+    4.6
+   ],
+   "end": [
+    16.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-s5.5",
+   "start": [
+    20.5,
+    0
+   ],
+   "end": [
+    20.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-n4",
+   "start": [
+    22.0,
+    4.6
+   ],
+   "end": [
+    22.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-n7.5",
+   "start": [
+    18.5,
+    4.6
+   ],
+   "end": [
+    18.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-mid",
+   "start": [
+    0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-s5",
+   "start": [
+    5.0,
+    18.0
+   ],
+   "end": [
+    5.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-s8.5",
+   "start": [
+    8.5,
+    18.0
+   ],
+   "end": [
+    8.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-n3.5",
+   "start": [
+    3.5,
+    13.4
+   ],
+   "end": [
+    3.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-n9.7",
+   "start": [
+    9.7,
+    13.4
+   ],
+   "end": [
+    9.7,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-mid",
+   "start": [
+    26.0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-s5",
+   "start": [
+    21.0,
+    18.0
+   ],
+   "end": [
+    21.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-s8.5",
+   "start": [
+    17.5,
+    18.0
+   ],
+   "end": [
+    17.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-n3.5",
+   "start": [
+    22.5,
+    13.4
+   ],
+   "end": [
+    22.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-n9.7",
+   "start": [
+    16.3,
+    13.4
+   ],
+   "end": [
+    16.3,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L4"
+  },
+  {
+   "id": "L5-ext-s",
+   "start": [
+    0,
+    0
+   ],
+   "end": [
+    26.0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-ext-e",
+   "start": [
+    26.0,
+    0
+   ],
+   "end": [
+    26.0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-ext-n",
+   "start": [
+    26.0,
+    18.0
+   ],
+   "end": [
+    0,
+    18.0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-ext-w",
+   "start": [
+    0,
+    18.0
+   ],
+   "end": [
+    0,
+    0
+   ],
+   "thickness": 0.35,
+   "height": 2.8,
+   "kind": "exterior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-corr-s",
+   "start": [
+    0,
+    7.6
+   ],
+   "end": [
+    26.0,
+    7.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-corr-n",
+   "start": [
+    26.0,
+    9.6
+   ],
+   "end": [
+    0,
+    9.6
+   ],
+   "thickness": 0.25,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-core-w",
+   "start": [
+    10.0,
+    0
+   ],
+   "end": [
+    10.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-stair-e",
+   "start": [
+    13.0,
+    0
+   ],
+   "end": [
+    13.0,
+    7.6
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-core-e",
+   "start": [
+    16.0,
+    0
+   ],
+   "end": [
+    16.0,
+    7.6
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-lift-s",
+   "start": [
+    13.0,
+    5.0
+   ],
+   "end": [
+    16.0,
+    5.0
+   ],
+   "thickness": 0.2,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-party-n",
+   "start": [
+    13,
+    9.6
+   ],
+   "end": [
+    13,
+    18.0
+   ],
+   "thickness": 0.3,
+   "height": 2.8,
+   "kind": "interior",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-mid",
+   "start": [
+    0,
+    4.6
+   ],
+   "end": [
+    10.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-s5.5",
+   "start": [
+    5.5,
+    0
+   ],
+   "end": [
+    5.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-n4",
+   "start": [
+    4.0,
+    4.6
+   ],
+   "end": [
+    4.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-n7.5",
+   "start": [
+    7.5,
+    4.6
+   ],
+   "end": [
+    7.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-mid",
+   "start": [
+    26.0,
+    4.6
+   ],
+   "end": [
+    16.0,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-s5.5",
+   "start": [
+    20.5,
+    0
+   ],
+   "end": [
+    20.5,
+    4.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-n4",
+   "start": [
+    22.0,
+    4.6
+   ],
+   "end": [
+    22.0,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-n7.5",
+   "start": [
+    18.5,
+    4.6
+   ],
+   "end": [
+    18.5,
+    7.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-mid",
+   "start": [
+    0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-s5",
+   "start": [
+    5.0,
+    18.0
+   ],
+   "end": [
+    5.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-s8.5",
+   "start": [
+    8.5,
+    18.0
+   ],
+   "end": [
+    8.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-n3.5",
+   "start": [
+    3.5,
+    13.4
+   ],
+   "end": [
+    3.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-n9.7",
+   "start": [
+    9.7,
+    13.4
+   ],
+   "end": [
+    9.7,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-mid",
+   "start": [
+    26.0,
+    13.4
+   ],
+   "end": [
+    13.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-s5",
+   "start": [
+    21.0,
+    18.0
+   ],
+   "end": [
+    21.0,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-s8.5",
+   "start": [
+    17.5,
+    18.0
+   ],
+   "end": [
+    17.5,
+    13.4
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-n3.5",
+   "start": [
+    22.5,
+    13.4
+   ],
+   "end": [
+    22.5,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-n9.7",
+   "start": [
+    16.3,
+    13.4
+   ],
+   "end": [
+    16.3,
+    9.6
+   ],
+   "thickness": 0.12,
+   "height": 2.8,
+   "kind": "partition",
+   "floor": "L5"
+  }
+ ],
+ "rooms": [
+  {
+   "id": "B1-stair",
+   "name": "Stair",
+   "boundary": [
+    "B1-ext-s",
+    "B1-stair-e",
+    "B1-core-n",
+    "B1-core-w"
+   ],
+   "use": "stair",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-lift",
+   "name": "Lift",
+   "boundary": [
+    "B1-lift-s",
+    "B1-core-e",
+    "B1-core-n",
+    "B1-stair-e"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-lobby",
+   "name": "Lift lobby (basement)",
+   "boundary": [
+    "B1-ext-s",
+    "B1-core-e",
+    "B1-lift-s",
+    "B1-stair-e"
+   ],
+   "use": "corridor",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-ramp",
+   "name": "Ramp (1:6, rising north)",
+   "boundary": [
+    "B1-ramp-s",
+    "B1-ramp-e",
+    "B1-ext-n",
+    "B1-ext-w"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-aisle",
+   "name": "Driving aisle",
+   "boundary": [
+    "B1-aisle-s",
+    "B1-ext-e",
+    "B1-aisle-n",
+    "B1-ramp-e"
+   ],
+   "use": "corridor",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-1",
+   "name": "Bay 1",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-1",
+    "B1-aisle-n",
+    "B1-ramp-e"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-2",
+   "name": "Bay 2",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-2",
+    "B1-aisle-n",
+    "B1-bayline-n-1"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-3",
+   "name": "Bay 3",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-3",
+    "B1-aisle-n",
+    "B1-bayline-n-2"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-4",
+   "name": "Bay 4",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-4",
+    "B1-aisle-n",
+    "B1-bayline-n-3"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-5",
+   "name": "Bay 5",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-5",
+    "B1-aisle-n",
+    "B1-bayline-n-4"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-6",
+   "name": "Bay 6",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-6",
+    "B1-aisle-n",
+    "B1-bayline-n-5"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-7",
+   "name": "Bay 7",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-7",
+    "B1-aisle-n",
+    "B1-bayline-n-6"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-8",
+   "name": "Bay 8",
+   "boundary": [
+    "B1-ext-n",
+    "B1-bayline-n-8",
+    "B1-aisle-n",
+    "B1-bayline-n-7"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-9",
+   "name": "Bay 9",
+   "boundary": [
+    "B1-bays-back-e",
+    "B1-bayline-se-1",
+    "B1-aisle-s",
+    "B1-core-e"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-10",
+   "name": "Bay 10",
+   "boundary": [
+    "B1-bays-back-e",
+    "B1-bayline-se-2",
+    "B1-aisle-s",
+    "B1-bayline-se-1"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-11",
+   "name": "Bay 11",
+   "boundary": [
+    "B1-bays-back-e",
+    "B1-bayline-se-3",
+    "B1-aisle-s",
+    "B1-bayline-se-2"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-12",
+   "name": "Bay 12",
+   "boundary": [
+    "B1-bays-back-e",
+    "B1-bayline-se-4",
+    "B1-aisle-s",
+    "B1-bayline-se-3"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-13",
+   "name": "Bay 13",
+   "boundary": [
+    "B1-bays-back-s",
+    "B1-bayline-sw-1",
+    "B1-aisle-s",
+    "B1-ext-w"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-14",
+   "name": "Bay 14",
+   "boundary": [
+    "B1-bays-back-s",
+    "B1-bayline-sw-2",
+    "B1-aisle-s",
+    "B1-bayline-sw-1"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-15",
+   "name": "Bay 15",
+   "boundary": [
+    "B1-bays-back-s",
+    "B1-bayline-sw-3",
+    "B1-aisle-s",
+    "B1-bayline-sw-2"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "B1-bay-16",
+   "name": "Bay 16",
+   "boundary": [
+    "B1-bays-back-s",
+    "B1-core-w",
+    "B1-aisle-s",
+    "B1-bayline-sw-3"
+   ],
+   "use": "other",
+   "floor": "B1"
+  },
+  {
+   "id": "G-stair",
+   "name": "Stair",
+   "boundary": [
+    "G-ext-s",
+    "G-stair-e",
+    "G-corr-s",
+    "G-core-w"
+   ],
+   "use": "stair"
+  },
+  {
+   "id": "G-lift",
+   "name": "Lift",
+   "boundary": [
+    "G-lift-s",
+    "G-core-e",
+    "G-corr-s",
+    "G-stair-e"
+   ],
+   "use": "other"
+  },
+  {
+   "id": "G-riser",
+   "name": "Riser and cleaner store",
+   "boundary": [
+    "G-ext-s",
+    "G-core-e",
+    "G-lift-s",
+    "G-stair-e"
+   ],
+   "use": "storage"
+  },
+  {
+   "id": "G-lift-lobby",
+   "name": "Lift lobby",
+   "boundary": [
+    "G-corr-s",
+    "G-ext-e",
+    "G-corr-n",
+    "G-ext-w"
+   ],
+   "use": "corridor"
+  },
+  {
+   "id": "G-entrance",
+   "name": "Entrance lobby",
+   "boundary": [
+    "G-corr-n",
+    "G-lobby-e",
+    "G-ext-n",
+    "G-lobby-w"
+   ],
+   "use": "corridor"
+  },
+  {
+   "id": "G-bins",
+   "name": "Bin store",
+   "boundary": [
+    "G-corr-n",
+    "G-lobby-w",
+    "G-ext-n",
+    "G-ext-w"
+   ],
+   "use": "storage"
+  },
+  {
+   "id": "G-cycles",
+   "name": "Cycle store",
+   "boundary": [
+    "G-corr-n",
+    "G-ext-e",
+    "G-ext-n",
+    "G-lobby-e"
+   ],
+   "use": "storage"
+  },
+  {
+   "id": "G-shop1",
+   "name": "Shop 1",
+   "boundary": [
+    "G-ext-s",
+    "G-core-w",
+    "G-corr-s",
+    "G-ext-w"
+   ],
+   "use": "other"
+  },
+  {
+   "id": "G-shop2",
+   "name": "Shop 2",
+   "boundary": [
+    "G-ext-s",
+    "G-ext-e",
+    "G-corr-s",
+    "G-core-e"
+   ],
+   "use": "other"
+  },
+  {
+   "id": "L1-stair",
+   "name": "Stair",
+   "boundary": [
+    "L1-ext-s",
+    "L1-stair-e",
+    "L1-corr-s",
+    "L1-core-w"
+   ],
+   "use": "stair",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-lift",
+   "name": "Lift",
+   "boundary": [
+    "L1-lift-s",
+    "L1-core-e",
+    "L1-corr-s",
+    "L1-stair-e"
+   ],
+   "use": "other",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-riser",
+   "name": "Riser and cleaner store",
+   "boundary": [
+    "L1-ext-s",
+    "L1-core-e",
+    "L1-lift-s",
+    "L1-stair-e"
+   ],
+   "use": "storage",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-corridor",
+   "name": "Corridor",
+   "boundary": [
+    "L1-corr-s",
+    "L1-ext-e",
+    "L1-corr-n",
+    "L1-ext-w"
+   ],
+   "use": "corridor",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-living",
+   "name": "Flat A Living room",
+   "boundary": [
+    "L1-ext-s",
+    "L1-A-s5.5",
+    "L1-A-mid",
+    "L1-ext-w"
+   ],
+   "use": "living",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-bed1",
+   "name": "Flat A Bedroom",
+   "boundary": [
+    "L1-ext-s",
+    "L1-core-w",
+    "L1-A-mid",
+    "L1-A-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-kitchen",
+   "name": "Flat A Kitchen",
+   "boundary": [
+    "L1-A-mid",
+    "L1-A-n4",
+    "L1-corr-s",
+    "L1-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-hall",
+   "name": "Flat A Hall",
+   "boundary": [
+    "L1-A-mid",
+    "L1-A-n7.5",
+    "L1-corr-s",
+    "L1-A-n4"
+   ],
+   "use": "corridor",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-A-bath",
+   "name": "Flat A Bathroom",
+   "boundary": [
+    "L1-A-mid",
+    "L1-core-w",
+    "L1-corr-s",
+    "L1-A-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-living",
+   "name": "Flat B Living room",
+   "boundary": [
+    "L1-ext-s",
+    "L1-B-s5.5",
+    "L1-B-mid",
+    "L1-ext-e"
+   ],
+   "use": "living",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-bed1",
+   "name": "Flat B Bedroom",
+   "boundary": [
+    "L1-ext-s",
+    "L1-core-e",
+    "L1-B-mid",
+    "L1-B-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-kitchen",
+   "name": "Flat B Kitchen",
+   "boundary": [
+    "L1-B-mid",
+    "L1-B-n4",
+    "L1-corr-s",
+    "L1-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-hall",
+   "name": "Flat B Hall",
+   "boundary": [
+    "L1-B-mid",
+    "L1-B-n7.5",
+    "L1-corr-s",
+    "L1-B-n4"
+   ],
+   "use": "corridor",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-B-bath",
+   "name": "Flat B Bathroom",
+   "boundary": [
+    "L1-B-mid",
+    "L1-core-e",
+    "L1-corr-s",
+    "L1-B-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-living",
+   "name": "Flat C Living room",
+   "boundary": [
+    "L1-ext-n",
+    "L1-C-s5",
+    "L1-C-mid",
+    "L1-ext-w"
+   ],
+   "use": "living",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-bed1",
+   "name": "Flat C Bedroom 1",
+   "boundary": [
+    "L1-ext-n",
+    "L1-C-s8.5",
+    "L1-C-mid",
+    "L1-C-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-bed2",
+   "name": "Flat C Bedroom 2",
+   "boundary": [
+    "L1-ext-n",
+    "L1-party-n",
+    "L1-C-mid",
+    "L1-C-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-kitchen",
+   "name": "Flat C Kitchen",
+   "boundary": [
+    "L1-C-mid",
+    "L1-C-n3.5",
+    "L1-corr-n",
+    "L1-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-hall",
+   "name": "Flat C Hall",
+   "boundary": [
+    "L1-C-mid",
+    "L1-C-n9.7",
+    "L1-corr-n",
+    "L1-C-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-C-bath",
+   "name": "Flat C Bathroom",
+   "boundary": [
+    "L1-C-mid",
+    "L1-party-n",
+    "L1-corr-n",
+    "L1-C-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-living",
+   "name": "Flat D Living room",
+   "boundary": [
+    "L1-ext-n",
+    "L1-D-s5",
+    "L1-D-mid",
+    "L1-ext-e"
+   ],
+   "use": "living",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-bed1",
+   "name": "Flat D Bedroom 1",
+   "boundary": [
+    "L1-ext-n",
+    "L1-D-s8.5",
+    "L1-D-mid",
+    "L1-D-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-bed2",
+   "name": "Flat D Bedroom 2",
+   "boundary": [
+    "L1-ext-n",
+    "L1-party-n",
+    "L1-D-mid",
+    "L1-D-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-kitchen",
+   "name": "Flat D Kitchen",
+   "boundary": [
+    "L1-D-mid",
+    "L1-D-n3.5",
+    "L1-corr-n",
+    "L1-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-hall",
+   "name": "Flat D Hall",
+   "boundary": [
+    "L1-D-mid",
+    "L1-D-n9.7",
+    "L1-corr-n",
+    "L1-D-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L1"
+  },
+  {
+   "id": "L1-D-bath",
+   "name": "Flat D Bathroom",
+   "boundary": [
+    "L1-D-mid",
+    "L1-party-n",
+    "L1-corr-n",
+    "L1-D-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L1"
+  },
+  {
+   "id": "L2-stair",
+   "name": "Stair",
+   "boundary": [
+    "L2-ext-s",
+    "L2-stair-e",
+    "L2-corr-s",
+    "L2-core-w"
+   ],
+   "use": "stair",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-lift",
+   "name": "Lift",
+   "boundary": [
+    "L2-lift-s",
+    "L2-core-e",
+    "L2-corr-s",
+    "L2-stair-e"
+   ],
+   "use": "other",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-riser",
+   "name": "Riser and cleaner store",
+   "boundary": [
+    "L2-ext-s",
+    "L2-core-e",
+    "L2-lift-s",
+    "L2-stair-e"
+   ],
+   "use": "storage",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-corridor",
+   "name": "Corridor",
+   "boundary": [
+    "L2-corr-s",
+    "L2-ext-e",
+    "L2-corr-n",
+    "L2-ext-w"
+   ],
+   "use": "corridor",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-living",
+   "name": "Flat A Living room",
+   "boundary": [
+    "L2-ext-s",
+    "L2-A-s5.5",
+    "L2-A-mid",
+    "L2-ext-w"
+   ],
+   "use": "living",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-bed1",
+   "name": "Flat A Bedroom",
+   "boundary": [
+    "L2-ext-s",
+    "L2-core-w",
+    "L2-A-mid",
+    "L2-A-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-kitchen",
+   "name": "Flat A Kitchen",
+   "boundary": [
+    "L2-A-mid",
+    "L2-A-n4",
+    "L2-corr-s",
+    "L2-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-hall",
+   "name": "Flat A Hall",
+   "boundary": [
+    "L2-A-mid",
+    "L2-A-n7.5",
+    "L2-corr-s",
+    "L2-A-n4"
+   ],
+   "use": "corridor",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-A-bath",
+   "name": "Flat A Bathroom",
+   "boundary": [
+    "L2-A-mid",
+    "L2-core-w",
+    "L2-corr-s",
+    "L2-A-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-living",
+   "name": "Flat B Living room",
+   "boundary": [
+    "L2-ext-s",
+    "L2-B-s5.5",
+    "L2-B-mid",
+    "L2-ext-e"
+   ],
+   "use": "living",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-bed1",
+   "name": "Flat B Bedroom",
+   "boundary": [
+    "L2-ext-s",
+    "L2-core-e",
+    "L2-B-mid",
+    "L2-B-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-kitchen",
+   "name": "Flat B Kitchen",
+   "boundary": [
+    "L2-B-mid",
+    "L2-B-n4",
+    "L2-corr-s",
+    "L2-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-hall",
+   "name": "Flat B Hall",
+   "boundary": [
+    "L2-B-mid",
+    "L2-B-n7.5",
+    "L2-corr-s",
+    "L2-B-n4"
+   ],
+   "use": "corridor",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-B-bath",
+   "name": "Flat B Bathroom",
+   "boundary": [
+    "L2-B-mid",
+    "L2-core-e",
+    "L2-corr-s",
+    "L2-B-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-living",
+   "name": "Flat C Living room",
+   "boundary": [
+    "L2-ext-n",
+    "L2-C-s5",
+    "L2-C-mid",
+    "L2-ext-w"
+   ],
+   "use": "living",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-bed1",
+   "name": "Flat C Bedroom 1",
+   "boundary": [
+    "L2-ext-n",
+    "L2-C-s8.5",
+    "L2-C-mid",
+    "L2-C-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-bed2",
+   "name": "Flat C Bedroom 2",
+   "boundary": [
+    "L2-ext-n",
+    "L2-party-n",
+    "L2-C-mid",
+    "L2-C-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-kitchen",
+   "name": "Flat C Kitchen",
+   "boundary": [
+    "L2-C-mid",
+    "L2-C-n3.5",
+    "L2-corr-n",
+    "L2-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-hall",
+   "name": "Flat C Hall",
+   "boundary": [
+    "L2-C-mid",
+    "L2-C-n9.7",
+    "L2-corr-n",
+    "L2-C-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-C-bath",
+   "name": "Flat C Bathroom",
+   "boundary": [
+    "L2-C-mid",
+    "L2-party-n",
+    "L2-corr-n",
+    "L2-C-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-living",
+   "name": "Flat D Living room",
+   "boundary": [
+    "L2-ext-n",
+    "L2-D-s5",
+    "L2-D-mid",
+    "L2-ext-e"
+   ],
+   "use": "living",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-bed1",
+   "name": "Flat D Bedroom 1",
+   "boundary": [
+    "L2-ext-n",
+    "L2-D-s8.5",
+    "L2-D-mid",
+    "L2-D-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-bed2",
+   "name": "Flat D Bedroom 2",
+   "boundary": [
+    "L2-ext-n",
+    "L2-party-n",
+    "L2-D-mid",
+    "L2-D-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-kitchen",
+   "name": "Flat D Kitchen",
+   "boundary": [
+    "L2-D-mid",
+    "L2-D-n3.5",
+    "L2-corr-n",
+    "L2-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-hall",
+   "name": "Flat D Hall",
+   "boundary": [
+    "L2-D-mid",
+    "L2-D-n9.7",
+    "L2-corr-n",
+    "L2-D-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L2"
+  },
+  {
+   "id": "L2-D-bath",
+   "name": "Flat D Bathroom",
+   "boundary": [
+    "L2-D-mid",
+    "L2-party-n",
+    "L2-corr-n",
+    "L2-D-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L2"
+  },
+  {
+   "id": "L3-stair",
+   "name": "Stair",
+   "boundary": [
+    "L3-ext-s",
+    "L3-stair-e",
+    "L3-corr-s",
+    "L3-core-w"
+   ],
+   "use": "stair",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-lift",
+   "name": "Lift",
+   "boundary": [
+    "L3-lift-s",
+    "L3-core-e",
+    "L3-corr-s",
+    "L3-stair-e"
+   ],
+   "use": "other",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-riser",
+   "name": "Riser and cleaner store",
+   "boundary": [
+    "L3-ext-s",
+    "L3-core-e",
+    "L3-lift-s",
+    "L3-stair-e"
+   ],
+   "use": "storage",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-corridor",
+   "name": "Corridor",
+   "boundary": [
+    "L3-corr-s",
+    "L3-ext-e",
+    "L3-corr-n",
+    "L3-ext-w"
+   ],
+   "use": "corridor",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-living",
+   "name": "Flat A Living room",
+   "boundary": [
+    "L3-ext-s",
+    "L3-A-s5.5",
+    "L3-A-mid",
+    "L3-ext-w"
+   ],
+   "use": "living",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-bed1",
+   "name": "Flat A Bedroom",
+   "boundary": [
+    "L3-ext-s",
+    "L3-core-w",
+    "L3-A-mid",
+    "L3-A-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-kitchen",
+   "name": "Flat A Kitchen",
+   "boundary": [
+    "L3-A-mid",
+    "L3-A-n4",
+    "L3-corr-s",
+    "L3-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-hall",
+   "name": "Flat A Hall",
+   "boundary": [
+    "L3-A-mid",
+    "L3-A-n7.5",
+    "L3-corr-s",
+    "L3-A-n4"
+   ],
+   "use": "corridor",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-A-bath",
+   "name": "Flat A Bathroom",
+   "boundary": [
+    "L3-A-mid",
+    "L3-core-w",
+    "L3-corr-s",
+    "L3-A-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-living",
+   "name": "Flat B Living room",
+   "boundary": [
+    "L3-ext-s",
+    "L3-B-s5.5",
+    "L3-B-mid",
+    "L3-ext-e"
+   ],
+   "use": "living",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-bed1",
+   "name": "Flat B Bedroom",
+   "boundary": [
+    "L3-ext-s",
+    "L3-core-e",
+    "L3-B-mid",
+    "L3-B-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-kitchen",
+   "name": "Flat B Kitchen",
+   "boundary": [
+    "L3-B-mid",
+    "L3-B-n4",
+    "L3-corr-s",
+    "L3-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-hall",
+   "name": "Flat B Hall",
+   "boundary": [
+    "L3-B-mid",
+    "L3-B-n7.5",
+    "L3-corr-s",
+    "L3-B-n4"
+   ],
+   "use": "corridor",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-B-bath",
+   "name": "Flat B Bathroom",
+   "boundary": [
+    "L3-B-mid",
+    "L3-core-e",
+    "L3-corr-s",
+    "L3-B-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-living",
+   "name": "Flat C Living room",
+   "boundary": [
+    "L3-ext-n",
+    "L3-C-s5",
+    "L3-C-mid",
+    "L3-ext-w"
+   ],
+   "use": "living",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-bed1",
+   "name": "Flat C Bedroom 1",
+   "boundary": [
+    "L3-ext-n",
+    "L3-C-s8.5",
+    "L3-C-mid",
+    "L3-C-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-bed2",
+   "name": "Flat C Bedroom 2",
+   "boundary": [
+    "L3-ext-n",
+    "L3-party-n",
+    "L3-C-mid",
+    "L3-C-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-kitchen",
+   "name": "Flat C Kitchen",
+   "boundary": [
+    "L3-C-mid",
+    "L3-C-n3.5",
+    "L3-corr-n",
+    "L3-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-hall",
+   "name": "Flat C Hall",
+   "boundary": [
+    "L3-C-mid",
+    "L3-C-n9.7",
+    "L3-corr-n",
+    "L3-C-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-C-bath",
+   "name": "Flat C Bathroom",
+   "boundary": [
+    "L3-C-mid",
+    "L3-party-n",
+    "L3-corr-n",
+    "L3-C-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-living",
+   "name": "Flat D Living room",
+   "boundary": [
+    "L3-ext-n",
+    "L3-D-s5",
+    "L3-D-mid",
+    "L3-ext-e"
+   ],
+   "use": "living",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-bed1",
+   "name": "Flat D Bedroom 1",
+   "boundary": [
+    "L3-ext-n",
+    "L3-D-s8.5",
+    "L3-D-mid",
+    "L3-D-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-bed2",
+   "name": "Flat D Bedroom 2",
+   "boundary": [
+    "L3-ext-n",
+    "L3-party-n",
+    "L3-D-mid",
+    "L3-D-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-kitchen",
+   "name": "Flat D Kitchen",
+   "boundary": [
+    "L3-D-mid",
+    "L3-D-n3.5",
+    "L3-corr-n",
+    "L3-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-hall",
+   "name": "Flat D Hall",
+   "boundary": [
+    "L3-D-mid",
+    "L3-D-n9.7",
+    "L3-corr-n",
+    "L3-D-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L3"
+  },
+  {
+   "id": "L3-D-bath",
+   "name": "Flat D Bathroom",
+   "boundary": [
+    "L3-D-mid",
+    "L3-party-n",
+    "L3-corr-n",
+    "L3-D-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L3"
+  },
+  {
+   "id": "L4-stair",
+   "name": "Stair",
+   "boundary": [
+    "L4-ext-s",
+    "L4-stair-e",
+    "L4-corr-s",
+    "L4-core-w"
+   ],
+   "use": "stair",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-lift",
+   "name": "Lift",
+   "boundary": [
+    "L4-lift-s",
+    "L4-core-e",
+    "L4-corr-s",
+    "L4-stair-e"
+   ],
+   "use": "other",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-riser",
+   "name": "Riser and cleaner store",
+   "boundary": [
+    "L4-ext-s",
+    "L4-core-e",
+    "L4-lift-s",
+    "L4-stair-e"
+   ],
+   "use": "storage",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-corridor",
+   "name": "Corridor",
+   "boundary": [
+    "L4-corr-s",
+    "L4-ext-e",
+    "L4-corr-n",
+    "L4-ext-w"
+   ],
+   "use": "corridor",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-living",
+   "name": "Flat A Living room",
+   "boundary": [
+    "L4-ext-s",
+    "L4-A-s5.5",
+    "L4-A-mid",
+    "L4-ext-w"
+   ],
+   "use": "living",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-bed1",
+   "name": "Flat A Bedroom",
+   "boundary": [
+    "L4-ext-s",
+    "L4-core-w",
+    "L4-A-mid",
+    "L4-A-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-kitchen",
+   "name": "Flat A Kitchen",
+   "boundary": [
+    "L4-A-mid",
+    "L4-A-n4",
+    "L4-corr-s",
+    "L4-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-hall",
+   "name": "Flat A Hall",
+   "boundary": [
+    "L4-A-mid",
+    "L4-A-n7.5",
+    "L4-corr-s",
+    "L4-A-n4"
+   ],
+   "use": "corridor",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-A-bath",
+   "name": "Flat A Bathroom",
+   "boundary": [
+    "L4-A-mid",
+    "L4-core-w",
+    "L4-corr-s",
+    "L4-A-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-living",
+   "name": "Flat B Living room",
+   "boundary": [
+    "L4-ext-s",
+    "L4-B-s5.5",
+    "L4-B-mid",
+    "L4-ext-e"
+   ],
+   "use": "living",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-bed1",
+   "name": "Flat B Bedroom",
+   "boundary": [
+    "L4-ext-s",
+    "L4-core-e",
+    "L4-B-mid",
+    "L4-B-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-kitchen",
+   "name": "Flat B Kitchen",
+   "boundary": [
+    "L4-B-mid",
+    "L4-B-n4",
+    "L4-corr-s",
+    "L4-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-hall",
+   "name": "Flat B Hall",
+   "boundary": [
+    "L4-B-mid",
+    "L4-B-n7.5",
+    "L4-corr-s",
+    "L4-B-n4"
+   ],
+   "use": "corridor",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-B-bath",
+   "name": "Flat B Bathroom",
+   "boundary": [
+    "L4-B-mid",
+    "L4-core-e",
+    "L4-corr-s",
+    "L4-B-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-living",
+   "name": "Flat C Living room",
+   "boundary": [
+    "L4-ext-n",
+    "L4-C-s5",
+    "L4-C-mid",
+    "L4-ext-w"
+   ],
+   "use": "living",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-bed1",
+   "name": "Flat C Bedroom 1",
+   "boundary": [
+    "L4-ext-n",
+    "L4-C-s8.5",
+    "L4-C-mid",
+    "L4-C-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-bed2",
+   "name": "Flat C Bedroom 2",
+   "boundary": [
+    "L4-ext-n",
+    "L4-party-n",
+    "L4-C-mid",
+    "L4-C-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-kitchen",
+   "name": "Flat C Kitchen",
+   "boundary": [
+    "L4-C-mid",
+    "L4-C-n3.5",
+    "L4-corr-n",
+    "L4-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-hall",
+   "name": "Flat C Hall",
+   "boundary": [
+    "L4-C-mid",
+    "L4-C-n9.7",
+    "L4-corr-n",
+    "L4-C-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-C-bath",
+   "name": "Flat C Bathroom",
+   "boundary": [
+    "L4-C-mid",
+    "L4-party-n",
+    "L4-corr-n",
+    "L4-C-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-living",
+   "name": "Flat D Living room",
+   "boundary": [
+    "L4-ext-n",
+    "L4-D-s5",
+    "L4-D-mid",
+    "L4-ext-e"
+   ],
+   "use": "living",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-bed1",
+   "name": "Flat D Bedroom 1",
+   "boundary": [
+    "L4-ext-n",
+    "L4-D-s8.5",
+    "L4-D-mid",
+    "L4-D-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-bed2",
+   "name": "Flat D Bedroom 2",
+   "boundary": [
+    "L4-ext-n",
+    "L4-party-n",
+    "L4-D-mid",
+    "L4-D-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-kitchen",
+   "name": "Flat D Kitchen",
+   "boundary": [
+    "L4-D-mid",
+    "L4-D-n3.5",
+    "L4-corr-n",
+    "L4-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-hall",
+   "name": "Flat D Hall",
+   "boundary": [
+    "L4-D-mid",
+    "L4-D-n9.7",
+    "L4-corr-n",
+    "L4-D-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L4"
+  },
+  {
+   "id": "L4-D-bath",
+   "name": "Flat D Bathroom",
+   "boundary": [
+    "L4-D-mid",
+    "L4-party-n",
+    "L4-corr-n",
+    "L4-D-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L4"
+  },
+  {
+   "id": "L5-stair",
+   "name": "Stair",
+   "boundary": [
+    "L5-ext-s",
+    "L5-stair-e",
+    "L5-corr-s",
+    "L5-core-w"
+   ],
+   "use": "stair",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-lift",
+   "name": "Lift",
+   "boundary": [
+    "L5-lift-s",
+    "L5-core-e",
+    "L5-corr-s",
+    "L5-stair-e"
+   ],
+   "use": "other",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-riser",
+   "name": "Riser and cleaner store",
+   "boundary": [
+    "L5-ext-s",
+    "L5-core-e",
+    "L5-lift-s",
+    "L5-stair-e"
+   ],
+   "use": "storage",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-corridor",
+   "name": "Corridor",
+   "boundary": [
+    "L5-corr-s",
+    "L5-ext-e",
+    "L5-corr-n",
+    "L5-ext-w"
+   ],
+   "use": "corridor",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-living",
+   "name": "Flat A Living room",
+   "boundary": [
+    "L5-ext-s",
+    "L5-A-s5.5",
+    "L5-A-mid",
+    "L5-ext-w"
+   ],
+   "use": "living",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-bed1",
+   "name": "Flat A Bedroom",
+   "boundary": [
+    "L5-ext-s",
+    "L5-core-w",
+    "L5-A-mid",
+    "L5-A-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-kitchen",
+   "name": "Flat A Kitchen",
+   "boundary": [
+    "L5-A-mid",
+    "L5-A-n4",
+    "L5-corr-s",
+    "L5-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-hall",
+   "name": "Flat A Hall",
+   "boundary": [
+    "L5-A-mid",
+    "L5-A-n7.5",
+    "L5-corr-s",
+    "L5-A-n4"
+   ],
+   "use": "corridor",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-A-bath",
+   "name": "Flat A Bathroom",
+   "boundary": [
+    "L5-A-mid",
+    "L5-core-w",
+    "L5-corr-s",
+    "L5-A-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-living",
+   "name": "Flat B Living room",
+   "boundary": [
+    "L5-ext-s",
+    "L5-B-s5.5",
+    "L5-B-mid",
+    "L5-ext-e"
+   ],
+   "use": "living",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-bed1",
+   "name": "Flat B Bedroom",
+   "boundary": [
+    "L5-ext-s",
+    "L5-core-e",
+    "L5-B-mid",
+    "L5-B-s5.5"
+   ],
+   "use": "bedroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-kitchen",
+   "name": "Flat B Kitchen",
+   "boundary": [
+    "L5-B-mid",
+    "L5-B-n4",
+    "L5-corr-s",
+    "L5-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-hall",
+   "name": "Flat B Hall",
+   "boundary": [
+    "L5-B-mid",
+    "L5-B-n7.5",
+    "L5-corr-s",
+    "L5-B-n4"
+   ],
+   "use": "corridor",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-B-bath",
+   "name": "Flat B Bathroom",
+   "boundary": [
+    "L5-B-mid",
+    "L5-core-e",
+    "L5-corr-s",
+    "L5-B-n7.5"
+   ],
+   "use": "bathroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-living",
+   "name": "Flat C Living room",
+   "boundary": [
+    "L5-ext-n",
+    "L5-C-s5",
+    "L5-C-mid",
+    "L5-ext-w"
+   ],
+   "use": "living",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-bed1",
+   "name": "Flat C Bedroom 1",
+   "boundary": [
+    "L5-ext-n",
+    "L5-C-s8.5",
+    "L5-C-mid",
+    "L5-C-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-bed2",
+   "name": "Flat C Bedroom 2",
+   "boundary": [
+    "L5-ext-n",
+    "L5-party-n",
+    "L5-C-mid",
+    "L5-C-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-kitchen",
+   "name": "Flat C Kitchen",
+   "boundary": [
+    "L5-C-mid",
+    "L5-C-n3.5",
+    "L5-corr-n",
+    "L5-ext-w"
+   ],
+   "use": "kitchen",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-hall",
+   "name": "Flat C Hall",
+   "boundary": [
+    "L5-C-mid",
+    "L5-C-n9.7",
+    "L5-corr-n",
+    "L5-C-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-C-bath",
+   "name": "Flat C Bathroom",
+   "boundary": [
+    "L5-C-mid",
+    "L5-party-n",
+    "L5-corr-n",
+    "L5-C-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-living",
+   "name": "Flat D Living room",
+   "boundary": [
+    "L5-ext-n",
+    "L5-D-s5",
+    "L5-D-mid",
+    "L5-ext-e"
+   ],
+   "use": "living",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-bed1",
+   "name": "Flat D Bedroom 1",
+   "boundary": [
+    "L5-ext-n",
+    "L5-D-s8.5",
+    "L5-D-mid",
+    "L5-D-s5"
+   ],
+   "use": "bedroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-bed2",
+   "name": "Flat D Bedroom 2",
+   "boundary": [
+    "L5-ext-n",
+    "L5-party-n",
+    "L5-D-mid",
+    "L5-D-s8.5"
+   ],
+   "use": "bedroom",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-kitchen",
+   "name": "Flat D Kitchen",
+   "boundary": [
+    "L5-D-mid",
+    "L5-D-n3.5",
+    "L5-corr-n",
+    "L5-ext-e"
+   ],
+   "use": "kitchen",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-hall",
+   "name": "Flat D Hall",
+   "boundary": [
+    "L5-D-mid",
+    "L5-D-n9.7",
+    "L5-corr-n",
+    "L5-D-n3.5"
+   ],
+   "use": "corridor",
+   "floor": "L5"
+  },
+  {
+   "id": "L5-D-bath",
+   "name": "Flat D Bathroom",
+   "boundary": [
+    "L5-D-mid",
+    "L5-party-n",
+    "L5-corr-n",
+    "L5-D-n9.7"
+   ],
+   "use": "bathroom",
+   "floor": "L5"
+  }
+ ],
+ "openings": [
+  {
+   "id": "B1-d-stair",
+   "wall": "B1-core-n",
+   "type": "door",
+   "offset": 1.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "B1-d-lift",
+   "wall": "B1-lift-s",
+   "type": "door",
+   "offset": 1.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "B1-d-lobby",
+   "wall": "B1-core-e",
+   "type": "door",
+   "offset": 2.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "B1-d-ramp",
+   "wall": "B1-ext-n",
+   "type": "opening",
+   "offset": 22.6,
+   "width": 3.2,
+   "height": 2.4
+  },
+  {
+   "id": "G-d-stair",
+   "wall": "G-corr-s",
+   "type": "door",
+   "offset": 11.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "G-d-lift",
+   "wall": "G-corr-s",
+   "type": "door",
+   "offset": 14.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "G-d-riser",
+   "wall": "G-stair-e",
+   "type": "door",
+   "offset": 2.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "G-w-stair",
+   "wall": "G-ext-s",
+   "type": "window",
+   "offset": 10.7,
+   "width": 1.6,
+   "sill": 0.9,
+   "height": 1.6
+  },
+  {
+   "id": "G-d-main",
+   "wall": "G-ext-n",
+   "type": "door",
+   "offset": 12.1,
+   "width": 1.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "G-d-entr",
+   "wall": "G-corr-n",
+   "type": "opening",
+   "offset": 12.1,
+   "width": 1.8,
+   "height": 2.1
+  },
+  {
+   "id": "G-d-bins-out",
+   "wall": "G-ext-w",
+   "type": "door",
+   "offset": 3.1,
+   "width": 1.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "G-d-bins-in",
+   "wall": "G-corr-n",
+   "type": "door",
+   "offset": 20.55,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "G-d-cyc-in",
+   "wall": "G-corr-n",
+   "type": "door",
+   "offset": 4.55,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "G-d-cyc-out",
+   "wall": "G-ext-e",
+   "type": "door",
+   "offset": 13.25,
+   "width": 1.5,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "G-d-shop1-street",
+   "wall": "G-ext-s",
+   "type": "door",
+   "offset": 4.1,
+   "width": 1.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "G-d-shop1-back",
+   "wall": "G-corr-s",
+   "type": "door",
+   "offset": 7.05,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "G-w-shop1-a",
+   "wall": "G-ext-s",
+   "type": "window",
+   "offset": 0.8,
+   "width": 2.4,
+   "sill": 0.3,
+   "height": 2.6
+  },
+  {
+   "id": "G-w-shop1-b",
+   "wall": "G-ext-s",
+   "type": "window",
+   "offset": 6.8,
+   "width": 2.4,
+   "sill": 0.3,
+   "height": 2.6
+  },
+  {
+   "id": "G-d-shop2-street",
+   "wall": "G-ext-s",
+   "type": "door",
+   "offset": 20.1,
+   "width": 1.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "G-d-shop2-back",
+   "wall": "G-corr-s",
+   "type": "door",
+   "offset": 23.05,
+   "width": 0.9,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "G-w-shop2-a",
+   "wall": "G-ext-s",
+   "type": "window",
+   "offset": 16.8,
+   "width": 2.4,
+   "sill": 0.3,
+   "height": 2.6
+  },
+  {
+   "id": "G-w-shop2-b",
+   "wall": "G-ext-s",
+   "type": "window",
+   "offset": 22.8,
+   "width": 2.4,
+   "sill": 0.3,
+   "height": 2.6
+  },
+  {
+   "id": "G-w-e1",
+   "wall": "G-ext-n",
+   "type": "window",
+   "offset": 14.2,
+   "width": 1.6,
+   "sill": 0.3,
+   "height": 2.6
+  },
+  {
+   "id": "G-w-e2",
+   "wall": "G-ext-n",
+   "type": "window",
+   "offset": 10.2,
+   "width": 1.6,
+   "sill": 0.3,
+   "height": 2.6
+  },
+  {
+   "id": "L1-d-stair",
+   "wall": "L1-corr-s",
+   "type": "door",
+   "offset": 11.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-d-lift",
+   "wall": "L1-corr-s",
+   "type": "door",
+   "offset": 14.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-d-riser",
+   "wall": "L1-stair-e",
+   "type": "door",
+   "offset": 2.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-w-stair",
+   "wall": "L1-ext-s",
+   "type": "window",
+   "offset": 10.7,
+   "width": 1.6,
+   "sill": 0.9,
+   "height": 1.6
+  },
+  {
+   "id": "L1-w-corr-w",
+   "wall": "L1-ext-w",
+   "type": "window",
+   "offset": 8.8,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-w-corr-e",
+   "wall": "L1-ext-e",
+   "type": "window",
+   "offset": 8.0,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-A-front",
+   "wall": "L1-corr-s",
+   "type": "door",
+   "offset": 4.7,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-A-d-living",
+   "wall": "L1-A-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-A-w-living",
+   "wall": "L1-ext-s",
+   "type": "window",
+   "offset": 1.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-A-d-bed1",
+   "wall": "L1-A-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-A-w-bed1",
+   "wall": "L1-ext-s",
+   "type": "window",
+   "offset": 6.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-A-k-open",
+   "wall": "L1-A-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L1-A-w-kitchen",
+   "wall": "L1-ext-w",
+   "type": "window",
+   "offset": 11.3,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L1-A-d-bath",
+   "wall": "L1-A-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-B-front",
+   "wall": "L1-corr-s",
+   "type": "door",
+   "offset": 20.3,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-B-d-living",
+   "wall": "L1-B-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L1-B-w-living",
+   "wall": "L1-ext-s",
+   "type": "window",
+   "offset": 22.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-B-d-bed1",
+   "wall": "L1-B-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L1-B-w-bed1",
+   "wall": "L1-ext-s",
+   "type": "window",
+   "offset": 17.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-B-k-open",
+   "wall": "L1-B-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L1-B-w-kitchen",
+   "wall": "L1-ext-e",
+   "type": "window",
+   "offset": 5.5,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L1-B-d-bath",
+   "wall": "L1-B-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L1-C-front",
+   "wall": "L1-corr-n",
+   "type": "door",
+   "offset": 20.8,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-C-d-living",
+   "wall": "L1-C-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L1-C-w-living",
+   "wall": "L1-ext-n",
+   "type": "window",
+   "offset": 22.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-C-d-bed1",
+   "wall": "L1-C-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L1-C-w-bed1",
+   "wall": "L1-ext-n",
+   "type": "window",
+   "offset": 18.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-C-d-bed2",
+   "wall": "L1-C-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L1-C-w-bed2",
+   "wall": "L1-ext-n",
+   "type": "window",
+   "offset": 14.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-C-k-open",
+   "wall": "L1-C-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L1-C-w-kitchen",
+   "wall": "L1-ext-w",
+   "type": "window",
+   "offset": 5.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L1-C-d-bath",
+   "wall": "L1-C-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L1-D-front",
+   "wall": "L1-corr-n",
+   "type": "door",
+   "offset": 4.2,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-D-d-living",
+   "wall": "L1-D-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-D-w-living",
+   "wall": "L1-ext-n",
+   "type": "window",
+   "offset": 1.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-D-d-bed1",
+   "wall": "L1-D-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-D-w-bed1",
+   "wall": "L1-ext-n",
+   "type": "window",
+   "offset": 5.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-D-d-bed2",
+   "wall": "L1-D-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L1-D-w-bed2",
+   "wall": "L1-ext-n",
+   "type": "window",
+   "offset": 9.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L1-D-k-open",
+   "wall": "L1-D-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L1-D-w-kitchen",
+   "wall": "L1-ext-e",
+   "type": "window",
+   "offset": 10.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L1-D-d-bath",
+   "wall": "L1-D-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-d-stair",
+   "wall": "L2-corr-s",
+   "type": "door",
+   "offset": 11.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-d-lift",
+   "wall": "L2-corr-s",
+   "type": "door",
+   "offset": 14.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-d-riser",
+   "wall": "L2-stair-e",
+   "type": "door",
+   "offset": 2.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-w-stair",
+   "wall": "L2-ext-s",
+   "type": "window",
+   "offset": 10.7,
+   "width": 1.6,
+   "sill": 0.9,
+   "height": 1.6
+  },
+  {
+   "id": "L2-w-corr-w",
+   "wall": "L2-ext-w",
+   "type": "window",
+   "offset": 8.8,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-w-corr-e",
+   "wall": "L2-ext-e",
+   "type": "window",
+   "offset": 8.0,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-A-front",
+   "wall": "L2-corr-s",
+   "type": "door",
+   "offset": 4.7,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-A-d-living",
+   "wall": "L2-A-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-A-w-living",
+   "wall": "L2-ext-s",
+   "type": "window",
+   "offset": 1.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-A-d-bed1",
+   "wall": "L2-A-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-A-w-bed1",
+   "wall": "L2-ext-s",
+   "type": "window",
+   "offset": 6.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-A-k-open",
+   "wall": "L2-A-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L2-A-w-kitchen",
+   "wall": "L2-ext-w",
+   "type": "window",
+   "offset": 11.3,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L2-A-d-bath",
+   "wall": "L2-A-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-B-front",
+   "wall": "L2-corr-s",
+   "type": "door",
+   "offset": 20.3,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-B-d-living",
+   "wall": "L2-B-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L2-B-w-living",
+   "wall": "L2-ext-s",
+   "type": "window",
+   "offset": 22.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-B-d-bed1",
+   "wall": "L2-B-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L2-B-w-bed1",
+   "wall": "L2-ext-s",
+   "type": "window",
+   "offset": 17.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-B-k-open",
+   "wall": "L2-B-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L2-B-w-kitchen",
+   "wall": "L2-ext-e",
+   "type": "window",
+   "offset": 5.5,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L2-B-d-bath",
+   "wall": "L2-B-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L2-C-front",
+   "wall": "L2-corr-n",
+   "type": "door",
+   "offset": 20.8,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-C-d-living",
+   "wall": "L2-C-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L2-C-w-living",
+   "wall": "L2-ext-n",
+   "type": "window",
+   "offset": 22.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-C-d-bed1",
+   "wall": "L2-C-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L2-C-w-bed1",
+   "wall": "L2-ext-n",
+   "type": "window",
+   "offset": 18.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-C-d-bed2",
+   "wall": "L2-C-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L2-C-w-bed2",
+   "wall": "L2-ext-n",
+   "type": "window",
+   "offset": 14.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-C-k-open",
+   "wall": "L2-C-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L2-C-w-kitchen",
+   "wall": "L2-ext-w",
+   "type": "window",
+   "offset": 5.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L2-C-d-bath",
+   "wall": "L2-C-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L2-D-front",
+   "wall": "L2-corr-n",
+   "type": "door",
+   "offset": 4.2,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-D-d-living",
+   "wall": "L2-D-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-D-w-living",
+   "wall": "L2-ext-n",
+   "type": "window",
+   "offset": 1.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-D-d-bed1",
+   "wall": "L2-D-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-D-w-bed1",
+   "wall": "L2-ext-n",
+   "type": "window",
+   "offset": 5.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-D-d-bed2",
+   "wall": "L2-D-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L2-D-w-bed2",
+   "wall": "L2-ext-n",
+   "type": "window",
+   "offset": 9.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L2-D-k-open",
+   "wall": "L2-D-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L2-D-w-kitchen",
+   "wall": "L2-ext-e",
+   "type": "window",
+   "offset": 10.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L2-D-d-bath",
+   "wall": "L2-D-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-d-stair",
+   "wall": "L3-corr-s",
+   "type": "door",
+   "offset": 11.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-d-lift",
+   "wall": "L3-corr-s",
+   "type": "door",
+   "offset": 14.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-d-riser",
+   "wall": "L3-stair-e",
+   "type": "door",
+   "offset": 2.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-w-stair",
+   "wall": "L3-ext-s",
+   "type": "window",
+   "offset": 10.7,
+   "width": 1.6,
+   "sill": 0.9,
+   "height": 1.6
+  },
+  {
+   "id": "L3-w-corr-w",
+   "wall": "L3-ext-w",
+   "type": "window",
+   "offset": 8.8,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-w-corr-e",
+   "wall": "L3-ext-e",
+   "type": "window",
+   "offset": 8.0,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-A-front",
+   "wall": "L3-corr-s",
+   "type": "door",
+   "offset": 4.7,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-A-d-living",
+   "wall": "L3-A-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-A-w-living",
+   "wall": "L3-ext-s",
+   "type": "window",
+   "offset": 1.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-A-d-bed1",
+   "wall": "L3-A-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-A-w-bed1",
+   "wall": "L3-ext-s",
+   "type": "window",
+   "offset": 6.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-A-k-open",
+   "wall": "L3-A-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L3-A-w-kitchen",
+   "wall": "L3-ext-w",
+   "type": "window",
+   "offset": 11.3,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L3-A-d-bath",
+   "wall": "L3-A-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-B-front",
+   "wall": "L3-corr-s",
+   "type": "door",
+   "offset": 20.3,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-B-d-living",
+   "wall": "L3-B-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L3-B-w-living",
+   "wall": "L3-ext-s",
+   "type": "window",
+   "offset": 22.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-B-d-bed1",
+   "wall": "L3-B-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L3-B-w-bed1",
+   "wall": "L3-ext-s",
+   "type": "window",
+   "offset": 17.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-B-k-open",
+   "wall": "L3-B-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L3-B-w-kitchen",
+   "wall": "L3-ext-e",
+   "type": "window",
+   "offset": 5.5,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L3-B-d-bath",
+   "wall": "L3-B-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L3-C-front",
+   "wall": "L3-corr-n",
+   "type": "door",
+   "offset": 20.8,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-C-d-living",
+   "wall": "L3-C-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L3-C-w-living",
+   "wall": "L3-ext-n",
+   "type": "window",
+   "offset": 22.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-C-d-bed1",
+   "wall": "L3-C-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L3-C-w-bed1",
+   "wall": "L3-ext-n",
+   "type": "window",
+   "offset": 18.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-C-d-bed2",
+   "wall": "L3-C-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L3-C-w-bed2",
+   "wall": "L3-ext-n",
+   "type": "window",
+   "offset": 14.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-C-k-open",
+   "wall": "L3-C-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L3-C-w-kitchen",
+   "wall": "L3-ext-w",
+   "type": "window",
+   "offset": 5.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L3-C-d-bath",
+   "wall": "L3-C-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L3-D-front",
+   "wall": "L3-corr-n",
+   "type": "door",
+   "offset": 4.2,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-D-d-living",
+   "wall": "L3-D-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-D-w-living",
+   "wall": "L3-ext-n",
+   "type": "window",
+   "offset": 1.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-D-d-bed1",
+   "wall": "L3-D-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-D-w-bed1",
+   "wall": "L3-ext-n",
+   "type": "window",
+   "offset": 5.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-D-d-bed2",
+   "wall": "L3-D-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L3-D-w-bed2",
+   "wall": "L3-ext-n",
+   "type": "window",
+   "offset": 9.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L3-D-k-open",
+   "wall": "L3-D-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L3-D-w-kitchen",
+   "wall": "L3-ext-e",
+   "type": "window",
+   "offset": 10.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L3-D-d-bath",
+   "wall": "L3-D-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-d-stair",
+   "wall": "L4-corr-s",
+   "type": "door",
+   "offset": 11.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-d-lift",
+   "wall": "L4-corr-s",
+   "type": "door",
+   "offset": 14.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-d-riser",
+   "wall": "L4-stair-e",
+   "type": "door",
+   "offset": 2.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-w-stair",
+   "wall": "L4-ext-s",
+   "type": "window",
+   "offset": 10.7,
+   "width": 1.6,
+   "sill": 0.9,
+   "height": 1.6
+  },
+  {
+   "id": "L4-w-corr-w",
+   "wall": "L4-ext-w",
+   "type": "window",
+   "offset": 8.8,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-w-corr-e",
+   "wall": "L4-ext-e",
+   "type": "window",
+   "offset": 8.0,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-A-front",
+   "wall": "L4-corr-s",
+   "type": "door",
+   "offset": 4.7,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-A-d-living",
+   "wall": "L4-A-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-A-w-living",
+   "wall": "L4-ext-s",
+   "type": "window",
+   "offset": 1.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-A-d-bed1",
+   "wall": "L4-A-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-A-w-bed1",
+   "wall": "L4-ext-s",
+   "type": "window",
+   "offset": 6.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-A-k-open",
+   "wall": "L4-A-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L4-A-w-kitchen",
+   "wall": "L4-ext-w",
+   "type": "window",
+   "offset": 11.3,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L4-A-d-bath",
+   "wall": "L4-A-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-B-front",
+   "wall": "L4-corr-s",
+   "type": "door",
+   "offset": 20.3,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-B-d-living",
+   "wall": "L4-B-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L4-B-w-living",
+   "wall": "L4-ext-s",
+   "type": "window",
+   "offset": 22.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-B-d-bed1",
+   "wall": "L4-B-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L4-B-w-bed1",
+   "wall": "L4-ext-s",
+   "type": "window",
+   "offset": 17.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-B-k-open",
+   "wall": "L4-B-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L4-B-w-kitchen",
+   "wall": "L4-ext-e",
+   "type": "window",
+   "offset": 5.5,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L4-B-d-bath",
+   "wall": "L4-B-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L4-C-front",
+   "wall": "L4-corr-n",
+   "type": "door",
+   "offset": 20.8,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-C-d-living",
+   "wall": "L4-C-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L4-C-w-living",
+   "wall": "L4-ext-n",
+   "type": "window",
+   "offset": 22.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-C-d-bed1",
+   "wall": "L4-C-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L4-C-w-bed1",
+   "wall": "L4-ext-n",
+   "type": "window",
+   "offset": 18.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-C-d-bed2",
+   "wall": "L4-C-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L4-C-w-bed2",
+   "wall": "L4-ext-n",
+   "type": "window",
+   "offset": 14.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-C-k-open",
+   "wall": "L4-C-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L4-C-w-kitchen",
+   "wall": "L4-ext-w",
+   "type": "window",
+   "offset": 5.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L4-C-d-bath",
+   "wall": "L4-C-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L4-D-front",
+   "wall": "L4-corr-n",
+   "type": "door",
+   "offset": 4.2,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-D-d-living",
+   "wall": "L4-D-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-D-w-living",
+   "wall": "L4-ext-n",
+   "type": "window",
+   "offset": 1.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-D-d-bed1",
+   "wall": "L4-D-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-D-w-bed1",
+   "wall": "L4-ext-n",
+   "type": "window",
+   "offset": 5.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-D-d-bed2",
+   "wall": "L4-D-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L4-D-w-bed2",
+   "wall": "L4-ext-n",
+   "type": "window",
+   "offset": 9.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L4-D-k-open",
+   "wall": "L4-D-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L4-D-w-kitchen",
+   "wall": "L4-ext-e",
+   "type": "window",
+   "offset": 10.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L4-D-d-bath",
+   "wall": "L4-D-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-d-stair",
+   "wall": "L5-corr-s",
+   "type": "door",
+   "offset": 11.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-d-lift",
+   "wall": "L5-corr-s",
+   "type": "door",
+   "offset": 14.0,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-d-riser",
+   "wall": "L5-stair-e",
+   "type": "door",
+   "offset": 2.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-w-stair",
+   "wall": "L5-ext-s",
+   "type": "window",
+   "offset": 10.7,
+   "width": 1.6,
+   "sill": 0.9,
+   "height": 1.6
+  },
+  {
+   "id": "L5-w-corr-w",
+   "wall": "L5-ext-w",
+   "type": "window",
+   "offset": 8.8,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-w-corr-e",
+   "wall": "L5-ext-e",
+   "type": "window",
+   "offset": 8.0,
+   "width": 1.2,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-A-front",
+   "wall": "L5-corr-s",
+   "type": "door",
+   "offset": 4.7,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-A-d-living",
+   "wall": "L5-A-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-A-w-living",
+   "wall": "L5-ext-s",
+   "type": "window",
+   "offset": 1.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-A-d-bed1",
+   "wall": "L5-A-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-A-w-bed1",
+   "wall": "L5-ext-s",
+   "type": "window",
+   "offset": 6.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-A-k-open",
+   "wall": "L5-A-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L5-A-w-kitchen",
+   "wall": "L5-ext-w",
+   "type": "window",
+   "offset": 11.3,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L5-A-d-bath",
+   "wall": "L5-A-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-B-front",
+   "wall": "L5-corr-s",
+   "type": "door",
+   "offset": 20.3,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-B-d-living",
+   "wall": "L5-B-mid",
+   "type": "door",
+   "offset": 4.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L5-B-w-living",
+   "wall": "L5-ext-s",
+   "type": "window",
+   "offset": 22.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-B-d-bed1",
+   "wall": "L5-B-mid",
+   "type": "door",
+   "offset": 6.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L5-B-w-bed1",
+   "wall": "L5-ext-s",
+   "type": "window",
+   "offset": 17.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-B-k-open",
+   "wall": "L5-B-mid",
+   "type": "opening",
+   "offset": 1.2,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L5-B-w-kitchen",
+   "wall": "L5-ext-e",
+   "type": "window",
+   "offset": 5.5,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L5-B-d-bath",
+   "wall": "L5-B-n7.5",
+   "type": "door",
+   "offset": 1.1,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L5-C-front",
+   "wall": "L5-corr-n",
+   "type": "door",
+   "offset": 20.8,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-C-d-living",
+   "wall": "L5-C-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L5-C-w-living",
+   "wall": "L5-ext-n",
+   "type": "window",
+   "offset": 22.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-C-d-bed1",
+   "wall": "L5-C-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L5-C-w-bed1",
+   "wall": "L5-ext-n",
+   "type": "window",
+   "offset": 18.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-C-d-bed2",
+   "wall": "L5-C-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L5-C-w-bed2",
+   "wall": "L5-ext-n",
+   "type": "window",
+   "offset": 14.35,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-C-k-open",
+   "wall": "L5-C-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L5-C-w-kitchen",
+   "wall": "L5-ext-w",
+   "type": "window",
+   "offset": 5.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L5-C-d-bath",
+   "wall": "L5-C-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "left"
+  },
+  {
+   "id": "L5-D-front",
+   "wall": "L5-corr-n",
+   "type": "door",
+   "offset": 4.2,
+   "width": 1.0,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-D-d-living",
+   "wall": "L5-D-mid",
+   "type": "door",
+   "offset": 3.85,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-D-w-living",
+   "wall": "L5-ext-n",
+   "type": "window",
+   "offset": 1.6,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-D-d-bed1",
+   "wall": "L5-D-mid",
+   "type": "door",
+   "offset": 6.35,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-D-w-bed1",
+   "wall": "L5-ext-n",
+   "type": "window",
+   "offset": 5.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-D-d-bed2",
+   "wall": "L5-D-mid",
+   "type": "door",
+   "offset": 8.7,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  },
+  {
+   "id": "L5-D-w-bed2",
+   "wall": "L5-ext-n",
+   "type": "window",
+   "offset": 9.85,
+   "width": 1.8,
+   "sill": 0.9,
+   "height": 1.4
+  },
+  {
+   "id": "L5-D-k-open",
+   "wall": "L5-D-mid",
+   "type": "opening",
+   "offset": 0.95,
+   "width": 1.6,
+   "height": 2.1
+  },
+  {
+   "id": "L5-D-w-kitchen",
+   "wall": "L5-ext-e",
+   "type": "window",
+   "offset": 10.9,
+   "width": 1.2,
+   "sill": 1.0,
+   "height": 1.1
+  },
+  {
+   "id": "L5-D-d-bath",
+   "wall": "L5-D-n9.7",
+   "type": "door",
+   "offset": 1.5,
+   "width": 0.8,
+   "height": 2.1,
+   "hinge": "start",
+   "swing": "right"
+  }
+ ]
+}

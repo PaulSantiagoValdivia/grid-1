@@ -1,7 +1,7 @@
 /**
- * The `grid` command, which `ongrid` runs too: `init`, `write`, `check`, `describe`, `draw`,
- * `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an agent's
- * host types (`npx -y ongrid mcp`, CMD-9).
+ * The `grid` command, which `ongrid` runs too: `init`, `write`, `edit`, `check`, `describe`,
+ * `draw`, `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an
+ * agent's host types (`npx -y ongrid mcp`, CMD-9).
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -29,6 +29,7 @@ import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
+import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
@@ -68,6 +69,12 @@ const COMMANDS = {
     summary: 'Writes a plan from rooms text: name the rooms with their sizes and neighbours, and Grid works out the walls. The main way to write a plan.',
     options: WRITE_OPTIONS,
   },
+  edit: {
+    usage: EDIT_USAGE,
+    summary: EDIT_SUMMARY,
+    // Each verb takes its own options: grid edit <verb> --help.
+    options: {},
+  },
   check: {
     usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--json] [--project <folder>]',
     summary: 'Checks a plan and prints the report: general guidance, not your local rules.',
@@ -80,7 +87,7 @@ const COMMANDS = {
   },
   draw: {
     usage: 'grid draw [<plan.json>] [--png | --3d] [--look <name>] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
-    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another. With --3d, draws the 3D model as the app opens it, as a PNG.',
+    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG.',
     options: DRAW_OPTIONS,
   },
   export: {
@@ -196,6 +203,10 @@ function warnLeftOut(io: CommandIo, loaded: LoadedPlan, exported?: readonly Left
 }
 
 async function runCommand(name: CommandName, args: readonly string[], io: CommandIo): Promise<number> {
+  if (name === 'edit') {
+    await runEdit(args, io.cwd, (text) => io.stdout(text))
+    return EXIT_OK
+  }
   const command = COMMANDS[name]
   const parsed = parseOptions(name, args, { ...command.options, ...HELP_FLAG })
   if (parsed.values.has('--help')) {
@@ -400,7 +411,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }
