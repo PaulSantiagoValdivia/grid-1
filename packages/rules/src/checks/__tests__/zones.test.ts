@@ -125,7 +125,7 @@ describe('size checks on a room with zones (CNT-8, lab EL-13)', () => {
 
   it('reaches the studio through its door, and gives the zones no route check of their own', () => {
     const report = checkLocalRules(zoned())
-    expect(report.findings.filter((f) => f.code === 'no_door' || f.code === 'no_route_to_exit')).toEqual([])
+    expect(report.findings.filter((f) => f.code === 'room_without_door' || f.code === 'no_route_to_exit')).toEqual([])
     const door = coverage(report, 'room-has-door')
     expect(door.lookedAt).toEqual([{ floor: 'ground', ids: ['bath', 'studio'] }])
     expect(door.skipped).toContainEqual(expect.objectContaining({ reason: 'part_of_room', ids: ['kitchen', 'living', 'sleep'] }))
