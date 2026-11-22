@@ -15,7 +15,7 @@ import { escapeCheck, hasEscapeFigures, type EscapeFigures } from './escape'
 import { resolveFigure, type FigureKey } from './figures'
 import { messages, type FigureSubject } from './messages'
 import { sizeCheck } from './size'
-import type { AppliedFigure, CheckCoverage, FindingCode, NotChecked, RuleFigures, RuleFinding, RulesReport } from './types'
+import type { AppliedFigure, CheckCoverage, FindingCode, NotChecked, RuleFigures, RuleFinding, RulesReport, WholeRoom } from './types'
 import { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE } from './types'
 
 /** Getting out comes first in the list: exit findings, then escape openings, then sizes. */
@@ -72,6 +72,8 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   const notChecked: NotChecked[] = []
   // MSG-2: what each figure check looked at, floor by floor.
   const scopes: Record<FigureRuleId, [string, FloorScope][]> = { 'habitable-room-area': [], 'escape-opening': [] }
+  // CNT-8: the rooms with zones each figure check looked at as a whole, and the use it applied.
+  const whole: Record<FigureRuleId, WholeRoom[]> = { 'habitable-room-area': [], 'escape-opening': [] }
   const read = new Map<string, ReturnType<typeof drawable>>()
   for (const floor of floors) {
     const floorName = floor.name || floor.id
@@ -85,6 +87,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     findings.push(...escapes.findings)
     if (ran['escape-opening']) {
       scopes['escape-opening'].push([floor.id, escapes.scope])
+      whole['escape-opening'].push(...escapes.wholeRooms)
       // Above the third storey the figures here stop: said, never passed in silence (CH-4).
       const above = escapes.scope.skipped.above_escape_storeys ?? []
       if (above.length > 0) {
@@ -103,6 +106,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
       findings.push(...sizes.findings)
       notChecked.push(...sizes.notChecked)
       scopes['habitable-room-area'].push([floor.id, sizes.scope])
+      whole['habitable-room-area'].push(...sizes.wholeRooms)
     } else scopes['habitable-room-area'].push([floor.id, allSkipped(storey, 'no_figures_for_place')])
   }
   // A plan of walls alone: no check that looks at rooms ran, and the report says so (CH-1).
@@ -134,7 +138,8 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     ...FIGURE_RULES.map((rule) => {
       const covered = coverageOf(rule, scopes[rule.id], findingsOf(rule.id))
       const kinds = ran[rule.id] && covered.lookedAtCount > 0 ? [...new Set(RULE_FIGURES[rule.id].flatMap((key) => resolve(key)?.readFor ?? []))] : []
-      return kinds.length > 0 ? { ...covered, readFor: kinds } : covered
+      const read = kinds.length > 0 ? { ...covered, readFor: kinds } : covered
+      return whole[rule.id].length > 0 ? { ...read, wholeRooms: whole[rule.id] } : read
     })
   ]
   const looked = new Set([

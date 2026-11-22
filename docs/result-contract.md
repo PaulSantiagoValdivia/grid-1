@@ -188,6 +188,7 @@ label.
 | `room/not-enclosed` | {thing} is not enclosed by its walls | walls that reach each other round the room |
 | `room/space-mismatch` | {thing} does not match the space its walls enclose | a room that covers the space its walls close off, and no more |
 | `room/inside-no-host` | {thing} is marked as inside another room, but no room holds it | a room on its floor that holds it |
+| `room/zone-not-in-room` | {thing} is marked as a zone of a room it does not lie in | a room on its floor, not a zone itself, that holds the whole zone |
 | `room/overlap` | {thing} overlaps another room | rooms that share no floor, or one marked inside the other |
 | `room/overlap-unknown` | {thing} could not be compared with another room to see whether they overlap | room outlines Grid can compare |
 | `room/wall-listed-twice` | {thing} lists a wall more than once | each wall once in its list |
@@ -267,6 +268,7 @@ checks first, then the figure checks, whether it ran or not:
 | `skippedCount` | How many parts that is. |
 | `findings` | How many findings it gave. |
 | `readFor` | Only on a figure check that looked at something: the kinds of building its figures were read for, as `["homes"]` (COD-2). |
+| `wholeRooms` | Only on a figure check that looked at a room with zones (CNT-8): each such room as `{ floor, room, use, zone }`, the use the check applied to the room as a whole, and the zone it read that use from (`null` for the room's own). |
 
 A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
 so a record with no findings says what it is: these parts were looked at and nothing was
@@ -283,8 +285,9 @@ found in them. A `reason` is one of:
 | `above_escape_storeys` | above the third storey, where the figures here stop |
 | `no_use` | no use stated |
 | `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
+| `part_of_room` | a zone (CNT-8), looked at as part of its room, with its use: the size and escape checks and the route checks look at the room as a whole |
 
-Every reason but `use_not_covered` is something the check could not look at. Where a whole
+Every reason but `use_not_covered` and `part_of_room` is something the check could not look at. Where a whole
 floor or plan was skipped for one of those, a `not-checked` line says so too; `coverage` holds
 the rest, room by room. `grid check` prints the count of rooms looked at by at least one check
 beside the count of lines, then each check with what it looked at and skipped; `grid_check`

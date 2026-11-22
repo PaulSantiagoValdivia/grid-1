@@ -16,6 +16,7 @@ import type {
   RuleFinding as PlanRuleFinding,
   RulesReport as PlanRulesReport
 } from '@ongrid/floorplan/geometry'
+import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import type { BuildingKind, FigureKey, FigureUnit, VerificationStatus } from './figures'
 
 export { GENERAL_GUIDANCE_LABEL, RULES_REPORT_SCHEMA_VERSION } from '@ongrid/floorplan/geometry'
@@ -109,6 +110,13 @@ export interface RuleFinding extends Omit<PlanRuleFinding, 'code'> {
    * how far it has been checked. Absent on a finding that compared nothing.
    */
   readonly figures?: readonly AppliedFigure[]
+  /**
+   * CNT-8, only on a finding about a room with zones: the use its figure was applied for, read
+   * from the room as a whole, and the zone it was read from (`zone`, also the second of `rooms`)
+   * when it is not the room's own. Optional, like `through`.
+   */
+  readonly use?: RoomUse
+  readonly zone?: string
 }
 
 export type NotCheckedReason =
@@ -135,10 +143,10 @@ export interface NotChecked extends Omit<PlanNotChecked, 'reason'> {
 }
 
 /**
- * Why a check did not look at a part (MSG-2). Two kinds: the check could not look at it
+ * Why a check did not look at a part (MSG-2). Three kinds: the check could not look at it
  * (`cannot_be_drawn`, `no_stairs`, `way_out_not_drawn`, `no_use`, `no_figures_for_place`,
- * `above_escape_storeys`, `no_rooms`, `alone_off_ground`), or the check is not about it
- * (`use_not_covered`).
+ * `above_escape_storeys`, `no_rooms`, `alone_off_ground`), the check is not about it
+ * (`use_not_covered`), or it looked at it as part of its room (`part_of_room`, CNT-8).
  */
 export type SkipReason =
   | 'cannot_be_drawn'
@@ -152,6 +160,8 @@ export type SkipReason =
   | 'alone_off_ground'
   /** The check's figure is for rooms of other uses. */
   | 'use_not_covered'
+  /** CNT-8: a zone of another room, which the check looks at as a whole, with the zone's use. */
+  | 'part_of_room'
 
 /** Parts of one floor, by id. `floor` is empty for parts of the whole plan. */
 export interface CoverageGroup {
@@ -190,6 +200,20 @@ export interface CheckCoverage {
    * with no finding still says it. Left out for a check that uses no figure, or did not run.
    */
   readonly readFor?: readonly BuildingKind[]
+  /**
+   * CNT-8, only on a figure check that looked at a room with zones: each such room, by floor and
+   * id, with the use the check applied to it as a whole, and the zone it read that use from
+   * (null for the room's own), so a pass with no finding says it too.
+   */
+  readonly wholeRooms?: readonly WholeRoom[]
+}
+
+/** A room with zones a figure check looked at as a whole (CNT-8). */
+export interface WholeRoom {
+  readonly floor: string
+  readonly room: string
+  readonly use: RoomUse
+  readonly zone: string | null
 }
 
 export interface RulesReport extends Omit<PlanRulesReport, 'basis' | 'findings' | 'notChecked'> {
