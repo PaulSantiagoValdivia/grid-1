@@ -151,6 +151,49 @@ the floor asked for) is refused with exit code 1, and no file is written: `Nothi
 plan.json has no wall, room or fixture that can be drawn.` It names what is left out, when
 anything is.
 
+### What the IFC holds (HND-2)
+
+The IFC is written so that a BIM program can schedule and take off from it. Everything in it is
+something the plan already says, put in the field IFC has for it; where the plan says nothing,
+the file says that too.
+
+- **Rooms.** Each room is a space whose name is its number and whose long name is the room's
+  name. Numbers are the room schedule's (`grid_schedule`): floors by level, then by id, rooms by
+  id, 1, 2, 3… across the floors. The use, when the plan states one, is the space's object type
+  and `Category` in `Pset_SpaceCommon`, whose `Reference` is the number. Grid's own set
+  `Grid_Space` holds `Id`, `Number`, `Use` (`not said` when the plan states none), `Area`, and
+  `AreaMeasure` and `AreaRule`, which name the measure and its rule: the net area as
+  `grid_areas` measures it.
+- **Base quantities**, as `Qto_…BaseQuantities` sets:
+  - spaces: height, perimeter, footprint (`GrossFloorArea`), net area (`NetFloorArea`), volume;
+  - walls: length on the axis, thickness, height, footprint with corners joined, side area and
+    volume, gross and less every opening in the wall;
+  - slabs, roof slabs and stair landings: thickness, perimeter, area and volume, and for a slab
+    a stair, lift shaft or void opens, its net area and volume too (IFC2x3 has no roof set: the
+    roof's slab carries it);
+  - doors and windows: width, height and area of the hole in the wall; a doorless opening the
+    same, with its depth; an opening in a slab its depth and area;
+  - ceilings (`Qto_CoveringBaseQuantities`): their area; parapets: height, footprint and volume.
+- **Slabs.** They are the ones the 3D view draws ([Slabs, roofs, ceilings and the
+  ground](plan-file.md#slabs-roofs-ceilings-and-the-ground)): one per floor over its outline, a
+  piece of its own under a room set above or below its storey, and a flat roof over every part
+  with nothing above. The plan states no slab or roof outline, so each is Grid's and says so in
+  `Grid_Slab`: `Assumed`, `ThicknessStated` (whether the floor states its slab's thickness) and
+  a `Note` on what Grid took.
+- **Walls** are typed by the kind the plan states and their thickness (`Exterior wall 0.3 m`),
+  the same grouping the estimate prices (`wall:exterior:0.3` is the type's tag). Each type
+  carries a one-layer material set, with one material per kind; its walls carry the set's
+  usage. The plan holds no build-up, and the type's description says so.
+- **Doors and windows** are typed by size, and doors by handing too (`Door 0.9 x 2.1 m, single
+  swing, left`), tagged as the estimate keys them (`door:0.9x2.1`). A door whose swing the plan
+  does not state is typed by its size alone.
+- **Flats** are not written as zones: the plan format holds no flats yet.
+- **Where it stands.** A plan that reaches more than 500 m from the origin (`farFromOrigin`) is
+  moved, in whole steps of that distance, to near the origin, and the move is the site's
+  placement: everything keeps its place, and its own coordinates stay small. A plan that states
+  its `site` keeps the site's origin on that point (CNT-3), and the building's placement holds
+  the rest of the move. There is always at least one storey.
+
 ## The report, short or full, and notes seen: `grid check`
 
 `grid check` prints a short report about this plan (MSG-10): the label, each line to look at

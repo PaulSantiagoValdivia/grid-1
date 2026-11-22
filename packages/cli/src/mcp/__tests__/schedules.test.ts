@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { parseFloorPlan, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
-import { validatePlan } from '@ongrid/floorplan/geometry'
+import { roomNumbers, toIfc, validatePlan } from '@ongrid/floorplan/geometry'
 import { openingSchedule, openingScheduleCsv, roomSchedule, roomScheduleCsv, ScheduleRowError } from '../../quantities/schedule'
 import { surveyPlan } from '../../quantities/survey'
 import { sheetPages } from '../../sheet/pages'
@@ -116,6 +116,25 @@ describe('ARE-12 the room schedule', () => {
     expect(ghost.state).toBe('not-looked-at')
     expect(s.total.state.leftOut.map((r) => r.id)).toEqual(['ghost'])
     expect(roomScheduleCsv(s)).toContain(',ghost,Box room,,,,')
+  })
+
+  it('HND-2 numbers every room as the library does, and the IFC file gives each the same number', () => {
+    for (const plan of [flat, tiny, reversed(tiny)]) {
+      const parsed = parseFloorPlan(plan)
+      const rows = roomSchedule(survey(plan)).rows.map((r) => [r.floor, r.id, r.number])
+      expect(rows).toEqual(roomNumbers(parsed).map((n) => [n.floor, n.id, n.number]))
+      // In the IFC a space's Name is its number and Grid_Space holds its room id (HND-2).
+      const ifc = toIfc(parsed)
+      const spaces = [...ifc.matchAll(/^#\d+=IFCSPACE\('[^']+',#\d+,'(\d+)',/gm)].map((m) => Number(m[1]))
+      const ids = [...ifc.matchAll(/^#\d+=IFCPROPERTYSINGLEVALUE\('Id',\$,IFCIDENTIFIER\('([^']*)'\),\$\);$/gm)].map((m) => m[1])
+      expect(spaces.map((n, i) => [ids[i], n])).toEqual(rows.map(([, id, n]) => [id, n]))
+    }
+  })
+
+  it('HND-2 numbers only the floors asked for, from 1, as before', () => {
+    const s = roomSchedule(survey(tiny), { floors: [tiny.floors![1]!.id] })
+    expect(s.rows.map((r) => r.number)).toEqual(s.rows.map((_, i) => i + 1))
+    expect(s.rows.map((r) => [r.floor, r.id, r.number])).toEqual(roomNumbers(parseFloorPlan(tiny), [tiny.floors![1]!.id]).map((n) => [n.floor, n.id, n.number]))
   })
 })
 
