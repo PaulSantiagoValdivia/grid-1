@@ -154,6 +154,14 @@ function traceImageCheck(project: Project, file: string, plan: FloorPlan): void 
 /** Reads a plan file inside the project. Refused with `PlanRefused`, or `PathRefused` for the path. */
 export function loadPlan(project: Project, file: string, options: LoadOptions = {}): LoadedPlan {
   const { text, real } = readText(project, file)
+  return loadPlanText(project, file, text, real, options)
+}
+
+/**
+ * Reads a plan from its text, as `loadPlan` reads a file's: an earlier version of `file` kept in
+ * a start marker or in git (WRT-8). `real` is the path it is named by in what is said of it.
+ */
+export function loadPlanText(project: Project, file: string, text: string, real: string, options: LoadOptions = {}): LoadedPlan {
   // MSG-6: the text first, for a merge left unfinished, NaN and a decimal comma.
   const read = readPlanText(text)
   if (!read.ok && read.fault.kind === 'unfinished-merge') {

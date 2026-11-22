@@ -133,6 +133,12 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
     { label: 'the plan, marking a note seen', args: (p) => ['check', p, '--seen', '1', '--reason', 'Seen', '--by', 'Owner'], given: asIs },
   ],
   describe: [{ label: 'the plan', args: (p) => ['describe', p], given: asIs }],
+  // WRT-8: the markers file is the plan's name beside the plan, never a path of its own.
+  mark: [{ label: '--plan', args: (p) => ['mark', 'start', '--plan', p], given: asIs }],
+  diff: [
+    { label: 'the plan', args: (p) => ['diff', p], given: asIs },
+    { label: '--picture', args: (p) => ['diff', PLAN, '--since', 'start', '--picture', `${p}.png`], given: (p) => `${p}.png` },
+  ],
   draw: [
     { label: 'the plan', args: (p) => ['draw', p], given: asIs },
     { label: '--out', args: (p) => ['draw', PLAN, '--out', `${p}.svg`], given: (p) => `${p}.svg` },
@@ -171,6 +177,8 @@ const PLAN_READERS: ReadonlyArray<readonly [label: string, args: (plan: string) 
   ['sheet', (p) => ['sheet', p, '--layout', 'check']],
   ['tidy', (p) => ['tidy', p]],
   ['occupancy', (p) => ['occupancy', p]],
+  ['mark', (p) => ['mark', 'start', '--plan', p]],
+  ['diff', (p) => ['diff', p]],
   ['write --replace', (p) => ['write', ROOMS, '--plan', p, '--replace']],
 ]
 
@@ -195,6 +203,8 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plans', call: tool('grid_compare', { plans: ['@', PLAN] }), given: asIs },
     { arg: 'plans', call: tool('grid_compare', { plans: [PLAN, '@'] }), given: asIs },
   ],
+  // WRT-8: the earlier version is read from the markers file beside the plan, or the project's .git.
+  grid_diff: [{ arg: 'plan', call: tool('grid_diff', { plan: '@' }), given: asIs }],
   grid_areas: [{ arg: 'plan', call: tool('grid_areas', { plan: '@' }), given: asIs }],
   grid_takeoff: [
     { arg: 'plan', call: tool('grid_takeoff', { plan: '@' }), given: asIs },
@@ -210,6 +220,7 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_preview: [{ arg: 'plan', call: tool('grid_preview', { plan: '@', view: '2d', note: 'A look' }), given: asIs }],
   grid_export: [{ arg: 'plan', call: tool('grid_export', { plan: '@', format: 'glb' }), given: asIs }],
   grid_sheet: [{ arg: 'plan', call: tool('grid_sheet', { plan: '@', layout: 'check' }), given: asIs }],
+  grid_mark_start: [{ arg: 'plan', call: tool('grid_mark_start', { plan: '@' }), given: asIs }],
   // MSG-10: its marks file is the plan's name beside the plan, never a path of its own.
   grid_mark_seen: [{ arg: 'plan', call: tool('grid_mark_seen', { plan: '@', line: 1, code: 'room/too-small', reason: 'Seen', by: 'Owner' }), given: asIs }],
   grid_write_rooms: [{ arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` }],

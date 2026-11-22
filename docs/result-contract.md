@@ -450,6 +450,23 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: what a change did, by what stands where (WRT-8)
+
+- New tool `grid_diff`, second in the list after `grid_compare`: the plan against a start marker
+  or its last commit. Data: `since` (`kind` `marker` or `git`, `name`, `at`, `commit`),
+  `verdict`, `sameBuilding`, `roomsFirst`, `shift`, `renamed` (`count`, `walls`, `openings`,
+  `rooms`), `issues` (`code`, `message`, `entities`), `rooms` (`room`, `name`, `status`
+  `unchanged`, `changed`, `moved`, `added` or `removed`, `before`, `after`, `moved`, `text`),
+  `changes` (`text`, `entities`, `rooms`), `stayed` (`opening`, `text`), `scope` (`checked`,
+  `rooms`, `outside`) and `picture` (`floor`, `width`, `height`, `pxPerMetre`, or null). Issue
+  codes: `door_joins_other_rooms`, `opening_crossed`, `room_unclosed`, `dangling_host`,
+  `invalid_base`, `invalid_head`, `unknown_target`, `note_added`, `note_gone`,
+  `suspected_id_churn`. They are the comparison's own, not lines of the result record.
+- New tool `grid_mark_start`, before `grid_mark_seen`: writes `plan.markers.json` beside the plan
+  and never the plan. Data: `written`, `name`, `at`, `replaced`, `removed`, `markers`.
+- `diffPlans` in `@ongrid/floorplan` reads a room's walls as a ring: the same walls from another
+  wall, or the other way round, are no change (lab U-4). Walls in another order still are.
+
 ### 2026-11-22: stairs counted once, and the drawing's symbols (SHT-11)
 
 - `grid_areas`: rooms used as a stair that lie one over the other on neighbouring floors are one

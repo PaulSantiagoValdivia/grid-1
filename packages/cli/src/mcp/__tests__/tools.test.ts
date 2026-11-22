@@ -10,6 +10,7 @@ import { agentFlat, twoBedFlat } from './replay/plans'
 /** The tools in their fixed order. Changing it is a decision: change this list with it. */
 const ORDER = [
   'grid_compare',
+  'grid_diff',
   'grid_areas',
   'grid_takeoff',
   'grid_schedule',
@@ -21,6 +22,7 @@ const ORDER = [
   'grid_preview',
   'grid_export',
   'grid_sheet',
+  'grid_mark_start',
   'grid_mark_seen',
   'grid_write_rooms',
   'grid_change_opening',
@@ -33,7 +35,7 @@ const ORDER = [
   'grid_rename_room',
 ]
 
-const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
+const READ_ONLY = new Set(['grid_compare', 'grid_diff', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
 const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room'])
 
 interface Listed {
@@ -78,7 +80,9 @@ describe('tools/list', () => {
     // room, stretch and rename each have one.
     // 21 since CMD-13: a problem report the person decides to file.
     // 22 since MSG-10: a note the person sets aside as seen, which writes a file of its own.
-    expect((await listed()).length).toBeLessThanOrEqual(22)
+    // 24 since WRT-8: what a change did (grid_diff), and the start marker it compares with
+    // where there is no git (grid_mark_start).
+    expect((await listed()).length).toBeLessThanOrEqual(24)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -115,7 +119,7 @@ describe('tools/list', () => {
 
   it('says the units are metres wherever a tool takes or gives a length', async () => {
     for (const tool of await listed()) {
-      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mark_seen', 'grid_mirror', 'grid_rename_room'].includes(tool.name)) continue
+      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mark_start', 'grid_mark_seen', 'grid_mirror', 'grid_rename_room'].includes(tool.name)) continue
       expect(tool.description, tool.name).toMatch(/metres/)
     }
   })
@@ -163,12 +167,15 @@ describe('the tools on a two-bedroom flat', () => {
   let b: Bench
   beforeAll(() => {
     // MSG-10: noted.json has one note to mark, a field Grid does not read.
-    b = bench({ 'plan.json': twoBedFlat(), 'flat.json': agentFlat(), 'noted.json': { ...twoBedFlat(), colour: 'red' } })
+    // WRT-8: plan.markers.json holds a start marker, the plan as it is.
+    b = bench({ 'plan.json': twoBedFlat(), 'flat.json': agentFlat(), 'noted.json': { ...twoBedFlat(), colour: 'red' }, 'plan.markers.json': { version: '1', markers: [{ name: 'start', at: '2026-11-22T10:00:00.000Z', text: JSON.stringify(twoBedFlat()) }] } })
   })
   afterAll(() => b.close())
 
   const CALLS: Record<string, Record<string, unknown>> = {
     grid_compare: { plans: ['plan.json', 'flat.json'] },
+    // WRT-8: against the start marker the bench holds beside the plan.
+    grid_diff: {},
     grid_areas: {},
     grid_takeoff: {},
     grid_schedule: {},
@@ -180,6 +187,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_preview: { view: '2d' },
     grid_export: { plan: 'plan.json', format: 'dxf' },
     grid_sheet: { plan: 'plan.json', layout: 'check' },
+    grid_mark_start: { plan: 'noted.json' },
     grid_mark_seen: { plan: 'noted.json', line: 1, code: 'plan/unknown-field', reason: 'Kept for our own tool', by: 'Owner' },
     grid_write_rooms: { plan: 'written.json', rooms: 'walls outside 0.3 inside 0.1 height 2.6\nroom living "Living" living 4 x 4\nroom bed "Bed" bedroom 3 x 4 east of living\ndoor d1 between living and bed, centred, 0.8 wide, opens into bed\ndoor front in living south, centred, 0.9 wide, opens in\n' },
     grid_change_opening: { opening: 'door-bath', width: 0.8, out: 'changed.json' },

@@ -14,6 +14,7 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- `grid diff` (and the tool `grid_diff`) says what a change did, by what stands where in the building rather than by ids: issues first, then room by room, then each change, with a picture in three colours. The same building under new ids reads as no change, with how many ids were renamed. It compares with a start marker set by `grid mark` (or `grid_mark_start`), kept in `plan.markers.json` beside the plan, so no git is needed, or with the last commit in the project's own `.git` (WRT-8).
 - `grid check` and `grid_check` are short by default and about your plan: what to look at, the figures those notes used, and what each check looked at. `--full` (or `full` for the tool) gives the whole report. A note you have looked at can be set aside as seen, with why and who (`grid check --seen 3 --reason … --by …`, or `grid_mark_seen`): it stays listed under Seen, in `plan.seen.json` beside the plan, and comes back as new when its part of the plan changes (MSG-10).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 

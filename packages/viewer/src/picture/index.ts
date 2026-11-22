@@ -25,3 +25,5 @@ export {
 } from './look'
 export type { PlanLook, Look, LookName, PaperScale } from './look'
 export type { LabelStyle } from '../canvas2d/labelPlacement'
+export { comparisonPicture, COMPARISON_COLORS, COMPARISON_LOOK, UNCHANGED_COLORS } from './comparison'
+export type { ComparisonPictureOptions } from './comparison'
