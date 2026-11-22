@@ -9,7 +9,7 @@ import { planFacts } from '../facts'
 
 describe('a wall through two floors, described', () => {
   it('gives each window its sill above its own floor, and the stair window on both floors', () => {
-    const text = describeText(planFacts(stairWindowThrough()), 'full', 'person')
+    const text = describeText(planFacts(stairWindowThrough()), 'rooms', 'person')
     // The first floor's north window is stated 3.85 m above the ground floor: 0.90 m above its own.
     expect(text).toContain('Heights: walls 2.7 m high; window sills 0.9 m; door sills at the floor.')
     const stairs = text.split('\n').filter((line) => line.startsWith('Stair: '))
