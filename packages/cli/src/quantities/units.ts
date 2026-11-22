@@ -8,6 +8,8 @@ export type DisplayUnits = (typeof DISPLAY_UNITS)[number]
 
 const FOOT_M = 0.3048
 const SQ_FT_PER_M2 = 1 / (FOOT_M * FOOT_M)
+/** Feet in a metre, to turn a rate per foot into one per metre (ARE-13). */
+export const FT_PER_M = 1 / FOOT_M
 
 export function sqFt(m2: number): number {
   return m2 * SQ_FT_PER_M2
