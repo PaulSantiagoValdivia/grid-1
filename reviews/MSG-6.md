@@ -182,4 +182,4 @@ After merging `main` at e7cf925, on a machine with a load average above 200 (ten
 - `npm run build`, `npm run typecheck`, `npm run lint`: passed.
 - `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
 - `npm run scoreboard`: as above; stored.
-- Full suite: FULL_SUITE
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 206 files, 4,379 tests, all passed.
