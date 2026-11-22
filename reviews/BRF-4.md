@@ -107,7 +107,25 @@ answer, which are unchanged; the new lines come after the faces.
 
 ## Checks
 
-Filled in at the end of the work; see "After merging main" below.
+Run on a laptop shared with other sessions (40 to 50 other vitest processes running), with
+`--maxWorkers=2 --minWorkers=1`.
+
+| Gate | Result |
+| --- | --- |
+| `npm run build` | passes; `packages/cli/dist/grid.mjs` 540,475 bytes before merging main, 553,154 after (cap 600 kB) |
+| `npm run typecheck`, `npm run lint` | pass, before and after merging main |
+| Full suite (`vitest run --exclude '.claude/**'`) | The one run hit its 1,500 s timeout after 155 of 318 files, all passed. The other 163 were run next: 161 reported, one failure, `diff-size.test.ts` "diffs 1,000 entities … well inside a second" (an absolute bound, 16 s under the load). Run alone it passed, 4 of 4. The two files that had not reported (`fixtures-parse.test.ts`, `scoreboard.test.ts`) passed, 22 tests. So every file passed, in three runs, none of them whole |
+| `npm run scoreboard` | Same as the stored figures, before and after merging main: rooms measured wrong 194 of 16,542 (735 not measured), damage silent 278 of 3,000, turns 19 of 67, mistakes 5 of 9, checks 20 of 42, sound plans with a warning 95 of 442 |
+
+## After merging main at 90a933b1
+
+Merged 17 commits (HND-11, COD-8 and others) in c3a985d1. Conflicts: both changelogs (every
+entry kept, BRF-4's first) and `types/floorplan.ts`'s conventions: HND-11 took C15 for taped
+lengths, so the floor outline is **C16**, renamed in every BRF-4 comment and doc. After the
+merge: build, typecheck and lint clean; the affected tests (main's 14 changed test files, the
+three BRF-4 test files, the brief, site, tools, coverage, edit, rules result, plan types, rooms
+text, levels and the end-to-end tests), 48 files, 681 passed; scoreboard "Same as the stored
+figures".
 
 ## For the owner
 
