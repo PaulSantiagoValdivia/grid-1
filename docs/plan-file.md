@@ -10,6 +10,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [What kind of building it is, and what each room is for](#what-kind-of-building-it-is-and-what-each-room-is-for): `plan/not-checked-sizes-for-building`, `plan/not-checked-escapes-for-building`, `floor/not-checked-sizes-for-building`, `floor/not-checked-escapes-for-building`, `plan/unknown-use`
 - [Floor levels and heights](#floor-levels-and-heights): `plan/level-gap`, `plan/same-level`, `floor/empty-top`, `wall/above-storey`, `floor/size-question`, `wall/unknown-floor`, `room/unknown-floor`
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
+- [Walls through floors, and floors that line up](#walls-through-floors-and-floors-that-line-up): `wall/through-floor`, `room/cross-floor`, `floor/out-of-line`, `room/stair-shifted`, `room/lift-shifted`
 - [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
 - [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
 - [Sloped roofs and ceilings](#sloped-roofs-and-ceilings): `opening/above-roof`, `floor/rooflight-misplaced`, `floor/dormers-not-drawn`, `opening/missing-wall`
@@ -17,6 +18,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
+- [Flats and flat types](#flats-and-flat-types): `flat/unknown-room`, `flat/room-in-two`, `flat/unknown-type`, `flat/duplicate-id`, `flat/duplicate-type`, `flat/zone-without-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [A curved wall](#a-curved-wall): `wall/arc-ends-apart`, `wall/arc-too-tight`
 - [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
@@ -34,6 +36,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Saved views, and the camera record](#saved-views-and-the-camera-record): a camera saved by name, as Grid sets it and as BCF writes it
 - [What needs to be accessible](#what-needs-to-be-accessible): `plan/not-checked-access`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
+- [How the format changes](#how-the-format-changes): what a new field may and may not do
 
 ## What a plan file may hold
 
@@ -45,14 +48,15 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id | 64 characters | the same |
 | the trace image's path, the base plan's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
-| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site or taped lengths | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats or flat types | 50,000 of each | |
+| the rooms one flat lists | 50,000, and at least one | |
 | the floors one opening pattern repeats on | 200 | |
 | the points of the site's boundary, of one of its things, or of a floor's outline | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
@@ -246,6 +250,58 @@ dividing line between them. A window gets none. In 3D, in the OBJ and glTF files
 file, the room's floor and space stand at its own level, and a raised room is solid down to the
 storey's floor. A room set more than 1.5 m off its storey, or raised to the height its floor
 states, is asked about (`room/offset-question`): so far off, it is more likely a floor of its own.
+
+## Walls through floors, and floors that line up
+
+A wall stands on one floor. It may also rise through the floors above it: `through` names the
+highest floor it rises through, and it stands on its own floor and on every floor between, in the
+order of `level`. It is one wall, shared by those floors: a room on any of them may list it, and
+one edit moves it on all of them. Its `height` is how high it stands above the `through` floor's
+level, as a wall of that floor would (left out, it takes that floor's `height`); below that it runs
+up through every floor and slab between. A stair hall's wall, a double-height shopfront and a wall
+rising past a mezzanine are written this way.
+
+```json
+{ "id": "g-n", "start": [8, 6], "end": [0, 6], "thickness": 0.3, "kind": "exterior", "height": 2.7, "floor": "ground", "through": "first" }
+```
+
+An opening in such a wall states its sill and height from the wall's own floor, as every opening
+does, and may reach as high as the wall rises. The lab's stair window from 0.9 to 5.4 m is one
+window: `"sill": 0.9, "height": 4.5` in the wall above, which rises 5.65 m (the ground floor's
+2.70 m, its 0.25 m slab and the first floor's 2.70 m). A window that lies on the first floor only
+states its sill from the ground floor too (3.85 m for a sill 0.90 m above the first floor). Two
+openings one over the other in such a wall are not an overlap.
+
+Each floor's plan draws the stretch of the wall that stands on it and the part of each opening that
+lies there, as a wall of that floor: the stair window is drawn as a window on both floors. The 3D
+view, the OBJ and glTF files and the IFC file raise the wall once, from its own floor to its top,
+with each opening whole, so the IFC holds one wall and one window on the ground floor's storey. A
+section cuts it once, whole, and the slab between the floors stops at its openings. The storeys
+stand where they would with a wall of each floor: the wall counts toward the height of the floor it
+rises through. A `through` that names a floor the plan does not have, or one not above the wall's
+own, is said (`wall/through-floor`, a warning), and the wall stands on its own floor only. A room
+that lists a wall of another floor that does not rise through its own is still an error and is left
+out (`room/cross-floor`).
+
+Floors are drawn one over the other, each with its own walls, so widening one floor leaves the one
+above where it was (lab E-9). The drawing's checks set each floor's outline, as its walls draw it,
+against the floors one level below: where it reaches past them, or sits back from them, by more
+than 0.05 m (`stackShift`) and half the thickest wall that stretch runs along (walls of different
+thickness on one axis have their faces that far apart), it says so, with the side, by how much and the box
+of each stretch (`floor/out-of-line`, a warning). A room used as a stair, or a lift shaft, that
+lies over the one below enough to join it but is moved from it by more than 0.05 m is said too,
+with which way, how far and where both stand (`room/stair-shifted`, `room/lift-shifted`). A lift
+shaft is the same on every floor, so one whose sides stand off the one below's is said even when it
+is not moved as a whole. An overhang, a set-back or a moved stair is often meant: a floor or a
+room that states `"overhang": "meant"` is not asked about.
+
+```json
+{ "id": "first", "name": "First floor", "level": 1, "overhang": "meant" }
+```
+
+`through` and `overhang` are optional and never defaulted (version 1). Rooms text writes rooms
+that rise through floors (`through <floor>` on a room line) as a room and its walls on each floor,
+stacked, not as walls through floors.
 
 ## Stairs that join two floors
 
@@ -527,6 +583,58 @@ dividing line, each keeps its id, name and use, and a new room holds them.
 `partOf` is optional and never defaulted, so a plan written before it reads with no key added
 (version 1). Rooms text has no word for it yet: a floor with zones is read back in Grid's own
 terms, so nothing is lost.
+
+## Flats and flat types
+
+A plan may say which rooms make each flat (a dwelling, a unit), in `flats` (CNT-4, C18), and
+state each kind of flat once, in `flatTypes`:
+
+```json
+"flatTypes": [{ "id": "one-bed", "name": "One bedroom" }],
+"flats": [
+  { "id": "A", "name": "Flat A", "type": "one-bed", "rooms": ["A-living", "A-bed1", "A-kitchen", "A-hall", "A-bath"] },
+  { "id": "B", "name": "Flat B", "type": "one-bed", "rooms": ["B-living", "B-bed1", "B-kitchen", "B-hall", "B-bath"], "mirrored": true }
+]
+```
+
+| Field | What it states |
+|---|---|
+| `flatTypes[].id`, `name` | A kind of flat, stated once and placed many times |
+| `flats[].id`, `name` | The flat; its name is read as its id when it states none |
+| `flats[].type` | The flat type it is, by id |
+| `flats[].rooms` | Its rooms, by id, at least one; on one floor or on several, for a duplex |
+| `flats[].mirrored` | The flat is its type's mirror image (a handed flat) |
+
+A flat is a named group of rooms, never a room: it adds no floor and closes no outline, and it is
+never read from the rooms' names. What reads it:
+
+- **Areas.** `grid_areas` gives each flat's net area, the rooms it lists counted as the net counts
+  them, floor by floor for a duplex, and the rooms in no flat apart ([areas.md](areas.md)).
+- **Schedules.** `grid_schedule of=flats` lists each flat with its type, rooms, bedrooms and area,
+  and the mix by type; the room schedule says each room's flat.
+- **The drawing.** Each flat's outline is drawn on its floors: a chain line along the middle of
+  the walls round its rooms, in the paper's colour over the walls, so one line runs between two
+  flats and a doorway breaks it.
+- **The IFC.** Each flat is an `IfcZone` grouping the spaces of its rooms
+  (`IfcRelAssignsToGroup`), on every storey it is on, with its id, type, whether it is mirrored
+  and its net area in `Grid_Flat`.
+
+Rooms text writes both from a unit that is a flat type ([rooms-first.md](rooms-first.md#many-of-one-room-floors-copied-and-walls-through-floors)).
+Nothing in the list is refused; what is wrong in it is named, worth a look, and the flat is read
+without it:
+
+| Code | What it says |
+|---|---|
+| `flat/unknown-room` | A flat names a room the plan does not have, with the room most likely meant; it is not counted |
+| `flat/room-in-two` | A flat names a room another flat names too; it is counted in the flat whose id comes first only |
+| `flat/unknown-type` | A flat is of a type the flat types do not state, with the type most likely meant |
+| `flat/duplicate-id` | Two flats have one id; the first is read and the other left out |
+| `flat/duplicate-type` | A flat type is stated twice; the first is read |
+| `flat/zone-without-room` | A flat names a [zone](#zones-inside-one-room) and not its room: the zone's floor is counted in its room, so it adds nothing |
+
+Both lists are optional and never defaulted, so a plan written before them reads with no key
+added (version 1). Grid's edits do not carry a flat yet: a room merged or split away is named by
+`flat/unknown-room` until the flat lists the room that is there now.
 
 ## Rooms with holes
 
@@ -1382,3 +1490,21 @@ name 120, each one line. A file that is wrong is refused naming the place (`seat
 and never the text, which is a person's name. `grid occupancy` lists who sits where by room name
 and names any seat whose room the plan no longer has ([commands.md](commands.md#who-sits-where-grid-occupancy)).
 Keep the file out of what you hand over: an export or a sheet never needs it.
+
+## How the format changes
+
+The plan format is version 1, and a change to it keeps every plan written before it reading and
+drawing as it did:
+
+- A new field is optional and never defaulted. A plan that leaves it out reads exactly as before,
+  and a plan written back gains no key it did not state.
+- A new field is named in the reading's list of the fields each part may hold, so a field it
+  does not know is still named (`plan/unknown-field`), and its text is held to the limits in
+  [What a plan file may hold](#what-a-plan-file-may-hold).
+- A rule a new field relaxes is relaxed only for a plan that states the field. LVL-5's `through`
+  lets a room list a wall of the floor below, which was always `room/cross-floor`; a plan with no
+  wall through floors is checked as before.
+- A new top-level part has its place in every drawing and export, and on the sheet
+  (`packages/cli/src/sheet/coverage.ts`).
+- A change that would read an existing plan differently needs a new version.
+

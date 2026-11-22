@@ -9,7 +9,8 @@
  */
 
 import type { Floor, FloorPlan, Wall } from './plan'
-import { floorHasGeometry, floorOf, isFloorSlice, planFloors } from './floors'
+import { floorHasGeometry, floorOf, isFloorSlice, planFloors, wallsOnFloor } from './floors'
+import { sharedPart, storeyFloorOf } from './through'
 import type { Issue } from './validate'
 import { limit, tolerance } from './tolerances'
 import { metresText } from './rounding'
@@ -241,7 +242,7 @@ function sameLevel(plan: FloorPlan, floors: readonly Floor[], issues: Issue[]): 
   }
   for (const group of groups.values()) {
     if (group.length < 2) continue
-    const boxes = group.map((floor) => ({ floor, box: boxOf(plan.walls.filter((wall) => floorOf(wall) === floor.id)) }))
+    const boxes = group.map((floor) => ({ floor, box: boxOf(wallsOnFloor(plan, floor.id)) }))
     const clashing = new Set<Floor>()
     for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {
@@ -309,7 +310,10 @@ function wallsAboveStorey(plan: FloorPlan, floors: readonly Floor[], broken: Rea
   if (stated.size === 0) return
   for (const wall of plan.walls) {
     if (wall.virtual || broken.has(wall.id) || !Number.isFinite(wall.height)) continue
-    const storey = stated.get(floorOf(wall))
+    // LVL-5: a part of a wall through floors runs through its floor's slab by design; the wall
+    // itself is asked about on the whole plan, against the floor it rises through.
+    if (sharedPart(wall) !== null) continue
+    const storey = stated.get(storeyFloorOf(plan, wall))
     if (storey === undefined || wall.height <= storey + tolerance('wallAboveStorey')) continue
     issues.push(
       issue(
@@ -317,7 +321,7 @@ function wallsAboveStorey(plan: FloorPlan, floors: readonly Floor[], broken: Rea
         wall.id,
         'wall/above-storey',
         `Wall ${quoted(wall.id)} is ${m(wall.height)} high, ${m(wall.height - storey)} higher than floor ` +
-          `${quoted(floorOf(wall))}, which states it is ${m(storey)} high. The storey and the roof stay where the ` +
+          `${quoted(storeyFloorOf(plan, wall))}, which states it is ${m(storey)} high. The storey and the roof stay where the ` +
           `floor puts them; if the wall really is taller, raise the floor's height.`
       )
     )

@@ -66,7 +66,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes, or `firm/<what>` for the firm's own standards (COD-8). One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
-| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3) or an opening pattern (`pattern`, LVL-8). |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3), an opening pattern (`pattern`, LVL-8) or a flat (`flat`, CNT-4). A flat is on the floor of its first room. |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
 | `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
@@ -222,6 +222,7 @@ label.
 | `wall/crosses-room` | {thing} runs across a room that does not list it | every wall across a room listed by the rooms on its sides |
 | `wall/stands-in-room` | {thing} stands inside a room that does not list it | a wall inside a room drawn as part of a room |
 | `wall/above-storey` | {thing} is higher than the storey its floor states | walls no higher than their floor's stated height |
+| `wall/through-floor` | {thing} rises through a floor that is not above its own, so it stands on its own floor only | through naming a floor above the wall's own, from the plan's floors |
 | `opening/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `opening/broken-wall` | {thing} is on a wall that cannot be drawn | a wall that can be drawn |
 | `opening/missing-wall` | {thing} is on a wall that is not in the plan | the id of a wall in the plan |
@@ -243,7 +244,7 @@ label.
 | `opening/on-dividing-line` | {thing} is on a dividing line | a door or window in a wall |
 | `opening/window-between-rooms` | {thing} has rooms on both sides | a window in a wall with the outside on one side, unless it is a borrowed light |
 | `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
-| `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
+| `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists standing on its own floor |
 | `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
 | `room/phase-wall` | {thing} stands when one of its walls does not, so it is left out | a room whose walls stand whenever it does: an existing room round existing walls, a new room round existing or new walls, a demolished room round existing or demolished walls |
 | `room/empty` | {thing} encloses no floor | walls that enclose some floor |
@@ -275,6 +276,12 @@ label.
 | `pattern/no-wall-above` | {thing} finds no wall above to repeat on | on each floor it is repeated on, a wall in the same line as its own, holding the opening's whole width |
 | `pattern/overlaps-opening` | {thing} would place an opening over another | each opening of the pattern clear of the other openings on its wall |
 | `pattern/id-clash` | {thing} would give an opening an id another part has | an id of its own for each opening a pattern places: the pattern's id, the floor and the number |
+| `flat/unknown-room` | {thing} names a room the plan does not have | rooms of the plan, by id |
+| `flat/room-in-two` | {thing} names a room another flat names too | each room in one flat at most |
+| `flat/unknown-type` | {thing} is of a type the plan's flat types do not state | a type stated in the plan's flat types, by id |
+| `flat/duplicate-id` | {thing} is listed more than once | an id of its own on every flat |
+| `flat/duplicate-type` | The plan states flat type "{id}" more than once | each flat type stated once |
+| `flat/zone-without-room` | {thing} names a zone but not the room it is part of | the room a zone is part of, in the flat with it |
 | `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
 | `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
@@ -295,6 +302,7 @@ label.
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/past-outline` | {thing}'s walls reach past the outline it states | walls inside the outline the floor states, the outside face of the floor |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
+| `floor/out-of-line` | {thing} does not line up with the floor below it | a floor's outline over the floor below it, or marked overhang "meant" where it overhangs or sits back on purpose |
 | `floor/rooflight-misplaced` | {thing} has a rooflight that does not lie on one slope of its roof | a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips |
 | `floor/dormers-not-drawn` | {thing} lists dormers, which are not supported yet | a roof Grid can draw: dormers are not supported yet |
 | `floor/size-question` | {thing} states a height that may not be meant | the height of a storey in a building |
@@ -311,6 +319,8 @@ label.
 | `plan/over-boundary` | The building reaches {distance} m over the {east} boundary, out of the plot | the building inside the plot's boundary |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
+| `room/stair-shifted` | The stair "{name}" on "{floor}" is {1.20 m east} of "{room}" on "{floor}" below it: it stands from {(x, y) to (x, y)}, the one below from {(x, y) to (x, y)} | the stair room over the one on the floor below, or marked overhang "meant" where it is moved on purpose |
+| `room/lift-shifted` | The lift shaft "{name}" on "{floor}" is {0.60 m north} of "{room}" on "{floor}" below it: it stands from {(x, y) to (x, y)}, the one below from {(x, y) to (x, y)} | the shaft over the one on the floor below, or marked overhang "meant" where it is moved on purpose |
 | `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
 | `room/too-small` | "{name}" is under {minimum} m² | the figure used here, at least {minimum} m² ({basis}, status {status}); this check's figures were read for {kinds} |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
@@ -319,7 +329,7 @@ label.
 | `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", these rooms could not be drawn, so they and what rests on them were not checked: "{room}", … | rooms that can be drawn |
-| `floor/not-checked-doors-not-drawn` | On "{floor}", these doors or windows could not be drawn, so they and what rests on them were not checked: "{id}", … | doors and windows that can be drawn |
+| `floor/not-checked-doors-not-drawn` | On "{floor}", {this window, these doors, these doors and windows} could not be drawn, so {it, they} and what rests on {it, them} were not checked: "{id}", … | {a window, doors, doors and windows} that can be drawn |
 | `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {place} | figures for the place, looked up and given to the check |
@@ -645,7 +655,7 @@ its text, which says the same.
 | `grid_preview` | `floor`, `view`, `room` (the room framed), `note`, `highlight`, `selected`, `camera`, `revision`, `planFile`, `previewFile` (the record beside the plan, inside the project) and `shown` (false when it only read the selection and wrote nothing). It never writes the plan ([The preview, shared with the person](tool-server.md#the-preview-shared-with-the-person)). |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, `reminder`: one line on a first plan with no brief beside it, else null, and `layout`: null, or for a first layout from the brief (BRF-6) its `shape`, `rooms` (the rooms text written), `outline`, `added`, `notKept` (each `room`, `name`, `text`, `by`), `notPlaced` and `touch` ([brief.md](brief.md#a-first-layout-from-the-brief)), and `scan`: null, or for a phone room scan (HND-12) its `evidence`, `paired`, `oneSided`, `areas`, `assumed`, `leftOut` and `match` ([commands.md](commands.md#a-plan-from-a-phone-room-scan-grid-write---scan)). |
 
 A line of the brief (BRF-1, [brief.md](brief.md)) has a `state` (`met`, `missed`, `open`, or
 `differs` for a size in a room's name), `wish` (`room`, `rooms`, `footprint`, `touch`, a figure's
@@ -707,6 +717,88 @@ A change that would add a problem that leaves a part out is refused, and nothing
   measures a curved wall to be demolished or new along its curve, and a whole circle has no ends
   to make good; a click on the preview's 3D picture meets a curved wall along its curve. A curved
   wall in a plan with phases is drawn and exported on its phase's layer, with its arc.
+
+### 2026-11-22: a first layout from the brief, and a door's alignment (BRF-6)
+
+- `grid_write_rooms` takes `layout` (`tidy` or `sizes`) in place of `rooms`, which is no longer
+  required: one of three, with HND-12's `scan`. A call with none of them, or more than one, is
+  refused naming them (`Pass layout or scan, not both.` for those two). It writes a first layout
+  of the brief beside the plan as rooms text, refused when there is no brief, it can't be read, or
+  it holds no room with a size. Its receipt adds `layout`: null when rooms text or a scan was
+  passed (and a layout's receipt carries `scan: null`); else `shape`, `rooms` (the rooms
+  text written, to change and send back), `outline` (east-west by north-south, m), `added` (the
+  hall Grid added, by name, or null), `notKept` (each size not kept: `room`, `name`, `text`, the
+  brief's own line for it with how much its area changed, and `by`, that change in m²),
+  `notPlaced` (each room of the brief not placed, with why) and `touch` (`wished`, `held`). The
+  text adds the same, then the rooms text. `grid write --layout tidy|sizes` does the same, and its
+  `--json` adds `layout`; it refuses `--layout` with a rooms file or with `--scan`.
+- A door between two rooms that share no wall (`rooms/no-shared-wall`) is refused, when one
+  room's other alignment would make them share one, with `With line 3 written '…', they share a
+  wall.` at the end of the message. The core's `compileRoomsText` gives the same as data on the
+  problem: `fixes`, each `{ line, text }`. A refusal of the tool stays text, as every refusal is.
+- A wall height the rooms text does not state is no longer written into the plan file as Grid's
+  default with an `unstated` beside it, which the check then named as a field it does not know;
+  the reading fills it, as for any wall written without one.
+- No new code in the record.
+
+### 2026-11-22: walls through floors, and floors that line up (LVL-5)
+
+- The plan format takes a wall's `through` (C19): the highest floor it rises through. A room on
+  any floor it stands on may list it, so `room/cross-floor` is no longer given for such a wall.
+  An opening in it may reach as high as the wall rises, measured from the wall's own floor, so
+  `opening/too-tall` compares with that height; openings one over the other in it are not
+  `opening/overlap`. `plan/unknown-field`'s list of a wall's fields now names `through` after
+  `floor`.
+- A floor and a room take `overhang: "meant"`: the floor's outline, or the stair room or lift
+  shaft, does not line up with the floor below on purpose.
+- New codes: `wall/through-floor` (`worth-a-look`): `through` names a floor the plan does not have
+  or one not above the wall's own, and the wall stands on its own floor only.
+  `floor/out-of-line` (`worth-a-look`): a floor's outline reaches past the floor below, or sits back
+  from it, by more than `stackShift` (0.05 m); its message names the side, how far and the box of
+  each stretch, up to three, then how many more. `room/stair-shifted` and `room/lift-shifted`
+  (`finding`, under the check `stairs-line-up`): a stair room or lift shaft that joins the one below
+  but is moved from it; the finding carries `shift` (`east`, `north`, in metres, `sides` for a shaft
+  not moved as a whole, and the `upper` and `lower` boxes), and its message says which way, how far
+  and where both stand. None is given for a floor or room marked `overhang: "meant"`.
+- Wording changed: `floor/not-checked-doors-not-drawn` names its openings by their type ("this
+  window could not be drawn, so it and what rests on it were not checked: …", "these doors and
+  windows …"), and so do its `found`, `needed` and `fix`; the notice carries `openingKinds`. It no
+  longer calls a window "doors or windows" (lab A-16). `room/cross-floor`'s `needed` and `fix`
+  mention a wall that rises through floors.
+- With VEW-4 and CNT-10: `grid_preview`'s `parts` list a wall through floors, and an opening in
+  it, on each floor it is drawn on, and a click on the 3D picture meets the wall up to its whole
+  rise; `grid_takeoff for=change` takes a wall through floors off once, whole, its height its whole
+  rise, and `floors` takes it in when it stands on any floor named.
+- With BRF-4: a floor that states an outline and has a wall rising through it from below is not
+  massing, so `grid_check` gives its `floor/unclaimed`, as `grid_areas` measures it.
+- `resultVersion` stays 1.
+
+### 2026-11-22: flats, flat types and the mix (CNT-4)
+
+- The plan format takes `flatTypes` (each `id` and `name`) and `flats` (each `id`, `name`,
+  `type`, `rooms` by id, at least one, on one floor or several, and `mirrored`), C18. Both are
+  optional and never defaulted; `plan/unknown-field`'s list of the plan's fields now names them
+  after `taped`.
+- A new kind of thing, `flat`, and six codes, all worth a look and none leaving out more than the
+  ids they name: `flat/unknown-room`, `flat/room-in-two` (the room stays in the flat whose
+  id comes first), `flat/unknown-type`, `flat/duplicate-id` (the first flat with the id is read),
+  `flat/duplicate-type` (about the plan, its `also` naming the type) and
+  `flat/zone-without-room`. A plan with no flats gets no new line. `resultVersion` stays 1.
+- `grid_areas`, only on a plan that lists flats: `data.flats`, each flat's `id`, `name`, `type`,
+  `typeName`, `mirrored`, `floors`, `net`, `byFloor`, `rooms` (counted), `notCounted` (`id`,
+  `why`: `zone`, `outside` or `stair-below`), `leftOut` and `state`; and `data.notInFlats`, the
+  net area of the rooms in no flat. The text adds "Flats, as the plan lists them:" with a line
+  per flat and "In no flat", and the rule for a flat's area. The CSV adds a row per flat
+  (`counted` is `flat`) and one for the rooms in no flat, before the totals.
+- `grid_schedule` takes `of=flats`: `rows` (each flat numbered in id order, with `type`,
+  `typeName`, `mirrored`, `floors` by name, `rooms`, `bedrooms`, `area`, `state`), `mix` (each
+  type: `type`, `name`, `flats`, `mirrored`, `share`, `area`, `each`), `total`, `notInFlats` and
+  `rules`. With `of=rooms` on a plan that lists flats, each row has `flat` (the flat's id, or
+  null), the text says the flat, and the CSV gains a `flat` column after `state`.
+- The drawing (`grid_view`, `grid draw`, the sheet) draws each flat's outline, a chain line in
+  the paper's colour along the middle of the walls round its rooms (`data-part="flat"`). The IFC
+  writes an `IfcZone` per flat with an `IfcRelAssignsToGroup` of its spaces and a `Grid_Flat`
+  property set. `grid sheet --layout check` ends with a flat schedule page on such a plan.
 
 ### 2026-11-22: a plan from a phone room scan (HND-12)
 

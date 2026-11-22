@@ -35,6 +35,8 @@ import { planEnvelope } from '../envelope'
 import { planFacade } from '../facade'
 import { expandPatterns } from '../patterns'
 import { pickInModel } from '../pick'
+import { planForFloor } from '../floors'
+import { wallRise } from '../through'
 import type { CameraRecord, Point3 } from '../camera'
 
 type Tuple = [number, number]
@@ -617,5 +619,57 @@ describe('a curved wall inside a floor outline (BRF-4 with CNT-18)', () => {
     const joined = planEnvelope(small).slabArea!
     expect(joined).toBeGreaterThan(disc)
     expect(joined).toBeLessThan(disc + 16)
+  })
+})
+
+describe('a curved wall in the parts merged from main (CNT-4, LVL-5)', () => {
+  it('grows a flat round a bay to the middle of the curved wall, as of the straight ones (CNT-4)', () => {
+    const plan: FloorPlan = { ...bayRoom(), flats: [{ id: 'f1', name: 'Flat 1', rooms: ['living'] }] } as FloorPlan
+    const [flat] = buildFloorPlan(plan).flats
+    // To the middle of every wall: 4 × 3 and the half disc of the bay's axis, radius 2.
+    const hand = 4 * 3 + (Math.PI * 2 * 2) / 2
+    const ring = flat!.rings[0]!
+    expect(Math.abs(Math.abs(area(ring)) - hand) / hand).toBeLessThan(0.002)
+  })
+
+  it('allows a thick round wall its thickness when the floor above stands a little off it (LVL-5)', () => {
+    // Two drums, 0.45 m thick, the first floor's 0.2 m north of the ground floor's: each reaches
+    // past the other by at most 0.2 m, within half the wall and `stackShift`. The circles start
+    // in the south, so their ends are nowhere near the stretch in the north.
+    const drum = (id: string, floor: string, dy: number): Wall => wall(id, [5, 2 + dy], [5, 2 + dy], { arc: { centre: [5, 5 + dy], sweep: 360 }, thickness: 0.45, floor })
+    const plan = parseFloorPlan({
+      version: '1',
+      floors: [{ id: 'ground', name: 'Ground', level: 0, height: 3 }, { id: 'first', name: 'First', level: 1, height: 3 }],
+      walls: [drum('g', 'ground', 0), drum('f', 'first', 0.2)],
+      rooms: [{ id: 'rg', name: 'Below', boundary: ['g'], floor: 'ground' }, { id: 'rf', name: 'Above', boundary: ['f'], floor: 'first' }],
+      openings: []
+    })
+    expect(validatePlan(plan).issues.filter((i) => i.code === 'floor/out-of-line')).toEqual([])
+  })
+})
+
+describe('a curved wall through floors (LVL-5 with CNT-18)', () => {
+  /** The bay rising through the first floor, 2.7 m above its level. */
+  function tower(): FloorPlan {
+    const plan = bayRoom()
+    return parseFloorPlan({
+      ...plan,
+      floors: [{ id: 'ground', name: 'Ground', level: 0, height: 3 }, { id: 'first', name: 'First', level: 1, height: 3 }],
+      walls: plan.walls.map((w) => (w.id === 'bay' ? { ...w, through: 'first' } : w))
+    })
+  }
+
+  it('raises its pieces once, its whole rise, and a click meets it high up', () => {
+    // Each floor's model is raised from its slice: the ground floor's holds the whole bay, the first's none of it.
+    const bays = buildScene(planForFloor(tower(), 'ground')).walls.filter((w) => w.id === 'bay')
+    expect(bays).toHaveLength(1)
+    expect(buildScene(planForFloor(tower(), 'first')).walls.some((w) => w.id === 'bay')).toBe(false)
+    const tops = bays[0]!.pieces!.map((p) => p.elevation.height)
+    // Its whole rise: the first floor's level over the ground floor's (its height and slab), and 2.7 m.
+    const rise = wallRise(tower(), tower().walls[2]!)
+    expect(rise).toBeGreaterThan(5.7)
+    expect(Math.max(...tops)).toBeCloseTo(rise, 6)
+    const top = wallPointAt(tower().walls[2]!, 1)
+    expect(pickInModel(tower(), looking([top.x + (top.x - 2) * 3, top.y + (top.y - 3) * 3, 5], [-(top.x - 2), -(top.y - 3), 0]), 0.5, 0.5)).toMatchObject({ id: 'bay', kind: 'wall' })
   })
 })

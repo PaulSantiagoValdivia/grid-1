@@ -10,7 +10,7 @@
  *
  * Pure but for `firmForCheck`, which reads the firm's file beside the plan through the project.
  */
-import { doorwayClearance, fixtureSpace, floorOf, itemName, turningSpace, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { doorwayClearance, fixtureSpace, itemName, turningSpace, type FloorPlan } from '@ongrid/floorplan/geometry'
 import type { FirmInput, FirmMeasured, FirmStandard } from '@ongrid/rules'
 import type { Project } from '../fs/projectFiles'
 import { planAreas } from '../quantities/areas'
@@ -85,11 +85,12 @@ export function firmMeasures(plan: FloorPlan, standards: readonly FirmStandard[]
             const opening = plan.openings.find((o) => o.id === facts.id)
             const wall = plan.walls.find((w) => w.id === facts.wall)
             if (!opening || !wall || wall.virtual === true) continue
-            const d = doorwayClearance(wall, opening, obstacles(floorOf(wall)))
+            // LVL-5: the floor the door stands on, as CNT-17 reads it; a wall through floors stands on more than its own.
+            const d = doorwayClearance(wall, opening, obstacles(facts.floor))
             const leaf = d.leaf > 0 ? ` less ${m(d.leaf)} for the open leaf and its stop` : ''
             const names = items.filter((item) => d.narrowedBy.includes(item.id)).map(itemName)
             const narrowed = names.length === 0 ? '' : `, ${names.join(', ')} ${names.length === 1 ? 'stands' : 'stand'} in front of ${m(d.covered)} of it`
-            out.push({ standard: i, thing: { kind: 'opening', id: opening.id }, floor: floorOf(wall), measured: d.clear, precision: 0, said: `its ${m(d.hole)} hole${leaf}${narrowed}`, also: [...d.narrowedBy] })
+            out.push({ standard: i, thing: { kind: 'opening', id: opening.id }, floor: facts.floor, measured: d.clear, precision: 0, said: `its ${m(d.hole)} hole${leaf}${narrowed}`, also: [...d.narrowedBy] })
           }
         }
         return

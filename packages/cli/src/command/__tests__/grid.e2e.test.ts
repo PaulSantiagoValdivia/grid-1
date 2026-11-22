@@ -542,9 +542,10 @@ describe('the built file', () => {
     // itself is a chunk of its own); merged with COD-8 and HND-11, 559,890 bytes, under the same cap.
     // 650 kB since HND-12: its phone room scan (the reader, the face pairing and the evidence
     // beside the plan, about 34,000 bytes), merged with WRT-7, CNT-10 and VEW-9 from main, makes it
-    // 607,030 bytes, again with no new dependency.
+    // 607,030 bytes, again with no new dependency. BRF-6's first layout from the brief adds about
+    // 11,800 more, also with no new dependency.
     // CNT-18 merged with WRT-7, CNT-10, VEW-9 and VEW-4 from main: 578,078 bytes; with BRF-4 and
-    // HND-12 too, 623,324 bytes, under the same cap.
+    // HND-12 too, 623,324 bytes; with CNT-4, LVL-5 and BRF-6 too, 643,587 bytes, under the same cap.
     expect(statSync(bundle).size).toBeLessThan(650_000)
   })
 })

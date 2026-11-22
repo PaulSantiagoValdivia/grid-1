@@ -126,6 +126,8 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
   write: [
     { label: 'the rooms text', args: (p) => ['write', p, '--plan', 'new.json'], given: asIs },
     { label: '--plan', args: (p) => ['write', ROOMS, '--plan', `${p}.json`], given: (p) => `${p}.json` },
+    // BRF-6: a first layout reads the brief beside the plan, and writes the plan.
+    { label: '--plan, with --layout', args: (p) => ['write', '--layout', 'tidy', '--plan', `${p}.json`], given: (p) => `${p}.json` },
     // HND-12: a phone room scan, read like a plan; its evidence file is the plan's name beside the plan.
     { label: '--scan', args: (p) => ['write', '--scan', p, '--plan', 'new.json'], given: asIs },
   ],
@@ -244,6 +246,8 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_write_brief: [{ arg: 'plan', call: tool('grid_write_brief', { plan: '@', brief: { rooms: [{ name: 'Lounge', area: 20, level: 'must', source: 'assumed' }] } }), given: asIs }],
   grid_write_rooms: [
     { arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` },
+    // BRF-6: a first layout reads the brief beside the plan, and writes the plan.
+    { arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, layout: 'tidy' } }), given: (p) => `${p}.json` },
     // HND-12: a phone room scan in place of rooms text.
     { arg: 'scan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: 'new.json', scan: p } }), given: asIs },
   ],

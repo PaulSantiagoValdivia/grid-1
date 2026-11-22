@@ -29,7 +29,7 @@
 
 import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
-import { floorOf, planFloors } from './floors'
+import { floorOf, planFloors, wallsOnFloor } from './floors'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, roomWallIds } from './plan'
 import { straightPieces } from './wall'
@@ -490,10 +490,10 @@ function compare(floor: string, walls: readonly Wall[], rooms: readonly DrawnRoo
 
 /** The walls of one floor that the spaces are worked out from, in plan order. */
 function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): Wall[] {
-  return plan.walls
+  // LVL-5: a wall through floors is one of each floor's it stands on.
+  return wallsOnFloor(plan, floor)
     .filter(
       (wall) =>
-        floorOf(wall) === floor &&
         !broken.has(wall.id) &&
         (wall.arc !== undefined ? curveFault(wall) === null : wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
         (wall.virtual === true || wall.thickness > 0)

@@ -47,7 +47,7 @@ import {
   type Thing,
 } from '../quantities/measure'
 import { WALKED_RULE } from '../quantities/walked'
-import { factsText, openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, shownNumber } from '../quantities/schedule'
+import { factsText, flatSchedule, flatScheduleCsv, openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, shownNumber } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
 import { SUN_RULE, sunAnswer } from '../quantities/sun'
@@ -258,13 +258,19 @@ const compareTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_areas
 
+/** CNT-4: an output schema with keys that only some plans' answers hold. */
+const withOptional = (schema: Record<string, unknown>, only: readonly string[]): Record<string, unknown> => ({
+  ...schema,
+  required: (schema['required'] as string[]).filter((key) => !only.includes(key)),
+})
+
 const areasTool: GridTool = {
   name: 'grid_areas',
   title: 'Floor areas',
   hint: 'read',
   description:
     'Use this when the person asks how big the plan or a room is, for the total floor area, a gross internal or gross external area, square feet, circulation or net to gross, or an area table for a spreadsheet. '
-    + 'It lists every room with its inside size and net area, the totals by floor and by use, and the gross areas, each with a sentence saying what it measures, what it does not take off and what the plan cannot say. '
+    + 'It lists every room with its inside size and net area, the totals by floor and by use, the area of each flat the plan lists (and of the rooms in no flat), and the gross areas, each with a sentence saying what it measures, what it does not take off and what the plan cannot say. '
     + 'Pass country for the gross measure the reader there usually means (the inside face of the outer walls in the UK and most of Europe, the outside face for US homes), or gross to ask for one or both. '
     + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart; a room Grid could not draw is named and left out of every figure. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
@@ -284,7 +290,7 @@ const areasTool: GridTool = {
     decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
   },
-  outputSchema: objectSchema({
+  outputSchema: withOptional(objectSchema({
     floors: listSchema(objectSchema({ floor: STRING, net: NUMBER, grossInternal: NULLABLE_NUMBER, grossExternal: NULLABLE_NUMBER, circulation: NUMBER, rooms: { type: 'array' }, leftOut: { type: 'array' }, byUse: { type: 'object' } }, ['floor', 'net', 'rooms', 'leftOut'])),
     net: NUMBER,
     grossInternal: NULLABLE_NUMBER,
@@ -305,7 +311,10 @@ const areasTool: GridTool = {
     sureness: { type: ['object', 'null'], properties: { source: STRING, plusMinus: NULLABLE_NUMBER, percent: NULLABLE_NUMBER } },
     // BRF-4: the storeys at or above the ground floor and below it.
     storeys: objectSchema({ above: NUMBER, below: NUMBER, storeys: { type: 'array' }, empty: { type: 'array' } }, ['above', 'below']),
-  }),
+    // CNT-4, only on a plan that lists flats: each flat's net area from the list, and the rooms in no flat.
+    flats: listSchema(objectSchema({ id: STRING, name: STRING, type: { type: ['string', 'null'] }, net: NUMBER, floors: listSchema(STRING), rooms: listSchema(STRING) }, ['id', 'name', 'net'])),
+    notInFlats: NULLABLE_NUMBER,
+  }), ['flats', 'notInFlats']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const outside = (args['outside_rooms'] as string[] | undefined) ?? []
@@ -341,9 +350,14 @@ const areasTool: GridTool = {
       // BRF-4 (lab FD-1): the storeys, counted by level from the floors that hold an outline or
       // walls that close one: massing counts before any wall.
       storeys: { above: storeys.above, below: storeys.below, storeys: storeys.storeys, empty: storeys.empty },
+      // CNT-4: only on a plan that lists flats, so every other answer is as it was.
+      ...(areas.notInFlats === null ? {} : { flats: areas.flats, notInFlats: areas.notInFlats }),
     }
     if (args['format'] === 'csv') {
       const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.zoneOf !== undefined ? 'zone' : r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
+      // CNT-4: each flat, then the rooms in no flat, after the rooms and before the totals.
+      for (const flat of areas.flats) rows.push([flat.floors.join(' '), flat.id, flat.name, flat.typeName ?? flat.type ?? '', null, null, flat.net, sqFt(flat.net), 'flat', flat.state.state])
+      if (areas.notInFlats !== null) rows.push(['all', '', 'In no flat', '', null, null, areas.notInFlats, sqFt(areas.notInFlats), 'not in a flat', areas.states.net.state])
       rows.push(['all', '', 'Net total', '', null, null, areas.net, sqFt(areas.net), '', areas.states.net.state])
       if (areas.grossInternal !== null) rows.push(['all', '', 'Gross internal', '', null, null, areas.grossInternal, sqFt(areas.grossInternal), '', areas.states.grossInternal.state])
       if (areas.grossExternal !== null) rows.push(['all', '', 'Gross external', '', null, null, areas.grossExternal, sqFt(areas.grossExternal), '', areas.states.grossExternal.state])
@@ -372,6 +386,17 @@ const areasTool: GridTool = {
         const gross = areas.reader.gross.map((m) => `${m === 'grossInternal' ? 'gross internal' : 'gross external'} ${f[m] === null ? 'not known' : areaText(f[m]!, units)}`)
         lines.push(`Floor ${q(f.floor)}: net ${areaText(f.net, units)}${surenessText(f.sureness, units)}, ${gross.join(', ')}.`)
       }
+    }
+    // CNT-4: each flat the plan lists, from the list and never from the rooms' names (lab EL-1).
+    if (areas.notInFlats !== null) {
+      lines.push('Flats, as the plan lists them:')
+      for (const flat of areas.flats) {
+        const type = flat.type === null ? '' : `${flat.typeName ?? flat.type}${flat.mirrored ? ', mirrored' : ''}; `
+        const floors = flat.floors.length > 1 ? `, on ${flat.floors.length} floors (${flat.floors.map((id) => `${q(id)} ${areaText(flat.byFloor[id] ?? 0, units)}`).join(', ')})` : ''
+        const doubt = flat.state.state === 'proven' ? '' : `, ${flat.state.state === 'not-proven' ? 'not proven' : 'not measured'}`
+        lines.push(`  ${q(flat.name)} (${type}${flat.rooms.length} room${flat.rooms.length === 1 ? '' : 's'}): ${areaText(flat.net, units)}${floors}${doubt}`)
+      }
+      lines.push(`  In no flat: ${areaText(areas.notInFlats, units)}.`)
     }
     const uses = Object.entries(areas.byUse)
     if (uses.length > 1) lines.push(`Net by use: ${uses.map(([use, area]) => `${use} ${areaText(area, units)}`).join(', ')}.`)
@@ -641,16 +666,36 @@ const takeoffTool: GridTool = {
 // grid_schedule
 
 /** ARE-12: the room schedule or the opening schedule, from one set of rows, as text or CSV. */
-function listSchedule(survey: Survey, of: 'rooms' | 'openings', floor: string | undefined, units: Display, asCsv: boolean): Answer {
+function listSchedule(survey: Survey, of: 'rooms' | 'openings' | 'flats', floor: string | undefined, units: Display, asCsv: boolean): Answer {
   const floors = floor === undefined ? undefined : [floor]
   const several = survey.facts.floors.length > 1
+  if (of === 'flats') {
+    // CNT-4: the plan's flats list, each flat once, then the mix by type (lab EL-1, AR-7).
+    const s = flatSchedule(survey, floors === undefined ? {} : { floors })
+    const data = { rows: s.rows, mix: s.mix, total: s.total, notInFlats: s.notInFlats, rules: s.rules }
+    if (asCsv) return { text: flatScheduleCsv(s), data }
+    if ((survey.plan.flats ?? []).length === 0) {
+      return { text: ['The plan lists no flats, so there is no flat schedule or mix. List them in the plan\'s "flats", each with its rooms by id, or place a flat type in rooms text (unit <name> flat "<type name>").', ...s.rules].join('\n'), data }
+    }
+    const count = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`
+    const lines = s.rows.map((r) => `${r.number}. ${q(r.name)}${r.typeName === null ? '' : ` (${r.typeName}${r.mirrored ? ', mirrored' : ''})`}, ${r.floors.map(q).join(' and ') || 'no floor given'}: ${count(r.rooms, 'room')}, ${count(r.bedrooms, 'bedroom')}, ${areaText(r.area, units)}${r.state === 'proven' ? '' : ', not proven'}`)
+    if (s.rows.length === 0) lines.push('No flat has a room on the floors given.')
+    lines.push(`All flats: ${count(s.total.flats, 'flat')}, ${areaText(s.total.area, units)}${stateText(s.total.state, several)}. In no flat: ${areaText(s.notInFlats, units)}.`)
+    lines.push('Mix by type:')
+    for (const m of s.mix) lines.push(`  ${q(m.name)}: ${count(m.flats, 'flat')}${m.mirrored === 0 ? '' : ` (${m.mirrored} mirrored)`}, ${percent(m.share)} of the flats, ${areaText(m.area, units)}${m.each === null ? '' : `, ${areaText(m.each, units)} each on average`}`)
+    lines.push(...s.rules)
+    return { text: lines.join('\n'), data }
+  }
   if (of === 'rooms') {
     const s = roomSchedule(survey, floors === undefined ? {} : { floors })
     const data = { rows: s.rows, floors: s.floors, total: s.total, rules: s.rules }
     if (asCsv) return { text: roomScheduleCsv(s), data }
     // CNT-9: a stated room number wins over Grid's, and the room's own facts follow its figures.
     const own = (properties: Readonly<Record<string, string | number | boolean>>): string => (Object.keys(properties).length === 0 ? '' : `; ${factsText(properties)}`)
-    const lines = s.rows.map((r) => `${r.roomNumber === null ? r.number : q(shownNumber(r))}. ${q(r.name)}${r.use ? ` (${r.use})` : ''}, ${q(r.floorName)}: ${r.area === null ? 'not measured: it could not be drawn' : areaText(r.area, units)}, ${r.height === null ? 'height not known' : `${lengthText(r.height, units)} high`}${r.state === 'not-proven' ? ', not proven' : ''}${own(r.properties)}`)
+    // CNT-4: on a plan that lists flats, the flat each room is in.
+    const flatNames = new Map((survey.plan.flats ?? []).map((f) => [f.id, f.name ?? f.id] as const))
+    const inFlat = (flat: string | null | undefined): string => (flat === undefined ? '' : flat === null ? ', in no flat' : `, flat ${q(flatNames.get(flat) ?? flat)}`)
+    const lines = s.rows.map((r) => `${r.roomNumber === null ? r.number : q(shownNumber(r))}. ${q(r.name)}${r.use ? ` (${r.use})` : ''}, ${q(r.floorName)}: ${r.area === null ? 'not measured: it could not be drawn' : areaText(r.area, units)}, ${r.height === null ? 'height not known' : `${lengthText(r.height, units)} high`}${r.state === 'not-proven' ? ', not proven' : ''}${inFlat(r.flat)}${own(r.properties)}`)
     for (const t of s.floors) lines.push(`${q(t.floorName!)}: ${t.rooms} rooms, ${areaText(t.area, units)}${stateText(t.state, several)}.`)
     lines.push(`All floors: ${s.total.rooms} rooms, ${areaText(s.total.area, units)}${stateText(s.total.state, several)}.`, ...s.rules)
     return { text: lines.join('\n'), data }
@@ -669,14 +714,14 @@ const scheduleTool: GridTool = {
   title: 'Door and window schedule',
   hint: 'read',
   description:
-    'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, or how many toilets, basins, showers, baths or kitchen runs there are and where. '
+    'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, how many toilets, basins, showers, baths or kitchen runs there are and where, or for the flats, the area of each flat or the unit mix. '
     + 'It groups every door, window and doorless opening by type and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame or leaf, so a clear width is not known. '
-    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height and floor, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size and the rooms on its two sides. Both as text or CSV. '
+    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height, floor and, on a plan that lists flats, its flat, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size and the rooms on its two sides; with of=flats, every flat the plan lists with its type, rooms, bedrooms and net area, and the mix by type (how many of each, how many mirrored). All as text or CSV. '
     + 'Do not use for wall or plaster quantities (grid_takeoff). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
-    of: { type: 'string', enum: ['rooms', 'openings'], description: 'rooms for the room schedule, openings for one row per door, window and opening. Grouped by type and size when left out.', examples: ['rooms', 'openings'] },
+    of: { type: 'string', enum: ['rooms', 'openings', 'flats'], description: 'rooms for the room schedule, openings for one row per door, window and opening, flats for the flats and the mix by type. Grouped by type and size when left out.', examples: ['rooms', 'openings', 'flats'] },
     types: { type: 'array', description: 'Only these kinds: door, window, opening, or fixture for the toilets, basins, showers, baths and kitchen runs. All of them when left out.', examples: [['door'], ['door', 'opening'], ['fixture']], items: { enum: ['door', 'window', 'opening', 'fixture'] }, minItems: 1, maxItems: 4 },
     narrower_than: { type: 'number', length: true, description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
     units: UNITS_ARG,
@@ -693,11 +738,14 @@ const scheduleTool: GridTool = {
     floors: { type: 'array' },
     total: { type: 'object' },
     rules: listSchema(STRING),
+    // CNT-4, with of=flats: the mix by type, and the net area of the rooms in no flat.
+    mix: listSchema(objectSchema({ type: { type: ['string', 'null'] }, name: STRING, flats: NUMBER, mirrored: NUMBER, share: NUMBER, area: NUMBER, each: NULLABLE_NUMBER })),
+    notInFlats: NUMBER,
   }, ['rows']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const units = displayFor(args['units'], args['decimal'], survey.plan)
-    const of = args['of'] as 'rooms' | 'openings' | undefined
+    const of = args['of'] as 'rooms' | 'openings' | 'flats' | undefined
     if (of !== undefined) {
       const stray = ['types', 'narrower_than'].filter((name) => args[name] !== undefined)
       if (stray.length > 0) throw new ToolRefusal(`of=${of} takes no ${stray.join(' or ')}.`)

@@ -17,7 +17,9 @@ import {
   validatePlan,
   wallCurve,
   wallLength,
+  wallRise,
   wallSegments,
+  wallStandsOn,
   type FloorPlan,
   type Opening,
   type Wall,
@@ -60,9 +62,9 @@ const metres = (value: number): string => value.toFixed(2)
 const KIND_ORDER = { exterior: 0, interior: 1, partition: 2 } as const
 const TYPE_WORDS = { door: 'Door', window: 'Window', opening: 'Doorless opening' } as const
 
-/** How much of an opening's hole lies in its wall: its width by its height up to the wall's top. */
-function hole(opening: Opening, wall: Wall): number {
-  const height = Math.max(0, Math.min(opening.sill + opening.height, wall.height) - opening.sill)
+/** How much of an opening's hole lies in its wall: its width by its height up to the wall's top, `top` above its floor. */
+function hole(opening: Opening, top: number): number {
+  const height = Math.max(0, Math.min(opening.sill + opening.height, top) - opening.sill)
   return opening.width * height
 }
 
@@ -95,11 +97,14 @@ export function planChange(plan: FloorPlan, options: { floors?: readonly string[
   if (!planHasPhases(plan)) {
     return { lines: [], notes: ['The plan states no phase, so it holds no work to cost: give its walls, openings and rooms a phase (existing, demolished or new).'] }
   }
-  const onFloor = (floor: string | undefined): boolean => options.floors === undefined || options.floors.includes(floor ?? 'ground')
+  // LVL-5: a wall through floors stands on each floor it rises through, and is taken off once,
+  // whole, its height its whole rise above its own floor.
+  const onFloor = (wall: Wall): boolean => options.floors === undefined || options.floors.some((floor) => wallStandsOn(plan, wall, floor))
+  const rise = (wall: Wall): number => wallRise(plan, wall)
   const phases = partPhases(plan)
   const phase = (id: string): Phase | undefined => phases.get(id)
   const broken = validatePlan(plan).broken
-  const walls = plan.walls.filter((w) => !broken.has(w.id) && onFloor(w.floor))
+  const walls = plan.walls.filter((w) => !broken.has(w.id) && onFloor(w))
   const byId = new Map(walls.map((w) => [w.id, w] as const))
   const openings = plan.openings.filter((o) => !broken.has(o.id) && byId.has(o.wall))
   const inWall = (wall: Wall): Opening[] => openings.filter((o) => o.wall === wall.id)
@@ -124,18 +129,18 @@ export function planChange(plan: FloorPlan, options: { floors?: readonly string[
     // CNT-18: a curved wall's length is along its curve.
     const length = wallLength(wall)
     if (length < tolerance('noLength')) continue
-    const holes = inWall(wall).reduce((sum, o) => sum + hole(o, wall), 0)
+    const holes = inWall(wall).reduce((sum, o) => sum + hole(o, rise(wall)), 0)
     const p = phase(wall.id)
     if (p === 'demolished') {
-      wallLine('demolish', 'demolish:wall', wall, CHANGE_RULES.demolishWall, 'Walls to be demolished', Math.max(0, length * wall.height - holes))
+      wallLine('demolish', 'demolish:wall', wall, CHANGE_RULES.demolishWall, 'Walls to be demolished', Math.max(0, length * rise(wall) - holes))
       add({ key: 'make_good:floor', what: 'Floor made good where walls are demolished', unit: 'm2', rule: CHANGE_RULES.floor, list: 'make good', order: [0] }, length * wall.thickness)
       // A whole circle (CNT-18) has no ends.
       for (const end of wallCurve(wall)?.closed === true ? [] : [wall.start, wall.end]) {
         const stays = walls.find((other) => other.id !== wall.id && other.virtual !== true && phase(other.id) === 'existing' && endsOn(end, other))
-        if (stays !== undefined) add({ key: 'make_good:wall_end', what: 'Wall faces made good where a demolished wall met them', unit: 'm', rule: CHANGE_RULES.wallEnd, list: 'make good', order: [1] }, stays.height)
+        if (stays !== undefined) add({ key: 'make_good:wall_end', what: 'Wall faces made good where a demolished wall met them', unit: 'm', rule: CHANGE_RULES.wallEnd, list: 'make good', order: [1] }, rise(stays))
       }
     } else if (p === 'new') {
-      wallLine('new', 'new:wall', wall, CHANGE_RULES.newWall, 'New walls', Math.max(0, length * wall.height - holes))
+      wallLine('new', 'new:wall', wall, CHANGE_RULES.newWall, 'New walls', Math.max(0, length * rise(wall) - holes))
     }
   }
 
@@ -146,13 +151,13 @@ export function planChange(plan: FloorPlan, options: { floors?: readonly string[
       openingLine('demolish', 'demolish', opening, CHANGE_RULES.demolishOpening, 'To be demolished:')
       if (phase(wall.id) === 'existing' && wall.virtual !== true) {
         const taken = inWall(wall).filter((o) => phase(o.id) === 'new').reduce((sum, o) => sum + overlap(opening, o), 0)
-        const infill = Math.max(0, hole(opening, wall) - taken)
+        const infill = Math.max(0, hole(opening, rise(wall)) - taken)
         if (infill > tolerance('areaEqual')) wallLine('make good', 'make_good:infill', wall, CHANGE_RULES.infill, 'Openings filled in', infill)
       }
     } else if (p === 'new') {
       openingLine('new', 'new', opening, CHANGE_RULES.newOpening, 'New')
       if (phase(wall.id) === 'existing' && wall.virtual !== true && opening.type !== 'opening') {
-        const height = Math.max(0, Math.min(opening.sill + opening.height, wall.height) - opening.sill)
+        const height = Math.max(0, Math.min(opening.sill + opening.height, rise(wall)) - opening.sill)
         const reveals = (2 * height + opening.width * (opening.sill > tolerance('noLength') ? 2 : 1)) * wall.thickness
         add({ key: 'make_good:reveals', what: 'Reveals of new openings cut in walls that stay', unit: 'm2', rule: CHANGE_RULES.reveals, list: 'make good', order: [3] }, reveals)
       }

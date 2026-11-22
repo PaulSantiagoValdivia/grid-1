@@ -12,6 +12,7 @@ import {
   dot,
   floorJoins,
   floorOf,
+  hasWallsThrough,
   indexPlan,
   phaseCounts,
   planFloors,
@@ -194,6 +195,8 @@ export interface PlanFacts {
   readonly connections: Connections
   /** Whether the plan states its north (CNT-3). The descriptions' sides stay the drawing's either way. */
   readonly northStated: boolean
+  /** CNT-4: whether the plan lists its flats, so which rooms make each is something it says. */
+  readonly flatsListed: boolean
   /**
    * CNT-10: what the plan's work holds, for a plan with phases: how many walls, openings and rooms
    * are in each phase, and the base it is fitted out in. Every other fact is of the building after
@@ -549,10 +552,25 @@ function heightsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Heights {
   const wall = usual(solid.map((w) => w.height))
   const statedOn = new Set(solid.map((w) => floorOf(w)))
   const floorOfWall = new Map(plan.walls.map((w) => [w.id, floorOf(w)]))
-  const onOwn = (o: Opening): boolean => own.has(floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID)
-  const windows = plan.openings.filter((o) => o.type === 'window')
+  // LVL-5: an opening in a wall through floors stands on the floor its foot is on, its sill above
+  // that floor's level: each opening as the lowest floor's slice that holds part of it has it.
+  const placed = new Map<Opening, string>()
+  if (hasWallsThrough(plan)) {
+    const seen = new Set<string>()
+    for (const floor of planFloors(plan)) {
+      for (const o of planForFloor(plan, floor.id).openings) {
+        if (seen.has(o.id)) continue
+        seen.add(o.id)
+        placed.set(o, floor.id)
+      }
+    }
+  }
+  const openingList = hasWallsThrough(plan) ? [...placed.keys()] : plan.openings
+  const floorOfOpening = (o: Opening): string => placed.get(o) ?? floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID
+  const onOwn = (o: Opening): boolean => own.has(floorOfOpening(o))
+  const windows = openingList.filter((o) => o.type === 'window')
   const windowSill = usual(windows.map((o) => o.sill))
-  const at = (o: Opening): HeightException => ({ id: o.id, floor: floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID, value: o.sill })
+  const at = (o: Opening): HeightException => ({ id: o.id, floor: floorOfOpening(o), value: o.sill })
   return {
     wall,
     notStated: { count: all.length - solid.length, drawn: WALL_DEFAULTS.solid.height },
@@ -563,7 +581,7 @@ function heightsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Heights {
       .map((w) => ({ id: w.id, floor: floorOf(w), value: w.height })),
     windowSill,
     windowSills: windows.filter((o) => o.sill !== windowSill && onOwn(o)).map(at),
-    doorSills: plan.openings.filter((o) => o.type !== 'window' && o.sill > 0 && onOwn(o)).map(at),
+    doorSills: openingList.filter((o) => o.type !== 'window' && o.sill > 0 && onOwn(o)).map(at),
   }
 }
 
@@ -601,6 +619,7 @@ export function planFacts(stated: FloorPlan): PlanFacts {
     },
     connections: connectionsOf(plan, floors),
     northStated: typeof plan.north === 'number',
+    flatsListed: (plan.flats ?? []).length > 0,
     work,
   }
 }

@@ -32,6 +32,7 @@
 
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
 import { planFloors, planForFloor } from '../floors'
+import { sharedPart, wholeWall } from '../through'
 import { inIdOrder } from '../order'
 import { indexPlan, openingsOf } from '../plan'
 import {
@@ -49,6 +50,7 @@ import { multiArea, piecesAsRings, ringOf } from '../polygons'
 import { tolerance } from '../tolerances'
 import { tryRoomShape } from '../room'
 import { roomZones } from '../zones'
+import { planFlats } from '../flats'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
 import { brokenOnFloor, validatePlan } from '../validate'
@@ -64,7 +66,7 @@ import type { Phase } from '../../types/floorplan'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { roomFloorArea } from '../room'
-import { MEASURES } from '../areas'
+import { FLAT_AREA_RULE, MEASURES, planAreaFigures } from '../areas'
 import { roomNumbers, shownRoomNumber, type RoomNumber } from '../roomNumbers'
 import { nearOrigin } from './origin'
 import { area } from '../vec2'
@@ -589,6 +591,10 @@ function deriveLevels(models: readonly FloorModel[]): Map<string, StoreyLevel> {
     models.map(({ floor, walls, index }) => {
       let tallest = 0
       for (const wall of walls) {
+        // LVL-5: a wall through floors counts toward the floor it rises through, with its own
+        // height (`floorElevations` stacks it so); its stretches below run through the slabs.
+        const part = sharedPart(wall)
+        if (part !== null && !part.top) continue
         // LVL-6: a wall the floor's roof cuts is as tall as the roof leaves it.
         if (Number.isFinite(wall.height)) tallest = Math.max(tallest, wallPeak(index.plan, wall))
       }
@@ -1979,7 +1985,12 @@ function writeStoreyContents(building: Context, storey: Storey): void {
   // CNT-10: each state's corners are joined among its own walls, so a demolished wall never bends a new one.
   const joints = phasedJoints(storey.model.walls, c.phaseOf)
 
-  for (const wall of storey.model.walls) {
+  for (const part of storey.model.walls) {
+    // LVL-5 (C19): a wall through floors is one wall element, on its own floor's storey, from its
+    // foot to its top, with its openings as stated: the window through two storeys is one window.
+    const whole = wholeWall(part, openingsOf(index, part.id).filter((o) => !broken.has(o.id)))
+    if (whole === null) continue
+    const wall = whole.wall
     let element: WallElement
     try {
       element = writeWall(c, storey, wall, joints.get(wall.id))
@@ -1990,7 +2001,7 @@ function writeStoreyContents(building: Context, storey: Storey): void {
     contained.push(element.id)
 
     const written: Opening[] = []
-    for (const opening of openingsOf(index, wall.id)) {
+    for (const opening of whole.openings) {
       if (broken.has(opening.id)) continue
       try {
         const filler = writeOpening(c, element, opening)
@@ -2086,6 +2097,44 @@ function factValue(value: Facts[string]): string {
   if (typeof value === 'boolean') return `IFCBOOLEAN(${en(value ? 'T' : 'F')})`
   if (typeof value === 'number') return Number.isSafeInteger(value) ? `IFCINTEGER(${int(value)})` : `IFCREAL(${real(value)})`
   return `IFCLABEL(${str(factText(value))})`
+}
+
+/**
+ * CNT-4: each flat of the plan's flats list as an IfcZone, grouping the spaces of its rooms
+ * through one IfcRelAssignsToGroup, on every floor it is on (a duplex's spaces are on two storeys).
+ * Name is the flat's name and ObjectType its type's; `Grid_Flat`, Grid's own set, holds its id,
+ * its type, whether it is its type's mirror image and its net area with the rule it follows
+ * (ARE-9's net, counted as the areas count it). A flat none of whose rooms has a space is not
+ * written. Written after the storeys, so a plan with no flats writes the same file as before.
+ */
+function writeZones(building: Context, plan: FloorPlan, storeys: readonly Storey[]): void {
+  if ((plan.flats ?? []).length === 0) return
+  const figures = planAreaFigures(plan)
+  const byFloor = new Map(storeys.map((storey) => [storey.model.floor.id, storey] as const))
+  const rule = MEASURES.net
+  const resolvedFlats = new Map(planFlats(plan).map((f) => [f.id, f] as const))
+  for (const flat of figures.flats) {
+    const resolved = resolvedFlats.get(flat.id)
+    const spaces = (resolved?.rooms ?? []).flatMap(({ id, floor }) => {
+      const space = byFloor.get(floor)?.spaces.get(id)
+      return space === undefined ? [] : [space]
+    })
+    if (spaces.length === 0) continue
+    const c = building
+    // IfcZone (GlobalId, OwnerHistory, Name, Description, ObjectType).
+    const zone = c.w.add('IFCZONE', str(c.guid('zone', flat.id)), ref(c.owner), str(flat.name), NULL, flat.type === null ? NULL : str(flat.typeName ?? flat.type))
+    // IfcRelAssignsToGroup (GlobalId, OwnerHistory, Name, Description, RelatedObjects, RelatedObjectsType, RelatingGroup).
+    c.w.add('IFCRELASSIGNSTOGROUP', str(c.guid('zone-group', flat.id)), ref(c.owner), NULL, NULL, refs(spaces), NULL, ref(zone))
+    propertySet(c, `grid-flat:${flat.id}`, 'Grid_Flat', [
+      property(c, 'Id', identifier(flat.id)),
+      ...(flat.type === null ? [] : [property(c, 'Type', identifier(flat.type))]),
+      ...(flat.typeName === null ? [] : [property(c, 'TypeName', label(flat.typeName))]),
+      property(c, 'Mirrored', booleanValue(flat.mirrored)),
+      property(c, 'Area', `IFCAREAMEASURE(${real(flat.net)})`),
+      property(c, 'AreaMeasure', label(rule.name)),
+      property(c, 'AreaRule', textValue(FLAT_AREA_RULE))
+    ], zone)
+  }
 }
 
 /**
@@ -2325,6 +2374,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeSlabs(c, plan, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
+  writeZones(c, plan, storeys)
   writeFacts(c)
   writePhases(c)
   writeLeftOut(c, building, options.leftOut ?? [])

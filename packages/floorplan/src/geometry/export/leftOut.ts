@@ -14,8 +14,11 @@
  */
 import type { EntityKind } from '../validate'
 
-/** The kinds of part an export can leave out: everything but the plan itself. */
-export type LeftOutKind = Exclude<EntityKind, 'plan'>
+/**
+ * The kinds of part an export can leave out: everything but the plan itself, and a flat (CNT-4),
+ * whose lines leave out nothing but the ids they name.
+ */
+export type LeftOutKind = Exclude<EntityKind, 'plan' | 'flat'>
 
 /** In the order a note lists them. */
 export const LEFT_OUT_KINDS: readonly LeftOutKind[] = ['wall', 'room', 'opening', 'item', 'stair', 'floor', 'pattern']

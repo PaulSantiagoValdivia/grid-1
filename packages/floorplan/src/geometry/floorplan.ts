@@ -39,6 +39,7 @@ import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomS
 import { planMarks } from './marks'
 import { planSite, siteExtent, type PlanSite } from './plot'
 import { siteFloors } from './site'
+import { flatOutlines, type PlanFlatOutline } from './flats'
 import type { MarkedPart, Phase } from '../types/floorplan'
 import { partPhases, planHasPhases, planInState } from './phases'
 
@@ -233,6 +234,12 @@ export interface PlanDrawing {
   readonly stairs: readonly PlanStair[]
   /** SHT-11: the rooms used as a lift that could be drawn, each with its cross. Empty with none. */
   readonly lifts: readonly PlanLift[]
+  /**
+   * SHT-11 with CNT-4: each flat of the plan's flats list with a room on this floor that could be
+   * drawn, as its outline: its rooms grown to the middle of the walls round them, joined. Empty
+   * when the plan lists no flats.
+   */
+  readonly flats: readonly PlanFlatOutline[]
   /**
    * The rooms that could not be drawn, each as the box round the walls it lists that the plan
    * holds (MSG-8). A room none of whose walls can be found has no box and is not here.
@@ -492,13 +499,14 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
   // BRF-3: the site on the ground floor's plan, and on a plan that is no slice.
   const site = floor === null || siteFloors(wholePlan(plan).whole).includes(floor) ? planSite(plan) : null
   const siteBounds = site === null ? null : computeBounds(siteExtent(site))
+  const flats = flatOutlines(plan, index, broken)
   // BRF-4 (C17): the floor's stated outline, on its own plan; on a plan that is no slice, its one floor's.
   const floors = planFloors(plan)
   const drawnFloor = floor ?? (floors.length === 1 ? floors[0]!.id : null)
   const statedRing = drawnFloor === null ? null : statedOutline(plan, drawnFloor)
   const floorRing = statedRing === null ? null : statedRing[0]!.slice(0, -1).map(([x, y]) => ({ x, y }))
   if (floorRing !== null) extent.push(...floorRing)
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, sketch, notes, north, sketchBounds, site, siteBounds, ...(floorRing === null ? {} : { outline: floorRing }), bounds: computeBounds(extent), issues }
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds, ...(floorRing === null ? {} : { outline: floorRing }), bounds: computeBounds(extent), issues }
 }
 
 /**

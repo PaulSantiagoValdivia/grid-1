@@ -438,6 +438,33 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── A first layout from the brief (BRF-6) ─────────────────────────────────────────────────
+  layoutHall: {
+    kind: 'limit',
+    value: 1.1,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. How wide the hall a first layout adds is, when the ' +
+      'brief names no corridor.',
+    basis: own
+  },
+  layoutRooms: {
+    kind: 'limit',
+    value: 10,
+    unit: 'count',
+    decides:
+      'The most rooms a first layout places: every way of sharing them between its two rows is tried.',
+    basis: own
+  },
+  layoutRowOrders: {
+    kind: 'limit',
+    value: 6,
+    unit: 'count',
+    decides:
+      'The most rooms in a row of a first layout whose every order is tried; a longer row keeps the brief\'s order.',
+    basis: own
+  },
+
   // ── A survey drawn from its own numbers (HND-11) ──────────────────────────────────────────
   tapedAgree: {
     kind: 'tolerance',
@@ -691,6 +718,19 @@ export const TOLERANCES = {
       'when they share at least this of the smaller one, and the way-out check goes up and down ' +
       'it. Stair rooms on both floors that share less are named as out of line. The lab found ' +
       'every sound pair at or above this and every planted fault below it (AU3-1).',
+    basis: own
+  },
+  stackShift: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'How far a floor, a stair room or a lift shaft may stand off the one below it and still line ' +
+      'up with it (LVL-5, lab WR-9): a floor whose outline reaches past the floor below, or sits ' +
+      'back from it, by more than this and half the thickest wall that stretch runs along is said ' +
+      'not to line up (walls of different thickness on one axis have their faces apart by up to ' +
+      'that), and so is a stair room or a shaft moved by more than this from the one it lies ' +
+      'over, unless the plan marks it as meant.',
     basis: own
   },
   stairStepLength: {

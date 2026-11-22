@@ -223,8 +223,11 @@ function unsaid(facts: PlanFacts, names: PersonNames): { person: string[]; agent
       person.push(`how ${subject} (no stair joins ${one ? 'it' : 'them'}${stairs ? `; ${stairs} marked as a stair` : ''})`)
       agent.push(`how floors connect (no stair joins ${unjoined.join(' ')}${stairs ? `; ${stairs} with use stair` : ''})`)
     }
-    person.push('which rooms make up each flat or home')
-    agent.push('which rooms make each flat')
+    // CNT-4: a plan that lists its flats says which rooms make each.
+    if (!facts.flatsListed) {
+      person.push('which rooms make up each flat or home')
+      agent.push('which rooms make each flat')
+    }
   }
   return { person, agent }
 }

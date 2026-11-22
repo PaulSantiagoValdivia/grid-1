@@ -14,6 +14,7 @@ import { floorOf } from './floors'
 import { pointInPolygon } from './innerPoint'
 import { roomShapes } from './items'
 import { indexPlan, type FloorPlan } from './plan'
+import { wallRise } from './through'
 import { tolerance } from './tolerances'
 import { wallSegments } from './wall'
 import { curveFault } from './arc'
@@ -75,7 +76,9 @@ export function pickInModel(plan: FloorPlan, camera: CameraRecord, x: number, y:
   for (const wall of plan.walls) {
     const floor = floorOf(wall)
     const level = levels.get(floor)
-    if (wall.virtual === true || level === undefined || !shown.has(floor) || wall.thickness <= 0 || wall.height <= 0) continue
+    // LVL-5: a wall through floors stands in the model once, whole, from its own floor's level.
+    const height = wallRise(plan, wall)
+    if (wall.virtual === true || level === undefined || !shown.has(floor) || wall.thickness <= 0 || !(height > 0)) continue
     if (wall.arc === undefined && Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) < tolerance('noLength')) continue
     if (curveFault(wall) !== null) continue
     // CNT-18: a curved wall is met piece by piece, as the 3D view stands it: one box along each
@@ -89,7 +92,7 @@ export function pickInModel(plan: FloorPlan, camera: CameraRecord, x: number, y:
       const v0 = ox * piece.normal.x + oy * piece.normal.y
       const dv = direction[0] * piece.normal.x + direction[1] * piece.normal.y
       const span: [number, number] = [0, Infinity]
-      if (!slab(u0, du, 0, piece.length, span) || !slab(v0, dv, -wall.thickness / 2, wall.thickness / 2, span) || !slab(origin[2], direction[2], level.base, level.base + wall.height, span)) continue
+      if (!slab(u0, du, 0, piece.length, span) || !slab(v0, dv, -wall.thickness / 2, wall.thickness / 2, span) || !slab(origin[2], direction[2], level.base, level.base + height, span)) continue
       const s = span[0]
       // How far along the wall, along its curve on a curved one.
       const along = piece.from + ((u0 + du * s) * (piece.to - piece.from)) / piece.length

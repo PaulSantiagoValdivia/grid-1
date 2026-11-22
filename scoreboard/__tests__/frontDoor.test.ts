@@ -10,10 +10,14 @@ import { basePlans, damageSet, soundPlans } from '../src/damage'
 
 /**
  * A message with the plan's names, its figures and the kind of part taken out. MSG-5: a line for
- * several rooms is read back to its one room's words (`PLURALS`).
+ * several rooms is read back to its one room's words (`PLURALS`). LVL-5: so are the kinds of the
+ * openings a floor could not draw.
  */
 const wordingOf = (message: string): string =>
   PLURALS.reduce((text, [one, many]) => text.replace(many, one), message)
+    // LVL-5 (lab A-16): openings that could not be drawn are named by their kind, one slot of the
+    // one wording, as the names and figures are.
+    .replace(/\b(?:this|these) (?:doors?|windows?|doorless openings?)(?:(?:, | and | or )(?:doors|windows|doorless openings))* could not be drawn, so (?:it|they) and what rests on (?:it|them)/g, 'THESE could not be drawn, so THEY and what rests on THEM')
     .replace(/"(?:[^"\\]|\\.)*"(?:, "(?:[^"\\]|\\.)*")*/g, 'NAME')
     .replace(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/g, 'N')
     // MSG-6: a part whose id cannot be read is named by its place.

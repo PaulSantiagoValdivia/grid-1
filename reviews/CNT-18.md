@@ -365,6 +365,47 @@ room is measured as before.
   files passed, 5,700 tests passed and 4 skipped, exit 0. Main had moved on to ed8b9f75 (CNT-4)
   by then; that is not merged here.
 
+- After merging main at 8a0c839e (CNT-4 as C18, LVL-5 as C19, BRF-6): eleven conflicts, each
+  kept both sides.
+  - `CHANGELOG.md`: CNT-18's line, then BRF-6's and CNT-4's.
+  - `docs/result-contract.md`: CNT-18's entry on top, then BRF-6's, LVL-5's and CNT-4's.
+  - `grid.e2e.test.ts`: BRF-6's comment, then the line for the merged size, under the 650 kB cap.
+  - `quantities/change.ts`: the import takes CNT-18's curve helpers and LVL-5's `wallRise` and
+    `wallStandsOn`; `wallAxis` is no longer used there.
+  - `geometry/pick.ts`: chord by chord (CNT-18), up to the wall's whole rise (LVL-5).
+  - `geometry/scene3d.ts`: the revision and a curved wall's pieces are both of the whole wall
+    through floors, so a curved wall through floors stands its whole rise.
+  - `geometry/shell.ts` and `geometry/spaces.ts`: the walls on a floor are LVL-5's
+    `wallsOnFloor`, and a curved one is still checked by `curveFault` and taken piece by piece.
+  - `types/floorplan.ts`: the header is C18 (flats), C19 (walls through floors), then C21; the
+    wall's schema has `through` before `arc`.
+  - `reading.test.ts` and `result.test.ts`: `…, floor, through, arc, properties, phase, face`,
+    as the schema gives them.
+
+  Main's new code was made to take the curve:
+  - CNT-4's flat outline (`flats.ts`) grows to the middle of a curved wall along its straight
+    pieces; before, it stopped at the face along the curve (3.2% short on the bay).
+  - LVL-5's floors line-up allowance (`stacking.ts`) boxes a curved wall round its curve, not
+    between its ends, so a thick round wall is allowed its thickness. Before, two drums 0.2 m apart
+    gave `floor/out-of-line`.
+  - BRF-6's first layout writes rooms text, which has straight walls only.
+
+  Tests added in the floorplan file: a flat round the bay, two thick drums one over the other, and
+  the bay through two floors (raised once from the ground floor's slice to its whole rise, met by
+  a click high up). The two fixes' tests were checked to fail without them.
+
+  Results:
+  - `npm run build` clean; the bundle 643,587 bytes, under the 650,000 cap.
+  - `npm run typecheck` and `npm run lint` clean; `npm run scoreboard` "Same as the stored
+    figures."
+  - The affected suites, two workers: 341 of 342 files passed, 5,774 tests passed, 1 failed and 3
+    skipped. The failure was `scoreboard/__tests__/frontDoor.test.ts`: the line-up allowance's
+    first version asked a zero-length straight wall for its axis, which throws, and stopped the
+    drawing check on 79 damaged plans. A straight wall is now boxed by its ends. That file and
+    the curved-wall tests then passed (2 files, 56 tests), and build, typecheck, lint and the
+    scoreboard passed again ("Same as the stored figures"). The whole set was run again after
+    the merge of cc60df1c.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every

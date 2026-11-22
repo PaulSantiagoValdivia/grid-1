@@ -37,6 +37,7 @@ import type { StairLayout } from './stairs'
 import { planStairs } from './stairs'
 import { floorElevations } from './elevations'
 import { planFloors, wholePlan } from './floors'
+import { wholeWall } from './through'
 import { floorEnvelope, type FloorRoof } from './envelope'
 import { wallTopProfile, type RoofPlane, type WallTopPoint } from './roofs'
 import { piecesAsRings } from './polygons'
@@ -517,10 +518,14 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
       continue
     }
 
-    const usable = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
+    // LVL-5 (C19): a wall through floors is raised once, whole, from its own floor, with its
+    // openings as stated; on the floors above it is there already.
+    const whole = wholeWall(wall, openingsOf(index, wall.id).filter((o) => !broken.has(o.id)))
+    if (whole === null) continue
+    const usable = whole.openings
     const ends = joints.get(wall.id)
-    const top = wallTopProfile(plan, wall)
-    const elevation = wallElevation(wall, usable, ends, top)
+    const top = whole.wall === wall ? wallTopProfile(plan, wall) : null
+    const elevation = wallElevation(whole.wall, usable, ends, top)
     if (!elevation) continue
 
     walls.push({
@@ -528,8 +533,8 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
       elevation,
       basis: wallBasis(wall),
       exposure: wallExposure(index, wall.id),
-      revision: wallRevision(wall, usable, ends, top),
-      ...(wall.arc !== undefined && { pieces: curvedWallPieces(wall, usable, ends) })
+      revision: wallRevision(whole.wall, usable, ends, top),
+      ...(wall.arc !== undefined && { pieces: curvedWallPieces(whole.wall, usable, ends) })
     })
     if (elevation.height > height) height = elevation.height
   }

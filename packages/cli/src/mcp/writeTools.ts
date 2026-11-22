@@ -10,7 +10,7 @@
 import { baseRefusal, baseTouched, phasedPatch } from '../edit/phases'
 import { planInMetres } from '@ongrid/floorplan/types/units'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { keptDerived } from '@ongrid/floorplan/rooms'
+import { keptDerived, LAYOUT_SHAPES, type LayoutShape } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
@@ -31,6 +31,7 @@ import { surveyPlan, type Survey } from '../quantities/survey'
 import { openingBetween } from './readTools'
 import { briefAnswer } from '../brief/answer'
 import { BRIEF_OUTPUT } from './briefTool'
+import { writeLayout } from '../brief/layout'
 import { TAPED_OUTPUT, TAPED_ROWS_IN_AN_EDIT, tapedRows, tapedTable } from '../taped/table'
 import {
   asRefusal,
@@ -38,6 +39,7 @@ import {
   floorArg,
   listSchema,
   NULLABLE_STRING,
+  NUMBER,
   objectSchema,
   openingArg,
   PLAN_ARG,
@@ -430,6 +432,21 @@ const mirrorTool: GridTool = {
 /** The rooms text a tool call may pass, at most. */
 export const ROOMS_TEXT_MAX = 200_000
 
+/** BRF-6: a first layout's part of the answer, or null when rooms text was written. */
+const LAYOUT_OUTPUT = {
+  type: ['object', 'null'],
+  properties: {
+    shape: STRING,
+    rooms: STRING,
+    outline: listSchema(NUMBER),
+    added: NULLABLE_STRING,
+    notKept: listSchema(objectSchema({ room: STRING, name: STRING, text: STRING, by: NUMBER })),
+    notPlaced: listSchema(STRING),
+    touch: objectSchema({ wished: NUMBER, held: NUMBER }),
+  },
+  required: ['shape', 'rooms', 'outline', 'added', 'notKept', 'notPlaced', 'touch'],
+}
+
 const ROOMS_EXAMPLE = [
   'walls outside 0.3 inside 0.1 height 2.6',
   'room living "Living room" living 4.4 x 4.2',
@@ -439,6 +456,21 @@ const ROOMS_EXAMPLE = [
   'door front in hall north, centred, 0.9 wide, opens in, hinged east',
   'window w1 in living south, centred, 1.8 wide, sill 0.6, height 1.5',
 ].join('\n')
+
+/**
+ * BRF-6 and HND-12: grid_write_rooms writes from exactly one of rooms text, a first layout from
+ * the brief and a phone room scan. Refused, naming them, when none or more than one is given.
+ */
+function refuseWaysIn(args: Readonly<Record<string, unknown>>): void {
+  const given = (['rooms', 'layout', 'scan'] as const).filter((name) => args[name] !== undefined)
+  if (given.length === 0) throw new ToolRefusal('Pass rooms (the rooms text to write), layout (tidy or sizes, a first layout from the brief beside the plan) or scan (a phone room scan file in the project): one of the three.')
+  if (given.length === 3) throw new ToolRefusal('Pass one of rooms, layout and scan, not all three: each writes the plan in place of the others.')
+  if (given.length === 2) {
+    const [first, second] = given
+    const why = second === 'scan' ? (first === 'layout' ? 'layout writes a first layout from the brief, scan writes the plan from a phone room scan' : 'scan writes the plan from a phone room scan, in place of rooms text') : 'layout writes a first layout from the brief, in place of rooms text'
+    throw new ToolRefusal(`Pass ${first} or ${second}, not both: ${why}.`)
+  }
+}
 
 const writeRoomsTool: GridTool = {
   name: 'grid_write_rooms',
@@ -450,8 +482,10 @@ const writeRoomsTool: GridTool = {
     + 'To change a plan, read it back with grid_describe as=rooms, change that text and pass it here: rooms text read from an older plan, or written over a plan changed some other way, is refused with the difference, and nothing is written (replace=true writes over it). Overlapping rooms and gaps that are neither wall nor room are refused, naming both rooms. '
     + 'A size may say centre or outside (8 x 10 outside: to the outside faces); inside is the default. What rooms cannot say (a free-standing wall, a room with a hole) is written raw, as one line of Grid\'s own JSON: raw wall {...}. '
     + `${ROOM_NAMES_TRAVEL} `
+    + 'In place of rooms, layout=tidy writes a first layout from the brief (grid_write_brief) in a rectangle, naming each size not kept and by how much; layout=sizes keeps every size. '
     + 'A plain number is metres; a length may carry its unit in one word (360cm, 3600mm, 12ft, 12ft6in, 12\'6"). A display line (display ft-in, display mm, display m decimal comma) records how the person reads lengths: drawings, figures and sheets follow it, and the plan file stays in metres. '
     + 'From a phone room scan: pass scan, the scan file in the project (Apple\'s room model, as JSON), in place of rooms. Grid pairs each wall\'s two faces into one wall as thick as the gap between them, takes a wall seen from one side as an outside wall of its usual thickness, places the doors and windows on their walls, keeps the scan beside the plan as <plan>.scan.json keyed by its ids, and lists everything it assumed to confirm with the person. A re-scan keeps the plan\'s ids for the parts it finds again. '
+    + 'Pass one of rooms, layout and scan. '
     + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file.',
   args: {
     plan: { ...PLAN_ARG, description: 'The plan file to write, inside the project folder, ending in .json. The project\'s own plan.json when left out.' },
@@ -459,11 +493,13 @@ const writeRoomsTool: GridTool = {
       type: 'string',
       lines: true,
       maxLength: ROOMS_TEXT_MAX,
-      description: 'The rooms text, one statement a line; pass it or scan. A room: room <id> "<name>" <use or -> <width> x <depth> [inside|centre|outside] <at x,y | north|south|east|west of <room> [align ...] [until <room>]>. An opening: door|window|opening <id> between <room> and <room> | in <room> <side>, <m> from <side> | centred, <m> wide [, sill <m>, height <m>, opens into <room>|in|out, hinged <direction>]. The first line sets the walls: walls outside <t> inside <t> height <h>.',
+      description: 'The rooms text, one statement a line; pass it, layout or scan. A room: room <id> "<name>" <use or -> <width> x <depth> [inside|centre|outside] <at x,y | north|south|east|west of <room> [align ...] [until <room>]>. An opening: door|window|opening <id> between <room> and <room> | in <room> <side>, <m> from <side> | centred, <m> wide [, sill <m>, height <m>, opens into <room>|in|out, hinged <direction>]. The first line sets the walls: walls outside <t> inside <t> height <h>.',
       examples: [ROOMS_EXAMPLE],
     },
     scan: { type: 'string', maxLength: PATH_MAX, description: 'In place of rooms: a phone room scan, as a path inside the project folder (Apple\'s room model saved as JSON). The plan is written from it, and the scan kept beside the plan.', examples: ['scans/flat.json'] },
     replace: { type: 'boolean', description: 'true to write over a plan that was not written from this text or scan, or was changed since. Refused with the difference when left out.', examples: [true] },
+    // BRF-6: a first layout from the brief, in place of rooms text.
+    layout: { type: 'string', enum: [...LAYOUT_SHAPES], description: 'In place of rooms: a first layout from the brief beside the plan. tidy: a rectangle; sizes: every size kept.', examples: ['tidy'] },
   },
   outputSchema: objectSchema({
     written: STRING,
@@ -477,6 +513,8 @@ const writeRoomsTool: GridTool = {
     // BRF-1: the brief's lines, and the one reminder when a first plan has no brief beside it.
     brief: BRIEF_OUTPUT,
     reminder: NULLABLE_STRING,
+    // BRF-6: the first layout from the brief, or null.
+    layout: LAYOUT_OUTPUT,
     // HND-12: what a scan gave, or null for rooms text.
     scan: {
       type: ['object', 'null'],
@@ -496,7 +534,8 @@ const writeRoomsTool: GridTool = {
   }),
   run(args, context) {
     const project = projectOf(context)
-    if ((args['rooms'] === undefined) === (args['scan'] === undefined)) throw new ToolRefusal('Pass rooms (the rooms text) or scan (a room scan file in the project), one of the two.')
+    const shape = args['layout'] as LayoutShape | undefined
+    refuseWaysIn(args)
     try {
       const file = planFileOf(project, args['plan'])
       if (args['scan'] !== undefined) {
@@ -515,6 +554,7 @@ const writeRoomsTool: GridTool = {
             drawingProblems: done.drawingProblems,
             brief: done.brief,
             reminder: done.reminder,
+            layout: null,
             taped: done.taped,
             scan: {
               evidence: done.evidence,
@@ -528,10 +568,12 @@ const writeRoomsTool: GridTool = {
           },
         }
       }
-      const done = writeRoomsIntoProject(project, args['rooms'] as string, file, { replace: args['replace'] === true, brief: true })
+      const options = { replace: args['replace'] === true, brief: true }
+      const laid = shape === undefined ? null : writeLayout(project, file, shape, options)
+      const done = laid?.done ?? writeRoomsIntoProject(project, args['rooms'] as string, file, options)
       const r = done.result
       return {
-        text: done.lines.join('\n'),
+        text: (laid?.lines ?? done.lines).join('\n'),
         data: {
           written: done.written,
           rooms: r.rooms.map((x) => ({ id: x.id, name: x.name, floor: x.floor, width: x.width, depth: x.depth, area: x.area, basis: x.basis })),
@@ -543,6 +585,7 @@ const writeRoomsTool: GridTool = {
           drawingProblems: done.drawingProblems,
           brief: done.brief,
           reminder: done.reminder,
+          layout: laid?.layout ?? null,
           scan: null,
           taped: done.taped,
         },

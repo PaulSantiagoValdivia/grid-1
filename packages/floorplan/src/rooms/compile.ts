@@ -40,6 +40,10 @@
  *       <place>: centred | <m> from <north|south|east|west> [of <room>]
  *       then:    sill <m>, height <m>, opens into <room>|in|out, hinged <direction>, no-swing
  *   unit <name> [setting=default ...] ... end      rooms and openings written once
+ *   unit <name> flat "<type name>" ["<flat name>"] [setting=default ...] ... end
+ *       a flat type (CNT-4): every placement of it is a flat of that type in the plan's flats,
+ *       with its label as id, the flat name with {n} as the label, its rooms, and mirrored
+ *       when it is placed mirrored; the type is in the plan's flat types, by the unit's name
  *   place <unit> as <label> <where> [mirror east-west|north-south] [gap <t>] [setting=value ...]
  *   repeat <unit> <n> <direction> of <room or unit> as <first label> [...]
  *   repeat <unit> <n> <direction> as <first label> <where the first goes> [mirror ...] [gap <t>] [setting=value ...]
@@ -116,6 +120,8 @@ const MIRROR_Y: Readonly<Record<string, string>> = { north: 'south', south: 'nor
 export const SIZE_BASES = ['inside', 'centre', 'outside'] as const
 export type SizeBasis = (typeof SIZE_BASES)[number]
 const BASIS_WORDS: Readonly<Record<string, SizeBasis>> = { inside: 'inside', centre: 'centre', center: 'centre', outside: 'outside' }
+/** The wall thicknesses rooms text writes when its `walls` line does not say (BRF-6's first layout packs by them). */
+export const ROOMS_WALLS = { outside: 0.3, inside: 0.1 } as const
 /** How far apart two parallel room faces may be and still be looked at as one wall's two faces. */
 const FACING_REACH = 3
 /** How far out of line two faces may be and still be named as sizes that do not add up. */
@@ -272,6 +278,8 @@ interface FloorDraft {
   extover: Array<{ room: string; side: string; say: WallSay }>
   openings: OpeningLine[]
   raw: { walls: unknown[]; rooms: unknown[]; openings: unknown[] }
+  /** CNT-4: each placement of a flat type on this floor: its label, its unit, its rooms and whether it is mirrored. */
+  flats: Array<{ label: string; unit: string; mirrored: boolean; rooms: RoomDraft[] }>
 }
 
 interface Unit {
@@ -293,6 +301,18 @@ export interface RoomsProblem {
   readonly code: string
   readonly line: number | null
   readonly message: string
+  /**
+   * MSG-7 with BRF-6 (lab AB-11): each change to one line that would clear the problem, as data:
+   * the line, numbered from 1, and the text to write there. Only a door between two rooms that
+   * share no wall has one today: the other alignment of one of the rooms.
+   */
+  readonly fixes?: readonly RoomsFix[]
+}
+
+/** One line of rooms text written another way: its number, from 1, and its new text. */
+export interface RoomsFix {
+  readonly line: number
+  readonly text: string
 }
 
 export interface RoomFacts {
@@ -406,7 +426,7 @@ class Compiler {
   display: NonNullable<FloorPlan['display']> | null = null
   // WRT-6 (lab AU3-6): no height until the text states one. A wall the text gives no height is
   // written with none, and the reading gives it its floor's height or Grid's default.
-  private rule: { outside: number; inside: number; height: number | null; kind: WallKind } = { outside: 0.3, inside: 0.1, height: null, kind: 'interior' }
+  private rule: { outside: number; inside: number; height: number | null; kind: WallKind } = { ...ROOMS_WALLS, height: null, kind: 'interior' }
   private dflt = { doorH: 2.1, winSill: 0.9, winH: 1.2 }
   private tkinds = new Map<number, WallKind>()
   sizes: { basis: SizeBasis; stated: boolean } = { basis: 'inside', stated: false }
@@ -415,6 +435,8 @@ class Compiler {
   /** One wall per stretch between two rooms, never one long wall past several. */
   split = false
   private units = new Map<string, Unit>()
+  /** CNT-4: the units that are flat types, in the order written: the type's name and the flats' name. */
+  private flatTypes = new Map<string, { name: string; flatName: string | null }>()
   /** WRT-4: rooms that rise through the floors written after their own, up to `through`. */
   private risers: Array<{ room: string; from: string; through: string; line: number; done?: boolean }> = []
   private cur: FloorDraft | null = null
@@ -485,7 +507,16 @@ class Compiler {
       if (t[0] === 'unit') {
         if (t.length < 2) this.stop('rooms/syntax', at, `line ${at}: write 'unit <name> [setting=default ...]', its lines, then 'end'.`)
         const params = new Map<string, string>()
-        for (const p of t.slice(2)) {
+        let settings = t.slice(2)
+        if (settings[0] === 'flat') {
+          // CNT-4: `unit <name> flat "<type name>" ["<flat name>"]`: the unit is a flat type.
+          const typeName = settings[1]
+          if (typeName === undefined || typeName.includes('=')) this.stop('rooms/syntax', at, `line ${at}: a flat type is written 'unit <name> flat "<type name>" ["<flat name>"] [setting=default ...]'.`)
+          const flatName = settings[2] !== undefined && !settings[2].includes('=') ? settings[2] : null
+          this.flatTypes.set(t[1]!, { name: typeName, flatName })
+          settings = settings.slice(flatName === null ? 2 : 3)
+        }
+        for (const p of settings) {
           const eq = p.indexOf('=')
           if (eq < 0) this.stop('rooms/syntax', at, `line ${at}: a unit's settings are written name=value, found '${p}'.`)
           params.set(p.slice(0, eq), p.slice(eq + 1))
@@ -1163,6 +1194,8 @@ class Compiler {
       this.addRoom(r, null)
     }
     fl.inst.set(label, rooms.map((r) => r.id))
+    // CNT-4: a placement of a flat type is a flat, mirrored when it is placed mirrored (WRT-4).
+    if (this.flatTypes.has(name)) fl.flats.push({ label, unit: name, mirrored: mx !== my, rooms })
     fl.openings.push(...pending)
   }
 
@@ -1279,6 +1312,11 @@ class Compiler {
     // A room that rose through to this floor is here already (WRT-4).
     for (const r of src.rooms.values()) if (!(fl.rooms.get(r.id)?.risenFrom === (r.risenFrom ?? src.id))) this.addRoom({ ...r, poly: [...r.poly], through: null, risenFrom: r.risenFrom }, null)
     for (const [k, v] of src.inst) fl.inst.set(k, [...v])
+    // CNT-4: the flats placed on the floor copied are flats here too, of the copied rooms.
+    for (const flat of src.flats) {
+      const rooms = flat.rooms.flatMap((r) => (src.rooms.get(r.id) === r && fl.rooms.has(r.id) ? [fl.rooms.get(r.id)!] : []))
+      fl.flats.push({ ...flat, rooms })
+    }
     for (const [k, v] of src.between) fl.between.set(k, { ...v })
     for (const [k, v] of src.betweenSide) fl.betweenSide.set(k, { ...v })
     for (const k of src.open) fl.open.add(k)
@@ -2117,6 +2155,7 @@ class Compiler {
       plan.openings.push(...(fl.raw.openings as Opening[]))
     }
     this.checkOpeningClash(plan.openings)
+    this.emitFlats(plan, idOf)
     const all = [...plan.walls, ...plan.rooms, ...plan.openings].map((x) => x.id)
     const twice = [...new Set(all.filter((x, k) => all.indexOf(x) !== k))].sort()
     for (const id of twice) this.problem('rooms/duplicate-id', null, `The id '${id}' would name two things in the plan (walls, rooms and openings share one set of ids). Rename one.`)
@@ -2136,6 +2175,35 @@ class Compiler {
       }
     }
     return plan
+  }
+
+  /**
+   * CNT-4: the flat types, and each placement of one as a flat. A label placed on more than one
+   * floor takes its floor's id in front, as a room's id does. A room removed after it was placed
+   * is not in its flat; a flat with no room left is not written.
+   */
+  private emitFlats(plan: { flatTypes?: FloorPlan['flatTypes']; flats?: FloorPlan['flats'] }, idOf: (fl: FloorDraft, id: string) => string): void {
+    if (this.flatTypes.size === 0) return
+    plan.flatTypes = [...this.flatTypes].map(([id, type]) => ({ id, name: type.name }))
+    const labels = new Map<string, number>()
+    for (const fl of this.floors) for (const label of new Set(fl.flats.map((f) => f.label))) labels.set(label, (labels.get(label) ?? 0) + 1)
+    const flats: NonNullable<FloorPlan['flats']> = []
+    for (const fl of this.floors) {
+      for (const flat of fl.flats) {
+        const rooms = flat.rooms.filter((r) => fl.rooms.get(r.id) === r).map((r) => idOf(fl, r.id))
+        if (rooms.length === 0) continue
+        const type = this.flatTypes.get(flat.unit)!
+        const id = (labels.get(flat.label) ?? 0) > 1 ? `${fl.id}-${flat.label}` : flat.label
+        flats.push({
+          id,
+          ...(type.flatName === null ? {} : { name: type.flatName.split('{n}').join(flat.label) }),
+          type: flat.unit,
+          rooms,
+          ...(flat.mirrored ? { mirrored: true } : {}),
+        })
+      }
+    }
+    plan.flats = flats
   }
 
   private checkOpeningClash(openings: readonly Opening[]): void {
@@ -2185,6 +2253,7 @@ function newFloor(id: string, name: string, level: number): FloorDraft {
     extover: [],
     openings: [],
     raw: { walls: [], rooms: [], openings: [] },
+    flats: [],
   }
 }
 
@@ -2194,11 +2263,62 @@ const REPEAT_MAX = 500
 /** How many times a plan whose sizes run to the walls is placed again, at most. */
 const SETTLE_ROUNDS = 8
 
+/** Where a word stands in a line of rooms text outside quotes: `re`'s first match there, or null. */
+function unquoted(line: string, re: RegExp): RegExpExecArray | null {
+  const quoted: Array<[number, number]> = []
+  for (const m of line.matchAll(/"[^"]*"|'[^']*'/g)) quoted.push([m.index, m.index + m[0].length])
+  const hash = line.split('').findIndex((c, i) => c === '#' && !quoted.some(([a, b]) => i >= a && i < b))
+  for (const m of line.matchAll(new RegExp(re.source, 'g'))) {
+    if (hash >= 0 && m.index >= hash) break
+    if (!quoted.some(([a, b]) => m.index >= a && m.index < b)) return m
+  }
+  return null
+}
+
 /**
- * Writes rooms text as a plan. The answer holds the plan, or null with the problems that stop
- * it; every warning and every guess the writing made; and the rooms, walls and openings as
- * Grid worked them out.
+ * BRF-6 (lab AB-11): a door between rooms that share no wall, where one of the two was placed
+ * beside another room and lined up on the wrong side. The other alignments of the room written
+ * last, then of the other, are tried in turn; the first with which the door line is no longer
+ * refused, and nothing else is that was not before, is the fix. Nothing is changed: it is offered, as data and in the message.
  */
+function alignmentFix(text: string, at: number, had: ReadonlySet<string>): RoomsFix | null {
+  const lines = text.split(/\r\n|\r|\n/)
+  let door: string[]
+  try {
+    door = wordsOf(lines[at - 1] ?? '', at)
+  } catch {
+    return null
+  }
+  const rooms = [door[3], door[5]].filter((id): id is string => id !== undefined)
+  const lineOf = (id: string): number => lines.slice(0, at - 1).findIndex((line) => /^\s*room\s/.test(line) && wordsOf(line, 0)[1] === id)
+  const order = rooms.map(lineOf).filter((i) => i >= 0).sort((a, b) => b - a)
+  for (const i of order) {
+    const line = lines[i]!
+    const place = unquoted(line, /\b(north|south|east|west)\s+of\s+\S+/)
+    if (place === null) continue
+    const across = place[1] === 'north' || place[1] === 'south'
+    const now = unquoted(line, /\balign\s+(\S+)/)
+    const current = now?.[1] === 'center' ? 'centre' : (now?.[1] ?? (across ? 'west' : 'south'))
+    for (const side of across ? ['west', 'east', 'centre'] : ['south', 'north', 'centre']) {
+      if (side === current) continue
+      const written = now !== null
+        ? `${line.slice(0, now.index)}align ${side}${line.slice(now.index + now[0].length)}`
+        : `${line.slice(0, place.index + place[0].length)} align ${side}${line.slice(place.index + place[0].length)}`
+      const tried = compileRoomsText([...lines.slice(0, i), written, ...lines.slice(i + 1)].join('\n'), { offerFixes: false }).problems
+      if (tried.every((p) => p.line !== at && had.has(`${p.code}|${p.line}`))) return { line: i + 1, text: written.trim() }
+    }
+  }
+  return null
+}
+
+/** The problem with its fix, for a door between rooms that share no wall: in the message, and as data. */
+function withAlignmentFix(text: string, problem: RoomsProblem, all: readonly RoomsProblem[]): RoomsProblem {
+  if (problem.code !== 'rooms/no-shared-wall' || problem.line === null) return problem
+  const fix = alignmentFix(text, problem.line, new Set(all.map((p) => `${p.code}|${p.line}`)))
+  if (fix === null) return problem
+  return { ...problem, message: `${problem.message} With line ${fix.line} written '${fix.text}', they share a wall.`, fixes: [fix] }
+}
+
 export interface CompileOptions {
   /**
    * HND-12: the decimal places the walls' ends, thicknesses and heights are written to: 4 (a
@@ -2206,9 +2326,22 @@ export interface CompileOptions {
    * a scan, whose rooms keep the scan's own areas.
    */
   readonly places?: number
+  /**
+   * BRF-6: whether a door between two rooms that share no wall is refused with the alignment that
+   * would make them share one, when there is one. On (the default) unless a fix is being tried.
+   */
+  readonly offerFixes?: boolean
 }
 
+/**
+ * Writes rooms text as a plan. The answer holds the plan, or null with the problems that stop
+ * it; every warning and every guess the writing made; and the rooms, walls and openings as
+ * Grid worked them out.
+ * A door between two rooms that share no wall is refused with the alignment that would make
+ * them share one, when there is one (`offerFixes`, on unless a fix is being tried).
+ */
 export function compileRoomsText(text: string, options: CompileOptions = {}): RoomsResult {
+  const offerFixes = options.offerFixes ?? true
   let assumed = new Map<string, number>()
   let compiler: Compiler | null = null
   let plan: WrittenPlan | null = null
@@ -2232,11 +2365,12 @@ export function compileRoomsText(text: string, options: CompileOptions = {}): Ro
     assumed = new Map([...assumed, ...compiler.found])
   }
   const c = compiler!
+  const problems = stopped === null ? c.problems : [stopped]
   return {
     plan: stopped === null ? plan : null,
     name: c.name,
     basedOn: c.basedOn,
-    problems: stopped === null ? c.problems : [stopped],
+    problems: offerFixes ? problems.map((p) => withAlignmentFix(text, p, problems)) : problems,
     warnings: c.warnings,
     guesses: c.guesses,
     rooms: c.roomFacts,

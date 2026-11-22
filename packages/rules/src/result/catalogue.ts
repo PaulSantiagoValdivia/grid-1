@@ -11,7 +11,7 @@
  * Plain English, never anything that reads as "this plan complies".
  */
 
-import { areaText, figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix, type WordingPart } from '@ongrid/floorplan/geometry'
+import { areaText, figureText, metresText, openingWords, passageText, planCheckWordings, tolerance, wordingText, type PlanFix, type WordingPart } from '@ongrid/floorplan/geometry'
 import { BUILDING_TYPE_TEXT, quoted } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
 import { buildingKindsText, findingReadFor, type BuildingKind } from '../checks/figures'
@@ -106,6 +106,19 @@ export interface CodeEntry {
 }
 
 const fixed = (text: string) => (): string => text
+/** LVL-5: how far a stair room or a shaft is moved from the one below, in words. */
+const shiftFound = (shift: RuleFinding['shift']): string => {
+  if (shift === undefined) return 'a room that joins the one below but is moved from it'
+  const ways = [
+    shift.east === 0 ? null : `${metresText(Math.abs(shift.east))} m ${shift.east > 0 ? 'east' : 'west'}`,
+    shift.north === 0 ? null : `${metresText(Math.abs(shift.north))} m ${shift.north > 0 ? 'north' : 'south'}`
+  ].filter((w): w is string => w !== null)
+  if (ways.length === 0) {
+    const sides = shift.sides.map((s) => `its ${s.side} side ${metresText(Math.abs(s.by))} m ${s.side === 'east' || s.side === 'west' ? (s.by > 0 ? 'east' : 'west') : s.by > 0 ? 'north' : 'south'}`)
+    return `${sides.join(' and ')} of the one below's, on the drawing (north is its top)`
+  }
+  return `moved ${ways.join(' and ')} of the one below, on the drawing (north is its top)`
+}
 /** BRF-3: the way an edge of the plot's boundary faces, and whether it is on a street, in words. */
 const edgeWords = (b: NonNullable<RuleFinding['boundary']>): string =>
   `which faces ${b.faces}${b.northStated ? '' : ' (with north as the top of the drawing: the plan states no north)'}${b.street ? ', on the street' : ''}`
@@ -448,6 +461,12 @@ export const CODES = {
     needed: fixed('a height above 0, or a virtual wall for a line with no substance'),
     fix: fixed('Give it its height, or mark it virtual.')
   },
+  // LVL-5 (C19): a wall through floors that names no floor above its own.
+  'wall/through-floor': {
+    says: (s) => `${s.label} rises through a floor that is not above its own, so it stands on its own floor only`,
+    needed: fixed('through naming a floor above the wall\'s own, from the plan\'s floors'),
+    fix: fixed('Name in through a floor above the wall\'s own, or leave through out for a wall of one floor.')
+  },
   'wall/unknown-floor': {
     says: (s) => `${s.label} is on a floor the plan does not list`,
     needed: fixed("a floor from the plan's floors"),
@@ -647,8 +666,8 @@ export const CODES = {
   },
   'room/cross-floor': {
     says: (s) => `${s.label} rests on a wall of another floor`,
-    needed: fixed('every wall it lists on its own floor'),
-    fix: fixed('Put the room on the floor of its walls, or list walls of its own floor.')
+    needed: fixed('every wall it lists standing on its own floor'),
+    fix: fixed('Put the room on the floor of its walls, list walls of its own floor, or, for one wall that both floors share, let it rise through them (through on the wall).')
   },
   'room/broken-wall': {
     says: (s) => `${s.label} rests on a wall that cannot be drawn`,
@@ -814,6 +833,40 @@ export const CODES = {
     fix: fixed('Rename the pattern, or the part that has the id.')
   },
 
+  // --- Flats (CNT-4) --------------------------------------------------------------------------
+  // The flats list's own faults. Each is worth a look: the flat is read without what it names
+  // wrongly, and nothing else changes. The found is the check's own sentence, with the ids.
+  'flat/unknown-room': {
+    says: (s) => `${s.label} names a room the plan does not have`,
+    needed: fixed('rooms of the plan, by id'),
+    fix: fixed('Name the room by its id, as grid describe gives it, or take it out of the flat\'s rooms.')
+  },
+  'flat/room-in-two': {
+    says: (s) => `${s.label} names a room another flat names too`,
+    needed: fixed('each room in one flat at most'),
+    fix: fixed('Take the room out of one of the two flats; until then it is counted in the flat whose id comes first.')
+  },
+  'flat/unknown-type': {
+    says: (s) => `${s.label} is of a type the plan's flat types do not state`,
+    needed: fixed('a type stated in the plan\'s flat types, by id'),
+    fix: fixed('Add the type to the flat types with its name, name one of them, or leave out the flat\'s type.')
+  },
+  'flat/duplicate-id': {
+    says: (s) => `${s.label} is listed more than once`,
+    needed: fixed('an id of its own on every flat'),
+    fix: fixed('Give each flat its own id, or join the two lists of rooms into one flat.')
+  },
+  'flat/duplicate-type': {
+    says: (s) => `The plan states flat type ${s.also[0] === undefined ? 'one' : quoted(s.also[0])} more than once`,
+    needed: fixed('each flat type stated once'),
+    fix: fixed('Keep one entry for the type; the first is read until then.')
+  },
+  'flat/zone-without-room': {
+    says: (s) => `${s.label} names a zone but not the room it is part of`,
+    needed: fixed('the room a zone is part of, in the flat with it'),
+    fix: fixed('Name the room in the flat: a zone\'s floor is counted in its room, so the zone alone adds nothing.')
+  },
+
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {
     says: (s) => `${s.label} has a number Grid does not accept`,
@@ -888,6 +941,12 @@ export const CODES = {
     says: (s) => `${s.label} has enclosed floor that no room claims`,
     needed: fixed('every enclosed floor in a room'),
     fix: fixed("If it is a room, draw it as one. If it is part of a room, list the walls that take it into that room's outline.")
+  },
+  // LVL-5 (lab WR-9): a floor whose outline does not lie over the floor below it.
+  'floor/out-of-line': {
+    says: (s) => `${s.label} does not line up with the floor below it`,
+    needed: fixed('a floor\'s outline over the floor below it, or marked overhang "meant" where it overhangs or sits back on purpose'),
+    fix: fixed('If it is meant, mark the floor with overhang "meant". If not, move its outside walls over the floor below, or let a wall both floors share rise through them (through).')
   },
   'floor/past-outline': {
     says: (s) => `${s.label}'s walls reach past the outline it states`,
@@ -1013,6 +1072,19 @@ export const CODES = {
     needed: fixed('the shaft over the one on the floor below'),
     fix: fixed('Move it over the lift shaft below.')
   },
+  // LVL-5 (lab WR-9): joined to the one below, but moved from it.
+  'room/stair-shifted': {
+    says: (s) => s.finding?.message ?? `${s.label} is moved from the stair below`,
+    found: (s) => shiftFound(s.finding?.shift),
+    needed: fixed('the stair room over the one on the floor below, or marked overhang "meant" where it is moved on purpose'),
+    fix: fixed('Move it back over the stair room below, or, if it is meant, mark the room with overhang "meant".')
+  },
+  'room/lift-shifted': {
+    says: (s) => s.finding?.message ?? `${s.label} is moved from the lift shaft below`,
+    found: (s) => shiftFound(s.finding?.shift),
+    needed: fixed('the shaft over the one on the floor below, or marked overhang "meant" where it is moved on purpose'),
+    fix: fixed('Move it back over the shaft below, or, if it is meant, mark the room with overhang "meant".')
+  },
   'opening/too-small-to-pass': {
     says: (s) => named(s, planCheckWordings.openingTooSmall(s.name)),
     found: (s) => (s.finding?.passage === undefined ? s.said : lowerFirst(passageText(s.finding.passage))),
@@ -1094,10 +1166,15 @@ export const CODES = {
     fix: fixed('Correct the lines that leave those rooms out. They are checked once they can be drawn, and so is what rests on them: a note held back comes back if it still holds.')
   },
   'floor/not-checked-doors-not-drawn': {
-    says: (s) => wordingText(planCheckWordings.doorsNotDrawn(s.floorName, s.also)),
-    found: (s) => `doors or windows that cannot be drawn${s.heldSaid ? `; held back until they can be: ${s.heldSaid}` : ''}`,
-    needed: fixed('doors and windows that can be drawn'),
-    fix: fixed('Correct the lines that leave those doors or windows out. They are checked once they can be drawn, and so is what rests on them: a note held back comes back if it still holds.')
+    // LVL-5 (lab A-16, VE-9): each opening worded as what it is, never a window as a door.
+    says: (s) => wordingText(planCheckWordings.doorsNotDrawn(s.floorName, s.also, s.notice?.openingKinds)),
+    found: (s) => `${openingWords(s.notice?.openingKinds, s.also.length).plain} that cannot be drawn${s.heldSaid ? `; held back until they can be: ${s.heldSaid}` : ''}`,
+    needed: (s) => `${openingWords(s.notice?.openingKinds, s.also.length).plain.replace(/^doors or windows$/, 'doors and windows')} that can be drawn`,
+    fix: (s) => {
+      const w = openingWords(s.notice?.openingKinds, s.also.length)
+      const one = s.also.length === 1 && w.plain !== 'doors or windows'
+      return `Correct the lines that leave ${one ? w.these.replace(/^this /, 'that ') : w.these.replace(/^these /, 'those ')} out. ${one ? 'It is' : 'They are'} checked once ${one ? 'it can' : 'they can'} be drawn, and so is what rests on ${one ? 'it' : 'them'}: a note held back comes back if it still holds.`
+    }
   },
   'floor/sketch-drawn-only': {
     says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,

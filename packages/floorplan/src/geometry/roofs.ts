@@ -28,7 +28,7 @@
 
 import type { FloorPlan, PlanIndex, Roof, Rooflight, Room, Wall } from './plan'
 import { indexPlan } from './plan'
-import { floorOf, planForFloor } from './floors'
+import { floorOf, planForFloor, wallsOnFloor } from './floors'
 import { floorElevations, DEFAULT_STOREY_HEIGHT } from './elevations'
 import { tryRoomShape } from './room'
 import { roomFloorOffset } from './steps'
@@ -78,7 +78,7 @@ const shapes = new WeakMap<FloorPlan, Map<string, RoofShapeOverFloor | null>>()
 
 /** The walls a floor's roof stands on: those stated outside, else every solid wall. */
 function roofWalls(plan: FloorPlan, floor: string): Wall[] {
-  const solid = plan.walls.filter((w) => floorOf(w) === floor && w.virtual !== true)
+  const solid = wallsOnFloor(plan, floor).filter((w) => w.virtual !== true)
   const outside = solid.filter((w) => w.kind === 'exterior')
   return outside.length > 0 ? outside : solid
 }
