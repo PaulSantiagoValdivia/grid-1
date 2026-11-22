@@ -168,8 +168,11 @@ the edge, chosen per person:
   it, `3,81` is refused with one line that names the decimal comma. A length past Grid's largest,
   or text Grid cannot read, is refused in words, by the argument's name. A plan file that states
   `"units": "mm"` (or `cm`, `ft`, `in`) is read in that unit and written back in metres.
+- **Rooms text.** A plain number is metres; a length may carry its unit in one word, with no
+  space: `360cm`, `12ft`, `12ft6in`, `12'6"` ([rooms first](rooms-first.md)).
 - **Writing.** A plan may say how its person reads lengths, in `display`. It changes no stored
-  number:
+  number. Rooms text sets it with a `display` line (`display ft-in precision 3`), and the
+  read-back writes that line again:
 
   ```json
   "display": { "length": "ft-in", "area": "ft2", "decimal": "point", "precision": 0 }
@@ -185,8 +188,9 @@ the edge, chosen per person:
   A call's `units` and `decimal` (`--units`, `--decimal` on `grid draw`) win over the plan's
   `display`. In feet and inches a length is written `12'-6"` and a sill `48"`; in millimetres,
   `2860`. The drawing's room areas and dimensions, and the figures of `grid_areas`,
-  `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view` follow the display. The check's
-  report, the sheet, the edit answers and the exports stay in metres for now.
+  `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view`, and the sheet's figures,
+  tables and drawings, follow the display. The check's report and the edit answers are still in
+  metres. The exports stay in metres and say so in the file, as DXF, IFC and glTF expect.
 
 ## Floor levels and heights
 

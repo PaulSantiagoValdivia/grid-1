@@ -663,6 +663,18 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: the person's own units, from rooms text to the sheet (WRT-7)
+
+- Rooms text takes a length with its unit in one word (`360cm`, `12ft`, `12ft6in`, `12'6"`); a
+  plain number is still metres. A unit it cannot read is refused as `rooms/units`, with the
+  forms it takes.
+- A `display` line in rooms text (`display ft-in`, `display mm decimal comma`) writes the plan's
+  `display`, and `grid_describe as=rooms` writes it back. The plan file stays in metres.
+- `grid_sheet` writes its figures, area tables and schedules in the plan's `display`: square feet
+  with feet and inches, and a decimal comma when chosen. A plan with no `display` is unchanged.
+- The server's instructions ask the agent to settle the person's units with the brief and to ask
+  only when the person's words and place do not say. No field of the result record changes.
+
 ### 2026-11-22: a survey drawn from its own numbers (HND-11)
 
 - A wall may be placed by a face (`face`, `left` or `right` walking from start to end), with its

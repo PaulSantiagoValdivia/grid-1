@@ -1,10 +1,14 @@
 # Grid
 
-Grid (ongrid): floor plans and plan checks for architects
+Grid (ongrid): floor plans for AI agents
 
-Grid lets architects design and check floor plans by describing them to an AI agent.
-One structured plan file (walls, rooms and openings, in metres) is the source of truth.
-A geometry core reads it, validates it, draws it in 2D and 3D, and feeds the exporters.
+Grid is a floor-plan toolkit built for AI agents. Describe a home or a building to your agent
+and it draws, measures, checks and changes the plan with Grid. Anyone can use it: homeowners,
+architects, builders, students.
+
+One structured plan file (walls, rooms and openings) is the source of truth. It is stored in
+metres and shown in each person's own units: metres, centimetres, millimetres, or feet and
+inches. A geometry core reads it, validates it, draws it in 2D and 3D, and feeds the exporters.
 
 ## Status
 

@@ -177,6 +177,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   if (plan.floors !== undefined) next['floors'] = plan.floors
   // CNT-5: a `building` line sets what kind of building it is; without one, the file's stays.
   if (plan.building !== undefined) next['building'] = plan.building
+  // WRT-7: a `display` line sets how the person reads lengths; without one, the file's stays.
+  if (plan.display !== undefined) next['display'] = plan.display
   next['walls'] = plan.walls
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings

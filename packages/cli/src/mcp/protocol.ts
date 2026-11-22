@@ -61,9 +61,19 @@ export const ROOM_NAMES_TRAVEL =
  * way to write a plan, and the plan file, not the rooms text, is the source of truth. BRF-1: the
  * brief comes first, from the person's words.
  */
+/**
+ * WRT-7: the person's units come from their words or their place, asked only when neither says,
+ * and are recorded in the plan's `display`, which every drawing, figure and sheet follows. The plan
+ * file stays in metres.
+ */
+export const UNITS_RULE =
+  'Work in the person\'s units: settle them with the brief, from their words (12 ft, 1,800 sq ft, 4 m) or their place, and ask only when neither says. '
+  + 'Record them with a display line in the rooms text (display ft-in, display m): Grid\'s drawings, figures and sheets follow it, and the plan file stays in metres. A length may carry its unit in one word (360cm, 12ft, 12\'6").'
+
 export const INSTRUCTIONS =
   'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. '
   + 'Before the first room, keep what the person asked for with grid_write_brief, from their own words, each wish given or assumed; every change then says which lines are met and which missed. '
+  + `${UNITS_RULE} `
   + 'Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls. '
   + 'The plan file is the source of truth; rooms text is a way of writing and reading it. To change a plan, read it back with grid_describe as=rooms, change the text and write it with grid_write_rooms. Each room\'s boundary is derived: never edit it by hand. '
   + `${ROOM_NAMES_TRAVEL} `

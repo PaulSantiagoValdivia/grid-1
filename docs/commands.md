@@ -625,13 +625,17 @@ drawn as a surface.
   number of findings and the three areas, then a page per floor with every room, door and window
   id on the drawing, the area of each room with its use, and every finding on that floor.
 
+Its figures, tables and drawings are in the plan's `display`, the person's own units (feet and
+inches with square feet, millimetres, a decimal comma), and in metres when the plan has none
+([Units](plan-file.md#units)). The findings are in metres.
+
 The words of a client sheet are the author's, in `sheet.json` beside the plan, or the file
 `--sheet` names:
 
 ```json
 {
   "version": "1",
-  "name": "Solace House",
+  "name": "Example House",
   "headline": "A private retreat for one",
   "intro": ["A two-storey home for everyday comfort, work and hosting."],
   "floors": {

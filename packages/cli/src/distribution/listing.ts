@@ -26,7 +26,7 @@ import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { RETELLING_RULE } from '../mcp/retelling'
 import { dependencies } from '../../package.json'
 import type { GridTool } from '../mcp/toolkit'
-import { ROOM_NAMES_TRAVEL } from '../mcp/protocol'
+import { ROOM_NAMES_TRAVEL, UNITS_RULE } from '../mcp/protocol'
 
 /** The npm package, and the command `npx` runs from it. */
 export const PACKAGE_NAME = 'ongrid'
@@ -153,6 +153,8 @@ function skill(): string {
     '   Grid sends nothing: show the person the draft and let them decide whether to file it.',
     '',
     ROOM_NAMES_TRAVEL,
+    '',
+    UNITS_RULE,
     '',
     `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}".`,
     RETELLING_RULE,
