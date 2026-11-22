@@ -184,3 +184,40 @@ On this branch, merged with main 25747b7:
   wants "Same as the stored figures" and got "Better than the stored figures" (turns 16 → 18,
   above). After storing them, that file alone: 19 passed.
 - `npm run scoreboard -- --write-current`: 197, 278, 18, 5, 14, 735, 95; stored.
+
+## Merged with main (ca2db98)
+
+Main brought WRT-6 (`grid_square_scan`), HND-2, LVL-4, MSG-5 and CNT-9 (`grid_fields`,
+`grid_find`, `grid_count`). Merge commit 1ccf624. Conflicts, each resolved keeping both sides:
+
+- The tool count: 22 on the common base, 24 here, 26 on main; now 28 in `server.test.ts`,
+  `tools.test.ts` (with both sides' comments), `AGENTS.md`, `docs/commands.md` and the agents'
+  changelog. `ORDER` and `serveTools.ts` merged on their own: `grid_diff` is second, right after
+  `grid_compare`, and `grid_mark_start` 17th, right before `grid_mark_seen`; CNT-9's three follow
+  `grid_schedule` and `grid_square_scan` is last. `READ_ONLY` holds `grid_diff` and CNT-9's
+  three, `CHANGES_PLAN` holds `grid_square_scan`.
+- `AGENTS.md`: the count, and the order sentence now names the start marker before the seen mark;
+  main's CNT-9 paragraph and WRT-8's paragraph both kept.
+- `docs/tool-server.md`: the order sentence names the start marker and counts ten tools that
+  change the plan; both sides' rows and sections kept.
+- `docs/commands.md`: main's `grid edit` row (with `square`), WRT-8's `grid mark` and `grid diff`
+  rows, and `grid serve` with the 28 tools.
+- `CHANGELOG.md` (Unreleased) and `docs/result-contract.md` (changelog for agents): every entry
+  kept, WRT-8's first; its entry adds that the tools are 28.
+- `packages/floorplan/src/geometry/rules/index.ts`: main's exports (`cannotBeDrawnNotices`,
+  `SanityOptions`, the held notes) and WRT-8's `openingFaces`.
+
+`tolerances.ts`, `docs/tolerances.md`, `catalogue.ts`, `everyPath.e2e.test.ts`, `listing.ts`,
+`capabilities.ts` and `scoreboard/current.json` merged on their own. The type check found no
+semantic conflict.
+
+Checks after the merge, on 1ccf624:
+
+- `npm run build`: bundled; `packages/cli/dist/grid.mjs` 462,477 bytes (under the 500 kB cap).
+  `npm run typecheck`: no errors. `npm run lint`: no findings. `npm run check:licenses`: 363
+  licences, none GPL, LGPL, AGPL, MPL or EPL.
+- `vitest run packages/cli packages/floorplan/src/geometry/diff packages/floorplan/src/geometry/__tests__
+  packages/viewer/src/picture packages/rules/src/result scoreboard --exclude '.claude/**'
+  --maxWorkers=2 --minWorkers=1`: 184 files, 3,659 passed, 4 skipped, none failed (778 s).
+- `npm run scoreboard`: 197, 278, 18, 5, 15, 735, 95, "Same as the stored figures".
+  `--write-current` left `scoreboard/current.json` unchanged, so no figures needed storing.
