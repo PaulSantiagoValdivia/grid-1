@@ -106,6 +106,34 @@
   stroke: none;
 }
 
+/* SHT-11: a stair's break line at the plan's cut, and a lift shaft's cross, thin in the wall ink. */
+.canvas [data-part='stair-break'],
+.canvas [data-part='lift-cross'] {
+  fill: none;
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+.canvas [data-part='lift'] {
+  pointer-events: none;
+}
+
+/* SHT-11: what lies above the cut, dashed: a stair past its break line, and the outline of the
+   floor above, over the floors and under the walls. Drawing, not a target. */
+.canvas [data-part='stair'] [data-above='true'] {
+  stroke-dasharray: 4 3;
+}
+.canvas [data-part='above'] {
+  pointer-events: none;
+}
+.canvas [data-part='above-line'] {
+  fill: none;
+  stroke: var(--plan-wall, #232320);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
 /* A step between rooms at different levels (LVL-7): where the higher floor ends, across a gap or
    over a dividing line, solid in the wall ink. */
 .canvas [data-part='step'] {

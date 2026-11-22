@@ -285,7 +285,7 @@ const areasTool: GridTool = {
       states: areas.states,
     }
     if (args['format'] === 'csv') {
-      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.outside ? 'outside' : 'inside', r.state]))
+      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
       rows.push(['all', '', 'Net total', '', null, null, areas.net, sqFt(areas.net), '', areas.states.net.state])
       if (areas.grossInternal !== null) rows.push(['all', '', 'Gross internal', '', null, null, areas.grossInternal, sqFt(areas.grossInternal), '', areas.states.grossInternal.state])
       if (areas.grossExternal !== null) rows.push(['all', '', 'Gross external', '', null, null, areas.grossExternal, sqFt(areas.grossExternal), '', areas.states.grossExternal.state])
@@ -300,7 +300,9 @@ const areasTool: GridTool = {
         // MSG-2: a room that could not be measured has no area, and one in doubt says so.
         const free = r.free === undefined ? '' : `, free floor ${areaText(r.free, units)} (fixtures stand on ${areaText(r.fixtures!, units)})`
         const measured = r.net === null ? 'not measured: it could not be drawn' : `${size}${areaText(r.net, units)}${free}${r.state === 'not-proven' ? `, not proven: the drawing questions its outline (${r.doubts.join(', ')})` : ''}`
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}`)
+        // SHT-11: a stair room over the stair below is counted once, with it.
+        const below = r.countedWith ? `, counted once with ${q(r.countedWith.room)} on floor ${q(r.countedWith.floor)}, the stair it rises from` : ''
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}${below}`)
       }
     }
     if (several) {
@@ -906,7 +908,7 @@ const viewTool: GridTool = {
     dimensions: { type: 'boolean', description: 'For plan: false to leave the sizes off, for a clean drawing. true when left out.', examples: [true, false] },
     crop: { type: 'string', maxLength: 120, description: 'For plan: frame just this part: a room, door, window or wall id, or a room\'s name. The whole floor when left out.', examples: ['kitchen', 'front-door'] },
     ids: { type: 'boolean', description: 'For plan: true to draw the id of every room, door and window on the picture, as the plan file holds them, and to list them in the text with the areas, what each door joins, the counts and the drawing\'s problems. false when left out.', examples: [true] },
-    hide: { type: 'string', maxLength: 120, description: 'For plan: parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings. Everything is drawn when left out.', examples: ['areas,swings', 'sketch'] },
+    hide: { type: 'string', maxLength: 120, description: 'For plan: parts to leave off, joined by commas: title, key, notes, sketch, dimensions, areas, swings, warnings, above (the dashed outline of the floor above). Everything is drawn when left out.', examples: ['areas,swings', 'sketch'] },
     colour: { type: 'string', enum: ['use'], description: 'For plan: use fills each room by its use and lists the uses in the key. One fill for every room when left out.', examples: ['use'] },
     key: { type: 'boolean', description: 'For plan: true to add a key under the drawing, even where the plan asks for none.', examples: [true] },
   },

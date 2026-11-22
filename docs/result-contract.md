@@ -475,6 +475,21 @@ A change that would add a problem that leaves a part out is refused, and nothing
   and `narrowedBy`) and `narrower` (what on it is narrower than `width`). Without `width`, the
   route answer is as before.
 
+### 2026-11-22: stairs counted once, and the drawing's symbols (SHT-11)
+
+- `grid_areas`: rooms used as a stair that lie one over the other on neighbouring floors are one
+  stair, counted once, on the floor it rises from. Each stair room over it keeps its own `net`
+  and gains `countedWith` (`floor`, `room`: the lowest stair room); it is in no net total, area by
+  use or circulation figure. Each floor gains `overStairs`, their area. A note names the stair and
+  the floors over it, the text says "counted once with …" on each such room, and the CSV's
+  `counted` column says `with the stair below`. The net rule's sentence says so. A plan with no
+  stair rooms stacked so is unchanged. `grid sheet`'s area table prints "counted below" for them.
+- `grid_takeoff` with `for=estimate`: the `floor:<use>` lines leave those stair rooms out as the
+  net area does, so `floor:stair` counts the stair once; the `floor` rule's sentence says so. The
+  wall faces, skirting and ceilings still count every room.
+- `grid_view` (kind plan) and `grid draw` take `above` in `hide`: the dashed outline of the floor
+  above. No code is added and no check changes.
+
 ### 2026-11-22: what kind of building it is, and more room uses (CNT-5)
 
 - A plan may say what kind of building it is (`building`: `home`, `office`, `shop`, `food`,

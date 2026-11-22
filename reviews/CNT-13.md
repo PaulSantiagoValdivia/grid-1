@@ -137,6 +137,11 @@ Nothing was removed.
   geometry and types, all of `packages/rules`, the tool server, quantities, the commands' tests,
   the viewer and `scoreboard/__tests__`): 209 files, 4,257 passed, 2 skipped.
 
+- After merging `main` again (6ba4fb9, SHT-11): the same changelog conflict, both entries kept.
+  Build, typecheck and lint clean; the scoreboard "Same as the stored figures"; geometry, the
+  result record, the tool server, quantities, draw, sheet, the viewer and `scoreboard/__tests__`
+  rerun: 184 files, 3,639 passed, 2 skipped.
+
 ## For the owner
 
 1. **S-8's table is a kitchen run labelled "Table 2".** CNT-11 holds fixtures only, so a loose
