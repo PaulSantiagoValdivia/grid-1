@@ -1278,7 +1278,6 @@ function writeLeftOut(c: Context, building: number, leftOut: readonly LeftOutPar
   c.w.add('IFCRELDEFINESBYPROPERTIES', str(c.guid('left-out', 'relation')), ref(c.owner), NULL, NULL, refs([building]), ref(set))
 }
 
-/** The id the plan stores (QAR-5), else the caller's, else the default. */
 /** CNT-3: where the plan says it sits: only with an origin, and when every number of it can be written. */
 function siteOf(plan: FloorPlan): (NonNullable<FloorPlan['site']> & { readonly origin: readonly [number, number] }) | null {
   const site = plan.site
@@ -1298,6 +1297,7 @@ function compoundAngle(degrees: number): string {
   return `(${parts.map((part) => int(sign * part + 0)).join(',')})`
 }
 
+/** The id the plan stores (QAR-5), else the caller's, else the default. */
 function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
   const stored: unknown = plan.projectId
   if (typeof stored === 'string' && stored !== '') return stored
