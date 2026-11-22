@@ -183,3 +183,19 @@ After merging `main` at 0b8b641 (SHT-4), with no conflict: build, typecheck and 
 affected tests (`packages/floorplan/src/geometry/export`, `src/export`, `roomNumbers`,
 `tolerances`, `areas`, the CLI's `schedules`, `exportTool`, `grid.e2e` and the sheet tests)
 passed, 654 of 654 in 23 files.
+
+After merging `main` at 25747b7 (CNT-3, CNT-5, SHT-11, CNT-13): conflicts in `ifc.ts`,
+`docs/commands.md` and the four IFC goldens. In `ifc.ts` the header keeps CNT-3's y-down note and
+HND-2's paragraph, and the site placement combines the two: the elements are written moved by
+`nearOrigin`'s step, the site sits at the plan's stated `site.origin` (CNT-3) or, with none, at
+the step, and the building's placement is the step less the site's point, so site plus building
+is the step and every element is where the plan puts it. With no step it is CNT-3's placement,
+with no site HND-2's; the latitude, longitude, elevation and true north are CNT-3's. A new test
+in `ifc.structure.test.ts` holds a stated site at survey coordinates to that. `commands.md` keeps
+HND-2's IFC section, with one line on the stated site, before MSG-10's `grid check` section.
+The goldens were regenerated from the merged code: against `main` they differ only by HND-2's
+additions, with the net area rule's wording now SHT-11's. Build, typecheck and lint clean; the
+affected tests (the floorplan geometry, export, types and rooms tests, the CLI's MCP, quantities,
+sheet, draw, `everyPath`, `exportName`, `grid.e2e` and `coverage`, the rules' result tests and
+the scoreboard's) passed, 3,515 with 4 skipped, of 3,519 in 145 files. `npm run scoreboard`:
+197, 278, 16, 5, 14, 735, 95, the same as stored.
