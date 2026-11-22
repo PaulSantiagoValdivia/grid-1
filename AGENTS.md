@@ -93,7 +93,11 @@ Notes for agents and people changing this repository.
   `packages/cli/src/fs/projectFiles.ts`, which keeps it inside the project folder. Nothing else
   in `packages/cli` imports `fs`: `src/__tests__/fileAccess.test.ts` fails if it does. It
   writes through Grid's one atomic writer, `packages/rules/src/store/atomicWrite.ts`, which the
-  rules store uses too.
+  rules store uses too. A path written inside a plan, such as its trace image
+  (`referenceImage.path`), is resolved the same way, from the project folder, by `loadPlan`
+  (CMD-15). `src/command/__tests__/everyPath.e2e.test.ts` hands every path a command or tool
+  takes the lab's T-5 cases and a link out of the project; a new command or tool argument that
+  takes a path fails it until its slot is listed there.
 
 ## Commands
 
