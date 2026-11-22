@@ -18,7 +18,7 @@ tests (`cli/src/mcp/__tests__/phases.test.ts`, `floorplan/src/geometry/__tests__
 
 ## What changed
 
-1. **The format** (`types/floorplan.ts`, convention C14; BRF-3 took C13 on main). `phase` on walls, openings and rooms
+1. **The format** (`types/floorplan.ts`, convention C15; BRF-3 and CNT-17 took C13 and C14 on main). `phase` on walls, openings and rooms
    (`PHASES`, `PhaseSchema`), and `base` on the plan (a path, held to a path's limit by
    `command/planText.ts`). Optional and never defaulted: the file stays version 1, and a plan that
    states neither reads exactly as before (`planInState` returns it as it is). A part that states
@@ -145,7 +145,7 @@ honestly, the whole `dist` (`grid.mjs` and every chunk) is 2,814,252 bytes again
 
 **After merging main** (WRT-4's mirror and turn, BRF-3's plot): conflicts in `CHANGELOG.md`, the
 agents' changelog, `write.ts`, `diffTools.ts`, `floorplan.ts`, `types/floorplan.ts` and `look.ts`,
-each resolved keeping both sides. BRF-3 took convention C13, so the phases are C14. The checks
+each resolved keeping both sides. BRF-3 took convention C13 and CNT-17 C14, so the phases are C15. The checks
 after the merge are below.
 
 | Check, after the merge (main at 26e928e) | Result |

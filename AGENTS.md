@@ -44,7 +44,7 @@ Notes for agents and people changing this repository.
   checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
   sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
 - `packages/floorplan/src/geometry/phases.ts` (CNT-10): a plan's phases, `existing`, `demolished`
-  and `new` on walls, openings and rooms (C14 in `types/floorplan.ts`). `planInState` gives the
+  and `new` on walls, openings and rooms (C15 in `types/floorplan.ts`). `planInState` gives the
   building before or after the work; everything that measures or checks reads it after
   (`surveyPlan`, `planAreaFigures`, `checkLocalRules` and the like), `validatePlan` checks each
   state on its own, and the drawing and the exports read both, each part with its phase. A plan
@@ -107,6 +107,12 @@ Notes for agents and people changing this repository.
   `grid_measure` and writes it met or missed, never as a score, and `answer.ts` adds the lines to
   every change's answer and the one reminder on a first plan with no brief. `grid_write_brief`
   writes it; `docs/brief.md` is its page.
+- Accessibility measurements (CNT-17, `packages/cli/src/quantities/access.ts`, `grid_measure
+  what=access`): for the rooms and routes a plan marks (`accessible`, C14), or every room, each
+  door's clear width, each corridor's narrowest point, turning space and the steps on the way in,
+  from CNT-13's, LVL-3's, LVL-4's and LVL-7's measures. Numbers are set only against the brief's
+  figures, said as "your figure", and a code's once `confirmedFigure` (`packages/rules`) gives
+  one: a named person checked it. No line says a plan is accessible.
 - `grid diff` and `grid mark` (WRT-8, `packages/cli/src/versions/`, tools `grid_diff` and
   `grid_mark_start` in `src/mcp/diffTools.ts`): the plan against a start marker
   (`plan.markers.json` beside it, at most `MARKERS_MAX`) or its last commit, read from the

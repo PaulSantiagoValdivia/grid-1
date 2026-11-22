@@ -27,6 +27,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
 - [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
 - [Saved views, and the camera record](#saved-views-and-the-camera-record): a camera saved by name, as Grid sets it and as BCF writes it
+- [What needs to be accessible](#what-needs-to-be-accessible): `plan/not-checked-access`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -1129,6 +1130,32 @@ is](#a-fault-stays-where-it-is)), and the rest of the plan is read.
 `grid_mirror` mirrors each saved view with the plan; the other changes leave them where they are,
 so a view of a room that moves keeps pointing where the room was. The sheet does not draw them
 (`coverage.ts`): it takes its own pictures.
+
+## What needs to be accessible
+
+A plan may say which rooms and routes need to be accessible, in `accessible` (CNT-17, C14):
+
+```json
+"accessible": { "rooms": ["bath", "bed1"], "routes": [{ "to": "kitchen" }, { "from": "bed1", "to": "bath" }] }
+```
+
+| Field | What it states |
+|---|---|
+| `rooms` | Rooms that need to be accessible, by id: each is measured, and the way in to it from the entrance |
+| `routes` | Ways that need to be accessible: `to` a room, and `from` a room or, left out, from the entrance (the front door the plan names, else its doors to the outside on the ground floor) |
+
+It is a mark of what is needed, never a finding. `grid_measure what=access` measures what it
+marks, as numbers ([the tool server](tool-server.md#accessibility-measurements-as-numbers)):
+each door's hole and clear width, each corridor's narrowest point, each room's turning space and
+the steps on the way in with their heights, set only against the person's own figures from the
+brief. With no mark it measures every room, and says so. An id the mark names that is no room
+is said in that answer and not measured; the plan is never refused for it. A mark that cannot be
+read is left out with a line (`plan/value-left-out`) and the rest of the plan is kept.
+
+`grid check` gives a plan that marks anything one line, `plan/not-checked-access`: what is
+marked was not checked, as Grid holds no figure for it that a named person has confirmed. No
+line says a room, a route or the plan is accessible. The sheet draws no mark. Grid's edits do
+not carry the mark yet: a room merged or split away is named in the answer as no room.
 
 ## People are kept out of the plan
 

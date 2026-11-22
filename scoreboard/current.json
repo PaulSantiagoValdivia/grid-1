@@ -121,7 +121,7 @@
    "parking": "no",
    "materials": "no",
    "shading": "no",
-   "accessible-mark": "no"
+   "accessible-mark": "yes"
   },
   "mistakes": {
    "mistakes": 9,

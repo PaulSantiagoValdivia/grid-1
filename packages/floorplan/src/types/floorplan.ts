@@ -118,7 +118,16 @@
  *   it is drawn on the ground floor's plan, and the building is measured to it from its outside
  *   face, every floor at or above the ground floor seen from above. All four are optional and
  *   never defaulted (version 1).
- * C14 · Phases, and a fit-out on a base plan (CNT-10, lab EL-10, CP4-4)
+ *
+ * C14 · What needs to be accessible (CNT-17, lab EL-15, C-14, J-15)
+ *   A plan MAY say which rooms and routes need to be accessible, in `accessible`: `rooms`, by id,
+ *   and `routes`, each `to` a room and `from` a room or, unstated, from the entrance. It is a
+ *   mark of what is needed, never a finding: Grid measures the marked rooms and the ways to them
+ *   (`grid_measure what=access`) and holds no figure they are checked against. Ids the mark names
+ *   that are no room are said and not measured, never refused. Optional and never defaulted
+ *   (version 1).
+ *
+ * C15 · Phases, and a fit-out on a base plan (CNT-10, lab EL-10, CP4-4)
  *   A wall, an opening and a room MAY state its `phase`: `existing` (it stands before the work and
  *   stays), `demolished` (it stands before the work and is taken out) or `new` (the work builds
  *   it). One plan then holds two states of the building: before the work (existing and
@@ -352,7 +361,7 @@ export const FloorSchema = z.object({
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
 
 /**
- * CNT-10 (C14): what the work does to a wall, an opening or a room: it stands before and stays
+ * CNT-10 (C15): what the work does to a wall, an opening or a room: it stands before and stays
  * (`existing`), it stands before and is taken out (`demolished`), or the work builds it (`new`).
  */
 export const PHASES = ['existing', 'demolished', 'new'] as const
@@ -464,7 +473,7 @@ export const WallSchema = z.preprocess(
       floor: text('id').pipe(z.string().min(1)).optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
-      // CNT-10 (C14): what the work does to it. Optional and never defaulted (version 1).
+      // CNT-10 (C15): what the work does to it. Optional and never defaulted (version 1).
       phase: PhaseSchema.optional(),
       // WRT-6: what the file left out and the reading filled in (`withWallDefaults`). Grid's
       // reading only: never in a file, and written back by `statedWall` without those values.
@@ -729,7 +738,7 @@ export const RoomSchema = z.object({
   number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
-  // CNT-10 (C14): what the work does to it. Optional and never defaulted (version 1).
+  // CNT-10 (C15): what the work does to it. Optional and never defaulted (version 1).
   phase: PhaseSchema.optional(),
 })
 
@@ -780,7 +789,7 @@ export const OpeningSchema = z.object({
   anchor: OpeningAnchorSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
-  // CNT-10 (C14): what the work does to it; unstated, its wall's when that is demolished or new.
+  // CNT-10 (C15): what the work does to it; unstated, its wall's when that is demolished or new.
   // Optional and never defaulted (version 1).
   phase: PhaseSchema.optional(),
 })
@@ -1260,6 +1269,25 @@ export const ViewSchema = z
   })
 
 /**
+ * CNT-17 (C14): a route that needs to be accessible: `to` a room, by id, and `from` a room or,
+ * unstated, from the entrance (the front door the plan names, else its doors to the outside on
+ * the ground floor).
+ */
+export const AccessibleRouteSchema = z.object({
+  from: text('id').pipe(z.string().min(1)).optional(),
+  to: text('id').pipe(z.string().min(1)),
+})
+
+/**
+ * CNT-17 (C14): the rooms and routes that need to be accessible. A mark of what is needed, never
+ * a finding. Optional and never defaulted (version 1).
+ */
+export const AccessibleSchema = z.object({
+  rooms: parts(text('id').pipe(z.string().min(1)), 'rooms').optional(),
+  routes: parts(AccessibleRouteSchema, 'routes').optional(),
+})
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
  * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
@@ -1343,7 +1371,7 @@ export const FloorPlanFieldsSchema = z.object({
   // LVL-3: stairs, each stated once across the floors it joins. Optional and never defaulted.
   stairs: parts(StairSchema, 'stairs').optional(),
   referenceImage: ReferenceImageSchema.optional(),
-  // CNT-10 (C14): the plan this one is fitted out in, by its path from the project folder. Its
+  // CNT-10 (C15): the plan this one is fitted out in, by its path from the project folder. Its
   // walls and openings are read in as existing and never written back. Optional and never
   // defaulted (version 1).
   base: text('path').pipe(z.string().min(1)).optional(),
@@ -1368,6 +1396,9 @@ export const FloorPlanFieldsSchema = z.object({
   // VEW-3 (C11): named views, each a camera saved with the plan (`ViewSchema`). Optional and never
   // defaulted (version 1).
   views: parts(ViewSchema, 'views').optional(),
+  // CNT-17 (C14): the rooms and routes that need to be accessible (`AccessibleSchema`). Optional
+  // and never defaulted (version 1).
+  accessible: AccessibleSchema.optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -1425,6 +1456,8 @@ export type SiteThing = z.infer<typeof SiteThingSchema>
 export type Setback = z.infer<typeof SetbackSchema>
 export type Mark = z.infer<typeof MarkSchema>
 export type View = z.infer<typeof ViewSchema>
+export type Accessible = z.infer<typeof AccessibleSchema>
+export type AccessibleRoute = z.infer<typeof AccessibleRouteSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {
