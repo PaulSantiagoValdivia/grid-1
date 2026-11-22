@@ -16,7 +16,8 @@
  */
 import type { FloorPlan } from '../types/floorplan'
 import type { ReadFault } from '../types/readParts'
-import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, planFloors, planForFloor, resolveFloor, toDxf, toGlb, toIfc, toObj, withPatterns } from '../geometry'
+import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, planFloors, planForFloor, resolveFloor, roomNumbers, shownRoomNumber, toDxf, toGlb, toIfc, toObj, withPatterns } from '../geometry'
+import type { DxfProfile } from '../geometry/export/dxfProfile'
 import type { LeftOutPart } from '../geometry/export/leftOut'
 import { exportContents } from './leftOut'
 
@@ -48,6 +49,8 @@ export interface PlanExportOptions {
   readonly now: Date
   /** What the reader did with the plan file (MSG-6): the parts it left out are named too. */
   readonly faults?: readonly ReadFault[]
+  /** HND-1: the DXF's layers, pens and scale; Grid's neutral profile when left out. */
+  readonly dxfProfile?: DxfProfile
 }
 
 export interface PlanExport {
@@ -96,7 +99,10 @@ export function exportPlan(stated: FloorPlan, format: ExportFormat, options: Pla
   const note = { leftOut: contents.leftOut }
   // CNT-9: the DXF writes the facts of the floor's parts and of the floor itself.
   const facts = dxfFactsOf(storey, planFloors(ordered).find((f) => f.id === floorId) ?? null)
-  const data = format === 'dxf' ? toDxf(buildFloorPlan(storey), { ...note, facts })
+  // HND-1: each room's tag carries its number, counted across the whole building (ARE-12).
+  const numbers = (): Map<string, string> => new Map(roomNumbers(ordered).filter((n) => n.floor === floorId).map((n) => [n.id, shownRoomNumber(n)]))
+  const profile = options.dxfProfile === undefined ? {} : { profile: options.dxfProfile }
+  const data = format === 'dxf' ? toDxf(buildFloorPlan(storey), { ...note, facts, roomNumbers: numbers(), ...profile })
     : format === 'obj' ? toObj(buildScene(storey), note)
     : toGlb(buildScene(storey), note)
   const floors = planFloors(plan)

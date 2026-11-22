@@ -18,6 +18,7 @@ import { area, signedArea } from '../vec2'
 import { validatePlan } from '../validate'
 import { buildFloorPlan } from '../floorplan'
 import { pointInPolygon } from '../innerPoint'
+import { modelEntities, numberOf, valueOf, worldShapes } from '../export/__tests__/dxf-reader'
 import { buildScene } from '../scene3d'
 import { toDxf } from '../export/dxf'
 import { toObj } from '../export/obj'
@@ -228,21 +229,17 @@ describe('what is drawn (ARE-6)', () => {
   })
 
   it('writes the hole into the DXF as a closed outline of its own on the rooms layer', () => {
-    const lines = toDxf(buildFloorPlan(ring())).split('\r\n')
-    const outlines: Vec2[][] = []
-    for (let i = 0; i < lines.length; i += 2) {
-      if (lines[i] !== '0' || lines[i + 1] !== 'POLYLINE' || lines[i + 3] !== 'GRID-ROOMS') continue
-      const points: Vec2[] = []
-      for (let j = i + 2; lines[j + 1] !== 'SEQEND'; j += 2) {
-        if (lines[j] === '0' && lines[j + 1] === 'VERTEX') points.push({ x: Number(lines[j + 5]), y: Number(lines[j + 7]) })
-      }
-      outlines.push(points)
-    }
+    // HND-1: light polylines, and the room's name in its tag.
+    const dxf = toDxf(buildFloorPlan(ring()))
+    const outlines: Vec2[][] = worldShapes(dxf).filter((s) => s.type === 'LWPOLYLINE' && s.layer === 'GRID-ROOMS').map((s) => [...s.points])
     expect(outlines.map((points) => Math.round(area(points) * 1e6) / 1e6)).toEqual([94.09, 18.49])
     // The label goes on the ring's floor, not in the courtyard.
-    const text = lines.indexOf('Ring gallery')
-    const at = { x: Number(lines[text - 7]), y: Number(lines[text - 5]) }
+    const name = modelEntities(dxf, 'ATTRIB').find((e) => valueOf(e, 1) === 'Ring gallery')!
+    const at = { x: numberOf(name, 10), y: numberOf(name, 20) }
     expect(inCourtyard(at)).toBe(false)
+    const labelAt = buildFloorPlan(ring()).rooms[0]!.labelAt
+    expect(at.x).toBeCloseTo(labelAt.x, 6)
+    expect(at.y).toBeCloseTo(labelAt.y, 6)
   })
 
   it('leaves the courtyard open in the 3D floor, the OBJ and the GLB', () => {
