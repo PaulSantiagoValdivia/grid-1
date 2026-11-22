@@ -77,7 +77,7 @@ export function buildingOfFloor(plan: FloorPlan): ReadonlyMap<string, string> {
   return new Map(planBuildings(plan).flatMap((building) => building.floors.map((floor) => [floor, building.id] as const)))
 }
 
-/** MSG-11: an issue says its sentence by key (`issue.building/*`); its `message` is the English. */
+/** MSG-11: an issue says its sentence by key (`issue.plan/building-*`); its `message` is the English. */
 const buildingIssue = (id: string, code: string, sentence: Said): Issue => withSaid({ entity: 'plan', id, code, message: english(sentence), severity: 'warning' }, sentence)
 
 /**
@@ -90,7 +90,7 @@ export function buildingIssues(plan: FloorPlan): Issue[] {
   const issues: Issue[] = []
   const seen = new Set<string>()
   for (const building of plan.buildings ?? []) {
-    if (seen.has(building.id)) issues.push(buildingIssue(building.id, 'building/duplicate-id', said('issue.building/duplicate-id', { building: name(building.id) })))
+    if (seen.has(building.id)) issues.push(buildingIssue(building.id, 'plan/building-duplicate-id', said('issue.plan/building-duplicate-id', { building: name(building.id) })))
     seen.add(building.id)
   }
   const floorIds = planFloors(plan).map((floor) => floor.id)
@@ -99,11 +99,11 @@ export function buildingIssues(plan: FloorPlan): Issue[] {
       const meant = likelyId(id, floorIds)
       const values = { building: name(building.name), floor: name(id) }
       issues.push(
-        buildingIssue(building.id, 'building/unknown-floor', meant === null ? said('issue.building/unknown-floor', values) : said('issue.building/unknown-floor.meant', { ...values, meant: name(meant) }))
+        buildingIssue(building.id, 'plan/building-unknown-floor', meant === null ? said('issue.plan/building-unknown-floor', values) : said('issue.plan/building-unknown-floor.meant', { ...values, meant: name(meant) }))
       )
     }
     for (const { floor, building: first } of building.elsewhere) {
-      issues.push(buildingIssue(building.id, 'building/floor-in-two', said('issue.building/floor-in-two', { building: name(building.name), floor: name(floor), first: name(first) })))
+      issues.push(buildingIssue(building.id, 'plan/building-floor-in-two', said('issue.plan/building-floor-in-two', { building: name(building.name), floor: name(floor), first: name(first) })))
     }
   }
   return issues

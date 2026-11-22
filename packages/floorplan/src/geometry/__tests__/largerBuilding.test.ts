@@ -283,6 +283,6 @@ describe('CNT-6 several buildings in one plan', () => {
   })
 
   it('names a floor a building lists that the plan does not have, and leaves it out', () => {
-    expect(validatePlan(campus()).issues.filter((i) => i.code.startsWith('building/')).map((i) => `${i.code} ${i.id}`)).toEqual(['building/unknown-floor studio'])
+    expect(validatePlan(campus()).issues.filter((i) => i.code.startsWith('plan/building-')).map((i) => `${i.code} ${i.id}`)).toEqual(['plan/building-unknown-floor studio'])
   })
 })

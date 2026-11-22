@@ -508,9 +508,9 @@ export const CODES = {
   // --- Buildings (CNT-6) ----------------------------------------------------------------------
   // The buildings list's own faults, as the flats list's: the building is read without what it
   // names wrongly. The found is the check's own sentence, with the ids.
-  'building/duplicate-id': {},
-  'building/unknown-floor': {},
-  'building/floor-in-two': {},
+  'plan/building-duplicate-id': {},
+  'plan/building-unknown-floor': {},
+  'plan/building-floor-in-two': {},
 
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},
