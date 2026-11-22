@@ -32,6 +32,8 @@ export interface Subject {
   readonly also: readonly string[]
   /** The names of the rooms a finding or notice names, as the plan writes them. */
   readonly names: readonly string[]
+  /** CNT-13: the fixtures a line names, each as `kitchen run "k1"` (`itemName`). */
+  readonly items?: readonly string[]
   /** How many floors the plan has. */
   readonly floors: number
   readonly finding?: RuleFinding
@@ -436,6 +438,12 @@ export const CODES = {
     needed: fixed('floor clear of walls where its leaf swings'),
     fix: fixed('Hang it from its other end, open it the other way, or move it clear of that wall.')
   },
+  'opening/door-hits-item': {
+    says: (s) => `${s.label} hits ${(s.items ?? []).join(', ') || 'a fixture'} when it opens`,
+    found: (s) => `its leaf sweeps the floor where ${(s.items ?? []).length === 1 ? 'that fixture stands' : 'those fixtures stand'}`,
+    needed: fixed('floor clear of fixtures where its leaf swings'),
+    fix: fixed('Hang it from its other end, open it the other way, or move the fixture out of its swing.')
+  },
   'opening/doors-collide': {
     says: (s) => `${s.label} hits another door when they open`,
     found: (s) => `its leaf and the leaf of door ${s.also.map(quoted).join(', ')} sweep the same floor`,
@@ -634,6 +642,18 @@ export const CODES = {
     says: (s) => `${s.label} is taller than the room it stands in`,
     needed: fixed('a fixture no higher than its room'),
     fix: fixed('Lower its height, or give the room or its floor the height it really has.')
+  },
+  // CNT-13: use indicators the drawing's check gives. The found is the check's own sentence:
+  // what was measured, with what depth, and that it is an indicator.
+  'item/blocks-doorway': {
+    says: (s) => `${s.label} stands in front of the doorway of ${s.also[0] === undefined ? 'an opening' : quoted(s.also[0])}, an indicator`,
+    needed: fixed('the floor in front of a doorway clear of fixtures, within Grid\'s own approach depth'),
+    fix: fixed('Move the fixture clear of the doorway, or move the doorway along its wall.')
+  },
+  'item/blocks-window': {
+    says: (s) => `${s.label} stands in front of ${s.also[0] === undefined ? 'a window' : `window ${quoted(s.also[0])}`}, higher than its sill, an indicator`,
+    needed: fixed('a fixture in front of a window no higher than its sill, within Grid\'s own approach depth'),
+    fix: fixed('Move the fixture along the wall clear of the window, lower it, or raise the sill.')
   },
 
   // --- Floors ---------------------------------------------------------------------------------

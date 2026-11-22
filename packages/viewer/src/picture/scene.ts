@@ -605,12 +605,13 @@ function planSceneIn(input: SceneInput): SvgNode[] {
 
   // CNT-12: the fixtures, over the room fills and under the walls, so a wall covers a fixture
   // that runs into it. Each is its symbol to scale, in the wall's ink on the paper. Drawing, not
-  // a target: clicks reach the room underneath.
+  // a target: clicks reach the room underneath. Lit, like a wall, while the warning of a door
+  // that swings into it is hovered (CNT-13).
   for (const item of drawing.items) {
     out.push(
       el(
         'g',
-        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none' },
+        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none', ...live.hit(item.id) },
         [
           ...item.rings.map((ring, index) => el('path', { 'data-part': 'fixture-ring', d: `${pathOf(ring)}`, ...paint.fixture }, [], `r${index}`)),
           ...item.lines.map((line, index) => el('path', { 'data-part': 'fixture-line', d: virtualPath(line), ...paint.fixtureLine }, [], `l${index}`))
