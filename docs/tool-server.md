@@ -20,7 +20,7 @@ the same facts as data; a view also returns its picture. Units are metres.
 | Tool | Answers |
 |---|---|
 | `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
-| `grid_areas` | Each room's size and net area, totals by use, gross areas, in metres or feet, as text or CSV, with the measuring rule stated |
+| `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), in metres or feet, as text or CSV, each figure with its rule stated |
 | `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; text or CSV |
 | `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; and what is narrower than the person's own figure |

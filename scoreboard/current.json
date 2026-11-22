@@ -3,7 +3,7 @@
  "counts": {
   "roomsMeasuredWrong": 197,
   "damageSilent": 386,
-  "turnsAnswered": 15,
+  "turnsAnswered": 16,
   "mistakesNamed": 2,
   "checksFed": 5,
   "roomsNotMeasured": 727,
@@ -54,7 +54,7 @@
   },
   "turns": {
    "turns": 67,
-   "answered": 15,
+   "answered": 16,
    "labAnsweredFully": 15
   },
   "checks": {
@@ -95,8 +95,8 @@
    "outdoor-space": "no",
    "flats": "no",
    "ceiling-height": "no",
-   "gross-area": "no",
-   "area-table": "no",
+   "gross-area": "yes",
+   "area-table": "yes",
    "room-width": "no",
    "route-length": "no",
    "take-offs": "no",
