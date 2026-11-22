@@ -10,7 +10,7 @@
 import { floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { causeText, checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
 import { readSeen, type SeenState } from '../seen/marks'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
@@ -1110,7 +1110,8 @@ function seenData(state: SeenState | undefined): Record<string, unknown> | undef
 /** One line of grid_check's list. COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for. */
 function toolLine(result: CheckResult, index: number): string {
   const line = result.result.lines[index]!
-  return `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''} Fix: ${line.fix} [${line.code}]`
+  // MSG-5: a line that follows from another is set under it, and says so.
+  return `  ${line.causedBy ? '  ' : ''}${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''}${line.causedBy ? ` Follows from ${causeText(line.causedBy)}.` : ` Fix: ${line.fix}`} [${line.code}]`
 }
 
 const checkTool: GridTool = {
@@ -1132,6 +1133,8 @@ const checkTool: GridTool = {
     label: STRING,
     // MSG-1: the one list and the one count, as docs/result-contract.md sets them out.
     count: { type: 'number' },
+    // MSG-5: the lines that follow from no other: the problems to act on.
+    problems: { type: 'number' },
     lines: listSchema(objectSchema({
       code: STRING,
       kind: STRING,
@@ -1147,6 +1150,16 @@ const checkTool: GridTool = {
       // MSG-7: the change that would clear the line, as data, and the same as a call to retry.
       fixes: { type: 'array' },
       calls: listSchema(objectSchema({ tool: STRING, arguments: { type: 'object' } }, ['tool', 'arguments'])),
+      // MSG-5: the line this one follows from; the parts a line for several stands for; the notes held back.
+      causedBy: objectSchema({ code: STRING, id: STRING }),
+      each: listSchema(objectSchema({ kind: STRING, id: STRING })),
+      held: listSchema(objectSchema({
+        code: STRING,
+        thing: objectSchema({ kind: STRING, id: STRING }),
+        floor: STRING,
+        also: listSchema(STRING),
+        waitsFor: listSchema(STRING),
+      })),
       // MSG-10: the person's seen mark, when the line has one: seen, or back (new again, its parts changed since).
       seen: objectSchema({ state: STRING, reason: STRING, by: STRING, at: STRING, changed: listSchema(objectSchema({ kind: STRING, id: STRING })) }, ['state', 'reason', 'by', 'at']),
     }, ['code', 'kind', 'thing', 'floor', 'also', 'message', 'found', 'needed', 'fix'])),
@@ -1199,14 +1212,14 @@ const checkTool: GridTool = {
     const seenWords = seen > 0 ? `; ${seen} of them seen, under Seen` : ''
     const checksRun = result.report.rules.length === 0 ? `Checks run: none. ${NOTHING_CHECKED}` : `Checks run: ${result.report.rules.length}.`
     // NOTHING_FOUND: an empty list only means these checks found nothing.
-    lines.push(`To look at: ${record.count === 0 ? `nothing. ${NOTHING_FOUND}` : `${record.count} (${countsText(record)}${seenWords}).`} ${checksRun}`)
+    lines.push(`To look at: ${record.count === 0 ? `nothing. ${NOTHING_FOUND}` : `${record.count} (${countsText(record)}${seenWords}).${problemsText(record)}`} ${checksRun}`)
     if (full) for (const rule of result.report.rules) lines.push(`  - ${rule.title} (${rule.source.label})`)
     // A seen line is listed under Seen, never left out (MSG-10).
     const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
     for (const index of open.slice(0, 12)) {
       lines.push(toolLine(result, index))
       const state = states[index]
-      if (state?.state === 'back') lines.push(`      ${seenBeforeText(state)}.`)
+      if (state?.state === 'back') lines.push(`${record.lines[index]!.causedBy ? '  ' : ''}      ${seenBeforeText(state)}.`)
     }
     if (open.length > 12) lines.push(`  … ${open.length - 12} more in the data, each with what was found and needed.`)
     // WRT-6 (lab WR-15): what was assumed, for the person to confirm, named even past the first 12.
@@ -1251,6 +1264,7 @@ const checkTool: GridTool = {
       data: {
         label: GENERAL_GUIDANCE_LABEL,
         count: record.count,
+        problems: record.problems,
         lines: withCalls,
         seenCount: seen,
         marksFile: result.seen?.file ?? '',

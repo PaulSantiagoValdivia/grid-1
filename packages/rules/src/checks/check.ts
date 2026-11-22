@@ -7,11 +7,13 @@
  * network.
  */
 
-import { checkPlanSanity, floorBuilding, floorStatesBuilding, groundLevel, planFloors, planForFloor, statedGround, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity, escapeWaitsFor, floorBuilding, floorStatesBuilding, groundLevel, planDamage, planFloors, planForFloor, statedGround, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
+import { roomWallIds } from '@ongrid/floorplan/geometry/plan'
 import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
+import type { LeftOutPart } from '@ongrid/floorplan/types/readParts'
 import { FIGURE_LIMITS, FIGURE_RULES, RULE_BUILDINGS, RULE_FIGURES, RULE_READ_FOR, RULE_USES, ruleReadsBuilding, type FigureRuleId } from './catalogue'
-import { allSkipped, coverageOf, LOOKS_AT, planCheckScopes, type FloorScope } from './coverage'
+import { allSkipped, coverageOf, heldCoverage, LOOKS_AT, planCheckScopes, type FloorScope } from './coverage'
 import { escapeCheck, hasEscapeFigures, type EscapeFigures } from './escape'
 import { buildingKindsText, resolveFigure, type FigureKey } from './figures'
 import { messages, type FigureSubject } from './messages'
@@ -42,6 +44,11 @@ export interface CheckOptions {
    * Not stated, the carried figures apply and every finding names them as its basis.
    */
   readonly country?: string
+  /**
+   * MSG-5: the walls, rooms and openings the reader left out of the plan (`readPlanParts`). A
+   * finding that rests on one is held back, as one on a part the drawing check leaves out is.
+   */
+  readonly leftOut?: readonly LeftOutPart[]
 }
 
 /** 'local-lookup' when a check applied a looked-up figure. */
@@ -63,7 +70,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     'habitable-room-area': minRoomArea !== null,
     'escape-opening': hasEscapeFigures(escape)
   }
-  const base = checkPlanSanity(plan)
+  const base = checkPlanSanity(plan, { leftOut: options.leftOut ?? [] })
   const floors = planFloors(plan)
   // LVL-4: the floor at grade is the ground floor, restated against the site's ground level.
   const atGround = new Set(
@@ -78,13 +85,15 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   // MSG-2: what each figure check looked at, floor by floor.
   const scopes: Record<FigureRuleId, [string, FloorScope][]> = { 'habitable-room-area': [], 'escape-opening': [] }
   const read = new Map<string, ReturnType<typeof drawable>>()
+  for (const floor of floors) read.set(floor.id, drawable(planForFloor(plan, floor.id)))
+  // MSG-5: what could not be drawn, as the plan checks read it, for the escape notes that rest on it.
+  const damage = planDamage(plan, read, options.leftOut ?? [])
+  const heldEscapes = new Map<string, { finding: RuleFinding; waitsFor: string[] }[]>()
   // CNT-5: the floors, by rule, that the plan says are a kind of building the rule does not read.
   const notFor: Record<FigureRuleId, { floor: string; rooms: string[]; building: BuildingType }[]> = { 'habitable-room-area': [], 'escape-opening': [] }
   for (const floor of floors) {
     const floorName = floor.name || floor.id
-    const drawn = drawable(planForFloor(plan, floor.id))
-    read.set(floor.id, drawn)
-    const { storey, leftOut } = drawn
+    const { storey, leftOut } = read.get(floor.id)!
     // The plan checks' notices for this floor first, then this floor's own.
     notChecked.push(...base.notChecked.filter((notice) => notice.floor === floor.id))
     // CNT-5: a figure check runs on a floor only where the plan says it is a kind of building
@@ -103,7 +112,12 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
     if (escapes === null) {
       // Skipped above, with the reason.
     } else if (ran['escape-opening']) {
-      findings.push(...escapes.findings)
+      for (const found of escapes.findings) {
+        const room = storey.rooms.find((r) => r.id === found.rooms[0])
+        const waitsFor = room === undefined ? [] : escapeWaitsFor(roomWallIds(room), damage.get(floor.id))
+        if (waitsFor.length === 0) findings.push(found)
+        else heldEscapes.set(floor.id, [...(heldEscapes.get(floor.id) ?? []), { finding: found, waitsFor }])
+      }
       scopes['escape-opening'].push([floor.id, escapes.scope])
       // Above the third storey the figures here stop: said, never passed in silence (CH-4).
       const above = escapes.scope.skipped.above_escape_storeys ?? []
@@ -126,6 +140,15 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
       notChecked.push(...sizes.notChecked)
       scopes['habitable-room-area'].push([floor.id, sizes.scope])
     } else scopes['habitable-room-area'].push([floor.id, allSkipped(storey, 'no_figures_for_place')])
+  }
+  // MSG-5: an escape note held back goes on its floor's "could not be drawn" notice, after the
+  // plan checks' own.
+  for (let i = 0; i < notChecked.length; i++) {
+    const notice = notChecked[i]!
+    const escapesHeld = heldEscapes.get(notice.floor)
+    if (notice.reason !== 'cannot_be_drawn' || escapesHeld === undefined) continue
+    notChecked[i] = { ...notice, held: [...(notice.held ?? []), ...escapesHeld] }
+    heldEscapes.delete(notice.floor)
   }
   // A plan of walls alone: no check that looks at rooms ran, and the report says so (CH-1).
   if (plan.rooms.length === 0) {
@@ -195,6 +218,9 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
       return kinds.length > 0 ? { ...covered, readFor: kinds, ...reads } : { ...covered, ...reads }
     })
   ]
+  // MSG-5: a part whose finding was held back was not looked at, and says why.
+  const held = notChecked.flatMap((notice) => (notice.held ?? []).map((h) => h.finding))
+  coverage.splice(0, coverage.length, ...heldCoverage(coverage, held))
   const looked = new Set([
     ...coverage.filter((c) => c.lookedAtCount > 0).map((c) => c.ruleId),
     ...base.rules.filter((rule) => !Object.hasOwn(LOOKS_AT, rule.id)).map((rule) => rule.id)
