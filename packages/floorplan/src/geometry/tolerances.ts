@@ -612,10 +612,10 @@ export const TOLERANCES = {
     decides:
       'How far a floor, a stair room or a lift shaft may stand off the one below it and still line ' +
       'up with it (LVL-5, lab WR-9): a floor whose outline reaches past the floor below, or sits ' +
-      'back from it, by more than this is said not to line up, and so is a stair room or a shaft ' +
-      'moved by more than this from the one it lies over, unless the plan marks it as meant. ' +
-      'Wall faces drawn a few centimetres apart, as walls of different thickness on one axis are, ' +
-      'line up.',
+      'back from it, by more than this and half the thickest wall that stretch runs along is said ' +
+      'not to line up (walls of different thickness on one axis have their faces apart by up to ' +
+      'that), and so is a stair room or a shaft moved by more than this from the one it lies ' +
+      'over, unless the plan marks it as meant.',
     basis: own
   },
   stairStepLength: {

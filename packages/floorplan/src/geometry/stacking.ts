@@ -5,8 +5,9 @@
  * other where it was, with nothing said (E-9: the ground floor 0.30 m wider than the floor above,
  * seen only in a 3D picture). Here each floor's outline, as its walls draw it (`floorSpaces`), is set
  * against the outline of the floors one level below: where it reaches past them it overhangs, and
- * where they reach past it it sits back. A stretch no more than `stackShift` across lines up, as
- * the faces of walls of different thickness on one axis do. Only floors with a room on them are
+ * where they reach past it it sits back. A stretch no deeper than `stackShift` and half the
+ * thickest wall it runs along lines up, as the faces of walls of different thickness on one axis
+ * do (the scoreboard's sound buildings have outside walls from 0.20 to 0.50 m on each floor). Only floors with a room on them are
  * compared: a parapet or a lone wall is no floor plate. Either way it is a warning, as an
  * overhang or a set-back is often meant: a floor that states `overhang: "meant"` is not asked about.
  *
@@ -15,10 +16,10 @@
 
 import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
-import type { Floor, FloorPlan } from './plan'
+import type { Floor, FloorPlan, Wall } from './plan'
 import type { FloorSpaces } from './spaces'
 import type { Issue } from './validate'
-import { floorOf, planFloors } from './floors'
+import { floorOf, planFloors, wallsOnFloor } from './floors'
 import { multiArea } from './polygons'
 import { TOLERANCES, tolerance } from './tolerances'
 import { metresText } from './rounding'
@@ -41,21 +42,49 @@ interface Stretch {
   readonly y0: number
   readonly x1: number
   readonly y1: number
-  /** Across the stretch, the narrower side of its box: how far it reaches past. */
+  /** Across the stretch: how far it reaches past (`widthOf`). */
   readonly depth: number
-  readonly side: 'north' | 'east' | 'south' | 'west'
+  /** The side of the floor below it lies on, or all round it when it goes round the floor. */
+  readonly side: 'north' | 'east' | 'south' | 'west' | 'all round'
   readonly area: number
 }
 
 /** The pieces of `a` outside `b`, each at least `stackShift` across, largest first. */
-function past(a: MultiPolygon, b: MultiPolygon, middle: { x: number; y: number }): Stretch[] | null {
+/**
+ * How deep a stretch may be and still be walls of different thickness on one axis: `stackShift`,
+ * and half the thickest solid wall of either floor that runs along it. A 0.45 m ground floor wall
+ * under a 0.25 m one, on one axis, puts their faces 0.10 m apart.
+ */
+function allowed(box: { x0: number; y0: number; x1: number; y1: number }, walls: readonly Wall[]): number {
+  let thickest = 0
+  for (const wall of walls) {
+    if (wall.virtual === true || !(wall.thickness > 0)) continue
+    const reach = wall.thickness / 2 + tolerance('gap')
+    const [x0, x1] = [Math.min(wall.start[0], wall.end[0]) - reach, Math.max(wall.start[0], wall.end[0]) + reach]
+    const [y0, y1] = [Math.min(wall.start[1], wall.end[1]) - reach, Math.max(wall.start[1], wall.end[1]) + reach]
+    if (x0 <= box.x1 && box.x0 <= x1 && y0 <= box.y1 && box.y0 <= y1) thickest = Math.max(thickest, wall.thickness)
+  }
+  return tolerance('stackShift') + thickest / 2
+}
+
+/**
+ * How wide a piece is across: the width of the strip with its area and the length of its edges,
+ * every ring. Exact for a rectangle (a strip along one side), and close for a frame round a floor
+ * or an L round a corner, where its box would give the length of a side.
+ */
+function widthOf(piece: Polygon, area: number): number {
+  let perimeter = 0
+  for (const ring of piece) for (let i = 0; i + 1 < ring.length; i++) perimeter += Math.hypot(ring[i + 1]![0] - ring[i]![0], ring[i + 1]![1] - ring[i]![1])
+  return (perimeter - Math.sqrt(Math.max(0, perimeter * perimeter - 16 * area))) / 4
+}
+
+function past(a: MultiPolygon, b: MultiPolygon, middle: { x: number; y: number }, walls: readonly Wall[]): Stretch[] | null {
   let pieces: MultiPolygon
   try {
     pieces = polygonClipping.difference(a, b)
   } catch {
     return null
   }
-  const least = tolerance('stackShift')
   const found: Stretch[] = []
   for (const piece of pieces) {
     const ring = piece[0] ?? []
@@ -63,15 +92,17 @@ function past(a: MultiPolygon, b: MultiPolygon, middle: { x: number; y: number }
     const xs = ring.map((p) => p[0])
     const ys = ring.map((p) => p[1])
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
-    const depth = Math.min(x1 - x0, y1 - y0)
-    if (!(depth > least)) continue
+    const area = multiArea([piece])
+    const depth = widthOf(piece, area)
+    if (!(depth > allowed({ x0, y0, x1, y1 }, walls))) continue
     const dx = (x0 + x1) / 2 - middle.x
     const dy = (y0 + y1) / 2 - middle.y
     // The side of the floor below it lies on: the way its middle is from the middle of that floor,
-    // read across the stretch's own long side when it is a strip.
+    // read across the stretch's own long side when it is a strip; all round when it holds the middle.
     const strip = x1 - x0 < y1 - y0 ? 'ew' : 'ns'
-    const side = strip === 'ew' ? (dx >= 0 ? 'east' : 'west') : dy >= 0 ? 'north' : 'south'
-    found.push({ x0, y0, x1, y1, depth, side, area: multiArea([piece]) })
+    const round = x0 < middle.x && middle.x < x1 && y0 < middle.y && middle.y < y1
+    const side = round ? 'all round' : strip === 'ew' ? (dx >= 0 ? 'east' : 'west') : dy >= 0 ? 'north' : 'south'
+    found.push({ x0, y0, x1, y1, depth, side, area })
   }
   return found.sort((p, q) => q.area - p.area)
 }
@@ -113,11 +144,12 @@ export function stackingIssues(plan: FloorPlan, spaces: readonly FloorSpaces[]):
       if (floor.overhang === 'meant') continue
       const upper = asMulti(outlines.get(floor.id) ?? [])
       if (upper.length === 0) continue
-      const over = past(upper, lowerUnion, middle)
-      const back = past(lowerUnion, upper, middle)
+      const walls = [...below.flatMap((f) => wallsOnFloor(plan, f.id)), ...wallsOnFloor(plan, floor.id)]
+      const over = past(upper, lowerUnion, middle, walls)
+      const back = past(lowerUnion, upper, middle, walls)
       if (over === null || back === null || (over.length === 0 && back.length === 0)) continue
       const said = (list: readonly Stretch[], verb: string): string => {
-        const named = list.slice(0, NAMED).map((s) => `${m(s.depth)} on the ${s.side}, from ${at(s.x0, s.y0)} to ${at(s.x1, s.y1)}`)
+        const named = list.slice(0, NAMED).map((s) => `${m(s.depth)} ${s.side === 'all round' ? 'all round' : `on the ${s.side}`}, from ${at(s.x0, s.y0)} to ${at(s.x1, s.y1)}`)
         const more = list.length > NAMED ? `, and in ${list.length - NAMED} more ${list.length - NAMED === 1 ? 'place' : 'places'}` : ''
         return `${verb} ${named.join('; ')}${more}`
       }

@@ -273,8 +273,9 @@ out (`room/cross-floor`).
 
 Floors are drawn one over the other, each with its own walls, so widening one floor leaves the one
 above where it was (lab E-9). The drawing's checks set each floor's outline, as its walls draw it,
-against the floors one level below: where it reaches past them by more than 0.05 m
-(`stackShift`), or sits back from them by more, it says so, with the side, by how much and the box
+against the floors one level below: where it reaches past them, or sits back from them, by more
+than 0.05 m (`stackShift`) and half the thickest wall that stretch runs along (walls of different
+thickness on one axis have their faces that far apart), it says so, with the side, by how much and the box
 of each stretch (`floor/out-of-line`, a warning). A room used as a stair, or a lift shaft, that
 lies over the one below enough to join it but is moved from it by more than 0.05 m is said too,
 with which way, how far and where both stand (`room/stair-shifted`, `room/lift-shifted`). A lift

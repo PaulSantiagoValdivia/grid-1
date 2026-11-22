@@ -25,7 +25,7 @@
 import type { Floor, FloorPlan, Opening, Wall } from './plan'
 import { floorOf, planFloors } from './floors'
 import { floorElevations, type BuildingElevations } from './elevations'
-import { tolerance } from './tolerances'
+import { TOLERANCES, tolerance } from './tolerances'
 import { quoted } from '../types/planText'
 import type { Issue } from './validate'
 
@@ -97,6 +97,13 @@ function levelsOf(plan: FloorPlan): BuildingElevations {
   return levels
 }
 
+/**
+ * A height worked out from floor levels, on the finest grid the overlap cuts use, so that a window
+ * stated 3.85 m above the ground floor reads 0.90 m above a first floor at 2.95 m, not 0.8999….
+ */
+const GRID = TOLERANCES.overlapGrids.values[1]!
+const clean = (v: number): number => (Number.isFinite(v) ? Math.round(v / GRID) * GRID : v)
+
 /** One floor's stretch of a wall through floors, in metres above the wall's own floor's level. */
 interface Stretch {
   readonly floor: string
@@ -116,8 +123,8 @@ export function wallStretches(plan: FloorPlan, wall: Wall): { readonly rise: num
   const at = (id: string): number => levels.get(id)?.floorLevel ?? 0
   const foot = at(floors[0]!)
   const rise = at(floors[floors.length - 1]!) + wall.height - foot
-  const stretches = floors.map((floor, i) => ({ floor, from: at(floor) - foot, to: i + 1 < floors.length ? at(floors[i + 1]!) - foot : rise }))
-  return { rise, stretches }
+  const stretches = floors.map((floor, i) => ({ floor, from: clean(at(floor) - foot), to: clean(i + 1 < floors.length ? at(floors[i + 1]!) - foot : rise) }))
+  return { rise: clean(rise), stretches }
 }
 
 /** How high a wall rises above its own floor's level: its height, or for one through floors its whole height. */
@@ -201,7 +208,7 @@ export function throughFloorParts(plan: FloorPlan, floorId: string): { readonly 
     if (!floors.includes(floorId)) continue
     const { rise, stretches } = wallStretches(plan, wall)
     const stretch = stretches.find((s) => s.floor === floorId)!
-    const height = stretch.to - stretch.from
+    const height = clean(stretch.to - stretch.from)
     if (!(height > tolerance('noLength'))) continue
     const part: SharedPart = {
       whole: wall,
@@ -227,15 +234,15 @@ export function throughFloorParts(plan: FloorPlan, floorId: string): { readonly 
       continue
     }
     const { stretch, part } = on
-    const height = stretch.to - stretch.from
-    const foot = opening.sill - stretch.from
-    const head = opening.sill + opening.height - stretch.from
+    const height = clean(stretch.to - stretch.from)
+    const foot = clean(opening.sill - stretch.from)
+    const head = clean(opening.sill + opening.height - stretch.from)
     const sill = Math.max(0, foot)
     const top = Math.min(head, height)
     // An opening that lies wholly on another floor's stretch has no part here.
     if (!(top - sill > tolerance('noLength')) && !(Number.isNaN(foot) || Number.isNaN(head))) continue
     const same = sill === opening.sill && top - sill === opening.height
-    const piece: Opening = same ? opening : { ...opening, sill, height: top - sill }
+    const piece: Opening = same ? opening : { ...opening, sill, height: clean(top - sill) }
     openingParts.set(piece, { whole: opening, base: part.base })
     openings.push(piece)
   }

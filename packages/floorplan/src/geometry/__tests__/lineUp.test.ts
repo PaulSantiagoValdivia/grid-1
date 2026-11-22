@@ -62,19 +62,19 @@ describe('a stair moved 1.2 m on one floor (lab WR-9, D-7)', () => {
 })
 
 /** Two boxes, one over the other, the ground floor `extra` m wider to the east (lab E-9: "30 cm wider"). */
-function house(extra: number, meant = false): FloorPlan {
-  const box = (floor: string, east: number) => [
-    { id: `${floor}-s`, start: [0, 0], end: [east, 0], thickness: 0.3, kind: 'exterior', height: 2.7, floor },
-    { id: `${floor}-e`, start: [east, 0], end: [east, 6], thickness: 0.3, kind: 'exterior', height: 2.7, floor },
-    { id: `${floor}-n`, start: [east, 6], end: [0, 6], thickness: 0.3, kind: 'exterior', height: 2.7, floor },
-    { id: `${floor}-w`, start: [0, 6], end: [0, 0], thickness: 0.3, kind: 'exterior', height: 2.7, floor }
+function house(extra: number, meant = false, groundThickness = 0.3): FloorPlan {
+  const box = (floor: string, east: number, thickness = 0.3) => [
+    { id: `${floor}-s`, start: [0, 0], end: [east, 0], thickness, kind: 'exterior', height: 2.7, floor },
+    { id: `${floor}-e`, start: [east, 0], end: [east, 6], thickness, kind: 'exterior', height: 2.7, floor },
+    { id: `${floor}-n`, start: [east, 6], end: [0, 6], thickness, kind: 'exterior', height: 2.7, floor },
+    { id: `${floor}-w`, start: [0, 6], end: [0, 0], thickness, kind: 'exterior', height: 2.7, floor }
   ]
   return parseFloorPlan({
     floors: [
       { id: 'g', name: 'Ground floor', level: 0 },
       { id: 'f', name: 'First floor', level: 1, ...(meant ? { overhang: 'meant' } : {}) }
     ],
-    walls: [...box('g', 8 + extra), ...box('f', 8)],
+    walls: [...box('g', 8 + extra, groundThickness), ...box('f', 8)],
     rooms: [
       { id: 'g-r', name: 'Living', floor: 'g', boundary: ['g-s', 'g-e', 'g-n', 'g-w'], use: 'living' },
       { id: 'f-r', name: 'Bedroom', floor: 'f', boundary: ['f-s', 'f-e', 'f-n', 'f-w'], use: 'bedroom' }
@@ -102,7 +102,9 @@ describe('a floor that no longer lies over the floor below (lab WR-9, E-9)', () 
   it('is not said when the overhang is marked as meant, nor when the floors line up', () => {
     expect(validatePlan(house(0.3, true)).issues.map((i) => i.code)).not.toContain('floor/out-of-line')
     expect(validatePlan(house(0)).issues.map((i) => i.code)).not.toContain('floor/out-of-line')
-    // Wall faces a few centimetres apart line up.
+    // Wall faces a few centimetres apart line up, and so do walls of different thickness on one
+    // axis: 0.50 m walls under 0.30 m ones put their faces 0.10 m apart all round.
     expect(validatePlan(house(0.03)).issues.map((i) => i.code)).not.toContain('floor/out-of-line')
+    expect(validatePlan(house(0, false, 0.5)).issues.map((i) => i.code)).not.toContain('floor/out-of-line')
   })
 })
