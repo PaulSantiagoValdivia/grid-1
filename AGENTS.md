@@ -248,7 +248,13 @@ Run the type check, the tests and the scoreboard before calling a change done.
 - Every `package.json` has `"license": "Apache-2.0"` and keeps `"private": true` until
   publishing is approved. A test checks both.
 - No dependency may be under a GPL, LGPL, AGPL, MPL or EPL licence. `npm run check:licenses`
-  checks `package-lock.json`, and CI runs it.
+  checks `package-lock.json`, and CI runs it. It also reads the parts list (`sbom.cdx.json`) a
+  ready-built package ships beside its binary, and holds those parts to the same rule. The one
+  exception is `ACCEPTED_BUNDLED` in `scripts/check-licenses.mjs`: parts under MPL-2.0 inside a
+  permissively licensed package's binary, shipped unchanged and named in `NOTICE` with where
+  their source is (today four, inside `@napi-rs/canvas`). The owner accepted them on
+  2026-11-22, to be reviewed again before publishing (`RELEASING.md`). Adding a part to that
+  list is the owner's decision, never an agent's.
 - Never commit secrets, `.env` files, personal data or paths from your own machine.
 - A feature documents itself in the `docs/` page for its topic, or in a new page with a row in
   the README's documentation table, and never by appending a section to `README.md`.

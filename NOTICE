@@ -19,6 +19,27 @@ Grid uses it to join wall footprints into the spaces they enclose
 
 Their full licence texts are in their packages.
 
+The ongrid package draws its PNG pictures with @napi-rs/canvas 1.1.0
+(https://github.com/Brooooooklyn/canvas), under the MIT License, Copyright (c) 2020 its author,
+as its LICENSE file states. It is a dependency, not copied code: the npm package lists it as
+optional and grid.mjs leaves it out (packages/cli/build.mjs), and the bundle for Claude's
+desktop app (.mcpb) carries it unchanged, with its LICENSE, under server/node_modules/. Its
+ready-built binary holds Skia and other libraries, each under its own licence, which the
+binary's package lists in its sbom.cdx.json.
+
+Four of the parts inside that binary are under the Mozilla Public License, Version 2.0
+(MPL-2.0, https://mozilla.org/MPL/2.0/). Grid does not change them and ships them only inside
+the binary, as @napi-rs/canvas builds it. Their source code is published on crates.io:
+
+- cssparser 0.38.0, https://crates.io/crates/cssparser/0.38.0
+- cssparser-macros 0.7.0, https://crates.io/crates/cssparser-macros/0.7.0
+- dtoa-short 0.3.5, https://crates.io/crates/dtoa-short/0.3.5
+- selectors 0.41.0, https://crates.io/crates/selectors/0.41.0
+
+The MPL-2.0 applies to those parts' own files only. It does not apply to Grid's code, which
+stays under the Apache License, Version 2.0. The versions above are the ones in
+@napi-rs/canvas 1.1.0; the binary's sbom.cdx.json lists the parts of the version installed.
+
 This product includes a port of the ACES filmic tone mapping function of three.js
 (packages/viewer/src/still/toneMap.ts), under the MIT License:
 

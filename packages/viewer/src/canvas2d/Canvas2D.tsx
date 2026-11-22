@@ -33,7 +33,7 @@ import {
 import { retainSelection } from './selection'
 import { dimensionKey, dimensionsProgress } from './buildFrame'
 import { toReact } from './toReact'
-import type { PlanLook } from '../picture/look'
+import type { Look, PlanLook } from '../picture/look'
 import { LIGHT_LOOK } from '../picture/look'
 import type { LabelStyle } from './labelPlacement'
 import { planScene } from '../picture/scene'
@@ -133,9 +133,10 @@ interface Canvas2DProps {
   onViewportChange?: (viewport: SharedViewport) => void
   /**
    * The colours and font written on the drawn elements, as a picture of the plan has them
-   * (`planToSvg`). Light by default. The stylesheets still win over them in the app.
+   * (`planToSvg`): colours of your own, or one of the named looks (`LOOKS`), the technical
+   * one included (VEW-1). Light by default. The stylesheets still win over them in the app.
    */
-  look?: PlanLook
+  look?: Look | PlanLook
   /** How the room tags read, as a picture of the plan has them (`PictureOptions.labels`). */
   labels?: LabelStyle
 }

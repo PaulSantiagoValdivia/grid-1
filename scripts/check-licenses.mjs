@@ -15,9 +15,13 @@
  * - A licence string that is not a valid expression fails when any word in it names one of the
  *   families, and passes otherwise.
  * - A package with no licence field is not checked here.
+ *
+ * It then reads the parts list (`sbom.cdx.json`, CycloneDX) that a ready-built package ships
+ * beside its binary, for every package of the lock file that is installed, and checks each part
+ * the same way. A part under a blocked licence fails unless it is in `ACCEPTED_BUNDLED`.
  */
-import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 /** The licence families Grid does not accept in its dependencies. */
@@ -175,22 +179,114 @@ export function checkLock(lock) {
 }
 
 /**
+ * The parts inside a ready-built package's binary that are under a blocked licence and that Grid
+ * accepts all the same. Each is under MPL-2.0, whose terms hold file by file: it is shipped
+ * unchanged, inside a package under a permissive licence, and `NOTICE` names it with where its
+ * source is, which is what MPL-2.0 asks for when its files are passed on unchanged. A test checks
+ * that `NOTICE` names each one. The owner accepted these on 2026-11-22, to be looked at again
+ * before Grid is published (RELEASING.md, "When publishing is approved"). A new part under a
+ * blocked licence, or one of these under another licence, still fails.
+ *
+ * @type {ReadonlyArray<{ name: string, license: string, in: string }>}
+ */
+export const ACCEPTED_BUNDLED = [
+  { name: 'cssparser', license: 'MPL-2.0', in: '@napi-rs/canvas' },
+  { name: 'cssparser-macros', license: 'MPL-2.0', in: '@napi-rs/canvas' },
+  { name: 'dtoa-short', license: 'MPL-2.0', in: '@napi-rs/canvas' },
+  { name: 'selectors', license: 'MPL-2.0', in: '@napi-rs/canvas' },
+]
+
+/**
+ * @param {unknown} licenses a CycloneDX component's `licenses` list
+ * @returns {string | undefined} one expression for them all, or none when it names no licence
+ */
+function componentLicense(licenses) {
+  if (!Array.isArray(licenses)) return undefined
+  /** @type {string[]} */
+  const parts = []
+  for (const entry of licenses) {
+    if (typeof entry?.expression === 'string') parts.push(entry.expression)
+    else if (typeof entry?.license?.id === 'string') parts.push(entry.license.id)
+    else if (typeof entry?.license?.name === 'string') parts.push(entry.license.name)
+  }
+  if (parts.length === 0) return undefined
+  return parts.length === 1 ? parts[0] : parts.map((part) => `(${part})`).join(' AND ')
+}
+
+/**
+ * @typedef {{ package: string, name: string, version: string, license: string, blocked: string[] }} BundledFinding
+ */
+
+/**
+ * @param {unknown} lock the parsed contents of a `package-lock.json`
+ * @param {string} root the folder the lock file is in, where its packages are installed
+ * @returns {{ lists: number, checked: number, accepted: number, findings: BundledFinding[] }}
+ */
+export function checkBundled(lock, root) {
+  const packages =
+    lock && typeof lock === 'object' && 'packages' in lock && lock.packages && typeof lock.packages === 'object'
+      ? Object.keys(lock.packages)
+      : []
+  /** @type {BundledFinding[]} */
+  const findings = []
+  let lists = 0
+  let checked = 0
+  let accepted = 0
+  for (const path of packages) {
+    if (path === '') continue
+    const file = join(root, path, 'sbom.cdx.json')
+    if (!existsSync(file)) continue
+    lists++
+    const sbom = JSON.parse(readFileSync(file, 'utf8'))
+    const owner = path.replace(/^.*node_modules\//, '')
+    for (const component of Array.isArray(sbom?.components) ? sbom.components : []) {
+      const license = componentLicense(component?.licenses)
+      if (license === undefined) continue
+      checked++
+      const result = checkLicense(license)
+      if (result.allowed) continue
+      const name = typeof component.name === 'string' ? component.name : '(unnamed)'
+      const known = ACCEPTED_BUNDLED.some(
+        (part) => part.name === name && part.license === license && (owner === part.in || owner.startsWith(`${part.in}-`)),
+      )
+      if (known) {
+        accepted++
+        continue
+      }
+      const version = typeof component.version === 'string' ? component.version : ''
+      findings.push({ package: owner, name, version, license, blocked: result.blocked })
+    }
+  }
+  return { lists, checked, accepted, findings }
+}
+
+/**
  * @param {string} lockPath
  * @returns {number} the exit code
  */
 export function main(lockPath) {
   const lock = JSON.parse(readFileSync(lockPath, 'utf8'))
   const { checked, findings } = checkLock(lock)
+  const bundled = checkBundled(lock, dirname(resolve(lockPath)))
   const families = BLOCKED_FAMILIES.join(', ')
   if (findings.length === 0) {
     console.log(`Checked ${checked} licences in ${lockPath}: none is ${families}.`)
-    return 0
+  } else {
+    console.error(`${findings.length} of ${checked} packages in ${lockPath} use a licence Grid does not accept (${families}):`)
+    for (const f of findings) {
+      console.error(`  ${f.name}${f.version ? `@${f.version}` : ''}  ${f.license}  (${f.path || 'root'})`)
+    }
   }
-  console.error(`${findings.length} of ${checked} packages in ${lockPath} use a licence Grid does not accept (${families}):`)
-  for (const f of findings) {
-    console.error(`  ${f.name}${f.version ? `@${f.version}` : ''}  ${f.license}  (${f.path || 'root'})`)
+  if (bundled.lists > 0 && bundled.findings.length === 0) {
+    const except = bundled.accepted > 0 ? `, but for the ${bundled.accepted} accepted and named in NOTICE` : ''
+    console.log(`Checked ${bundled.checked} parts in ${bundled.lists} ready-built ${bundled.lists === 1 ? 'package' : 'packages'}: none is ${families}${except}.`)
+  } else if (bundled.findings.length > 0) {
+    console.error(`${bundled.findings.length} parts inside ready-built packages use a licence Grid does not accept (${families}):`)
+    for (const f of bundled.findings) {
+      console.error(`  ${f.name}${f.version ? `@${f.version}` : ''}  ${f.license}  (inside ${f.package})`)
+    }
   }
-  return 1
+  return findings.length === 0 && bundled.findings.length === 0 ? 0 : 1
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
