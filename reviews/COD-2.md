@@ -82,3 +82,7 @@ Choices that were yours, each taken the reversible way:
 - After merging `main` at 89f1f15 (MSG-6, HND-9; the contract's changelog kept every section
   from both sides): build, typecheck and lint clean; the affected tests (rules, coverage, the
   `grid` end-to-end tests, the tool server, the sheet) 712 of 712 passed.
+- After merging `main` at c4f773f (MSG-8, MSG-4, WRT-3): `grid_check`'s lines keep main's
+  numbers and COD-2's `Needed:`; the contract's changelog keeps every section. Build,
+  typecheck and lint clean; the affected tests 717 of 717 passed; `npm run scoreboard` the same
+  as the stored figures.
