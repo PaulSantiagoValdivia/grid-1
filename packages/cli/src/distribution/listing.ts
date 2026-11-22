@@ -25,6 +25,7 @@
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { dependencies } from '../../package.json'
 import type { GridTool } from '../mcp/toolkit'
+import { ROOM_NAMES_TRAVEL } from '../mcp/protocol'
 
 /** The npm package, and the command `npx` runs from it. */
 export const PACKAGE_NAME = 'ongrid'
@@ -137,6 +138,8 @@ function skill(): string {
     '   `grid_move_room_side`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`,',
     '   `grid_stretch`, `grid_rename_room` or `grid_mirror`; each says what it changed, what it',
     '   guessed and what it could not keep. Change the plan only when asked.',
+    '',
+    ROOM_NAMES_TRAVEL,
     '',
     `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}", and never say a plan`,
     'meets a code or has been passed by anyone: the checks are general guidance.',

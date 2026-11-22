@@ -14,7 +14,11 @@
  * review's ghosts of an earlier version carry none: only the app draws them.
  *
  * Line widths are written in metres for the zoom being drawn (pixels times metres per pixel),
- * not with `vector-effect: non-scaling-stroke`, which only browsers honour.
+ * not with `vector-effect: non-scaling-stroke`, which only browsers honour. A paper look
+ * (SHT-1's technical look) gives them in millimetres on paper instead, times the output scale.
+ *
+ * The look decides how each part is drawn, never where: the walls, openings, door swings,
+ * dimensions and label places are the same in every look.
  *
  * Pure: no DOM, no React.
  */
@@ -37,8 +41,8 @@ import {
   placeRoomLabels
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
-import type { PlanLook } from './look'
-import { LINE_PX, TEXT_PX, lengthText } from './look'
+import type { Look, PlanLook } from './look'
+import { LINE_PX, TEXT_PX, lengthText, lineMetres, toLook } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 
@@ -47,6 +51,9 @@ export const WARNING_RADIUS_PX = 5
 
 /** The pulse's size on screen, whatever the zoom. */
 export const PULSE_RADIUS_PX = 6
+
+/** The size of the "?" on a door whose swing is not stated, in screen pixels. */
+export const UNDECIDED_TEXT_PX = 10
 
 /** The presentation attributes this module writes. Nothing else in the markup uses them. */
 export const PAINT_ATTRIBUTES = [
@@ -132,16 +139,25 @@ export interface SceneInput {
   readonly dimensions: readonly Dimension[]
   /** How many metres one pixel of the picture measures: the zoom. */
   readonly metersPerPixel: number
-  readonly look: PlanLook
+  /** A named look, or colours of your own drawn the working way. */
+  readonly look: Look | PlanLook
+  /**
+   * N in the output scale 1:N, for a look whose lines are in millimetres on paper. Left out,
+   * the picture's own: each of its pixels a CSS pixel on paper.
+   */
+  readonly paperScale?: number
   /** How the room tags read: capitals, numbers, how the area is rounded. */
   readonly labels?: LabelStyle
   readonly live?: Partial<SceneLive>
 }
 
-/** The paint for each part, for one zoom. */
-function paints(look: PlanLook, mpp: number) {
-  const px = (value: number): string => lengthText(value * mpp)
-  const dashes = (values: readonly number[]): string => values.map(px).join(' ')
+/** The paint for each part, for one look, zoom and output scale. */
+function paints(named: Look, mpp: number, paperScale: number | undefined) {
+  const look = named.colors
+  const line = lineMetres(named, mpp, paperScale)
+  const width = (part: Parameters<typeof line.width>[0]): string => lengthText(line.width(part))
+  const dashes = (part: Parameters<typeof line.dash>[0]): string => line.dash(part).map(lengthText).join(' ')
+  const ink = named.ink
   const text = (fill: string, size: number): Attrs => ({
     fill,
     'font-family': look.font,
@@ -153,39 +169,70 @@ function paints(look: PlanLook, mpp: number) {
     wall: (exposure: PlanWall['exposure'] | undefined): Attrs => ({
       fill: exposure === 'exterior' ? look.wallExterior : look.wall
     }),
+    // Drawn under every wall's fill and twice as wide as the pen: the fill covers its inner
+    // half, and where two walls meet, the seam, so what shows is one outline the pen's width
+    // round the walls as a whole.
+    wallOutline:
+      named.wallOutline === null
+        ? null
+        : ({
+            fill: 'none',
+            stroke: named.wallOutline,
+            'stroke-width': lengthText(2 * line.width('wallOutline')),
+            'stroke-linejoin': 'miter'
+          } as Attrs),
     virtual: {
       fill: 'none',
       stroke: look.virtual,
-      'stroke-width': px(LINE_PX.virtual),
-      'stroke-dasharray': dashes(LINE_PX.virtualDash)
+      'stroke-width': width('virtual'),
+      'stroke-dasharray': dashes('virtual')
     } as Attrs,
-    opening: (type: PlanOpening['type'], swing: boolean): Attrs => ({
-      fill: type === 'window' ? look.window : look.paper,
-      ...(type === 'opening' || swing
-        ? { stroke: 'none' }
-        : { stroke: look.wall, 'stroke-width': px(LINE_PX.opening) })
-    }),
-    jamb: { stroke: look.wall, 'stroke-width': px(LINE_PX.jamb) } as Attrs,
-    step: { stroke: look.wall, 'stroke-width': px(LINE_PX.step), 'stroke-linecap': 'butt' } as Attrs,
-    fixture: { fill: look.paper, stroke: look.wall, 'stroke-width': px(LINE_PX.fixture), 'stroke-linejoin': 'round' } as Attrs,
-    fixtureLine: { fill: 'none', stroke: look.wall, 'stroke-width': px(LINE_PX.fixture), 'stroke-linecap': 'butt' } as Attrs,
-    doorLeaf: { stroke: look.wall, 'stroke-width': px(LINE_PX.doorLeaf), 'stroke-linecap': 'square' } as Attrs,
-    doorArc: { fill: 'none', stroke: look.wall, 'stroke-width': px(LINE_PX.doorArc) } as Attrs,
-    extension: { stroke: look.dimension, 'stroke-width': px(LINE_PX.extension) } as Attrs,
+    opening: (type: PlanOpening['type'], swing: boolean): Attrs =>
+      // A paper look leaves the gap open, so the walls' outline shows across their cut ends.
+      named.wallOutline !== null
+        ? { fill: 'none', stroke: 'none' }
+        : {
+            fill: type === 'window' ? look.window : look.paper,
+            ...(type === 'opening' || swing ? { stroke: 'none' } : { stroke: ink, 'stroke-width': width('opening') })
+          },
+    jamb: { stroke: ink, 'stroke-width': width('jamb') } as Attrs,
+    step: { stroke: ink, 'stroke-width': width('step'), 'stroke-linecap': 'butt' } as Attrs,
+    fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
+    fixtureLine: { fill: 'none', stroke: ink, 'stroke-width': width('fixture'), 'stroke-linecap': 'butt' } as Attrs,
+    doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
+    doorArc: { fill: 'none', stroke: ink, 'stroke-width': width('doorArc') } as Attrs,
+    windowFace: { stroke: ink, 'stroke-width': width('windowFace'), 'stroke-linecap': 'butt' } as Attrs,
+    glass: { stroke: ink, 'stroke-width': width('glass'), 'stroke-linecap': 'butt' } as Attrs,
+    undecided: {
+      stroke: ink,
+      'stroke-width': width('undecided'),
+      'stroke-dasharray': dashes('undecided'),
+      'stroke-linecap': 'butt'
+    } as Attrs,
+    undecidedText: {
+      fill: ink,
+      'font-family': look.font,
+      'font-size': UNDECIDED_TEXT_PX,
+      'text-anchor': 'middle'
+    } as Attrs,
+    // A disc of paper under the "?", so the dashed line never runs through it. Not a halo of
+    // stroke under the text: Skia, which draws the PNG, does not honour `paint-order`.
+    undecidedDisc: { fill: look.paper } as Attrs,
+    extension: { stroke: look.dimension, 'stroke-width': width('extension') } as Attrs,
     dimensionLine: (room: boolean): Attrs =>
       room
         ? {
             stroke: look.dimensionSoft,
-            'stroke-width': px(LINE_PX.dimension),
-            'stroke-dasharray': dashes(LINE_PX.roomDimensionDash)
+            'stroke-width': width('dimension'),
+            'stroke-dasharray': dashes('roomDimension')
           }
-        : { stroke: look.dimension, 'stroke-width': px(LINE_PX.dimension) },
+        : { stroke: look.dimension, 'stroke-width': width('dimension') },
     dimensionText: (room: boolean): Attrs =>
       room
         ? text(look.dimensionSoftText, TEXT_PX.roomDimension)
         : text(look.dimensionText, TEXT_PX.dimension),
     label: text(look.label, TEXT_PX.roomName),
-    leader: { stroke: look.labelSoft, 'stroke-width': px(LINE_PX.leader) } as Attrs,
+    leader: { stroke: look.labelSoft, 'stroke-width': width('leader') } as Attrs,
     area: text(look.labelSoft, TEXT_PX.roomArea),
     // In a group scaled to pixels, so these widths are pixels.
     warningDot: { fill: look.warning, stroke: look.paper, 'stroke-width': LINE_PX.warningRing } as Attrs,
@@ -309,13 +356,62 @@ function blocksNear(dim: Dimension, blocks: readonly Box[], mpp: number): Box[] 
   return blocks.filter((block) => block.minX < reach.maxX && reach.minX < block.maxX && block.minY < reach.maxY && reach.minY < block.maxY)
 }
 
+type Line = readonly [Vec2, Vec2]
+
+/** The line from `a` to `b` moved `by` metres along the opening's normal, in SVG coordinates. */
+function across(opening: PlanOpening, by: number): Line {
+  const shift = (p: Vec2): Vec2 => ({ x: p.x + opening.normal.x * by, y: -(p.y + opening.normal.y * by) })
+  return [shift(opening.from), shift(opening.to)]
+}
+
+const lineEl = (part: string, [a, b]: Line, attrs: Attrs): SvgNode => el('line', { 'data-part': part, x1: a.x, y1: a.y, x2: b.x, y2: b.y, ...attrs })
+
+/**
+ * A window as the wall's break bridged by thin lines: one along each face of the wall and the
+ * glass line along its middle. Drawing, not a target.
+ */
+function windowSymbol(opening: PlanOpening, paint: Paints): SvgNode {
+  const half = opening.thickness / 2
+  return el(
+    'g',
+    { 'data-part': 'window-symbol', 'data-opening': opening.id, 'pointer-events': 'none', 'aria-hidden': 'true' },
+    [
+      lineEl('window-face', across(opening, half), paint.windowFace),
+      lineEl('window-face', across(opening, -half), paint.windowFace),
+      lineEl('window-glass', across(opening, 0), paint.glass)
+    ],
+    `${opening.id}:window`
+  )
+}
+
+/**
+ * A door whose hinge or swing the plan does not state: a dashed line across the gap and a "?",
+ * so it reads as a door still to be decided, never as a guessed swing or an open gap.
+ */
+function undecidedSymbol(opening: PlanOpening, mpp: number, paint: Paints): SvgNode {
+  const at = { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }
+  return el(
+    'g',
+    { 'data-part': 'door-undecided', 'data-opening': opening.id, 'pointer-events': 'none', role: 'img', 'aria-label': 'Door with no stated swing' },
+    [
+      lineEl('door-undecided-line', across(opening, 0), paint.undecided),
+      el('g', { transform: labelTransform(at, mpp) }, [
+        el('circle', { 'data-part': 'door-undecided-disc', r: UNDECIDED_TEXT_PX * 0.6, ...paint.undecidedDisc }),
+        el('text', { 'data-part': 'door-undecided-mark', dy: '3.5', ...paint.undecidedText }, ['?'])
+      ])
+    ],
+    `${opening.id}:undecided`
+  )
+}
+
 /** The plan's elements, back to front: what goes inside the `<svg>`. */
 export function planScene(input: SceneInput): SvgNode[] {
-  const { drawing, handings, doorWarnings, dimensions, metersPerPixel: mpp, look } = input
+  const { drawing, handings, doorWarnings, dimensions, metersPerPixel: mpp } = input
+  const look = toLook(input.look)
   const style = input.labels ?? {}
   const decimals = style.areaDecimals ?? 2
   const live: SceneLive = { ...STILL, ...input.live }
-  const paint = paints(look, mpp)
+  const paint = paints(look, mpp, input.paperScale)
   const out: SvgNode[] = []
 
   const selected = (id: string): boolean => id === live.selectedId
@@ -424,6 +520,22 @@ export function planScene(input: SceneInput): SvgNode[] {
   }
   for (const opening of live.ghosts?.openings ?? []) {
     out.push(openingShape(opening, live.ghostAttrs(opening.id), `ghost-opening-${opening.id}`))
+  }
+
+  // A paper look's heavy outline round the cut walls, under their fills (`paints`). Drawing, not
+  // a target: clicks reach the walls on top.
+  const outline = paint.wallOutline
+  if (outline) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'wall-outlines', 'pointer-events': 'none', 'aria-hidden': 'true' },
+        drawing.walls.flatMap((wall) =>
+          wall.virtual ? [] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'wall-outline', 'data-wall': wall.id, ...outline }))
+        ),
+        'wall-outlines'
+      )
+    )
   }
 
   for (const wall of drawing.walls) {
@@ -561,6 +673,8 @@ export function planScene(input: SceneInput): SvgNode[] {
         )
       )
     }
+    if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
+    if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
   }
 
   // A step between rooms at different levels (LVL-7): a solid line in the wall's ink across the

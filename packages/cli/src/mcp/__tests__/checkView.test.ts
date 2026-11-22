@@ -66,7 +66,7 @@ describe('the check view', () => {
     await expect(view.run({ plan: 'plan.json', kind: 'plan', ids: true, floor: 'attic' }, { project: openProject(dir, dir) })).rejects.toThrow(/"ground"/)
   })
 
-  it('is the same picture a person gets with grid draw --ids, which refuses --3d', async () => {
+  it('is the same drawing a person gets with grid draw --ids, in grid draw\'s technical look, which refuses --3d', async () => {
     const dir = project()
     const run = async (...args: string[]) => {
       let out = ''
@@ -76,7 +76,7 @@ describe('the check view', () => {
     }
     const drawn = await run('draw', 'plan.json', '--ids')
     expect(drawn.status).toBe(0)
-    expect(drawn.out).toBe(await drawPlan(JSON.parse(readFileSync(sample, 'utf8')), { format: 'svg', labels: { ids: true } }))
+    expect(drawn.out).toBe(await drawPlan(JSON.parse(readFileSync(sample, 'utf8')), { format: 'svg', look: 'technical', labels: { ids: true } }))
     const refused = await run('draw', 'plan.json', '--ids', '--3d')
     expect(refused.status).toBe(2)
     expect(refused.err).toContain('--ids draws the ids on a floor plan, not on the 3D model')

@@ -17,6 +17,11 @@ Notes for agents and people changing this repository.
   `src/geometry/__tests__/tolerances.test.ts` fails on a tolerance literal anywhere else in the
   geometry, validation or schema, and when the table in `docs/tolerances.md` no longer matches
   it. Its figures are Grid's own drawing checks and cite no document.
+- `packages/floorplan/src/geometry/areas.ts` (ARE-9): net, gross internal and gross external
+  area per floor and per use, from the spaces and the worked-out outside walls. Every figure
+  carries its rule from `MEASURES`, in Grid's own words; the table in `docs/areas.md` must match
+  it, and no measuring standard is named anywhere but in a figure record (a test checks both).
+  The CLI's `quantities/areas.ts` adds room sizes, free floor, circulation and each figure's state.
 - `packages/floorplan/src/rooms/` (WRT-2): writing a plan rooms first and reading any plan back
   as rooms text. `compile.ts` works out the walls, their kinds, the room boundaries and the
   openings' places from rooms text (the language is in its header); `read.ts` reads a plan back
@@ -37,7 +42,10 @@ Notes for agents and people changing this repository.
   gets its one wording, what is needed and the fix in that catalogue, and a line in the
   contract's code table and changelog.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
-  computes geometry of its own.
+  computes geometry of its own. A look (SHT-1, `src/picture/look.ts`) is a named set of values
+  the one drawing function, `planScene`, applies to the same geometry: `working` for the screen
+  and every picture an agent gets, `technical` for sheets and `grid draw`, black on white with
+  line weights in millimetres on paper from a pen set chosen by scale (1:50, 1:100, 1:200).
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `edit`, `check`,
   `describe`, `draw`, `export`, `sheet`, `tidy`, `serve` and `mcp`, in `src/command/`. `write`
   (WRT-2) writes a plan from rooms text, the main way to write one; `describe --as rooms` reads
