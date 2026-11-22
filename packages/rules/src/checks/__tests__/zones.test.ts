@@ -3,9 +3,14 @@ import { resolve } from 'path'
 import { gunzipSync } from 'zlib'
 import { describe, expect, it } from 'vitest'
 import { parseFloorPlan, type FloorPlan, type Room } from '@ongrid/floorplan/types/floorplan'
-import { checkLocalRules } from '../check'
-import { inspectPlan } from '../../result'
+import { checkLocalRules as checkRules } from '../check'
+import { inspectPlan as inspect } from '../../result'
 import type { RulesReport } from '../types'
+
+// COD-3: with no place stated, no figure is applied, so these checks run for a stated place.
+const PLACE = { country: 'US' } as const
+const checkLocalRules = (plan: FloorPlan): RulesReport => checkRules(plan, PLACE)
+const inspectPlan = (plan: unknown): ReturnType<typeof inspect> => inspect(plan, PLACE)
 
 /**
  * CNT-8, lab EL-13 (A-22): split into zones, the studio's sleeping corner got "under 6.5 m²";

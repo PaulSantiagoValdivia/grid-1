@@ -14,6 +14,9 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- `grid diff` (and the tool `grid_diff`) says what a change did, by what stands where in the building rather than by ids: issues first, then room by room, then each change, with a picture in three colours. The same building under new ids reads as no change, with how many ids were renamed. It compares with a start marker set by `grid mark` (or `grid_mark_start`), kept in `plan.markers.json` beside the plan, so no git is needed, or with the last commit in the project's own `.git` (WRT-8).
+
+- The plan says where it will be built, in `site.country` (`US`, `USA`, `United States`, `Spain`…), and `grid check` reads it on its own; `--country` (or `country` for `grid_check`) names another place for one check and takes the same names. With no place stated, room sizes and escape openings are no longer checked against the US figures: the report says so on its first line, with how many lines the US figures would have given. A place Grid does not know is refused, and the report names a place only by Grid's own name for it (COD-3).
 - Walls, doors, windows, rooms and floors can carry facts of your own in `properties` (a fire rating, a department, a head count), and a room its number. They are kept through edits and `grid tidy`, listed in the schedules, and written into the IFC (a `Grid_Properties` set) and the DXF (layer `GRID-FACTS`). Three tools ask across them: `grid_fields`, `grid_find` and `grid_count`, and `grid_view` picks out or colours their answers (CNT-9).
 - A plan can say where its values came from, given, measured, scanned or assumed, and how sure each is, in its `marks`. What was assumed is drawn dashed and listed under "To confirm" in `grid check`; areas from scanned walls say "from a scan, about ± x%"; `grid edit square` (`grid_square_scan`) squares a scan and says how far each wall moved. A wall that states no height is now described as "height not stated", and Grid no longer writes 2.7 m into a file that left it out (WRT-6).
 - Fixtures are obstacles now (CNT-13). A door that swings into one names it ("Door "d1" hits "Table 2" (kitchen run "table-2") when it opens"), and `grid check` says when a fixture stands in front of a doorway or in front of a window above its sill. `grid_measure what=use` gives a room's use indicators: can a wheelchair turn, the clear width each doorway leaves, the way through, the floor in front of and beside each fixture and a blocked window; `what=route` with a `width` says whether a body or a trolley that wide gets through. Each says what it measured and against which width, yours or Grid's own indicator, never a rule.
@@ -58,7 +61,7 @@ Grid has not been released yet. The first release will hold:
   the tests, the licence check and the scoreboard.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 23 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 28 tools.
 - A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
   all floors) and a door and window schedule that lists each opening once with the two rooms it
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.

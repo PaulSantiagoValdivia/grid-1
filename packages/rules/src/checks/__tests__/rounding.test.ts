@@ -16,9 +16,11 @@ function room(w: number, h: number, use: string, windows: Omit<Opening, 'wall' |
   const walls = corners.map(
     (start, i): Wall => ({ id: `w${i}`, start, end: corners[(i + 1) % 4]!, thickness: 0.2, height: 2.7, kind: 'exterior', floor: 'f' })
   )
+  // COD-3: the plan states its place, so the US figures apply.
   return {
     version: '1',
     units: 'm',
+    site: { country: 'US' },
     floors: [{ id: 'f', name: 'Floor', level }],
     walls,
     rooms: [{ id: 'r', name: 'Bedroom 2', boundary: walls.map((wall) => wall.id), floor: 'f', use } as Room],

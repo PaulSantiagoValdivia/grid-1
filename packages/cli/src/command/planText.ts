@@ -167,6 +167,12 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
       if (problem) return `front.${field} ${problem}`
     }
   }
+  // COD-3: the place is a name or a code; one Grid does not know is left out when the plan is read.
+  const site = raw['site']
+  if (isObject(site) && typeof site['country'] === 'string') {
+    const problem = textProblem(site['country'], 'name')
+    if (problem) return `site.country ${problem}`
+  }
   const image = raw['referenceImage']
 
   if (isObject(image) && typeof image['path'] === 'string') {

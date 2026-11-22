@@ -303,6 +303,29 @@ export class Project {
     }
   }
 
+  /**
+   * The bytes of a file in the project, as they are: for a file that is not text, such as an
+   * object in the project's own git folder (WRT-8). Errors carry `code` as `readText`'s do.
+   */
+  readBytes(given: string, maxBytes: number): Uint8Array {
+    const { real, missing } = this.locate(given)
+    if (missing > 0) throw errno('ENOENT', `no such file ${quoted(given)}`)
+    const stat = fs.statSync(real)
+    if (stat.isDirectory()) throw errno('EISDIR', `${quoted(given)} is a folder`)
+    if (!stat.isFile()) throw this.refused(given, 'it is not a plain file')
+    if (stat.size > maxBytes) throw errno('EFBIG', `${quoted(given)} is larger than ${maxBytes} bytes`)
+    const bytes = fs.readFileSync(real)
+    if (bytes.length > maxBytes) throw errno('EFBIG', `${quoted(given)} is larger than ${maxBytes} bytes`)
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  }
+
+  /** The names in a folder inside the project, sorted; empty when there is no such folder. */
+  folderNames(given: string): string[] {
+    const { real, missing } = this.locate(given)
+    if (missing > 0 || !fs.statSync(real).isDirectory()) return []
+    return fs.readdirSync(real).sort()
+  }
+
   /** The text of a file, or null when there is none. */
   readTextIfThere(given: string): string | null {
     try {

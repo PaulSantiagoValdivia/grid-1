@@ -97,7 +97,8 @@ describe('merging two rooms of different uses (CNT-8, lab AB-9)', () => {
   })
 
   it('checks the open-plan room as a whole, with the living room\'s use, never the zones on their own', () => {
-    const result = inspectPlan(written('zones.json'))
+    // COD-3: with no place stated no figure applies, so the check runs for a stated place.
+    const result = inspectPlan(written('zones.json'), { country: 'US' })
     const size = result.coverage.find((c) => c.ruleId === 'habitable-room-area')!
     expect(size.lookedAt.flatMap((g) => g.ids)).toContain('kitchen-living')
     expect(size.wholeRooms).toEqual([{ floor: 'ground', room: 'kitchen-living', use: 'living', zone: 'living' }])

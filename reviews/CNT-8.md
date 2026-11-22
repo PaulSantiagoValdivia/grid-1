@@ -399,3 +399,14 @@ added while the run was going against a `merge.ts` it had already loaded; after 
 `packages/cli/src/edit`, `mcp/__tests__/facts.test.ts` and `tools.test.ts` pass alone: Test Files
 7 passed (7), Tests 71 passed (71). None failed on timing. The scoreboard and the full suite were
 not run for this merge.
+
+## After merging main (5039f12, COD-3 and WRT-8)
+
+- The conflicts were in `docs/result-contract.md` (both changelog sections kept), `checks/check.ts`
+  (the size check keeps CNT-8's `wholeRooms` and takes COD-3's skip reason, `no_place` or
+  `no_figures_for_place`) and `checks/types.ts` (the skip-reason comment lists both).
+- COD-3 applies no figure to a plan that states no place. The CNT-8 size and escape tests in
+  `rules/src/checks/__tests__/zones.test.ts` and `cli/src/edit/__tests__/zones.test.ts` now run
+  for a stated place (`country: 'US'`), as main's own figure tests do. Their expectations are
+  unchanged. A room with zones and no place is skipped as `no_place`, like any other room.
+
