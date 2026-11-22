@@ -143,14 +143,34 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
       (opening) => wallIds.has(opening.wall) && !collided.has(opening.wall)
     ),
     // CNT-12: an item by its own floor. A plan with no items keeps no key.
-    ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) })
+    ...(plan.items !== undefined && { items: plan.items.filter((item) => floorOf(item) === floorId) }),
+    // SHT-7: a sketch item by its own floor; a note by its room's, or its own when at a point.
+    ...(plan.sketch !== undefined && { sketch: plan.sketch.filter((item) => floorOf(item) === floorId) }),
+    ...(plan.annotations !== undefined && {
+      annotations: plan.annotations.filter((note) =>
+        note.room !== undefined ? plan.rooms.some((room) => room.id === note.room && floorOf(room) === floorId) : floorOf(note) === floorId
+      )
+    })
   }
-  slices.add(slice)
+  // A slice of a slice still leads back to the plan the first was cut from.
+  slices.set(slice, { whole: slices.get(plan)?.whole ?? plan, floor: floorId })
   return slice
 }
 
-/** Every plan `planForFloor` returned, held weakly: nothing about the slice itself changes. */
-const slices = new WeakSet<FloorPlan>()
+/**
+ * Every plan `planForFloor` returned, with the plan it was cut from and its floor, held weakly:
+ * nothing about the slice itself changes.
+ */
+const slices = new WeakMap<FloorPlan, { readonly whole: FloorPlan; readonly floor: string }>()
+
+/**
+ * The whole plan a floor's slice was cut from, and the slice's floor; a plan that is no slice is
+ * its own whole, with no floor. A stair (LVL-3) joins two floors, so a slice reads it from here.
+ */
+export function wholePlan(plan: FloorPlan): { readonly whole: FloorPlan; readonly floor: string | null } {
+  const found = slices.get(plan)
+  return found === undefined ? { whole: plan, floor: null } : found
+}
 
 /**
  * Whether `plan` is one floor's slice (`planForFloor`). A slice keeps the whole floor list but

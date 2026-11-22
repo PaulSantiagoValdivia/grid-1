@@ -96,6 +96,42 @@ The release workflow, [.github/workflows/release.yml](.github/workflows/release.
 same step as a dry run on GitHub. It starts only by hand (Actions, "Release (dry run)", Run
 workflow, on any branch, with the version), asks for no token and has no publish step.
 
+## The checks on GitHub
+
+Every pull request, and every push to `main`, runs one workflow (QAR-4),
+[.github/workflows/ci.yml](.github/workflows/ci.yml), on Linux and on Windows, on Node 22 (the
+version in `.nvmrc`). It installs with `npm ci` and runs, each as its own step:
+`npm run build`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run check:licenses`,
+`npm run check:data` and `npm run scoreboard`. Any step that fails turns the pull request's check
+red; the two systems run apart, so a failure on one still lets the other finish.
+
+The workflow can read the repository and nothing else (`contents: read`). It uses no secret,
+keeps no git credentials on the runner, and pins every action to a commit, with its release in a
+comment beside it. Every text file is checked out with LF line endings, Windows too
+(`.gitattributes`), so the tests read the same bytes everywhere. `scripts/__tests__/ci-workflow.test.ts`
+holds the workflow to all of this.
+
+Windows is where the file-name rules are real (T-4: `CON`, `NUL`, a name ending in a dot, `\`
+between folders); tests that need a symbolic link to a file, or Unix file modes, are skipped
+there and say why.
+
+To run what the workflow runs, on your own computer:
+
+```bash
+npm ci
+npm run build
+npm run typecheck
+npm run lint
+npm test
+npm run check:licenses
+npm run check:data
+npm run scoreboard
+```
+
+A red check only stops a merge when the repository requires it: that is a branch protection
+setting on GitHub (require the two `Typecheck, lint and test` checks to pass before merging into
+`main`), and it is the owner's to set.
+
 ## The checklist
 
 Each release, in order. Tick each line in the release's issue or pull request.

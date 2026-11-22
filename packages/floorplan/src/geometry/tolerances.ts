@@ -397,6 +397,29 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Stairs and lifts (LVL-3) ──────────────────────────────────────────────────────────────
+  stairRoomOverlap: {
+    kind: 'tolerance',
+    value: 0.5,
+    unit: 'ratio',
+    decides:
+      'Two rooms used as a stair (or as a lift) on neighbouring floors are one stair (or one shaft) ' +
+      'when they share at least this of the smaller one, and the way-out check goes up and down ' +
+      'it. Stair rooms on both floors that share less are named as out of line. The lab found ' +
+      'every sound pair at or above this and every planted fault below it (AU3-1).',
+    basis: own
+  },
+  stairStepLength: {
+    kind: 'limit',
+    value: 0.63,
+    unit: 'm',
+    decides:
+      'How a stair that states no number of risers is laid out: Grid takes the number that brings ' +
+      'twice the riser plus the going nearest this length, the stride of a person on a stair. It ' +
+      'only lays the stair out; it judges no riser and no going.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',

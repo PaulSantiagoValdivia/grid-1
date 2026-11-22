@@ -14,7 +14,7 @@ export const NAME_MAX = 120
 export const ID_MAX = 64
 /** The most characters the trace image's path may have. */
 export const IMAGE_PATH_MAX = 1024
-/** The most walls, rooms, openings, floors or items a plan may have, each. */
+/** The most walls, rooms, openings, floors, items or stairs a plan may have, each. */
 export const PARTS_MAX = 50_000
 /** The most walls a room's boundary may list. */
 export const BOUNDARY_MAX = 2_000
@@ -57,8 +57,13 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   rooms: { id: 'id', name: 'name', floor: 'id' },
   openings: { id: 'id', wall: 'id' },
   floors: { id: 'id', name: 'name' },
+  // LVL-3: a stair names the two floors it joins.
+  stairs: { id: 'id', name: 'name', from: 'id', to: 'id' },
   // CNT-12: a fixture's kind is held to an id's limit, its label to a name's.
   items: { id: 'id', kind: 'id', label: 'name', floor: 'id' },
+  // SHT-7: writing on the drawing and the sketch layer.
+  annotations: { id: 'id', text: 'name', room: 'id', floor: 'id' },
+  sketch: { id: 'id', category: 'id', text: 'name', floor: 'id' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -114,7 +119,13 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
     const problem = textProblem(projectId, 'id')
     if (problem) return `projectId ${problem}`
   }
+  const title = raw['title']
+  if (typeof title === 'string') {
+    const problem = textProblem(title, 'name')
+    if (problem) return `title ${problem}`
+  }
   const image = raw['referenceImage']
+
   if (isObject(image) && typeof image['path'] === 'string') {
     const problem = textProblem(image['path'], 'path')
     if (problem) return `referenceImage.path ${problem}`

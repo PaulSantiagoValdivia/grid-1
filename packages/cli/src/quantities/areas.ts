@@ -206,6 +206,11 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   const grossInternalState = grossInternal === null ? NOT_LOOKED_AT : joinStates(floors.map((f) => f.states.grossInternal))
   const grossExternalState = figures.grossExternal.area === null ? NOT_LOOKED_AT : joinStates(floors.map((f) => f.states.grossExternal))
   const circulationState = joinStates(floors.map((f) => f.states.circulation))
+  // LVL-3: a stair the plan states stands in rooms that are already measured, so its flights add
+  // no floor: its area is counted once, in the rooms it stands in.
+  for (const stair of survey.facts.connections.stairs) {
+    notes.push(`Stair ${JSON.stringify(stair.id)} covers ${stair.footprint.toFixed(2)} m² in the rooms it stands in; it adds no floor of its own.`)
+  }
   return {
     floors,
     net,

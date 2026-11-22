@@ -175,7 +175,7 @@ describe('holes that are not holes', () => {
     const walls = [...square('o', [0, 0], [10, 10]), ...square('c', [3, 3], [7, 7])]
     const missing: Room = { id: 'r', name: 'R', boundary: ['o0', 'o1', 'o2', 'o3'], holes: [['c0', 'c1', 'nope']] }
     expect(errors(planOf(walls, [missing])).map((i) => [i.code, i.message])).toEqual([
-      ['room/unclosed', 'Hole 1 of room "r" references wall "nope", which does not exist']
+      ['room/unclosed', 'Hole 1 of room "r" references wall "nope", which is not in the plan']
     ])
     const outOfOrder: Room = { ...missing, holes: [['c0', 'c2', 'c1', 'c3']] }
     const found = errors(planOf(walls, [outOfOrder]))

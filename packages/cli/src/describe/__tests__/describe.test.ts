@@ -6,6 +6,7 @@ import { FloorPlanSchema, type FloorPlan } from '@ongrid/floorplan/types/floorpl
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength } from '../card'
 import { planFacts } from '../facts'
+import { stairHouse, twoFloorHouse } from '@ongrid/floorplan/test-support/plans'
 
 /**
  * VEW-5: `grid describe` in three lengths, for a person and for an agent. The plans are the
@@ -208,10 +209,22 @@ describe('what a card says and never says', () => {
 
   it('says what the plan cannot say', () => {
     expect(card(plans.flat!, 'rooms', 'person')).toContain('Not in the plan: where north is and what kind of building it is.')
+    // LVL-3: the block's six stair rooms lie one over the other, so its floors are joined.
     const block = card(plans.block!, 'rooms', 'person')
-    expect(block).toContain('how its floors connect (it holds no stairs or lifts, only 6 rooms marked as a stair)')
+    expect(block).toContain('Not in the plan: where north is, what kind of building it is and which rooms make up each flat or home.')
+    expect(block).toContain('Stairs: the stair rooms lie one over the other from Ground floor to Floor 5.')
     expect(block).toContain('which rooms make up each flat or home')
-    expect(card(plans.block!, 'rooms', 'agent')).toContain('NOT IN PLAN north; kind of building; how floors connect (no stairs or lifts; 6 rooms with use stair); which rooms make each flat')
+    expect(card(plans.block!, 'rooms', 'agent')).toContain('NOT IN PLAN north; kind of building; which rooms make each flat')
+    expect(card(plans.block!, 'rooms', 'agent')).toContain('STAIRS stair rooms ground->L1->L2->L3->L4->L5')
+  })
+
+  it('says the stairs a plan states, with what Grid works out, and the floors no stair joins (LVL-3)', () => {
+    expect(card(twoFloorHouse(), 'rooms', 'person')).toContain('how its floors connect (no stair joins them)')
+    expect(card(twoFloorHouse(), 'rooms', 'agent')).toContain('how floors connect (no stair joins ground first)')
+    const person = card(stairHouse(), 'rooms', 'person')
+    expect(person).not.toContain('how its floors connect')
+    expect(person).toContain('Stairs: "Main stair" from Ground floor up to First floor, 14 risers of 0.21 m, going 0.22 m, 0.9 m wide.')
+    expect(card(stairHouse(), 'rooms', 'agent')).toContain('STAIRS s1 ground->first 14x0.21 going 0.22 width 0.9')
   })
 
   it('puts wall and sill heights in one line of exceptions', () => {

@@ -15,7 +15,7 @@
  */
 
 import type { Vec2 } from '../vec2'
-import type { SceneSlab, SceneWall, Vec3 } from '../scene3d'
+import type { SceneSlab, SceneStair, SceneWall, Vec3 } from '../scene3d'
 import { alongFace } from '../scene3d'
 import { triangulate } from '../triangulate'
 
@@ -139,4 +139,33 @@ export function floorMesh(floor: SceneSlab): Mesh | null {
     }
   }
   return storable({ points, faces })
+}
+
+/**
+ * A stair (LVL-3) as one mesh: every tread and landing a closed block, its top facing up, its
+ * bottom down, and a band of faces round its sides. Blocks that touch keep their own faces, so
+ * the mesh is a set of solids, not one skin.
+ */
+export function stairMesh(stair: SceneStair): Mesh | null {
+  const points: Vec3[] = []
+  const faces: Face[] = []
+  for (const block of stair.blocks) {
+    const { vertices, triangles } = triangulate(block.outline)
+    if (triangles.length === 0) continue
+    const top = points.length
+    for (const v of vertices) points.push({ x: v.x, y: v.y, z: block.top })
+    const bottom = points.length
+    for (const v of vertices) points.push({ x: v.x, y: v.y, z: block.bottom })
+    for (const [a, b, c] of triangles) faces.push([top + a, top + b, top + c], [bottom + a, bottom + c, bottom + b])
+    // The outline winds counter-clockwise, so its outside lies to the right of each edge.
+    const n = block.outline.length
+    const side = points.length
+    for (const p of block.outline) points.push({ x: p.x, y: p.y, z: block.bottom }, { x: p.x, y: p.y, z: block.top })
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n
+      const [p0, p1, q0, q1] = [side + 2 * i, side + 2 * i + 1, side + 2 * j, side + 2 * j + 1]
+      faces.push([p0, q0, q1], [p0, q1, p1])
+    }
+  }
+  return faces.length === 0 ? null : storable({ points, faces })
 }
