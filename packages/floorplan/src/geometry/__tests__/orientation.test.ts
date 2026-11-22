@@ -63,7 +63,9 @@ describe('the plan format', () => {
     expect(fails({ front: {} })).toBe(true)
     expect(fails({ front: { wall: 's1', opening: 'entry' } })).toBe(true)
     expect(fails({ site: { origin: [0, 0], latitude: 40 } })).toBe(true)
-    expect(fails({ site: { latitude: 40, longitude: 3 } })).toBe(true)
+    // A site with no origin reads, with what Grid does not hold named (lab G/s01b): it places nothing.
+    expect(fails({ site: { latitude: 40, longitude: 3 } })).toBe(false)
+    expect(fails({ site: { boundary: [[0, 0], [15, 0]], street: 'south' } })).toBe(false)
     expect(fails({ site: { origin: [0, 0], latitude: 91, longitude: 3 } })).toBe(true)
     expect(fails({ yAxis: 'left' })).toBe(true)
     expect(fails({ north: Number.POSITIVE_INFINITY })).toBe(true)
@@ -217,5 +219,7 @@ describe('the IFC file', () => {
     const points = (ifc: string): string[] => ifc.split('\n').filter((line) => line.includes('IFCCARTESIANPOINT((2.,3.,0.))') || line.includes('IFCCARTESIANPOINT((-2.,-3.,0.))'))
     expect(points(placed)).toHaveLength(2)
     expect(points(plain)).toHaveLength(0)
+    // With no origin, nothing is placed on the earth.
+    expect(toIfc(house({ site: { latitude: 40.5, longitude: -3.25 } }))).toBe(plain)
   })
 })

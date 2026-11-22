@@ -1279,12 +1279,12 @@ function writeLeftOut(c: Context, building: number, leftOut: readonly LeftOutPar
 }
 
 /** The id the plan stores (QAR-5), else the caller's, else the default. */
-/** CNT-3: where the plan says it sits, when every number of it can be written. */
-function siteOf(plan: FloorPlan): NonNullable<FloorPlan['site']> | null {
+/** CNT-3: where the plan says it sits: only with an origin, and when every number of it can be written. */
+function siteOf(plan: FloorPlan): (NonNullable<FloorPlan['site']> & { readonly origin: readonly [number, number] }) | null {
   const site = plan.site
-  if (site === undefined) return null
+  if (site === undefined || site.origin === undefined) return null
   const numbers = [...site.origin, site.latitude ?? 0, site.longitude ?? 0, site.elevation ?? 0]
-  return numbers.every(Number.isFinite) ? site : null
+  return numbers.every(Number.isFinite) ? { ...site, origin: site.origin } : null
 }
 
 /**

@@ -483,7 +483,7 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
   }))
   const top: Record<string, unknown> = {}
   if (plan.north !== undefined) top['north'] = wrapDegrees(r3(-plan.north))
-  if (plan.site !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: flip(plan.site.origin) }
+  if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: flip(plan.site.origin) }
   const north = plan.north === undefined ? '' : ` The plan's north is mirrored with it: ${wrapDegrees(r3(plan.north))}° → ${top['north'] as number}° counter-clockwise from the top of the drawing.`
   return {
     walls,

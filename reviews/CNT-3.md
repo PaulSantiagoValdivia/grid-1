@@ -12,8 +12,14 @@
   - `yAxis`: `up` (C4, as Grid draws every plan) or `down` (the coordinates are the building's
     mirror image, as a screen's or an image's pixels run). Unstated reads as `up`.
   - `front`: `{ wall }` or `{ opening }`, exactly one: the part whose outside face is the front.
-  - `site`: `{ origin: [x, y], latitude?, longitude?, elevation? }`: a point of the plan and
+  - `site`: `{ origin?: [x, y], latitude?, longitude?, elevation? }`: a point of the plan and
     where it is on the earth. Latitude and longitude come together; ±90 and ±180 at most.
+    Nothing is placed on the earth without `origin`. Every field is optional because two lab
+    plans already write a `site` of their own (`G/scenarios/s01b-site-fields.json`, a plot
+    boundary, setbacks and a street; `s06c`, ground levels): with `origin` required, those
+    plans failed the format whole and could no longer be edited (the full suite caught it in
+    `scoreboard/__tests__/stairJoins.test.ts`). Now they read, and their fields are named as
+    fields Grid does not hold.
   - The reader names fields inside `front` and `site` it does not know, like any other part, and
     `planTextProblem` holds `front.wall` and `front.opening` to an id's limit (MSG-9).
 - **Which way things face** (`packages/floorplan/src/geometry/orientation.ts`, new). `planFacing`
@@ -73,12 +79,13 @@ unchanged. The new figures are stored in `scoreboard/current.json` in the same c
 
 - New `packages/floorplan/src/geometry/__tests__/orientation.test.ts` (19): the format (no key
   added when unstated; the four read; bad fronts, a lone latitude, a sideways y, an infinite
-  north refused); bearings with north up, turned, y down and none; the eight points and exact
+  north refused; a site with no origin, or with a plot boundary, read); bearings with north up, turned, y down and none; the eight points and exact
   quarter turns; which rooms face east in a two-room house, the openings' ways and that a door
   between rooms faces nowhere; everything turning with north 90, and the front with it; the
   fallback with no north, and with y down; the same building drawn mirrored with y down facing
   the same ways; each reason a front is not said; the drawing's `north`, and a north symbol
-  taking it; the IFC's `TrueNorth` (`$`, and four stated norths) and the site placement.
+  taking it; the IFC's `TrueNorth` (`$`, and four stated norths), the site placement, and no
+  placement for a site with no origin.
 - New `packages/cli/src/mcp/__tests__/facing.test.ts` (8): `what=facing` with a stated north,
   with none, for one room, and refusing an argument it does not take; `grid_describe` for a
   person and an agent, and unchanged for a plan with no north; `grid_view`'s words; the two
@@ -106,6 +113,17 @@ unchanged. The new figures are stored in `scoreboard/current.json` in the same c
 
 Nothing was removed.
 
+## The checks run
+
+- `npm run build`, `npm run typecheck` and `npm run lint`: clean.
+- `npm run scoreboard`: "Same as the stored figures" (after storing checks fed 12).
+- The full suite (`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`, under
+  a load average near 250): 237 of 238 files passed, 4,669 tests passed and 3 skipped; the one
+  failing file was `scoreboard/__tests__/stairJoins.test.ts`, which failed to load because a lab
+  plan's own `site` had no `origin`. That was this branch's fault: `site.origin` is optional now
+  (above), and the file passes alone (8 scoreboard test files, 53 passed, 2 skipped), as do the
+  orientation, facing, reading and result tests rerun after the fix.
+
 ## For the owner
 
 1. **The north's convention.** Degrees counter-clockwise from the top of the drawing, the same
@@ -132,8 +150,10 @@ Nothing was removed.
 5. **"No north" in IFC.** IFC reads an absent `TrueNorth` as +y, so a reader places a plan with
    no north exactly as before; the file only stops asserting it. If you want an explicit "north
    not known" for BIM users, a property on the site would be a small follow-up.
-6. **Site in the IFC.** I write the site's latitude, longitude and elevation when stated, and
-   put the IFC site's origin on the stated point. The DXF, the sheet and the 3D views carry no
+6. **Site in the IFC.** I write the site's latitude, longitude and elevation when an origin is
+   stated, and put the IFC site's origin on that point; without an origin nothing is placed.
+   The lab's agents wrote `site` as the plot (boundary, setbacks, street, ground levels); this
+   `site` holds only where the building sits, so a plot remains a later card under the same key. The DXF, the sheet and the 3D views carry no
    location. A building's position may count as personal data for a home; the problem report
    drops it, but every IFC export carries it once stated.
 7. **No tool sets them.** North, front, site and y direction are written in the plan file by

@@ -61,7 +61,8 @@
  *   building's mirror image (as a screen or an image's pixels run). `front` names the part whose
  *   outside face is the front: a wall, or an opening (the front door) by its wall. `site` says
  *   where the building sits: `origin`, a point of the plan, and where that point is on the earth
- *   (`latitude` and `longitude` in degrees, `elevation` in metres). All four are optional and
+ *   (`latitude` and `longitude` in degrees, `elevation` in metres); it places nothing without
+ *   `origin`. All four are optional and
  *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
  *   north, and its y runs up (C4).
  */
@@ -517,11 +518,13 @@ export const FrontSchema = z
 /**
  * CNT-3 (C7): where the building sits. `origin` is a point of the plan, in metres; `latitude` and
  * `longitude` (degrees, north and east positive, given together) and `elevation` (metres above
- * sea level) say where that point is on the earth. Only `origin` is needed.
+ * sea level) say where that point is on the earth. Each is optional, so a site an agent wrote
+ * with fields Grid does not hold yet (a plot boundary, setbacks) still reads, with those fields
+ * named; nothing is placed on the earth until `origin` is stated.
  */
 export const SiteSchema = z
   .object({
-    origin: Vec2,
+    origin: Vec2.optional(),
     latitude: finite().min(-90).max(90).optional(),
     longitude: finite().min(-180).max(180).optional(),
     elevation: finite().optional(),
