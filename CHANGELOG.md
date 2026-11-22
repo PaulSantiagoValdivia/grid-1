@@ -15,6 +15,7 @@ Grid say that a plan complies with anything.
 ## Unreleased
 
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
+- The IFC file arrives with its data: each room carries its number, its use and its net area with the rule it follows; walls, spaces, slabs, doors and windows carry base quantities; walls are typed by kind and thickness with a material, doors and windows by size. Slabs and roofs Grid works out are marked assumed, and a plan at survey coordinates is written near the origin (HND-2).
 
 Grid has not been released yet. The first release will hold:
 

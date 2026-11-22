@@ -10,6 +10,23 @@ import { indexPlan } from '../../plan'
 import { wallExposure } from '../../exposure'
 import { parseFloorPlan } from '../../../types/floorplan'
 import { ballroomWithStage, genkanFlat } from '../../../test-support/plans'
+import {
+  en,
+  entity,
+  items,
+  num,
+  nums,
+  ofType,
+  only,
+  parseArgs,
+  parseDoc,
+  ref,
+  refs,
+  str,
+  walk,
+  type Doc,
+  type Entity
+} from './step-reader'
 
 /**
  * IFC export.
@@ -19,279 +36,10 @@ import { ballroomWithStage, genkanFlat } from '../../../test-support/plans'
  * and a reader that mis-unescapes it the same way would agree with each other
  * and with nobody else. The parser rejects anything the standard does not
  * allow (an unescaped quote, a raw non-ASCII byte, a dangling reference), so a
- * malformed file fails here instead of in an architect's import dialog.
+ * malformed file fails here instead of in an architect's import dialog. It is
+ * in `step-reader.ts`, which the structural test (`ifc.structure.test.ts`) reads
+ * files with too.
  */
-
-// ---------------------------------------------------------------------------
-// A strict ISO 10303-21 reader
-// ---------------------------------------------------------------------------
-
-type Value =
-  | { readonly t: 'null' }
-  | { readonly t: 'derived' }
-  | { readonly t: 'str'; readonly v: string }
-  | { readonly t: 'num'; readonly v: number; readonly raw: string }
-  | { readonly t: 'enum'; readonly v: string }
-  | { readonly t: 'ref'; readonly v: number }
-  | { readonly t: 'list'; readonly v: readonly Value[] }
-  | { readonly t: 'typed'; readonly name: string; readonly v: Value }
-
-interface Entity {
-  readonly id: number
-  readonly type: string
-  readonly args: readonly Value[]
-}
-
-interface Doc {
-  readonly header: ReadonlyMap<string, readonly Value[]>
-  readonly entities: ReadonlyMap<number, Entity>
-  readonly order: readonly Entity[]
-}
-
-class Reader {
-  pos = 0
-  constructor(readonly src: string) {}
-
-  private fail(message: string): never {
-    throw new Error(`${message} at ${this.pos} in: ${this.src}`)
-  }
-
-  peek(): string {
-    return this.src[this.pos] ?? ''
-  }
-
-  expect(char: string): void {
-    if (this.peek() !== char) this.fail(`expected ${char}`)
-    this.pos++
-  }
-
-  atEnd(): boolean {
-    return this.pos >= this.src.length
-  }
-
-  value(): Value {
-    const c = this.peek()
-    if (c === '$') {
-      this.pos++
-      return { t: 'null' }
-    }
-    if (c === '*') {
-      this.pos++
-      return { t: 'derived' }
-    }
-    if (c === "'") return this.string()
-    if (c === '.') return this.enumeration()
-    if (c === '#') return this.reference()
-    if (c === '(') return this.list()
-    if (c === '-' || (c >= '0' && c <= '9')) return this.number()
-    if (c >= 'A' && c <= 'Z') return this.typed()
-    return this.fail(`unexpected ${JSON.stringify(c)}`)
-  }
-
-  private string(): Value {
-    this.expect("'")
-    let out = ''
-    for (;;) {
-      if (this.atEnd()) this.fail('unterminated string')
-      const c = this.src[this.pos]!
-      const code = c.charCodeAt(0)
-      if (code < 0x20 || code > 0x7e) this.fail(`raw character U+${code.toString(16)} in string`)
-
-      if (c === "'") {
-        if (this.src[this.pos + 1] === "'") {
-          out += "'"
-          this.pos += 2
-          continue
-        }
-        this.pos++
-        return { t: 'str', v: out }
-      }
-
-      if (c === '\\') {
-        if (this.src[this.pos + 1] === '\\') {
-          out += '\\'
-          this.pos += 2
-          continue
-        }
-        if (this.src.startsWith('\\X2\\', this.pos)) {
-          this.pos += 4
-          const end = this.src.indexOf('\\X0\\', this.pos)
-          if (end < 0) this.fail('unterminated \\X2\\ block')
-          const hex = this.src.slice(this.pos, end)
-          if (hex.length === 0 || hex.length % 4 !== 0 || !/^[0-9A-F]+$/.test(hex)) {
-            this.fail(`bad \\X2\\ payload ${hex}`)
-          }
-          for (let i = 0; i < hex.length; i += 4) {
-            out += String.fromCharCode(parseInt(hex.slice(i, i + 4), 16))
-          }
-          this.pos = end + 4
-          continue
-        }
-        this.fail('unknown escape')
-      }
-
-      out += c
-      this.pos++
-    }
-  }
-
-  private enumeration(): Value {
-    this.expect('.')
-    const m = /^[A-Z][A-Z0-9_]*/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad enumeration')
-    this.pos += m[0].length
-    this.expect('.')
-    return { t: 'enum', v: m[0] }
-  }
-
-  private reference(): Value {
-    this.expect('#')
-    const m = /^\d+/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad reference')
-    this.pos += m[0].length
-    return { t: 'ref', v: Number(m[0]) }
-  }
-
-  private number(): Value {
-    const m = /^-?\d+(\.\d*)?(E[+-]?\d+)?/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad number')
-    this.pos += m[0].length
-    return { t: 'num', v: Number(m[0]), raw: m[0] }
-  }
-
-  private list(): Value {
-    this.expect('(')
-    const items: Value[] = []
-    if (this.peek() === ')') {
-      this.pos++
-      return { t: 'list', v: items }
-    }
-    for (;;) {
-      items.push(this.value())
-      if (this.peek() === ',') {
-        this.pos++
-        continue
-      }
-      this.expect(')')
-      return { t: 'list', v: items }
-    }
-  }
-
-  private typed(): Value {
-    const m = /^[A-Z][A-Z0-9_]*/.exec(this.src.slice(this.pos))
-    if (!m) this.fail('bad type name')
-    this.pos += m[0].length
-    this.expect('(')
-    const inner = this.value()
-    this.expect(')')
-    return { t: 'typed', name: m[0], v: inner }
-  }
-
-  /** `a,b,c` with no enclosing parentheses: the argument list of an entity. */
-  args(): Value[] {
-    const out: Value[] = []
-    if (this.atEnd()) return out
-    for (;;) {
-      out.push(this.value())
-      if (this.peek() === ',') {
-        this.pos++
-        continue
-      }
-      if (!this.atEnd()) this.fail('trailing characters')
-      return out
-    }
-  }
-}
-
-function parseArgs(text: string): Value[] {
-  return new Reader(text).args()
-}
-
-function parseDoc(text: string): Doc {
-  const lines = text.split('\n')
-  expect(lines[lines.length - 1]).toBe('')
-  lines.pop()
-  expect(text).not.toContain('\r')
-
-  let i = 0
-  const next = (): string => {
-    const line = lines[i++]
-    if (line === undefined) throw new Error('unexpected end of file')
-    return line
-  }
-
-  expect(next()).toBe('ISO-10303-21;')
-  expect(next()).toBe('HEADER;')
-
-  const header = new Map<string, Value[]>()
-  for (let line = next(); line !== 'ENDSEC;'; line = next()) {
-    const m = /^([A-Z_]+)\((.*)\);$/.exec(line)
-    if (!m) throw new Error(`bad header line: ${line}`)
-    header.set(m[1]!, parseArgs(m[2]!))
-  }
-
-  expect(next()).toBe('DATA;')
-
-  const entities = new Map<number, Entity>()
-  const order: Entity[] = []
-  for (let line = next(); line !== 'ENDSEC;'; line = next()) {
-    const m = /^#(\d+)=([A-Z][A-Z0-9_]*)\((.*)\);$/.exec(line)
-    if (!m) throw new Error(`bad entity line: ${line}`)
-    const entity: Entity = { id: Number(m[1]), type: m[2]!, args: parseArgs(m[3]!) }
-    if (entities.has(entity.id)) throw new Error(`duplicate #${entity.id}`)
-    entities.set(entity.id, entity)
-    order.push(entity)
-  }
-
-  expect(next()).toBe('END-ISO-10303-21;')
-  expect(i).toBe(lines.length)
-
-  return { header, entities, order }
-}
-
-function* walk(value: Value): Generator<Value> {
-  yield value
-  if (value.t === 'list') for (const item of value.v) yield* walk(item)
-  if (value.t === 'typed') yield* walk(value.v)
-}
-
-// Typed accessors: each throws on a mismatch, so a wrong attribute shape fails loudly.
-const str = (v: Value | undefined): string => {
-  if (v?.t !== 'str') throw new Error(`expected string, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const num = (v: Value | undefined): number => {
-  if (v?.t !== 'num') throw new Error(`expected number, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const ref = (v: Value | undefined): number => {
-  if (v?.t !== 'ref') throw new Error(`expected reference, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const en = (v: Value | undefined): string => {
-  if (v?.t !== 'enum') throw new Error(`expected enumeration, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const items = (v: Value | undefined): readonly Value[] => {
-  if (v?.t !== 'list') throw new Error(`expected list, got ${JSON.stringify(v)}`)
-  return v.v
-}
-const refs = (v: Value | undefined): number[] => items(v).map(ref)
-const nums = (v: Value | undefined): number[] => items(v).map(num)
-
-const ofType = (doc: Doc, type: string): Entity[] => doc.order.filter((e) => e.type === type)
-
-function entity(doc: Doc, id: number): Entity {
-  const found = doc.entities.get(id)
-  if (!found) throw new Error(`#${id} is not defined`)
-  return found
-}
-
-const only = (doc: Doc, type: string): Entity => {
-  const found = ofType(doc, type)
-  expect(found, type).toHaveLength(1)
-  return found[0]!
-}
 
 // ---------------------------------------------------------------------------
 // Placements, composed by hand
@@ -1239,8 +987,9 @@ describe('wall placement in the building', () => {
 describe('Pset_WallCommon', () => {
   /** IsExternal as a reader sees it: through the property set attached to the wall. */
   function isExternal(doc: Doc, wall: Entity): boolean {
-    const defining = ofType(doc, 'IFCRELDEFINESBYPROPERTIES').filter((r) =>
-      refs(r.args[4]).includes(wall.id)
+    // HND-2 gives the wall its base quantities too: Pset_WallCommon is one of its sets.
+    const defining = ofType(doc, 'IFCRELDEFINESBYPROPERTIES').filter(
+      (r) => refs(r.args[4]).includes(wall.id) && str(entity(doc, ref(r.args[5])).args[2]) === 'Pset_WallCommon'
     )
     expect(defining).toHaveLength(1)
 
@@ -1617,8 +1366,9 @@ const roomOf = (id: string, name: string, boundary: string[], floor?: string): R
 
 const spacesOf = (doc: Doc): Entity[] => ofType(doc, 'IFCSPACE')
 
+/** HND-2: by the room's name, its LongName; its Name is its number. */
 function spaceByName(doc: Doc, name: string): Entity {
-  const found = spacesOf(doc).filter((e) => str(e.args[2]) === name)
+  const found = spacesOf(doc).filter((e) => str(e.args[7]) === name)
   expect(found, name).toHaveLength(1)
   return found[0]!
 }
@@ -1632,8 +1382,8 @@ function spaceStoreys(doc: Doc): Map<string, string> {
     for (const id of refs(rel.args[5])) {
       const child = entity(doc, id)
       expect(child.type).toBe('IFCSPACE')
-      expect(out.has(str(child.args[2]))).toBe(false)
-      out.set(str(child.args[2]), str(parent.args[2]))
+      expect(out.has(str(child.args[7]))).toBe(false)
+      out.set(str(child.args[7]), str(parent.args[2]))
     }
   }
   return out
@@ -1646,12 +1396,13 @@ describe('spaces', () => {
     rooms: [roomOf('kitchen', 'Kitchen', boundary)]
   })
 
-  it('exports each room as a space named after it, under its storey', () => {
+  it('exports each room as a space numbered and named after it, under its storey', () => {
     const doc = exported(kitchenPlan())
     const space = spaceByName(doc, 'Kitchen')
 
     expect(spacesOf(doc)).toHaveLength(1)
-    // IfcSpace(..., Name, ..., LongName)
+    // IfcSpace(..., Name, ..., LongName): HND-2 makes the Name the room's number.
+    expect(str(space.args[2])).toBe('1')
     expect(str(space.args[7])).toBe('Kitchen')
     expect(spaceStoreys(doc)).toEqual(new Map([['Kitchen', 'Ground floor']]))
   })
@@ -1792,7 +1543,7 @@ describe('names cannot corrupt the document', () => {
     for (const name of ["Ba\u00f1o 'B'", 'C:\\Kitchen', 'caf\u00e9 \u65e5\u672c \u{1F600}']) {
       const doc = exported(named(name))
       const space = spacesOf(doc)[0]!
-      expect(str(space.args[2])).toBe(name)
+      expect(str(space.args[2])).toBe('1')
       expect(str(space.args[7])).toBe(name)
     }
   })
@@ -1812,7 +1563,7 @@ describe('names cannot corrupt the document', () => {
     expect(hostile.entities.has(900)).toBe(false)
     expect(hostile.entities.has(901)).toBe(false)
 
-    const name = str(spacesOf(hostile)[0]!.args[2])
+    const name = str(spacesOf(hostile)[0]!.args[7])
     expect(name).not.toContain('\n')
     expect(name).toBe("Bath#900=IFCWALL($,$);#901=IFCSPACE('x');")
   })
@@ -1845,6 +1596,8 @@ function expectWellFormed(text: string): Doc {
 }
 
 const namesOf = (entities: readonly Entity[]): string[] => entities.map((e) => str(e.args[2]))
+/** HND-2: a space's Name is its room number, and its LongName the room's name. */
+const roomNamesOf = (spaces: readonly Entity[]): string[] => spaces.map((e) => str(e.args[7]))
 
 describe('broken geometry degrades instead of failing', () => {
   /** A sound 4 x 3 room (k*), and a second sound room (m*) to prove the rest still exports. */
@@ -1863,7 +1616,7 @@ describe('broken geometry degrades instead of failing', () => {
   it('exports the sound plan completely, as the baseline', () => {
     const doc = exportOf(sound())
     expect(wallsOf(doc)).toHaveLength(8)
-    expect(namesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
     expect(namesOf(openingsIn(doc))).toEqual(['door'])
   })
 
@@ -1872,7 +1625,7 @@ describe('broken geometry degrades instead of failing', () => {
     plan.rooms.push(roomOf('ghost', 'Ghost', ['k1', 'k2', 'nowhere', 'k4']))
     const doc = exportOf(plan)
 
-    expect(namesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
     expect(wallsOf(doc)).toHaveLength(8)
   })
 
@@ -1883,7 +1636,7 @@ describe('broken geometry degrades instead of failing', () => {
 
     expect(namesOf(wallsOf(doc))).toEqual(['k2', 'k3', 'k4', 'm1', 'm2', 'm3', 'm4'])
     // The kitchen rests on the broken wall; the door hangs on it.
-    expect(namesOf(spacesOf(doc))).toEqual(['Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Main'])
     expect(openingsIn(doc)).toHaveLength(0)
     expect(ofType(doc, 'IFCDOOR')).toHaveLength(0)
   })
@@ -1954,7 +1707,7 @@ describe('broken geometry degrades instead of failing', () => {
     const doc = expectWellFormed(text)
 
     expect(namesOf(wallsOf(doc))).toEqual(['k1', 'k2', 'k3', 'k4', 'm1', 'm2', 'm3', 'm4'])
-    expect(namesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Kitchen', 'Main'])
     expect(namesOf(openingsIn(doc))).toEqual(['door'])
   })
 
@@ -1981,7 +1734,7 @@ describe('broken geometry degrades instead of failing', () => {
     }).not.toThrow()
 
     const doc = expectWellFormed(text)
-    expect(namesOf(spacesOf(doc))).toEqual(['Main'])
+    expect(roomNamesOf(spacesOf(doc))).toEqual(['Main'])
     expect(wallsOf(doc).length).toBe(7)
   })
 
@@ -2052,9 +1805,11 @@ describe('wall material layer set usage', () => {
   function usages(doc: Doc): Map<string, Entity[]> {
     const out = new Map<string, Entity[]>()
     // IfcRelAssociatesMaterial(GlobalId, OwnerHistory, Name, Description, RelatedObjects, RelatingMaterial)
+    // HND-2 associates each wall type with its layer set too; only the walls are read here.
     for (const rel of ofType(doc, 'IFCRELASSOCIATESMATERIAL')) {
       const material = entity(doc, ref(rel.args[5]))
       for (const id of refs(rel.args[4])) {
+        if (entity(doc, id).type !== 'IFCWALLSTANDARDCASE') continue
         const name = str(entity(doc, id).args[2])
         out.set(name, [...(out.get(name) ?? []), material])
       }
@@ -2106,7 +1861,7 @@ describe('wall material layer set usage', () => {
     }
   })
 
-  it('shares one usage between walls of the same thickness, and none for virtual walls', () => {
+  it('shares one usage between walls of the same kind and thickness, and none for virtual walls', () => {
     const doc = exported(plan())
     const byWall = usages(doc)
 
@@ -2115,19 +1870,54 @@ describe('wall material layer set usage', () => {
     expect(ofType(doc, 'IFCMATERIALLAYERSETUSAGE')).toHaveLength(2)
     expect(ofType(doc, 'IFCMATERIALLAYERSET')).toHaveLength(2)
     expect(ofType(doc, 'IFCMATERIALLAYER')).toHaveLength(2)
+    // HND-2: one material per stated kind, named after it.
     expect(ofType(doc, 'IFCMATERIAL')).toHaveLength(1)
-    expect(str(only(doc, 'IFCMATERIAL').args[0])).toBe('Wall')
+    expect(str(only(doc, 'IFCMATERIAL').args[0])).toBe('Interior wall')
     expect(byWall.has('virtual')).toBe(false)
   })
 
-  it('names the layer set after the thickness', () => {
+  it('names the layer set after the kind and the thickness', () => {
     const names = ofType(exported(plan()), 'IFCMATERIALLAYERSET').map((e) => str(e.args[1]))
-    expect(names).toEqual(['Wall 0.2 m', 'Wall 0.3 m'])
+    expect(names).toEqual(['Interior wall 0.2 m', 'Interior wall 0.3 m'])
+  })
+
+  it('HND-2 types the walls by kind and thickness, each type carrying its layer set and material', () => {
+    const doc = exported({
+      ...plan(),
+      walls: [...plan().walls, wallAt('e', [0, 4], 0, 4, { thickness: 0.2, kind: 'exterior' })]
+    })
+    const types = ofType(doc, 'IFCWALLTYPE')
+    // IfcWallType(..., Name (2), Description, ApplicableOccurrence, HasPropertySets, RepresentationMaps, Tag (7), ElementType, PredefinedType)
+    expect(types.map((t) => [str(t.args[2]), str(t.args[7]), en(t.args[9])])).toEqual([
+      ['Interior wall 0.2 m', 'wall:interior:0.2', 'STANDARD'],
+      ['Interior wall 0.3 m', 'wall:interior:0.3', 'STANDARD'],
+      ['Exterior wall 0.2 m', 'wall:exterior:0.2', 'STANDARD']
+    ])
+    expect(ofType(doc, 'IFCMATERIAL').map((m) => str(m.args[0]))).toEqual(['Interior wall', 'Exterior wall'])
+
+    const typed = new Map<string, string>()
+    for (const rel of ofType(doc, 'IFCRELDEFINESBYTYPE')) {
+      const type = entity(doc, ref(rel.args[5]))
+      if (type.type !== 'IFCWALLTYPE') continue
+      for (const id of refs(rel.args[4])) typed.set(str(entity(doc, id).args[2]), str(type.args[2]))
+    }
+    expect(Object.fromEntries(typed)).toEqual({ a: 'Interior wall 0.2 m', b: 'Interior wall 0.3 m', c: 'Interior wall 0.2 m', e: 'Exterior wall 0.2 m' })
+
+    for (const type of types) {
+      const rel = ofType(doc, 'IFCRELASSOCIATESMATERIAL').filter((r) => refs(r.args[4]).includes(type.id))
+      expect(rel, str(type.args[2])).toHaveLength(1)
+      const set = entity(doc, ref(rel[0]!.args[5]))
+      expect(set.type).toBe('IFCMATERIALLAYERSET')
+      expect(str(set.args[1])).toBe(str(type.args[2]))
+      // The usage its walls carry is of the same set.
+      const wallUsage = usages(doc).get([...typed].find(([, name]) => name === str(type.args[2]))![0])![0]!
+      expect(ref(wallUsage.args[0])).toBe(set.id)
+    }
   })
 
   it('writes nothing when there is no wall', () => {
     const doc = exported(emptyPlan())
-    for (const type of ['IFCMATERIAL', 'IFCRELASSOCIATESMATERIAL', 'IFCMATERIALLAYERSETUSAGE']) {
+    for (const type of ['IFCMATERIAL', 'IFCRELASSOCIATESMATERIAL', 'IFCMATERIALLAYERSETUSAGE', 'IFCWALLTYPE']) {
       expect(ofType(doc, type), type).toHaveLength(0)
     }
   })
@@ -2349,6 +2139,8 @@ describe('door swing', () => {
     const out = new Map<string, string | null>(ofType(doc, 'IFCDOOR').map((d) => [str(d.args[2]), null]))
     for (const rel of ofType(doc, 'IFCRELDEFINESBYTYPE')) {
       const style = entity(doc, ref(rel.args[5]))
+      // HND-2 types the walls too.
+      if (style.type === 'IFCWALLTYPE') continue
       expect(style.type).toBe('IFCDOORSTYLE')
       for (const id of refs(rel.args[4])) out.set(str(entity(doc, id).args[2]), en(style.args[8]))
     }
@@ -2402,31 +2194,45 @@ describe('door swing', () => {
     const doc = exported(twoFloors)
     const styles = ofType(doc, 'IFCDOORSTYLE')
     expect(styles.map((s) => en(s.args[8])).sort()).toEqual(['SINGLE_SWING_LEFT', 'SINGLE_SWING_RIGHT'])
-    const related = ofType(doc, 'IFCRELDEFINESBYTYPE').map((r) => [en(entity(doc, ref(r.args[5])).args[8]), refs(r.args[4]).length])
+    const related = ofType(doc, 'IFCRELDEFINESBYTYPE')
+      .filter((r) => entity(doc, ref(r.args[5])).type === 'IFCDOORSTYLE')
+      .map((r) => [en(entity(doc, ref(r.args[5])).args[8]), refs(r.args[4]).length])
     expect(Object.fromEntries(related)).toEqual({ SINGLE_SWING_LEFT: 3, SINGLE_SWING_RIGHT: 1 })
   })
 
-  it('leaves an undecided door untyped and unturned', () => {
+  it('HND-2 types an undecided door by its size with no handing, and leaves it unturned', () => {
     const doc = exported(doorsPlan([{ hinge: 'start' }, { swing: 'left' }, {}, { hinge: 'end', swing: 'right' }]))
     const styles = stylesByDoor(doc)
-    expect([styles.get('d1'), styles.get('d2'), styles.get('d3')]).toEqual([null, null, null])
+    expect([styles.get('d1'), styles.get('d2'), styles.get('d3')]).toEqual(['NOTDEFINED', 'NOTDEFINED', 'NOTDEFINED'])
     for (const name of ['d1', 'd2', 'd3']) {
       const local = entity(doc, ref(doorNamed(doc, name).args[5]))
       expect(axisFrame(doc, ref(local.args[1])).o).toEqual([0, 0, 0])
     }
   })
 
-  it('writes no door style for a plan with no stated swing', () => {
-    expect(ofType(exported(samplePlan()), 'IFCDOORSTYLE')).toHaveLength(0)
-    expect(ofType(exported(samplePlan()), 'IFCRELDEFINESBYTYPE')).toHaveLength(0)
+  it('HND-2 writes one door style with no handing for a plan with no stated swing', () => {
+    const styles = ofType(exported(samplePlan()), 'IFCDOORSTYLE')
+    expect(styles.map((s) => [str(s.args[2]), str(s.args[7]), en(s.args[8])])).toEqual([['Door 0.9 x 2.1 m, swing not stated', 'door:0.9x2.1', 'NOTDEFINED']])
   })
 
-  it('names the styles in plain words and keeps their GUIDs stable', () => {
+  it('names the styles by size and handing in plain words, and keeps their GUIDs stable', () => {
     const plan = doorsPlan(table.map(([h]) => h))
     const a = ofType(exported(plan), 'IFCDOORSTYLE')
     const b = ofType(exported(plan), 'IFCDOORSTYLE')
-    expect(a.map((s) => str(s.args[2])).sort()).toEqual(['Single swing, left', 'Single swing, right'])
+    expect(a.map((s) => str(s.args[2]))).toEqual(['Door 0.9 x 2.1 m, single swing, left', 'Door 0.9 x 2.1 m, single swing, right'])
     expect(a.map((s) => str(s.args[0]))).toEqual(b.map((s) => str(s.args[0])))
+  })
+
+  it('HND-2 gives doors of another size a style of their own, and windows styles by size', () => {
+    const plan = doorsPlan([{ hinge: 'start', swing: 'left' }, { hinge: 'start', swing: 'left' }])
+    plan.openings[1] = { ...plan.openings[1]!, width: 0.8 }
+    plan.openings.push({ id: 'win1', wall: 'w1', type: 'window', offset: 3.2, width: 0.6, sill: 0.9, height: 1.2 })
+    const doc = exported(plan)
+    expect(ofType(doc, 'IFCDOORSTYLE').map((s) => str(s.args[2]))).toEqual(['Door 0.8 x 2.1 m, single swing, left', 'Door 0.9 x 2.1 m, single swing, left'])
+    const windows = ofType(doc, 'IFCWINDOWSTYLE')
+    expect(windows.map((s) => [str(s.args[2]), str(s.args[7])])).toEqual([['Window 0.6 x 1.2 m', 'window:0.6x1.2']])
+    const typed = ofType(doc, 'IFCRELDEFINESBYTYPE').filter((r) => ref(r.args[5]) === windows[0]!.id)
+    expect(typed.flatMap((r) => refs(r.args[4]).map((id) => str(entity(doc, id).args[2])))).toEqual(['win1'])
   })
 
   // IFC opens a door toward its own +y and puts a LEFT door's hinge at local x = 0. Checked in

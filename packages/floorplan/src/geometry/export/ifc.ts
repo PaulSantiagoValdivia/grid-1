@@ -15,10 +15,19 @@
  * (`validatePlan`) and an element is written exactly when the views draw it.
  *
  * Coordinates are the model's own: metres, X and Y as on the plan, Z up (C4).
- * That is already a right-handed basis with Z up, so nothing is flipped.
+ * That is already a right-handed basis with Z up, so nothing is flipped. A plan
+ * at survey coordinates is moved near the origin, the move kept in the site's
+ * placement (`nearOrigin`, HND-2).
+ *
+ * HND-2: the file carries what the plan already says, in the fields IFC has for
+ * it: each space its room's number, use and net area with the rule (ARE-9,
+ * ARE-12); base quantities on walls, spaces, slabs, doors, windows and doorless
+ * openings; wall types by stated kind and thickness, each with its material;
+ * door and window styles by size. What the plan does not hold (flats, slabs,
+ * materials, opening types) is not made up: slabs Grid works out say so.
  */
 
-import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall } from '../plan'
+import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
 import { planFloors, planForFloor } from '../floors'
 import { inIdOrder } from '../order'
 import { indexPlan, openingsOf } from '../plan'
@@ -41,6 +50,11 @@ import { wallAxis } from '../wall'
 import { wallJoints } from '../joints'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
+import { roomFloorArea } from '../room'
+import { MEASURES } from '../areas'
+import { roomNumbers } from '../roomNumbers'
+import { limit } from '../tolerances'
+import { area } from '../vec2'
 import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
 
 export interface IfcOptions {
@@ -270,11 +284,31 @@ interface Shared {
   readonly east2: number
 }
 
-/** Wall material, shared by every wall of one thickness. */
+/** One wall type: the walls of one stated kind and one thickness, with their material. */
+interface WallTypeEntry {
+  readonly kind: WallKind
+  readonly thickness: number
+  /** The layer set the type carries, and the usage its walls carry. */
+  readonly set: number
+  readonly usage: number
+  readonly walls: number[]
+}
+
+/** Wall materials and types, created on first use. */
 interface WallMaterials {
-  material: number | null
-  /** Insertion order is first use, so the output stays deterministic. */
-  readonly byThickness: Map<string, { usage: number; walls: number[] }>
+  /** One material per stated kind. */
+  readonly byKind: Map<WallKind, number>
+  /** One type per kind and thickness. Insertion order is first use, so the output stays deterministic. */
+  readonly byType: Map<string, WallTypeEntry>
+}
+
+/** Doors and windows of one type: the same kind, handing and size. */
+interface OpeningStyleEntry {
+  readonly type: 'door' | 'window'
+  readonly operation: DoorOperation | 'NOTDEFINED'
+  readonly width: number
+  readonly height: number
+  readonly fillers: number[]
 }
 
 interface Context {
@@ -282,12 +316,17 @@ interface Context {
   readonly owner: number
   readonly shared: Shared
   readonly materials: WallMaterials
-  /** Doors typed by their swing, by operation type, in the order they were written. */
-  readonly doorsByOperation: Map<DoorOperation, number[]>
+  /** Doors and windows by type (`openingStyleKey`), in the order they were first written. */
+  readonly openingStyles: Map<string, OpeningStyleEntry>
+  /** Every room's number (ARE-12), by `floor`, NUL, `id`. */
+  readonly roomNumbers: ReadonlyMap<string, number>
   /** The GlobalId of an element of this context's floor, or of the building's. */
   guid(kind: string, id: string): string
   readonly issuer: GuidIssuer
 }
+
+/** A floor and an id as one key: ids repeat from floor to floor. */
+const onFloorKey = (floor: string, id: string): string => `${floor}\u0000${id}`
 
 /** The same context, issuing the identities of one floor's elements. */
 function onFloor(c: Context, floorId: string): Context {
@@ -580,11 +619,75 @@ function relate(c: Context, type: string, key: string, ...rest: readonly string[
   return c.w.add(type, str(c.guid(type, key)), ref(c.owner), NULL, NULL, ...rest)
 }
 
+// ---------------------------------------------------------------------------
+// Properties and base quantities (HND-2)
+// ---------------------------------------------------------------------------
+
+const label = (value: string): string => `IFCLABEL(${str(value)})`
+const identifier = (value: string): string => `IFCIDENTIFIER(${str(value)})`
+const textValue = (value: string): string => `IFCTEXT(${str(value)})`
+const booleanValue = (value: boolean): string => `IFCBOOLEAN(${en(value ? 'T' : 'F')})`
+
+/** IfcPropertySingleValue(Name, Description, NominalValue, Unit). */
+const property = (c: Context, name: string, nominal: string): number =>
+  c.w.add('IFCPROPERTYSINGLEVALUE', str(name), NULL, nominal, NULL)
+
+/**
+ * A property set on one element. `key` keeps its identity and its relation's apart from every
+ * other set of the element. A `Pset_` name is the standard's, for its own properties only; a
+ * `Grid_` set is Grid's own.
+ */
+function propertySet(c: Context, key: string, name: string, properties: readonly number[], element: number): void {
+  if (properties.length === 0) return
+  const set = c.w.add('IFCPROPERTYSET', str(c.guid('pset', key)), ref(c.owner), str(name), NULL, refs(properties))
+  relate(c, 'IFCRELDEFINESBYPROPERTIES', `pset:${key}`, refs([element]), ref(set))
+}
+
+/** A base quantity: its kind, name, value in metres, m² or m³, and what it measures, when said. */
+type Quantity = readonly ['LENGTH' | 'AREA' | 'VOLUME', string, number, string?]
+
+/**
+ * A base quantity set (`Qto_…BaseQuantities`) on one element, as an IfcElementQuantity whose
+ * method is `BaseQuantities`: what a BIM tool's take-off and schedules read. A value that is not
+ * a number is left out; none is negative (IFC2x3 requires it).
+ */
+function quantitySet(c: Context, key: string, name: string, quantities: readonly Quantity[], element: number): void {
+  const written = quantities
+    .filter(([, , value]) => Number.isFinite(value))
+    .map(([kind, quantity, value, description]) =>
+      // IfcQuantityLength / Area / Volume (Name, Description, Unit, Value): the unit is the project's.
+      c.w.add(`IFCQUANTITY${kind}`, str(quantity), description === undefined ? NULL : str(description), NULL, real(Math.max(0, value)))
+    )
+  if (written.length === 0) return
+  const set = c.w.add('IFCELEMENTQUANTITY', str(c.guid('qto', key)), ref(c.owner), str(name), NULL, str('BaseQuantities'), refs(written))
+  relate(c, 'IFCRELDEFINESBYPROPERTIES', `qto:${key}`, refs([element]), ref(set))
+}
+
+/** The length round a closed ring. */
+function perimeter(ring: Ring): number {
+  let sum = 0
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!
+    const b = ring[(i + 1) % ring.length]!
+    sum += Math.hypot(b.x - a.x, b.y - a.y)
+  }
+  return sum
+}
+
+/** A footprint's area: its outline less its holes. */
+const footprintArea = (footprint: Footprint): number =>
+  footprint.holes.reduce((sum, hole) => sum - area(hole), area(footprint.outline))
+
+/** A size in a type's name and key, in metres to the millimetre, as the estimate's keys write it (ARE-13). */
+const sizeText = (value: number): string => String(Math.round(value * 1000) / 1000)
+
 interface WallElement {
   readonly id: number
   readonly placement: number
   readonly wall: Wall
   readonly length: number
+  /** The area of its body profile, seen from above: its footprint, corners joined. */
+  readonly footprint: number
 }
 
 /**
@@ -623,18 +726,19 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
 
   const half = wall.thickness / 2
   // Local Y is the wall's normal, its left face.
-  const profile =
+  const outline: Ring | null =
     ends === undefined
+      ? null
+      : [
+          { x: -ends.start.right, y: -half },
+          { x: axis.length + ends.end.right, y: -half },
+          { x: axis.length + ends.end.left, y: half },
+          { x: -ends.start.left, y: half }
+        ]
+  const profile =
+    outline === null
       ? rectangleProfile(c, axis.length, wall.thickness, axis.length / 2)
-      : footprintProfile(c, {
-          outline: [
-            { x: -ends.start.right, y: -half },
-            { x: axis.length + ends.end.right, y: -half },
-            { x: axis.length + ends.end.left, y: half },
-            { x: -ends.start.left, y: half }
-          ],
-          holes: []
-        })
+      : footprintProfile(c, { outline, holes: [] })
   const body = bodyRepresentation(c, extrusion(c, profile, wall.height))
   const shape = productShape(c, [axisRepresentation, body])
 
@@ -651,40 +755,75 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
   )
 
   writeWallProperties(c, wall, id, wallExposure(storey.model.index, wall.id) === 'exterior')
-  associateWallMaterial(c, wall, id)
-  return { id, placement: wallPlacement, wall, length: axis.length }
+  typeWall(c, wall, id)
+  const footprint = outline === null ? axis.length * wall.thickness : area(outline)
+  return { id, placement: wallPlacement, wall, length: axis.length, footprint }
 }
+
+/**
+ * HND-2: `Qto_WallBaseQuantities`, from the wall as written: its axis length, thickness and
+ * height, the footprint of its body (corners joined, SHT-2), its side along the axis, and its
+ * volume, each less the openings written in it (their width by height, through its thickness).
+ */
+function writeWallQuantities(c: Context, element: WallElement, openings: readonly Opening[]): void {
+  const { wall, length, footprint } = element
+  const holes = openings.reduce((sum, opening) => sum + opening.width * opening.height, 0)
+  const side = length * wall.height
+  const volume = footprint * wall.height
+  quantitySet(c, `wall:${wall.id}`, 'Qto_WallBaseQuantities', [
+    ['LENGTH', 'Length', length, 'Along its axis, from start to end.'],
+    ['LENGTH', 'Width', wall.thickness],
+    ['LENGTH', 'Height', wall.height],
+    ['AREA', 'GrossFootprintArea', footprint, 'Its body seen from above, with its corners joined to the walls it meets.'],
+    ['AREA', 'GrossSideArea', side, 'Its length along the axis times its height, one side.'],
+    ['AREA', 'NetSideArea', side - holes, 'The gross side area less every opening written in it, at its full size.'],
+    ['VOLUME', 'GrossVolume', volume],
+    ['VOLUME', 'NetVolume', volume - holes * wall.thickness, 'The gross volume less every opening written in it, through its thickness.']
+  ], element.id)
+}
+
+/** What a wall's material and type are called, by the kind the plan states (ARE-13 prices by it too). */
+const WALL_KIND_WORDS: Readonly<Record<WallKind, string>> = {
+  exterior: 'Exterior wall',
+  interior: 'Interior wall',
+  partition: 'Partition'
+}
+
+/** The plan holds no material or construction (CNT-15 will): the type says so. */
+const WALL_TYPE_NOTE =
+  'The plan holds no material or build-up: the type is the walls of one stated kind and one thickness, with one layer named after the kind.'
+
+/** A wall's stated kind; a file read without the schema may leave it out, and the schema's default is interior. */
+const kindOf = (wall: Wall): WallKind => (wall.kind in WALL_KIND_WORDS ? wall.kind : 'interior')
 
 /**
  * IFC2x3 requires every IfcWallStandardCase to be associated with exactly one
  * IfcMaterialLayerSetUsage (its WR1), so each wall gets one: a single layer as
- * thick as the wall, in a set named after that thickness. The usage runs along
- * local Y (across the wall) with an offset of -thickness/2, which centres the
- * layer on the axis, the same band the Body profile covers (C1).
+ * thick as the wall. The usage runs along local Y (across the wall) with an
+ * offset of -thickness/2, which centres the layer on the axis, the same band the
+ * Body profile covers (C1).
  *
- * One material, and one layer set and usage per distinct thickness, shared by
- * the walls that have it. They are created on first use and the association
+ * HND-2: walls are typed by the kind the plan states and their thickness, the way
+ * the estimate groups them (`wall:exterior:0.35`, ARE-13). Each type is an
+ * IfcWallType carrying its IfcMaterialLayerSet; its walls carry that set's usage.
+ * One material per kind, named after it. All are created on first use and the
  * relations are written once at the end, so nothing is written for a plan with
  * no walls.
  */
-function associateWallMaterial(c: Context, wall: Wall, element: number): void {
+function typeWall(c: Context, wall: Wall, element: number): void {
   const { w, materials } = c
-  const key = real(wall.thickness)
+  const kind = kindOf(wall)
+  const key = `wall:${kind}:${sizeText(wall.thickness)}`
 
-  let entry = materials.byThickness.get(key)
+  let entry = materials.byType.get(key)
   if (!entry) {
-    materials.material ??= w.add('IFCMATERIAL', str('Wall'))
-    const layer = w.add(
-      'IFCMATERIALLAYER',
-      ref(materials.material),
-      real(wall.thickness),
-      NULL
-    )
-    const set = w.add(
-      'IFCMATERIALLAYERSET',
-      refs([layer]),
-      str(`Wall ${key.replace(/\.$/, '')} m`)
-    )
+    let material = materials.byKind.get(kind)
+    if (material === undefined) {
+      material = w.add('IFCMATERIAL', str(WALL_KIND_WORDS[kind]))
+      materials.byKind.set(kind, material)
+    }
+    const layer = w.add('IFCMATERIALLAYER', ref(material), real(wall.thickness), NULL)
+    const set = w.add('IFCMATERIALLAYERSET', refs([layer]), str(wallTypeName(kind, wall.thickness)))
     const usage = w.add(
       'IFCMATERIALLAYERSETUSAGE',
       ref(set),
@@ -692,14 +831,37 @@ function associateWallMaterial(c: Context, wall: Wall, element: number): void {
       en('POSITIVE'),
       real(-wall.thickness / 2)
     )
-    entry = { usage, walls: [] }
-    materials.byThickness.set(key, entry)
+    entry = { kind, thickness: wall.thickness, set, usage, walls: [] }
+    materials.byType.set(key, entry)
   }
   entry.walls.push(element)
 }
 
-function writeWallMaterialAssociations(c: Context): void {
-  for (const [key, { usage, walls }] of c.materials.byThickness) {
+const wallTypeName = (kind: WallKind, thickness: number): string => `${WALL_KIND_WORDS[kind]} ${sizeText(thickness)} m`
+
+/**
+ * Each wall type, the walls it types, and the two material associations: the layer set on the
+ * type, its usage on the walls.
+ */
+function writeWallTypes(c: Context): void {
+  for (const [key, { kind, thickness, set, usage, walls }] of c.materials.byType) {
+    // IfcWallType: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
+    // HasPropertySets, RepresentationMaps, Tag, ElementType, PredefinedType.
+    const type = c.w.add(
+      'IFCWALLTYPE',
+      str(c.guid('wall-type', key)),
+      ref(c.owner),
+      str(wallTypeName(kind, thickness)),
+      str(WALL_TYPE_NOTE),
+      NULL,
+      NULL,
+      NULL,
+      str(key),
+      str(WALL_KIND_WORDS[kind]),
+      en('STANDARD')
+    )
+    relate(c, 'IFCRELDEFINESBYTYPE', key, refs(walls), ref(type))
+    relate(c, 'IFCRELASSOCIATESMATERIAL', `type:${key}`, refs([type]), ref(set))
     relate(c, 'IFCRELASSOCIATESMATERIAL', key, refs(walls), ref(usage))
   }
 }
@@ -757,38 +919,92 @@ function doorOperation(opening: Opening): DoorOperation | null {
   return hingeOnLeft ? 'SINGLE_SWING_LEFT' : 'SINGLE_SWING_RIGHT'
 }
 
-const DOOR_STYLE_NAMES: Record<DoorOperation, string> = {
-  SINGLE_SWING_LEFT: 'Single swing, left',
-  SINGLE_SWING_RIGHT: 'Single swing, right'
+const HANDING_WORDS: Record<DoorOperation | 'NOTDEFINED', string> = {
+  SINGLE_SWING_LEFT: 'single swing, left',
+  SINGLE_SWING_RIGHT: 'single swing, right',
+  NOTDEFINED: 'swing not stated'
+}
+
+const OPERATION_ORDER = { SINGLE_SWING_LEFT: 0, SINGLE_SWING_RIGHT: 1, NOTDEFINED: 2 } as const
+
+/** A door or window type's key: its kind and size, as the estimate prices it (`door:0.9x2.1`, ARE-13). */
+const styleTag = (type: 'door' | 'window', width: number, height: number): string =>
+  `${type}:${sizeText(width)}x${sizeText(height)}`
+
+function styleName(entry: OpeningStyleEntry): string {
+  const size = `${sizeText(entry.width)} x ${sizeText(entry.height)} m`
+  return entry.type === 'door' ? `Door ${size}, ${HANDING_WORDS[entry.operation]}` : `Window ${size}`
+}
+
+/** The plan holds no door or window types (CNT-14 will): the style says how Grid grouped them. */
+const STYLE_NOTE =
+  'The plan holds no door or window types: Grid groups the openings by kind, size (the hole in the wall, width by height) and, for a door, its handing.'
+
+/** Puts a door or window in its type, made on first use. */
+function typeOpening(c: Context, opening: Opening, operation: DoorOperation | null, filler: number): void {
+  const type = opening.type === 'door' ? 'door' : 'window'
+  const handing = type === 'door' ? operation ?? 'NOTDEFINED' : 'NOTDEFINED'
+  const key = `${styleTag(type, opening.width, opening.height)}:${handing}`
+  const entry = c.openingStyles.get(key)
+  if (entry) entry.fillers.push(filler)
+  else c.openingStyles.set(key, { type, operation: handing, width: opening.width, height: opening.height, fillers: [filler] })
 }
 
 /**
- * One shared IfcDoorStyle per handing, with the doors it types. Shared, because a BIM tool
- * makes one door type per style; a door that doesn't state its swing stays untyped.
+ * HND-2: one shared style per door type and per window type, with the doors or windows it types:
+ * the same size and, for a door, the same handing, since IFC2x3 keeps a door's operation on its
+ * style. Shared, because a BIM tool makes one family type per style. Doors first, then windows,
+ * each by handing, width and height.
  */
-function writeDoorStyles(c: Context): void {
-  for (const operation of ['SINGLE_SWING_LEFT', 'SINGLE_SWING_RIGHT'] as const) {
-    const doors = c.doorsByOperation.get(operation)
-    if (!doors || doors.length === 0) continue
-    // IfcDoorStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
-    // HasPropertySets, RepresentationMaps, Tag, OperationType, ConstructionType,
-    // ParameterTakesPrecedence, Sizeable.
-    const style = c.w.add(
-      'IFCDOORSTYLE',
-      str(c.guid('door-style', operation)),
-      ref(c.owner),
-      str(DOOR_STYLE_NAMES[operation]),
-      NULL,
-      NULL,
-      NULL,
-      NULL,
-      NULL,
-      en(operation),
-      en('NOTDEFINED'),
-      '.F.',
-      '.T.'
-    )
-    relate(c, 'IFCRELDEFINESBYTYPE', operation, refs(doors), ref(style))
+function writeOpeningStyles(c: Context): void {
+  const entries = [...c.openingStyles.entries()].sort(
+    ([, a], [, b]) =>
+      (a.type === b.type ? 0 : a.type === 'door' ? -1 : 1) ||
+      OPERATION_ORDER[a.operation] - OPERATION_ORDER[b.operation] ||
+      a.width - b.width ||
+      a.height - b.height
+  )
+  for (const [key, entry] of entries) {
+    const tag = styleTag(entry.type, entry.width, entry.height)
+    const style =
+      entry.type === 'door'
+        ? // IfcDoorStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
+          // HasPropertySets, RepresentationMaps, Tag, OperationType, ConstructionType,
+          // ParameterTakesPrecedence, Sizeable.
+          c.w.add(
+            'IFCDOORSTYLE',
+            str(c.guid('door-style', key)),
+            ref(c.owner),
+            str(styleName(entry)),
+            str(STYLE_NOTE),
+            NULL,
+            NULL,
+            NULL,
+            str(tag),
+            en(entry.operation),
+            en('NOTDEFINED'),
+            '.F.',
+            '.T.'
+          )
+        : // IfcWindowStyle: GlobalId, OwnerHistory, Name, Description, ApplicableOccurrence,
+          // HasPropertySets, RepresentationMaps, Tag, ConstructionType, OperationType,
+          // ParameterTakesPrecedence, Sizeable.
+          c.w.add(
+            'IFCWINDOWSTYLE',
+            str(c.guid('window-style', key)),
+            ref(c.owner),
+            str(styleName(entry)),
+            str(STYLE_NOTE),
+            NULL,
+            NULL,
+            NULL,
+            str(tag),
+            en('NOTDEFINED'),
+            en('NOTDEFINED'),
+            '.F.',
+            '.T.'
+          )
+    relate(c, 'IFCRELDEFINESBYTYPE', key, refs(entry.fillers), ref(style))
   }
 }
 
@@ -841,8 +1057,16 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   )
   relate(c, 'IFCRELVOIDSELEMENT', opening.id, ref(element.id), ref(hole))
 
-  // A plain opening only cuts the wall.
-  if (opening.type === 'opening') return null
+  // A plain opening only cuts the wall, and carries its own quantities.
+  if (opening.type === 'opening') {
+    quantitySet(c, `opening:${opening.id}`, 'Qto_OpeningElementBaseQuantities', [
+      ['LENGTH', 'Width', opening.width],
+      ['LENGTH', 'Height', opening.height],
+      ['LENGTH', 'Depth', wall.thickness],
+      ['AREA', 'Area', opening.width * opening.height]
+    ], hole)
+    return null
+  }
 
   // IFC opens a door toward its own +y, with a LEFT door's hinge at local x = 0. A door
   // that opens to the wall's right face is turned half a turn about z, from its far end, so
@@ -869,11 +1093,13 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
     real(opening.width)
   )
   relate(c, 'IFCRELFILLSELEMENT', opening.id, ref(hole), ref(filler))
-  if (operation !== null) {
-    const doors = c.doorsByOperation.get(operation)
-    if (doors) doors.push(filler)
-    else c.doorsByOperation.set(operation, [filler])
-  }
+  const size: Quantity[] = [
+    ['LENGTH', 'Width', opening.width],
+    ['LENGTH', 'Height', opening.height],
+    ['AREA', 'Area', opening.width * opening.height, 'The hole in the wall, width by height: the plan holds no frame.']
+  ]
+  quantitySet(c, `${opening.type}:${opening.id}`, opening.type === 'door' ? 'Qto_DoorBaseQuantities' : 'Qto_WindowBaseQuantities', size, filler)
+  typeOpening(c, opening, operation, filler)
   return filler
 }
 
@@ -901,13 +1127,16 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     bodyRepresentation(c, extrusion(c, profile, height))
   ])
 
-  return w.add(
+  // HND-2: Name is the room's number and LongName its name, the way a BIM tool reads a room's
+  // number and name; ObjectType is its use, when the plan states one.
+  const number = c.roomNumbers.get(onFloorKey(storey.model.floor.id, room.id))
+  const space = w.add(
     'IFCSPACE',
     str(c.guid('space', room.id)),
     ref(c.owner),
-    str(room.name),
+    str(number === undefined ? room.name : String(number)),
     NULL,
-    NULL,
+    room.use === undefined ? NULL : str(room.use),
     ref(spacePlacement),
     ref(shape),
     str(room.name),
@@ -915,6 +1144,67 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     en('INTERNAL'),
     NULL
   )
+  writeSpaceData(c, storey, room, space, footprint, height, number)
+  return space
+}
+
+/** Grid_Space's words for a room whose use the plan does not state, as the areas say it (ARE-9). */
+const USE_NOT_SAID = 'not said'
+
+const FOOTPRINT_RULE =
+  "The space's footprint: inside the faces of its walls, less its holes; a room drawn inside it is not taken off."
+
+/**
+ * HND-2: what a room is, in the fields IFC has for it. `Pset_SpaceCommon` holds its number
+ * (`Reference`) and its use (`Category`, when stated); `Grid_Space`, Grid's own set, holds its
+ * id, number, use and net area with the measure and the rule it follows (ARE-9's net, in Grid's
+ * words); `Qto_SpaceBaseQuantities` its height, perimeter, footprint, net area and volume.
+ */
+function writeSpaceData(
+  c: Context,
+  storey: Storey,
+  room: Room,
+  space: number,
+  footprint: Footprint,
+  height: number,
+  number: number | undefined
+): void {
+  let net: number | null = null
+  try {
+    // ARE-9's net, by the one function the areas use: the outline less its holes and the rooms
+    // drawn inside it.
+    net = roomFloorArea(room, storey.model.index, footprint.outline)
+  } catch {
+    // Left unsaid: the space still carries its footprint.
+  }
+  const gross = footprintArea(footprint)
+  const rule = MEASURES.net
+
+  propertySet(c, `space:${room.id}`, 'Pset_SpaceCommon', [
+    ...(number === undefined ? [] : [property(c, 'Reference', identifier(String(number)))]),
+    ...(room.use === undefined ? [] : [property(c, 'Category', label(room.use))])
+  ], space)
+
+  propertySet(c, `grid-space:${room.id}`, 'Grid_Space', [
+    property(c, 'Id', identifier(room.id)),
+    ...(number === undefined ? [] : [property(c, 'Number', `IFCINTEGER(${int(number)})`)]),
+    property(c, 'Use', label(room.use ?? USE_NOT_SAID)),
+    ...(net === null
+      ? []
+      : [
+          property(c, 'Area', `IFCAREAMEASURE(${real(net)})`),
+          property(c, 'AreaMeasure', label(rule.name)),
+          property(c, 'AreaRule', textValue(rule.measures))
+        ])
+  ], space)
+
+  quantitySet(c, `space:${room.id}`, 'Qto_SpaceBaseQuantities', [
+    ['LENGTH', 'Height', height],
+    ['LENGTH', 'GrossPerimeter', perimeter(footprint.outline)],
+    ['AREA', 'GrossFloorArea', gross, FOOTPRINT_RULE],
+    ...(net === null ? [] : [['AREA', 'NetFloorArea', net, rule.measures] as const]),
+    ['VOLUME', 'GrossVolume', gross * height]
+  ], space)
 }
 
 type Ring = readonly { readonly x: number; readonly y: number }[]
@@ -974,7 +1264,7 @@ function writeSlab(
   ])
   const roof = kind === 'ROOF'
 
-  return c.w.add(
+  const slab = c.w.add(
     'IFCSLAB',
     str(c.guid(roof ? 'roof' : 'slab', room.id)),
     ref(c.owner),
@@ -986,6 +1276,30 @@ function writeSlab(
     NULL,
     en(kind)
   )
+  const key = `${roof ? 'roof' : 'slab'}:${room.id}`
+  writeSlabQuantities(c, key, slab, footprint, thickness)
+  // The plan holds no slab or roof (LVL-4 will): this one is Grid's, and says so.
+  propertySet(c, key, 'Grid_Slab', [
+    property(c, 'Assumed', booleanValue(true)),
+    property(c, 'Note', textValue(roof ? ROOF_NOTE : SLAB_NOTE))
+  ], slab)
+  return slab
+}
+
+const SLAB_NOTE =
+  `The plan holds no slab: Grid puts one under each room, the room's footprint, as thick as its floor states or ${SLAB_THICKNESS} m, and solid down to that under a raised room.`
+const ROOF_NOTE =
+  `The plan holds no roof: Grid puts a flat one, ${SLAB_THICKNESS} m thick, over each room of the top floor, the room's footprint.`
+
+/** HND-2: `Qto_SlabBaseQuantities`, from the slab as written: its footprint and its thickness. */
+function writeSlabQuantities(c: Context, key: string, slab: number, footprint: Footprint, thickness: number): void {
+  const gross = footprintArea(footprint)
+  quantitySet(c, key, 'Qto_SlabBaseQuantities', [
+    ['LENGTH', 'Width', thickness, 'Its thickness.'],
+    ['LENGTH', 'Perimeter', perimeter(footprint.outline)],
+    ['AREA', 'GrossArea', gross],
+    ['VOLUME', 'GrossVolume', gross * thickness]
+  ], slab)
 }
 
 /**
@@ -1114,20 +1428,20 @@ function writeStair(c: Context, storey: Storey, stair: StairLayout): number {
   })
   stair.landings.forEach((_, i) => {
     const landing = blocks[block + i]!
-    parts.push(
-      c.w.add(
-        'IFCSLAB',
-        str(c.guid('stair-landing', `${stair.id}:${i}`)),
-        ref(c.owner),
-        str(`${stair.name} landing ${i + 1}`),
-        NULL,
-        NULL,
-        ref(placement(c.w, at, [0, 0, 0])),
-        ref(body([{ outline: landing.outline, height: landing.top - landing.bottom }])),
-        NULL,
-        en('LANDING')
-      )
+    const slab = c.w.add(
+      'IFCSLAB',
+      str(c.guid('stair-landing', `${stair.id}:${i}`)),
+      ref(c.owner),
+      str(`${stair.name} landing ${i + 1}`),
+      NULL,
+      NULL,
+      ref(placement(c.w, at, [0, 0, 0])),
+      ref(body([{ outline: landing.outline, height: landing.top - landing.bottom }])),
+      NULL,
+      en('LANDING')
     )
+    writeSlabQuantities(c, `landing:${stair.id}:${i}`, slab, { outline: landing.outline, holes: [] }, landing.top - landing.bottom)
+    parts.push(slab)
   })
   aggregate(c, `stair:${stair.id}`, element, parts)
   return element
@@ -1150,15 +1464,18 @@ function writeStoreyContents(building: Context, storey: Storey): void {
     }
     contained.push(element.id)
 
+    const written: Opening[] = []
     for (const opening of openingsOf(index, wall.id)) {
       if (broken.has(opening.id)) continue
       try {
         const filler = writeOpening(c, element, opening)
+        written.push(opening)
         if (filler !== null) contained.push(filler)
       } catch {
         // Likewise: one bad opening does not cost the wall its others.
       }
     }
+    writeWallQuantities(c, element, written)
   }
 
   if (contained.length > 0) {
@@ -1277,11 +1594,64 @@ function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
   return options.projectId ?? IFC_DEFAULT_PROJECT_ID
 }
 
+type Pair2 = readonly [number, number]
+
+/**
+ * HND-2 (lab MS-12, CP2-1): the plan as the file writes it, near the origin, and where its origin
+ * went. A plan that reaches no further than `farFromOrigin` is written as it is. One drawn at
+ * survey coordinates is moved by whole steps of `farFromOrigin`, to bring the middle of its walls
+ * within half a step of the origin, and the move is the site's placement: every element keeps
+ * its place in the world, and its own coordinates are small, which BIM tools need to import it.
+ * A plan holding a coordinate past `largest`, which validation refuses, is written as it is, so
+ * the move cannot bring a refused part back.
+ */
+function nearOrigin(plan: FloorPlan): { readonly plan: FloorPlan; readonly at: Pair2 } {
+  const unmoved = { plan, at: [0, 0] as const }
+  // A plan read without the schema may hold anything: only pairs of finite numbers count, and
+  // anything else is left as it is, for the floors' validation to leave out.
+  const pair = (value: unknown): Pair2 | null =>
+    Array.isArray(value) && value.length === 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])
+      ? [value[0] as number, value[1] as number]
+      : null
+  const pairs = (values: readonly unknown[]): Pair2[] => values.flatMap((value) => {
+    const p = pair(value)
+    return p === null ? [] : [p]
+  })
+  const wallPoints = pairs(plan.walls.flatMap((wall) => [wall.start, wall.end]))
+  const others = pairs([
+    ...(plan.items ?? []).map((item) => item.at),
+    ...(plan.stairs ?? []).flatMap((stair) => (Array.isArray(stair.run) ? stair.run : []))
+  ])
+  if ([...wallPoints, ...others].some(([x, y]) => Math.hypot(x, y) > limit('largest'))) return unmoved
+  if (!wallPoints.some(([x, y]) => Math.hypot(x, y) > limit('farFromOrigin'))) return unmoved
+  const step = limit('farFromOrigin')
+  const middle = (axis: 0 | 1): number => {
+    const values = wallPoints.map((p) => p[axis])
+    return Math.round((Math.min(...values) + Math.max(...values)) / 2 / step) * step
+  }
+  const at: Pair2 = [middle(0), middle(1)]
+  function move<T>(value: T): T {
+    const p = pair(value)
+    return p === null ? value : ([p[0] - at[0], p[1] - at[1]] as T)
+  }
+  return {
+    plan: {
+      ...plan,
+      walls: plan.walls.map((wall) => ({ ...wall, start: move(wall.start), end: move(wall.end) })),
+      ...(plan.items === undefined ? {} : { items: plan.items.map((item) => ({ ...item, at: move(item.at) })) }),
+      ...(plan.stairs === undefined
+        ? {}
+        : { stairs: plan.stairs.map((stair) => (Array.isArray(stair.run) ? { ...stair, run: stair.run.map(move) } : stair)) })
+    },
+    at
+  }
+}
+
 function buildDocument(given: FloorPlan, options: IfcOptions): string {
   const timestamp = usableTimestamp(options.timestamp)
   const projectName = options.projectName ?? DEFAULT_PROJECT_NAME
   // QAR-5: the parts in id order, so the file does not hang on the order they are listed in.
-  const plan = inIdOrder(given)
+  const { plan, at: origin } = nearOrigin(inIdOrder(given))
 
   const w = new StepWriter()
   const issuer = createGuidIssuer(projectIdOf(plan, options))
@@ -1292,8 +1662,9 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     w,
     owner,
     shared,
-    materials: { material: null, byThickness: new Map() },
-    doorsByOperation: new Map(),
+    materials: { byKind: new Map(), byType: new Map() },
+    openingStyles: new Map(),
+    roomNumbers: new Map(roomNumbers(plan).map((n) => [onFloorKey(n.floor, n.id), n.number] as const)),
     guid: (kind, id) => issuer.issue(kind, id),
     issuer
   }
@@ -1321,7 +1692,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     ref(units)
   )
 
-  const sitePlacement = placement(w, null, [0, 0, 0])
+  const sitePlacement = placement(w, null, [origin[0], origin[1], 0])
   const site = rooted(
     'IFCSITE',
     'site',
@@ -1363,8 +1734,8 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     writeStorey(c, buildingPlacement, model, levels.get(model.floor.id)!)
   )
   for (const storey of storeys) writeStoreyContents(c, storey)
-  writeWallMaterialAssociations(c)
-  writeDoorStyles(c)
+  writeWallTypes(c)
+  writeOpeningStyles(c)
 
   aggregate(c, 'project', project, [site])
   aggregate(c, 'site', site, [building])

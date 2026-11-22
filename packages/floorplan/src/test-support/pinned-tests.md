@@ -182,6 +182,17 @@ and the new `opening_too_small_to_pass` on the hole) instead of only that `no_ex
 half of CH-6, what lies beyond an opening (a window into the next room, a door into a walled
 courtyard), is MSG-17's and has no `it.fails`. No other expected figure changed (`reviews/MSG-18.md`).
 
+HND-2 fixed no expected failure: the lab's EX-2 (IFC rooms carry a name and nothing else) had no
+`it.fails`. It wrote the four IFC golden files again on purpose: each room's space is named by its
+number with the room's name as its long name, and walls, spaces, slabs, doors, windows and
+doorless openings gain base quantities, wall types, door and window styles and Grid's own property
+sets, so entity numbers move; no wall, opening, space or slab moved or changed shape. In
+`ifc.test.ts` the space helpers read a room's name from the long name; `leaves an undecided door
+untyped and unturned` is now `types an undecided door by its size with no handing, and leaves it
+unturned`, and `writes no door style for a plan with no stated swing` now expects one style with no
+handing; the material tests expect one material per stated kind (`Interior wall`) and layer sets
+named after kind and thickness. See `reviews/HND-2.md`.
+
 ## Kinds of test the suite does not have yet
 
 From the lab's entry Z-7. None of these is built here.
@@ -201,6 +212,9 @@ From the lab's entry Z-7. None of these is built here.
   itself. The large files of SC-3 have no guard.
 - **Pictures and real readers.** Nothing compares what the 2D or 3D view draws, and exported
   files are compared with Grid's own output and four golden IFC files, never opened by the
-  programs people use (SE-8, SE-9, DR-3, EX-1).
+  programs people use (SE-8, SE-9, DR-3, EX-1). Every IFC the repository's plans give is checked
+  for its references, relationships, room data, quantities and materials by
+  `geometry/export/__tests__/ifc.structure.test.ts` (HND-2), which stands in for the lab's
+  IfcOpenShell checker but is not it.
 - **An agent or a person in the loop.** Six entries can only be checked by watching someone
   use Grid (MS-13, WR-2, WR-10, WR-11, PE-1, PE-2).
