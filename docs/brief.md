@@ -18,7 +18,8 @@ export, sheet or drawing reads it.
 
 An agent writes it in one call, `grid_write_brief`, from the person's words, before the first
 room is drawn: the plan need not exist yet. The call replaces the whole brief; with no `brief`
-it reads the one there and writes nothing.
+it reads the one there and writes nothing. A plan that is there and that Grid refuses is refused
+here too, as by every tool, and no brief is written.
 
 ```json
 {
