@@ -155,6 +155,26 @@ after the merge are below.
 | `npm run typecheck`, `npm run lint`, `npm run check:licenses` | pass (363 licences, no new dependency) |
 | `npm run scoreboard` | passes, same as the stored figures (main's: 197 rooms wrong, 278 silent, 19 turns answered); nothing to store |
 
+Main moved twice more while those ran. **After merging main at e486ccb (CNT-17, LVL-9):**
+conflicts in the changelogs, `types/floorplan.ts` (CNT-17 took C14, so the phases are C15),
+`result.test.ts` (the plan's fields: `base` and `accessible` both) and `look.ts` (LVL-9's `hatch`,
+`mark` and `chain` beside `demolished`), each kept both sides; LVL-9's sections now cut the building
+after the work (`planSection`). Main's cap is now 600 kB; `grid.mjs` is 520,535 bytes. The full
+suite timed out at 1,500 s under a load average near 245 after 139 files, all passing (3,592
+tests); the other 180 files were run on their own: 180 passed, 1,971 tests passed, 2 skipped.
+Typecheck, lint and licences pass; the scoreboard is the same as stored (197, 278, 19 turns, 5,
+20 checks fed, 735, 95).
+
+**After merging main at 4fe29ed (COD-8):** conflicts in the changelogs and `command/check.ts`
+(the firm's standards and the base both passed to `inspectPlan`), both kept. `grid.mjs` is 531,003
+bytes. The affected tests (the four phase files, `cli/src/distribution`, `cli/src/firm`,
+`tools.test.ts`, `rules/src/result`, the check tests, `grid.e2e.test.ts`, `everyPath.e2e.test.ts`,
+the sheet, `approvalWords.test.ts`, `floorplan/src/types`): 39 files, 585 passed, 1 failed: the
+`grid.e2e.test.ts` speed test (grid check on the sample flat under 500 ms, median of 7), at a load
+average of 300. Rerun alone it failed again. Timed by hand at the same load, the median of 7 was
+0.55 to 0.65 s for main's own build and 0.66 s for this branch's: the machine, not the change. It
+should pass on a quiet machine; not verified here. Typecheck and lint pass.
+
 New tests: `floorplan/src/geometry/__tests__/phases.test.ts` (11), `floorplan/src/export/__tests__/phases.test.ts` (3), `viewer/src/picture/__tests__/phases.test.ts` (4), `cli/src/mcp/__tests__/phases.test.ts` (12), a case in `coverage.test.ts`, and the base plan's block in `everyPath.e2e.test.ts` (8).
 
 ## Changed test expectations
