@@ -28,6 +28,7 @@ import { exportPlan } from '../../export/planExport'
 import { parseGlb } from '../export/__tests__/glb-reader'
 import { readRoomsText } from '../../rooms/read'
 import { compileRoomsText } from '../../rooms/compile'
+import { readPlanParts } from '../../types/readParts'
 
 type Tuple = [number, number]
 
@@ -72,6 +73,14 @@ describe('a curved wall in the plan file (C8)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
+  })
+
+  it('reads an arc it cannot read as not stated, and says so: the wall is straight', () => {
+    // The lab's agents wrote a radius alone (scenario s05b): no centre, no sweep.
+    const raw = { ...bayRoom(), walls: bayRoom().walls.map((w) => (w.id === 'bay' ? { ...w, arc: { radius: 3 } } : w)) }
+    const read = readPlanParts(raw)
+    expect(read.plan.walls.find((w) => w.id === 'bay')!.arc).toBeUndefined()
+    expect(read.faults).toContainEqual(expect.objectContaining({ kind: 'value-left-out', part: expect.objectContaining({ list: 'walls', id: 'bay' }) }))
   })
 
   it('refuses a sweep of nothing or more than a whole turn', () => {

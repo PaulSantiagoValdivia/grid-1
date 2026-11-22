@@ -22,6 +22,11 @@ Notes for agents and people changing this repository.
   carries its rule from `MEASURES`, in Grid's own words; the table in `docs/areas.md` must match
   it, and no measuring standard is named anywhere but in a figure record (a test checks both).
   The CLI's `quantities/areas.ts` adds room sizes, free floor, circulation and each figure's state.
+- `packages/floorplan/src/geometry/arc.ts` (CNT-18): a curved wall (C8, `arc` in the schema):
+  its curve worked out from its centre and sweep, its faults, and the stations straight pieces
+  follow it by. Read a wall that may be curved through `wall.ts`: `wallLength`, `wallFrameAt`,
+  `wallSegments` (its chords) and `wallSliceShape` (its faces as true arcs); `wallAxis` throws
+  for a curved wall, so no code takes its chord for it.
 - `packages/floorplan/src/rooms/` (WRT-2): writing a plan rooms first and reading any plan back
   as rooms text. `compile.ts` works out the walls, their kinds, the room boundaries and the
   openings' places from rooms text (the language is in its header); `read.ts` reads a plan back

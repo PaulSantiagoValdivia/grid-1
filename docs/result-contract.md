@@ -465,8 +465,8 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - New codes, errors about a wall (`thing.kind` `wall`), which leave the wall out of every view,
   measure and export: `wall/arc-ends-apart`, its end is not on the circle where the sweep takes
   its start (further than `arcEnds`, 5 mm), and `wall/arc-too-tight`, its radius is no more than
-  half its thickness. A curve the reader cannot read leaves the wall out (`plan/part-left-out`),
-  as a thickness does.
+  half its thickness. An `arc` the reader cannot read (no centre, a sweep of 0) is read as not
+  stated, as a hinge is (`plan/value-left-out`), and the wall is drawn straight.
 - `grid_export` adds `approximated`: each curved wall, and each room along one, that the file
   writes with its curve as straight pieces, as `{ kind: "wall" | "room", id, floor }`, and a
   line in its text that says so. The DXF writes a curved wall's faces as true arcs and names only

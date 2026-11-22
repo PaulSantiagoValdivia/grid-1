@@ -349,7 +349,9 @@ positive as every turn in a plan is. Its radius is the distance from the centre 
 A round room is that one wall (`"boundary": ["round"]`); a half-round bay is a straight wall's
 worth of room with one wall of `"sweep": 180` across its open side; a stair tower is a room of
 one curved wall on each floor. A wall that states no `arc` is straight, and a plan with none
-reads exactly as before (version 1).
+reads exactly as before (version 1). An `arc` Grid cannot read (with no centre, or a sweep of 0
+or past a whole turn) is read as not stated, as a door's hinge is: the wall is drawn straight,
+and `grid check` says so (`plan/value-left-out`).
 
 The wall grows half its thickness either side of its curve, as a straight wall does of its line
 (C1); its `left` face is the one on the left going from `start` to `end`, the inside of a
