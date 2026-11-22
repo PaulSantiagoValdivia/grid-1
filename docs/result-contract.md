@@ -360,6 +360,19 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: sizes along the walls, in chains (SHT-4)
+
+- No line, code or wording of the record changes.
+- The floor plan picture (`grid draw`, `grid_view` kind plan, the sheet) dimensions each room
+  along its walls' faces: width and depth for a room with four square corners, one size per
+  side for any other, each line inside its room. Outside the plan, each side has a chain of
+  openings, a chain of walls and the overall size, along the plan's own main directions, and
+  each chain adds up to the overall size. In the technical look the lines end in 45-degree
+  ticks with the numbers along them.
+- In an SVG, each dimension's group carries `data-measured-to`, what its two ends measure to
+  (`face`, `centre-line` or `finish`), and `data-kind` is `overall`, `wall`, `opening` or
+  `room`.
+
 ### 2026-11-22: what would be right (MSG-7)
 
 - A line gets `fixes` where a change to one part would clear it, and in `grid_check` the

@@ -193,6 +193,29 @@ the uses in the key. `--key` adds a key where the plan asks for none. A word Gri
 is refused by name, and none of the three is taken with `--3d`. `grid_view` takes the same as
 `hide`, `colour` and `key`.
 
+## The sizes on a drawing
+
+A floor plan picture's sizes run along the walls, in the plan's own two main directions (the
+way most of its outside walls run), so a house drawn turned is dimensioned along its walls, not
+by the box it makes on the page.
+
+- Inside each room: a room with four square corners gets its width and depth, between its
+  walls' faces. Any other room (an L, a room with a bay, a skewed one) gets one size per side,
+  a little in from that side, and every line stays inside its room.
+- Outside the plan, on each side that has them, three chains, nearest first: the openings
+  (from the corner to each edge of a door or window in the walls facing that side), the walls
+  (each wall's faces where it meets that side, and the corners) and the overall size. Each
+  chain runs between the same two outer faces, so it adds up to the overall size. The overall
+  width is always below the plan and the overall depth to its left; above and to the right
+  there is one only where a chain is.
+- Every size measures to a wall's face, or to the line of a dividing line, which has no
+  faces. A plan records no finishes, so none measures to a finish yet. In an SVG each
+  dimension's `data-measured-to` says it, for its two ends: `face`, `centre-line` or `finish`.
+
+In the technical look each dimension line ends in a 45-degree tick and its number runs along
+it; the working look keeps plain ends and upright numbers. `--hide dimensions` leaves them all
+off.
+
 ## What went wrong, on the drawing: `grid draw`
 
 `grid draw` and `grid_view` show what went wrong on the drawing. Every line `grid check` prints
