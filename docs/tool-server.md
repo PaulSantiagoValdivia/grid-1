@@ -30,7 +30,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_fields` | What can be asked of the plan: the fields Grid works out for each kind of part, with their units, and the facts of the person's own the parts carry, with how many carry each and their values (see below) |
 | `grid_find` | The walls, doors, windows, openings, rooms or floors that meet every condition, by id, with only the fields asked for, and a `view` for `grid_view` that picks them out |
 | `grid_count` | The parts that meet every condition, grouped by a field or fact, each group with its count, its sums and its ids, and a `view` for `grid_view` that colours each group |
-| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; and which way each room, outside wall and window faces by the plan's north |
+| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; and which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall) |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules"; the notes the person set aside are listed under Seen |
@@ -180,6 +180,41 @@ room. A room bigger than `useRasterCells` points is measured on a coarser grid. 
 names a door whose leaf swings into a fixture (`opening/door-hits-item`, with the fixture's
 label, kind and id), and a fixture standing in front of a doorway (`item/blocks-doorway`) or in
 front of a window and higher than its sill (`item/blocks-window`), each with what it measured.
+
+## Which rooms get the sun: a table of geometry
+
+Read this when the person asks which rooms get the sun, which way the bedroom windows look, how
+much window a room has for its size, or how deep a room runs from its windows. `grid_measure`
+with `what=sun` (BRF-5) answers with a table per room, and `room` gives one room's. It is
+geometry and nothing more: Grid works out no sun path, shade, sky, glass or reflection, and the
+table says nothing of how much daylight or sun a room gets, nor whether that is enough. Every
+line of the table starts "Geometry,", after the label and the north.
+
+| Column | What it is |
+|---|---|
+| Window wall | A stretch of outside wall with a window in it, behind the room, as `what=facing` finds it |
+| Faces, bearing | The way the wall's outside face looks: the bearing in degrees clockwise from north and the nearest of the eight points of the compass, turned by the plan's `north` |
+| Windows | Each window in that stretch: its hole in the wall, width by height, and that area, with no frame taken off |
+| Window area against floor area | The windows' areas added up for the room, and that as a share of the room's net floor area (`windowToFloor`, a ratio in the data, a percentage in the text) |
+| Depth | The distance, square to the window wall, from its inside face to the farthest point of the room's floor. An L-shaped room is as deep as the leg that runs farthest from the wall |
+
+North is read from the plan as `what=facing` reads it. A plan that states no north is answered
+with north as the top of the drawing, and the line after the label says so first; each window
+wall's line then says "if the top of the drawing is north". Doors and openings are not counted,
+glazed or not, because the plan does not say which are glazed. A room with no window in an
+outside wall gets one line saying so. For the lab's two-bed flat with `"north": 30`:
+
+```text
+North, as the plan states it: 30° counter-clockwise from the top of the drawing (north 30).
+Geometry, not a daylight result: each room's window walls, the way each faces, the window area against the floor area, and how deep the room runs from each window wall.
+Geometry, "Living room" ("living"): floor 18.48 m², windows 4.52 m², 24.5% of the floor area, in 2 window walls.
+Geometry, "Living room" ("living"), window wall "ext-south": faces south-west (bearing 210°); windows "win-living-south" 1.80 m wide × 1.50 m high, 2.70 m²; the room runs 4.20 m deep from its inside face.
+Geometry, "Hall" ("hall"): floor 5.33 m², no window in an outside wall.
+```
+
+The table lives in `grid_measure` and not in a tool of its own, so the tools stay 26: it reads
+the same walls and north as `what=facing`, and it measures rooms as `what=room` does. The
+geometry is `planSunTable` in `@ongrid/floorplan` (`src/geometry/sun.ts`).
 
 ## A note set aside as seen
 
