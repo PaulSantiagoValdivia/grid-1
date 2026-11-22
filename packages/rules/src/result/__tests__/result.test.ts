@@ -193,8 +193,8 @@ describe('words Grid does not read (MSG-4)', () => {
     ])
     const worth = result.lines.filter((l) => l.kind === 'worth-a-look')
     expect(worth.slice(0, reading.length)).toEqual(reading)
-    // LVL-3 added `stairs` to the plan's fields, CNT-3 `north`, `yAxis`, `front` and `site`.
-    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, written')
+    // LVL-3 added `stairs` to the plan's fields, CNT-3 `north`, `yAxis`, `front` and `site`, WRT-7 `display`.
+    expect(reading[3]!.needed).toBe('one of the fields of the plan: version, units, projectId, walls, rooms, openings, floors, stairs, referenceImage, items, title, annotations, sketch, north, yAxis, front, site, display, written')
   })
 
   it('names a use Grid does not know with the use meant, and reads Bedroom as bedroom', () => {
@@ -286,9 +286,9 @@ describe('every line', () => {
     expect(lines[0]).toMatchObject({
       thing: { kind: 'opening', id: 'd_bb' },
       also: ['bathroom', 'bedroom'],
-      message: 'An opening from "Bathroom" is too small for a person to pass through, so it is not a way through',
+      message: 'An opening from "Bathroom" is too small for a person to get through, so it is not a way through',
       found: 'the door is 0.30 m wide',
-      needed: "at least 0.40 m wide: Grid's own size for a person to pass, not a code figure"
+      needed: "at least 0.40 m wide: Grid's own size for a person to get through, not a code figure"
     })
   })
 })

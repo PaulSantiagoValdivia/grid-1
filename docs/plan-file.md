@@ -52,7 +52,8 @@ id (or its place, when it has no id that can be read) and its place in the file:
 | What the file holds | What Grid does | Line |
 |---|---|---|
 | a number written as text (`"2.5"`, `"0.9 m"`), `"true"`, a word in other capitals (`"Exterior"`, `"Door"`, units `"M"`) | reads it as meant | `plan/read-as-meant` |
-| a value a field can do without that cannot be read (a hinge `"left"`, a `null` thickness, units `"mm"`) | uses the field's default, or reads it as not stated; a unit other than metres is read in metres | `plan/value-left-out` |
+| a value a field can do without that cannot be read (a hinge `"left"`, a `null` thickness, units `"furlong"`) | uses the field's default, or reads it as not stated; a unit Grid has no word for is read as metres | `plan/value-left-out` |
+| units `"mm"`, `"cm"`, `"ft"` or `"in"` | reads every length in that unit, and writes the plan back in metres when it changes it (see [Units](#units)) | `plan/read-as-meant` |
 | a value the part needs that cannot be read (a negative offset, a missing start, an opening type `"gate"`) | leaves the part out, and the rooms and openings on a wall left out with it | `plan/part-left-out` |
 | a wall's thickness or height, or an opening's sill, stated out of range or as a word | leaves the part out: a default would change what is drawn and measured | `plan/part-left-out` |
 | `NaN`, `Infinity`, or a number with a decimal comma in an object (`"offset": 3,45`) | reads it as a value that is not there, and names it for what it is | as above |
@@ -69,6 +70,37 @@ version Grid does not read, `walls` that is not a list) still refuses the plan.
 `grid write` and the tools that change the plan write it back, so they read it whole and refuse a
 plan with anything left out, naming the first. The record's codes are in
 [the result contract](result-contract.md).
+
+## Units
+
+The plan file stores metres, always (WRT-7). The person's own units are read and written at
+the edge, chosen per person:
+
+- **Reading.** Every length a tool or `grid edit` takes is a number in metres, or text with its
+  unit: `3.81`, `3.81 m`, `381 cm`, `3810 mm`, `12'6"`, `12' 6"`, `12'-6"`, `12 ft 6 in`, `150"`,
+  `6 1/2"`. With the call's `decimal` set to `comma` (`--decimal comma`), `3,81` is 3.81 m; without
+  it, `3,81` is refused with one line that names the decimal comma. A length past Grid's largest,
+  or text Grid cannot read, is refused in words, by the argument's name. A plan file that states
+  `"units": "mm"` (or `cm`, `ft`, `in`) is read in that unit and written back in metres.
+- **Writing.** A plan may say how its person reads lengths, in `display`. It changes no stored
+  number:
+
+  ```json
+  "display": { "length": "ft-in", "area": "ft2", "decimal": "point", "precision": 0 }
+  ```
+
+  | Field | Takes | Left out |
+  |---|---|---|
+  | `length` | `m`, `cm`, `mm` or `ft-in` | (required in `display`) |
+  | `area` | `m2` or `ft2` | `ft2` with `ft-in`, else `m2` |
+  | `decimal` | `point` (2.40) or `comma` (2,40) | `point` |
+  | `precision` | decimals shown, 0 to 5; in feet and inches, the inch in 2^n parts (0 whole inches, 3 eighths) | 2 for m, 1 for cm, 0 for mm and ft-in |
+
+  A call's `units` and `decimal` (`--units`, `--decimal` on `grid draw`) win over the plan's
+  `display`. In feet and inches a length is written `12'-6"` and a sill `48"`; in millimetres,
+  `2860`. The drawing's room areas and dimensions, and the figures of `grid_areas`,
+  `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view` follow the display. The check's
+  report, the sheet, the edit answers and the exports stay in metres for now.
 
 ## Floor levels and heights
 

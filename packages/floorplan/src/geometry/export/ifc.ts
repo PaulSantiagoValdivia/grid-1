@@ -42,6 +42,7 @@ import type { WallEnds } from '../wall'
 import { wallAxis } from '../wall'
 import { wallJoints } from '../joints'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
+import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
 import { directionOfTurn, planOrientation } from '../orientation'
 
@@ -1339,7 +1340,8 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     'project',
     'project',
     projectName,
-    NULL,
+    // MSG-3: the label as the project's description, which a viewer shows with its name.
+    str(GENERAL_GUIDANCE_LABEL),
     NULL,
     NULL,
     NULL,
@@ -1409,7 +1411,8 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeLeftOut(c, building, options.leftOut ?? [])
 
   return w.toString([
-    `FILE_DESCRIPTION((${str('ViewDefinition [CoordinationView_V2.0]')}),${str('2;1')});`,
+    // MSG-3: the label beside the view definition, in the header every reader parses first.
+    `FILE_DESCRIPTION((${str('ViewDefinition [CoordinationView_V2.0]')},${str(GENERAL_GUIDANCE_LABEL)}),${str('2;1')});`,
     // FILE_NAME(name, time_stamp, author, organization, preprocessor, system, authorization)
     // Author and organisation stay empty: no personal data goes into the file.
     `FILE_NAME(${str(projectName)},${str(isoSeconds(timestamp))},(${str('')}),(${str('')}),` +

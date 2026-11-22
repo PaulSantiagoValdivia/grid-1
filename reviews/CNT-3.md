@@ -109,7 +109,13 @@ unchanged. The new figures are stored in `scoreboard/current.json` in the same c
 - `packages/rules/src/result/__tests__/result.test.ts`: `wordsNotRead()` added
   `site: { north: 12 }` as a field Grid does not know; it is `plot: { north: 12 }` now. The
   `needed` of the plan's unknown field lists the plan's fields, now with `north, yAxis, front,
-  site` before `written`.
+  site` before `written`. After merging `main` (WRT-7 added `display`), the list ends `north,
+  yAxis, front, site, display, written`.
+- After merging `main`, the golden IFC files were regenerated again on `main`'s versions (MSG-3
+  changed them). Each differs from `main`'s by the north change above and nothing else, checked
+  by script with entity numbers set aside.
+- `packages/cli/src/mcp/__tests__/facing.test.ts` (new here): after the merge every tool answer
+  starts with the label (MSG-3), so the north line is the answer's second line, after the label.
 
 Nothing was removed.
 
@@ -123,6 +129,12 @@ Nothing was removed.
   plan's own `site` had no `origin`. That was this branch's fault: `site.origin` is optional now
   (above), and the file passes alone (8 scoreboard test files, 53 passed, 2 skipped), as do the
   orientation, facing, reading and result tests rerun after the fix.
+
+- After merging `main` (ef88ec9): build, typecheck and lint clean; the scoreboard again
+  "Better than the stored figures" on checks fed alone (11 on `main`, 12 here), stored as 12;
+  the affected tests rerun (geometry, types, result, notes, checks, the tool server, draw,
+  describe, edit, report, sheet, the commands' end-to-end tests, quantities, the viewer's
+  picture and `scoreboard/__tests__`) pass, the two facing tests after the change above.
 
 ## For the owner
 

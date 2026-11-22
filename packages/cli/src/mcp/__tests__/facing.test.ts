@@ -7,6 +7,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { bench, type Bench, type Reply } from './replay/harness'
 
 /** A 6 × 4 m house: the living room to the west, the kitchen to the east, a window in each. */
@@ -71,14 +72,17 @@ describe('which rooms face east (grid_measure what=facing)', () => {
     const east = a.rooms.filter((r) => r.faces.includes('east')).map((r) => r.id)
     expect(east).toEqual(['living', 'kitchen'])
     expect(a.front).toEqual({ part: 'opening', id: 'entry', wall: 's1', faces: 'west', bearing: 270 })
-    expect(reply.text.split('\n')[0]).toBe('North, as the plan states it: 90° counter-clockwise from the top of the drawing (north 90).')
+    // MSG-3: the label comes first, then the north the answer uses.
+    expect(reply.text.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
+    expect(reply.text.split('\n')[1]).toBe('North, as the plan states it: 90° counter-clockwise from the top of the drawing (north 90).')
     expect(reply.text).toContain('  east: "Living" (living, window), "Kitchen" (kitchen)')
   })
 
   it('takes the top of the drawing as north when the plan states none, and says so first', async () => {
     const reply = await ok('grid_measure', { plan: 'plain.json', what: 'facing' })
     expect(answer(reply).north).toEqual({ stated: false, assumed: 'the top of the drawing, +y' })
-    expect(reply.text.split('\n')[0]).toMatch(/^The plan states no north, so these directions take north as the top of the drawing \(\+y\), which is not known to be north/)
+    expect(reply.text.split('\n')[0]).toBe(GENERAL_GUIDANCE_LABEL)
+    expect(reply.text.split('\n')[1]).toMatch(/^The plan states no north, so these directions take north as the top of the drawing \(\+y\), which is not known to be north/)
     expect(answer(reply).rooms.find((r) => r.id === 'kitchen')!.faces[0]).toBe('east')
   })
 

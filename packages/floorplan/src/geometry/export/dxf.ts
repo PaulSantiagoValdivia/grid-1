@@ -20,6 +20,7 @@ import type { PlanDrawing } from '../floorplan'
 import { doorSwing, type SwingArc } from '../door'
 import { TOLERANCES } from '../tolerances'
 import { areaText } from '../rounding'
+import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { kindLabel, leftOutByKind, leftOutSummary, partNames, type LeftOutPart } from './leftOut'
 
 /**
@@ -311,6 +312,16 @@ function writeText(w: DxfWriter, layer: string, at: Vec2, text: string): void {
 }
 
 /**
+ * MSG-3: the label, centred above the drawing on the labels layer, where whoever opens the file
+ * reads it first. It is written last, so it is drawn over everything else.
+ */
+function writeLabel(w: DxfWriter, drawing: PlanDrawing): void {
+  const { min, max } = drawing.bounds
+  writeText(w, DXF_LAYERS.labels, { x: (min.x + max.x) / 2, y: max.y + TEXT_HEIGHT * 2 }, GENERAL_GUIDANCE_LABEL)
+}
+
+
+/**
  * The lines of the note, each within R12's cap: a kind's names run on over as many lines as they
  * need, and a line never ends inside a name. A name longer than a line is cut by `sanitizeText`.
  */
@@ -433,6 +444,7 @@ function writeEntities(w: DxfWriter, drawing: PlanDrawing, leftOut: readonly Lef
   }
   writeLeftOut(w, drawing, leftOut)
 
+  writeLabel(w, drawing)
   w.pair(0, 'ENDSEC')
 }
 

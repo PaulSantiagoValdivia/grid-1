@@ -1,6 +1,6 @@
 ISO-10303-21;
 HEADER;
-FILE_DESCRIPTION(('ViewDefinition [CoordinationView_V2.0]'),'2;1');
+FILE_DESCRIPTION(('ViewDefinition [CoordinationView_V2.0]','General guidance, not your local rules'),'2;1');
 FILE_NAME('Golden plan','2026-11-11T12:00:00',(''),(''),'Grid','Grid','');
 FILE_SCHEMA(('IFC2X3'));
 ENDSEC;
@@ -24,7 +24,7 @@ DATA;
 #17=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Axis','Model',*,*,*,*,#15,$,.GRAPH_VIEW.,$);
 #18=IFCAXIS2PLACEMENT3D(#11,$,$);
 #19=IFCDIRECTION((1.,0.));
-#20=IFCPROJECT('0qud8tq$NgHSpxHYhvxkny',#5,'Golden plan',$,$,$,$,(#15),#10);
+#20=IFCPROJECT('0qud8tq$NgHSpxHYhvxkny',#5,'Golden plan','General guidance, not your local rules',$,$,$,(#15),#10);
 #21=IFCCARTESIANPOINT((0.,0.,0.));
 #22=IFCAXIS2PLACEMENT3D(#21,$,$);
 #23=IFCLOCALPLACEMENT($,#22);

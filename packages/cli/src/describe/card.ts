@@ -17,11 +17,10 @@
  * connect, which rooms make a flat) is said as such. A floor laid out like an earlier one is said once. Wall and
  * sill heights are one line: the usual height and the exceptions.
  *
- * The cards check nothing, and say so with the label "General guidance, not your local
- * rules", as every report of Grid's does wherever it mentions checks. No line says a plan
+ * The cards check nothing, and say so. `describePlan` puts the label "General guidance, not
+ * your local rules" first, as every report of Grid's does (MSG-3). No line says a plan
  * complies.
  */
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
 export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls'] as const
@@ -437,8 +436,9 @@ const PERSON_KEY = 'Metres, inside the walls: a size is across by up the drawing
 const AGENT_KEY_ROOMS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2 | next: across a wall, no way through | opening: id d/o/w(door/opening/window) or v(virtual wall) width >other side(none=outside window, OUT=outside, NONE=nothing drawn, LEFT=left out) side of this room, gaps to its corners'
 const AGENT_KEY_WALLS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2. wall: id start>end thickness x/i/p/v(exterior/interior/partition/virtual) h=not the floor\'s usual | opening: id d/o/w offset+width room gaps to its side\'s corners(start end first)|other(none=outside, NONE=nothing drawn, LEFT=left out)'
 
-const PERSON_CLOSE = `This describes the plan and checks nothing: grid check runs the checks. ${GENERAL_GUIDANCE_LABEL}.`
-const AGENT_CLOSE = `CHECKS none here: grid check. ${GENERAL_GUIDANCE_LABEL}.`
+// The label leads every description (`describePlan`, MSG-3), so the close need not repeat it.
+const PERSON_CLOSE = 'This describes the plan and checks nothing: grid check runs the checks.'
+const AGENT_CLOSE = 'CHECKS none here: grid check.'
 
 function personFloorHead(floor: FloorFacts, names: PersonNames): string {
   const left = floor.leftOut.length > 0 ? ` ${plural(floor.leftOut.length, 'part')} can't be drawn and ${floor.leftOut.length === 1 ? 'is' : 'are'} left out.` : ''

@@ -14,7 +14,7 @@ import { FontsMissing } from '../sheet/fonts'
 import type { ServerTool, ToolAnswer } from './protocol'
 import { READ_TOOLS } from './readTools'
 import { reportProblemTool } from './reportTool'
-import { readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
+import { labelled, readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
 import { WRITE_TOOLS } from './writeTools'
 import { EDIT_TOOLS } from './editTools'
 
@@ -33,7 +33,7 @@ export const GRID_TOOLS: readonly GridTool[] = [
 
 async function answer(tool: GridTool, raw: unknown, context: ToolContext): Promise<ToolAnswer> {
   try {
-    const result = await tool.run(readArgs(tool, raw), context)
+    const result = labelled(await tool.run(readArgs(tool, raw), context))
     return { text: result.text, data: result.data, ...(result.image ? { image: result.image } : {}) }
   } catch (error) {
     if (error instanceof ToolRefusal || error instanceof CanvasMissing || error instanceof FontsMissing) return { text: error.message, isError: true }

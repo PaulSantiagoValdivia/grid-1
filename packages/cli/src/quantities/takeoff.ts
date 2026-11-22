@@ -47,7 +47,7 @@ export interface Takeoff {
 
 const KINDS: readonly Wall['kind'][] = ['exterior', 'interior', 'partition']
 
-function roomTakeoff(room: SurveyRoom): RoomTakeoff {
+export function roomTakeoff(room: SurveyRoom): RoomTakeoff {
   const perimeter = room.edges.reduce((sum, edge) => sum + edge.length, 0)
   let face = 0
   const heights: number[] = []
