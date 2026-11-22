@@ -10,6 +10,7 @@ import {
   cross,
   dot,
   indexPlan,
+  planInState,
   planForFloor,
   roomWallIds,
   sub,
@@ -80,8 +81,11 @@ function wallOfEdge(from: Vec2, to: Vec2, walls: readonly Wall[]): Wall | null {
   return null
 }
 
-export function surveyPlan(plan: FloorPlan): Survey {
-  const facts = planFacts(plan)
+export function surveyPlan(stated: FloorPlan): Survey {
+  // CNT-10: every measure is of the building as it will be after the work (`planInState`).
+  const plan = planInState(stated, 'after')
+  // Its facts count the work too (`PlanFacts.work`), from the plan as stated.
+  const facts = planFacts(stated)
   const rooms: SurveyRoom[] = []
   for (const floor of facts.floors) {
     const { storey, leftOut } = drawable(planForFloor(plan, floor.id))

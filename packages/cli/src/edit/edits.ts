@@ -10,7 +10,7 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { cameraRecord, compassBearing, dot, drawingBearing, planOrientation, storedView, sub, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { cameraRecord, compassBearing, dot, drawingBearing, planOrientation, storedView, sub, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema, wallWithEnds } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
@@ -23,7 +23,7 @@ type Pair = [number, number]
 type RawRecord = Record<string, unknown>
 
 /** A change to one opening. `null` takes a key out. */
-export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall']: Opening[K] }> & { anchor?: OpeningAnchor | null }
+export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall' | 'phase']: Opening[K] }> & { anchor?: OpeningAnchor | null }
 
 /** A change to one room. `null` takes a key out. `partOf` makes it a zone of that room (CNT-8). */
 export type RoomChange = {
@@ -32,6 +32,8 @@ export type RoomChange = {
   use?: string | null
   partOf?: string | null
   properties?: Readonly<Record<string, string | number | boolean>>
+  /** CNT-10: a room taken out of a plan with phases stays, to be demolished. */
+  phase?: Room['phase']
 }
 
 /** What a change does, by id. */
@@ -41,7 +43,7 @@ export interface Patch {
    * HND-11: `mirrored` turns a wall placed by its face over to its other face, as a mirror does.
    * CNT-18: `arc`, a curved wall's new centre and sweep.
    */
-  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind']; mirrored?: boolean; arc?: { centre: Pair; sweep: number } }>
+  readonly walls: ReadonlyMap<string, { start?: Pair; end?: Pair; kind?: Wall['kind']; mirrored?: boolean; arc?: { centre: Pair; sweep: number }; phase?: Wall['phase'] }>
   readonly openings: ReadonlyMap<string, OpeningChange>
   readonly removeOpenings: ReadonlySet<string>
   readonly rooms: ReadonlyMap<string, RoomChange>

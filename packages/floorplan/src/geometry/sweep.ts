@@ -14,6 +14,7 @@
  * it shows calls `validateFloorDoorSweeps` with that drawing instead (QAR-7).
  */
 
+import { planInState } from './phases'
 import type { FloorPlan, Opening, Wall } from './plan'
 import type { Issue } from './validate'
 import type { DoorHinge, DoorSide, DoorSwing } from './door'
@@ -248,10 +249,15 @@ export function validateDoorSweeps(
  * before, so the findings and their order are what trying every pair gives.
  */
 export function validateFloorDoorSweeps(
-  slice: FloorPlan,
-  drawing: PlanDrawing,
+  given: FloorPlan,
+  whole: PlanDrawing,
   swingOf: (opening: Opening) => DoorSwingValues | null | undefined
 ): readonly DoorSweepIssue[] {
+  // CNT-10: doors swing in the building as it will be after the work; what is to be demolished
+  // is in no door's way.
+  const slice = planInState(given, 'after')
+  const standing = (part: { readonly phase?: string }): boolean => part.phase !== 'demolished'
+  const drawing = slice === given ? whole : { ...whole, walls: whole.walls.filter(standing), openings: whole.openings.filter(standing) }
   const issues: DoorSweepIssue[] = []
   // What the view draws for this storey: broken walls and openings are
   // already out, and validation has said why.

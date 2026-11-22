@@ -2,6 +2,14 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { bench } from './replay/harness'
+import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { planToSvg } from '@ongrid/viewer/src/picture'
+import { surveyPlan } from '../../quantities/survey'
+import { routeBetween } from '../../quantities/measure'
+import { crossingOf } from '../../quantities/walked'
+import { planChange } from '../../quantities/change'
+import { emptyPatch } from '../../edit/edits'
+import { phasedPatch } from '../../edit/phases'
 
 /**
  * CNT-18: a curved wall through the tool server. A round room and a living room with a half-round
@@ -143,5 +151,108 @@ describe('a curved wall through the tool server (CNT-18)', () => {
     expect(radius(bay.end)).toBeCloseTo(radius(bay.start), 6)
     const check = await b.call('grid_check', { plan: 'turned.json' })
     expect(check.text).not.toMatch(/arc-ends-apart/)
+  })
+})
+
+/** The living room with its bay as a dividing line, and a nook beyond it in a 4 × 2.5 m box. */
+const linePlan = {
+  version: '1',
+  units: 'm',
+  walls: [
+    wall('s', [0, 0], [4, 0]),
+    wall('e', [4, 0], [4, 3]),
+    wall('bay', [4, 3], [0, 3], { arc: { centre: [2, 3], sweep: 180 }, virtual: true, thickness: 0, height: 0 }),
+    wall('w', [0, 3], [0, 0]),
+    wall('ne', [4, 3], [4, 5.5]),
+    wall('nn', [4, 5.5], [0, 5.5]),
+    wall('nw', [0, 5.5], [0, 3]),
+  ],
+  rooms: [
+    { id: 'living', name: 'Living', boundary: ['s', 'e', 'bay', 'w'] },
+    { id: 'nook', name: 'Nook', boundary: ['bay', 'ne', 'nn', 'nw'] },
+  ],
+  openings: [{ id: 'd2', wall: 's', type: 'door', offset: 1.5, width: 0.9, sill: 0, height: 2.1 }],
+}
+
+/**
+ * The tool server's plan with phases: a garden wall on a half circle, from a fence that stays, to
+ * be demolished, and a curved dividing line to go with it.
+ */
+const phasedPlan = {
+  ...plan,
+  walls: [
+    ...plan.walls,
+    wall('fence', [30, -2], [30, 2]),
+    wall('garden', [30, 0], [34, 0], { arc: { centre: [32, 0], sweep: 180 }, phase: 'demolished' }),
+    wall('edge', [30, -5], [34, -5], { arc: { centre: [32, -5], sweep: 180 }, virtual: true, thickness: 0, height: 0, phase: 'demolished' }),
+  ],
+}
+
+describe('a curved wall in the parts merged from main (VEW-9, CNT-10)', () => {
+  const b = bench({ 'plan.json': plan, 'phased.json': phasedPlan })
+  afterAll(() => b.close())
+
+  it('walks a route out through a door in a curved wall, face to face through it (VEW-9)', async () => {
+    const survey = surveyPlan(parseFloorPlan(plan))
+    const crossing = crossingOf(survey, survey.byId.get('drum')!, 'd1')!
+    // Straight through the hole, square to its chord: the wall's thickness.
+    expect(Math.hypot(crossing.far.x - crossing.near.x, crossing.far.y - crossing.near.y)).toBeCloseTo(0.2, 9)
+    const toMiddle = { x: 15 - crossing.near.x, y: 5 - crossing.near.y }
+    expect(toMiddle.x * crossing.inward.x + toMiddle.y * crossing.inward.y).toBeGreaterThan(2.8)
+    // From the middle of the drum to the middle of the hole's inside edge, a chord 0.3 rad round
+    // at 2.9 m, and on through the wall: 3 cos 0.15 - 0.1 + 0.2 = 3.07 m.
+    const route = routeBetween(survey, 'drum', 'outside')!
+    expect(route.length).toBeCloseTo(3 * Math.cos(0.15) - 0.1 + 0.2, 3)
+    const reply = await b.call('grid_measure', { plan: 'plan.json', what: 'route', room: 'drum', to: 'outside' })
+    expect(reply.isError, reply.text).toBe(false)
+    expect(reply.text).toContain('Walked, 3.07 m')
+    const walk = await b.call('grid_describe', { plan: 'plan.json', length: 'walk' })
+    expect(walk.isError, walk.text).toBe(false)
+    expect(walk.text).toContain('3 drum <OUT d1 d0.9 | SW 5.8x5.77 26.42')
+  })
+
+  it('crosses a curved dividing line at the middle of the stretch two rooms share, along the curve (VEW-9)', () => {
+    const survey = surveyPlan(parseFloorPlan(linePlan))
+    const living = survey.byId.get('living')!
+    const nook = survey.byId.get('nook')!
+    const out = crossingOf(survey, living, 'bay', nook)!
+    // The top of the bay, 2 m round from either end, not the middle of its chord.
+    expect(out.near.x).toBeCloseTo(2, 3)
+    expect(out.near.y).toBeCloseTo(5, 3)
+    expect(out.far).toEqual(out.near)
+    expect(out.inward.y).toBeCloseTo(-1, 6)
+    expect(crossingOf(survey, nook, 'bay', living)!.inward.y).toBeCloseTo(1, 6)
+    // Walked from the living room's middle up to the top of the bay and on to the nook's middle.
+    const route = routeBetween(survey, 'living', 'nook')!
+    expect(route.steps.map((s) => s.via)).toEqual(['bay'])
+    expect(route.length).not.toBeNull()
+    expect(route.legs.map((l) => l.room)).toEqual(['living', 'nook'])
+  })
+
+  it('costs a curved wall to be demolished along its curve, with the one end it meets a wall at (CNT-10)', async () => {
+    const change = planChange(parseFloorPlan(phasedPlan))
+    const quantity = (key: string): number | undefined => change.lines.find((l) => l.key === key)?.quantity
+    expect(quantity('demolish:wall:exterior:0.2')).toBeCloseTo(2 * Math.PI * 2.7, 6)
+    expect(quantity('make_good:floor')).toBeCloseTo(2 * Math.PI * 0.2, 6)
+    expect(quantity('make_good:wall_end')).toBeCloseTo(2.7, 9)
+    const reply = await b.call('grid_takeoff', { plan: 'phased.json', for: 'change' })
+    expect(reply.isError, reply.text).toBe(false)
+  })
+
+  it('keeps a curved wall an edit takes out of a plan with phases, to be demolished (CNT-10)', () => {
+    const read = parseFloorPlan(phasedPlan)
+    const piece = { id: 'cut', start: [4, 3], end: [2, 3], thickness: 0.2, height: 2.7, kind: 'exterior' }
+    const patch = phasedPatch(read, { ...emptyPatch([]), removeWalls: new Set(['bay']), addWalls: [piece] })
+    expect(patch.walls.get('bay')).toEqual({ phase: 'demolished' })
+    expect(patch.removeWalls?.has('bay')).toBe(false)
+    expect(patch.addWalls).toEqual([{ ...piece, phase: 'new' }])
+  })
+
+  it('draws a curved dividing line to be demolished along its curve (CNT-10)', () => {
+    const svg = planToSvg(parseFloorPlan(phasedPlan))
+    const edge = /<path [^>]*data-part="demolished-wall" data-id="edge"[^>]*>/.exec(svg) ?? /<path d="([^"]*)"[^>]*data-part="demolished-wall"[^>]*data-id="edge"/.exec(svg)
+    expect(edge).not.toBeNull()
+    const d = /d="([^"]*)"/.exec(edge![0])![1]!
+    expect(d.split('L').length).toBeGreaterThan(100)
   })
 })

@@ -158,7 +158,7 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
     return []
   }
   const base = named[0]!
-  // A curved wall's openings go along its curve (CNT-18, C16), its length along it.
+  // A curved wall's openings go along its curve (CNT-18, C17), its length along it.
   const curved = base.arc !== undefined && curveFault(base) === null
   const axis = curved ? { sx: 0, sy: 0, dx: 0, dy: 0, length: wallLength(base) } : base.arc !== undefined ? null : axisOf(base)
   if (axis === null) {

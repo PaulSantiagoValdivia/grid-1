@@ -1,5 +1,5 @@
 /**
- * Curved walls (CNT-18, C16).
+ * Curved walls (CNT-18, C17).
  *
  * A wall may be an arc of a circle: the plan states its `centre` and the `sweep` it turns
  * through from `start` to `end`. The curve is the wall's axis, and every length along a curved
@@ -73,6 +73,19 @@ function workOut(wall: Wall): WallCurve | null {
 export function curvePointAt(curve: WallCurve, s: number): Vec2 {
   const angle = curve.startAngle + (Math.sign(curve.sweep) * s) / curve.radius
   return { x: curve.centre.x + curve.radius * Math.cos(angle), y: curve.centre.y + curve.radius * Math.sin(angle) }
+}
+
+/**
+ * How far along the curve from `start` a point lies, seen from the centre: the curve's own
+ * distance for a point on it. A point off the ends of an open curve is taken to the nearer end.
+ */
+export function curveAlong(curve: WallCurve, p: Vec2): number {
+  const angle = Math.atan2(p.y - curve.centre.y, p.x - curve.centre.x)
+  const turned = ((((angle - curve.startAngle) * Math.sign(curve.sweep)) % TURN) + TURN) % TURN
+  const s = turned * curve.radius
+  if (s <= curve.length || curve.closed) return Math.min(s, curve.length)
+  // Past the end: the nearer of the two ends, round the gap.
+  return s - curve.length < (TURN - turned) * curve.radius ? curve.length : 0
 }
 
 /** The unit direction the curve runs in, `s` metres along it. */

@@ -24,6 +24,7 @@
  * Pure: a plan in, numbers and sentences out. The join is done by `polygon-clipping` (MIT).
  */
 
+import { planInState } from './phases'
 import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Polygon } from 'polygon-clipping'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
@@ -514,7 +515,10 @@ const total = (measure: Measure, floors: readonly FloorAreaFigures[], pick: (f: 
  * rule it follows. Never throws on a plan the schema reads: a figure that cannot be worked out is
  * null with the reason.
  */
-export function planAreaFigures(plan: FloorPlan, options: AreaOptions = {}): PlanAreaFigures {
+export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): PlanAreaFigures {
+  // CNT-10: the areas of the building as it will be after the work.
+  const plan = planInState(stated, 'after')
+  const options = plan === stated ? given : { ...given, index: undefined, broken: undefined }
   const index = options.index ?? indexPlan(plan)
   const broken = options.broken ?? validatePlan(plan, index, { spaces: false }).broken
   const outside = options.outside ?? new Set<string>()

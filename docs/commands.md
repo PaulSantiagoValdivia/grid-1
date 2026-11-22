@@ -21,6 +21,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [A facade: `grid draw --facade`](#a-facade-grid-draw---facade)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
+- [The preview in a browser: `grid preview`](#the-preview-in-a-browser-grid-preview)
 
 ## The commands
 
@@ -29,15 +30,16 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)). With a brief beside the plan, it says each line met or missed ([the brief](brief.md)) |
 | `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below). With `firm-standards.json` beside the plan, the firm's own standards are set against it too, under their own heading ([a firm's own standards](firm-standards.md)) |
-| `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
+| `grid describe [<plan>] [--length line\|rooms\|walls\|walk] [--for person\|agent] [--as rooms] [--floor <id>] [--pictures <folder>]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, with `--length walls` its walls, and with `--length walk` the plan walked room by room, with `--pictures` a picture from each doorway (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d \| --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left\|right]] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`, or one side of the building in elevation with `--facade north` (`east`, `south`, `west`), or with `--section` a section along a line through every floor; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows, `--marks` adds level, elevation and section marks to a plan (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror` (`--how left-right`, or `--turn 90` to turn the plan a quarter, counter-clockwise as Grid draws it), `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
 | `grid mark [<name>] [--plan <plan.json>] [--remove]` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside it, for `grid diff` to compare with: no git needed. At most 5 (see below) |
-| `grid diff [<plan>] [--since <name>\|git] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
+| `grid diff [<plan>] [--since <name>\|git\|phase] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 30 tools in [the tool server](tool-server.md) |
+| `grid preview [<plan>] [--port <n>]` | Serves the preview as a page on this computer only: the plan in 2D and 3D, the part you click shared with the agent, the room it frames and the parts it picks out; it draws again within 2 s of the plan changing (see below) |
+| `grid serve` | Starts the tool server on standard input and output, with the 31 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes
@@ -179,7 +181,11 @@ can name and pen its own way.
 - **Walls** are closed outlines, one per solid piece between openings, with their corners joined
   as the drawing joins them, on `GRID-WALLS-EXTERIOR` or `GRID-WALLS-INTERIOR`. Each wall is
   filled by a solid hatch on `GRID-WALLS-FILL`. A dividing line is one dashed line on
-  `GRID-WALLS-VIRTUAL`.
+  `GRID-WALLS-VIRTUAL`. In a plan with phases (CNT-10) each wall goes on its phase's layer
+  instead: `GRID-WALLS-EXISTING`, `GRID-WALLS-NEW` (filled on `GRID-WALLS-FILL-NEW`) or
+  `GRID-WALLS-DEMOLISHED` (dashed, unfilled), and each opening to be demolished is its dashed
+  outline on `GRID-OPENINGS-DEMOLISHED`
+  ([existing, demolished and new](plan-file.md#existing-demolished-and-new)).
 - **Doors, windows and doorless openings are blocks**, one per kind and size, named by width and
   wall thickness in millimetres (`GRID-WINDOW-1200x200`), inserted on `GRID-DOORS`,
   `GRID-WINDOWS` or `GRID-OPENINGS` and turned along their wall, so they can be counted and
@@ -348,13 +354,14 @@ kept only in the marks file, which no export, sheet or drawing reads.
 
 `grid describe` is a short account of the plan, for an agent to check its own work without
 reading the file: a front door that opens into a bedroom, or a bathroom reached only through
-the study, shows on the first read. It answers in three lengths:
+the study, shows on the first read. It answers in four lengths:
 
 | `--length` | What it holds |
 |---|---|
 | `line` | One line: floors, rooms, bedrooms and bathrooms (by the `use` a room states, never its name), the area inside, and which rooms the doors from outside lead into |
 | `rooms` (the default) | The line, then each room's inside size, position and the rooms next to it, and every opening in it with the room on its other side and its distance to the two inside corners of that side |
 | `walls` | The rooms, then every wall with its openings, each with the rooms on its two sides |
+| `walk` | The plan walked room by room from its way in: in each room, standing in the doorway you came in by, what is ahead, on your left, on your right and in the wall you stand in, and how far |
 
 `--for person` (the default) names rooms and floors by their names and never prints an id.
 `--for agent` is terse and carries every id, the offsets along each wall and a key line, so an
@@ -374,6 +381,19 @@ says so; its first line is the label "General guidance, not your local rules", a
 report (MSG-3). `--as rooms` starts with the label as a comment, which `grid write` ignores, and
 `grid draw` puts it in the drawing's top-left corner.
 
+`--length walk` (VEW-9) is the long form. Each floor starts at its way in: the front door the plan
+names, else the widest door from outside into a corridor, else the widest door from outside; a
+floor with no door from outside starts in its stair room. The walk takes the ways on from each
+room from left to right as you stand in its doorway and goes as deep as it can, so a room off a
+room comes straight after it. In each room you stand at the middle of the doorway you came in by,
+facing in, and the room is said wall by wall: ahead, left, right and the wall you stand in, with
+how far each wall and each door, window, open side and fixture is. `--floor <id>` walks one floor;
+without it a floor laid out like an earlier one is said once. `--pictures <folder>` writes a
+picture from each doorway into the folder, which must be there: at eye height (1.6 m), a step
+into the room, looking ahead, as `walk-01.png`, `walk-02.png` and on, each named under its room.
+`--floor` and `--pictures` go with `--length walk` only. How a route's length is walked is in
+[tool-server.md](tool-server.md#a-routes-length-and-a-walk-through).
+
 ## What a change did: `grid mark` and `grid diff`
 
 `grid mark` keeps the plan as it is now, under a name (`start` unless you name another), in a
@@ -384,7 +404,9 @@ version last committed.
 
 `grid diff` compares the plan with an earlier version of itself: the marker `--since` names, or
 with `--since git` the version last committed in the project's own git folder. With neither, it
-compares with the marker `start` when the plan has one, else with the last commit. Grid reads
+compares with the marker `start` when the plan has one, else with the last commit. With
+`--since phase`, a plan with existing, demolished and new parts is compared with itself, before
+its work against after it: what is removed is to be demolished, what is added is new (CNT-10). Grid reads
 git's own files, through the same project folder rules as every other file, and runs no
 program: a `.git` folder in the project folder itself, a SHA-1 repository, the branch `HEAD`
 names. A repository whose `.git` is above the project folder is outside it, and is not read.
@@ -636,13 +658,17 @@ drawn as a surface.
   number of findings and the three areas, then a page per floor with every room, door and window
   id on the drawing, the area of each room with its use, and every finding on that floor.
 
+Its figures, tables and drawings are in the plan's `display`, the person's own units (feet and
+inches with square feet, millimetres, a decimal comma), and in metres when the plan has none
+([Units](plan-file.md#units)). The findings are in metres.
+
 The words of a client sheet are the author's, in `sheet.json` beside the plan, or the file
 `--sheet` names:
 
 ```json
 {
   "version": "1",
-  "name": "Solace House",
+  "name": "Example House",
   "headline": "A private retreat for one",
   "intro": ["A two-storey home for everyday comfort, work and hosting."],
   "floors": {
@@ -673,3 +699,21 @@ is refused and says where the file goes.
 The file is kept apart from the plan so that people's names never travel with it: no export,
 sheet or tool of the tool server reads it, and the tool server has no tool for it. Its format is
 in [People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan).
+
+## The preview in a browser: `grid preview`
+
+`grid preview [plan.json]` serves Grid's preview as a page at `http://127.0.0.1:4178/`, or at
+another free port when that one is in use (`--port` names one; `0` takes any free one), and keeps
+running until Ctrl+C. Open it in a browser on the same computer: it listens on 127.0.0.1 only,
+answers only requests addressed to 127.0.0.1 or localhost on its port, and takes calls only from
+its own page. It is the page an agent's host shows beside the chat when it shows MCP Apps
+([The preview, shared with the person](tool-server.md#the-preview-shared-with-the-person)), for
+hosts and editors that do not.
+
+The page shows one floor in 2D, the viewer's own drawing (wheel to zoom, drag to move, double
+click to frame again), or the model in 3D (drag to turn it, wheel to move nearer). A click on a
+part selects it: the agent reads it with `grid_preview`. The parts the agent picks out are
+coloured, the room it frames fills the page, and its note is under the drawing. The page reads
+the plan and the record beside it, `plan.preview.json`, every half second, and draws again
+within 2 s of either changing. The plan is refused, and nothing is served, when it is outside
+the project folder or cannot be read.

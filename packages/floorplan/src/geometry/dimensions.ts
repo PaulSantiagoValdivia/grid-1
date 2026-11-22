@@ -561,10 +561,13 @@ export interface DimensionOptions {
  * at small scale — the consumer decides which ones to show at which zoom.
  */
 export function buildDimensions(
-  drawing: PlanDrawing,
+  whole: PlanDrawing,
   options: DimensionOptions = {}
 ): Dimension[] {
   const { overall = true, chains = true, rooms = true, openings = false } = options
+  // CNT-10: the sizes are of the building after the work; what is to be demolished has none.
+  const standing = (part: { readonly phase?: string }): boolean => part.phase !== 'demolished'
+  const drawing = whole.walls.every(standing) && whole.openings.every(standing) ? whole : { ...whole, walls: whole.walls.filter(standing), openings: whole.openings.filter(standing) }
   const result: Dimension[] = []
 
   result.push(...outsideDimensions(drawing, { overall, chains }))

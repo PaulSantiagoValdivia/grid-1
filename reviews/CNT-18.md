@@ -9,7 +9,7 @@ under "For the owner".
 
 ## What changed
 
-- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C16 in its header).
+- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C17 in its header).
   A wall may state `arc: { centre: [x, y], sweep }`: `sweep` is the angle in degrees the wall
   turns through round `centre` from `start` to `end`, counter-clockwise positive as `turn` and
   `north` are, never 0 and at most a whole turn either way (the schema refuses others). 360 is a
@@ -291,6 +291,51 @@ room is measured as before.
   (`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`): 322 of 322 files,
   5,629 tests passed and 2 skipped, then 5,627 passed and 4 skipped.
 
+- After merging main at fbe5160e (WRT-7, CNT-10, VEW-9, VEW-4): ten conflicts, each kept both
+  sides.
+  - `CHANGELOG.md`: CNT-18's line, then main's four.
+  - `docs/result-contract.md`: CNT-18's entry on top of the changelog for agents, then VEW-4's,
+    VEW-9's, CNT-10's and WRT-7's.
+  - `grid.e2e.test.ts`: both comments on the bundle, and a line for the merged size.
+  - `cli/src/edit/edits.ts`: the Patch's walls take both `arc` (CNT-18) and `phase` (CNT-10);
+    the import takes both `wallLength` and `Room`.
+  - `export/dxf.ts`: a curved dividing line is an `ARC` on CNT-10's demolished layer when it is
+    to be demolished; a curved wall's runs keep their arcs on its phase's layer, with no fill
+    when it is to be demolished and the new fill layer when new.
+  - `export/ifc.ts`: both imports (the curve's and CNT-10's phases).
+  - `geometry/floorplan.ts`: `PlanWall` has both `phase` and `curve`.
+  - `types/floorplan.ts`: CNT-10 took C16, so the curved wall became C17 (since renumbered: see
+    below).
+  - `reading.test.ts` and `result.test.ts`: the fields as the schema gives them,
+    `…, floor, arc, properties, phase, face`.
+
+  Main's new code was made to take the curve:
+  - CNT-10's IFC notes a curved wall's phase as it does a straight one's.
+  - The phased drawing's frame takes in a demolished curved dividing line.
+  - The 2D picture draws a demolished curved dividing line along its curve.
+  - The change take-off (`quantities/change.ts`) measures a curved wall along its curve, looks
+    along its chords for the walls an end meets, and gives a whole circle no ends.
+  - The phased edits (`edit/phases.ts`) never take a straight piece for a cut of a curved wall,
+    so a curved wall an edit takes out stays, to be demolished. Before, it threw.
+  - VEW-9's walk (`quantities/walked.ts`): a door in a curved wall is crossed square to its
+    straight hole, and a curved dividing line at the middle, along the curve, of the stretch the
+    two rooms share (`curveAlong`, new in `arc.ts`), on the straight piece both outlines follow.
+    Before, both threw.
+  - VEW-4's 3D pick (`pick.ts`) meets a curved wall chord by chord. Before, it threw, and it
+    skipped a whole circle.
+
+  Tests added: in the floorplan file, the pick on the bay and the round room, a curved wall in a
+  plan with phases (drawing, DXF layers, IFC phase) and `curveAlong`. In the tool server's file,
+  the route and the walk out of the round room, the crossing of a curved dividing line, the
+  change take-off, a curved wall taken out in a plan with phases, and a demolished curved line in
+  the picture.
+
+  Results: `npm run build` clean, with the bundle at 578,078 bytes, under the 600,000 cap;
+  `npm run typecheck` clean; `npm run lint` clean; `npm run scoreboard` "Same as the stored
+  figures."; the curved-wall, pick, walk, and phase tests of every package, 9 files and 132
+  tests, passed. The affected suites were stopped after 321 files, all passed (5,642 tests),
+  when main moved to 65e37ca1; they were run again after that merge.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -302,7 +347,7 @@ room is measured as before.
    | Room outline (`room.ts`) | pieces | traced by its chords; a round room of 2.9 m inside radius is 0.016% under |
    | Areas (net, gross internal, gross external) | pieces | the same outline and chord strips |
    | Wall length, offsets, opening fit | exact | along the curve (`wallLength`) |
-   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C16) |
+   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C17) |
    | Door swings, sweep check | exact | from the straight hole; the swing is a true arc |
    | Routes (door graph, way-out checks) | exact | each opening's sides from the curve's normal at its middle; room floors by the outline |
    | Exposure, spaces, outside walls, facing, use indicators | pieces | by the chords |

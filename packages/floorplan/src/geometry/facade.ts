@@ -30,10 +30,11 @@
  * `outline` is the facade's silhouette above the ground. Stairs stand inside the building and are
  * not seen.
  *
- * Opening patterns (C12) are expanded first (`withPatterns`). A curved wall (C16) is seen by the
+ * Opening patterns (C12) are expanded first (`withPatterns`). A curved wall (C17) is seen by the
  * straight pieces the outline follows it by, each standing for the wall. Pure, and never throws.
  */
 
+import { planInState } from './phases'
 import type { MultiPolygon, Polygon } from 'polygon-clipping'
 import polygonClipping from 'polygon-clipping'
 import type { FloorPlan, Opening, Wall } from './plan'
@@ -405,7 +406,8 @@ const KIND_ORDER: Readonly<Record<FacadeFaceKind, number>> = { slab: 0, wall: 1,
 
 /** The facade of one side of the building. See the module's header. */
 export function planFacade(stated: FloorPlan, side: FacadeSide): Facade {
-  const plan = withPatterns(stated)
+  // CNT-10: the facade as it will be after the work.
+  const plan = planInState(withPatterns(stated), 'after')
   const direction = SIDE_DIRECTION[side]
   // Looking against the side's way, the right hand points this way.
   const across = { x: -direction.y + 0, y: direction.x + 0 }

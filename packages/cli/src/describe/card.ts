@@ -6,7 +6,9 @@
  *   opening in it with the room on its other side and its distance to the two inside
  *   corners of that side of the room.
  * - `walls`: the rooms, then every wall with its openings, each with the rooms on its two
- *   sides. The agent's form leaves openings and neighbours out of its room lines, to stay
+ *   sides.
+ * - `walk` (VEW-9): the plan walked room by room from its way in, standing in each doorway;
+ *   `walk.ts` works it out and words it, and `describePlan` sends it there. The agent's form leaves openings and neighbours out of its room lines, to stay
  *   short: every opening under its wall names the rooms it joins.
  *
  * The person's form names rooms and floors by their names and never prints an id: ids are
@@ -24,7 +26,7 @@
 import { BUILDING_TYPE_TEXT } from '@ongrid/floorplan/types/floorplan'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
-export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls'] as const
+export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls', 'walk'] as const
 export type DescribeLength = (typeof DESCRIBE_LENGTHS)[number]
 
 export const DESCRIBE_AUDIENCES = ['person', 'agent'] as const
@@ -66,7 +68,7 @@ function capped(items: readonly string[], most: number): string[] {
 const isSide = (side: OpeningSide | Beyond): side is OpeningSide => typeof side !== 'string'
 
 /** Names for a person: a room by its name, numbered when two on a floor share it. */
-class PersonNames {
+export class PersonNames {
   private readonly rooms = new Map<string, string>()
   private readonly floors = new Map<string, string>()
 
@@ -162,7 +164,24 @@ function personLine(facts: PlanFacts, names: PersonNames): string {
   const entered = into.length === 0
     ? 'no door leads in from outside'
     : `from outside, ${waysText(ways)} into ${listed(capped(into, 5))}`
-  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.${personBuilding(facts, names)}`
+  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.${personBuilding(facts, names)}${personWork(facts)}`
+}
+
+/** CNT-10: what the plan's work holds, as a sentence; every other figure is after the work. */
+function personWork(facts: PlanFacts): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string => [plural(n.walls, 'wall'), plural(n.openings, 'opening'), plural(n.rooms, 'room')].join(', ')
+  const shell = base === null ? '' : ` It is fitted out in ${JSON.stringify(base)}, whose walls and openings are existing and are not changed here.`
+  return ` It holds work: to be demolished ${parts(counts.demolished)}; new ${parts(counts.new)}; the sizes here are after the work.${shell}`
+}
+
+/** CNT-10: the same for an agent, as `WORK demolished 1 wall, …; new …; figures after the work`. */
+function agentWork(facts: PlanFacts): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string => `${n.walls} walls ${n.openings} openings ${n.rooms} rooms`
+  return ` WORK existing ${parts(counts.existing)}; demolished ${parts(counts.demolished)}; new ${parts(counts.new)}; figures after the work${base === null ? '' : `; BASE ${JSON.stringify(base)} read-only`}.`
 }
 
 /** CNT-5: what kind of building the plan says it is, and each floor that says otherwise, as a sentence. */
@@ -183,7 +202,7 @@ function agentBuilding(facts: PlanFacts): string {
 function agentLine(facts: PlanFacts): string {
   const ways = waysIn(facts)
   const into = ways.length === 0 ? 'no way in from outside' : `from outside into ${capped([...new Set(ways.map((way) => way.room))], 8).join(', ')}`
-  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}`
+  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}${agentWork(facts)}`
 }
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */

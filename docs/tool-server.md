@@ -8,6 +8,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 - [Asking across the parts: fields, find and count](#asking-across-the-parts-fields-find-and-count)
 - [The label, and retelling a report](#the-label-and-retelling-a-report)
 - [A camera you can set, and saved views](#a-camera-you-can-set-and-saved-views)
+- [The preview, shared with the person](#the-preview-shared-with-the-person)
 - [Measuring from faces, and a room's height](#measuring-from-faces-and-a-rooms-height)
 - [What a change did](#what-a-change-did)
 - [A note set aside as seen](#a-note-set-aside-as-seen)
@@ -18,27 +19,28 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker, the seen mark and the brief, and last the eleven that
+requests people make most, with the problem report last of them, then the preview and the preview page's own call, the export, the sheet, the start marker, the seen mark and the brief, and last the eleven that
 change the plan, writing it rooms first leading and saving a view last. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
-the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
+the same facts as data; a view also returns its picture. A length argument is metres, or text with its unit (`12'6"`, `360 cm`); the measuring tools, the views and the sheet write in `units` and `decimal`, or the plan's `display`, the person's own units, and in metres when neither says (see [Units](plan-file.md#units)). The check and the edit answers are in metres.
 
 | Tool | Answers |
 |---|---|
 | `grid_compare` | Options side by side (net, gross internal, gross external, circulation, area by use), and what differs by room name, walls and openings; a plan mirrored or moved is said to be so. With `picture`, one sheet at one scale |
 | `grid_diff` | What changed since the start marker or the last commit, by what stands where, not by ids: issues first (a door that now joins other rooms, a wall that now meets an opening, notes that came and went), the verdict room by room with how many ids were only renamed, then the changes one line each; with `rooms`, the changes outside them; with a picture unless `picture: false` (see below) |
 | `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), and under a roof the floor states the floor by headroom band, in metres or feet, as text or CSV, each figure with its rule stated |
-| `grid_takeoff` | Metres of wall by kind, per room floor, ceiling (with its height and lowered zones), skirting and wall face less openings, and per floor the slab and the roof over every part with nothing above, marked assumed, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); text or CSV |
+| `grid_takeoff` | Metres of wall by kind, per room floor, ceiling (with its height and lowered zones), skirting and wall face less openings, and per floor the slab and the roof over every part with nothing above, marked assumed, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); with `for=change` a plan's work as three lists, demolish, make good and new, priced the same way ([plan-file.md](plan-file.md#existing-demolished-and-new)); text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); a room's stated number and each part's facts of the person's own go with them; text or CSV |
 | `grid_fields` | What can be asked of the plan: the fields Grid works out for each kind of part, with their units, and the facts of the person's own the parts carry, with how many carry each and their values (see below) |
 | `grid_find` | The walls, doors, windows, openings, rooms or floors that meet every condition, by id, with only the fields asked for, and a `view` for `grid_view` that picks them out |
 | `grid_count` | The parts that meet every condition, grouped by a field or fact, each group with its count, its sums and its ids, and a `view` for `grid_view` that colours each group |
-| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall); the plot: how far the building stands from each edge of the site's boundary against the set-back the person asked for, each face's distance to the edge in front of it, and the plot coverage; and the accessibility measurements, as numbers (each door's clear width, each corridor's narrowest point, turning space, and the steps on the way in from the entrance) |
+| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it and how far it is walked, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; which way each room, outside wall and window faces by the plan's north; which rooms get the sun, as a table of geometry per room (each window wall's way, the window area against the floor area, the depth from each window wall); the plot: how far the building stands from each edge of the site's boundary against the set-back the person asked for, each face's distance to the edge in front of it, and the plot coverage; and the accessibility measurements, as numbers (each door's clear width, each corridor's narrowest point, turning space, and the steps on the way in from the entrance) |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`, and with `colour` set to a field or fact, or `highlight` set to ids, the parts picked out (see below); always with each part's box in image pixels), a facade (`kind=facade` with `side`: one side of the drawing in elevation, every floor at its level, as `grid draw --facade`, with the walls, openings and levels it shows in `facade`), the model through a camera you set (a side or corner, or a bearing from the plan's north, with tilt, distance, eye height, lens and a room to point at), a saved view by name, or an eye-level view in a room with the window sills against the eye; every 3D picture with its camera record ([below](#a-camera-you-can-set-and-saved-views)); or with `kind` `section` a section along a line through every floor (`cut`, `toward`), its levels, room heights and what Grid takes hatched and listed in the picture, the text and `section` (LVL-9); a plan takes `marks` (`levels`, `elevations`, `section`) to mark them, as `grid draw --marks` |
-| `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
+| `grid_describe` | The plan in room terms, as `grid describe`; with `length=walk`, walked room by room from its way in, standing in each doorway, with `pictures` a picture at eye height from each ([below](#a-routes-length-and-a-walk-through)); with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules", then the place the figures were for (the plan's `site.country`, or `country`; with none, no figure is applied); the notes the person set aside are listed under Seen; with `firm-standards.json` beside the plan, the firm's own standards' notes (`firm/…`) under their own heading, apart from the code figures ([firm-standards.md](firm-standards.md)) |
 | `grid_report_problem` | A draft issue about a failure the agent met, for the person to file or not: Grid sends nothing (see below) |
-| `grid_preview` | Points the live preview at a floor or room of the plan |
+| `grid_preview` | Shows the person a floor in 2d or 3d in Grid's preview, a room framed, parts picked out and a note, and answers with the picture the preview shows; with no argument but `plan`, reads what the person selected by clicking (see [below](#the-preview-shared-with-the-person)) |
+| `grid_preview_sync` | The preview page's own call, which a host that shows MCP Apps lists for the page only: the drawing, the shared record, and what the person did there. Not for an agent |
 | `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/`, and says what the file leaves out of the plan (the file says it too); a file that would hold nothing of the plan is refused. A DXF takes its layers and pens from `dxf-layers.json` in the project folder when there is one, and answers with it as `dxfProfile` ([what the DXF holds](commands.md#what-the-dxf-holds-hnd-1)) |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_mark_start` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside the plan, for `grid_diff` to compare with; or takes one off. At most 5 |
@@ -174,6 +176,63 @@ same record. A name already saved is refused unless `replace` is true. The app's
 at a record handed to it (`Canvas3D`'s `camera`), and the stills are taken with the same
 settings (`recordCamera`), so the person and the agent see the same picture.
 
+## The preview, shared with the person
+
+Read this when the person should see the plan while you talk ("show me", "where is that?"), or
+says "this", "here" or "the one I clicked" (VEW-4). Grid's preview is one page with the plan in
+2D and 3D. A host that shows MCP Apps shows it beside the chat: `grid_preview` names it as its
+app (`_meta.ui.resourceUri`, `ui://grid/preview`), and the server lists it as a resource of type
+`text/html;profile=mcp-app` that loads nothing from anywhere else. Anywhere else the person runs
+`grid preview` and opens the page it prints in a browser on the same computer
+([commands.md](commands.md#the-preview-in-a-browser-grid-preview)). Both pages show the same
+thing, and draw again within 2 s of the plan file changing.
+
+The person and the agent meet in one record beside the plan, `<plan>.preview.json`
+(`plan.preview.json` beside `plan.json`), which the plan knows nothing of and no export, sheet
+or drawing reads. It holds the same camera record as `grid_view`'s ([above](#a-camera-you-can-set-and-saved-views)):
+
+| Field | What it holds | Written by |
+|---|---|---|
+| `view` | `2d` or `3d` | both |
+| `floor` | The floor shown, or null for the lowest (in 3d, the whole building) | both |
+| `camera` | In 3d, the camera record the preview looks through, or null for Grid's own view | both |
+| `selected` | What the person clicked last: `id`, `kind` (`room`, `wall`, `door`, `window`, `opening`, `fixture`) and `floor`, or null | the page |
+| `highlight` | The ids the agent picked out | `grid_preview` |
+| `frame` | The room the agent framed, or null | `grid_preview` |
+| `note` | The agent's note, at most 120 characters | `grid_preview` |
+| `revision`, `changedBy` | One higher on every write, and who wrote it last (`agent` or `person`) | both |
+
+`grid_preview` takes `floor`, `room` (framed, and its floor shown), `view`, `highlight` (ids, an
+empty list for none), `camera` (a record `grid_view` returned; the view becomes 3d) and `note`.
+It checks each against the plan, writes the record and answers with what the preview now shows,
+what the person has selected, and the picture: `grid_view`'s plan with the parts picked out and
+cropped to the room, or the model through the preview's camera, as an image with its text. A
+host without the page loses nothing. Called with no argument but `plan`, it writes nothing and
+answers with what the person selected and what the preview shows, without a picture. Its data:
+`floor`, `view`, `room` (the frame), `note`, `highlight`, `selected` (`id`, `kind`, `name`,
+`floor`, or null), `camera`, `revision`, `planFile`, `previewFile` and `shown` (false for a read).
+
+On the page a click on the 2D drawing returns the id of the part under it (each part of the
+viewer's SVG carries its `data-id`); a click on the 3D picture is turned into a ray through the
+camera record and meets the nearest wall, door or window in its wall, or room floor
+(`pickInModel`). Either becomes `selected`. In an MCP App the page also tells the host
+(`ui/update-model-context`), so the selection reaches the agent's next turn without a call.
+Dragging the 3D picture turns the camera and the wheel moves it nearer or further; both are
+written as `camera`.
+
+`grid_preview_sync` is the page's call (`_meta.ui.visibility` `app`). It takes `plan`, `since`
+(the revision the page has), `look` (`working` or `dark`), and what the person did: `floor`,
+`view`, `select` (an id), `clear`, `pick` (`x` and `y` on the 3D picture, 0 to 1 from its
+top-left corner) and `camera`. It answers `changed`, `revision` (the drawing's key and the
+record's revision), `planFile`, `record`, `selected` and `picked`; when the drawing changed,
+`floors`, `parts` and `drawing` (2d: `svg` and each part's `box` in the SVG's frame; 3d: its
+`camera`) with the picture as a PNG; when only the record changed, `drawing` is null; when
+nothing changed, `changed` is false. Where the canvas a PNG needs is not installed, both tools
+say so and still move the preview.
+
+Which hosts show an MCP App from a local tool server is not settled here: Grid follows the
+MCP Apps standard of 2026-01-26 and has been tried against a stand-in host, not a real one.
+
 ## Measuring from faces, and a room's height
 
 `grid_measure` measures as a person with a tape does, so an agent does no arithmetic of its own.
@@ -203,6 +262,38 @@ A room may state its height, floor to ceiling, in metres:
 A wall that states no height gets 2.7 m, which cannot be told from a stated 2.7 m. The plan
 comparison in `@ongrid/floorplan` (`diffPlans`) reports a room height stated, changed or taken out.
 
+## A route's length, and a walk-through
+
+`grid_measure what=route` (VEW-9) gives the rooms passed through in order (`rooms`), every door,
+opening or open side on the way (`steps`) and how far it is walked (`length`, with each room's
+share in `legs`). It is walked from the middle of the room it starts in (the centre of the
+widest circle the room holds) to the middle of each doorway on the room's face, straight through
+the hole to the middle of its other face, and on to the middle of the room it ends in, or to the
+outside face of the door out with `to=outside`. Inside a room the line is the shortest that keeps
+to its floor, round inside corners and holes. In the lab's two-bed flat, Bedroom 1 to the Hall
+is 2.19 m in the bedroom, 0.10 m through the wall and 2.05 m in the Hall: 4.34 m. With `width`,
+the way the body or trolley gets through by carries its `length` too. A length is null when a
+room on the way has no outline Grid can measure.
+
+`grid_describe length=walk` is the long form of the description: the plan walked room by room.
+Each floor starts at its way in: the front door the plan names, else the widest door from outside
+into a corridor, else the widest door from outside; a floor with no door from outside starts in
+its stair room. The walk takes the ways on from each room from left to right as you stand in its
+doorway, goes as deep as it can and comes back, so a room off a room comes straight after it. In
+each room you stand in the doorway you came in by, at its middle, facing in square to the wall,
+and what is in the room is said by the wall it is on: ahead (from left to right, each so far to
+your left or right), on your left and on your right (each so far ahead), and in the wall you
+stand in. A fixture is on the wall nearest its middle. Each wall comes with how far it is,
+straight out from where you stand. A plan whose y runs down the page is the building mirrored,
+and left and right are read the right way round. A floor laid out like an earlier one is said
+once; `floor` walks one floor. A room no way reaches is listed as not reached.
+
+With `pictures=true` the answer carries a picture from each doorway, at eye height (1.6 m), a
+step into the room, looking ahead: VEW-3's eye camera, in the walk's order, at most 12 an answer.
+`pictures` in the data lists each one's room, floor, eye height and heading. `grid describe
+--length walk --pictures <folder>` writes them all into a folder that must be there, as
+`walk-01.png`, `walk-02.png` and on. The walk checks nothing and says so.
+
 ## What a change did
 
 Call `grid_mark_start` before an edit and `grid_diff` after every save. `grid_mark_start` copies
@@ -211,6 +302,8 @@ keeps at most 5 markers, and `remove: true` takes one off. `grid_diff` takes no 
 it reads the plan and the earlier version itself, the marker `since` names, or with
 `since: "git"` the version last committed in the project's own `.git` folder, read from git's
 files without running git. With neither, it uses the marker `start` when there is one, else git.
+With `since: "phase"`, a plan with existing, demolished and new parts is compared with itself,
+before its work against after it (CNT-10).
 
 It pairs the two versions by what stands where before it trusts an id, as
 [`grid diff`](commands.md#what-a-change-did-grid-mark-and-grid-diff) says, and answers issues

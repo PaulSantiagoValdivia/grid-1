@@ -331,7 +331,7 @@ describe('grid_takeoff with for=estimate', () => {
 
   it('refuses a rates file that is not there, and rates without for=estimate', async () => {
     expect((await b.call('grid_takeoff', { for: 'estimate', rates: 'missing.json' })).text).toMatch(/^There is no rates file "missing.json"/)
-    expect((await b.call('grid_takeoff', { rates: 'rates.json' })).text).toBe('rates goes with for=estimate: the take-off by room holds no cost.')
+    expect((await b.call('grid_takeoff', { rates: 'rates.json' })).text).toBe('rates goes with for=estimate or for=change: the take-off by room holds no cost.')
     expect((await b.call('grid_takeoff', { for: 'estimate', rooms: ['A-bath'] })).isError).toBe(true)
   })
 

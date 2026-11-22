@@ -12,7 +12,7 @@ import { buildScene, elevationArea } from '../scene3d'
 import { roomArea } from '../room'
 import { planAreaFigures } from '../areas'
 import { wallLength, wallPointAt, wallSegments, wallSlicePolygon } from '../wall'
-import { curveFault, wallCurve } from '../arc'
+import { curveAlong, curveFault, wallCurve } from '../arc'
 import { area, distance } from '../vec2'
 import { parseFloorPlan, wallWithEnds } from '../../types/floorplan'
 import { wallJoints } from '../joints'
@@ -34,6 +34,8 @@ import { readPlanParts } from '../../types/readParts'
 import { planEnvelope } from '../envelope'
 import { planFacade } from '../facade'
 import { expandPatterns } from '../patterns'
+import { pickInModel } from '../pick'
+import type { CameraRecord, Point3 } from '../camera'
 
 type Tuple = [number, number]
 
@@ -74,7 +76,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C16)', () => {
+describe('a curved wall in the plan file (C17)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
@@ -519,5 +521,87 @@ describe('a taped length along a curved wall (HND-11 with CNT-18)', () => {
     expect(Math.abs(side!.drawn! - 2 * Math.PI * 2.9) / (2 * Math.PI * 2.9)).toBeLessThan(0.001)
     expect(corner!.state).toBe('not-measured')
     expect(corner!.missing).toBe('no-corner')
+  })
+})
+
+/** A camera record with only what a pick reads set (VEW-4's test does the same). */
+function looking(position: Point3, direction: Point3): CameraRecord {
+  return { position, direction, up: [0, 0, 1], fieldOfView: 90, aspectRatio: 1, cut: null } as unknown as CameraRecord
+}
+
+describe('a click on a curved wall in the 3D preview (VEW-4 with CNT-18)', () => {
+  it('meets the bay along its curve: its window where the window is, the wall beside it', () => {
+    // The window runs 2.5 to 3.7 m along the bay from (4, 3): its middle is at 3.1 m, the top of the curve near (2.04, 5).
+    const middle = wallPointAt(bayRoom().walls[2]!, 3.1)
+    expect(pickInModel(bayRoom(), looking([middle.x, 10, 1.5], [0, -1, 0]), 0.5, 0.5)).toMatchObject({ id: 'win', kind: 'window' })
+    expect(pickInModel(bayRoom(), looking([3.9, 10, 0.5], [0, -1, 0]), 0.5, 0.5)).toMatchObject({ id: 'bay', kind: 'wall' })
+  })
+
+  it('meets a whole circle, whose start and end are one point, and its door', () => {
+    expect(pickInModel(roundRoom(), looking([5, -5, 1.2], [0, 1, 0]), 0.5, 0.5)).toMatchObject({ id: 'round', kind: 'wall' })
+    const door = wallPointAt(roundRoom().walls[0]!, 2.45)
+    const out = { x: (door.x - 5) * 3, y: (door.y - 5) * 3 }
+    expect(pickInModel(roundRoom(), looking([5 + out.x, 5 + out.y, 1], [-out.x, -out.y, 0]), 0.5, 0.5)).toMatchObject({ id: 'd1', kind: 'door' })
+  })
+})
+
+describe('a curved wall in a plan with phases (CNT-10 with CNT-18)', () => {
+  /** The bay room, with a garden wall on a half circle to be demolished and a curved line to go with it. */
+  function phased(): FloorPlan {
+    const plan = bayRoom()
+    return {
+      ...plan,
+      walls: [
+        ...plan.walls,
+        wall('garden', [10, 0], [14, 0], { arc: { centre: [12, 0], sweep: 180 }, phase: 'demolished' }),
+        wall('edge', [10, -5], [14, -5], { arc: { centre: [12, -5], sweep: 180 }, virtual: true, thickness: 0, height: 0, phase: 'demolished' })
+      ]
+    }
+  }
+  const options = { projectId: 'p', projectName: 'Garden', now: new Date(0) }
+
+  it('draws the demolished curve with its arc, and frames it', () => {
+    const drawing = buildFloorPlan(phased())
+    const garden = drawing.walls.find((w) => w.id === 'garden')!
+    expect(garden.phase).toBe('demolished')
+    expect(garden.curve!.radius).toBeCloseTo(2, 9)
+    // The line curves south, below its ends: the frame takes it in.
+    expect(drawing.bounds.min.y).toBeLessThan(-6.9)
+    expect(drawing.bounds.max.y).toBeGreaterThan(1.9)
+  })
+
+  it('writes the demolished curves on the DXF\'s demolished layer as arcs, with no fill', () => {
+    const dxf = exportPlan(phased(), 'dxf', options).data as string
+    const demolished = entitiesOf(dxf).filter((e) => e.layer === 'GRID-WALLS-DEMOLISHED')
+    const outline = demolished.filter((e) => e.type === 'LWPOLYLINE')
+    expect(outline).toHaveLength(1)
+    expect(outline[0]!.values(42).filter((b) => b !== 0).length).toBeGreaterThanOrEqual(2)
+    expect(demolished.filter((e) => e.type === 'ARC')).toHaveLength(1)
+    expect(demolished.filter((e) => e.type === 'HATCH')).toHaveLength(0)
+    expect(entitiesOf(dxf).filter((e) => e.type === 'HATCH' && e.layer.startsWith('GRID-WALLS-FILL'))).toHaveLength(4)
+  })
+
+  it('gives the curved wall its phase in the IFC', () => {
+    const ifc = exportPlan(phased(), 'ifc', options).data as string
+    const garden = /#(\d+)=IFCWALLSTANDARDCASE\('[^']*',#\d+,'garden'/.exec(ifc)![1]!
+    const phases = [...ifc.matchAll(/#(\d+)=IFCPROPERTYSINGLEVALUE\('Phase',\$,IFCLABEL\('(\w+)'\),\$\);/g)]
+    const sets = [...ifc.matchAll(/#(\d+)=IFCPROPERTYSET\('[^']*',#\d+,'Grid_Phase',\$,\(#(\d+)\)\);/g)]
+    // The one phase set related to the garden wall says it is to be demolished.
+    const rels = [...ifc.matchAll(/IFCRELDEFINESBYPROPERTIES\([^;]*\(#(\d+)\),#(\d+)\);/g)].filter((m) => m[1] === garden)
+    const own = sets.filter((s) => rels.some((m) => m[2] === s[1]))
+    expect(own).toHaveLength(1)
+    expect(phases.find((v) => v[1] === own[0]![2])![2]).toBe('demolished')
+  })
+})
+
+describe('a point on a curve, by how far along it lies (CNT-18)', () => {
+  it('reads back the distance a point was put at, either way round, and takes a point past an end to the nearer end', () => {
+    const bay = wallCurve(bayRoom().walls[2]!)!
+    for (const s of [0, 1, 3.1, 6]) expect(curveAlong(bay, wallPointAt(bayRoom().walls[2]!, s))).toBeCloseTo(s, 9)
+    const clockwise = wall('c', [0, 3], [4, 3], { arc: { centre: [2, 3], sweep: -180 } })
+    expect(curveAlong(wallCurve(clockwise)!, wallPointAt(clockwise, 2))).toBeCloseTo(2, 9)
+    // Below the bay's centre, just past its start (4, 3) and its end (0, 3).
+    expect(curveAlong(bay, { x: 3.9, y: 2 })).toBe(0)
+    expect(curveAlong(bay, { x: 0.1, y: 2 })).toBeCloseTo(bay.length, 9)
   })
 })

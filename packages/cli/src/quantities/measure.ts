@@ -36,6 +36,7 @@ import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { floorGraph } from '@ongrid/floorplan/geometry/rules/graph'
 import { compassOf, type Compass } from '../describe/facts'
 import type { Survey, SurveyRoom } from './survey'
+import { walkedLength, type WalkedLeg } from './walked'
 
 export const EMPTY_ROOM_RULE =
   'Measured in the empty room between wall faces: the fixtures the plan holds, furniture, radiators, door leaves and the space a person needs round them are not taken off.'
@@ -134,6 +135,10 @@ export interface Route {
   /** The narrowest door or opening on the way, and the room with the narrowest widest circle. */
   readonly narrowestPassage: { readonly via: string; readonly width: number } | null
   readonly narrowestRoom: { readonly room: string; readonly widestCircle: number } | null
+  /** VEW-9: how far it is walked (`WALKED_RULE`), in metres; null when a room on it has no outline. */
+  readonly length: number | null
+  /** Each room's share of the length, in order; the holes through the walls are the rest. */
+  readonly legs: readonly WalkedLeg[]
 }
 
 /** The way out of every room, as a step past the last room of a route to `outside`. */
@@ -209,7 +214,8 @@ export function routeBetween(survey: Survey, from: string, to: string): Route | 
     const circle = 2 * poleOfInaccessibility(room.polygon, undefined, room.holes).distance
     if (narrowestRoom === null || circle < narrowestRoom.widestCircle) narrowestRoom = { room: id, widestCircle: circle }
   }
-  return { from, to, rooms, steps, narrowestPassage, narrowestRoom }
+  const walked = walkedLength(survey, rooms, steps.map((s) => s.via), goal === OUT)
+  return { from, to, rooms, steps, narrowestPassage, narrowestRoom, length: walked?.length ?? null, legs: walked?.legs ?? [] }
 }
 
 // ---------------------------------------------------------------------------------------------

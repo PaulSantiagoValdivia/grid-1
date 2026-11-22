@@ -19,6 +19,13 @@ door front    in hall north, centred, 0.9 wide, opens in, hinged east
 window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
 ```
 
+- Lengths are in the person's units. A plain number is metres; a length may carry its unit in
+  one word, with no space: `360cm`, `3600mm`, `12ft`, `12ft6in`, `12'6"`, `150in`, so
+  `room living "Living room" living 14ft x 12'6"` is as good as `4.267 x 3.81`. A `display` line
+  (`display ft-in`, `display mm`, `display m decimal comma`) records how the person reads lengths
+  and areas: the drawings, the figures and the sheet follow it, and the read-back writes it again
+  ([Units](plan-file.md#units)). The plan file stays in metres either way. Settle the units with
+  the brief, from the person's words or their place, and ask only when neither says.
 - North, east, south and west are the drawing's sides, north at the top, even in a plan that
   states its real north ([plan-file.md](plan-file.md#north-front-and-where-the-building-is)).
 - A size is east-west by north-south, to the inside faces. `3 x 4 centre` measures to the walls'

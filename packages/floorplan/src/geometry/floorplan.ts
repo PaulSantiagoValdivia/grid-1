@@ -38,7 +38,8 @@ import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomS
 import { planMarks } from './marks'
 import { planSite, siteExtent, type PlanSite } from './plot'
 import { siteFloors } from './site'
-import type { MarkedPart } from '../types/floorplan'
+import type { MarkedPart, Phase } from '../types/floorplan'
+import { partPhases, planHasPhases, planInState } from './phases'
 
 export interface PlanWall {
   readonly id: string
@@ -60,6 +61,11 @@ export interface PlanWall {
   readonly thickness: number
   /** WRT-6: the plan marks the wall, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
+  /**
+   * CNT-10: what the work does to it, in a plan with phases; left out in one with none. A
+   * demolished wall is drawn as it stands before the work, the others as they will be after it.
+   */
+  readonly phase?: Phase
   /**
    * CNT-18: a curved wall's arc, exactly, for a drawing or an export that can draw an arc; absent
    * for a straight wall. `path` is its axis by its stations (what a curved dividing line draws as),
@@ -99,6 +105,8 @@ export interface PlanRoom {
   readonly labelAt: Vec2
   /** WRT-6: the plan marks the room, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
+  /** CNT-10: what the work does to it, in a plan with phases. Only rooms that stand after the work are drawn. */
+  readonly phase?: Phase
 }
 
 export interface PlanOpening {
@@ -118,6 +126,8 @@ export interface PlanOpening {
   readonly swing?: Opening['swing']
   /** WRT-6: the plan marks the opening, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
+  /** CNT-10: what the work does to it, in a plan with phases; left out in one with none. */
+  readonly phase?: Phase
 }
 
 /** A fixture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
@@ -310,9 +320,37 @@ export function planBounds(plan: FloorPlan): Bounds {
  * A broken plan does not make this fail: whatever cannot be built is skipped
  * and recorded in `issues`.
  */
+/**
+ * CNT-10: a plan with phases is drawn as it will be after the work, each wall, opening and room
+ * with its phase, and the walls and openings to be demolished as they stand before it, first in
+ * the lists so that what stands after the work is drawn over them. Each state's corners are
+ * joined among its own walls, so a demolished wall never bends a new one. A plan with no phases
+ * is drawn as it always was.
+ */
 export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
-  const index = indexPlan(plan)
-  const { issues, broken } = validatePlan(plan, index)
+  if (!planHasPhases(plan)) {
+    const index = indexPlan(plan)
+    const { issues, broken } = validatePlan(plan, index)
+    return buildDrawing(plan, index, issues, broken, null)
+  }
+  const { issues, broken } = validatePlan(plan)
+  const phases = partPhases(plan)
+  const afterPlan = planInState(plan, 'after')
+  const after = buildDrawing(afterPlan, indexPlan(afterPlan), issues, broken, phases)
+  const beforePlan = planInState(plan, 'before')
+  const before = buildDrawing(beforePlan, indexPlan(beforePlan), issues, broken, phases)
+  const demolished = (part: { readonly phase?: Phase }): boolean => part.phase === 'demolished'
+  const walls = [...before.walls.filter(demolished), ...after.walls]
+  const openings = [...before.openings.filter(demolished), ...after.openings]
+  const extent = [after.bounds.min, after.bounds.max, ...walls.filter(demolished).flatMap((wall) => [...wall.slices.flat(), ...wall.centerline, ...(wall.curve?.path ?? [])])]
+  return { ...after, walls, openings, bounds: computeBounds(after.walls.length + after.rooms.length + after.items.length + after.stairs.length === 0 ? extent.slice(2) : extent) }
+}
+
+function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issues: readonly Issue[], broken: ReadonlySet<string>, phases: ReadonlyMap<string, Phase> | null): PlanDrawing {
+  const phaseOf = (id: string): { phase?: Phase } => {
+    const phase = phases?.get(id)
+    return phase === undefined ? {} : { phase }
+  }
   // WRT-6: what the plan marks assumed is drawn in its own style; only those parts get the key.
   const marks = planMarks(plan)
   const assumed = (part: MarkedPart, id: string): { assumed?: true } => (marks.assumed(part, id) ? { assumed: true } : {})
@@ -353,7 +391,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
                 .map((part) => wallSliceShape(wall, part.from, part.to, ends))
         }
       }),
-      ...assumed('wall', wall.id)
+      ...assumed('wall', wall.id),
+      ...phaseOf(wall.id)
     })
 
     for (const slice of slices) extent.push(...slice)
@@ -361,7 +400,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
 
     for (const opening of usable) {
       const span = openingSpan(opening)
-      // The hole is straight between its edges (C16): on a curved wall, the chord between them.
+      // The hole is straight between its edges (C17): on a curved wall, the chord between them.
       const hole = openingChord(wall, span.from, span.to)
       openings.push({
         id: opening.id,
@@ -377,7 +416,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
         // Only what the plan states: an undecided door has no key, so nothing downstream guesses.
         ...(opening.hinge !== undefined && { hinge: opening.hinge }),
         ...(opening.swing !== undefined && { swing: opening.swing }),
-        ...assumed('opening', opening.id)
+        ...assumed('opening', opening.id),
+        ...phaseOf(opening.id)
       })
     }
   }
@@ -404,7 +444,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       // The middle of the corners of a ring lies in its hole: there, the point of its floor
       // farthest from every edge.
       labelAt: holes.length === 0 ? centroid(polygon) : poleOfInaccessibility(polygon, undefined, holes).point,
-      ...assumed('room', room.id)
+      ...assumed('room', room.id),
+      ...phaseOf(room.id)
     })
     extent.push(...polygon)
   }

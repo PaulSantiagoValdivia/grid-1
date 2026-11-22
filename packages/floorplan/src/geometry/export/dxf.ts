@@ -71,6 +71,11 @@ export const DXF_LAYERS = {
   wallInterior: neutral('walls-inside'),
   wallVirtual: neutral('dividing-lines'),
   wallFill: neutral('wall-fill'),
+  wallExisting: neutral('walls-existing'),
+  wallNew: neutral('walls-new'),
+  wallDemolished: neutral('walls-demolished'),
+  wallFillNew: neutral('wall-fill-new'),
+  openingsDemolished: neutral('openings-demolished'),
   rooms: neutral('rooms'),
   roomTags: neutral('room-tags'),
   doors: neutral('doors'),
@@ -453,6 +458,8 @@ function openingBlocks(drawing: PlanDrawing): { blocks: OpeningBlock[]; places: 
   const blocks = new Map<string, OpeningBlock>()
   const places: OpeningPlace[] = []
   for (const opening of drawing.openings) {
+    // CNT-10: an opening to be demolished has no block: it is its outline (`writeModel`).
+    if (opening.phase === 'demolished') continue
     const width = distance(opening.from, opening.to)
     if (!writablePoints([opening.from, opening.to]) || !writable(opening.thickness) || !(width > 0)) continue
     const kind: OpeningKind = opening.type === 'door' ? 'door' : opening.type === 'window' ? 'window' : 'opening'
@@ -901,18 +908,26 @@ function writeModel(space: Space, drawing: PlanDrawing, parts: ModelParts): Boun
   // Each wall: its fill, then its outlines over the fill, one closed outline per solid run
   // between its openings, with its corners joined (SHT-2). A dividing line has no substance: it
   // is a single line (C3). A wall that borders no room goes with the interior walls.
+  //
+  // CNT-10: in a plan with phases each wall goes on its phase's layer: a wall to be demolished as
+  // its dashed outline with no fill, a new one with its fill on a layer of its own.
   for (const wall of drawing.walls) {
     if (wall.virtual) {
       // CNT-18: a curved dividing line is a true arc, or a circle all the way round.
-      if (wall.curve !== undefined) writeCurveLine(space, space.layer('dividing-lines'), wall.curve)
-      else space.line(space.layer('dividing-lines'), wall.centerline[0], wall.centerline[1])
+      const lineLayer = space.layer(wall.phase === 'demolished' ? 'walls-demolished' : 'dividing-lines')
+      if (wall.curve !== undefined) writeCurveLine(space, lineLayer, wall.curve)
+      else space.line(lineLayer, wall.centerline[0], wall.centerline[1])
       continue
     }
     if (wall.slices.length === 0) continue
     // CNT-18: a curved wall's runs, fill and outline, with their faces as true arcs.
     const runs = wall.curve?.runs.map(curvedRun) ?? null
-    space.hatch(space.layer('wall-fill'), runs?.map((run) => run.points) ?? wall.slices, runs?.map((run) => run.turns) ?? [])
-    const layer = space.layer(wall.exposure === 'exterior' ? 'walls-outside' : 'walls-inside')
+    if (wall.phase !== 'demolished') {
+      space.hatch(space.layer(wall.phase === 'new' ? 'wall-fill-new' : 'wall-fill'), runs?.map((run) => run.points) ?? wall.slices, runs?.map((run) => run.turns) ?? [])
+    }
+    const layer = space.layer(
+      wall.phase === 'demolished' ? 'walls-demolished' : wall.phase === 'new' ? 'walls-new' : wall.phase === 'existing' ? 'walls-existing' : wall.exposure === 'exterior' ? 'walls-outside' : 'walls-inside'
+    )
     if (runs !== null) for (const run of runs) space.polyline(layer, run.points, true, run.turns)
     else for (const slice of wall.slices) space.polyline(layer, slice, true)
   }
@@ -921,6 +936,13 @@ function writeModel(space: Space, drawing: PlanDrawing, parts: ModelParts): Boun
   for (const place of parts.places) {
     const layer = space.layer(place.kind === 'door' ? 'doors' : place.kind === 'window' ? 'windows' : 'openings')
     space.insert(layer, parts.names.get(place.key)!, place.at, place.rotation)
+  }
+
+  // CNT-10: each opening to be demolished, as the dashed outline across its wall where it stood.
+  for (const opening of drawing.openings) {
+    if (opening.phase !== 'demolished' || !writablePoints([opening.from, opening.to]) || !writable(opening.thickness)) continue
+    const half = scale(opening.normal, opening.thickness / 2)
+    space.polyline(space.layer('openings-demolished'), [add(opening.from, half), add(opening.to, half), sub(opening.to, half), sub(opening.from, half)], true)
   }
 
   // A tag in each room: its number above its name, its area below.
