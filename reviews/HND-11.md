@@ -109,13 +109,12 @@ names lab folders (`AU1/scenarios/MS-12/…` in `scoreboard/data/lab-plans.ndjso
 
 ## Checks run
 
-Before merging `main`, on 9fa8850 and the fix that follows it (`grid_check` always carries
-`taped`, empty for a plan that keeps none): `npm run build`, `npm run typecheck`, `npm run lint`
+Before merging `main` (the work as committed in da9be3e to 7db7126): `npm run build`, `npm run typecheck`, `npm run lint`
 and `npm run check:licenses` (363 licences, none GPL, LGPL, AGPL, MPL or EPL) exit 0.
 `npx vitest run packages/floorplan packages/rules packages/viewer scoreboard/__tests__ scripts
 --maxWorkers=2 --minWorkers=1`: 4,129 passed, 3 skipped, in 210 of 210 files.
 `npx vitest run packages/cli --maxWorkers=2 --minWorkers=1`: 1,129 passed, 2 failed, 1 skipped,
-in 79 files. The two failures:
+in 79 files, run before the fix below went into 9fa8850. The two failures:
 
 - `mcp/__tests__/tools.test.ts`, "answers every tool with text and data that fit its output
   schema": `grid_check` gave `taped` only on a plan that keeps some, and its schema requires every
