@@ -8,6 +8,7 @@
  */
 import path from 'path'
 import { planFloors, resolveFloor } from '@ongrid/floorplan/geometry'
+import { english, joined, said, type Said } from '@ongrid/floorplan/messages'
 import {
   EXPORT_FORMATS,
   exportFileName,
@@ -15,6 +16,7 @@ import {
   isExportFormat,
   kindsText,
   partNames,
+  type ApproximatedPart,
   type ExportFormat,
   type LeftOutPart,
   type PlanExport
@@ -175,6 +177,23 @@ export function leftOutText(leftOut: readonly LeftOutPart[]): string | null {
 }
 
 /**
+ * CNT-18: the line that says which curves an export writes as straight pieces, or null when it
+ * writes none so. The file names them too, beside what it leaves out.
+ */
+export function approximatedText(approximated: readonly ApproximatedPart[]): string | null {
+  if (approximated.length === 0) return null
+  // MSG-11: the words are keys of the message files (`drawing.export.approximated*`), said in English.
+  const named = (kind: ApproximatedPart['kind']): Said | null => {
+    const parts = approximated.filter((part) => part.kind === kind)
+    if (parts.length === 0) return null
+    const names = someNames(parts.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))
+    return said(`drawing.export.approximated.${kind}.${parts.length === 1 ? 'one' : 'many'}`, { n: parts.length, names })
+  }
+  const parts = [named('wall'), named('room')].filter((part) => part !== null)
+  return english(said('drawing.export.approximated', { parts: joined(parts, 'join.and') }))
+}
+
+/**
  * HND-6: an export that would hold nothing of the plan is refused, so an empty file that looks
  * whole is never written. Says which floor, when the plan has several, and what is left out.
  */
@@ -220,6 +239,8 @@ export interface ExportDone {
   readonly written: string
   /** HND-6: what the file leaves out of the plan, which the file names too. */
   readonly leftOut: readonly LeftOutPart[]
+  /** CNT-18: the curves the file writes as straight pieces, which it names too. */
+  readonly approximated: readonly ApproximatedPart[]
   /** HND-1: the project's DXF profile file the export used, or null for Grid's own layers. */
   readonly dxfProfile: string | null
   readonly note?: string
@@ -237,7 +258,7 @@ export function exportIntoProject(project: Project, planFile: string, format: Ex
   const loaded = loadPlan(project, planFile)
   const made = exportFile(project, loaded, planFile, format, request)
   const written = writeBesidePlan(project, planFile, made.name.fileName, made.data)
-  const done = { loaded, written, leftOut: made.leftOut, dxfProfile: made.dxfProfile }
+  const done = { loaded, written, leftOut: made.leftOut, approximated: made.approximated, dxfProfile: made.dxfProfile }
   return made.name.note === undefined ? done : { ...done, note: made.name.note }
 }
 

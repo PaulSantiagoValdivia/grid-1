@@ -14,7 +14,7 @@ import { keptDerived, LAYOUT_SHAPES, type LayoutShape } from '@ongrid/floorplan/
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
-import { checkExportRequest, dxfProfileLine, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
+import { approximatedText, checkExportRequest, dxfProfileLine, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
 import { DXF_PROFILE_FILE, DxfProfileRefused } from '../export/dxfProfile'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
@@ -94,6 +94,8 @@ const exportTool: GridTool = {
     leftOutParts: listSchema(
       objectSchema({ kind: STRING, id: NULLABLE_STRING, place: NULLABLE_STRING, floor: NULLABLE_STRING, code: NULLABLE_STRING }, ['kind', 'id', 'place', 'floor', 'code'])
     ),
+    // CNT-18: the curved walls and the rooms along them the file writes as straight pieces.
+    approximated: listSchema(objectSchema({ kind: STRING, id: STRING, floor: NULLABLE_STRING }, ['kind', 'id', 'floor'])),
     note: { type: ['string', 'null'] },
     dxfProfile: { type: ['string', 'null'] },
   }),
@@ -114,9 +116,11 @@ const exportTool: GridTool = {
       // HND-6: what this file leaves out, which the file says too.
       const left = leftOutText(done.leftOut)
       if (left !== null) lines.push(left)
+      const curves = approximatedText(done.approximated)
+      if (curves !== null) lines.push(curves)
       // HND-1: a DXF names the project's profile when its layers and pens came from one.
       if (done.dxfProfile !== null) lines.push(dxfProfileLine(done.dxfProfile))
-      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, note: done.note ?? null, dxfProfile: done.dxfProfile } }
+      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, approximated: done.approximated, note: done.note ?? null, dxfProfile: done.dxfProfile } }
     } catch (error) {
       if (error instanceof PathRefused || error instanceof PlanRefused || error instanceof ExportWriteFailed || error instanceof DxfProfileRefused) throw new ToolRefusal(error.message)
       if (error instanceof UsageError) throw new ToolRefusal(asArguments(error.message))

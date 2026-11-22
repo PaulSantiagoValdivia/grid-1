@@ -14,7 +14,7 @@ import { add, dot, scale, signedArea, sub, tolerance, wallAxis, type Vec2 } from
 import { heightStated } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import type { Survey } from '../quantities/survey'
-import { type Direction, type OpeningChange, type Patch, type RoomChange } from './edits'
+import { refuseCurved, type Direction, type OpeningChange, type Patch, type RoomChange } from './edits'
 import { cutWall, freshId, piecesBeside, spanOn, usedIds } from './merge'
 import { EditRefused } from './refused'
 import { COMPASS, r3, roomFaceAlong } from './seat'
@@ -56,6 +56,7 @@ export function addRoom(survey: Survey, request: AddRoomRequest): Patch {
   if (hostWalls.length > 1) throw new EditRefused(`The ${request.side} side of ${hostName} is ${hostWalls.length} walls (${hostWalls.map((w) => quoted(w.id)).join(', ')}); this tool builds against one wall.`)
   const wall = hostWalls[0]!
   if (wall.virtual === true) throw new EditRefused(`The ${request.side} side of ${hostName} is a dividing line, not a wall.`)
+  refuseCurved([wall], 'addRoom')
   const axis = wallAxis(wall)
   const span = spanOn(host, wall)!
   const tw = wall.thickness

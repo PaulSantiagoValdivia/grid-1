@@ -18,10 +18,11 @@ import type { FloorPlan } from '../types/floorplan'
 import type { ReadFault } from '../types/readParts'
 import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, nearOrigin, planFloors, planForFloor, resolveFloor, roomNumbers, shownRoomNumber, toDxf, toGlb, toIfc, toObj, withPatterns } from '../geometry'
 import type { DxfProfile } from '../geometry/export/dxfProfile'
-import type { LeftOutPart } from '../geometry/export/leftOut'
-import { exportContents } from './leftOut'
+import type { ApproximatedPart, Approximations, LeftOutPart } from '../geometry/export/leftOut'
+import { curveDeviation } from '../geometry/arc'
+import { exportContents, type ExportContents } from './leftOut'
 
-export type { LeftOutKind, LeftOutPart } from '../geometry/export/leftOut'
+export type { ApproximatedPart, Approximations, LeftOutKind, LeftOutPart } from '../geometry/export/leftOut'
 export { countText, kindsText, leftOutByKind, partName, partNames } from '../geometry/export/leftOut'
 
 export type ExportFormat = 'dxf' | 'ifc' | 'obj' | 'glb'
@@ -61,6 +62,25 @@ export interface PlanExport {
   readonly leftOut: readonly LeftOutPart[]
   /** HND-6: the file holds no wall, room or fixture of the plan. */
   readonly empty: boolean
+  /**
+   * CNT-18: the parts the file writes with their curve as straight pieces, which the file names
+   * beside what it leaves out. Empty for a plan with no curved wall.
+   */
+  readonly approximated: readonly ApproximatedPart[]
+}
+
+/**
+ * CNT-18: which curved parts each format writes as straight pieces. The DXF writes a curved
+ * wall's faces and a curved dividing line as true arcs, and only the room outlines along them
+ * as pieces; the IFC writes a curved wall's axis as a true arc and its body, the spaces and the
+ * slabs as pieces; the OBJ and the GLB are triangles, so their walls are flat facets and their
+ * floors' outlines pieces.
+ */
+function approximationsOf(plan: FloorPlan, format: ExportFormat, contents: ExportContents): Approximations {
+  const parts = format === 'dxf' ? contents.curved.rooms : [...contents.curved.walls, ...contents.curved.rooms]
+  if (parts.length === 0) return { parts, off: 0 }
+  const off = Math.max(0, ...plan.walls.filter((wall) => wall.arc !== undefined).map(curveDeviation))
+  return { parts, off }
 }
 
 function slug(value: string): string {
@@ -100,14 +120,16 @@ export function exportPlan(stated: FloorPlan, format: ExportFormat, options: Pla
   const ordered = inIdOrder(plan)
   if (format === 'ifc') {
     const contents = exportContents(ordered, planFloors(ordered).map((floor) => floor.id), options.faults)
-    const data = toIfc(plan, { projectId: options.projectId, projectName: options.projectName, timestamp: options.now, leftOut: contents.leftOut })
-    return { data, fileName: exportFileName(options.projectName, format, null), filter, ...contents }
+    const approximations = approximationsOf(ordered, format, contents)
+    const data = toIfc(plan, { projectId: options.projectId, projectName: options.projectName, timestamp: options.now, leftOut: contents.leftOut, approximations })
+    return { data, fileName: exportFileName(options.projectName, format, null), filter, leftOut: contents.leftOut, empty: contents.empty, approximated: approximations.parts }
   }
 
   const floorId = resolveFloor(plan, options.floorId)
   const contents = exportContents(ordered, [floorId], options.faults)
   const storey = planForFloor(ordered, floorId)
-  const note = { leftOut: contents.leftOut }
+  const approximations = approximationsOf(ordered, format, contents)
+  const note = { leftOut: contents.leftOut, approximations }
   // CNT-9: the DXF writes the facts of the floor's parts and of the floor itself.
   const facts = dxfFactsOf(storey, planFloors(ordered).find((f) => f.id === floorId) ?? null)
   // HND-1: each room's tag carries its number, counted across the whole building (ARE-12).
@@ -119,5 +141,5 @@ export function exportPlan(stated: FloorPlan, format: ExportFormat, options: Pla
   const floors = planFloors(plan)
   const floor = floors.find((f) => f.id === floorId)
   const floorName = floors.length > 1 ? (floor?.name || floorId) : null
-  return { data, fileName: exportFileName(options.projectName, format, floorName), filter, ...contents }
+  return { data, fileName: exportFileName(options.projectName, format, floorName), filter, leftOut: contents.leftOut, empty: contents.empty, approximated: approximations.parts }
 }

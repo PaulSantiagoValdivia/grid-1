@@ -11,8 +11,9 @@ import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
 import { add, centroid, dot, fromTuple, intersectLines, scale, sub } from './vec2'
 import { tolerance } from './tolerances'
-import type { WallAxis } from './wall'
-import { openingSpan, pointAlong, wallAxis, wallCenterline, wallPlanSlices } from './wall'
+import type { SliceSide, WallAxis } from './wall'
+import { openingChord, openingSpan, wallAxis, wallCenterline, wallParts, wallPath, wallPlanSlices, wallSegments, wallSliceShape } from './wall'
+import { wallCurve } from './arc'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { roomFloorArea, tryRoomShape } from './room'
@@ -67,6 +68,24 @@ export interface PlanWall {
    * demolished wall is drawn as it stands before the work, the others as they will be after it.
    */
   readonly phase?: Phase
+  /**
+   * CNT-18: a curved wall's arc, exactly, for a drawing or an export that can draw an arc; absent
+   * for a straight wall. `path` is its axis by its stations (what a curved dividing line draws as),
+   * and `runs` each solid run's two faces exactly, one per slice and in the same order.
+   */
+  readonly curve?: PlanCurve
+}
+
+/** CNT-18: a curved wall's arc in a drawing (`PlanWall.curve`). */
+export interface PlanCurve {
+  readonly centre: Vec2
+  readonly radius: number
+  /** Radians, counter-clockwise from +X, where the wall starts. */
+  readonly startAngle: number
+  /** Signed radians, counter-clockwise positive. */
+  readonly sweep: number
+  readonly path: readonly Vec2[]
+  readonly runs: readonly { readonly left: SliceSide; readonly right: SliceSide }[]
 }
 
 export interface PlanRoom {
@@ -302,6 +321,9 @@ export function planBounds(plan: FloorPlan): Bounds {
   const points: Vec2[] = []
   for (const wall of plan.walls) {
     points.push(fromTuple(wall.start), fromTuple(wall.end))
+    // CNT-18: a curve bows out past its ends.
+    const curve = wall.arc === undefined ? null : wallCurve(wall)
+    if (curve !== null && curve.radius > 0) points.push(...wallPath(wall))
   }
   return computeBounds(points)
 }
@@ -334,7 +356,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const demolished = (part: { readonly phase?: Phase }): boolean => part.phase === 'demolished'
   const walls = [...before.walls.filter(demolished), ...after.walls]
   const openings = [...before.openings.filter(demolished), ...after.openings]
-  const extent = [after.bounds.min, after.bounds.max, ...walls.filter(demolished).flatMap((wall) => [...wall.slices.flat(), ...wall.centerline])]
+  const extent = [after.bounds.min, after.bounds.max, ...walls.filter(demolished).flatMap((wall) => [...wall.slices.flat(), ...wall.centerline, ...(wall.curve?.path ?? [])])]
   return { ...after, walls, openings, bounds: computeBounds(after.walls.length + after.rooms.length + after.items.length + after.stairs.length === 0 ? extent.slice(2) : extent) }
 }
 
@@ -356,9 +378,11 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
   for (const wall of plan.walls) {
     if (broken.has(wall.id)) continue
 
-    const axis = wallAxis(wall)
     const usable = openingsOf(index, wall.id).filter((o) => !broken.has(o.id))
-    const slices = wall.virtual ? [] : wallPlanSlices(wall, usable, joints.get(wall.id))
+    const ends = joints.get(wall.id)
+    const slices = wall.virtual ? [] : wallPlanSlices(wall, usable, ends)
+    const curve = wallCurve(wall)
+    const path = wallPath(wall)
 
     walls.push({
       id: wall.id,
@@ -367,22 +391,38 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
       slices,
       centerline: wallCenterline(wall),
       thickness: wall.virtual ? 0 : wall.thickness,
+      ...(curve !== null && {
+        curve: {
+          centre: curve.centre,
+          radius: curve.radius,
+          startAngle: curve.startAngle,
+          sweep: curve.sweep,
+          path,
+          runs: wall.virtual
+            ? []
+            : wallParts(wall, usable)
+                .filter((part) => part.kind === 'solid')
+                .map((part) => wallSliceShape(wall, part.from, part.to, ends))
+        }
+      }),
       ...assumed('wall', wall.id),
       ...phaseOf(wall.id)
     })
 
     for (const slice of slices) extent.push(...slice)
-    extent.push(axis.start, axis.end)
+    extent.push(...path)
 
     for (const opening of usable) {
       const span = openingSpan(opening)
+      // The hole is straight between its edges (C21): on a curved wall, the chord between them.
+      const hole = openingChord(wall, span.from, span.to)
       openings.push({
         id: opening.id,
         wallId: wall.id,
         type: opening.type,
-        from: pointAlong(axis, span.from),
-        to: pointAlong(axis, span.to),
-        normal: axis.normal,
+        from: hole.start,
+        to: hole.end,
+        normal: hole.normal,
         // A dividing line has no width, so neither has a gap in it: it must not paint the
         // written thickness across the floor.
         thickness: wall.virtual ? 0 : wall.thickness,
@@ -482,8 +522,17 @@ function boxRoundWalls(room: FloorPlan['rooms'][number], index: ReturnType<typeo
   for (const id of new Set([...room.boundary, ...(room.holes ?? []).flat()])) {
     const wall = index.wallsById.get(id)
     if (!wall || ![...wall.start, ...wall.end].every(Number.isFinite)) continue
+    const half = Number.isFinite(wall.thickness) && wall.thickness > 0 ? wall.thickness / 2 : 0
+    // CNT-18: a curved wall stands as its straight pieces, when it can be built at all.
+    if (wall.arc !== undefined) {
+      const curve = wallCurve(wall)
+      if (curve !== null && curve.radius > 0 && [...wall.arc.centre].every(Number.isFinite)) {
+        for (const axis of wallSegments(wall)) walls.push({ axis, half })
+      }
+      continue
+    }
     if (wall.start[0] === wall.end[0] && wall.start[1] === wall.end[1]) continue
-    walls.push({ axis: wallAxis(wall), half: Number.isFinite(wall.thickness) && wall.thickness > 0 ? wall.thickness / 2 : 0 })
+    walls.push({ axis: wallAxis(wall), half })
   }
   if (walls.length === 0) return null
   const half = Math.max(...walls.map((wall) => wall.half))

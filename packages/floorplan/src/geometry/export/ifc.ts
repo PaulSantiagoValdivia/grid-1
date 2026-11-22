@@ -33,6 +33,7 @@
 import type { Floor, FloorPlan, Opening, PlanIndex, Room, Wall, WallKind } from '../plan'
 import { planFloors, planForFloor } from '../floors'
 import { sharedPart, wholeWall } from '../through'
+import { english, said } from '../../messages/say'
 import { inIdOrder } from '../order'
 import { indexPlan, openingsOf } from '../plan'
 import {
@@ -58,7 +59,9 @@ import type { StairLayout } from '../stairs'
 import { planStairs } from '../stairs'
 import { stairBlocks } from '../scene3d'
 import type { WallEnds } from '../wall'
-import { wallAxis } from '../wall'
+import { openingChord, openingSpan, wallAxis, wallPolygon } from '../wall'
+import { curveStations, wallCurve, type WallCurve } from '../arc'
+import type { Vec2 } from '../vec2'
 import { partPhases, phasedJoints } from '../phases'
 import type { Phase } from '../../types/floorplan'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
@@ -68,7 +71,7 @@ import { FLAT_AREA_RULE, MEASURES, planAreaFigures } from '../areas'
 import { roomNumbers, shownRoomNumber, type RoomNumber } from '../roomNumbers'
 import { nearOrigin } from './origin'
 import { area } from '../vec2'
-import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
+import { approximationLines, leftOutByKind, leftOutSummary, partNames, type Approximations, type LeftOutKind, type LeftOutPart } from './leftOut'
 import { factOf, factText, ROOM_NUMBER_FACT, type Facts } from '../../types/facts'
 import { directionOfTurn, planOrientation } from '../orientation'
 
@@ -93,6 +96,11 @@ export interface IfcOptions {
    * `Grid_LeftOut`. None, and the file is as it was.
    */
   readonly leftOut?: readonly LeftOutPart[]
+  /**
+   * CNT-18: the curves the file writes as straight pieces, written as the building's property set
+   * `Grid_Approximated`. None, and the file is as it was.
+   */
+  readonly approximations?: Approximations
 }
 
 /** The project identity used when the caller supplies none. */
@@ -781,6 +789,8 @@ interface WallElement {
   readonly length: number
   /** The area of its body profile, seen from above: its footprint, corners joined. */
   readonly footprint: number
+  /** CNT-18: a curved wall is placed at the storey's origin, unturned, and its openings at their chords. */
+  readonly curved: boolean
   /** LVL-6: its body's height, the highest point of the top a roof leaves it, else its own. */
   readonly height: number
   /** LVL-6: its side along the axis under its top, and its body's volume, cut by the roof. */
@@ -803,6 +813,9 @@ interface WallElement {
  * before the first entity is written, so a failure leaves no dangling entity.
  */
 function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | undefined): WallElement {
+  // A curve that cannot be worked out has no straight axis either: `wallAxis` refuses it below, and the wall is left out.
+  const curve = wallCurve(wall)
+  if (curve !== null) return writeCurvedWall(c, storey, wall, curve, ends)
   const axis = wallAxis(wall)
   const { w } = c
 
@@ -879,7 +892,65 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
   const ring = outline ?? [{ x: 0, y: -half }, { x: axis.length, y: -half }, { x: axis.length, y: half }, { x: 0, y: half }]
   const side = top === null ? axis.length * peak : faceUnderTop(top, 0, axis.length)
   const volume = cuts.length === 0 ? footprint * peak : volumeUnder([...planes, { z0: peak, gx: 0, gy: 0 }], [[ringOf(ring)]])
-  return { id, placement: wallPlacement, wall, length: axis.length, footprint, height: peak, side, volume, cut: cuts.length > 0 }
+  return { id, placement: wallPlacement, wall, length: axis.length, footprint, height: peak, side, volume, cut: cuts.length > 0, curved: false }
+}
+
+/**
+ * CNT-18: a curved wall. It is placed at the storey's origin, unturned, so its shapes are in the
+ * plan's own coordinates. Its `Axis` is the true arc, an IfcTrimmedCurve on an IfcCircle trimmed
+ * by angle (radians, the file's plane angle unit), running the way the wall turns; its `Body`
+ * is its outline, corners joined as in the views, followed by the straight pieces the views
+ * draw it with (`wallPolygon`), extruded `height`: IFC2x3's profiles take an arc only through a
+ * composite curve, which the Coordination View's readers do not all build. A whole circle's
+ * body is a ring: its outer face with its inner face as a void. The note names the wall
+ * (`Grid_Approximated`).
+ */
+function writeCurvedWall(c: Context, storey: Storey, wall: Wall, curve: WallCurve, ends: WallEnds | undefined): WallElement {
+  const { w } = c
+  const wallPlacement = placement(w, storey.placement, [0, 0, 0])
+
+  const centre = w.add('IFCCARTESIANPOINT', reals([curve.centre.x, curve.centre.y]))
+  const circle = w.add('IFCCIRCLE', ref(w.add('IFCAXIS2PLACEMENT2D', ref(centre), ref(c.shared.east2))), real(curve.radius))
+  const trim = (angle: number): string => `(IFCPARAMETERVALUE(${real(angle)}))`
+  const end = curve.startAngle + curve.sweep
+  const line = w.add('IFCTRIMMEDCURVE', ref(circle), trim(curve.startAngle), trim(end), curve.sweep > 0 ? '.T.' : '.F.', en('PARAMETER'))
+  const axisRepresentation = w.add('IFCSHAPEREPRESENTATION', ref(c.shared.axisContext), str('Axis'), str('Curve2D'), refs([line]))
+
+  const half = wall.thickness / 2
+  // A face of a whole circle: its stations at `offset` from the axis, the last (the first again) left off.
+  const ring = (offset: number): Vec2[] =>
+    curveStations(curve)
+      .slice(0, -1)
+      .map((s) => {
+        const angle = curve.startAngle + (Math.sign(curve.sweep) * s) / curve.radius
+        return { x: curve.centre.x + (curve.radius + offset) * Math.cos(angle), y: curve.centre.y + (curve.radius + offset) * Math.sin(angle) }
+      })
+  const footprint: Footprint = curve.closed
+    ? { outline: counterClockwise(ring(half)), holes: [[...counterClockwise(ring(-half))].reverse()] }
+    : { outline: counterClockwise(wallPolygon(wall, ends)), holes: [] }
+  const profile = footprintProfile(c, footprint)
+  const body = bodyRepresentation(c, extrusion(c, profile, wall.height))
+  const shape = productShape(c, [axisRepresentation, body])
+
+  const id = w.add('IFCWALLSTANDARDCASE', str(c.guid('wall', wall.id)), ref(c.owner), str(wall.id), NULL, NULL, ref(wallPlacement), ref(shape), NULL)
+  writeWallProperties(c, wall, id, wallExposure(storey.model.index, wall.id) === 'exterior')
+  typeWall(c, wall, id)
+  noteFacts(c, id, 'wall', wall)
+  notePhase(c, id, 'wall', wall.id)
+  // The roof does not cut a curved wall (LVL-6's wall tops follow straight walls): it is measured at its own height.
+  const bodyArea = footprintArea(footprint)
+  return { id, placement: wallPlacement, wall, length: curve.length, footprint: bodyArea, height: wall.height, side: curve.length * wall.height, volume: bodyArea * wall.height, cut: false, curved: true }
+}
+
+/** A ring of points counter-clockwise, as a profile's outline runs. */
+function counterClockwise(points: readonly Vec2[]): Vec2[] {
+  let twice = 0
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]!
+    const b = points[(i + 1) % points.length]!
+    twice += a.x * b.y - b.x * a.y
+  }
+  return twice >= 0 ? [...points] : [...points].reverse()
 }
 
 /**
@@ -1141,24 +1212,34 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   const { w } = c
   const { wall } = element
 
-  const voidPlacement = w.add(
-    'IFCLOCALPLACEMENT',
-    ref(element.placement),
-    ref(
-      w.add(
-        'IFCAXIS2PLACEMENT3D',
-        ref(w.add('IFCCARTESIANPOINT', reals([opening.offset, 0, opening.sill]))),
-        NULL,
-        NULL
-      )
-    )
-  )
+  // CNT-18: in a curved wall the hole is the straight chord between the opening's edges (C21),
+  // placed there and as wide as that chord, and deep enough to cut through both faces where
+  // they bow away from it.
+  const span = openingSpan(opening)
+  const chord = element.curved ? openingChord(wall, span.from, span.to) : null
+  const width = chord === null ? opening.width : chord.length
+  const bow = chord === null ? 0 : 2 * (wallCurve(wall)!.radius + wall.thickness / 2) * Math.sin(opening.width / (4 * wallCurve(wall)!.radius)) ** 2
+  const voidPlacement =
+    chord === null
+      ? w.add(
+          'IFCLOCALPLACEMENT',
+          ref(element.placement),
+          ref(
+            w.add(
+              'IFCAXIS2PLACEMENT3D',
+              ref(w.add('IFCCARTESIANPOINT', reals([opening.offset, 0, opening.sill]))),
+              NULL,
+              NULL
+            )
+          )
+        )
+      : placement(w, element.placement, [chord.start.x, chord.start.y, opening.sill], [chord.dir.x, chord.dir.y, 0])
 
   const cut = rectangleProfile(
     c,
-    opening.width,
-    wall.thickness + 2 * VOID_CLEARANCE,
-    opening.width / 2
+    width,
+    wall.thickness + 2 * VOID_CLEARANCE + 2 * bow,
+    width / 2
   )
   const voidShape = productShape(c, [
     bodyRepresentation(c, extrusion(c, cut, opening.height))
@@ -1197,9 +1278,9 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   const operation = opening.type === 'door' ? doorOperation(opening) : null
   const turned = operation !== null && opening.swing === 'right'
   const fillerPlacement = turned
-    ? placement(w, voidPlacement, [opening.width, 0, 0], [-1, 0, 0])
+    ? placement(w, voidPlacement, [width, 0, 0], [-1, 0, 0])
     : placement(w, voidPlacement, [0, 0, 0])
-  const leaf = rectangleProfile(c, opening.width, LEAF_DEPTH, opening.width / 2)
+  const leaf = rectangleProfile(c, width, LEAF_DEPTH, width / 2)
   const fillerShape = productShape(c, [bodyRepresentation(c, extrusion(c, leaf, opening.height))])
 
   const filler = w.add(
@@ -1213,7 +1294,7 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
     ref(fillerShape),
     NULL,
     real(opening.height),
-    real(opening.width)
+    real(width)
   )
   relate(c, 'IFCRELFILLSELEMENT', opening.id, ref(hole), ref(filler))
   const size: Quantity[] = [
@@ -2134,6 +2215,27 @@ function writeLeftOut(c: Context, building: number, leftOut: readonly LeftOutPar
   c.w.add('IFCRELDEFINESBYPROPERTIES', str(c.guid('left-out', 'relation')), ref(c.owner), NULL, NULL, refs([building]), ref(set))
 }
 
+/**
+ * CNT-18: the curves the file writes as straight pieces, as the building's property set
+ * `Grid_Approximated`, beside `Grid_LeftOut`: `Parts` is how many, `Note` says so in words, and
+ * the walls and the rooms each have their count and ids. Written only when there are some.
+ */
+function writeApproximations(c: Context, building: number, approximations: Approximations): void {
+  const { parts } = approximations
+  if (parts.length === 0) return
+  const value = (name: string, nominal: string): number => c.w.add('IFCPROPERTYSINGLEVALUE', str(name), NULL, nominal, NULL)
+  const properties = [value('Parts', `IFCINTEGER(${int(parts.length)})`), value('Note', `IFCTEXT(${str(approximationLines(approximations)[0]!)})`)]
+  for (const kind of ['wall', 'room'] as const) {
+    const group = parts.filter((part) => part.kind === kind)
+    if (group.length === 0) continue
+    const [count, ids] = LEFT_OUT_PROPERTIES[kind]
+    const names = partNames(group.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))
+    properties.push(value(count, `IFCINTEGER(${int(group.length)})`), value(ids, `IFCTEXT(${str(names.join(', '))})`))
+  }
+  const set = c.w.add('IFCPROPERTYSET', str(c.guid('approximated', 'set')), ref(c.owner), str('Grid_Approximated'), str(english(said('drawing.ifc.approximated'))), refs(properties))
+  c.w.add('IFCRELDEFINESBYPROPERTIES', str(c.guid('approximated', 'relation')), ref(c.owner), NULL, NULL, refs([building]), ref(set))
+}
+
 /** CNT-3: where the plan says it sits: only with an origin, and when every number of it can be written. */
 function siteOf(plan: FloorPlan): (NonNullable<FloorPlan['site']> & { readonly origin: readonly [number, number] }) | null {
   const site = plan.site
@@ -2277,6 +2379,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeFacts(c)
   writePhases(c)
   writeLeftOut(c, building, options.leftOut ?? [])
+  writeApproximations(c, building, options.approximations ?? { parts: [], off: 0 })
 
   return w.toString([
     // MSG-3: the label beside the view definition, in the header every reader parses first.

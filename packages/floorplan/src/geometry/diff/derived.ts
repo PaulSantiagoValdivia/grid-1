@@ -11,12 +11,15 @@ import type { Opening, PlanIndex, Wall } from '../plan'
 import { floorOf } from '../floors'
 import { add, fromTuple, scale, sub } from '../vec2'
 import type { Vec2 } from '../vec2'
-import { wallAxis } from '../wall'
+import { wallAxis, wallPointAt } from '../wall'
+import { curveFault } from '../arc'
 import type { PlanChange } from './types'
 
 /** Where the middle of the opening sits on the plan, or null if its wall has no axis. */
 function centreOnPlan(opening: Opening, wall: Wall): Vec2 | null {
   try {
+    // Along a curved wall's curve (CNT-18).
+    if (wall.arc !== undefined) return curveFault(wall) === null ? wallPointAt(wall, opening.offset + opening.width / 2) : null
     const axis = wallAxis(wall)
     return add(fromTuple(wall.start), scale(axis.dir, opening.offset + opening.width / 2))
   } catch {

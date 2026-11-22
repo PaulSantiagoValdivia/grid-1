@@ -17,8 +17,11 @@ import type { FloorPlan, Opening, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
+import { tolerance } from './tolerances'
 import type { WallEnds } from './wall'
-import { SQUARE_ENDS, openingSpan, wallAxis } from './wall'
+import { SQUARE_ENDS, openingSpan, wallAxis, wallLength, wallParts, wallPath, wallPointAt, wallSegments } from './wall'
+import { curveStationsBetween, wallCurve } from './arc'
+import { cross, dot, fromTuple, normalize, sub } from './vec2'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { tryRoomShape } from './room'
@@ -121,6 +124,19 @@ export interface SceneWall {
    * re-uploading it on every write to the plan file.
    */
   readonly revision: string
+  /**
+   * CNT-18: a curved wall, raised as straight pieces that follow its curve: each a flat prism
+   * of its own, mitred to the next, solid between openings and a lintel or a sill over each.
+   * A consumer raises these and not `elevation`, which is then the wall unrolled along its
+   * curve (its holes where its openings are, for measuring). Absent for a straight wall.
+   */
+  readonly pieces?: readonly SceneWallPiece[]
+}
+
+/** One straight piece of a curved wall in 3D (CNT-18): a rectangle on its own basis, no holes. */
+export interface SceneWallPiece {
+  readonly elevation: WallElevation
+  readonly basis: WallBasis
 }
 
 /**
@@ -154,6 +170,8 @@ export interface SceneDivider {
   /** The wall's axis on the model's XY plane, at z = 0. */
   readonly from: Vec2
   readonly to: Vec2
+  /** CNT-18: a curved dividing line's axis by its stations, from `from` to `to`; absent when straight. */
+  readonly path?: readonly Vec2[]
 }
 
 /** One block of a stair: a tread or a landing, solid from the stair's foot to its top (LVL-3). */
@@ -322,7 +340,7 @@ export function wallElevation(
 ): WallElevation | null {
   if (wall.virtual) return null
 
-  const length = wallAxis(wall).length
+  const length = wallLength(wall)
 
   // Counter-clockwise, starting at the foot of `start`. LVL-6: a wall the roof cuts has the top the
   // roof leaves it (`wallTopProfile`), walked back from the far end.
@@ -348,8 +366,12 @@ export function wallElevation(
   }
 }
 
-/** The wall's orthonormal basis, in model coordinates. */
+/** The wall's orthonormal basis, in model coordinates. A curved wall's is its first piece's (CNT-18). */
 export function wallBasis(wall: Wall): WallBasis {
+  if (wall.arc !== undefined) {
+    const first = wallSegments(wall)[0]!
+    return basisOf(first.start, first.end)
+  }
   const axis = wallAxis(wall)
   return {
     origin: { x: axis.start.x, y: axis.start.y, z: 0 },
@@ -357,6 +379,88 @@ export function wallBasis(wall: Wall): WallBasis {
     up: { x: 0, y: 0, z: 1 },
     across: { x: -axis.normal.x, y: -axis.normal.y, z: 0 }
   }
+}
+
+function basisOf(from: Vec2, to: Vec2): WallBasis {
+  const dir = normalize(sub(to, from))
+  return {
+    origin: { x: from.x, y: from.y, z: 0 },
+    along: { x: dir.x, y: dir.y, z: 0 },
+    up: { x: 0, y: 0, z: 1 },
+    across: { x: dir.y, y: -dir.x, z: 0 }
+  }
+}
+
+/**
+ * A curved wall's straight pieces in 3D (CNT-18). Each run of `wallParts` is followed by chords:
+ * a solid run by its stations, an opening's lintel and sill by the one chord its hole is, so the
+ * hole stays straight. Where two chords meet, both are mitred on the line that halves the turn,
+ * so their faces meet edge to edge; at an end of the wall, the joint's reach is taken along the
+ * end chord.
+ */
+export function curvedWallPieces(wall: Wall, openings: readonly Opening[] = [], ends: WallEnds = SQUARE_ENDS): SceneWallPiece[] {
+  const curve = wallCurve(wall)
+  if (curve === null || wall.virtual) return []
+  const parts = wallParts(wall, openings)
+  // Every chord, by where it runs along the curve; a lintel and its sill share theirs.
+  const runs: { from: number; to: number; zFrom: number; zTo: number }[] = []
+  for (const part of parts) {
+    const stations = part.kind === 'solid' ? curveStationsBetween(curve, part.from, part.to) : [part.from, part.to]
+    for (let k = 0; k + 1 < stations.length; k++) runs.push({ from: stations[k]!, to: stations[k + 1]!, zFrom: part.zFrom, zTo: part.zTo })
+  }
+  const breaks = [...new Set(runs.flatMap((run) => [run.from, run.to]))].sort((a, b) => a - b)
+  const point = (s: number): Vec2 => wallPointAt(wall, s)
+  const none = tolerance('noLength')
+  const chordAt = (from: number): Vec2 | null => {
+    const i = breaks.findIndex((b) => Math.abs(b - from) <= none)
+    if (i < 0) return null
+    const next = breaks[i + 1] ?? (curve.closed ? breaks[1] : undefined)
+    if (next === undefined) return null
+    const to = next < from ? next + curve.length : next
+    return normalize(sub(point(to), point(from)))
+  }
+  const chordTo = (to: number): Vec2 | null => {
+    const i = breaks.findIndex((b) => Math.abs(b - to) <= none)
+    if (i < 0) return null
+    const prev = i > 0 ? breaks[i - 1] : curve.closed ? breaks[breaks.length - 2] : undefined
+    if (prev === undefined) return null
+    return normalize(sub(point(to), point(prev > to ? prev - curve.length : prev)))
+  }
+  const half = wall.thickness / 2
+  const mitre = (a: Vec2 | null, b: Vec2 | null): { left: number; right: number } => {
+    if (a === null || b === null) return { left: 0, right: 0 }
+    const reach = half * Math.tan(Math.atan2(cross(a, b), dot(a, b)) / 2)
+    return { left: -reach, right: reach }
+  }
+  const total = curve.length
+  return runs.flatMap((run) => {
+    const a = point(run.from)
+    const b = point(run.to)
+    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    if (length <= none || run.zTo - run.zFrom <= none) return []
+    const dir = normalize(sub(b, a))
+    const atStart = !curve.closed && run.from <= none
+    const atEnd = !curve.closed && run.to >= total - none
+    const pieceEnds: WallEnds = {
+      start: atStart ? ends.start : mitre(chordTo(run.from), dir),
+      end: atEnd ? ends.end : mitre(dir, chordAt(run.to))
+    }
+    const elevation: WallElevation = {
+      wallId: wall.id,
+      outline: [
+        { x: 0, y: run.zFrom },
+        { x: length, y: run.zFrom },
+        { x: length, y: run.zTo },
+        { x: 0, y: run.zTo }
+      ],
+      holes: [],
+      thickness: wall.thickness,
+      length,
+      height: run.zTo - run.zFrom,
+      ends: pieceEnds
+    }
+    return [{ elevation, basis: basisOf(a, b) }]
+  })
 }
 
 /** A room's slab polygon, with its holes. The same ones the plan view draws. */
@@ -406,10 +510,11 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
   for (const wall of plan.walls) {
     if (broken.has(wall.id)) continue
 
-    const axis = wallAxis(wall)
-    extent.push(axis.start, axis.end)
+    const path = wallPath(wall)
+    extent.push(...path)
     if (wall.virtual) {
-      dividers.push({ wallId: wall.id, from: axis.start, to: axis.end })
+      const [from, to] = [fromTuple(wall.start), fromTuple(wall.end)]
+      dividers.push({ wallId: wall.id, from, to, ...(wall.arc !== undefined && { path }) })
       continue
     }
 
@@ -428,7 +533,8 @@ export function buildScene(stated: FloorPlan, options: SceneOptions = {}): Scene
       elevation,
       basis: wallBasis(wall),
       exposure: wallExposure(index, wall.id),
-      revision: wallRevision(whole.wall, usable, ends, top)
+      revision: wallRevision(whole.wall, usable, ends, top),
+      ...(wall.arc !== undefined && { pieces: curvedWallPieces(whole.wall, usable, ends) })
     })
     if (elevation.height > height) height = elevation.height
   }

@@ -20,6 +20,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
 - [Flats and flat types](#flats-and-flat-types): `flat/unknown-room`, `flat/room-in-two`, `flat/unknown-type`, `flat/duplicate-id`, `flat/duplicate-type`, `flat/zone-without-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
+- [A curved wall](#a-curved-wall): `wall/arc-ends-apart`, `wall/arc-too-tight`
 - [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
@@ -664,6 +665,52 @@ there, or the outside. A plan with no `holes` reads and measures as before.
 
 A hole whose wall list cannot close, or is out of order, gets the same codes as an outline
 (`room/unclosed`, `room/out-of-order`, `room/inside-out`), and the line names the hole.
+
+## A curved wall
+
+A wall may be an arc of a circle (CNT-18). It states `arc`: its `centre`, and its `sweep`, the
+angle in degrees it turns through round the centre from `start` to `end`, counter-clockwise
+positive as every turn in a plan is. Its radius is the distance from the centre to `start`, and
+`end` lies on the circle where the sweep takes it. A whole circle sweeps 360 (or -360), and its
+`start` and `end` are one point:
+
+```json
+{ "id": "round", "start": [8, 5], "end": [8, 5], "thickness": 0.2, "height": 2.7, "kind": "exterior", "arc": { "centre": [5, 5], "sweep": 360 } }
+```
+
+A round room is that one wall (`"boundary": ["round"]`); a half-round bay is a straight wall's
+worth of room with one wall of `"sweep": 180` across its open side; a stair tower is a room of
+one curved wall on each floor. A wall that states no `arc` is straight, and a plan with none
+reads exactly as before (version 1). An `arc` Grid cannot read (with no centre, or a sweep of 0
+or past a whole turn) is read as not stated, as a door's hinge is: the wall is drawn straight,
+and `grid check` says so (`plan/value-left-out`).
+
+The wall grows half its thickness either side of its curve, as a straight wall does of its line
+(C1); its `left` face is the one on the left going from `start` to `end`, the inside of a
+counter-clockwise curve. An opening's `offset` and `width` are measured along the curve (C2), so
+`offset + width` is never more than the wall's length along it; its hole is straight between its
+two edges, as a door's leaf is, so a 0.90 m door on a 3 m radius is a hole 0.897 m across. The
+door swings from that straight edge.
+
+Grid works the room's outline out along the inside face of the curve, piece by straight piece,
+each no more than `arcSagitta` (1 mm) off the curve and turning no more than `arcStep` (0.03
+radians): a round room of 2.9 m inside radius measures 26.417 m² against the 26.421 m² of the true
+circle, 0.016% short. The same pieces are what the area, the spaces, the outside walls and
+the checks read. The 2D drawing, the sheet and the DXF draw the wall's faces as arcs; the 3D
+view raises it as flat pieces mitred to each other, with a lintel over each hole. What each
+export writes as pieces it says ([commands.md](commands.md#what-an-export-leaves-out-hnd-6)).
+
+Rooms text writes straight walls: a floor with a curved wall is read back in Grid's own terms
+(`raw wall` lines), which keep the curve. The room edits (move a side, merge, split, add a room
+against a wall, stretch) leave a curved wall as it is and refuse a change that would move or cut
+one; an opening on it can still be widened, moved along it from its start or end, or turned.
+Squaring a scan leaves a curved wall as it is, and refuses to square a wall that ends on one.
+The wall faults leave a curved wall out: none of them is about one, and `grid tidy` moves none.
+
+| Code | What it says |
+|---|---|
+| `wall/arc-ends-apart` | The wall's end is not on its circle where the sweep takes its start, by more than `arcEnds` (5 mm): the line says where the end should be. The wall is not drawn |
+| `wall/arc-too-tight` | The radius, from the centre to the start, is no more than half the wall's thickness, so its inside face has no curve. The wall is not drawn |
 
 ## Opening patterns
 

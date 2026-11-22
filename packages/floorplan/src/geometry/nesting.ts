@@ -32,6 +32,8 @@ import { groupedNum } from './issueWords'
 import { floorOf } from './floors'
 import type { Room, Wall } from './plan'
 import type { Vec2 } from './vec2'
+import { straightPieces } from './wall'
+import { curveFault } from './arc'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Box, WallRun } from './polygons'
 import { boxOfRings, cornerFills, intersectionArea, multiArea, overlaps, polygonArea, strip, union } from './polygons'
@@ -117,12 +119,16 @@ function footprint(inner: Traced, wallsById: ReadonlyMap<string, Wall>, snap: (v
   for (const id of new Set(inner.room.boundary)) {
     const wall = wallsById.get(id)
     if (!wall || wall.virtual === true || !(wall.thickness > 0) || !Number.isFinite(wall.thickness)) continue
-    const start = { x: wall.start[0], y: wall.start[1] }
-    const dx = wall.end[0] - start.x
-    const dy = wall.end[1] - start.y
-    const length = Math.hypot(dx, dy)
-    if (!(length > 0) || !Number.isFinite(length)) continue
-    runs.push({ wall, start, dir: { x: dx / length, y: dy / length }, length, half: wall.thickness / 2 })
+    // A curved wall is its straight pieces (CNT-18).
+    if (wall.arc !== undefined && curveFault(wall) !== null) continue
+    for (const piece of straightPieces(wall)) {
+      const start = { x: piece.start[0], y: piece.start[1] }
+      const dx = piece.end[0] - start.x
+      const dy = piece.end[1] - start.y
+      const length = Math.hypot(dx, dy)
+      if (!(length > 0) || !Number.isFinite(length)) continue
+      runs.push({ wall: piece, start, dir: { x: dx / length, y: dy / length }, length, half: wall.thickness / 2 })
+    }
   }
   const strips = runs.map((r) => strip(r.start, r.dir, r.length, r.half, 0, snap))
   const joined = union([inner.polygon, ...strips, ...cornerFills(runs, FILL_INSET, snap)])

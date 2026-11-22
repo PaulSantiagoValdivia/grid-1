@@ -72,6 +72,47 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Curved walls (CNT-18) ─────────────────────────────────────────────────────────────────
+  arcEnds: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'How far a curved wall\'s end may lie from where its sweep takes its start round its centre, ' +
+      'and how far the two ends may differ in their distance from the centre, and still be one ' +
+      'arc; further, `wall/arc-ends-apart` names the wall and where its end should be.',
+    basis: own
+  },
+  arcSagitta: {
+    kind: 'tolerance',
+    value: 0.001,
+    unit: 'm',
+    decides:
+      'How far the straight pieces a curved wall is traced, checked and drawn with may stand off ' +
+      'its curve at their middle. Smaller pieces are taken where this alone would leave too few ' +
+      '(`arcStep`).',
+    basis: own
+  },
+  arcStep: {
+    kind: 'tolerance',
+    value: 0.03,
+    unit: 'radian',
+    decides:
+      'The most a curved wall turns through along one of its straight pieces, so that a small ' +
+      'round room measures within a few hundredths of a percent of its true area: a straight ' +
+      'piece cuts off a sliver of the curve, and the sliver shrinks with the square of this.',
+    basis: own
+  },
+  arcPiecesMost: {
+    kind: 'limit',
+    value: 1000,
+    unit: 'count',
+    decides:
+      'The most straight pieces one curved wall is traced with; a curve longer than these pieces ' +
+      'can follow within `arcSagitta` is traced with this many, a little further off it.',
+    basis: own
+  },
+
   // ── Walls that meet ───────────────────────────────────────────────────────────────────────
   gap: {
     kind: 'tolerance',

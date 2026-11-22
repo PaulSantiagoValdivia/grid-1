@@ -222,6 +222,8 @@ display chooses a point. Names from the plan are never translated.
 | `plan/same-level` | {thing} is at the same level as another floor | each floor at its own level, or an elevation in metres on each |
 | `wall/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `wall/zero-length` | {thing} has no length | a start and an end at different points |
+| `wall/arc-ends-apart` | {thing} does not end where its curve takes it | an end on the circle where the sweep takes the start round the centre |
+| `wall/arc-too-tight` | {thing} curves round too small a radius | a radius, from the centre to the start, over half the wall's thickness |
 | `wall/no-thickness` | {thing} has no thickness | a thickness above 0, or a virtual wall for a line with no substance |
 | `wall/no-height` | {thing} has no height | a height above 0, or a virtual wall for a line with no substance |
 | `wall/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
@@ -692,6 +694,50 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: a curved wall (CNT-18)
+
+- A wall may state `arc`: `{ centre: [x, y], sweep }`, the angle in degrees it turns through
+  round `centre` from `start` to `end` (counter-clockwise positive; 360 is a whole circle, its
+  `start` and `end` one point). Offsets, widths and lengths along it are along the curve, and an
+  opening's hole is the straight chord between its edges. Every figure (areas, lengths, routes,
+  facing) follows the curve; a plan with no curved wall answers exactly as before.
+- New codes, errors about a wall (`thing.kind` `wall`), which leave the wall out of every view,
+  measure and export: `wall/arc-ends-apart`, its end is not on the circle where the sweep takes
+  its start (further than `arcEnds`, 5 mm), and `wall/arc-too-tight`, its radius is no more than
+  half its thickness. An `arc` the reader cannot read (no centre, a sweep of 0) is read as not
+  stated, as a hinge is (`plan/value-left-out`), and the wall is drawn straight.
+- `grid_export` adds `approximated`: each curved wall, and each room along one, that the file
+  writes with its curve as straight pieces, as `{ kind: "wall" | "room", id, floor }`, and a
+  line in its text that says so. The DXF writes a curved wall's faces as true arcs and names only
+  the rooms; the IFC writes its axis as a true arc and names the walls and the rooms; the OBJ and
+  the GLB name both. The file says it too, beside what it leaves out: `Grid_Approximated` in an
+  IFC, the left-out layer in a DXF (`GRID-LEFT-OUT`, or the profile's), comment lines in an OBJ,
+  `asset.extras.gridApproximated` in a GLB. In the DXF a curved wall's outline and its fill (HND-1's
+  hatch) have their faces as true arcs, on HND-1's wall layers and pens. A plan with no curved wall gets none of it, and its files are as they were.
+- `grid_describe` gives a curved wall's centre and sweep (`arc(5,5 360°)` for an agent, "curving
+  360° anticlockwise round 5, 5 (radius 3, 18.85 along the curve)" for a person). Read back as
+  rooms text, a floor with a curved wall is given in Grid's own terms (`raw` lines), which keep
+  the curve.
+- The edits that move, cut or measure from a side of a room refuse a curved wall, naming it
+  (`isError: true`): rooms text and the room edits draw straight walls. `grid_change_opening`
+  changes an opening on a curved wall along the curve, measured from its start or its end;
+  `grid_mirror` mirrors a curved wall's centre and turns its sweep the other way.
+  `grid_square_scan` leaves a curved wall as it is, says so among what it guessed, and refuses to
+  square a wall whose end meets one.
+- The IFC's base quantities (HND-2) measure a curved wall along its curve: `Length` is its length
+  along the arc, `GrossFootprintArea` and the volumes its body by the straight pieces.
+- With VEW-9, CNT-10 and VEW-4: `grid_measure what=route` and `grid_describe length=walk` walk
+  through a door in a curved wall square to its straight hole, and cross a curved dividing line
+  at the middle, along the curve, of the stretch the two rooms share; `grid_takeoff for=change`
+  measures a curved wall to be demolished or new along its curve, and a whole circle has no ends
+  to make good; a click on the preview's 3D picture meets a curved wall along its curve. A curved
+  wall in a plan with phases is drawn and exported on its phase's layer, with its arc.
+- With MSG-11: `wall/arc-ends-apart` and `wall/arc-too-tight` are said in every language, as
+  the other wall codes are; `grid_describe` gives a curved wall in the language asked
+  for ("en curva de 180° en sentido antihorario…"). The refusals of an edit on a curved wall, the
+  export's line on its approximations and the files' notes stay English, from keys of the message
+  files, as the other edits' and exports' words do.
 
 ### 2026-11-22: every language, starting with Spanish (MSG-11)
 

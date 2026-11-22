@@ -15,11 +15,18 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { add, cross, dot, intersectLines, planMarks, scale, sub, tolerance, wallAxis, wallSureness, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { add, cross, curveFault, dot, intersectLines, planMarks, scale, sub, tolerance, wallAxis, wallSegments, wallSureness, type Vec2, type Wall, type WallSegment } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import type { Survey } from '../quantities/survey'
-import { listed, type OpeningChange, type Patch } from './edits'
+import { listed, refuseCurved, type OpeningChange, type Patch } from './edits'
 import { EditRefused } from './refused'
+import { english, joined, name, said as sentence, type Value } from '@ongrid/floorplan/messages'
+
+/** CNT-18: ids in a sentence as `listed` gives them, at most three and then how many more. */
+function listedNames(ids: readonly string[], max = 3): Value {
+  const shown: Value[] = ids.length > max ? [...ids.slice(0, max - 1).map(name), sentence('issue.part.more', { n: ids.length - max + 1 })] : ids.map(name)
+  return joined(shown, 'join.comma', 'join.and')
+}
 import { r3, seatOpenings } from './seat'
 
 type Pair = [number, number]
@@ -65,14 +72,27 @@ function mainDirection(walls: readonly Wall[]): number {
 
 const pair = (p: Vec2): Pair => [r3(p.x), r3(p.y)]
 
+/** How far a point is from one straight piece of a wall's axis. */
+function distanceToPiece(p: Vec2, piece: WallSegment): number {
+  const t = Math.max(0, Math.min(piece.length, dot(sub(p, piece.start), piece.dir)))
+  return Math.hypot(p.x - (piece.start.x + piece.dir.x * t), p.y - (piece.start.y + piece.dir.y * t))
+}
+
 export function squarePlan(survey: Survey, request: SquareRequest): Patch {
   const plan = survey.plan
   const onFloor = (wall: Wall): boolean => request.floor === undefined || (wall.floor ?? 'ground') === request.floor
   const marks = planMarks(plan)
-  const walls = plan.walls.filter((w) => onFloor(w) && w.start.some((v, i) => v !== w.end[i]))
+  // CNT-18: a curved wall is never squared and never moved; it is left as it is, and said.
+  const curved = plan.walls.filter((w) => onFloor(w) && w.arc !== undefined && (request.all === true || wallSureness(marks, w.id).source === 'scanned'))
+  // MSG-11: the words are keys of the message files, said in English as the edits' answers are.
+  const curvedNote = curved.length === 0 ? null : english(sentence(curved.length === 1 ? 'edit.square.curvedLeft.one' : 'edit.square.curvedLeft.many', { walls: listedNames(curved.map((w) => w.id)) }))
+  const walls = plan.walls.filter((w) => onFloor(w) && w.arc === undefined && w.start.some((v, i) => v !== w.end[i]))
   if (walls.length === 0) throw new EditRefused('That floor has no walls to square.')
   const scanned = walls.filter((w) => wallSureness(marks, w.id).source === 'scanned')
   const chosen = request.all === true ? walls : scanned
+  if (chosen.length === 0 && curved.length > 0) {
+    throw new EditRefused(english(sentence('edit.square.onlyCurved', { walls: listedNames(curved.map((w) => w.id)) })))
+  }
   if (chosen.length === 0) {
     throw new EditRefused('No wall is marked scanned, so nothing would be squared. Mark the scanned walls in the plan\'s marks (source scanned), or pass all to square every wall.')
   }
@@ -102,7 +122,7 @@ export function squarePlan(survey: Survey, request: SquareRequest): Patch {
     throw new EditRefused(`Every wall to square is more than about 3° off the plan's main directions, so none was turned: ${listed(leftOff.map(quoted))}.`)
   }
   if (lines.size === 0) {
-    return { walls: new Map(), openings: new Map(), removeOpenings: new Set(), rooms: new Map(), said: [`Every one of the ${chosen.length} walls to square is on the plan's main directions already: nothing moved.`], extra: { moves: [], leftAsTheyAre: [] } }
+    return { walls: new Map(), openings: new Map(), removeOpenings: new Set(), rooms: new Map(), said: [`Every one of the ${chosen.length} walls to square is on the plan's main directions already: nothing moved.`, ...(curvedNote === null ? [] : [curvedNote])], extra: { moves: [], leftAsTheyAre: [] } }
   }
 
   const lineOf = (wall: Wall): { point: Vec2; dir: Vec2 } => lines.get(wall.id) ?? { point: wallAxis(wall).start, dir: wallAxis(wall).dir }
@@ -111,7 +131,15 @@ export function squarePlan(survey: Survey, request: SquareRequest): Patch {
   const meets = (wall: Wall, end: Vec2): Wall | null => {
     let best: { wall: Wall; off: number } | null = null
     for (const other of plan.walls) {
-      if (other.id === wall.id || !sameFloor(other, wall) || other.start.every((v, i) => v === other.end[i])) continue
+      if (other.id === wall.id || !sameFloor(other, wall)) continue
+      if (other.arc !== undefined) {
+        // An end on a curved wall stays on the curve only if neither moves: a squared wall that
+        // meets one is refused (CNT-18).
+        const reach = (wall.thickness + other.thickness) / 2 + tolerance('gap')
+        if (curveFault(other) === null && wallSegments(other).some((piece) => distanceToPiece(end, piece) <= reach)) return other
+        continue
+      }
+      if (other.start.every((v, i) => v === other.end[i])) continue
       const axis = wallAxis(other)
       // A wall in a row with this one continues it; it does not meet it at a corner.
       if (Math.abs(cross(axis.dir, wallAxis(wall).dir)) < tolerance('nearlyParallel')) continue
@@ -128,7 +156,7 @@ export function squarePlan(survey: Survey, request: SquareRequest): Patch {
   const changes = new Map<string, { start?: Pair; end?: Pair }>()
   const moves: WallMove[] = []
   for (const wall of plan.walls.filter(onFloor)) {
-    if (wall.start.every((v, i) => v === wall.end[i])) continue
+    if (wall.arc !== undefined || wall.start.every((v, i) => v === wall.end[i])) continue
     const own = lineOf(wall)
     const squared = lines.has(wall.id)
     const change: { start?: Pair; end?: Pair } = {}
@@ -137,6 +165,7 @@ export function squarePlan(survey: Survey, request: SquareRequest): Patch {
       const was: Vec2 = { x: wall[key][0], y: wall[key][1] }
       const other = meets(wall, was)
       if (!squared && (other === null || !lines.has(other.id))) continue
+      if (other !== null) refuseCurved([other], 'squareScan')
       const at = other === null ? null : intersectLines(own, lineOf(other))
       // A crossing far from the old end is not where the walls met: the end only comes onto its line.
       const now = at !== null && Math.hypot(at.x - was.x, at.y - was.y) <= wall.thickness + other!.thickness + tolerance('gap')
@@ -179,6 +208,7 @@ export function squarePlan(survey: Survey, request: SquareRequest): Patch {
   const notKept = [...seated.notKept]
   if (leftOff.length > 0) notKept.push(`${listed(leftOff.map((id) => `wall ${quoted(id)}`))} ${leftOff.length === 1 ? 'is' : 'are'} more than about 3° off the plan's main directions and ${leftOff.length === 1 ? 'was' : 'were'} left as ${leftOff.length === 1 ? 'it is' : 'they are'}: a bay, a splay or a mistake is for the person to say.`)
   const guessed = [...seated.guessed]
+  if (curvedNote !== null) guessed.push(curvedNote)
   if (request.all !== true && scanned.length < walls.length) guessed.push(`Only the ${scanned.length} walls marked scanned were squared; pass all to square every wall.`)
   return {
     walls: changes,

@@ -14,7 +14,7 @@
  *
  * Pure: a survey in, plain data out.
  */
-import { compareIds, floorOf, planFloors, planForFloor, tolerance, wallAxis } from '@ongrid/floorplan/geometry'
+import { compareIds, floorOf, planFloors, planForFloor, tolerance, wallLength } from '@ongrid/floorplan/geometry'
 import { factKey, factOf, factText, type FactValue } from '@ongrid/floorplan/types/floorplan'
 import { likelyId } from '@ongrid/floorplan/types/nearest'
 import { LengthRefused, readLength } from '@ongrid/floorplan/types/units'
@@ -184,7 +184,8 @@ export function askPlan(survey: Survey): Asked {
     }
     if (part.kind === 'wall') {
       const wall = walls.get(part.id)!
-      if (name === 'length') return wallAxis(wall).length
+      // Along a curved wall's curve (CNT-18).
+      if (name === 'length') return wallLength(wall)
       if (name === 'thickness') return wall.thickness
       if (name === 'height') return wall.height
       if (name === 'wall kind') return wall.kind

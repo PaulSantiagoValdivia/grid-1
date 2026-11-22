@@ -35,6 +35,8 @@ import type { OpeningPattern } from '../types/floorplan'
 import { PARTS_MAX } from '../types/planText'
 import { likelyId } from '../types/nearest'
 import { metresText } from './rounding'
+import { wallLength, wallPointAt } from './wall'
+import { curveFault, wallCurve } from './arc'
 import { english, name, num, said, type Said, type Value } from '../messages/say'
 import { groupedNum, withSaid } from './issueWords'
 
@@ -108,7 +110,7 @@ function wallAbove(walls: readonly Wall[], base: Wall, p0: readonly [number, num
   const over = tolerance('openingOverrun')
   let best: { wall: Wall; offset: number; off: number } | null = null
   for (const wall of walls) {
-    if (wall.virtual === true) continue
+    if (wall.virtual === true || wall.arc !== undefined) continue
     const axis = axisOf(wall)
     if (axis === null) continue
     const along = (p: readonly [number, number]): number => (p[0] - axis.sx) * axis.dx + (p[1] - axis.sy) * axis.dy
@@ -121,6 +123,30 @@ function wallAbove(walls: readonly Wall[], base: Wall, p0: readonly [number, num
     if (best === null || off < best.off) best = { wall, offset: Math.max(0, offset), off }
   }
   return best === null ? null : { wall: best.wall, offset: best.offset }
+}
+
+/**
+ * CNT-18: on the floor above, the curved wall on the same circle as curved wall `base` (its centre
+ * and radius within the two walls' half thicknesses) that holds the stretch of `base`'s curve from
+ * `from` to `from + width`, with that stretch's offset along its own curve.
+ */
+function curveAbove(walls: readonly Wall[], base: Wall, from: number, width: number): { wall: Wall; offset: number } | null {
+  const over = tolerance('openingOverrun')
+  const at = wallPointAt(base, from)
+  const own = wallCurve(base)!
+  for (const wall of walls) {
+    if (wall.virtual === true || wall.arc === undefined || curveFault(wall) !== null) continue
+    const curve = wallCurve(wall)!
+    const reach = (wall.thickness + base.thickness) / 2
+    if (Math.hypot(curve.centre.x - own.centre.x, curve.centre.y - own.centre.y) > reach || Math.abs(curve.radius - own.radius) > reach) continue
+    const turn = (Math.sign(curve.sweep) * (Math.atan2(at.y - curve.centre.y, at.x - curve.centre.x) - curve.startAngle)) % (2 * Math.PI)
+    let offset = (turn < 0 ? turn + 2 * Math.PI : turn) * curve.radius
+    // A curve running the other way holds the stretch from its far edge.
+    if (Math.sign(curve.sweep) !== Math.sign(own.sweep)) offset -= width
+    if (offset < -over || offset + width > curve.length + over) continue
+    return { wall, offset: Math.max(0, offset) }
+  }
+  return null
 }
 
 /** The openings one pattern would place, and what stops the rest. */
@@ -139,7 +165,9 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
     return []
   }
   const base = named[0]!
-  const axis = axisOf(base)
+  // A curved wall's openings go along its curve (CNT-18, C21), its length along it.
+  const curved = base.arc !== undefined && curveFault(base) === null
+  const axis = curved ? { sx: 0, sy: 0, dx: 0, dy: 0, length: wallLength(base) } : base.arc !== undefined ? null : axisOf(base)
   if (axis === null) {
     issues.push(problem(pattern, 'pattern/does-not-fit', said('issue.pattern/does-not-fit.noLength', { pattern: label(pattern), wall: name(base.id) })))
     return []
@@ -180,7 +208,7 @@ function placementsOf(plan: FloorPlan, pattern: OpeningPattern, floorIds: readon
     offsets.forEach((offset, i) => {
       const p0: [number, number] = [axis.sx + axis.dx * offset, axis.sy + axis.dy * offset]
       const p1: [number, number] = [axis.sx + axis.dx * (offset + width), axis.sy + axis.dy * (offset + width)]
-      const above = wallAbove(walls, base, p0, p1, width)
+      const above = curved ? curveAbove(walls, base, offset, width) : wallAbove(walls, base, p0, p1, width)
       if (above === null) missed.push(i + 1)
       else out.push({ pattern, opening: make(`${pattern.id}-${floor}-${i + 1}`, above.wall.id, above.offset) })
     })

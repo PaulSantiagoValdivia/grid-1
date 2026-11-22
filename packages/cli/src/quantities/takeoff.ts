@@ -20,7 +20,9 @@ import {
   planFloors,
   planForFloor,
   roomCeiling,
+  curveFault,
   wallAxis,
+  wallLength,
   faceUnderTop,
   wallTopProfile,
   type FloorEnvelope,
@@ -241,8 +243,10 @@ export function planTakeoff(survey: Survey, floors?: readonly string[], rooms?: 
   for (const o of survey.plan.openings) openingWidth.set(o.wall, (openingWidth.get(o.wall) ?? 0) + o.width)
   const runs: WallRun[] = KINDS.map((kind) => {
     const of = walls.filter((wall) => wall.kind === kind)
-    const gross = of.reduce((sum, wall) => sum + wallAxis(wall).length, 0)
-    const net = of.reduce((sum, wall) => sum + Math.max(0, wallAxis(wall).length - (openingWidth.get(wall.id) ?? 0)), 0)
+    // Along a curved wall's curve (CNT-18).
+    const lengthOf = (wall: Wall): number => (wall.arc !== undefined ? (curveFault(wall) === null ? wallLength(wall) : 0) : wallAxis(wall).length)
+    const gross = of.reduce((sum, wall) => sum + lengthOf(wall), 0)
+    const net = of.reduce((sum, wall) => sum + Math.max(0, lengthOf(wall) - (openingWidth.get(wall.id) ?? 0)), 0)
     return { kind, count: of.length, gross, net }
   }).filter((run) => run.count > 0)
   // A zone's floor, walls and ceiling are its room's (CNT-8): taken off once, unless asked for by name.

@@ -54,7 +54,7 @@ export function wallRevision(wall: Wall, openings: readonly Opening[] = [], ends
     num(wall.thickness),
     num(wall.height),
     wall.virtual === true ? 'v' : '-'
-  ].join(':')
+  ].join(':') + (wall.arc === undefined ? '' : `~${[wall.arc.centre[0], wall.arc.centre[1], wall.arc.sweep].map(num).join(':')}`)
 
   // A wall joined to others changes shape when they move (SHT-2), so its corners are part of it.
   const corners =

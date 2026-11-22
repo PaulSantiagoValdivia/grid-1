@@ -23,7 +23,8 @@ import { floorOf, isFloorSlice, planFloors } from './floors'
 import { throughIssues, wallRise, wallStandsOn } from './through'
 import { stackingIssues } from './stacking'
 import { area } from './vec2'
-import { openingSpan, wallAxis } from './wall'
+import { openingSpan, wallLength } from './wall'
+import { curveFault } from './arc'
 import { RoomOutlineError, roomNesting, roomPolygon } from './room'
 import type { FloorPiece, FloorSpaces, RoomMismatch } from './spaces'
 import { planSpaces, spacesKnown } from './spaces'
@@ -219,7 +220,7 @@ const held = (value: number): boolean => Math.abs(value) <= tolerance('largest')
 const kilometres = (metres: number): Value => groupedNum((metres / 1000).toLocaleString('en'))
 
 /** The number of a part, as a line names it. */
-type NumberPart = 'startCoordinate' | 'endCoordinate' | 'thickness' | 'height' | 'offset' | 'width' | 'sill'
+type NumberPart = 'startCoordinate' | 'endCoordinate' | 'centreCoordinate' | 'sweep' | 'thickness' | 'height' | 'offset' | 'width' | 'sill'
 
 function tooLarge(what: NumberPart, value: number): Said {
   const part = said(`issue.part.number.${what}`)
@@ -244,7 +245,13 @@ function validateWallNumbers(wall: Wall, issues: Issue[]): boolean {
     ['endCoordinate', wall.end[0]],
     ['endCoordinate', wall.end[1]],
     ['thickness', wall.thickness],
-    ['height', wall.height]
+    ['height', wall.height],
+    // CNT-18: a curved wall's centre is a point of the plan too.
+    ...(wall.arc === undefined ? [] : ([
+      ['centreCoordinate', wall.arc.centre[0]],
+      ['centreCoordinate', wall.arc.centre[1]],
+      ['sweep', wall.arc.sweep]
+    ] as [NumberPart, number][]))
   ]
   const bad = named.find(([, value]) => !held(value))
   if (bad === undefined) return true
@@ -271,7 +278,14 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
   const [sx, sy] = wall.start
   const [ex, ey] = wall.end
 
-  if (sx === ex && sy === ey) {
+  // CNT-18: a whole circle starts and ends at one point; a curve that cannot be built says why.
+  const curved = curveFault(wall)
+  if (curved !== null) {
+    issues.push(issue('wall', wall.id, curved.code, curved.said))
+    return false
+  }
+
+  if (sx === ex && sy === ey && wall.arc === undefined) {
     issues.push(
       issue('wall', wall.id, 'wall/zero-length', said('issue.wall/zero-length', { wall: name(wall.id), at: pointSaid(exactMetres(sx), exactMetres(sy)) }))
     )
@@ -305,6 +319,9 @@ function validateWall(wall: Wall, issues: Issue[]): boolean {
   }
   return ok
 }
+
+/** C2: an opening's offset and width are along its wall's axis, curved or not (CNT-18). */
+const lengthOf = (wall: Wall): number => wallLength(wall)
 
 function validateOpening(
   opening: Opening,
@@ -364,7 +381,7 @@ function validateOpening(
   }
 
   const span = openingSpan(opening)
-  const wallLength = wallAxis(wall).length
+  const wallLength = lengthOf(wall)
   // MS-16: a wall whose ends were rounded to the millimetre is a hair shorter than meant, so an
   // opening may run `openingOverrun` past it and still fit.
   const overrun = tolerance('openingOverrun')

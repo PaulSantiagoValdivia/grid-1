@@ -19,7 +19,8 @@ line names a part; `read.*`, what the reader found and what the format wants; `i
 drawing check's own sentence; `check.*`, a plan check's finding or notice, its title and its
 limits; `line.<code>.<field>`, the result record's `message` (`says`), `found`, `needed` and
 `fix`; `report.*` and `tool.check.*`, the words of a report around its lines; `describe.*`,
-`drawing.*` and `sheet.*` for those outputs. A last part
+`drawing.*` and `sheet.*` for those outputs (`drawing.*` also holds a file's own words, said in
+English); `edit.*`, an edit's refusals and notes, said in English as the edits' answers are. A last part
 after the field (`.one`, `.many`, `.none`) is one wording of several, chosen by the code.
 
 A wording holds named placeholders, `{width}`. `say(language, key, values)` fills them:

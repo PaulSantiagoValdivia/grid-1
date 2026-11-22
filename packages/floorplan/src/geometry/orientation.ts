@@ -22,7 +22,9 @@ import { isFiniteWall } from './elevations'
 import { planWallSides, stretchAt } from './exposure'
 import { tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
-import { wallAxis } from './wall'
+import { wallAxis, wallFrameAt } from './wall'
+import type { WallCurve } from './arc'
+import { curveFault, curveStationsBetween, wallCurve } from './arc'
 
 /** The eight points of the compass, clockwise from north. */
 export const COMPASS_POINTS = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'] as const
@@ -149,6 +151,12 @@ export interface PlanFacing {
   readonly front: FrontFacing | null
 }
 
+/** A stretch of a curved wall in its straight pieces, each with the normal at its middle. */
+function stationParts(wall: FloorPlan['walls'][number], curve: WallCurve, from: number, to: number): { from: number; to: number; normal: Vec2 }[] {
+  const stations = curveStationsBetween(curve, from, to)
+  return stations.slice(1).map((end, i) => ({ from: stations[i]!, to: end, normal: wallFrameAt(wall, (stations[i]! + end) / 2).normal }))
+}
+
 /**
  * Which way each outside wall, each opening in one and each room behind them faces. Walls that
  * are dividing lines, broken, or without a room on either face face nowhere and are not listed.
@@ -168,7 +176,8 @@ export function planFacing(plan: FloorPlan, index: PlanIndex = indexPlan(plan)):
     if (found === undefined) continue
     const axis = (() => {
       try {
-        return wallAxis(wall)
+        if (curveFault(wall) !== null) return null
+        return wall.arc === undefined ? wallAxis(wall) : wallCurve(wall)
       } catch {
         return null
       }
@@ -178,25 +187,36 @@ export function planFacing(plan: FloorPlan, index: PlanIndex = indexPlan(plan)):
       if (stretch.worked !== 'exterior' || stretch.to - stretch.from < shortest) continue
       // The room is on one face: the outside is the other. `normal` points at the left face.
       const inLeft = stretch.left.length > 0
-      const outward = inLeft ? { x: -axis.normal.x + 0, y: -axis.normal.y + 0 } : axis.normal
-      const bearing = bearingOf(outward, orientation, northUsed)
-      if (bearing === null) continue
-      const facing: WallFacing = {
-        wall: wall.id,
-        floor: floorOf(wall),
-        from: stretch.from,
-        to: stretch.to,
-        rooms: inLeft ? stretch.left : stretch.right,
-        outward,
-        bearing,
-        faces: compassPoint(bearing)
+      // A curved wall turns as it runs (CNT-18): its stretch is cut where it comes to face
+      // another of the compass points, each part facing the way its middle faces.
+      const parts: { from: number; to: number; normal: Vec2 }[] =
+        'normal' in axis
+          ? [{ from: stretch.from, to: stretch.to, normal: axis.normal }]
+          : stationParts(wall, axis, stretch.from, stretch.to)
+      const facings: WallFacing[] = []
+      for (const part of parts) {
+        const outward = inLeft ? { x: -part.normal.x + 0, y: -part.normal.y + 0 } : part.normal
+        const bearing = bearingOf(outward, orientation, northUsed)
+        if (bearing === null) continue
+        const faces = compassPoint(bearing)
+        const last = facings.at(-1)
+        if (last !== undefined && last.faces === faces && Math.abs(last.to - part.from) <= tolerance('noLength')) {
+          facings[facings.length - 1] = { ...last, to: part.to }
+          continue
+        }
+        facings.push({ wall: wall.id, floor: floorOf(wall), from: part.from, to: part.to, rooms: inLeft ? stretch.left : stretch.right, outward, bearing, faces })
       }
-      walls.push(facing)
-      byWall.set(wall.id, [...(byWall.get(wall.id) ?? []), facing])
+      for (const facing of facings) {
+        walls.push(facing)
+        byWall.set(wall.id, [...(byWall.get(wall.id) ?? []), facing])
+      }
     }
   }
 
+  const curved = new Set(plan.walls.filter((wall) => wall.arc !== undefined).map((wall) => wall.id))
   const facingAt = (wallId: string, s: number): WallFacing | null => {
+    // A curved wall's stretch is in parts: the part the place is in.
+    if (curved.has(wallId)) return (byWall.get(wallId) ?? []).find((f) => f.from - tolerance('noLength') <= s && s <= f.to + tolerance('noLength')) ?? null
     const stretches = sides.get(wallId)
     const at = stretches === undefined ? null : stretchAt(stretches, s)
     if (at === null) return null

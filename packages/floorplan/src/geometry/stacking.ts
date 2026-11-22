@@ -25,6 +25,8 @@ import { TOLERANCES, tolerance } from './tolerances'
 import { metresText } from './rounding'
 import { english, joined, name, num, said, type Said, type Value } from '../messages/say'
 import { withSaid } from './issueWords'
+import { wallPath } from './wall'
+import { curveFault } from './arc'
 
 const levelOf = (floor: Floor): number => (Number.isFinite(floor.level) ? floor.level : 0)
 
@@ -61,8 +63,12 @@ function allowed(box: { x0: number; y0: number; x1: number; y1: number }, walls:
   for (const wall of walls) {
     if (wall.virtual === true || !(wall.thickness > 0)) continue
     const reach = wall.thickness / 2 + tolerance('gap')
-    const [x0, x1] = [Math.min(wall.start[0], wall.end[0]) - reach, Math.max(wall.start[0], wall.end[0]) + reach]
-    const [y0, y1] = [Math.min(wall.start[1], wall.end[1]) - reach, Math.max(wall.start[1], wall.end[1]) + reach]
+    // Its box round its axis: a curved wall's (CNT-18) round its curve, not between its ends. A
+    // straight wall is boxed between its ends, which needs no length.
+    const ends = [{ x: wall.start[0], y: wall.start[1] }, { x: wall.end[0], y: wall.end[1] }]
+    const path = wall.arc !== undefined && curveFault(wall) === null ? wallPath(wall) : ends
+    const [x0, x1] = [Math.min(...path.map((p) => p.x)) - reach, Math.max(...path.map((p) => p.x)) + reach]
+    const [y0, y1] = [Math.min(...path.map((p) => p.y)) - reach, Math.max(...path.map((p) => p.y)) + reach]
     if (x0 <= box.x1 && box.x0 <= x1 && y0 <= box.y1 && box.y0 <= y1) thickest = Math.max(thickest, wall.thickness)
   }
   return tolerance('stackShift') + thickest / 2

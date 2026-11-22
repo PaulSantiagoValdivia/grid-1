@@ -389,6 +389,9 @@ export const CODES = {
   // --- Walls ----------------------------------------------------------------------------------
   'wall/too-large': {},
   'wall/zero-length': {},
+  // CNT-18: a curved wall that cannot be built.
+  'wall/arc-ends-apart': {},
+  'wall/arc-too-tight': {},
   'wall/no-thickness': {},
   'wall/no-height': {},
   // LVL-5 (C19): a wall through floors that names no floor above its own.

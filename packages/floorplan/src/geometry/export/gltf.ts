@@ -21,7 +21,7 @@ import { floorMesh, makeNamer, shellMesh, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { english, name, said } from '../../messages/say'
-import { leftOutLines, leftOutSummary, type LeftOutPart } from './leftOut'
+import { approximationLines, leftOutLines, leftOutSummary, NO_APPROXIMATIONS, type Approximations, type LeftOutPart } from './leftOut'
 
 const MAGIC = 0x46546c67 // "glTF"
 const VERSION = 2
@@ -128,6 +128,8 @@ function partsOf(scene: Scene3D): Part[] {
 export interface GlbOptions {
   /** HND-6: the parts of the plan this file leaves out, written into `asset.extras`. */
   readonly leftOut?: readonly LeftOutPart[]
+  /** CNT-18: the curves it writes as flat facets and straight pieces, written beside them. */
+  readonly approximations?: Approximations
   /**
    * HND-11 (lab MS-12): where the scene's zero is on the plan, when the scene was built near zero
    * from a plan far from it (`nearOrigin`). The model is then one node that holds every part,
@@ -145,7 +147,7 @@ export const GLB_ORIGIN_NODE = 'origin'
  * says so: a note in words, the count, and each part. `extras` is glTF's place for data of an
  * application's own, which every reader keeps and none acts on. JSON escapes the ids.
  */
-function assetOf(leftOut: readonly LeftOutPart[], origin: readonly [number, number] | null): object {
+function assetOf(leftOut: readonly LeftOutPart[], origin: readonly [number, number] | null, approximations: Approximations): object {
   // MSG-3: the label travels in the file, where glTF keeps data of the file's own.
   const extras: Record<string, unknown> = { label: GENERAL_GUIDANCE_LABEL }
   if (origin !== null) {
@@ -159,6 +161,10 @@ function assetOf(leftOut: readonly LeftOutPart[], origin: readonly [number, numb
   if (leftOut.length > 0) {
     const note = [leftOutSummary(leftOut), ...leftOutLines(leftOut)]
     extras['gridLeftOut'] = { count: leftOut.length, note, parts: leftOut }
+  }
+  // CNT-18: `asset.extras.gridApproximated`, the curves written as facets, beside what is left out.
+  if (approximations.parts.length > 0) {
+    extras['gridApproximated'] = { count: approximations.parts.length, note: approximationLines(approximations), parts: approximations.parts }
   }
   return { version: '2.0', generator: GENERATOR, extras }
 }
@@ -174,7 +180,7 @@ function assetOf(leftOut: readonly LeftOutPart[], origin: readonly [number, numb
 export function toGlb(scene: Scene3D, options: GlbOptions = {}): Uint8Array {
   const parts = partsOf(scene)
   const moved = options.origin !== undefined && (options.origin[0] !== 0 || options.origin[1] !== 0) ? options.origin : null
-  const asset = assetOf(options.leftOut ?? [], moved)
+  const asset = assetOf(options.leftOut ?? [], moved, options.approximations ?? NO_APPROXIMATIONS)
   if (parts.length === 0) return encodeGlb({ asset, scene: 0, scenes: [{}] }, null)
 
   // Per mesh: its positions, then its indices. Both are 4 bytes a component, so

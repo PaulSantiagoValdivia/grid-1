@@ -187,6 +187,17 @@
  *   A floor whose outline does not lie over the floor below it, and a stair or lift room that does
  *   not lie over the one below, are said, unless the floor or room states `overhang: "meant"`.
  *   All optional and never defaulted (version 1): a plan that states none reads as before.
+ *
+ * C21 · A curved wall (CNT-18)
+ *   A wall MAY be an arc of a circle: `arc.centre` is the circle's middle and `arc.sweep` the
+ *   angle the wall turns through from `start` to `end` round it, in degrees, counter-clockwise
+ *   positive as `turn` and `north` are; 360 (or -360) is a whole circle, whose `start` and `end`
+ *   are one point. The radius is the distance from the centre to `start`, and `end` must lie on
+ *   the circle where the sweep takes `start` (`wall/arc-ends-apart`). C1 holds about the curve:
+ *   the wall grows thickness/2 on each side of it, `left` is the side on the left going from
+ *   `start` to `end`. C2 holds along the curve: an opening's `offset` and `width` are measured
+ *   along it, and its hole is straight between its two edges, as a door's leaf is. Optional and
+ *   never defaulted, so a plan with no curved wall reads exactly as before (version 1).
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -197,6 +208,7 @@ import { roofFrame, roofTop } from './roofFrame'
 import { en } from '../messages/en'
 import { LANGUAGES } from '../messages/languages'
 import { roomUseOfLabel } from '../messages/uses'
+import { english, said } from '../messages/say'
 import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
@@ -492,7 +504,7 @@ function withWallDefaults(raw: unknown): unknown {
   const face = filled['face']
   const thickness = virtual ? 0 : filled['thickness']
   if (isFace(face) && isEndPair(filled['start']) && isEndPair(filled['end']) && typeof thickness === 'number' && Number.isFinite(thickness) && thickness >= 0) {
-    const [start, end] = centreFromFace(filled['start'], filled['end'], face, thickness)
+    const [start, end] = centreFromFace(filled['start'], filled['end'], face, thickness, arcOf(filled))
     delete filled['face']
     return { ...filled, start, end, placedBy: face }
   }
@@ -535,18 +547,55 @@ function shiftedLine(start: Pair, end: Pair, by: number): [[number, number], [nu
   ]
 }
 
+/** CNT-18 (C21): a curved wall's arc, as a file states it, when it can be read. */
+export interface WallCurveOf {
+  readonly centre: Pair
+  readonly sweep: number
+}
+
+/** CNT-18: a wall's `arc`, as its file states it or as Grid reads it, or undefined when it has none it can read. */
+function arcOf(wall: Readonly<Record<string, unknown>>): WallCurveOf | undefined {
+  const arc = wall['arc']
+  if (typeof arc !== 'object' || arc === null || Array.isArray(arc)) return undefined
+  const { centre, sweep } = arc as Record<string, unknown>
+  return isEndPair(centre) && typeof sweep === 'number' && Number.isFinite(sweep) && sweep !== 0 ? { centre, sweep } : undefined
+}
+
+/**
+ * CNT-18: the curve `start`→`end` round `arc.centre` moved `by` metres to its left (to its right
+ * when negative): each end along its own radius, since a curve's faces are circles round the same
+ * centre. Going counter-clockwise the left is toward the centre. Null when an end is on the
+ * centre or the move would take it through the centre.
+ */
+function shiftedArc(start: Pair, end: Pair, by: number, arc: WallCurveOf): [[number, number], [number, number]] | null {
+  const at = (p: Pair): [number, number] | null => {
+    const r = Math.hypot(p[0] - arc.centre[0], p[1] - arc.centre[1])
+    const to = r - Math.sign(arc.sweep) * by
+    if (!(r > 0) || !(to > 0)) return null
+    return [arc.centre[0] + ((p[0] - arc.centre[0]) * to) / r, arc.centre[1] + ((p[1] - arc.centre[1]) * to) / r]
+  }
+  const s = at(start)
+  const e = at(end)
+  return s === null || e === null ? null : [s, e]
+}
+
+/** A wall's line moved to its left: along its radius for a curve, square to it for a straight line. */
+function shifted(start: Pair, end: Pair, by: number, arc: WallCurveOf | undefined): [[number, number], [number, number]] | null {
+  return arc === undefined ? shiftedLine(start, end, by) : shiftedArc(start, end, by, arc)
+}
+
 /**
  * HND-11: a wall's centre line from the face its file gives: half the thickness away from that
  * face, into the wall's body. A left face has the body on its right. A line of no length is
  * returned as it is.
  */
-export function centreFromFace(start: Pair, end: Pair, face: WallFace, thickness: number): [[number, number], [number, number]] {
-  return shiftedLine(start, end, (face === 'left' ? -1 : 1) * (thickness / 2)) ?? [[start[0], start[1]], [end[0], end[1]]]
+export function centreFromFace(start: Pair, end: Pair, face: WallFace, thickness: number, arc?: WallCurveOf): [[number, number], [number, number]] {
+  return shifted(start, end, (face === 'left' ? -1 : 1) * (thickness / 2), arc) ?? [[start[0], start[1]], [end[0], end[1]]]
 }
 
 /** HND-11: the face line a file gives a wall placed by its face, from the wall's centre line. */
-export function faceFromCentre(start: Pair, end: Pair, face: WallFace, thickness: number): [[number, number], [number, number]] {
-  const [s, e] = shiftedLine(start, end, (face === 'left' ? 1 : -1) * (thickness / 2)) ?? [[start[0], start[1]], [end[0], end[1]]]
+export function faceFromCentre(start: Pair, end: Pair, face: WallFace, thickness: number, arc?: WallCurveOf): [[number, number], [number, number]] {
+  const [s, e] = shifted(start, end, (face === 'left' ? 1 : -1) * (thickness / 2), arc) ?? [[start[0], start[1]], [end[0], end[1]]]
   return [
     [written(s[0]), written(s[1])],
     [written(e[0]), written(e[1])],
@@ -570,13 +619,15 @@ function movingThickness(wall: Readonly<Record<string, unknown>>): number {
  * so (`placedBy`) keeps saying so. Every change that moves a wall end goes through here, so no
  * centre point ever lands in a file as a face.
  */
-export function wallWithEnds<T extends Record<string, unknown>>(wall: T, ends: { readonly start?: Pair | undefined; readonly end?: Pair | undefined }, mirrored = false): T {
+export function wallWithEnds<T extends Record<string, unknown>>(wall: T, ends: { readonly start?: Pair | undefined; readonly end?: Pair | undefined; readonly arc?: WallCurveOf | undefined }, mirrored = false): T {
   const face = wall['face']
   if (isFace(face) && isEndPair(wall['start']) && isEndPair(wall['end'])) {
     const thickness = movingThickness(wall)
-    const [s, e] = centreFromFace(wall['start'], wall['end'], face, thickness)
+    // CNT-18: a curved wall's face is found from its arc as it was, and written from its new one.
+    const before = arcOf(wall)
+    const [s, e] = centreFromFace(wall['start'], wall['end'], face, thickness, before)
     const now = mirrored ? otherFace(face) : face
-    const [start, end] = faceFromCentre(ends.start ?? s, ends.end ?? e, now, thickness)
+    const [start, end] = faceFromCentre(ends.start ?? s, ends.end ?? e, now, thickness, ends.arc ?? before)
     return { ...wall, start, end, face: now }
   }
   const placed = wall['placedBy']
@@ -631,6 +682,18 @@ export function heightByDefault(
   return (plan.floors ?? []).find((f) => f.id === floor)?.height === undefined
 }
 
+/**
+ * CNT-18 (C21): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
+ * and never more than a whole turn.
+ */
+export const WallArcSchema = z.object({
+  centre: Vec2,
+  sweep: finite().refine((value) => value !== 0 && Math.abs(value) <= 360, {
+    // MSG-11: its words are a key of the message files, said in English as the schema's are.
+    message: english(said('read.arc.sweep')),
+  }),
+})
+
 export const WallSchema = z.preprocess(
   withWallDefaults,
   z
@@ -653,6 +716,9 @@ export const WallSchema = z.preprocess(
       // on each floor between, and its height is measured from this floor's level. Optional and
       // never defaulted: unstated, the wall stands on its own floor only (version 1).
       through: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-18 (C21): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
+      // Optional and never defaulted: unstated, the wall is straight (version 1).
+      arc: WallArcSchema.optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
       // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
@@ -1580,7 +1646,7 @@ function withFloorHeights(raw: unknown): unknown {
       const w = wall as Record<string, unknown>
       if (w.virtual === true || floorOfRaw(w) !== id || !isPair(w.start) || !isPair(w.end)) return []
       // HND-11: a wall placed by its face frames the roof on its centre line, as it is read.
-      const [start, end] = isFace(w.face) ? centreFromFace(w.start, w.end, w.face, movingThickness(w)) : [w.start, w.end]
+      const [start, end] = isFace(w.face) ? centreFromFace(w.start, w.end, w.face, movingThickness(w), arcOf(w)) : [w.start, w.end]
       return [{ start, end, outside: w.kind === 'exterior' }]
     })
     const outside = lines.filter((l) => l.outside)
@@ -1699,6 +1765,7 @@ export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
 export type Phase = z.infer<typeof PhaseSchema>
 export type Wall = z.infer<typeof WallSchema>
+export type WallArc = z.infer<typeof WallArcSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
 export type RoomTenure = z.infer<typeof RoomTenureSchema>
 export type Room = z.infer<typeof RoomSchema>
