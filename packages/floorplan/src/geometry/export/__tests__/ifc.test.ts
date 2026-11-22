@@ -2178,24 +2178,34 @@ describe('slabs', () => {
     expect(SLAB_THICKNESS).toBe(0.25)
   })
 
-  it('writes a floor slab under every room, a base slab on the lowest storey and a roof on the top', () => {
+  // LVL-4: one slab per floor, from its outline, and a roof over every part with nothing above.
+  // Before, a slab per room (its inner faces) and a roof over every room of the top level.
+  it('writes one slab per floor, a base slab on the lowest level, and a roof over the part with nothing above', () => {
     const doc = exported(house())
     const kinds = Object.fromEntries(slabsOf(doc).map((e) => [str(e.args[2]), kind(e)]))
 
     expect(kinds).toEqual({
-      'Store floor slab': 'BASESLAB',
-      'Hall floor slab': 'FLOOR',
-      'Bedroom floor slab': 'FLOOR',
-      'Bedroom roof': 'ROOF'
+      'Cellar slab': 'BASESLAB',
+      'Ground slab': 'FLOOR',
+      'First slab': 'FLOOR',
+      'First roof slab': 'ROOF'
     })
+    // IfcRoof(..., ShapeType): a flat roof, made of its slab.
+    const roof = only(doc, 'IFCROOF')
+    expect(str(roof.args[2])).toBe('First roof')
+    expect((roof.args[8] as { v: string }).v).toBe('FLAT_ROOF')
+    const parts = ofType(doc, 'IFCRELAGGREGATES').filter((rel) => ref(rel.args[4]) === roof.id)
+    expect(parts.flatMap((rel) => refs(rel.args[5])).map((id) => str(entity(doc, id).args[2]))).toEqual(['First roof slab'])
   })
 
-  it('contains each slab in its own storey', () => {
+  it('contains each slab in its own storey, and the roof in the storey it covers', () => {
     const map = containment(exported(house()))
-    expect(map.get('Store floor slab')).toBe('Cellar')
-    expect(map.get('Hall floor slab')).toBe('Ground')
-    expect(map.get('Bedroom floor slab')).toBe('First')
-    expect(map.get('Bedroom roof')).toBe('First')
+    expect(map.get('Cellar slab')).toBe('Cellar')
+    expect(map.get('Ground slab')).toBe('Ground')
+    expect(map.get('First slab')).toBe('First')
+    expect(map.get('First roof')).toBe('First')
+    // The roof's slab is part of the roof, not contained apart.
+    expect(map.has('First roof slab')).toBe(false)
   })
 
   it('lays each floor slab 0.25 m under its storey floor level, and the roof 0.25 m on its walls', () => {
@@ -2204,10 +2214,10 @@ describe('slabs', () => {
     const { floors, roof } = floorElevations(plan)
 
     const expectations: Array<[string, number, number]> = [
-      ['Store floor slab', floors.get('cellar')!.floorLevel - 0.25, floors.get('cellar')!.floorLevel],
-      ['Hall floor slab', -0.25, 0],
-      ['Bedroom floor slab', 3.0, 3.25],
-      ['Bedroom roof', roof.bottom, roof.top]
+      ['Cellar slab', floors.get('cellar')!.floorLevel - 0.25, floors.get('cellar')!.floorLevel],
+      ['Ground slab', -0.25, 0],
+      ['First slab', 3.0, 3.25],
+      ['First roof slab', roof.bottom, roof.top]
     ]
     expect(roof.bottom).toBeCloseTo(6.05, 9)
 
@@ -2220,21 +2230,15 @@ describe('slabs', () => {
     }
   })
 
-  it('gives every slab the footprint of its room space (C3: the inner faces)', () => {
+  it('gives every slab the floor\'s outline, to the outside faces of its walls (VE-4: none under walls before)', () => {
     const doc = exported(house())
-    const pairs: Array<[string, string]> = [
-      ['Store floor slab', 'Store'],
-      ['Hall floor slab', 'Hall'],
-      ['Bedroom floor slab', 'Bedroom'],
-      ['Bedroom roof', 'Bedroom']
-    ]
-    const xy = (solid: WorldSolid): string[] =>
-      solid.base.map((p) => `${p[0].toFixed(6)},${p[1].toFixed(6)}`)
-
-    for (const [slab, room] of pairs) {
-      const slabSolid = bodyOf(doc, slabFor(doc, slab))
-      expect(xy(slabSolid), slab).toEqual(xy(bodyOf(doc, spaceByName(doc, room))))
-      expect(Math.abs(signedAreaXY(slabSolid.base)), slab).toBeCloseTo(12, 8)
+    for (const name of ['Cellar slab', 'Ground slab', 'First slab', 'First roof slab']) {
+      const solid = bodyOf(doc, slabFor(doc, name))
+      // 4.2 × 3.2 m between wall axes, 0.2 m walls: 4.4 × 3.4 m outside, where the room is 4.0 × 3.0.
+      expect(Math.abs(signedAreaXY(solid.base)), name).toBeCloseTo(4.4 * 3.4, 8)
+      const xs = solid.base.map((p) => p[0])
+      expect(Math.min(...xs), name).toBeCloseTo(-0.1, 9)
+      expect(Math.max(...xs), name).toBeCloseTo(4.3, 9)
     }
   })
 
@@ -2251,12 +2255,12 @@ describe('slabs', () => {
       rooms: [roomOf('kitchen', 'Kitchen', ['k1', 'k2', 'k3', 'k4'])]
     })
 
-    const base = bodyOf(doc, slabFor(doc, 'Kitchen floor slab'))
-    expect(kind(slabFor(doc, 'Kitchen floor slab'))).toBe('BASESLAB')
+    const base = bodyOf(doc, slabFor(doc, 'Ground floor slab'))
+    expect(kind(slabFor(doc, 'Ground floor slab'))).toBe('BASESLAB')
     expect(Math.min(...zs(base))).toBeCloseTo(-0.25, 9)
     expect(Math.max(...zs(base))).toBeCloseTo(0, 9)
 
-    const roof = bodyOf(doc, slabFor(doc, 'Kitchen roof'))
+    const roof = bodyOf(doc, slabFor(doc, 'Ground floor roof slab'))
     expect(Math.min(...zs(roof))).toBeCloseTo(2.7, 9)
     expect(Math.max(...zs(roof))).toBeCloseTo(2.95, 9)
   })
@@ -2278,23 +2282,23 @@ describe('slabs', () => {
     })
 
     expect(slabsOf(doc).map((e) => `${str(e.args[2])}:${kind(e)}`).sort()).toEqual([
-      'A floor slab:BASESLAB',
-      'A roof:ROOF',
-      'B floor slab:BASESLAB',
-      'B roof:ROOF'
+      'Ground roof slab:ROOF',
+      'Ground slab:BASESLAB',
+      'Wing roof slab:ROOF',
+      'Wing slab:BASESLAB'
     ])
   })
 
-  it('writes no slab for a room that does not close, or one on a broken wall', () => {
-    const walls = boxWalls('k', 0, 0, 4.2, 3.2)
+  it('writes a slab wherever the walls close a floor, whatever the rooms, and none where they close none', () => {
     const doc = exported({
-      ...planOf(undefined, [...walls, ...boxWalls('z', 10, 0, 4.2, 3.2), wallAt('nan', [20, 0], 0, 4, { height: Number.NaN })]),
-      rooms: [
-        roomOf('open', 'Open', ['k1', 'k2', 'k3']),
-        roomOf('broken', 'Broken', ['z1', 'z2', 'z3', 'nan'])
-      ]
+      ...planOf(undefined, [...boxWalls('k', 0, 0, 4.2, 3.2), wallAt('nan', [20, 0], 0, 4, { height: Number.NaN })]),
+      // A room that does not close is no slab of its own: the walls round it carry one.
+      rooms: [roomOf('open', 'Open', ['k1', 'k2', 'k3'])]
     })
-    expect(slabsOf(doc)).toHaveLength(0)
+    const slab = bodyOf(doc, slabFor(doc, 'Ground floor slab'))
+    expect(Math.abs(signedAreaXY(slab.base))).toBeCloseTo(4.4 * 3.4, 8)
+    // A lone wall closes nothing, and one that is not a number is left out.
+    expect(slabsOf(exported(planOf(undefined, [wallAt('lone', [0, 0], 0, 4)])))).toHaveLength(0)
   })
 
   it('gives every slab its own GlobalId, the same on every export', () => {
@@ -2528,14 +2532,18 @@ describe('a room with a hole (ARE-6)', () => {
     expect(Math.max(...xs)).toBeCloseTo(7.15, 8)
   })
 
+  // LVL-4: the slab is the floor's outline, so the courtyard's walls stand on it, and only the floor
+  // they enclose, 3.7 m square, is open: before, the slab was the gallery's own floor, open over the
+  // 4.3 m square of the hole's outer faces.
   it('leaves the courtyard open in the floor slab and the roof too', () => {
     const doc = exported(ring())
     const slabs = ofType(doc, 'IFCSLAB')
     expect(slabs).toHaveLength(2)
     for (const slab of slabs) {
-      const { type, inner } = profileRings(doc, slab)
+      const { type, outer, inner } = profileRings(doc, slab)
       expect(type).toBe('IFCARBITRARYPROFILEDEFWITHVOIDS')
-      expect(inner.map((curve) => ringArea2(curve))).toEqual([expect.closeTo(18.49, 8)])
+      expect(ringArea2(outer)).toBeCloseTo(10.3 * 10.3, 8)
+      expect(inner.map((curve) => ringArea2(curve))).toEqual([expect.closeTo(3.7 * 3.7, 8)])
     }
   })
 
@@ -2569,12 +2577,15 @@ describe('LVL-7 a step inside a floor in the IFC file', () => {
     expect(zRange(bodyOf(doc, spaceByName(doc, 'Hall')))[0]).toBeCloseTo(0, 9)
   })
 
+  // LVL-4: the storey's one slab lies under every room, so the genkan's own slab rises from it.
   it('puts the top of the genkan\'s slab at 0.18 m, solid down to the storey\'s slab', () => {
     const doc = parseDoc(toIfc(genkanFlat()))
     const [low, high] = zRange(bodyOf(doc, slabNamed(doc, 'Genkan floor slab')))
     expect(high).toBeCloseTo(0.18, 9)
-    expect(low).toBeCloseTo(-SLAB_THICKNESS, 9)
-    expect(zRange(bodyOf(doc, slabNamed(doc, 'Hall floor slab')))).toEqual([-SLAB_THICKNESS, 0])
+    expect(low).toBeCloseTo(0, 9)
+    const storey = ofType(doc, 'IFCSLAB').filter((e) => (e.args[8] as { v: string }).v === 'BASESLAB')
+    expect(storey).toHaveLength(1)
+    expect(zRange(bodyOf(doc, storey[0]!))).toEqual([-SLAB_THICKNESS, 0])
   })
 
   it('lowers a sunken genkan\'s space and slab 0.18 m', () => {

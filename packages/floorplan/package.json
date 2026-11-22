@@ -18,7 +18,8 @@
     "./notes": "./src/notes/notes.ts",
     "./rooms": "./src/rooms/index.ts",
     "./test-support/plans": "./src/test-support/plans.ts",
-    "./test-support/facts": "./src/test-support/facts.ts"
+    "./test-support/facts": "./src/test-support/facts.ts",
+    "./test-support/lab": "./src/test-support/lab.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

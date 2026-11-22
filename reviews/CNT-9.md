@@ -234,3 +234,7 @@ conflicted; every one keeps both sides.
 - **IFC**: both imports kept: the facts' sets and the room-number names beside CNT-3's `TrueNorth`
   and site.
 - **Changelogs**: CNT-9's entry first, then main's in main's order.
+
+## After merging main at b58930a
+
+LVL-4 conflicted in three places, each kept whole: the changelog for agents (CNT-9 first, then LVL-4), the tool table in `docs/tool-server.md` (LVL-4's `grid_takeoff` row, CNT-9's `grid_schedule`, `grid_fields`, `grid_find` and `grid_count` rows) and the exports of `packages/floorplan/package.json` (both test-support entries).

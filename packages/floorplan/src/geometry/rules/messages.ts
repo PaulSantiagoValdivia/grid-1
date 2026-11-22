@@ -99,6 +99,17 @@ export const wordings = {
     name(room),
     words(` leads outside ${height} m above the ground, so it is not a way out`)
   ],
+  /**
+   * LVL-4: a door, window or opening in an outside wall that lies below the ground the site states
+   * (lab VE-7). Its depth is the finding's `belowGround`: its top when it lies wholly below, else its foot.
+   */
+  belowGround: (kind: 'door' | 'window' | 'opening', room: string | null, wall: string, wholly: boolean, depth: string): WordingPart[] => [
+    words(`The ${kind} in `),
+    ...(room === null ? [words('wall '), name(wall)] : [name(room)]),
+    words(
+      ` lies ${wholly ? 'wholly' : 'partly'} below the ground: its ${wholly ? 'top' : kind === 'window' ? 'sill' : kind === 'door' ? 'threshold' : 'foot'} is ${depth} m under the ground level the site states`
+    )
+  ],
   /** MSG-18: a door or doorless opening no person fits through. Its size is the finding's `passage`. */
   openingTooSmall: (room: string): WordingPart[] => [
     words('An opening from '),
@@ -132,5 +143,7 @@ export const messages = {
     wordingText(rooms.length > 0 ? wordings.roomsNotDrawn(floor, rooms) : wordings.doorsNotDrawn(floor)),
   doorToUndrawnSpace: (room: string): string => wordingText(wordings.doorToUndrawnSpace(room)),
   doorOutAboveGround: (room: string, height: string): string => wordingText(wordings.doorOutAboveGround(room, height)),
+  belowGround: (kind: 'door' | 'window' | 'opening', room: string | null, wall: string, wholly: boolean, depth: string): string =>
+    wordingText(wordings.belowGround(kind, room, wall, wholly, depth)),
   openingTooSmall: (room: string): string => wordingText(wordings.openingTooSmall(room))
 }
