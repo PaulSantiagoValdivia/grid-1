@@ -52,6 +52,8 @@ export const SHEET_COVERAGE = {
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
   // VEW-3: a saved view is a camera for grid_view and grid draw --view; the sheet takes its own.
   views: { shown: 'not shown', why: 'A saved view is a camera for grid_view and grid draw --view (VEW-3); the sheet takes its own pictures.' },
+  // CNT-17: what needs to be accessible is a mark for the measurements, not part of the drawing.
+  accessible: { shown: 'not shown', why: 'It marks the rooms and routes that need to be accessible (CNT-17), which grid_measure what=access measures; the sheet draws no mark and states no figure for them.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**

@@ -1016,6 +1016,13 @@ export const CODES = {
     needed: fixed('a mark on a part the plan has, by its id'),
     fix: fixed('Name the part by the id the plan gives it now, or take the mark out.')
   },
+  // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured, never checked.
+  'plan/not-checked-access': {
+    says: (s) => `What the plan marks as needing to be accessible (${s.said}) was not checked: Grid holds no figure for it that a named person has confirmed`,
+    found: (s) => `${s.said} marked as needing to be accessible`,
+    needed: fixed('figures for the widths of doors and corridors, turning space and steps that a named person has confirmed against their source, or the person\'s own figures in the brief beside the plan'),
+    fix: fixed('Nothing to change in the plan: grid_measure what=access measures the doors, corridors, turning space and steps of what is marked, as numbers, against the person\'s own figures.')
+  },
   'plan/not-checked-no-rooms': {
     says: () => wordingText(figureWordings.noRooms()),
     found: fixed('walls, and no rooms'),
