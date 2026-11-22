@@ -33,9 +33,22 @@ const fixtures: [string, FloorPlan][] = [
 const sizeFindings = (plan: FloorPlan, options?: Parameters<typeof checkLocalRules>[1]) =>
   checkLocalRules(plan, options).findings.filter((f) => f.code === 'room_too_small')
 
+/** Every room a bedroom, so both figure checks look at a room and apply their figures (MSG-2). */
+const allBedrooms = (plan: FloorPlan): FloorPlan =>
+  edit(plan, (copy) => {
+    for (const room of copy.rooms) room.use = 'bedroom'
+  })
+
 describe('a report with no figures given', () => {
+  it('lists no figure of a check that looked at no room (MSG-2)', () => {
+    // The flat says no room's use: neither figure check looks at a room, so neither applied a figure.
+    const report = checkLocalRules(flat())
+    expect(report.figures).toEqual([])
+    expect(report.rules.map((r) => r.id)).toEqual(PLAN_RULES.map((r) => r.id))
+  })
+
   it.each(fixtures)('for %s is labelled as general guidance, every figure a baseline with its sources and status', (_name, plan) => {
-    const report = checkLocalRules(plan)
+    const report = checkLocalRules(allBedrooms(plan))
     expect(report.basis).toBe('general-baseline')
     expect(report.label).toBe(GENERAL_GUIDANCE_LABEL)
     expect(report.lookupNotice).toBeUndefined()

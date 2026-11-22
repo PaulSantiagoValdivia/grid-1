@@ -24,6 +24,15 @@ export const RESULT_VERSION = 1 as const
 export const LINE_KINDS = ['refused', 'left-out', 'worth-a-look', 'finding', 'not-checked'] as const
 export type LineKind = (typeof LINE_KINDS)[number]
 
+/**
+ * How far a number Grid gives is borne out by the plan (MSG-2, lab AA-12, AC-9): `proven` when
+ * every part it is made of was measured and nothing in the drawing questions them; `not-proven`
+ * when a part was left out or is in doubt, and it says which; `not-looked-at` when nothing it
+ * would be made of could be measured. A number is never shown as more than its state.
+ */
+export const NUMBER_STATES = ['proven', 'not-proven', 'not-looked-at'] as const
+export type NumberState = (typeof NUMBER_STATES)[number]
+
 /** What a line is about. The plan as a whole has the id `''`. */
 export type ThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening'
 

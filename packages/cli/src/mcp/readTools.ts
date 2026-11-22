@@ -16,6 +16,7 @@ import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
 import { LOOKS, SIDES, type LookName, type Side } from '../draw/viewNames'
 import { AREA_RULES, planAreas } from '../quantities/areas'
+import { stateText } from '../quantities/state'
 import { comparePlans, optionRow, type Comparison, type OptionRow } from '../quantities/compare'
 import {
   distanceBetween,
@@ -218,6 +219,8 @@ const areasTool: GridTool = {
     netToGross: NULLABLE_NUMBER,
     rules: listSchema(STRING),
     notes: listSchema(STRING),
+    // MSG-2: each total's state (proven, not-proven, not-looked-at) and the rooms it left out.
+    states: { type: 'object' },
   }),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
@@ -234,13 +237,14 @@ const areasTool: GridTool = {
       netToGross: areas.netToGross,
       rules: areas.rules,
       notes: areas.notes,
+      states: areas.states,
     }
     if (args['format'] === 'csv') {
-      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, sqFt(r.net), r.outside ? 'outside' : 'inside']))
-      rows.push(['all', '', 'Net total', '', null, null, areas.net, sqFt(areas.net), ''])
-      if (areas.grossInternal !== null) rows.push(['all', '', 'Gross internal', '', null, null, areas.grossInternal, sqFt(areas.grossInternal), ''])
-      if (areas.grossExternal !== null) rows.push(['all', '', 'Gross external', '', null, null, areas.grossExternal, sqFt(areas.grossExternal), ''])
-      return { text: csv(['floor', 'room id', 'name', 'use', 'across m', 'up m', 'net m2', 'net sq ft', 'counted'], rows), data }
+      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.outside ? 'outside' : 'inside', r.state]))
+      rows.push(['all', '', 'Net total', '', null, null, areas.net, sqFt(areas.net), '', areas.states.net.state])
+      if (areas.grossInternal !== null) rows.push(['all', '', 'Gross internal', '', null, null, areas.grossInternal, sqFt(areas.grossInternal), '', areas.states.grossInternal.state])
+      if (areas.grossExternal !== null) rows.push(['all', '', 'Gross external', '', null, null, areas.grossExternal, sqFt(areas.grossExternal), '', areas.states.grossExternal.state])
+      return { text: csv(['floor', 'room id', 'name', 'use', 'across m', 'up m', 'net m2', 'net sq ft', 'counted', 'state'], rows), data }
     }
     const lines: string[] = []
     const several = survey.facts.floors.length > 1
@@ -248,12 +252,14 @@ const areasTool: GridTool = {
       if (several) lines.push(`Floor ${q(f.floor)}:`)
       for (const r of f.rooms) {
         const size = r.size ? `${lengthText(r.size[0], units)} × ${lengthText(r.size[1], units)}, ` : ''
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${size}${areaText(r.net, units)}${r.outside ? ', outside: not counted' : ''}`)
+        // MSG-2: a room that could not be measured has no area, and one in doubt says so.
+        const measured = r.net === null ? 'not measured: it could not be drawn' : `${size}${areaText(r.net, units)}${r.state === 'not-proven' ? `, not proven: the drawing questions its outline (${r.doubts.join(', ')})` : ''}`
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}`)
       }
     }
-    lines.push(`Net: ${areaText(areas.net, units)}.`)
+    lines.push(`Net: ${areaText(areas.net, units)}${stateText(areas.states.net, several)}.`)
     if (areas.grossInternal !== null) {
-      lines.push(`Gross internal: ${areaText(areas.grossInternal, units)}. Gross external: ${areaText(areas.grossExternal!, units)}.`)
+      lines.push(`Gross internal: ${areaText(areas.grossInternal, units)}${stateText(areas.states.grossInternal, several)}. Gross external: ${areaText(areas.grossExternal!, units)}${stateText(areas.states.grossExternal, several)}.`)
       lines.push(`Circulation: ${areas.circulation.toFixed(2)} m², ${percent(areas.circulationShare)} of gross internal. Net to gross: ${percent(areas.netToGross)}.`)
     }
     const outsideArea = areas.floors.reduce((sum, f) => sum + f.outsideRooms, 0)

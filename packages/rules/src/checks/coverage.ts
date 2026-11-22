@@ -50,21 +50,21 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
 export function skipWhy(reason: SkipReason, ruleId: string): string {
   switch (reason) {
     case 'no_figures_for_place':
-      return 'the figures here are from US model codes, and none were given for the place this plan is for'
+      return 'no figures for the place the plan is for: the ones here are from US model codes'
     case 'no_rooms':
-      return 'there are no rooms on the floor'
+      return 'no rooms on the floor'
     case 'cannot_be_drawn':
-      return 'it could not be drawn'
+      return 'could not be drawn'
     case 'no_stairs':
-      return 'Grid cannot follow its floor down to the ground floor'
+      return 'on a floor Grid cannot follow down to the ground floor'
     case 'way_out_not_drawn':
       return "the floor's only door out leads to a space that is not drawn"
     case 'alone_off_ground':
-      return 'it is the only room on a floor off the ground, reached by a stair the plan does not draw'
+      return 'the only room on a floor off the ground, reached by a stair the plan does not draw'
     case 'above_escape_storeys':
-      return 'it is above the third storey, where the figures here stop'
+      return 'above the third storey, where the figures here stop'
     case 'no_use':
-      return 'it does not say what it is used for'
+      return 'no use stated'
     case 'use_not_covered':
       return ruleId === 'escape-opening'
         ? 'only bedrooms are checked'
@@ -72,16 +72,21 @@ export function skipWhy(reason: SkipReason, ruleId: string): string {
   }
 }
 
-/** One check's coverage from its scopes, floor by floor, in floor order. */
+const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
+
+/** Ids by text, so the coverage is the same whatever order the plan lists its parts in. */
+const sorted = (ids: readonly string[]): string[] => [...ids].sort(byText)
+
+/** One check's coverage from its scopes, floor by floor, in floor order; ids by text. */
 export function coverageOf(rule: Rule, scopes: readonly (readonly [string, FloorScope])[], findings: number): CheckCoverage {
   const lookedAt: CoverageGroup[] = scopes
     .filter(([, scope]) => scope.lookedAt.length > 0)
-    .map(([floor, scope]) => ({ floor, ids: [...scope.lookedAt] }))
+    .map(([floor, scope]) => ({ floor, ids: sorted(scope.lookedAt) }))
   const skipped: CoverageSkip[] = []
   for (const [floor, scope] of scopes) {
     for (const reason of SKIP_ORDER) {
       const ids = scope.skipped[reason] ?? []
-      if (ids.length > 0) skipped.push({ floor, ids: [...ids], reason, why: skipWhy(reason, rule.id) })
+      if (ids.length > 0) skipped.push({ floor, ids: sorted(ids), reason, why: skipWhy(reason, rule.id) })
     }
   }
   const count = (groups: readonly CoverageGroup[]): number => groups.reduce((sum, group) => sum + group.ids.length, 0)
@@ -107,7 +112,12 @@ export function allSkipped(storey: FloorPlan, reason: SkipReason): FloorScope {
  * the core's notices: `no_stairs` and `way_out_not_drawn` say which floors the route checks
  * could not follow, and a room or door the drawing check leaves out is skipped by every check.
  */
-export function planCheckScopes(plan: FloorPlan, base: PlanRulesReport): Map<string, [string, FloorScope][]> {
+export function planCheckScopes(
+  plan: FloorPlan,
+  base: PlanRulesReport,
+  /** Each floor as `drawable` reads it, when the caller has it already. */
+  read: ReadonlyMap<string, ReturnType<typeof drawable>> = new Map()
+): Map<string, [string, FloorScope][]> {
   const noStairs = new Set(base.notChecked.filter((n) => n.reason === 'no_stairs').map((n) => n.floor))
   const wayOutNotDrawn = new Set(base.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
   const scopes = new Map<string, [string, FloorScope][]>(base.rules.map((rule) => [rule.id, []]))
@@ -116,7 +126,7 @@ export function planCheckScopes(plan: FloorPlan, base: PlanRulesReport): Map<str
   }
   for (const floor of planFloors(plan)) {
     const slice = planForFloor(plan, floor.id)
-    const { storey, leftOut } = drawable(slice)
+    const { storey, leftOut } = read.get(floor.id) ?? drawable(slice)
     const outlines = roomOutlines(storey, indexPlan(storey), leftOut.rooms)
     const drawn = storey.rooms.filter((room) => outlines.has(room.id)).map((room) => room.id)
     const cannot = storey.rooms.filter((room) => !outlines.has(room.id)).map((room) => room.id)

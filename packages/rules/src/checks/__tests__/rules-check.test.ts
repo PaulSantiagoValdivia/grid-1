@@ -225,7 +225,8 @@ describe('what the full check does not need to be told', () => {
   it('never throws on a plan with nothing in it', () => {
     const empty: FloorPlan = { version: '1', units: 'm', walls: [], rooms: [], openings: [] }
     expect(() => checkLocalRules(empty)).not.toThrow()
-    expect(checkLocalRules(empty).notChecked).toEqual([])
+    // MSG-2 (lab CH-1): no rooms, so no check that looks at rooms ran, and the report says so.
+    expect(checkLocalRules(empty).notChecked.map((n) => n.reason)).toEqual(['no_rooms'])
   })
 
   it('stays plain: no data-model or compliance word in what it says', () => {

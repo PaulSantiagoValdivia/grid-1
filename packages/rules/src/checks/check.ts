@@ -72,9 +72,12 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   const notChecked: NotChecked[] = []
   // MSG-2: what each figure check looked at, floor by floor.
   const scopes: Record<FigureRuleId, [string, FloorScope][]> = { 'habitable-room-area': [], 'escape-opening': [] }
+  const read = new Map<string, ReturnType<typeof drawable>>()
   for (const floor of floors) {
     const floorName = floor.name || floor.id
-    const { storey, leftOut } = drawable(planForFloor(plan, floor.id))
+    const drawn = drawable(planForFloor(plan, floor.id))
+    read.set(floor.id, drawn)
+    const { storey, leftOut } = drawn
     // The plan checks' notices for this floor first, then this floor's own.
     notChecked.push(...base.notChecked.filter((notice) => notice.floor === floor.id))
     // Escape openings don't need stairs: every floor up to the third storey is checked.
@@ -122,7 +125,7 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   // Every check Grid has, with what it looked at; a check that looked at nothing is not listed as
   // applied, nor are its figures (MSG-2).
   const findingsOf = (ruleId: string): number => findings.filter((f) => f.ruleId === ruleId).length
-  const planScopes = planCheckScopes(plan, base)
+  const planScopes = planCheckScopes(plan, base, read)
   const coverage: CheckCoverage[] = [
     // A plan check this file does not know yet keeps no coverage, and stays listed: a test fails.
     ...base.rules.filter((rule) => Object.hasOwn(LOOKS_AT, rule.id)).map((rule) => coverageOf(rule, planScopes.get(rule.id) ?? [], findingsOf(rule.id))),
