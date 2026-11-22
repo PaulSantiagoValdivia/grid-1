@@ -67,7 +67,9 @@ The working look stays in screen pixels, as the app draws it, whatever scale is 
   (as it already does for parts it leaves out); a sheet's floor page carries a key line, "A door
   drawn with a dashed line and "?" has no stated swing yet.", on both layouts.
 
-## Decisions made without you
+## For the owner
+
+Choices that were yours, each taken the reversible way:
 
 1. **`grid draw` defaults to the technical look.** The card says technical is "the export
    default" and `grid_view` already tells agents a file to hand on is not a view. `grid draw`
@@ -140,14 +142,16 @@ Two tests changed what they compare, because `grid draw` now draws technical by 
 
 ## Checks run
 
-After merging `main` (which brought CNT-12's fixtures; they take the `finest` pen in the
-technical look and keep 0.75 px in the working look):
+After merging `main` at e7cf925 (MSG-2, CMD-15, QAR-10 and the README split; CNT-12's fixtures
+came in the merge before, and take the `finest` pen in the technical look, 0.75 px in working).
+README.md is kept as `main` has it; the `grid draw` row with `--look` is in `docs/commands.md`.
 
 - `npm run build`, `npm run typecheck`, `npm run lint`: clean.
-- `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
-- Full suite, two workers: 4,252 of 4,253 passed. The one failure was the timing test "answers
-  grid check on the sample flat in under half a second", with the machine's load average
-  above 200 from the other sessions; alone it passed.
+- `npm run check:licenses` (first merge): 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
+- Tests touched: 219 of 219 passed.
+- Full suite, two workers: 4,374 of 4,375 passed. The one failure was the timing test "answers
+  grid check on the sample flat in under half a second", with the machine's load average about
+  250 from the other sessions; run alone, it passed.
 - `npm run scoreboard`: the same as the stored figures.
 
 ## Still open
