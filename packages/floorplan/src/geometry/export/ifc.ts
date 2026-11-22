@@ -36,6 +36,7 @@ import { validatePlan } from '../validate'
 import type { WallEnds } from '../wall'
 import { wallAxis } from '../wall'
 import { wallJoints } from '../joints'
+import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 
 export interface IfcOptions {
   /**
@@ -457,7 +458,7 @@ function analyseFloor(plan: FloorPlan, floor: Floor): FloorModel {
   } catch {
     // Validation is total, but the export must be even if it is not: a floor
     // that cannot be analysed is a floor with nothing sound on it.
-    const empty: FloorPlan = { ...plan, walls: [], rooms: [], openings: [] }
+    const empty: FloorPlan = { ...plan, walls: [], rooms: [], openings: [], items: [] }
     return { floor, index: indexPlan(empty), broken: new Set(), walls: [] }
   }
 }
@@ -1075,6 +1076,52 @@ function writeStoreyContents(building: Context, storey: Storey): void {
   aggregate(c, `spaces:${storey.model.floor.id}`, storey.id, spaces)
 }
 
+/**
+ * CNT-12: every storey's fixtures, each an IfcFurnishingElement and never a wall: placed at its
+ * middle, turned as the plan turns it, and its footprint extruded to its height from the floor of
+ * the room it stands in. `ObjectType` is its kind and `Tag` its id. Written after everything else,
+ * in a containment relation of their own per storey, so a plan with no fixtures writes the same
+ * file as before.
+ */
+function writeItems(building: Context, storeys: readonly Storey[]): void {
+  for (const storey of storeys) {
+    const { index, broken, floor } = storey.model
+    const items = (index.plan.items ?? []).filter((item) => !broken.has(item.id) && isItemKind(item.kind))
+    if (items.length === 0) continue
+    const c = onFloor(building, floor.id)
+    const rooms = roomShapes(index, broken)
+    const written: number[] = []
+    for (const item of items) {
+      try {
+        const room = itemRoom(item, rooms)
+        const turn = ((item.turn ?? 0) * Math.PI) / 180
+        const along: Triple = [Math.cos(turn), Math.sin(turn), 0]
+        const itemPlacement = placement(c.w, storey.placement, [item.at[0], item.at[1], room === null ? 0 : roomFloorOffset(room)], along)
+        const body = bodyRepresentation(c, extrusion(c, rectangleProfile(c, item.size[0], item.size[1], 0), item.height))
+        const kind = isItemKind(item.kind) ? ITEM_KIND_WORDS[item.kind] : item.kind
+        written.push(
+          c.w.add(
+            'IFCFURNISHINGELEMENT',
+            str(c.guid('item', item.id)),
+            ref(c.owner),
+            str(item.label ?? kind),
+            NULL,
+            str(item.kind),
+            ref(itemPlacement),
+            ref(productShape(c, [body])),
+            str(item.id)
+          )
+        )
+      } catch {
+        // A fixture that cannot be built is left out.
+      }
+    }
+    if (written.length > 0) {
+      relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `items:${floor.id}`, refs(written), ref(storey.id))
+    }
+  }
+}
+
 /** The id the plan stores (QAR-5), else the caller's, else the default. */
 function projectIdOf(plan: FloorPlan, options: IfcOptions): string {
   const stored: unknown = plan.projectId
@@ -1179,6 +1226,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     storeys.map((storey) => storey.id)
   )
   writeSlabs(c, storeys)
+  writeItems(c, storeys)
 
   return w.toString([
     `FILE_DESCRIPTION((${str('ViewDefinition [CoordinationView_V2.0]')}),${str('2;1')});`,

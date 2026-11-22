@@ -13,6 +13,7 @@
 
 import {
   floorOf,
+  itemNoun,
   planFloors,
   validateDoorSweeps,
   validatePlan,
@@ -30,7 +31,7 @@ import { LINE_KINDS, RESULT_VERSION, type GridResult, type LineKind, type Result
 
 type ZodIssue = NonNullable<ReturnType<typeof FloorPlanSchema.safeParse>['error']>['issues'][number]
 
-const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening' }
+const NOUN: Record<ThingKind, string> = { plan: 'The plan', floor: 'Floor', wall: 'Wall', room: 'Room', opening: 'Opening', item: 'Item' }
 const OPENING_NOUN = { door: 'Door', window: 'Window', opening: 'Opening' } as const
 /** An id from a file the format refused, when it is one Grid would read: else it is not repeated. */
 const safeId = (value: unknown): string | null =>
@@ -90,7 +91,7 @@ function placeText(path: readonly (string | number)[]): string {
 function partAt(raw: Record<string, unknown>, path: readonly (string | number)[]): { thing: Thing; floor: string | null; label: string } {
   const whole = { thing: { kind: 'plan' as const, id: '' }, floor: null, label: NOUN.plan }
   const [list, at] = path
-  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor' }
+  const kinds: Record<string, ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item' }
   if (typeof list !== 'string' || typeof at !== 'number' || !Object.hasOwn(kinds, list)) return whole
   const items = raw[list]
   const item = Array.isArray(items) ? (items[at] as unknown) : undefined
@@ -181,6 +182,8 @@ function namesOf(plan: FloorPlan): Names {
   for (const wall of plan.walls) if (!walls.has(wall.id)) walls.set(wall.id, wall)
   const openings = new Map<string, FloorPlan['openings'][number]>()
   for (const opening of plan.openings) if (!openings.has(opening.id)) openings.set(opening.id, opening)
+  const items = new Map<string, NonNullable<FloorPlan['items']>[number]>()
+  for (const item of plan.items ?? []) if (!items.has(item.id)) items.set(item.id, item)
   const floorName = (id: string): string => floorNames.get(id) ?? id
   const roomName = (id: string): string => rooms.get(id)?.name || id
   return {
@@ -209,6 +212,11 @@ function namesOf(plan: FloorPlan): Names {
             name: id,
             floor: wall ? floorOf(wall) : null
           }
+        }
+        case 'item': {
+          // A fixture by its kind: `Toilet "wc1"` (CNT-12). One of a kind Grid does not hold is an `Item`.
+          const item = items.get(id)
+          return { label: item ? itemNoun(item) : `${NOUN.item} ${quoted(id)}`, name: id, floor: item ? floorOf(item) : null }
         }
       }
     }
