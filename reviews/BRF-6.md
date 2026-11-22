@@ -179,3 +179,13 @@ rows), `writeTools.ts` (`grid_write_rooms` answers both `layout` and `taped`), `
 (both sets) and the contract's write-tools row (both fields). After the merges: build, typecheck
 and lint clean; the tests either side touched, in two runs, 59 files (676 passed, 1 skipped) and
 56 files (826 passed); scoreboard "Same as the stored figures". No second full suite.
+
+## After merging main at fbe5160e
+
+Merged WRT-7's units in rooms text, CNT-10, VEW-9 and VEW-4 (a069dfc9). Conflicts: both
+changelogs (every entry kept), the bundle cap comment (600 kB kept, about 571,700 bytes with BRF-6),
+`write.ts` (WRT-7's `display` line written, and BRF-6's walls written without an unstated height)
+and `writeTools.ts` (`grid_write_rooms` describes both `layout` and lengths with their units).
+After the merge: build, typecheck and lint clean; the tests either side touched, 49 files (515
+passed, 1 skipped) and `cli/src/command`, 21 files (400 passed); scoreboard "Same as the stored
+figures".
