@@ -21,7 +21,7 @@ import type { NumberState } from '@ongrid/rules'
 export type { NumberState }
 
 /** The drawing problems that question a room's measured outline, and so its area. */
-export const DOUBTS: readonly string[] = ['room/not-enclosed', 'room/space-mismatch', 'room/overlap', 'room/overlap-unknown', 'room/inside-no-host']
+export const DOUBTS: readonly string[] = ['room/not-enclosed', 'room/space-mismatch', 'room/overlap', 'room/overlap-unknown', 'room/inside-no-host', 'room/zone-not-in-room']
 
 /** A room a figure names, as the plan writes it. */
 export interface RoomRef {

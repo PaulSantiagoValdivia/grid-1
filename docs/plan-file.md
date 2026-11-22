@@ -14,6 +14,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
+- [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
@@ -36,7 +37,7 @@ file never reaches the exports with its letters turned into question marks. A fi
 | Text | At most | Also refused |
 |---|---|---|
 | a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
+| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins, the room a zone is part of | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
@@ -370,6 +371,56 @@ outline of the room around it stays whole; only its area changes.
 | `room/inside-no-host` | A room marked `inside` that no room on its floor holds, with how much of it lies outside the room that holds most of it. It is counted on its own |
 | `room/overlap-unknown` | Two rooms that could not be compared, with the reason |
 | `floor/overlaps-unknown` | A floor whose rooms were not all compared: the plan has more than 200,000 pairs of rooms lying over each other (thousands of copies piled in one place), and Grid stopped there |
+
+## Zones inside one room
+
+An open-plan room holds several uses: a studio where you sleep, cook and sit. Draw the room once,
+round its own walls, and each zone as a room of its own that names the room in `partOf`:
+
+```json
+"rooms": [
+  { "id": "studio", "name": "Studio", "boundary": ["ext-s", "ext-e", "bath-s", "bath-w", "ext-n", "ext-w"] },
+  { "id": "sleep", "name": "Sleeping corner", "use": "bedroom", "boundary": ["ext-s", "sleep-e", "kit-s", "ext-w"], "partOf": "studio" }
+]
+```
+
+A zone's outline lies inside its room's, along the room's walls and dividing lines (virtual
+walls) of the zone's own. The two overlap on purpose:
+
+- The room is the place. It is measured, counted, reached and checked as a whole. A door or a
+  fixture in it is in the room, whichever zone it is in, and the 3D view, the IFC and the floor
+  slabs have the room's floor only. A zone's `ceiling`, `void` or floor offset is not read: the
+  ceiling, the slab and any opening in it are the room's ([Slabs, roofs, ceilings and the
+  ground](#slabs-roofs-ceilings-and-the-ground)), and a zone used as a stair or a lift opens no
+  slab of its own.
+- A zone is named and measured, and is in no total: `grid_areas` lists it with its room
+  (`zoneOf`) and gives its floor to its own use in the area by use, the room schedule lists it
+  under its room, and the takeoff, the estimate and the comparison of two plans count its floor
+  once, in its room.
+- The size and escape checks look at the room as a whole, at its whole area, with the room's own
+  use or, when the check does not cover that, its zones' uses: a studio with a sleeping corner is
+  checked as a room someone sleeps in, and a finding names the zone it read the use from. The
+  studio drawn with zones and drawn as one bedroom get the same result. In the record's
+  coverage, the zones are skipped as `part_of_room` and the room is listed in `wholeRooms` with
+  the use applied.
+- The overlap check leaves a zone and its room alone, and a dividing line that only zones list
+  divides no room and makes no space of its own. Two zones of one room that share floor are
+  still named (`room/overlap`).
+
+A room is a zone only when the room it names is on its floor, is not a zone itself, and holds all
+of it. Otherwise it is counted as a room of its own and named:
+
+| Code | What it says |
+|---|---|
+| `room/zone-not-in-room` | A room marked as a zone of another that is not on its floor, is a zone itself, or does not hold it, with how much of it lies outside |
+
+Merging two rooms of different uses (`grid_merge_rooms`, `grid edit merge`) asks for the merged
+room's use, or keeps both as zones with `zones`: the stretch of wall between them becomes a
+dividing line, each keeps its id, name and use, and a new room holds them.
+
+`partOf` is optional and never defaulted, so a plan written before it reads with no key added
+(version 1). Rooms text has no word for it yet: a floor with zones is read back in Grid's own
+terms, so nothing is lost.
 
 ## Rooms with holes
 

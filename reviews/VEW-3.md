@@ -43,7 +43,7 @@ move it in one call, and the plan's saved views.
 
 **Saved views** (C11 in `types/floorplan.ts`: `views`, `ViewSchema`). Each holds its name, the
 setting, `floors` and the BCF camera. A new tool, `grid_save_view` (`packages/cli/src/mcp/viewTool.ts`,
-the 29th, last), saves a record by name through `writeChange`, with `replace` and `remove`.
+the 30th, last), saves a record by name through `writeChange`, with `replace` and `remove`.
 `grid_view view=<name>`, `grid draw --view <name>` and the app (handed the record) call it up.
 `grid_mirror` mirrors the saved views with the plan. `coverage.ts`: the sheet does not show them.
 `planText.ts` holds a view's name to a name's limit and its cut to an id's.
@@ -55,7 +55,7 @@ table, `degree` and `mm`.
 **Docs**: `docs/plan-file.md` "Saved views, and the camera record"; `docs/tool-server.md` "A
 camera you can set, and saved views" and the two tool rows; `docs/commands.md` `--view` and the
 tool count; `docs/tolerances.md`; `CHANGELOG.md` (Unreleased); the agents' changelog in
-`docs/result-contract.md`; `AGENTS.md` (29 tools, `viewTool.ts`, where the camera lives).
+`docs/result-contract.md`; `AGENTS.md` (30 tools, `viewTool.ts`, where the camera lives).
 
 ## The done-when items
 
@@ -92,8 +92,8 @@ for number, looking along the record's direction with its up.
 ## Expectations changed
 
 - `packages/cli/src/mcp/__tests__/tools.test.ts`: `grid_save_view` added last to `ORDER` and to
-  `CHANGES_PLAN`; the tool limit 28 → 29 (26 → 27 before merging WRT-8, 24 before merging CNT-9), with its reason; a call for it in `CALLS`.
-- `packages/cli/src/mcp/__tests__/server.test.ts`: 28 → 29 tools (26 → 27 before merging WRT-8).
+  `CHANGES_PLAN`; the tool limit 29 → 30 (28 → 29 before merging BRF-1, 26 → 27 before merging WRT-8, 24 before merging CNT-9), with its reason; a call for it in `CALLS`.
+- `packages/cli/src/mcp/__tests__/server.test.ts`: 29 → 30 tools (28 → 29 before merging BRF-1, 26 → 27 before merging WRT-8).
 - `packages/cli/src/mcp/__tests__/checkView.test.ts`: the refusal of `ids` with `kind=3d` now
   lists the 3d arguments (`floor, from, bearing, tilt, distance, eye_height, lens, room, camera,
   view, turn, tilt_by`).
@@ -111,7 +111,7 @@ for number, looking along the record's direction with its up.
 
 1. **A new tool for saving, not an argument of `grid_view`.** Saving writes the plan file;
    `grid_view` is read-only, and hosts approve read-only tools without asking. Folding saving in
-   would have made every picture call a write. So `grid_save_view` is the 29th tool, last, marked
+   would have made every picture call a write. So `grid_save_view` is the 30th tool, last, marked
    as changing the plan. Reversible: it can move into `grid_view` (losing its read-only hint) or
    into `grid_preview` later.
 2. **`from` stays a side of the drawing; `bearing` is a compass bearing.** Every Grid argument

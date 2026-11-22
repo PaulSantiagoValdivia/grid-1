@@ -18,7 +18,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker and the seen mark, and last the eleven that
+requests people make most, with the problem report last of them, then the preview, the export, the sheet, the start marker, the seen mark and the brief, and last the eleven that
 change the plan, writing it rooms first leading and saving a view last. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
@@ -43,11 +43,12 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_mark_start` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside the plan, for `grid_diff` to compare with; or takes one off. At most 5 |
 | `grid_mark_seen` | Sets a note of `grid_check` aside as seen, with the person's reason and the name or role they give, in `plan.seen.json` beside the plan; or takes the mark off (see below) |
+| `grid_write_brief` | Writes the brief beside the plan from the person's words, before the first room: room areas and counts, inside sizes, the footprint, rooms that must or must not touch, and the person's own figures, each with its level, its quote and whether it was given or assumed, and what is still open; answers with each line met or missed ([brief.md](brief.md)) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |
-| `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share |
+| `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share. Two rooms of different uses need `use`, or `zones` to keep both as zones of one open-plan room ([Zones inside one room](plan-file.md#zones-inside-one-room)); left out, the call is refused and asks. The verdict names any use the plan no longer has |
 | `grid_split_room` | Splits a room with a new wall, the new room taking one side, with a door in it |
 | `grid_add_room` | Builds a room against the outside of a side of a room, saying what happens to openings in the wall it covers |
 | `grid_stretch` | Makes the whole building wider or longer, at its outside wall or through a room |
@@ -56,7 +57,10 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_save_view` | Saves a camera record `grid_view` returned under a name, with the plan, in its `views`, as Grid's setting and as BCF's camera; with `replace` over a view of that name, with `remove` takes one out ([below](#a-camera-you-can-set-and-saved-views)) |
 
 Every change answers with what it changed, what it guessed and what it could not keep, and
-names the plan by its path in the project, so its size does not grow with the building.
+names the plan by its path in the project, so its size does not grow with the building. When a
+brief is kept beside the plan, it answers with each of its lines met or missed too, and a size
+written in a room's name is read against the room until the brief gives one; the first plan
+written with no brief beside it gets one line saying so ([brief.md](brief.md)).
 
 A tool that names no plan reads the project's `plan.json` in a folder `grid init` made. A floor
 or room the plan does not have is refused with the ones it has, a room, wall, door or window
@@ -101,6 +105,8 @@ is one call for one request.
   the fields of numbers in `sum`: each group's `value`, `count`, `sums`, `missing` (how many had
   no value to add) and `ids`, largest first and the parts that state none last, then the
   `total`. "Area per department" is `{ "kind": ["room"], "by": "department", "sum": ["area"] }`.
+  A zone of a room (CNT-8) is counted in no group: its floor is its room's. The text names the
+  zones left out; `grid_find` lists them, and gives a zone no `number`, since its room has one.
 
 Both take `kind`, `floor` and `room` (the room, the walls beside it and the openings into it) to
 narrow what is looked at. A condition is one line, a field or fact and a test: `is missing`,
@@ -239,6 +245,10 @@ room. A room bigger than `useRasterCells` points is measured on a coarser grid. 
 names a door whose leaf swings into a fixture (`opening/door-hits-item`, with the fixture's
 label, kind and id), and a fixture standing in front of a doorway (`item/blocks-doorway`) or in
 front of a window and higher than its sill (`item/blocks-window`), each with what it measured.
+
+A zone (CNT-8) is part of its room, and the room is the place: `what=use` on a zone, and
+`what=route` from or to one, measures its room as a whole, says so on its first line, and names
+the zone asked for in the data (`zone`, `fromZone`, `toZone`).
 
 ## A note set aside as seen
 

@@ -45,7 +45,7 @@ import { factsText, openingSchedule, openingScheduleCsv, planSchedule, roomSched
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
 import { figureOf, roomIndicators, USE_RULE, wideRoute, wideRouteLines } from '../quantities/use'
-import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
+import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantities/survey'
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
 import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
@@ -321,7 +321,7 @@ const areasTool: GridTool = {
       sureness: areas.sureness ?? null,
     }
     if (args['format'] === 'csv') {
-      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
+      const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.zoneOf !== undefined ? 'zone' : r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
       rows.push(['all', '', 'Net total', '', null, null, areas.net, sqFt(areas.net), '', areas.states.net.state])
       if (areas.grossInternal !== null) rows.push(['all', '', 'Gross internal', '', null, null, areas.grossInternal, sqFt(areas.grossInternal), '', areas.states.grossInternal.state])
       if (areas.grossExternal !== null) rows.push(['all', '', 'Gross external', '', null, null, areas.grossExternal, sqFt(areas.grossExternal), '', areas.states.grossExternal.state])
@@ -336,9 +336,11 @@ const areasTool: GridTool = {
         // MSG-2: a room that could not be measured has no area, and one in doubt says so.
         const free = r.free === undefined ? '' : `, free floor ${areaText(r.free, units)} (fixtures stand on ${areaText(r.fixtures!, units)})`
         const measured = r.net === null ? 'not measured: it could not be drawn' : `${size}${areaText(r.net, units)}${free}${r.state === 'not-proven' ? `, not proven: the drawing questions its outline (${r.doubts.join(', ')})` : ''}`
+        // CNT-8: a zone's floor is in its room's, so it is not counted again.
+        const zone = r.zoneOf === undefined ? '' : `, a zone of ${q(f.rooms.find((room) => room.id === r.zoneOf)?.name ?? r.zoneOf)}: in its area, not counted again`
         // SHT-11: a stair room over the stair below is counted once, with it.
         const below = r.countedWith ? `, counted once with ${q(r.countedWith.room)} on floor ${q(r.countedWith.floor)}, the stair it rises from` : ''
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.net === null ? '' : surenessText(r.sureness, units)}${r.outside ? ', outside: not counted' : ''}${below}`)
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.net === null ? '' : surenessText(r.sureness, units)}${r.outside ? ', outside: not counted' : ''}${zone}${below}`)
       }
     }
     if (several) {
@@ -882,12 +884,15 @@ const countTool: GridTool = {
       const by = args['by'] === undefined ? null : fieldOf(ask, args['by'] as string, 'by')
       const sums = ((args['sum'] as string[] | undefined) ?? []).map((name, i) => fieldOf(ask, name, `sum item ${i + 1}`))
       checkSums(ask, sums)
-      const found = select(ask, {
+      const picked = select(ask, {
         ...(kinds === undefined ? {} : { kinds }),
         ...(args['floor'] === undefined ? {} : { floor: args['floor'] as string }),
         ...(args['room'] === undefined ? {} : { room: args['room'] as string }),
         ...(args['where'] === undefined ? {} : { where: args['where'] as string[] }),
       })
+      // CNT-8: a zone's floor and facts are its room's to count, so a zone is counted in no group.
+      const found = picked.filter((part) => part.zoneOf === undefined)
+      const zones = picked.filter((part) => part.zoneOf !== undefined)
       const groups = groupParts(ask, found, by, sums)
       const [total] = groupParts(ask, found, null, sums)
       const units = Object.fromEntries(sums.map((field) => [fieldName(field), unitOf(field)]))
@@ -901,6 +906,7 @@ const countTool: GridTool = {
         ? []
         : [`By ${q(fieldName(by))}:`, ...groups.slice(0, 40).map((g) => `  ${g.value === null ? 'not stated' : valueText(by, g.value)}: ${partsWord(kinds, g.count)}${sums.length === 0 ? '' : `, ${sumText(g)}`}`), ...(groups.length > 40 ? [`  … and ${groups.length - 40} more groups in the data.`] : [])]
       lines.push(`In all: ${partsWord(kinds, found.length)}${sums.length === 0 || total === undefined ? '' : `, ${sumText(total)}`}.`)
+      if (zones.length > 0) lines.push(`Not counted: ${zones.length === 1 ? 'a zone' : `${zones.length} zones`} of a room, counted with the room: ${zones.slice(0, 20).map((p) => q(p.id)).join(', ')}${zones.length > 20 ? ', …' : ''}. grid_find lists ${zones.length === 1 ? 'it' : 'them'}.`)
       const { view, floors } = viewOf(ask, found.map((p) => p.id), by === null ? { highlight: found.slice(0, 2000).map((p) => p.id) } : { colour: fieldName(by) })
       if (found.length > 0) lines.push(`To see ${by === null ? 'them picked out' : 'each group in its own colour'}, pass view to grid_view${floors.length > 1 ? `: they are on ${floors.length} floors, so draw each floor in turn` : ''}.`)
       lines.push(QUERY_RULE)
@@ -1005,6 +1011,13 @@ const measureTool: GridTool = {
       if (!room || room.polygon.length < 3) throw new ToolRefusal('That room has no outline Grid can measure; grid_check says why.')
       return room
     }
+    // CNT-8: a zone is part of its room, and the room is the place: the use indicators and the
+    // ways through the plan measure the room as a whole, and say so.
+    const wholeOf = (room: SurveyRoom): { room: SurveyRoom; said: string | null } => {
+      const of = room.facts.zoneOf === undefined ? undefined : survey.byId.get(room.facts.zoneOf)
+      if (of === undefined || of.polygon.length < 3) return { room, said: null }
+      return { room: of, said: `${q(room.facts.name)} is a zone of ${q(of.facts.name)}: measured as part of it, the room as a whole.` }
+    }
     if (what === 'room') {
       const room = roomOf()
       const r = measureRoom(room)
@@ -1018,11 +1031,12 @@ const measureTool: GridTool = {
     }
     if (what === 'use') {
       // CNT-13: the room's use indicators, each set against the person's figure or Grid's own.
-      const room = roomOf()
+      const asked = roomOf()
+      const { room, said } = wholeOf(asked)
       const found = roomIndicators(survey, room, { width: args['width'], diameter: args['diameter'], clearance: args['clearance'] }, L)
       return {
-        text: [...found.lines, USE_RULE].join('\n'),
-        data: { what, answer: { room: room.facts.id, indicators: found.indicators }, rule: USE_RULE },
+        text: [...(said === null ? [] : [said]), ...found.lines, USE_RULE].join('\n'),
+        data: { what, answer: { room: room.facts.id, ...(said === null ? {} : { zone: asked.facts.id }), indicators: found.indicators }, rule: USE_RULE },
       }
     }
     if (what === 'facing') {
@@ -1092,25 +1106,33 @@ const measureTool: GridTool = {
       }
     }
     if (what === 'route') {
-      const room = roomOf()
+      const asked = roomOf()
       if (args['to'] === undefined) throw new ToolRefusal('what=route needs to: a room id, or "outside".')
-      const to = args['to'] === 'outside' ? 'outside' : roomArg(survey.plan, args['to'], 'to')
-      if (to !== 'outside' && survey.byId.get(to)?.facts.floor !== room.facts.floor) throw new ToolRefusal('Both rooms of a route must be on the same floor: the plan says nothing of what joins floors.')
+      const askedTo = args['to'] === 'outside' ? 'outside' : roomArg(survey.plan, args['to'], 'to')
+      if (askedTo !== 'outside' && survey.byId.get(askedTo)?.facts.floor !== asked.facts.floor) throw new ToolRefusal('Both rooms of a route must be on the same floor: the plan says nothing of what joins floors.')
+      // CNT-8: a zone is no place of its own: the way starts or ends in its room.
+      const start = wholeOf(asked)
+      const goal = askedTo === 'outside' ? undefined : survey.byId.get(askedTo)
+      const end = goal === undefined ? null : wholeOf(goal)
+      const room = start.room
+      const to = askedTo === 'outside' ? 'outside' : (end?.room.facts.id ?? askedTo)
+      const said = [start.said, end === null ? null : end.said].filter((line): line is string => line !== null)
+      const zones = { ...(start.said === null ? {} : { fromZone: asked.facts.id }), ...(end === null || end.said === null ? {} : { toZone: askedTo }) }
       if (args['width'] !== undefined) {
         // CNT-13: a body or a trolley this wide, clear of the fixtures, room by room and doorway by doorway.
         const wide = wideRoute(survey, room.facts.id, to, args['width'] as number)
         if (wide === null) {
-          return { text: `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.\n${USE_RULE}`, data: { what, answer: { found: false }, rule: USE_RULE } }
+          return { text: [...said, `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.`, USE_RULE].join('\n'), data: { what, answer: { found: false, ...zones }, rule: USE_RULE } }
         }
         const figure = figureOf(args['width'], 'usePassageWidth')
         return {
-          text: [...wideRouteLines(survey, wide, figure, L), USE_RULE].join('\n'),
-          data: { what, answer: { found: true, code: 'use/passage-width', figure, ...wide }, rule: USE_RULE },
+          text: [...said, ...wideRouteLines(survey, wide, figure, L), USE_RULE].join('\n'),
+          data: { what, answer: { found: true, code: 'use/passage-width', figure, ...wide, ...zones }, rule: USE_RULE },
         }
       }
       const route = routeBetween(survey, room.facts.id, to)
       if (route === null) {
-        return { text: `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.\n${EMPTY_ROOM_RULE}`, data: { what, answer: { found: false }, rule: EMPTY_ROOM_RULE } }
+        return { text: [...said, `There is no way from ${q(room.facts.name)} to ${to === 'outside' ? 'the outside' : q(survey.byId.get(to)!.facts.name)} through the plan's doors and openings.`, EMPTY_ROOM_RULE].join('\n'), data: { what, answer: { found: false, ...zones }, rule: EMPTY_ROOM_RULE } }
       }
       const name = (id: string): string => (id === 'outside' ? 'outside' : q(survey.byId.get(id)?.facts.name ?? id))
       const steps = route.steps.map((s) => `${s.type} ${q(s.via)}${s.width === null ? '' : ` ${L(s.width)}`} into ${name(s.into)}`).join(', then ')
@@ -1119,12 +1141,13 @@ const measureTool: GridTool = {
         return `${name(id)} ${L(measureRoom(r).widestCircle)}`
       }).join(', ')
       const lines = [
+        ...said,
         `From ${name(route.from)} to ${name(route.to)}: ${steps}.`,
         route.narrowestPassage ? `Narrowest door or opening on the way: ${q(route.narrowestPassage.via)}, ${L(route.narrowestPassage.width)}.` : 'No door or opening on the way, only open sides.',
         `Widest circle in each room on the way: ${widths}.`,
         EMPTY_ROOM_RULE,
       ]
-      return { text: lines.join('\n'), data: { what, answer: { found: true, ...route }, rule: EMPTY_ROOM_RULE } }
+      return { text: lines.join('\n'), data: { what, answer: { found: true, ...route, ...zones }, rule: EMPTY_ROOM_RULE } }
     }
     if (args['under'] === undefined) throw new ToolRefusal('what=narrow needs under: the person\'s figure in metres.')
     const under = args['under'] as number

@@ -211,9 +211,10 @@ export function planTakeoff(survey: Survey, floors?: readonly string[], rooms?: 
     const net = of.reduce((sum, wall) => sum + Math.max(0, wallAxis(wall).length - (openingWidth.get(wall.id) ?? 0)), 0)
     return { kind, count: of.length, gross, net }
   }).filter((run) => run.count > 0)
+  // A zone's floor, walls and ceiling are its room's (CNT-8): taken off once, unless asked for by name.
   const ceilingOf = ceilings(survey)
   const list = survey.rooms
-    .filter((room) => onFloor(room.facts.floor) && (rooms === undefined || rooms.includes(room.facts.id)))
+    .filter((room) => onFloor(room.facts.floor) && (rooms === undefined ? room.facts.zoneOf === undefined : rooms.includes(room.facts.id)))
     .map((room) => roomTakeoff(room, ceilingOf))
   const total = (key: 'floorArea' | 'ceiling' | 'skirting' | 'wallFace'): number => list.reduce((sum, room) => sum + room[key], 0)
   return {

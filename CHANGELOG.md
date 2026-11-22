@@ -15,6 +15,7 @@ Grid say that a plan complies with anything.
 ## Unreleased
 
 - A 3D view can be asked for the way a person describes it: from a bearing or a side or corner, looking down so many degrees, from so far or with the eye so high, at a room, with a lens in millimetres, and moved with "a bit lower and more from the left" in one step. Every 3D picture comes with its camera, which says whether it stands in a room or outside any room. A view can be saved by name with the plan (`grid_save_view`) and called up again, the same, by an agent (`grid_view view=…`), by you (`grid draw --view …`) or in the app's 3D view; it is stored as Grid's setting and as the camera the open BCF format writes (VEW-3).
+- Keep what the person asked for beside the plan, in `plan.brief.json`: room areas and counts, inside sizes, the footprint, rooms that must or must not touch, and their own figures such as a door width, each with how much it matters (must, should, avoid), their words, and whether they said it or the agent assumed it. The agent writes it in one call, `grid_write_brief`, before the first room. After every change Grid says each line met or missed, as "asked 4.5, drawn 11.93 m²", never as a score; until the brief gives a room a size, a size in its name ("6 tatami", "12 m²") is checked against the room. The first plan written with no brief gets one line saying so (BRF-1).
 - `grid diff` (and the tool `grid_diff`) says what a change did, by what stands where in the building rather than by ids: issues first, then room by room, then each change, with a picture in three colours. The same building under new ids reads as no change, with how many ids were renamed. It compares with a start marker set by `grid mark` (or `grid_mark_start`), kept in `plan.markers.json` beside the plan, so no git is needed, or with the last commit in the project's own `.git` (WRT-8).
 
 - The plan says where it will be built, in `site.country` (`US`, `USA`, `United States`, `Spain`…), and `grid check` reads it on its own; `--country` (or `country` for `grid_check`) names another place for one check and takes the same names. With no place stated, room sizes and escape openings are no longer checked against the US figures: the report says so on its first line, with how many lines the US figures would have given. A place Grid does not know is refused, and the report names a place only by Grid's own name for it (COD-3).
@@ -62,7 +63,7 @@ Grid has not been released yet. The first release will hold:
   the tests, the licence check and the scoreboard.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 28 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 30 tools.
 - A room schedule (number, name, use, area, height, floor, with the totals of each floor and of
   all floors) and a door and window schedule that lists each opening once with the two rooms it
   joins, as text, as CSV for a spreadsheet, and as tables at the end of the check sheet.

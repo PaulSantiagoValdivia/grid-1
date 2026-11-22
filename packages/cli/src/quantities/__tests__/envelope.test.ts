@@ -6,7 +6,8 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { labPlan, labPlanText } from '@ongrid/floorplan/test-support/lab'
-import { parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { parseFloorPlan, type FloorPlan, type Room } from '@ongrid/floorplan/types/floorplan'
+import { toIfc } from '@ongrid/floorplan/geometry/export/ifc'
 import { surveyPlan } from '../survey'
 import { planTakeoff } from '../takeoff'
 import { bench, type Bench } from '../../mcp/__tests__/replay/harness'
@@ -79,5 +80,66 @@ describe('ceilings in the take-off', () => {
     const [kitchen] = planTakeoff(surveyPlan(plan)).rooms
     expect(kitchen!.ceilingHeight).toBe(2.6)
     expect(kitchen!.lowered.map((z) => [z.name, z.height, Number(z.area.toFixed(2))])).toEqual([['Bulkhead', 2.3, Number((5.8 * 0.9).toFixed(2))]])
+  })
+})
+
+/**
+ * CNT-8 with LVL-4: a zone's floor and ceiling are its room's. The lab's studio, with a first
+ * floor over its kitchenette, drawn once with its three parts as zones (each stating a ceiling,
+ * a void, a sunken floor or a stair use of its own) and once as the one room without them, gives
+ * the same slabs, roofs, ceilings and take-off.
+ */
+describe('zones in the slabs, roofs, ceilings and take-off (CNT-8)', () => {
+  const STUDIO = 'A/scenarios/studio.json'
+  const LINES = ['kit-s', 'sleep-e']
+  const ZONES: Record<string, Partial<Room>> = {
+    sleep: { floorOffset: -0.2, ceiling: { lowered: [{ name: 'Bed nook', points: [[0, 0], [2.4, 0], [2.4, 1], [0, 1]], height: 2.2 }] } },
+    living: { void: true },
+    kitchen: { use: 'stair', ceiling: {} },
+  }
+  const ceiling: Room['ceiling'] = { lowered: [{ name: 'Bulkhead', points: [[0, 4.5], [3.5, 4.5], [3.5, 5.3], [0, 5.3]], height: 2.3 }] }
+
+  function studio(zoned: boolean): FloorPlan {
+    const plan = labPlan(STUDIO)
+    const room: Room = { id: 'studio', name: 'Studio', boundary: ['ext-s', 'ext-e', 'bath-s', 'bath-w', 'ext-n', 'ext-w'], ceiling }
+    const first = [
+      { id: 'f-s', start: [0, 3], end: [3.5, 3] },
+      { id: 'f-e', start: [3.5, 3], end: [3.5, 5.3] },
+      { id: 'f-n', start: [3.5, 5.3], end: [0, 5.3] },
+      { id: 'f-w', start: [0, 5.3], end: [0, 3] },
+    ].map((w) => ({ ...w, floor: 'first', thickness: 0.2, height: 2.6, kind: 'exterior' }))
+    return parseFloorPlan({
+      ...plan,
+      floors: [{ id: 'ground', name: 'Ground floor', level: 0 }, { id: 'first', name: 'First floor', level: 1 }],
+      walls: [...plan.walls.filter((w) => zoned || !LINES.includes(w.id)), ...first],
+      rooms: [
+        room,
+        ...plan.rooms.flatMap((r) => (r.id in ZONES ? (zoned ? [{ ...r, ...ZONES[r.id], partOf: 'studio' }] : []) : [r])),
+        { id: 'f-stair', name: 'Stair', use: 'stair', floor: 'first', boundary: ['f-s', 'f-e', 'f-n', 'f-w'] },
+      ],
+    })
+  }
+
+  it('gives a room with zones the same slabs, roofs, ceilings and take-off as the room without them', () => {
+    const [zoned, plain] = [planTakeoff(surveyPlan(studio(true))), planTakeoff(surveyPlan(studio(false)))]
+    expect(zoned.envelope).toEqual(plain.envelope)
+    expect(zoned.totals).toEqual(plain.totals)
+    expect(zoned.rooms).toEqual(plain.rooms)
+    // No opening over the zone used as a stair, no void, no sunken slab: the slab is the outline.
+    for (const line of zoned.envelope.floors) expect(line.slab!.openings).toEqual([])
+    expect(zoned.envelope.slabs).toBeCloseTo(zoned.envelope.floors.reduce((sum, f) => sum + f.outline!, 0), 6)
+    const room = zoned.rooms.find((r) => r.id === 'studio')!
+    expect(room.lowered.map((z) => z.name)).toEqual(['Bulkhead'])
+    // Asked for by name, a zone has no ceiling of its own.
+    expect(planTakeoff(surveyPlan(studio(true)), undefined, ['sleep']).rooms[0]!.lowered).toEqual([])
+  })
+
+  it('writes the same slabs, openings, roofs and ceilings into the IFC', () => {
+    const count = (plan: FloorPlan, entity: string): number =>
+      toIfc(plan, { projectId: 'proj', timestamp: new Date(0) }).split('\n').filter((line) => line.includes(`=${entity}(`)).length
+    for (const entity of ['IFCSLAB', 'IFCOPENINGELEMENT', 'IFCROOF', 'IFCCOVERING', 'IFCSPACE']) {
+      expect([entity, count(studio(true), entity)]).toEqual([entity, count(studio(false), entity)])
+    }
+    expect(count(studio(true), 'IFCCOVERING')).toBe(2)
   })
 })
