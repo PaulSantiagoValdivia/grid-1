@@ -194,12 +194,12 @@ export class Project {
    * Follows the path to where it really leads. Refused when its text can't name a file in the
    * project, or when the real path of what exists of it is outside the project folder.
    */
-  private locate(given: string): Located {
+  private locate(given: string, base: Folder = this.base): Located {
     if (typeof given !== 'string') throw new PathRefused('A path must be text.')
     const problem = this.textProblem(given)
     if (problem) throw this.refused(given, problem)
-    const lexical = path.resolve(this.base.real, separated(given))
-    const asNamed = path.resolve(this.base.named, separated(given))
+    const lexical = path.resolve(base.real, separated(given))
+    const asNamed = path.resolve(base.named, separated(given))
 
     // Inside by its text, or once the links of the system above the project are resolved (such
     // as /var to /private/var on macOS, or a short Windows name). Every other outcome, an error
@@ -272,9 +272,12 @@ export class Project {
   /**
    * Checks a path without reading or writing anything, and gives the real path it leads to.
    * For a feature that hands the path on, such as a trace image the app will show.
+   * `relativeTo` says where a relative path starts when it isn't where this project's own
+   * paths start: a path written inside a plan file starts from the project folder (CMD-15).
    */
-  resolve(given: string): string {
-    return this.locate(given).real
+  resolve(given: string, relativeTo?: RelativeTo): string {
+    const base = relativeTo === undefined ? this.base : relativeTo === 'cwd' ? this.cwd : this.project
+    return this.locate(given, base).real
   }
 
   /**
