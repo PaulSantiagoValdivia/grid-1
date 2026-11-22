@@ -24,6 +24,9 @@ export const SHEET_COVERAGE = {
   rooms: { shown: 'drawn and tabled' },
   floors: { shown: 'a page each' },
   stairs: { shown: 'drawn' },
+  // LVL-4: the site's ground level feeds the checks, whose findings the sheet lists; no drawing
+  // shows the ground yet.
+  site: { shown: 'not shown', why: 'Its ground level is read by the checks, whose findings the sheet lists; no drawing shows the ground yet.' },
   referenceImage: { shown: 'not shown', why: 'A tracing aid, not part of the building.' },
   // CNT-12: the fixtures are drawn on each floor's plan by `drawPlan`, to scale. The 3D still
   // does not show them yet, and the room table measures the rooms, which they add nothing to.
