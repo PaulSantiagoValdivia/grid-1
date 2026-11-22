@@ -61,6 +61,22 @@ describe('the six T-5 trace-image paths', () => {
   })
 })
 
+describe('a path written inside a plan (CMD-15)', () => {
+  it('starts from the project folder when asked, wherever Grid runs', () => {
+    mkdirSync(join(root, 'plans'))
+    mkdirSync(join(root, 'assets'))
+    const fromPlans = openProject(root, join(root, 'plans'))
+    expect(fromPlans.resolve('assets/reference.png', 'project')).toBe(join(real, 'assets', 'reference.png'))
+    expect(fromPlans.resolve('assets/reference.png')).toBe(join(real, 'plans', 'assets', 'reference.png'))
+    expect(fromPlans.resolve('../assets/reference.png', 'cwd')).toBe(join(real, 'assets', 'reference.png'))
+    expectRefused(() => fromPlans.resolve('../assets/reference.png', 'project'), '../assets/reference.png', 'outside the project folder')
+  })
+
+  it.each(T5_TRACE_IMAGE_PATHS)('%j is refused from the project folder too', (given, why) => {
+    expectRefused(() => project.resolve(given, 'project'), given, why)
+  })
+})
+
 describe('Windows names (T-4), refused on every system', () => {
   it.each(T4_WINDOWS_NAMES)('%j', (given, why) => {
     expect(pathProblem(given, 'linux')).toContain(why)

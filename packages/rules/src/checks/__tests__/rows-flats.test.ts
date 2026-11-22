@@ -17,7 +17,8 @@ describe('R-7 flats whose walls in a row change thickness', () => {
     const withoutDoor = report.findings.filter((f) => f.code === 'room_without_door').flatMap((f) => f.rooms)
     // The light well has no door, and says so: it is outdoor space (lab R-8).
     expect(withoutDoor).toEqual(['patio'])
-    expect(report.notChecked.flatMap((n) => n.rooms)).toEqual([])
+    // Its dormitories are above the third storey: said as not checked for escape (MSG-2), not left out.
+    expect(report.notChecked.filter((n) => n.reason !== 'above_escape_storeys').flatMap((n) => n.rooms)).toEqual([])
   })
 
   it('the Berlin flat: the Berliner Zimmer is checked like any other room', () => {

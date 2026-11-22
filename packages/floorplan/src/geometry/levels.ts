@@ -401,7 +401,7 @@ function floorOffsetQuestions(plan: FloorPlan, floors: readonly Floor[], broken:
   }
 }
 
-/** The checks on levels and heights, in the order they are listed in the README. */
+/** The checks on levels and heights, in the order docs/plan-file.md lists them. */
 export function levelIssues(
   plan: FloorPlan,
   broken: ReadonlySet<string>,

@@ -9,6 +9,8 @@
 
 import { indexPlan, overFigure, rounded, shownAgainst, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
 import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
+import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import type { FloorScope } from './coverage'
 import { ESCAPE_TOP_LEVEL } from './figures'
 import { messages } from './messages'
 import type { AppliedFigure, RuleFinding } from './types'
@@ -69,12 +71,29 @@ export function escapeCheck(
   level: number,
   roomName: (id: string) => string,
   figures: EscapeFigures
-): RuleFinding[] {
-  // Above the third storey the rule asks nothing, so there is nothing to say.
-  if (level > ESCAPE_TOP_LEVEL.level || !hasEscapeFigures(figures)) return []
-
+): { findings: RuleFinding[]; scope: FloorScope } {
   const index = indexPlan(storey)
   const outlines = roomOutlines(storey, index, leftOut)
+  // MSG-2: every room of the floor is looked at or skipped, with the reason. Only bedrooms are
+  // looked at; a room with no use stated may be one, so it is said apart.
+  const above = level > ESCAPE_TOP_LEVEL.level
+  const scope: FloorScope = { lookedAt: [], skipped: { cannot_be_drawn: [], no_use: [], use_not_covered: [], above_escape_storeys: [] } }
+  for (const room of storey.rooms) {
+    const reason = !outlines.has(room.id)
+      ? 'cannot_be_drawn'
+      : !(ROOM_USES as readonly unknown[]).includes(room.use)
+        ? 'no_use'
+        : room.use !== 'bedroom'
+          ? 'use_not_covered'
+          : above
+            ? 'above_escape_storeys'
+            : null
+    if (reason === null) scope.lookedAt.push(room.id)
+    else scope.skipped[reason]!.push(room.id)
+  }
+  // Above the third storey the figures here stop: the bedrooms are said to be not checked (CH-4).
+  if (above || !hasEscapeFigures(figures)) return { findings: [], scope }
+
   const minArea = level === 0 ? (figures.minAreaGrade ?? figures.minArea) : figures.minArea
   const { minWidth, minHeight, maxSill } = figures
   const bigEnough = (w: Measured): boolean =>
@@ -151,5 +170,5 @@ export function escapeCheck(
       figures: present([minArea, minWidth, minHeight])
     })
   }
-  return findings
+  return { findings, scope }
 }

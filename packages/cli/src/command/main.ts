@@ -286,6 +286,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const out = textOf(parsed, '--out')
     const ids = checkTidyRequest({ apply: textOf(parsed, '--apply'), out })
     const project = openProject(projectOption, io.cwd)
+    // CMD-15: --out is checked even when no fix is made and nothing is written.
+    if (out !== undefined) project.resolve(out)
     // Read whole: tidy writes the file back, and must not drop a part the reader would leave out.
     const loaded = loadPlan(project, planFile, { whole: true })
     if (ids === null) {
