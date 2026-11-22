@@ -23,6 +23,7 @@
  * - Copilot CLI `copilot mcp add`: docs.github.com, Copilot CLI, add MCP servers.
  */
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { RETELLING_RULE } from '../mcp/retelling'
 import { dependencies } from '../../package.json'
 import type { GridTool } from '../mcp/toolkit'
 import { ROOM_NAMES_TRAVEL } from '../mcp/protocol'
@@ -130,7 +131,8 @@ function skill(): string {
     '1. Start with `grid_describe` to learn the rooms and what each door joins.',
     '2. Answer questions about sizes with `grid_areas`, `grid_measure`, `grid_schedule` or `grid_takeoff`.',
     '3. Show the plan with `grid_view` when the person wants to see it.',
-    '4. Run `grid_check` after any change, and pass on what it finds.',
+    '4. Run `grid_check` after any change, and tell the person what it finds. When they set a note',
+    '   aside, `grid_mark_seen` marks it seen with their reason and the name they give; it stays listed.',
     '5. Write a plan rooms first, the main way to write one: `grid_write_rooms` takes the rooms',
     '   with their sizes and neighbours and works out the walls. The plan file is the source of',
     '   truth: to change a plan, read it back with `grid_describe` as=rooms, change the text and',
@@ -143,8 +145,8 @@ function skill(): string {
     '',
     ROOM_NAMES_TRAVEL,
     '',
-    `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}", and never say a plan`,
-    'meets a code or has been passed by anyone: the checks are general guidance.',
+    `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}".`,
+    RETELLING_RULE,
     '',
   ].join('\n')
 }

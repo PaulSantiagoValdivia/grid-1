@@ -32,7 +32,8 @@ record. It never throws: a check that fails inside Grid becomes a line
 (`scoreboard/__tests__/frontDoor.test.ts`).
 
 `grid check` prints the record (`--json` gives it as `result`), and `grid_check` returns its
-`count` and `lines` beside the older lists, which it keeps for now.
+`count` and `lines` beside the older lists, which it keeps for now. Both print a short report by
+default, and the whole one on request (MSG-10, see "The short report, and seen notes").
 
 ## The record
 
@@ -91,6 +92,24 @@ finding's wording is its check's own (`checks/messages.ts`, and `planCheckWordin
 `@ongrid/floorplan`), so the report's `message`, the notes a person reads and the record say
 the same words. A test fails when one code is worded two ways (AU4-1).
 
+### The label, and words no line uses
+
+The label "General guidance, not your local rules" is the first line of every report and every
+list Grid prints or a tool answers, and every tool answer carries it as `label` in its data
+(MSG-3). Drawings carry it in their top-left corner, and every export file in a place its
+format keeps: a text over the plan in DXF, the header and the project's description in IFC,
+`asset.extras.label` in GLB, the first comment in OBJ, the first cell of a CSV, a comment on
+the first line of rooms text, and the footer of every sheet page.
+
+No line Grid writes holds pass, complies, compliant, approved, meets code or their kin, outside
+the user's own quoted text (`approvalWords` in `@ongrid/rules`; message codes in brackets are
+identifiers and are left out). A figure is given as the figure used here, with its basis (the
+document, edition and clause, or where it was looked up) and its status, never as what the
+plan or the reader needs. A check that looked at nothing says "Nothing was checked for …".
+`scoreboard/__tests__/approvalWords.test.ts` holds the reports and the exports of the lab's
+plans to this, and `src/__tests__/label.test.ts` in `packages/cli` holds every output to the
+label.
+
 ## The codes
 
 `{thing}` is the part as a line names it: `Wall "w1"`, `Door "d1"`, `Room "Kitchen"`, `Floor
@@ -107,6 +126,8 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
 | `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
 | `plan/note-no-place` | Note "{id}" names a room the plan does not have, so it is not drawn | a room id from the plan, or a point (at) |
+| `plan/front-not-said` | The front names wall "{id}", which the plan does not have, so no front is said | a wall that faces outside, or an opening in one, such as the front door |
+| `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round | a plan whose y runs up the page, as Grid draws it |
 | `plan/unknown-use` | Room "{name}" has a use Grid does not know, "{use}" | one of the uses Grid knows: bedroom, living, … |
 | `plan/empty` | The plan has nothing in it: no walls, rooms or openings | walls, and the rooms and openings they hold |
 | `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
@@ -130,6 +151,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `wall/no-height` | {thing} has no height | a height above 0, or a virtual wall for a line with no substance |
 | `wall/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `wall/kind-differs` | {thing} is stated as one kind, but the rooms on its sides show another | a kind that matches the rooms on its sides |
+| `wall/ends-in-opening` | {thing} ends on another wall inside one of its openings | a wall that meets another clear of its doors and windows |
 | `wall/size-question` | {thing} has a size that may not be meant | the size of a wall in a building |
 | `wall/short` | {thing} stops short of a corner | wall ends that meet at the corner |
 | `wall/gap` | {thing} leaves a gap in a straight side of a room | the walls of a side meeting end to end |
@@ -152,6 +174,10 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
 | `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
+| `opening/crosses-wall` | {thing} runs into a wall that meets its wall | an opening within the clear run of its wall, between the walls that meet it |
+| `opening/fills-wall` | {thing} is as long as its wall | some wall left beside an opening |
+| `opening/on-dividing-line` | {thing} is on a dividing line | a door or window in a wall |
+| `opening/window-between-rooms` | {thing} has rooms on both sides | a window in a wall with the outside on one side, unless it is a borrowed light |
 | `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
 | `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
@@ -198,11 +224,11 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
-| `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to pass through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to pass, not a code figure |
-| `room/too-small` | "{name}" is under {minimum} m² | at least {minimum} m² |
+| `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
+| `room/too-small` | "{name}" is under {minimum} m² | the figure used here, at least {minimum} m² ({basis}, status {status}); this check's figures were read for {kinds} |
 | `room/no-escape-opening` | "{name}" has no window or door to escape through | a window or door to the outside that someone can climb through |
-| `room/escape-window-too-small` | The window of "{name}" is too small to escape through | a window someone can climb through |
-| `room/escape-window-too-high` | The window of "{name}" is too high to escape through | a lower sill |
+| `room/escape-window-too-small` | The window of "{name}" is too small to escape through | the figures used here, at least {area} m², {width} m wide, {height} m high ({basis}, status {status}); a window someone can climb through when no figure applied; this check's figures were read for {kinds} |
+| `room/escape-window-too-high` | The window of "{name}" is too high to escape through | the figure used here, a sill at most {maximum} m above the floor ({basis}, status {status}); a lower sill when no figure applied; this check's figures were read for {kinds} |
 | `floor/not-checked-no-stairs` | The way out of "{floor}" was not checked: no stair joins it to the ground floor | a stair joining it, through the floors between, to the ground floor |
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", rooms that could not be drawn were not checked: "{room}", … | rooms that can be drawn |
@@ -211,6 +237,10 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
+| `plan/not-checked-sizes-for-building` | Room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
+| `plan/not-checked-escapes-for-building` | Escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this is {an office} | figures read for {an office}; the ones here were read for homes (…) |
+| `floor/not-checked-sizes-for-building` | On "{floor}", room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
+| `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 
@@ -220,7 +250,10 @@ A plan with a field Grid does not know, or a room use it does not know, is still
 that field, and with that room's use not stated. Each is a line worth a look, about the part it
 is on, with the nearest word Grid knows when one was most likely meant: `thick` on a wall gives
 `plan/unknown-field`, whose `found` and `fix` name `thickness` ("Did you mean "thickness"?"). A
-use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line. A plan with no
+use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line; and a word that
+plainly means a use is read as it (CNT-5, `USE_WORDS` in the plan format), so `WC` is `toilet` and
+gives no line. No word is read as `bedroom`, `living` or `dining`, the uses the figure checks look
+at: `lounge` gives a line that suggests `living`. A plan with no
 walls, rooms or openings, `{}` among them, gives `plan/empty`. A field name or a use that breaks
 the text rule (MSG-9) is never repeated: the line says it is not. The fields each part has are
 read from the format itself (`readingNotes` in `@ongrid/floorplan/types/reading`), so a field
@@ -244,6 +277,7 @@ checks first, then the figure checks, whether it ran or not:
 | `skippedCount` | How many parts that is. |
 | `findings` | How many findings it gave. |
 | `readFor` | Only on a figure check that looked at something: the kinds of building its figures were read for, as `["homes"]` (COD-2). |
+| `uses`, `buildings` | Only on a figure check: the room uses it looks at, as `["bedroom"]`, and the kinds of building it runs in, as `["home"]` (CNT-5). It runs too where the plan does not say what kind of building it is. |
 
 A check that looks at rooms has every room of the plan under `lookedAt` or under `skipped`,
 so a record with no findings says what it is: these parts were looked at and nothing was
@@ -251,6 +285,7 @@ found in them. A `reason` is one of:
 
 | Reason | Why |
 |---|---|
+| `not_for_building` | the figures were read for homes (houses and flats people live in), and the plan says this is {an office}: the plan, or that floor, is a kind of building the check does not run in (CNT-5) |
 | `no_figures_for_place` | no figures for the place the plan is for: the ones here are from US model codes |
 | `no_rooms` | no rooms on the floor |
 | `cannot_be_drawn` | could not be drawn |
@@ -285,6 +320,60 @@ each total (`net`, `circulation`, `grossInternal`, `grossExternal`, `circulation
 `netToGross`). Each holds `state`, `leftOut` and `notProven`, the rooms as `{ floor, id, name }`.
 A total that left a room out names it, in `leftOut`, in its text ("not proven: leaves out
 "Kitchen", which could not be measured") and in a note. The CSV has a `state` column.
+
+## The short report, and seen notes
+
+`grid check` and `grid_check` print a short report by default, sized to the plan (MSG-10): the
+label first; the lines, each with what was found and needed and the fix; the figures those
+lines used, each as the figure used here with its document, edition, clause and status; what
+each check looked at, in counts (the rooms looked at by at least one check, each check's count,
+and the parts it could not look at, with the reason); and one line on what the whole report
+adds. A check that looked at nothing still says "Nothing was checked for …". `grid check --full`
+and `grid_check` with `full: true` add the checks run, every figure the checks applied, each
+check's parts one by one, and what these checks never look at (`limits`). The data is the same
+either way: `grid check --json` gives the whole check, and `grid_check`'s data keeps `coverage`
+and `limits`. For the lab's 62.65 m² flat the short text is 988 bytes from `grid check` and 973
+from `grid_check` (`packages/cli/src/command/__tests__/shortReport.test.ts`).
+
+A person can set a note aside as seen, with a reason and the name or role they give, through
+`grid check --seen <n> --reason <text> --by <name>` or `grid_mark_seen`. A seen note is never left
+out and never called dealt with: it is listed under "Seen", with its reason, who marked it and
+the day, and the count of lines says how many are seen. The mark is keyed to the note (its
+`code`, `thing` and `also`) and to the content of the parts it is about: the thing and the
+`also` ids, a room with the walls of its outline, an opening with its wall, a floor with
+everything on it, and the whole plan for a line about the plan that names no part. When one of
+them changes, the mark no longer holds and the line is listed with the others again, saying it
+was seen before and which part changed since.
+
+The marks are kept beside the plan, in `<plan>.seen.json` (`plan.seen.json` beside
+`plan.json`), read and written only through the project's resolver. No export, sheet or drawing
+reads them. A file that is there and cannot be read is said in the report, every note is then
+listed as new, and no mark is written over it.
+
+```json
+{
+  "version": "1",
+  "marks": [
+    {
+      "code": "room/too-small",
+      "thing": { "kind": "room", "id": "bed2" },
+      "also": [],
+      "parts": [{ "kind": "room", "id": "bed2", "hash": "…" }, { "kind": "wall", "id": "w3", "hash": "…" }],
+      "reason": "A box room, kept small on purpose",
+      "by": "Owner",
+      "at": "2026-11-22T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+In `grid_check`'s data, a line with a mark carries `seen`: `{ state, reason, by, at }`, `state`
+`seen` while the mark holds, and `back`, with `changed` (each part as `{ kind, id }`), when one
+of its parts changed since. `seenCount` is how many lines are seen, `marksFile` the marks file
+in the project, and `marksProblem` why it could not be read, or null. `grid check --json` gives
+the same as `seen` (`file`, `problem`, and `states`, one per line of `result.lines`) once a line
+has a mark or the marks file cannot be read, and `marked` after `--seen` or `--unseen`; a plan
+no one has marked gives the same JSON as before.
 
 ## Refusals
 
@@ -343,6 +432,7 @@ its text, which says the same.
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
+| `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
@@ -371,6 +461,141 @@ A change that would add a problem that leaves a part out is refused, and nothing
   stair rooms stacked so is unchanged. `grid sheet`'s area table prints "counted below" for them.
 - `grid_view` (kind plan) and `grid draw` take `above` in `hide`: the dashed outline of the floor
   above. No code is added and no check changes.
+
+### 2026-11-22: what kind of building it is, and more room uses (CNT-5)
+
+- A plan may say what kind of building it is (`building`: `home`, `office`, `shop`, `food`,
+  `hotel`, `school`, `health`, `sport`, `assembly`, `industry`, `warehouse`, `parking` or
+  `other`), and a floor may say otherwise for itself (`floors[].building`). Unstated, nothing
+  changes.
+- The figure checks (room size, escape openings) run only where the building, or its floor, is
+  a home, or where the plan does not say. Elsewhere their rooms are skipped as
+  `not_for_building`, and one line says so: about the plan (`plan/not-checked-sizes-for-building`,
+  `plan/not-checked-escapes-for-building`) when the plan's own kind is the reason on every
+  floor, else about each floor (`floor/not-checked-sizes-for-building`,
+  `floor/not-checked-escapes-for-building`). New codes and a new reason, all `not-checked`;
+  `resultVersion` stays.
+- `coverage` adds `uses` and `buildings` on each figure check: the room uses it looks at and the
+  kinds of building it runs in.
+- Room uses run to 27: `toilet`, `utility`, `study`, `office`, `meeting`, `reception`, `retail`,
+  `classroom`, `treatment`, `waiting`, `sport`, `changing`, `staff`, `worship`, `assembly`,
+  `plant` and `parking` join the ten (LVL-3 added `lift`), and `other` is listed last. A drawing
+  coloured by use (SHT-7) gives each its own pale fill. A word that plainly means a use
+  (`WC`, `staff room`, `warehouse`, `bryggers`) is read as it and gives no `plan/unknown-use`
+  line; no word is read as `bedroom`, `living` or `dining`. The tools' `use` arguments take the
+  new uses.
+- A room may say who it is for (`tenure`: `private`, `shared`, `common` or `commercial`) and carry
+  the firm's own room type (`roomType`). No check reads either yet.
+- A note or sheet line that used a figure, on a floor the plan says is a home, ends "and the plan
+  says this is a home" instead of COD-2's "the plan does not say what kind of building it is, so
+  Grid applied them as they are", which stays where the plan does not say.
+
+### 2026-11-22: a short report, and notes set aside as seen (MSG-10)
+
+- `grid_check`'s text is short by default: the label, the lines, what each check looked at in
+  counts, and one line on what `full: true` adds. `full: true` adds the checks run, every figure
+  (as "The figure used here for …", with its basis and status), each check's skipped parts and
+  what these checks never look at. Before, the text always ended with the never-looked-at lines;
+  they are still in `limits` in the data, which is unchanged but for the fields below.
+- `grid_check` takes `full`, and its data gains `seenCount`, `marksFile`, `marksProblem`, and
+  `seen` on each line the person marked: `{ state: "seen" | "back", reason, by, at, changed? }`.
+- A new tool, `grid_mark_seen`, sets a note aside as seen with the person's reason and the name
+  or role they give, or takes the mark off (`unmark`). It takes the note's number and code as
+  `grid_check` gave them, and refuses a number that now names another code. It writes only
+  `<plan>.seen.json` beside the plan. The tools are 22.
+- A seen note is listed under "Seen" in the text, and still counted. When one of its parts
+  changes, it is listed with the others again, saying so.
+
+### 2026-11-22: north, front and where the building is (CNT-3)
+
+- The plan may hold `north`, `yAxis`, `front` and `site` ([plan-file.md](plan-file.md#north-front-and-where-the-building-is)).
+  A plan that states none gets every answer as before.
+- `grid_measure` takes `what=facing`, with `room` for one room: `answer` holds `north` (`stated`,
+  and `degrees` counter-clockwise from the top of the drawing, or the `assumed` north), `yAxis`,
+  `front`, and `rooms`, `walls` and `openings`, each with the compass point it `faces`
+  (`north`, `north-east`, … `north-west`) and, for walls and openings, its `bearing` in degrees
+  clockwise from north. A plan that states no north is answered with north as the top of the
+  drawing, and the text's first line says so.
+- New codes, worth a look: `plan/front-not-said`, a front that names a part the plan does not
+  have or a wall that does not face outside, naming it in `also`; `plan/y-down`, a plan whose y
+  runs down the page.
+- `grid_view`'s text for a plan that states its north says where the north arrow points, in
+  place of "the plan holds no real north". `grid_describe` adds a few lines on north and the
+  ways the rooms face for a plan that states its north or its front, and leaves "north" out of
+  what is not in the plan. `grid_mirror` mirrors the stated north and the site's origin, and
+  says so in `changed`.
+- The IFC export writes the stated north as `TrueNorth`, and none for a plan that states none
+  (it wrote +y before), and the site's origin, latitude, longitude and elevation when stated.
+
+### 2026-11-22: sizes along the walls, in chains (SHT-4)
+
+- No line, code or wording of the record changes.
+- The floor plan picture (`grid draw`, `grid_view` kind plan, the sheet) dimensions each room
+  along its walls' faces: width and depth for a room with four square corners, one size per
+  side for any other, each line inside its room. Outside the plan, each side has a chain of
+  openings, a chain of walls and the overall size, along the plan's own main directions, and
+  each chain adds up to the overall size. In the technical look the lines end in 45-degree
+  ticks with the numbers along them.
+- In an SVG, each dimension's group carries `data-measured-to`, what its two ends measure to
+  (`face`, `centre-line` or `finish`), and `data-kind` is `overall`, `wall`, `opening` or
+  `room`.
+
+### 2026-11-22: quantities for a first estimate (ARE-13)
+
+- `grid_takeoff` takes `for` and `rates`. With `for=estimate` its data holds `label`, `lines`
+  (each with `key`, `what`, `quantity`, `unit` of `m2`, `m` or `nr`, `rule`, `assumed`, and
+  `floors` for the slab, upper floors and roof), `notes` and `rules`; then either `rateCard`
+  (no rates file: `{label, currency, rates: {key: {rate: null, unit}}}`, ready to fill) or `cost`
+  (`file`, `label`, `currency`, `total`, `complete`, `missing`, `wrongUnit`, `unused`,
+  `wholeBuilding`) with `orders` and `orderProblems`, and each line adds `state` (`priced`,
+  `no rate`, `wrong unit`, `alternative`), `rateKey`, `given`, `rate`, `priced` and `amount`.
+  `format=csv` gives the bill as one table. Without `for` the answer is as before, with one more
+  line saying `for=estimate` exists.
+- The rates file is `rates` (a path inside the project) or `rates.json` beside the plan. One
+  that names no currency, holds a negative rate, a unit Grid does not take, a key that is not a
+  key or a field Grid does not read is refused (`isError: true`, one line naming the file and the
+  part). `rates` without `for=estimate`, and `rooms` with it, are refused.
+
+### 2026-11-22: the label first, and no line reads as approval (MSG-3)
+
+- Every tool answer leads with the label, and its data carries `label`; every output schema
+  lists it as required. A CSV's first row is the label in one cell; rooms text from
+  `grid_describe` as=rooms starts with it as a comment, which writing it back ignores.
+- `needed` on `room/too-small`, `room/escape-window-too-small` and `room/escape-window-too-high`
+  gives the figure as "the figure used here", with its basis and status.
+- `opening/too-small-to-pass` keeps its code; its wording, `needed` and `fix` say "get through".
+- `grid check` gives each figure as "The figure used here for … is …", with its basis and
+  status, and a check that looked at nothing as "Nothing was checked for …". `grid_check` says
+  the same in its text.
+- The tool server's instructions tell an agent how to retell a report: the label first, none of
+  the forbidden words, and each figure with its basis and status.
+
+### 2026-11-22: where each opening stands (MSG-16)
+
+- Five new warnings, `worth-a-look`, in `grid check` and `grid_check`. None of them leaves
+  anything out: the opening is still drawn, cut through its own wall only.
+  - `opening/crosses-wall`: the opening runs into the body of a wall that meets its wall (a
+    corner, a junction, a wall passing through). `also` names that wall and the opening's wall;
+    the line gives the offsets that keep it clear.
+  - `wall/ends-in-opening`: a wall ends on another inside one of its openings. The line is about
+    the wall that ends; `also` names the opening and the wall it lands on.
+  - `opening/fills-wall`: the opening is as long as its wall.
+  - `opening/on-dividing-line`: a door or a window on a dividing line. `also` names the line.
+  - `opening/window-between-rooms`: a window in a wall with rooms on both sides, which may be a
+    borrowed light. `also` names the wall and the two rooms.
+- `grid_split_room` refuses a new wall whose end would land inside a door or window of the wall
+  it meets, and names the nearest place along the room where it would not.
+
+### 2026-11-22: units at the edge (WRT-7)
+
+- Every length argument takes a number in metres, or text with its unit (`"12'6\""`, `"900 mm"`,
+  `"381 cm"`); with `decimal: "comma"`, a decimal comma (`"3,81"`). Its schema is
+  `["number", "string"]`. A length Grid cannot read is refused by the argument's name.
+- `grid_areas`, `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view` take `units`
+  `m`, `cm`, `mm` or `ft-in` (`ft` is the same as `ft-in`) and `decimal`; left out, the plan's
+  `display`. Feet and inches are written `12'-6"` (they were `12' 6"`), a window's sill in inches.
+- A plan file with `"units": "mm"`, `"cm"`, `"ft"` or `"in"` is read in that unit, with a
+  `plan/read-as-meant` line, and a change writes it in metres. No new code.
 
 ### 2026-11-22: what would be right (MSG-7)
 

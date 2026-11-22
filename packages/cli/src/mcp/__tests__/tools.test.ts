@@ -21,6 +21,7 @@ const ORDER = [
   'grid_preview',
   'grid_export',
   'grid_sheet',
+  'grid_mark_seen',
   'grid_write_rooms',
   'grid_change_opening',
   'grid_move_room_side',
@@ -55,6 +56,8 @@ function allowed(property: Record<string, unknown>): boolean {
   if (Array.isArray(property['enum'])) return true
   if (property['type'] === 'boolean') return true
   if (property['type'] === 'number') return typeof property['minimum'] === 'number' && typeof property['maximum'] === 'number'
+  // WRT-7: a length takes metres, or text with its unit, of at most a few characters.
+  if (Array.isArray(property['type']) && property['type'].includes('number')) return typeof property['minimum'] === 'number' && typeof property['maximum'] === 'number' && typeof property['maxLength'] === 'number'
   if (property['type'] === 'string') return typeof property['pattern'] === 'string' || typeof property['maxLength'] === 'number'
   if (property['type'] === 'object') return typeof property['properties'] === 'object'
   if (property['type'] === 'array') {
@@ -74,7 +77,8 @@ describe('tools/list', () => {
     // 20 since WRT-3: one sentence of request is one call (lab WR-2), so merge, split, add a
     // room, stretch and rename each have one.
     // 21 since CMD-13: a problem report the person decides to file.
-    expect((await listed()).length).toBeLessThanOrEqual(21)
+    // 22 since MSG-10: a note the person sets aside as seen, which writes a file of its own.
+    expect((await listed()).length).toBeLessThanOrEqual(22)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -111,7 +115,7 @@ describe('tools/list', () => {
 
   it('says the units are metres wherever a tool takes or gives a length', async () => {
     for (const tool of await listed()) {
-      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mirror', 'grid_rename_room'].includes(tool.name)) continue
+      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mark_seen', 'grid_mirror', 'grid_rename_room'].includes(tool.name)) continue
       expect(tool.description, tool.name).toMatch(/metres/)
     }
   })
@@ -134,10 +138,32 @@ function conforms(schema: Record<string, unknown>, value: unknown, at = '$'): st
   return problems
 }
 
+describe('lengths typed with their unit (WRT-7)', () => {
+  it('moves a side by 12\'6", 3810 mm, 381 cm or 3,81 with the decimal comma, all as 3.81 m', async () => {
+    const b = bench({ 'plan.json': twoBedFlat() })
+    try {
+      const written: string[] = []
+      for (const [i, by] of [`12'6"`, '3810 mm', '381 cm', '3,81', 3.81].entries()) {
+        const reply = await b.call('grid_move_room_side', { room: 'bed2', side: 'north', by, ...(by === '3,81' ? { decimal: 'comma' } : {}), out: `by${i}.json` })
+        expect(reply.isError, reply.text).toBe(false)
+        expect(reply.text, String(by)).toMatch(/3\.81 m north/)
+        written.push(readFileSync(join(b.folder, `by${i}.json`), 'utf8'))
+      }
+      expect(new Set(written).size).toBe(1)
+      const comma = await b.call('grid_move_room_side', { room: 'bed2', side: 'north', by: '3,81', out: 'comma.json' })
+      expect(comma).toMatchObject({ isError: true })
+      expect(comma.text).toMatch(/^by has a decimal comma: write 3\.81, or choose the decimal comma/)
+    } finally {
+      b.close()
+    }
+  })
+})
+
 describe('the tools on a two-bedroom flat', () => {
   let b: Bench
   beforeAll(() => {
-    b = bench({ 'plan.json': twoBedFlat(), 'flat.json': agentFlat() })
+    // MSG-10: noted.json has one note to mark, a field Grid does not read.
+    b = bench({ 'plan.json': twoBedFlat(), 'flat.json': agentFlat(), 'noted.json': { ...twoBedFlat(), colour: 'red' } })
   })
   afterAll(() => b.close())
 
@@ -154,6 +180,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_preview: { view: '2d' },
     grid_export: { plan: 'plan.json', format: 'dxf' },
     grid_sheet: { plan: 'plan.json', layout: 'check' },
+    grid_mark_seen: { plan: 'noted.json', line: 1, code: 'plan/unknown-field', reason: 'Kept for our own tool', by: 'Owner' },
     grid_write_rooms: { plan: 'written.json', rooms: 'walls outside 0.3 inside 0.1 height 2.6\nroom living "Living" living 4 x 4\nroom bed "Bed" bedroom 3 x 4 east of living\ndoor d1 between living and bed, centred, 0.8 wide, opens into bed\ndoor front in living south, centred, 0.9 wide, opens in\n' },
     grid_change_opening: { opening: 'door-bath', width: 0.8, out: 'changed.json' },
     grid_move_room_side: { room: 'bed2', side: 'north', by: 0.5, out: 'moved.json' },
@@ -173,6 +200,9 @@ describe('the tools on a two-bedroom flat', () => {
       expect(reply.isError, `${name}: ${reply.text}`).toBe(false)
       expect(reply.text.length, name).toBeGreaterThan(0)
       expect(conforms(schemas.get(name)!, reply.data), name).toEqual([])
+      // MSG-3: the label leads every answer and is in its data.
+      expect(reply.text.split('\n')[0], name).toContain('General guidance, not your local rules')
+      expect((reply.data as { label?: string }).label, name).toBe('General guidance, not your local rules')
     }
   }, 60_000)
 

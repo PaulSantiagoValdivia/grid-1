@@ -7,6 +7,7 @@
  * writes the file's own JSON back with only that change in it. It is refused, and nothing is
  * written, when it would leave the drawing with a problem it did not have.
  */
+import { planInMetres } from '@ongrid/floorplan/types/units'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { keptDerived } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
@@ -34,6 +35,7 @@ import {
   objectSchema,
   openingArg,
   PLAN_ARG,
+  DECIMAL_IN_ARG,
   planFileOf,
   projectOf,
   readPlan,
@@ -275,7 +277,8 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
   }
   let raw: Record<string, unknown>
   try {
-    raw = JSON.parse(project.readText(file).text) as Record<string, unknown>
+    // WRT-7: a file in another unit is written back in metres, the only unit Grid writes.
+    raw = planInMetres(JSON.parse(project.readText(file).text) as Record<string, unknown>).raw
   } catch (error) {
     if (error instanceof PathRefused) throw new ToolRefusal(error.message)
     throw new ToolRefusal(`${file} could not be read again to write the change; nothing was written.`)
@@ -324,11 +327,12 @@ const changeOpeningTool: GridTool = {
     + 'Do not use to move a wall (grid_move_room_side). Grid has doors, windows and doorless openings only: no bifold, sliding or roof windows. It replaces the plan file unless out is given. Units are metres.',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     opening: { type: 'string', id: true, required: true, description: 'The id of the door, window or opening to change (grid_describe with for=agent lists them).', examples: ['door-bath', 'win-kitchen'] },
-    width: { type: 'number', description: 'The new width of the hole in the wall, in metres.', examples: [0.9, 4], minimum: 0.3, maximum: 20 },
+    width: { type: 'number', length: true, description: 'The new width of the hole in the wall, in metres.', examples: [0.9, 4], minimum: 0.3, maximum: 20 },
     keep: { type: 'string', enum: KEEPS, description: 'Which point stays put when the width changes: start (the end nearer the wall\'s start), centre or end. centre when left out.', examples: ['centre', 'start'] },
-    height: { type: 'number', description: 'The new height of the opening, in metres.', examples: [2.1, 1.2], minimum: 0.2, maximum: 10 },
-    sill: { type: 'number', description: 'Windows: the new sill above the floor, in metres.', examples: [0.9, 0.6], minimum: 0, maximum: 5 },
+    height: { type: 'number', length: true, description: 'The new height of the opening, in metres.', examples: [2.1, 1.2], minimum: 0.2, maximum: 10 },
+    sill: { type: 'number', length: true, description: 'Windows: the new sill above the floor, in metres.', examples: [0.9, 0.6], minimum: 0, maximum: 5 },
     type: { type: 'string', enum: ['door', 'window', 'opening'], description: 'Make it a door, a window or a doorless opening.', examples: ['door', 'opening'] },
     opens_into: { type: 'string', id: true, description: 'Doors: the room id it opens into, or "outside".', examples: ['hall', 'outside'] },
     hinge: { type: 'string', enum: ['start', 'end'], description: 'Doors: the end of the opening it hangs from, start being nearer the wall\'s start.', examples: ['start', 'end'] },
@@ -336,7 +340,7 @@ const changeOpeningTool: GridTool = {
     room: { type: 'string', id: true, description: 'A room: with side, the opening moves to that side of it; with from, it is measured from that room\'s side.', examples: ['bath', 'hall'] },
     side: { type: 'string', enum: DIRECTIONS, description: 'With room: the side of that room whose wall it moves to.', examples: ['north'] },
     from: { type: 'string', enum: FROMS, description: 'What its place is measured and kept from: with room, a side of that room (its inside face); without, an end of its wall: start, end, or the end toward north, east, south or west.', examples: ['west', 'start'] },
-    distance: { type: 'number', description: 'Metres from that side or end to the opening\'s nearer edge. Left out with from, the distance it has now is kept.', examples: [0.25, 0.1], minimum: 0, maximum: 100 },
+    distance: { type: 'number', length: true, description: 'Metres from that side or end to the opening\'s nearer edge. Left out with from, the distance it has now is kept.', examples: [0.25, 0.1], minimum: 0, maximum: 100 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
@@ -375,10 +379,11 @@ const moveSideTool: GridTool = {
     + 'Only a side square to the drawing moves: north is the top of the drawing. Do not use to add a separate room or to split one. It replaces the plan file unless out is given. Units are metres.',
   args: {
     plan: PLAN_ARG,
+    decimal: DECIMAL_IN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The room whose side moves.', examples: ['kitchen', 'bed1'] },
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'Which side of the room: north (the top of the drawing), east, south or west.', examples: ['north', 'east'] },
-    by: { type: 'number', description: 'Metres to move it: positive makes the room bigger, negative smaller. Pass by or to.', examples: [3, -0.5], minimum: -50, maximum: 50 },
-    to: { type: 'number', description: 'The room\'s inside size across that side after the move, in metres: its depth for north or south, its width for east or west. Pass by or to.', examples: [4, 3.2], minimum: 0.3, maximum: 100 },
+    by: { type: 'number', length: true, description: 'Metres to move it: positive makes the room bigger, negative smaller. Pass by or to.', examples: [3, -0.5], minimum: -50, maximum: 50 },
+    to: { type: 'number', length: true, description: 'The room\'s inside size across that side after the move, in metres: its depth for north or south, its width for east or west. Pass by or to.', examples: [4, 3.2], minimum: 0.3, maximum: 100 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
@@ -408,7 +413,7 @@ const mirrorTool: GridTool = {
   hint: 'change-plan',
   description:
     'Use this when the person asks to flip the plan, mirror it, or have it the other way round: "the lounge is on the right as you come in, flip it". '
-    + 'left-right swaps east and west, top-bottom swaps north and south. Every room keeps its size and every door keeps opening into the same room. '
+    + 'left-right swaps east and west, top-bottom swaps north and south. Every room keeps its size and every door keeps opening into the same room. A north the plan states is mirrored too, so the swap is the real one. '
     + 'Do not use to turn the drawing for a picture (grid_view). It replaces the plan file unless out is given.',
   args: {
     plan: PLAN_ARG,

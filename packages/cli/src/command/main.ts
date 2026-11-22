@@ -28,7 +28,8 @@ import { linkSeats, occupancyFileOf, occupancyText, OccupancyRefused, readOccupa
 import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
-import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
+import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
+import { readSeen, SeenRefused } from '../seen/marks'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
@@ -76,8 +77,8 @@ const COMMANDS = {
     options: {},
   },
   check: {
-    usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--json] [--project <folder>]',
-    summary: 'Checks a plan and prints the report: general guidance, not your local rules.',
+    usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--full] [--json] [--seen <n> --reason <text> --by <name> | --unseen <n>] [--project <folder>]',
+    summary: 'Checks a plan and prints the report: general guidance, not your local rules. Short, about this plan, unless --full. --seen sets a note aside as seen, with your reason and name, in the marks file beside the plan.',
     options: CHECK_OPTIONS,
   },
   describe: {
@@ -202,6 +203,31 @@ function warnLeftOut(io: CommandIo, loaded: LoadedPlan, exported?: readonly Left
   io.stderr(`Left out ${ids.length} part${ids.length === 1 ? '' : 's'} that can't be drawn: ${list}. grid check says why.\n`)
 }
 
+/**
+ * MSG-10: what `--seen` or `--unseen` asks, checked: a number, and with `--seen` a reason and a
+ * name. `--reason` and `--by` mean nothing without `--seen`, and are refused by name.
+ */
+function markAsk(parsed: ReturnType<typeof parseOptions>): MarkAsk | null {
+  const seen = textOf(parsed, '--seen')
+  const unseen = textOf(parsed, '--unseen')
+  const reason = textOf(parsed, '--reason')
+  const by = textOf(parsed, '--by')
+  if (seen !== undefined && unseen !== undefined) throw new UsageError('--seen and --unseen were both given: give one.')
+  if (seen === undefined) {
+    if (reason !== undefined) throw new UsageError('--reason goes with --seen <n>: it is why that note is set aside.')
+    if (by !== undefined) throw new UsageError('--by goes with --seen <n>: it is who sets that note aside.')
+  }
+  const value = seen ?? unseen
+  if (value === undefined) return null
+  const flag = seen !== undefined ? '--seen' : '--unseen'
+  if (!/^[1-9]\d{0,6}$/.test(value)) throw new UsageError(`${flag} takes the number of a note in the report, such as 3.`)
+  const number = Number(value)
+  if (seen === undefined) return { mark: 'unseen', number }
+  if (reason === undefined) throw new UsageError('--seen needs --reason: why the note is set aside, in one line.')
+  if (by === undefined) throw new UsageError('--seen needs --by: who sets it aside, as the name or role you give.')
+  return { mark: 'seen', number, reason, by }
+}
+
 async function runCommand(name: CommandName, args: readonly string[], io: CommandIo): Promise<number> {
   if (name === 'edit') {
     await runEdit(args, io.cwd, (text) => io.stdout(text))
@@ -250,7 +276,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     if (parsed.values.has('--json')) {
       const r = done.result
       io.stdout(`${JSON.stringify({ label: GENERAL_GUIDANCE_LABEL, written: done.written, rooms: r.rooms, walls: r.walls.map((w) => ({ id: w.id, kind: w.kind, virtual: w.virtual, thickness: w.thickness, length: w.length, rooms: w.rooms })), openings: r.openings, guesses: r.guesses, warnings: r.warnings, sizes: r.sizes, verdict: done.verdict, drawingProblems: done.drawingProblems }, null, 2)}\n`)
-    } else io.stdout(`${done.lines.join('\n')}\n`)
+    } else io.stdout(`${[GENERAL_GUIDANCE_LABEL, ...done.lines].join('\n')}\n`)
     return EXIT_OK
   }
 
@@ -268,9 +294,19 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
 
   if (name === 'check') {
     const json = parsed.values.has('--json')
-    const loaded = loadPlan(openProject(projectOption, io.cwd), planFile)
-    const result = checkPlan(loaded, { floor: textOf(parsed, '--floor'), country: textOf(parsed, '--country') })
-    io.stdout(json ? checkJson(result) : checkText(result, planFloors(loaded.plan).length))
+    const ask = markAsk(parsed)
+    const project = openProject(projectOption, io.cwd)
+    const loaded = loadPlan(project, planFile)
+    const country = textOf(parsed, '--country')
+    // MSG-10: a number is the note's in the whole plan's report, whatever --floor shows.
+    const done: MarkDone | null = ask === null ? null : markNote(project, planFile, loaded, checkPlan(loaded, { country }), ask, ask.mark === 'seen' ? '--seen' : '--unseen')
+    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country }), loaded, readSeen(project, planFile))
+    if (json) io.stdout(checkJson(result, done ?? undefined))
+    else {
+      const text = checkText(result, planFloors(loaded.plan).length, { full: parsed.values.has('--full') })
+      // The label stays the first line; what was marked comes right after it.
+      io.stdout(done === null ? text : text.replace('\n', `\n${done.text}\n`))
+    }
     return EXIT_OK
   }
 
@@ -290,6 +326,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
       ids: parsed.values.has('--ids'),
+      units: textOf(parsed, '--units'),
+      decimal: textOf(parsed, '--decimal'),
       look: textOf(parsed, '--look'),
       hide: textOf(parsed, '--hide'),
       colour: textOf(parsed, '--colour'),
@@ -414,7 +452,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof SeenRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

@@ -8,9 +8,11 @@
  *
  * Pure: no DOM, no React. For PNG, see `drawPlan` in the `ongrid` package.
  */
+import { displayOf } from '@ongrid/floorplan/types/units'
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
 import type { Bounds, Dimension, PlanDrawing } from '@ongrid/floorplan/geometry'
 import {
+  GENERAL_GUIDANCE_LABEL,
   boundsWithDimensions,
   buildDimensions,
   buildFloorPlan,
@@ -26,11 +28,11 @@ import { doorSymbolOf } from '../canvas2d/doorSymbol'
 import type { Viewport } from '../canvas2d/viewport'
 import { fitTo, viewBoxOf } from '../canvas2d/viewport'
 import type { Look, LookName, PlanLook } from './look'
-import { LOOKS, toLook } from './look'
+import { LOOKS, lengthText, toLook } from './look'
 import { planScene } from './scene'
 import type { FaultLine, PictureKey } from './faults'
 import { faultKey, faultsOnFloor } from './faults'
-import { keyEntries, stackBands, writingBand } from './writing'
+import { keyEntries, northArrowNode, stackBands, writingBand } from './writing'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
@@ -111,7 +113,10 @@ export interface Picture {
    * plan does not state, in a look that marks them (`technical`). Empty in any other look.
    */
   readonly undecidedDoors: readonly string[]
-  /** The plan's elements: exactly what the app's 2D view draws inside its `<svg>`. */
+  /**
+   * The plan's elements: exactly what the app's 2D view draws inside its `<svg>`, and, when the
+   * plan states its north, the north arrow in the corner of the view (CNT-3).
+   */
   readonly nodes: readonly SvgNode[]
   /**
    * The key under the drawing, when the picture was given faults: `height` more pixels below
@@ -246,7 +251,7 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
   // SHT-11: the floor above, worked out only when it is shown.
   const above = on('above') ? floorAbove(slice) : undefined
-  const nodes = planScene({
+  const scene = planScene({
     drawing,
     handings,
     doorWarnings: warningMessages(doorWarningsOf(slice, drawing)),
@@ -254,7 +259,8 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     metersPerPixel: view.width / width,
     look,
     ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
-    labels: options.labels,
+    // WRT-7: the labels and dimensions are in the call's display, else the plan's own.
+    labels: options.labels?.display !== undefined || plan.display === undefined ? options.labels : { ...options.labels, display: displayOf(plan.display.length, plan.display.decimal ?? 'point', plan.display.area, plan.display.precision) },
     faults,
     uses,
     ...(above === undefined ? {} : { above }),
@@ -268,6 +274,8 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
       colourBy: show.colourBy ?? null
     }
   })
+  // CNT-3: a plan that states its north gets a north arrow in the corner of the view.
+  const nodes = drawing.north === null ? scene : [...scene, northArrowNode(drawing.north, view, view.width / width, look.colors)]
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
   const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))
@@ -281,12 +289,37 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes, key }
 }
 
+/** How a picture is written as a file. */
+export interface PictureFileOptions {
+  /**
+   * MSG-3: the label "General guidance, not your local rules" in the top-left corner. On by
+   * default; off only where the page round the picture carries it already (a sheet).
+   */
+  readonly label?: boolean
+}
+
+/** The label's text size in pixels, as a dimension's. */
+const LABEL_PX = 11
+
+/**
+ * The label on a paper-coloured strip in the top-left corner, in pixels like every label, so it
+ * reads the same at any zoom. Its width is estimated, never measured, as room labels are.
+ */
+function labelNode(look: Look, x: number, y: number, unitsPerPixel: number): SvgNode {
+  const width = GENERAL_GUIDANCE_LABEL.length * LABEL_PX * 0.56 + 12
+  return el('g', { 'data-part': 'guidance-label', transform: `translate(${lengthText(x)} ${lengthText(y)}) scale(${lengthText(unitsPerPixel)})` }, [
+    el('rect', { x: 0, y: 0, width: lengthText(width), height: LABEL_PX + 10, fill: look.colors.paper, opacity: 0.9 }),
+    el('text', { x: 6, y: LABEL_PX + 3, fill: look.colors.labelSoft, 'font-family': look.colors.font, 'font-size': LABEL_PX }, [GENERAL_GUIDANCE_LABEL])
+  ])
+}
+
 /**
  * The picture as an SVG file. `scale` multiplies its size in pixels and nothing else: the
- * drawing is the same, only finer.
+ * drawing is the same, only finer. It carries the label in its top-left corner (MSG-3).
  */
-export function pictureToSvg(picture: Picture, scale = 1): string {
+export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOptions = {}): string {
   const { view, look, key } = picture
+  const stamp = options.label !== false
   const label = `Floor plan with ${picture.rooms} rooms`
   if (key) {
     // The plan in its own frame at the top, in plan metres; the key under it, in pixels.
@@ -309,7 +342,9 @@ export function pictureToSvg(picture: Picture, scale = 1): string {
       [
         el('rect', { 'data-part': 'paper', x: 0, y: 0, width: picture.width, height: total, fill: look.colors.paper }),
         plan,
-        el('g', { 'data-part': 'key', transform: `translate(0 ${picture.height})` }, key.nodes)
+        el('g', { 'data-part': 'key', transform: `translate(0 ${picture.height})` }, key.nodes),
+        // In this frame a unit is a pixel already.
+        ...(stamp ? [labelNode(look, 0, 0, 1)] : [])
       ]
     )
     return `${toSvg(root)}\n`
@@ -333,7 +368,7 @@ export function pictureToSvg(picture: Picture, scale = 1): string {
       role: 'img',
       'aria-label': label
     },
-    [paper, ...picture.nodes]
+    [paper, ...picture.nodes, ...(stamp ? [labelNode(look, view.x, view.y, view.width / picture.width)] : [])]
   )
   return `${toSvg(root)}\n`
 }

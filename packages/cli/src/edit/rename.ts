@@ -6,7 +6,7 @@
  *
  * Pure: a survey in, a patch out.
  */
-import { buildingKind } from '@ongrid/floorplan/geometry'
+import { buildingKind, floorBuilding, floorOf } from '@ongrid/floorplan/geometry'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { rulesForUse } from '@ongrid/rules'
 import { quoted } from '../fs/projectFiles'
@@ -35,9 +35,11 @@ export function renameRoom(survey: Survey, roomId: string, request: { readonly n
   }
   if (said.length === 0) throw new EditRefused(`That is how ${name} is already: nothing to change.`)
 
-  // Which checks look at the room before and after: they go by its use, never its name.
-  const before = rulesForUse(was)
-  const after = rulesForUse(is)
+  // Which checks look at the room before and after: they go by its use, never its name, and
+  // run only in the kinds of building they read (CNT-5).
+  const building = floorBuilding(survey.plan, floorOf(room))
+  const before = rulesForUse(was, building)
+  const after = rulesForUse(is, building)
   const now = after.filter((rule) => !before.some((r) => r.id === rule.id))
   const noLonger = before.filter((rule) => !after.some((r) => r.id === rule.id))
   const lines: string[] = []

@@ -29,6 +29,8 @@ export interface DrawOptions extends PictureOptions {
    * the same drawing.
    */
   readonly scale?: number
+  /** MSG-3: the label in the top-left corner. On by default; off where the page carries it (a sheet). */
+  readonly label?: boolean
 }
 
 /**
@@ -57,9 +59,9 @@ export function drawPlan(plan: FloorPlan, options: DrawOptions & { format: 'svg'
 export function drawPlan(plan: FloorPlan, options: DrawOptions & { format: 'png' }): Promise<Uint8Array>
 export function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string | Uint8Array>
 export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<string | Uint8Array> {
-  const { format, scale = 1, ...pictureOptions } = options
+  const { format, scale = 1, label = true, ...pictureOptions } = options
   const picture = planPicture(plan, pictureOptions)
-  if (format === 'svg') return pictureToSvg(picture)
+  if (format === 'svg') return pictureToSvg(picture, 1, { label })
   if (format !== 'png') throw new RangeError(`Grid draws SVG or PNG, not ${String(format)}`)
   if (!(scale > 0) || !Number.isFinite(scale)) throw new RangeError(`The scale must be a number above 0: got ${scale}`)
 
@@ -75,7 +77,7 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   const installed = (family: string): boolean => GlobalFonts.has(family)
   const nodes = forSkia(picture.nodes, installed)
   const key = picture.key && { ...picture.key, nodes: forSkia(picture.key.nodes, installed) }
-  const image = await loadImage(Buffer.from(pictureToSvg({ ...picture, nodes, key }, scale)))
+  const image = await loadImage(Buffer.from(pictureToSvg({ ...picture, nodes, key }, scale, { label })))
 
   const canvas = createCanvas(width, height)
   const context = canvas.getContext('2d')

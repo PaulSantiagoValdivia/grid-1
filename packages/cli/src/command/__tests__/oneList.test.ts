@@ -58,8 +58,12 @@ describe('the MS-18 plan', () => {
 
   it('grid_check says what the checks never look at, ceiling height and load-bearing walls among them (COD-4)', async () => {
     const tool = GRID_TOOLS.find((t) => t.name === 'grid_check')!
-    const answer = await tool.run({ plan: 'plan.json' }, { project })
+    // MSG-10: the short answer keeps them in the data and names how many; full=true lists them.
+    const short = await tool.run({ plan: 'plan.json' }, { project })
+    const answer = await tool.run({ plan: 'plan.json', full: true }, { project })
+    expect(short.data['limits']).toEqual(answer.data['limits'])
     const limits = (answer.data as { limits: string[] }).limits
+    expect(short.text).toContain(`what is never looked at (${limits.length}).`)
     expect(limits).toEqual(checkPlan(loadPlan(project, 'plan.json'), {}).result.limits)
     expect(limits).toContainEqual(expect.stringMatching(/^Ceiling height is not checked\b/))
     expect(limits).toContainEqual(expect.stringMatching(/^Which walls carry load is not known\b/))

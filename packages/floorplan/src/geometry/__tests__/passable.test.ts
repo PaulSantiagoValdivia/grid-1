@@ -76,7 +76,7 @@ describe('the lab cases that cleared their notes (CH-6)', () => {
       ruleId: 'room-has-door',
       rooms: ['hall'],
       openings: ['slot'],
-      message: 'An opening from "Hall" is too small for a person to pass through, so it is not a way through',
+      message: 'An opening from "Hall" is too small for a person to get through, so it is not a way through',
       passage: { kind: 'opening', short: 'width', drawn: 0.05, passable: 0.4 }
     })
   })
@@ -98,7 +98,7 @@ describe('the lab cases that cleared their notes (CH-6)', () => {
       'opening_too_small_to_pass bed+hall',
       'room_without_door bed'
     ])
-    expect(report.findings[0]!.message).toBe('An opening from "Bedroom" is too small for a person to pass through, so it is not a way through')
+    expect(report.findings[0]!.message).toBe('An opening from "Bedroom" is too small for a person to get through, so it is not a way through')
     expect(report.findings[0]!.passage).toEqual({ kind: 'door', short: 'width', drawn: 0.3, passable: 0.4 })
   })
 })
@@ -146,7 +146,7 @@ describe('the size a person passes through', () => {
   it('is said in the notes with the sizes Grid uses, as its own and not a code figure', () => {
     const plan = house(front, door('slim', 'mid', { width: 0.3 }))
     const note = planNotes(plan, checkPlanSanity(plan)).notes.find((n) => n.id.startsWith('opening_too_small_to_pass'))!
-    expect(note.title.map((p) => p.text).join('')).toBe('An opening from Bedroom is too small for a person to pass through, so it is not a way through')
+    expect(note.title.map((p) => p.text).join('')).toBe('An opening from Bedroom is too small for a person to get through, so it is not a way through')
     expect(note.detail.map((p) => p.text).join('')).toBe(
       'The door is 0.30 m wide. Grid counts a door or an opening as a way through when it is at least 0.40 m wide and 1.20 m high, with its sill no more than 0.30 m above the floor. ' +
         "That is Grid's own size, not a code figure."

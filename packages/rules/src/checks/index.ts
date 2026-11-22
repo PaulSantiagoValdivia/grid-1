@@ -1,5 +1,5 @@
 export * from './types'
-export { FIGURE_LIMITS, FIGURE_RULES, HABITABLE_USES, RULE_FIGURES, RULE_USES, RULES, rulesForUse } from './catalogue'
+export { FIGURE_LIMITS, FIGURE_RULES, HABITABLE_USES, RULE_BUILDINGS, RULE_FIGURES, RULE_READ_FOR, RULE_USES, RULES, ruleReadsBuilding, rulesForUse } from './catalogue'
 export type { FigureRuleId } from './catalogue'
 export { basisOf, checkLocalRules } from './check'
 export type { CheckOptions } from './check'
@@ -10,6 +10,8 @@ export {
   US_MODEL_CODES,
   VERIFICATION_STATUSES,
   BUILDING_KINDS,
+  READ_FOR_BUILDINGS,
+  readForCovers,
   baselineApplies,
   buildingKindsText,
   findingReadFor,
@@ -20,4 +22,5 @@ export {
 } from './figures'
 export type { BuildingKind, FigureKey, FigureSpec, FigureUnit, Provenance, SourceCitation, Verification, VerificationStatus } from './figures'
 export { figuresFromSheet } from './fromSheet'
+export { FIGURE_NAMES, FIGURE_STATUS_WORDS, figureBasisText, figureNeededText, figureStatusText, figureUsedText, figureValueText } from './figureWords'
 export { coverageOnFloor, LOOKS_AT, roomsLookedAt, skipWhy } from './coverage'

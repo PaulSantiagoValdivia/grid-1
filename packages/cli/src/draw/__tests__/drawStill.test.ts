@@ -29,7 +29,8 @@ describe('drawStill', () => {
     expect(typeof (globalThis as { window?: unknown }).window).toBe('undefined')
     expect(typeof (globalThis as { document?: unknown }).document).toBe('undefined')
 
-    const png = await drawStill(flat)
+    // Without the label (MSG-3), the file holds exactly the still's pixels.
+    const png = await drawStill(flat, { label: false })
     expect([...png.subarray(0, 8)]).toEqual(PNG_SIGNATURE)
     expect(pngSize(png)).toEqual([1200, 800])
     const file = join(dir, 'flat.png')
@@ -45,6 +46,22 @@ describe('drawStill', () => {
     expect(Buffer.from(read).equals(Buffer.from(pixels.data))).toBe(true)
     expect([...read.subarray(0, 3)]).toEqual([0xf1, 0xee, 0xe8])
     expect(LIGHT_COLORS_3D.background).toBe('#f1eee8')
+  })
+
+  it('stamps the label in the top-left corner and leaves the rest of the still as it was (MSG-3)', async () => {
+    const pixelsOf = async (png: Uint8Array): Promise<Uint8ClampedArray> => {
+      const image = await loadImage(Buffer.from(png))
+      const canvas = createCanvas(image.width, image.height)
+      const context = canvas.getContext('2d')
+      context.drawImage(image, 0, 0)
+      return context.getImageData(0, 0, image.width, image.height).data
+    }
+    const labelled = await pixelsOf(await drawStill(flat))
+    const plain = await pixelsOf(await drawStill(flat, { label: false }))
+    const row = 1200 * 4
+    // The strip is at most 30 rows high: everything under it is the still's own.
+    expect(Buffer.from(labelled.subarray(30 * row)).equals(Buffer.from(plain.subarray(30 * row)))).toBe(true)
+    expect(Buffer.from(labelled.subarray(0, 30 * row)).equals(Buffer.from(plain.subarray(0, 30 * row)))).toBe(false)
   })
 
   it('draws twice as wide and tall at scale 2', async () => {

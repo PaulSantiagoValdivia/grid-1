@@ -13,15 +13,15 @@
  * the plan's own handles, which an agent needs to edit it and a person never does. The
  * agent's form is terse and carries every id.
  *
- * What the plan cannot say (north, the kind of building, how floors connect, which rooms
- * make a flat) is said as such. A floor laid out like an earlier one is said once. Wall and
+ * What the plan cannot say (north when it states none, the kind of building, how floors
+ * connect, which rooms make a flat) is said as such. A floor laid out like an earlier one is said once. Wall and
  * sill heights are one line: the usual height and the exceptions.
  *
- * The cards check nothing, and say so with the label "General guidance, not your local
- * rules", as every report of Grid's does wherever it mentions checks. No line says a plan
+ * The cards check nothing, and say so. `describePlan` puts the label "General guidance, not
+ * your local rules" first, as every report of Grid's does (MSG-3). No line says a plan
  * complies.
  */
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { BUILDING_TYPE_TEXT } from '@ongrid/floorplan/types/floorplan'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
 export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls'] as const
@@ -155,19 +155,37 @@ function personLine(facts: PlanFacts, names: PersonNames): string {
   const entered = into.length === 0
     ? 'no door leads in from outside'
     : `from outside, ${waysText(ways)} into ${listed(capped(into, 5))}`
-  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.`
+  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.${personBuilding(facts, names)}`
+}
+
+/** CNT-5: what kind of building the plan says it is, and each floor that says otherwise, as a sentence. */
+function personBuilding(facts: PlanFacts, names: PersonNames): string {
+  const { plan, floors } = facts.building
+  const own = floors.map((f) => `${names.floor(f.floor)} is ${BUILDING_TYPE_TEXT[f.building]}`)
+  if (plan === undefined) return own.length === 0 ? '' : ` The plan says ${listed(own)}.`
+  return ` The plan says it is ${BUILDING_TYPE_TEXT[plan]}${own.length === 0 ? '' : `, and ${listed(own)}`}.`
+}
+
+/** CNT-5: the same for an agent, as `BUILDING home; ground shop`. */
+function agentBuilding(facts: PlanFacts): string {
+  const { plan, floors } = facts.building
+  if (plan === undefined && floors.length === 0) return ''
+  return ` BUILDING ${[...(plan === undefined ? [] : [plan]), ...floors.map((f) => `${f.floor} ${f.building}`)].join('; ')}.`
 }
 
 function agentLine(facts: PlanFacts): string {
   const ways = waysIn(facts)
   const into = ways.length === 0 ? 'no way in from outside' : `from outside into ${capped([...new Set(ways.map((way) => way.room))], 8).join(', ')}`
-  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.`
+  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}`
 }
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */
 function unsaid(facts: PlanFacts, names: PersonNames): { person: string[]; agent: string[] } {
-  const person = ['where north is', 'what kind of building it is']
-  const agent = ['north', 'kind of building']
+  // CNT-3: a plan that states its north says so in its own lines.
+  // CNT-5: a plan may say what kind of building it is; one that says it for every floor is not asked.
+  const said = facts.building.plan !== undefined || (facts.floors.length > 0 && facts.floors.every((f) => facts.building.floors.some((b) => b.floor === f.id)))
+  const person = [...(facts.northStated ? [] : ['where north is']), ...(said ? [] : ['what kind of building it is'])]
+  const agent = [...(facts.northStated ? [] : ['north']), ...(said ? [] : ['kind of building'])]
   if (facts.floors.length > 1) {
     // Floors no stair joins (LVL-3): a stair the plan states, or stair rooms one over the other.
     const { unjoined } = facts.connections
@@ -436,8 +454,9 @@ const PERSON_KEY = 'Metres, inside the walls: a size is across by up the drawing
 const AGENT_KEY_ROOMS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2 | next: across a wall, no way through | opening: id d/o/w(door/opening/window) or v(virtual wall) width >other side(none=outside window, OUT=outside, NONE=nothing drawn, LEFT=left out) side of this room, gaps to its corners'
 const AGENT_KEY_WALLS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2. wall: id start>end thickness x/i/p/v(exterior/interior/partition/virtual) h=not the floor\'s usual | opening: id d/o/w offset+width room gaps to its side\'s corners(start end first)|other(none=outside, NONE=nothing drawn, LEFT=left out)'
 
-const PERSON_CLOSE = `This describes the plan and checks nothing: grid check runs the checks. ${GENERAL_GUIDANCE_LABEL}.`
-const AGENT_CLOSE = `CHECKS none here: grid check. ${GENERAL_GUIDANCE_LABEL}.`
+// The label leads every description (`describePlan`, MSG-3), so the close need not repeat it.
+const PERSON_CLOSE = 'This describes the plan and checks nothing: grid check runs the checks.'
+const AGENT_CLOSE = 'CHECKS none here: grid check.'
 
 function personFloorHead(floor: FloorFacts, names: PersonNames): string {
   const left = floor.leftOut.length > 0 ? ` ${plural(floor.leftOut.length, 'part')} can't be drawn and ${floor.leftOut.length === 1 ? 'is' : 'are'} left out.` : ''
