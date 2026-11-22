@@ -15,7 +15,7 @@ and `grid mcp` start the same server; the lines that install it in an agent are 
 
 `grid serve` is an MCP server over standard input and output, for an agent's host to start.
 Its tools are listed in a fixed order: first those that read the plan, in the order of the
-requests people make most, with the problem report last of them, then the preview, the export, the sheet and the seen mark, and last the nine that
+requests people make most, with the problem report last of them, then the preview, the export, the sheet, the seen mark and the brief, and last the nine that
 change the plan, writing it rooms first leading. Every tool has a title, a read-only or destructive hint, an input schema with an example
 and the allowed values of each argument, and an output schema. Each answer is short text with
 the same facts as data; a view also returns its picture. Figures are in metres; a length argument also takes text with its unit, and the measuring tools and views write in `units` and `decimal`, or the plan's `display` (see [Units](plan-file.md#units)).
@@ -35,6 +35,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_export` | Writes DXF, IFC, GLB or OBJ into `exports/`, and says what the file leaves out of the plan (the file says it too); a file that would hold nothing of the plan is refused |
 | `grid_sheet` | Writes the plan as an A3 PDF into `exports/`: layout `client` (cover, a page per floor, the words as `sheet`) or `check` (every id, use and finding) |
 | `grid_mark_seen` | Sets a note of `grid_check` aside as seen, with the person's reason and the name or role they give, in `plan.seen.json` beside the plan; or takes the mark off (see below) |
+| `grid_write_brief` | Writes the brief beside the plan from the person's words, before the first room: room areas and counts, inside sizes, the footprint, rooms that must or must not touch, and the person's own figures, each with its level, its quote and whether it was given or assumed, and what is still open; answers with each line met or missed ([brief.md](brief.md)) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out |
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
@@ -46,7 +47,10 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_rename_room` | Renames a room or changes its use, saying which checks now look at it |
 
 Every change answers with what it changed, what it guessed and what it could not keep, and
-names the plan by its path in the project, so its size does not grow with the building.
+names the plan by its path in the project, so its size does not grow with the building. When a
+brief is kept beside the plan, it answers with each of its lines met or missed too, and a size
+written in a room's name is read against the room until the brief gives one; the first plan
+written with no brief beside it gets one line saying so ([brief.md](brief.md)).
 
 A tool that names no plan reads the project's `plan.json` in a folder `grid init` made. A floor
 or room the plan does not have is refused with the ones it has, a room, wall, door or window

@@ -14,6 +14,7 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- Keep what the person asked for beside the plan, in `plan.brief.json`: room areas and counts, inside sizes, the footprint, rooms that must or must not touch, and their own figures such as a door width, each with how much it matters (must, should, avoid), their words, and whether they said it or the agent assumed it. The agent writes it in one call, `grid_write_brief`, before the first room. After every change Grid says each line met or missed, as "asked 4.5, drawn 11.93 m²", never as a score; until the brief gives a room a size, a size in its name ("6 tatami", "12 m²") is checked against the room. The first plan written with no brief gets one line saying so (BRF-1).
 - `grid check` and `grid_check` are short by default and about your plan: what to look at, the figures those notes used, and what each check looked at. `--full` (or `full` for the tool) gives the whole report. A note you have looked at can be set aside as seen, with why and who (`grid check --seen 3 --reason … --by …`, or `grid_mark_seen`): it stays listed under Seen, in `plan.seen.json` beside the plan, and comes back as new when its part of the plan changes (MSG-10).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 
