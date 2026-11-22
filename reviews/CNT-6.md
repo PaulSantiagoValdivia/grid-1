@@ -92,15 +92,24 @@ context add 0 m² (lab EL-17).
   fixture gets it: in `duplexHouse` the studio S1 (bedroom and bathroom) is entered only through the
   duplex D1's hall, so CNT-6 says S1 has no front door and names door `d_hb` as between homes. The
   fixture is unchanged.
-- (Filled in below from the full run, if more.)
+- `packages/cli/src/mcp/__tests__/flats.test.ts`: the duplex's `grid_check` held no `flat/` line;
+  it now holds `flat/no-front-door` for the studio (same reason) and still no fault of the list.
+- `packages/cli/src/__tests__/ownWords.test.ts`: `coverage.ts` 27 to 28 (the buildings' "not
+  shown" reason), and the ceiling on sentences left to move one higher for the context shape's
+  outline refusal in the schema (merged with ARE-15's raise: 1511). Two other new sentences went
+  into the message files instead (`read.building.floors`, `areas.buildings.heading`).
 
 ## Scoreboard
 
-(Filled in from the run below.)
+No count moves: 197, 277, 22, 5, 22, guards 735 and 95, the same as `current.json`. None of the
+lab's plans states a separating wall, a `beyond`, buildings or context yet, so the routes and areas
+read them as before.
 
 ## The checks run
 
-(Filled in below.)
+After merging `main` (ARE-15, 0e99848d): the full suite (`vitest run --exclude '.claude/**'
+--maxWorkers=4 --minWorkers=1`) 365 files, 6,051 passed, 4 skipped; `npm run typecheck` and
+`npm run lint` clean; `npm run scoreboard` the same as the stored figures.
 
 ## For the owner
 
