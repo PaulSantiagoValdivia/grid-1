@@ -40,9 +40,10 @@ export interface DrawOptions extends PictureOptions {
  * - `format: 'png'` resolves to the PNG file's bytes.
  *
  * Every other option is `planToSvg`'s: `floor` (the lowest by default), `width` (1200 px by
- * default), `height` (follows the plan's shape by default), `look` (`light`, `dark` or your
- * own colours), `showDimensions` (on by default) and `faults` (the result record's lines, to
- * mark what went wrong on the drawing and list it under it; none by default).
+ * default), `height` (follows the plan's shape by default), `look` (`working`, the default,
+ * `technical` or `dark`, or your own colours), `paperScale` (the technical look's 1:N) and
+ * `showDimensions` (on by default) and `faults` (the result record's lines, to mark what went
+ * wrong on the drawing and list it under it; none by default).
  *
  * The plan is not checked here: parse and validate it first. Whatever part of a broken plan
  * cannot be drawn is left out, as in the app.
@@ -79,7 +80,7 @@ export async function drawPlan(plan: FloorPlan, options: DrawOptions): Promise<s
   const canvas = createCanvas(width, height)
   const context = canvas.getContext('2d')
   // The paper, under the drawing's own, so no corner is ever left transparent.
-  context.fillStyle = picture.look.paper
+  context.fillStyle = picture.look.colors.paper
   context.fillRect(0, 0, width, height)
   context.drawImage(image, 0, 0, width, height)
   return canvas.encode('png')

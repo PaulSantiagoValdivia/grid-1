@@ -1,7 +1,7 @@
 /**
  * The `grid` command, which `ongrid` runs too: `init`, `write`, `check`, `describe`, `draw`,
- * `export`, `tidy`, `serve` and `mcp`, the same server under the name an agent's host types
- * (`npx -y ongrid mcp`, CMD-9).
+ * `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an agent's
+ * host types (`npx -y ongrid mcp`, CMD-9).
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
  * plan, hands it to Grid's packages, and writes what comes back. `serve` starts the tool server
@@ -24,12 +24,13 @@ import { CanvasMissing } from '../draw/canvas'
 import { openProject, PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { FontsMissing } from '../sheet/fonts'
+import { linkSeats, occupancyFileOf, occupancyText, OccupancyRefused, readOccupancy } from '../occupancy/occupancy'
 import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText } from './check'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
-import { checkDrawRequest, DRAW_OPTIONS, drawFile } from './draw'
+import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed } from './export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
@@ -77,8 +78,8 @@ const COMMANDS = {
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
-    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG.',
+    usage: 'grid draw [<plan.json>] [--png | --3d] [--look <name>] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG.',
     options: DRAW_OPTIONS,
   },
   export: {
@@ -95,6 +96,11 @@ const COMMANDS = {
     usage: 'grid tidy [<plan.json>] [--apply <ids>|all] [--out <file.json>] [--json] [--project <folder>]',
     summary: 'Lists the faults where walls meet, each with the fix Grid offers. With --apply, makes the fixes chosen on the plan file.',
     options: TIDY_OPTIONS,
+  },
+  occupancy: {
+    usage: 'grid occupancy [<plan.json>] [--project <folder>]',
+    summary: 'Lists who sits where, from the occupancy file beside the plan (plan.occupancy.json), by room. No export carries it.',
+    options: PROJECT_OPTION,
   },
   serve: {
     usage: 'grid serve [--project <folder>]',
@@ -130,7 +136,7 @@ const OVERVIEW = [
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
   '',
   `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
-  `write writes ${PROJECT_PLAN}, and check, describe, draw, export, sheet and tidy read it when no plan file is named, and export`,
+  `write writes ${PROJECT_PLAN}, and check, describe, draw, export, sheet, tidy and occupancy read it when no plan file is named, and export`,
   'writes into exports/. grid init never replaces a file: it refuses a folder that already holds',
   `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
@@ -169,7 +175,12 @@ function checkWritable(project: Project, file: string): void {
 
 /** Says, on standard error, which parts a picture or an export leaves out. */
 function warnLeftOut(io: CommandIo, loaded: LoadedPlan): void {
-  const ids = [...loaded.broken].sort()
+  // MSG-6: a part the reader left out is named by its id, or its place when it has none.
+  const faults = loaded.faults ?? []
+  const read = faults.flatMap((f) => (f.kind === 'read-as-meant' || f.kind === 'value-left-out' ? [] : [f.part.id ?? `${f.part.list}[${f.part.index}]`]))
+  const ids = [...new Set([...loaded.broken, ...read])].sort()
+  const otherwise = faults.length - read.length
+  if (otherwise > 0) io.stderr(`Read ${otherwise} value${otherwise === 1 ? '' : 's'} otherwise than written. grid check says which.\n`)
   if (ids.length === 0) return
   const list = ids.length > 5 ? `${ids.slice(0, 5).join(', ')} and ${ids.length - 5} more` : ids.join(', ')
   io.stderr(`Left out ${ids.length} part${ids.length === 1 ? '' : 's'} that can't be drawn: ${list}. grid check says why.\n`)
@@ -259,15 +270,18 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
       ids: parsed.values.has('--ids'),
+      look: textOf(parsed, '--look'),
     }
-    const { scale } = checkDrawRequest(request)
+    const { scale, look } = checkDrawRequest(request)
     if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {
       throw new UsageError('A PNG is not shown in a terminal: name a file with --out, or send the output to a file or another program.')
     }
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
-    const picture = await drawFile(loaded, request, scale)
+    const { file: picture, undecidedDoors } = await drawFile(loaded, request, scale, look)
     warnLeftOut(io, loaded)
+    const undecided = undecidedNote(undecidedDoors)
+    if (undecided) io.stderr(undecided)
     if (request.out === undefined) {
       io.stdout(picture)
     } else {
@@ -283,7 +297,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const project = openProject(projectOption, io.cwd)
     // CMD-15: --out is checked even when no fix is made and nothing is written.
     if (out !== undefined) project.resolve(out)
-    const loaded = loadPlan(project, planFile)
+    // Read whole: tidy writes the file back, and must not drop a part the reader would leave out.
+    const loaded = loadPlan(project, planFile, { whole: true })
     if (ids === null) {
       const list = tidyList(loaded)
       io.stdout(json ? `${JSON.stringify(list, null, 2)}\n` : tidyListText(list))
@@ -293,6 +308,17 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const written = done.text === null ? null : project.shown(write(project, out ?? planFile, done.text))
     const result = { label: GENERAL_GUIDANCE_LABEL, applied: done.applied, skipped: done.skipped, left: done.left, written }
     io.stdout(json ? `${JSON.stringify(result, null, 2)}\n` : tidyAppliedText(result))
+    return EXIT_OK
+  }
+
+  if (name === 'occupancy') {
+    const project = openProject(projectOption, io.cwd)
+    const loaded = loadPlan(project, planFile)
+    const read = readOccupancy(project, planFile)
+    if (read === null) {
+      throw new OccupancyRefused(`There is no ${project.shown(project.resolve(occupancyFileOf(planFile)))}: who sits where is kept in that file, beside the plan and apart from it.`)
+    }
+    io.stdout(occupancyText(project.shown(read.file), linkSeats(loaded.plan, read.occupancy)))
     return EXIT_OK
   }
 
@@ -365,7 +391,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

@@ -42,14 +42,6 @@ export interface Scoreboard {
   readonly noRefereeFigure: readonly { readonly name: string; readonly why: string }[]
 }
 
-const parse = (text: string): unknown => {
-  try {
-    return JSON.parse(text)
-  } catch {
-    return undefined
-  }
-}
-
 interface AreaTally {
   plans: number
   plansGridCannotRead: number
@@ -145,7 +137,7 @@ export function runScoreboard(options: RunOptions = {}): Scoreboard {
         continue
       }
       const expected = new Map(Object.entries(figure.rooms).map(([key, room]) => [key, room.area]))
-      tallyAreas(areas[set], parse(plan.text), expected)
+      tallyAreas(areas[set], plan.text, expected)
     }
   }
   const examples = data.benchExamples()
@@ -208,7 +200,7 @@ export function runScoreboard(options: RunOptions = {}): Scoreboard {
   for (const m of data.mistakes()) {
     const plan = labByName.get(m.plan)
     if (!plan) throw new Error(`Mistake ${m.n}: the plan ${m.plan} is not in the data`)
-    const run = runGrid(parse(plan.text), { exports: false })
+    const run = runGrid(plan.text, { exports: false })
     const ids = new Set([...run.issues, ...run.sweeps].map((i) => i.id).concat(run.findingIds))
     const said = everythingSaid(run)
     const hit = m.ids.some((id) => ids.has(id) || said.some((text) => mentions(text, id)))

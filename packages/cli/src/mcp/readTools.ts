@@ -14,7 +14,7 @@ import { describePlan, describeRooms } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
-import { LOOKS, SIDES, type LookName, type Side } from '../draw/viewNames'
+import { LOOKS, SIDES, namedLook, type LookName, type Side } from '../draw/viewNames'
 import { AREA_RULES, planAreas } from '../quantities/areas'
 import { stateText } from '../quantities/state'
 import { comparePlans, optionRow, type Comparison, type OptionRow } from '../quantities/compare'
@@ -178,7 +178,7 @@ const compareTool: GridTool = {
       const floor = args['floor']
       surveys.forEach((survey) => floorArg(survey.plan, floor))
       const { sheetView } = await import('../draw/views')
-      const sheet = await sheetView(surveys.map((survey, i) => ({ plan: survey.plan, title: labels[i]!, ...(floor ? { floor: floor as string } : {}) })), 'light')
+      const sheet = await sheetView(surveys.map((survey, i) => ({ plan: survey.plan, title: labels[i]!, ...(floor ? { floor: floor as string } : {}) })), 'working')
       image = { data: sheet.png, mimeType: 'image/png' as const }
       lines.push(`The sheet: ${labels.join(', ')} side by side, all at 1 m = ${sheet.pxPerMetre.toFixed(1)} px. Look at it before you describe it.`)
     }
@@ -199,8 +199,9 @@ const areasTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks how big the plan or a room is, for the total floor area, a gross internal or gross external area, square feet, circulation or net to gross, or an area table for a spreadsheet. '
-    + 'It lists every room with its inside size and net area, the totals by use, and the gross areas, each with the rule it is measured by stated in the answer. '
-    + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Units are metres unless units is ft.',
+    + 'It lists every room with its inside size and net area, the totals by floor and by use, and the gross areas, each with a sentence saying what it measures, what it does not take off and what the plan cannot say. '
+    + 'Pass country for the gross measure the reader there usually means (the inside face of the outer walls in the UK and most of Europe, the outside face for US homes), or gross to ask for one or both. '
+    + 'Rooms named in outside_rooms (a balcony, a terrace) are listed apart; a room Grid could not draw is named and left out of every figure. Do not use for wall lengths, plaster or skirting (grid_takeoff), or to compare plans (grid_compare). Units are metres unless units is ft.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
@@ -212,16 +213,22 @@ const areasTool: GridTool = {
       minItems: 1,
       maxItems: 50,
     },
+    country: { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code: the gross measure usual there is given first. Both when left out or when Grid has none for that place.', examples: ['GB', 'US'] },
+    gross: { type: 'string', enum: ['internal', 'external', 'both'], description: 'The gross measure to give: internal (to the inside face of the outer walls), external (to the outside face) or both. The usual one for country when left out.', examples: ['both', 'external'] },
     units: UNITS_ARG,
     format: FORMAT_ARG,
   },
   outputSchema: objectSchema({
-    floors: listSchema(objectSchema({ floor: STRING, net: NUMBER, grossInternal: NULLABLE_NUMBER, grossExternal: NULLABLE_NUMBER, circulation: NUMBER, rooms: { type: 'array' }, byUse: { type: 'object' } }, ['floor', 'net', 'rooms'])),
+    floors: listSchema(objectSchema({ floor: STRING, net: NUMBER, grossInternal: NULLABLE_NUMBER, grossExternal: NULLABLE_NUMBER, circulation: NUMBER, rooms: { type: 'array' }, leftOut: { type: 'array' }, byUse: { type: 'object' } }, ['floor', 'net', 'rooms', 'leftOut'])),
     net: NUMBER,
     grossInternal: NULLABLE_NUMBER,
     grossExternal: NULLABLE_NUMBER,
+    byUse: { type: 'object' },
     circulationShare: NULLABLE_NUMBER,
     netToGross: NULLABLE_NUMBER,
+    leftOut: { type: 'array' },
+    gross: objectSchema({ measures: listSchema(STRING), chosen: STRING, why: STRING }, ['measures', 'chosen', 'why']),
+    measures: listSchema(objectSchema({ measure: STRING, name: STRING, measures: STRING, notTakenOff: STRING, cannotSay: STRING })),
     rules: listSchema(STRING),
     notes: listSchema(STRING),
     // MSG-2: each total's state (proven, not-proven, not-looked-at) and the rooms it left out.
@@ -232,14 +239,27 @@ const areasTool: GridTool = {
     const outside = (args['outside_rooms'] as string[] | undefined) ?? []
     for (const id of outside) roomArg(survey.plan, id, 'outside_rooms item')
     const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
-    const areas = planAreas(survey, new Set(outside), floor === undefined ? undefined : [floor])
+    const country = args['country'] as string | undefined
+    if (country !== undefined && !/^[A-Za-z]{2}$/.test(country)) throw new ToolRefusal(`country takes a two-letter country code, such as GB or US: got ${q(country)}.`)
+    const asked = args['gross'] as 'internal' | 'external' | 'both' | undefined
+    const gross = asked === undefined ? undefined : asked === 'both' ? 'both' : asked === 'internal' ? 'grossInternal' : 'grossExternal'
+    const areas = planAreas(survey, {
+      outside: new Set(outside),
+      ...(floor === undefined ? {} : { floors: [floor] }),
+      ...(country === undefined ? {} : { country }),
+      ...(gross === undefined ? {} : { gross }),
+    })
     const data = {
       floors: areas.floors,
       net: areas.net,
       grossInternal: areas.grossInternal,
       grossExternal: areas.grossExternal,
+      byUse: areas.byUse,
       circulationShare: areas.circulationShare,
       netToGross: areas.netToGross,
+      leftOut: areas.leftOut,
+      gross: { measures: areas.reader.gross, chosen: areas.reader.chosen, why: areas.reader.why },
+      measures: areas.measures,
       rules: areas.rules,
       notes: areas.notes,
       states: areas.states,
@@ -263,14 +283,33 @@ const areasTool: GridTool = {
         lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}`)
       }
     }
-    lines.push(`Net: ${areaText(areas.net, units)}${stateText(areas.states.net, several)}.`)
-    if (areas.grossInternal !== null) {
-      lines.push(`Gross internal: ${areaText(areas.grossInternal, units)}${stateText(areas.states.grossInternal, several)}. Gross external: ${areaText(areas.grossExternal!, units)}${stateText(areas.states.grossExternal, several)}.`)
+    if (several) {
+      for (const f of areas.floors) {
+        const gross = areas.reader.gross.map((m) => `${m === 'grossInternal' ? 'gross internal' : 'gross external'} ${f[m] === null ? 'not known' : areaText(f[m]!, units)}`)
+        lines.push(`Floor ${q(f.floor)}: net ${areaText(f.net, units)}, ${gross.join(', ')}.`)
+      }
+    }
+    const uses = Object.entries(areas.byUse)
+    if (uses.length > 1) lines.push(`Net by use: ${uses.map(([use, area]) => `${use} ${areaText(area, units)}`).join(', ')}.`)
+    // Each figure with the rule it follows, in Grid's words: never a bare number (AR-16).
+    lines.push(`Net: ${areaText(areas.net, units)}${stateText(areas.states.net, several)}. ${AREA_RULES.net}`)
+    for (const m of areas.reader.gross) {
+      const value = m === 'grossInternal' ? areas.grossInternal : areas.grossExternal
+      const state = value === null ? '' : stateText(areas.states[m], several)
+      lines.push(`${m === 'grossInternal' ? 'Gross internal' : 'Gross external'}: ${value === null ? 'not known' : areaText(value, units)}${state}. ${AREA_RULES[m]}`)
+    }
+    lines.push(`Assumed: ${areas.reader.why} Grid's own rule, not checked against any local standard.`)
+    if (areas.grossInternal !== null && areas.reader.gross.includes('grossInternal')) {
       lines.push(`Circulation: ${areas.circulation.toFixed(2)} m², ${percent(areas.circulationShare)} of gross internal. Net to gross: ${percent(areas.netToGross)}.`)
     }
     const outsideArea = areas.floors.reduce((sum, f) => sum + f.outsideRooms, 0)
     if (outsideArea > 0) lines.push(`Outside, listed apart: ${areaText(outsideArea, units)}.`)
-    lines.push(...areas.rules, ...areas.notes)
+    for (const rule of areas.measures) {
+      if (rule.measure === 'net' || areas.reader.gross.includes(rule.measure)) lines.push(`${rule.name}: ${rule.notTakenOff} ${rule.cannotSay}`)
+    }
+    // Any rule beyond the measures', such as free floor where fixtures stand (CNT-12).
+    const measureRules: readonly string[] = Object.values(AREA_RULES)
+    lines.push(...areas.rules.filter((rule) => !measureRules.includes(rule)), ...areas.notes)
     return { text: lines.join('\n'), data }
   },
 }
@@ -649,7 +688,7 @@ const viewTool: GridTool = {
     room: { type: 'string', id: true, description: 'For eye: the room to stand in.', examples: ['kitchen', 'living'] },
     toward: { type: 'string', maxLength: 64, description: 'For eye: an opening id to look at, or a direction (north, north-east, east, south-east, south, south-west, west, north-west). The room\'s first window when left out.', examples: ['back-door', 'north'] },
     eye_height: { type: 'number', description: 'For eye: metres above the floor. 1.6 standing when left out; about 1.2 seated.', examples: [1.6, 1.2], minimum: 0.3, maximum: 3 },
-    look: { type: 'string', enum: LOOKS, description: 'For plan: light (the default), dark, or mono for black lines on white.', examples: ['light', 'mono'] },
+    look: { type: 'string', enum: LOOKS, description: 'For plan: working (the default: clear labels and strong contrast), technical for black on white as on a sheet, with lines in millimetres at the scale and doors with no stated swing marked "?", or dark. light and mono are older names for working and technical.', examples: ['working', 'technical'] },
     dimensions: { type: 'boolean', description: 'For plan: false to leave the sizes off, for a clean drawing. true when left out.', examples: [true, false] },
     crop: { type: 'string', maxLength: 120, description: 'For plan: frame just this part: a room, door, window or wall id, or a room\'s name. The whole floor when left out.', examples: ['kitchen', 'front-door'] },
     ids: { type: 'boolean', description: 'For plan: true to draw the id of every room, door and window on the picture, as the plan file holds them, and to list them in the text with the areas, what each door joins, the counts and the drawing\'s problems. false when left out.', examples: [true] },
@@ -665,16 +704,21 @@ const viewTool: GridTool = {
     if (stray.length > 0) throw new ToolRefusal(`kind=${kind} takes ${allowed[kind]!.join(', ')}, not ${stray.join(', ')}.`)
     const plan = survey.plan
     if (kind === 'plan') {
-      const look = (args['look'] as LookName | undefined) ?? 'light'
+      const asked = (args['look'] as LookName | undefined) ?? 'working'
+      const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`
       const { planView } = await import('../draw/views')
       const withIds = args['ids'] === true
       const shown = floor ?? survey.facts.floors[0]?.id ?? 'ground'
       const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
       // What went wrong, numbered as grid_check numbers it, marked on the drawing (MSG-8).
       const faults = inspectPlan(plan).lines
-      const view = await planView(plan, { floor: shown, look, dimensions: args['dimensions'] !== false, ids: withIds, faults, ...(crop ? { frame: cropFrame(crop) } : {}) })
+      const view = await planView(plan, { floor: shown, look: asked, dimensions: args['dimensions'] !== false, ids: withIds, faults, ...(crop ? { frame: cropFrame(crop) } : {}) })
       const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
+      const undecided = view.undecidedDoors ?? []
+      if (undecided.length > 0) {
+        lines.push(`Drawn with a dashed line and "?" as undecided, ${undecided.length === 1 ? 'a door' : `${undecided.length} doors`} with no stated swing: ${undecided.map(q).join(', ')}. Ask the person which side each is hinged on and which way it opens, then set its hinge and swing.`)
+      }
       lines.push('Each part\'s box on the picture, in pixels from its top-left corner, is in boxes: id, kind and x, y, width, height.')
       const marked = faults.filter((line) => line.floor === null || line.floor === shown).length
       if (marked > 0) lines.push(`${marked} of grid_check's lines are about this floor: each has its grid_check number on the part it is about, and all are listed under the drawing. A room that cannot be drawn is the dashed box round its walls.`)
@@ -814,6 +858,8 @@ const checkTool: GridTool = {
       skippedCount: { type: 'number' },
       findings: { type: 'number' },
     }, ['ruleId', 'title', 'looksAt', 'lookedAt', 'lookedAtCount', 'skipped', 'skippedCount', 'findings'])),
+    // COD-4: what these checks never look at, whatever the plan (ceiling height, which walls carry load).
+    limits: listSchema(STRING),
   }),
   run(args, context) {
     const { loaded } = readPlan(context, args['plan'])
@@ -845,9 +891,11 @@ const checkTool: GridTool = {
       const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
       lines.push(`  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}.`)
     }
+    // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
+    lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
     return {
       text: lines.join('\n'),
-      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing, coverage: record.coverage },
+      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: record.lines, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
     }
   },
 }

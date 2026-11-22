@@ -103,6 +103,13 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/unknown-word` | {thing} has a word the format does not know | {wanted} at {place} |
 | `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
+| `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
+| `plan/part-left-out` | {thing} is left out: a value it needs cannot be read | {wanted} at {place} |
+| `plan/value-left-out` | {thing} has a value the format cannot read, and is read without it | {wanted} at {place} |
+| `plan/read-as-meant` | {thing} has a value written another way, and it is read as meant | {wanted} at {place} |
+| `plan/blank-id` | {thing} is left out: its id is blank | an id of its own on every part, with more than spaces in it |
+| `plan/id-clash` | {thing} is left out: another part has the same id | every id on one part only, across the whole plan |
+| `plan/similar-id` | {thing} is left out: its id differs from another part's only in capitals or spaces | ids that differ in more than capitals or spaces |
 | `plan/check-failed` | A check could not run on this plan: something went wrong inside Grid | the check to run to the end |
 | `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin (0, 0) |
 | `plan/duplicate-id` | Id {thing} names more than one wall, room or opening | every id on one wall, room or opening only |
@@ -252,7 +259,35 @@ A total that left a room out names it, in `leftOut`, in its text ("not proven: l
 
 ## Refusals
 
-A plan is refused when it is not JSON, not a JSON object, or does not fit the plan format.
+A plan is refused when it is not JSON, not a JSON object, holds an unfinished git merge, or
+does not fit the plan format at its top level (a version Grid does not read, a list of parts
+that is not a list).
+
+A fault inside a part refuses nothing (MSG-6). The plan is read part by part, with the
+format's own rules, and each wall, room, opening, floor and fixture that cannot be read as
+written gets a line by its id (or, with no id that can be read, its place) and its place in
+the file:
+
+- `plan/read-as-meant` (`worth-a-look`): a number written as text (`"2.5"`, `"0.9 m"`),
+  `"true"` for true, a word that differs from one the format knows only in its capitals or
+  spaces (`"Exterior"`), a whole number where an id goes. It is read as meant.
+- `plan/value-left-out` (`worth-a-look`): a value the format cannot read in a field the part can
+  do without. The field's default is used, or the field is read as not stated; the line says
+  which. A unit other than metres is read so: every length is read in metres.
+- `plan/part-left-out` (`left-out`): a value the part cannot do without that cannot be read. The
+  part is left out of every view, measure and export, and a room or opening that rests on a wall
+  left out is left out with it (`room/broken-wall`, `opening/broken-wall`, naming the wall).
+- `NaN`, `Infinity` and a number with a decimal comma inside an object (`"offset": 3,45`) are
+  not JSON. They are read as a value that is not there, at their place, and the line names
+  them for what they are. A comma inside a list is JSON, so `[4,6,3,3]` for a point is read as
+  four numbers, and the line says a decimal comma most likely split them.
+- Ids are unique across the whole plan. A blank id (`plan/blank-id`) and an id that differs
+  from an earlier one only in capitals or spaces (`plan/similar-id`) leave the part out; the
+  earlier keeps its id, in the order walls, rooms, openings. Of two parts with one id, only the
+  clash is left out (`plan/id-clash`): a wall keeps its id, since rooms and openings name walls,
+  and otherwise the first in the order walls, rooms, openings, fixtures does. Two walls with one id are both left out (`plan/duplicate-id`): a room that
+  names it could mean either. The lines name both parts, and `plan/id-clash` and
+  `plan/duplicate-id` an id to rename one to.
 
 - In the record: `read: false`, and one `refused` line for each place the format refuses,
   with the part it is in when its id can be read, the place (`walls[2].thickness`) and what
@@ -295,6 +330,43 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: a fault stays local (MSG-6)
+
+- A value Grid cannot read inside a wall, room, opening, floor or fixture no longer refuses the
+  plan. Each line's `found` says the place and the value as read (`-0.3 at openings[1].offset`,
+  `NaN, which JSON does not hold as a number at …`), and `needed` what the format takes there.
+  The plan is read part by part: new codes `plan/part-left-out` (`left-out`),
+  `plan/value-left-out` and `plan/read-as-meant` (`worth-a-look`). The record is `read: true`,
+  and every check runs on the rest. Of the scoreboard's 3,000 damaged plans, the 504 the format
+  refused are each read now, with the damaged value named by its part and place.
+- New refusal `plan/unfinished-merge`: a file with git's conflict markers is named as an
+  unfinished merge, with the line of the first conflict and what each side adds or changes, by
+  id. `plan/not-json` now says the line and column where the text stops being JSON.
+- New `plan/blank-id`, `plan/similar-id` and `plan/id-clash` (`left-out`). A room and a wall that
+  share an id now leave out only the room; the rooms on the wall are measured. Before, both were
+  left out with every room on the wall.
+- `plan/duplicate-id` (two walls with one id) names how many parts share the id and an id to
+  rename one to. `room/broken-wall` and `opening/broken-wall` name the wall when it was left out
+  when the plan was read.
+- The `plan/missing-field`, `plan/wrong-type`, `plan/unknown-word`, `plan/out-of-range` and
+  `plan/not-in-format` refusals are now only given for the plan's top level.
+
+### 2026-11-22: people kept out of hand-over files (HND-9)
+
+- The server's instructions and the descriptions of `grid_write_rooms`, `grid_export` and
+  `grid_sheet` say that room names and ids go into every export and sheet: never put a
+  person's name in one. Who sits where belongs in `plan.occupancy.json` beside the plan, which
+  no tool reads and no export carries. No answer changes.
+
+### 2026-11-22: what is never looked at (COD-4)
+
+- `limits` adds two lines: "Ceiling height is not checked, in any room or under a sloping
+  roof" and "Which walls carry load is not known: the plan does not record it, so nothing here
+  looks at structure". There are eight lines now. A ceiling-height check, when there is one,
+  takes the first away.
+- `grid_check` returns `limits` and ends its text with "Never looked at, whatever the plan (N):"
+  and the lines.
 
 ### 2026-11-22: what each check looked at (MSG-2)
 

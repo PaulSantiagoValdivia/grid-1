@@ -73,6 +73,8 @@ the same number appears in front of the line in `grid check`.
     its lines.
   - `mcp/__tests__/checkView.test.ts` compares `grid draw --ids` with `drawPlan`. It now passes
     `drawPlan` the record's lines, because `grid draw` always marks them.
+  - `draw/__tests__/looks.test.ts` (SHT-1, merged after MSG-8 was written) compares `grid draw`
+    in each look with `drawPlan`. It now passes the record's lines too, for the same reason.
 - `look.test.ts` gains checks that the new parts' line widths, dash, tint and font sizes in
   `look.ts` match `plan.css`.
 
@@ -86,6 +88,10 @@ the same number appears in front of the line in `grid check`.
   would be a follow-up.
 - **`--country`.** It can add findings, and with them shift the numbers after them. `grid draw`
   takes no country, so its numbers match `grid check` without `--country`. The contract says so.
+- **Looks (SHT-1).** The marks, words and key take their colours from the look: orange in the
+  working look, black on white in the technical one, where the undrawn room's tint is a light
+  grey. Their line widths stay in screen pixels in every look, because they mark the drawing
+  and are not part of it.
 - **Fixtures (CNT-12).** A line about a fixture (`thing.kind` `item`) gets its mark on the
   middle of the fixture's outline.
 - **Parallel work.** MSG-2 and MSG-4 may touch `command/check.ts`. The numbering change there

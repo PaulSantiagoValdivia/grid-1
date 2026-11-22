@@ -5,9 +5,23 @@
  * and font written in. Its elements are the ones the app's 2D view draws. For PNG, see
  * `drawPlan` in the `ongrid` package.
  */
-export { planToSvg, planPicture, pictureView, pictureToSvg, fullHeight, DEFAULT_WIDTH } from './planSvg'
+export { planToSvg, planPicture, pictureView, pictureToSvg, lookOf, undecidedDoorsOf, fullHeight, DEFAULT_WIDTH } from './planSvg'
 export type { PictureOptions, Picture } from './planSvg'
 export type { FaultLine, PictureKey } from './faults'
-export { LIGHT_LOOK, DARK_LOOK, PICTURE_FONT } from './look'
-export type { PlanLook } from './look'
+export {
+  LIGHT_LOOK,
+  DARK_LOOK,
+  PICTURE_FONT,
+  LOOKS,
+  LOOK_NAMES,
+  WORKING_LOOK,
+  TECHNICAL_LOOK,
+  DARK_WORKING_LOOK,
+  PAPER_PENS,
+  PAPER_SCALES,
+  lineMetres,
+  paperScaleOf,
+  penSetFor
+} from './look'
+export type { PlanLook, Look, LookName, PaperScale } from './look'
 export type { LabelStyle } from '../canvas2d/labelPlacement'
