@@ -64,7 +64,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 |---|---|
 | `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
-| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12) or a stair (LVL-3). |
+| `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3) or an opening pattern (`pattern`, LVL-8). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
 | `also` | The ids of the other parts the line names: the wall a door hits, the rooms a finding names. |
 | `message` | The one wording of the code, with the plan's names in quotes and the figures filled in. |
@@ -259,6 +259,12 @@ label.
 | `stair/too-few-risers` | {thing} states fewer risers than its flights need | at least two risers on each flight |
 | `stair/end-in-no-room` | {thing} starts or ends in no room, so it joins nothing there | each end of its walking line in a room |
 | `stair/duplicate-id` | {thing} shares its id with another stair | an id of its own for each stair |
+| `pattern/unknown-wall` | {thing} names a wall Grid cannot find | the id of one wall of the plan |
+| `pattern/does-not-fit` | {thing} does not fit its wall | room on the wall, between its margins, for every opening of the pattern |
+| `pattern/unknown-floor` | {thing} is to be repeated on a floor the plan does not have | a floor of the plan in the pattern's floors |
+| `pattern/no-wall-above` | {thing} finds no wall above to repeat on | on each floor it is repeated on, a wall in the same line as its own, holding the opening's whole width |
+| `pattern/overlaps-opening` | {thing} would place an opening over another | each opening of the pattern clear of the other openings on its wall |
+| `pattern/id-clash` | {thing} would give an opening an id another part has | an id of its own for each opening a pattern places: the pattern's id, the floor and the number |
 | `item/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `item/no-size` | {thing} has no size | a width, a depth and a height above 0 |
 | `item/unknown-kind` | {thing} is a kind the plan does not hold yet | a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run" |
@@ -602,6 +608,26 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `data` has `view` null.
 - No new code in the result record: a section and its marks are pictures. `resultVersion`
   stays 1.
+
+### 2026-11-22: facades, and opening patterns (LVL-8)
+
+- `grid_view` takes `kind: "facade"` with `side` (`north`, `east`, `south` or `west`, the sides
+  of the drawing, north its top) and `look`: one side of the building in elevation, every floor
+  at its level. Its data: `kind` `facade`, `floor` and `camera` null, `pxPerMetre`, `ids` (the
+  openings it shows) and a new optional `facade`: `side`, `compass` (`{ bearing, faces }` by the
+  plan's north, or null), `ground` (`{ level, stated }`), `levels` (`floor`, `name`, `level`,
+  `height`), `walls`, `openings` and `extent` (`u0`, `u1`, `bottom`, `top`, or null when nothing
+  faces that side). `side` with any other kind is refused, as the other kinds' arguments are.
+- A plan may state opening patterns, `patterns`. Every tool and check reads the plain openings
+  they expand into, with ids `<pattern>-<floor>-<n>`, as if written by hand: `grid_check`'s
+  escape and route checks count them, the schedules list them, the exports hold them. The tools
+  that change the plan keep the patterns as patterns.
+- A new kind of thing, `pattern`, and six codes for what kept a pattern's openings from being
+  placed, each `left-out`: `pattern/unknown-wall`, `pattern/does-not-fit`,
+  `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening` and
+  `pattern/id-clash`. A pattern the reader cannot read is `plan/part-left-out`, named
+  `Opening pattern "id"`. `resultVersion` stays 1: no field changed meaning.
+- `plan/unknown-field`'s `needed` on the plan lists `patterns` among the plan's fields.
 
 ### 2026-11-22: a camera an agent can set, saved as a named view (VEW-3)
 

@@ -211,6 +211,18 @@ export type LinePart =
   | 'glass'
   | 'undecided'
   /**
+   * LVL-8: a facade's lines, heaviest first: the ground, the outline of the facade against the sky,
+   * the edges of the faces on its front plane, of the faces set back, of the faces further back,
+   * and its doors and windows and the floor-level marks.
+   */
+  | 'elevationGround'
+  | 'elevationOutline'
+  | 'elevationNear'
+  | 'elevationBack'
+  | 'elevationFar'
+  | 'elevationOpening'
+  | 'elevationLevel'
+  /**
    * LVL-9: a section's ground line, written twice its width like the wall outline, none of it
    * under a fill, so it reads twice as heavy as the cut.
    */
@@ -277,6 +289,21 @@ export interface Look {
 export const LOOK_NAMES = ['working', 'technical', 'dark'] as const
 export type LookName = (typeof LOOK_NAMES)[number]
 
+/**
+ * LVL-8: a facade's lines on screen, in pixels, heaviest first: the ground, the facade's outline,
+ * then each face's edges lighter the further back it stands. Grid's own choice; the app draws no
+ * facade, so no stylesheet says them again.
+ */
+export const ELEVATION_PX = {
+  ground: 3,
+  outline: 2,
+  near: 1.25,
+  back: 0.75,
+  far: 0.5,
+  opening: 0.75,
+  level: 0.75
+} as const
+
 /** The working look's lines: `LINE_PX`, the app's own, and the parts only other looks draw. */
 const SCREEN_LINES: ScreenLines = {
   unit: 'px',
@@ -298,6 +325,13 @@ const SCREEN_LINES: ScreenLines = {
     windowFace: LINE_PX.opening,
     glass: LINE_PX.opening,
     undecided: LINE_PX.opening,
+    elevationGround: ELEVATION_PX.ground,
+    elevationOutline: ELEVATION_PX.outline,
+    elevationNear: ELEVATION_PX.near,
+    elevationBack: ELEVATION_PX.back,
+    elevationFar: ELEVATION_PX.far,
+    elevationOpening: ELEVATION_PX.opening,
+    elevationLevel: ELEVATION_PX.level,
     // LVL-9: the section and the marks for it, which the app does not draw, so plan.css has none.
     ground: 1.5,
     beyond: 0.75,
@@ -338,6 +372,15 @@ const PAPER_LINES: PaperLines = {
     windowFace: 'fine',
     glass: 'fine',
     undecided: 'fine',
+    // LVL-8: a facade: the ground with the cut pen, the outline with the medium one, the front
+    // plane fine and what stands back finest, as an elevation is drawn.
+    elevationGround: 'cut',
+    elevationOutline: 'medium',
+    elevationNear: 'fine',
+    elevationBack: 'finest',
+    elevationFar: 'finest',
+    elevationOpening: 'finest',
+    elevationLevel: 'finest',
     ground: 'cut',
     beyond: 'finest',
     hatch: 'finest',

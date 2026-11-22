@@ -4,16 +4,17 @@
  * `grid check` gives, and listed under it (MSG-8), and the plan's title, notes, key and sketch
  * (SHT-7); `--hide`, `--colour` and `--key` choose what it shows.
  * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`; with `--view`, a
- * view saved with the plan (VEW-3), through its camera record. With `--section`, a section along a
- * line through every floor, through `drawSection` (LVL-9); `--marks` adds the marks for the plan's
- * other drawings to a floor plan.
+ * view saved with the plan (VEW-3), through its camera record. With `--facade` (LVL-8), one side of
+ * the building in elevation, every floor at its level, through `drawFacade`. With `--section`, a
+ * section along a line through every floor, through `drawSection` (LVL-9); `--marks` adds the
+ * marks for the plan's other drawings to a floor plan.
  * Written to `--out`, or to standard output when no file is named.
  */
 import { DISPLAY_UNITS, displayFor } from '../quantities/units'
 import { LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
 import { inspectPlan } from '@ongrid/rules'
-import { cameraRecord, findView, viewSetting } from '@ongrid/floorplan/geometry'
-import { drawPlan } from '../draw/drawPlan'
+import { FACADE_SIDES, cameraRecord, findView, viewSetting, type FacadeSide } from '@ongrid/floorplan/geometry'
+import { drawFacade, drawPlan } from '../draw/drawPlan'
 import { planPicture } from '@ongrid/viewer/src/picture'
 import { drawShowOf } from './drawShow'
 import { floorOption, type LoadedPlan } from './plan'
@@ -25,6 +26,7 @@ import { marksAsked, readMarks, readSectionOption, towardOf } from './section'
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
   '--3d': { takesValue: false, help: 'Draw the 3D model as the app opens it, as a PNG of 1200 by 800 pixels.' },
+  '--facade': { takesValue: true, help: 'Draw one side of the building in elevation instead of a floor plan: north, east, south or west, the sides of the drawing (north is its top). Every floor at its level. Not with --3d, --view or --floor.' },
   '--view': { takesValue: true, help: 'Draw a view saved with the plan (grid_save_view), by name: the 3D model through its camera, as a PNG of 1200 by 800 pixels.' },
   '--out': { takesValue: true, help: 'The file to write, inside the project, ending in .svg (or .png with --png or --3d). Standard output when left out.' },
   '--floor': { takesValue: true, help: 'The floor to draw (a floor id from the plan). The lowest floor when left out. With --3d, that floor as a cutaway; the whole building when left out.' },
@@ -36,9 +38,9 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8 (up to 4 with --3d). 1 when left out.' },
   '--units': { takesValue: true, help: 'How areas and dimensions are written: m, cm, mm or ft-in. The plan\'s own display, or m, when left out. Not with --3d.' },
   '--decimal': { takesValue: true, help: 'The decimal mark: point or comma. The plan\'s own display, or point, when left out.' },
-  '--section': { takesValue: true, help: 'Draw a section instead of a floor plan: the line to cut along, x1,y1:x2,y2 in metres, through every floor, with its levels and room heights, and what it takes that the plan does not state hatched and listed. Not with --3d.' },
+  '--section': { takesValue: true, help: 'Draw a section instead of a floor plan: the line to cut along, x1,y1:x2,y2 in metres, through every floor, with its levels and room heights, and what it takes that the plan does not state hatched and listed. Not with --3d, --view or --facade.' },
   '--toward': { takesValue: true, help: 'With --section: the side of the line the section looks toward, walking from its first point to its second: left (the default) or right.' },
-  '--marks': { takesValue: true, help: 'Marks to add to a floor plan, joined by commas: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of --section and the way it looks, on the plan, instead of drawing the section). Not with --3d.' },
+  '--marks': { takesValue: true, help: 'Marks to add to a floor plan, joined by commas: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of --section and the way it looks, on the plan, instead of drawing the section). Not with --3d, --view or --facade.' },
   ...PROJECT_OPTION,
 }
 
@@ -52,6 +54,8 @@ export interface DrawRequest {
   readonly threeD?: boolean
   /** VEW-3: a saved view's name: the 3D model through its camera. */
   readonly view?: string
+  /** LVL-8: one side of the building in elevation instead of a floor plan, as given. */
+  readonly facade?: string
   readonly out?: string
   readonly floor?: string
   readonly scale?: string
@@ -123,6 +127,7 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
   if (request.view !== undefined && request.floor !== undefined) throw new UsageError('--view draws the floors its camera was saved with: leave --floor or --view out.')
   // A still is always a PNG, so --png would say nothing.
   if (request.threeD && request.png) throw new UsageError('--png does nothing with --3d, which always draws a PNG: leave --png out.')
+  if (request.facade !== undefined) checkFacadeRequest(request)
   if (request.threeD && request.ids) throw new UsageError('--ids draws the ids on a floor plan, not on the 3D model: leave --ids or --3d out.')
   if (request.threeD && request.look !== undefined) throw new UsageError('--look is for a floor plan, not the 3D model: leave --look or --3d out.')
   if (request.threeD && (request.units !== undefined || request.decimal !== undefined)) throw new UsageError('--units and --decimal write the labels of a floor plan, not the 3D model: leave them or --3d out.')
@@ -153,7 +158,32 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
   return { scale, look }
 }
 
+/**
+ * LVL-8: a facade is one side of the whole building, in elevation: it takes the side, and how it is
+ * drawn and written (--look, --png, --scale, --out), and refuses what belongs to a floor plan or
+ * to the 3D model, by name.
+ */
+function checkFacadeRequest(request: DrawRequest): void {
+  const side = request.facade!
+  if (!(FACADE_SIDES as readonly string[]).includes(side)) {
+    throw new UsageError(`--facade ${JSON.stringify(side)} is not a side Grid draws: use one of ${FACADE_SIDES.join(', ')}, the sides of the drawing (north is its top).`)
+  }
+  if (request.view !== undefined) throw new UsageError('--facade draws one side of the building and --view a saved view of the model: give one of them.')
+  if (request.threeD) throw new UsageError('--facade draws one side of the building and --3d the model: give one of them.')
+  if (request.section !== undefined) throw new UsageError('--facade draws one side of the building and --section a cut through it: give one of them.')
+  if (request.floor !== undefined) throw new UsageError('--floor picks a floor plan; a facade shows every floor at its level: leave --floor or --facade out.')
+  const planOnly: [unknown, string][] = [[request.ids || undefined, '--ids'], [request.hide, '--hide'], [request.colour, '--colour'], [request.key || undefined, '--key'], [request.units, '--units'], [request.decimal, '--decimal'], [request.marks, '--marks']]
+  for (const [given, flag] of planOnly) {
+    if (given !== undefined) throw new UsageError(`${flag} is for a floor plan, not a facade: leave ${flag} or --facade out.`)
+  }
+}
+
 export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: number, look: LookName = DRAW_LOOK): Promise<DrawnFile> {
+  if (request.facade !== undefined) {
+    const side = request.facade as FacadeSide
+    const file = request.png ? await drawFacade(loaded.plan, { format: 'png', side, look, scale }) : await drawFacade(loaded.plan, { format: 'svg', side, look })
+    return { file, undecidedDoors: [] }
+  }
   const asked = sectionAsked(request)
   if (asked.section !== null) {
     // Loaded only for a section.

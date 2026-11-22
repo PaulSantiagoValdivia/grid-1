@@ -73,4 +73,9 @@ describe('grid_view kind=plan with marks', () => {
     await expect(call({ kind: 'section', cut: THROUGH_STAIR, view: 'Garden corner' })).rejects.toThrow('kind=section takes cut, toward, look, not view.')
     await expect(call({ kind: '3d', cut: THROUGH_STAIR, toward: 'left' })).rejects.toThrow('kind=3d takes floor, from, bearing, tilt, distance, eye_height, lens, room, camera, view, turn, tilt_by, not toward, cut.')
   })
+
+  it('refuses a side with a section, and a cut or marks with a facade (after LVL-8)', async () => {
+    await expect(call({ kind: 'section', cut: THROUGH_STAIR, side: 'south' })).rejects.toThrow('kind=section takes cut, toward, look, not side.')
+    await expect(call({ kind: 'facade', side: 'south', cut: THROUGH_STAIR, marks: ['levels'] })).rejects.toThrow('kind=facade takes side, look, not marks, cut.')
+  })
 })

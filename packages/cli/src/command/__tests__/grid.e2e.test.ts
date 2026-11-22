@@ -432,6 +432,8 @@ describe('options: each command refuses what it does not take, by name', () => {
     [['draw', 'two-bed-flat.json', '--3d', '--section', '1,2:9,2'], '--section is for a drawing, not the 3D model'],
     [['draw', 'two-bed-flat.json', '--view', 'Garden corner', '--section', '1,2:9,2'], '--section is for a drawing, not a saved view of the 3D model: leave --section or --view out.'],
     [['draw', 'two-bed-flat.json', '--view', 'Garden corner', '--marks', 'levels'], '--marks is for a drawing, not a saved view of the 3D model: leave --marks or --view out.'],
+    [['draw', 'two-bed-flat.json', '--facade', 'south', '--section', '1,2:9,2'], '--facade draws one side of the building and --section a cut through it: give one of them.'],
+    [['draw', 'two-bed-flat.json', '--facade', 'south', '--marks', 'levels'], '--marks is for a floor plan, not a facade: leave --marks or --facade out.'],
     [['draw', 'two-bed-flat.json', '--marks', 'section'], '--marks section draws the line of a section on the plan: add --section'],
     [['draw', 'two-bed-flat.json', '--marks', 'levels,levels'], '--marks names levels twice'],
     [['draw', 'two-bed-flat.json', '--marks', 'grid'], '--marks "grid" is not a mark Grid draws on a plan'],

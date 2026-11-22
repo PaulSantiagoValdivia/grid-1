@@ -255,7 +255,7 @@ export function sectionPicture(plan: FloorPlan, line: SectionLine, options: Sect
     undecidedDoors: [],
     nodes,
     key,
-    description: `Section ${label}–${label} through ${cutRooms} ${cutRooms === 1 ? 'room' : 'rooms'}`,
+    title: `Section ${label}–${label} through ${cutRooms} ${cutRooms === 1 ? 'room' : 'rooms'}`,
     section
   }
 }

@@ -1,15 +1,15 @@
 /**
  * The named views the tool server draws: a floor plan, a sheet of plans side by side at one
- * scale, the 3D model from a side of the drawing, an eye-level view from inside a room, and a
- * section along a line (LVL-9).
+ * scale, a facade (LVL-8), the 3D model from a side of the drawing, an eye-level view from inside
+ * a room, and a section along a line (LVL-9).
  *
  * Every picture is the viewer's own drawing (`planPicture`, `planStill`): only the camera and
  * the frame are chosen here. A 3D picture is taken from one camera record (VEW-3, `cameraAsk.ts`).
  */
 import type { Display } from '@ongrid/floorplan/types/units'
 import { poleOfInaccessibility, type Bounds, type CameraRecord, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
-import { LOOKS as PICTURE_LOOKS, comparisonPicture, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
-import { resolveFloor, type BuildingComparison } from '@ongrid/floorplan/geometry'
+import { LOOKS as PICTURE_LOOKS, comparisonPicture, facadePicture, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
+import { resolveFloor, type BuildingComparison, type Facade, type FacadeSide } from '@ongrid/floorplan/geometry'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
 import { sectionPicture } from '@ongrid/viewer/src/picture/section'
 import type { PlanSection, SectionLine } from '@ongrid/floorplan/geometry/section'
@@ -64,6 +64,16 @@ export async function sectionView(plan: FloorPlan, line: SectionLine, look: Look
   const picture = sectionPicture(plan, line, { look: lookOf(look) })
   const png = await pictureToPng(picture)
   return { png, width: picture.width, height: fullHeight(picture), pxPerMetre: picture.width / picture.view.width, section: picture.section }
+}
+
+/**
+ * LVL-8: one side of the building in elevation, every floor at its level. The core works out what
+ * is seen (`planFacade`); the viewer draws it (`facadePicture`), in the look asked for.
+ */
+export async function facadeView(plan: FloorPlan, options: { side: FacadeSide; look: LookName }): Promise<PlanView & { readonly facade: Facade }> {
+  const picture = facadePicture(plan, { side: options.side, look: lookOf(options.look) })
+  const png = await pictureToPng(picture)
+  return { png, width: picture.width, height: fullHeight(picture), pxPerMetre: picture.width / picture.view.width, facade: picture.facade }
 }
 
 /**

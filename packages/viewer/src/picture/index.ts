@@ -18,6 +18,7 @@ export {
   TECHNICAL_LOOK,
   DARK_WORKING_LOOK,
   PAPER_PENS,
+  ELEVATION_PX,
   PAPER_SCALES,
   lineMetres,
   paperScaleOf,
@@ -25,6 +26,8 @@ export {
 } from './look'
 export type { PlanLook, Look, LookName, PaperScale } from './look'
 export type { LabelStyle } from '../canvas2d/labelPlacement'
+export { facadePicture, facadeScene, facadeToSvg, facadeCaption } from './facade'
+export type { FacadePicture, FacadePictureOptions } from './facade'
 export { comparisonPicture, COMPARISON_COLORS, COMPARISON_LOOK, UNCHANGED_COLORS } from './comparison'
 export type { ComparisonPictureOptions } from './comparison'
 export { sectionPicture } from './section'

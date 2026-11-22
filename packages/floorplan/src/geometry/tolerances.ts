@@ -635,6 +635,36 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Facades and opening patterns (LVL-8) ──────────────────────────────────────────────────
+  facadeFacing: {
+    kind: 'tolerance',
+    value: 0.0175,
+    unit: 'sine',
+    decides:
+      'A face of the building is drawn on a facade when it turns at least this much toward the ' +
+      'side the facade is seen from (about one degree): a face edge-on to it, or turned away, is ' +
+      'not seen.',
+    basis: own
+  },
+  facadeOnFace: {
+    kind: 'tolerance',
+    value: 0.01,
+    unit: 'm',
+    decides:
+      'A wall whose outside face lies within this of a stretch of the floor\'s outline is the wall ' +
+      'that stretch of the facade shows, with its height and its openings.',
+    basis: own
+  },
+  facadeSameDepth: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'Faces of a facade that stand within this of each other, front to back, are drawn as one ' +
+      'plane, with one line weight; a face set back further is drawn lighter.',
+    basis: own
+  },
+
   // ── Limits: refused ───────────────────────────────────────────────────────────────────────
   largest: {
     kind: 'limit',
