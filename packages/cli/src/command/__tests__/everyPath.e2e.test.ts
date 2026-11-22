@@ -133,6 +133,12 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
     { label: 'the plan, marking a note seen', args: (p) => ['check', p, '--seen', '1', '--reason', 'Seen', '--by', 'Owner'], given: asIs },
   ],
   describe: [{ label: 'the plan', args: (p) => ['describe', p], given: asIs }],
+  // WRT-8: the markers file is the plan's name beside the plan, never a path of its own.
+  mark: [{ label: '--plan', args: (p) => ['mark', 'start', '--plan', p], given: asIs }],
+  diff: [
+    { label: 'the plan', args: (p) => ['diff', p], given: asIs },
+    { label: '--picture', args: (p) => ['diff', PLAN, '--since', 'start', '--picture', `${p}.png`], given: (p) => `${p}.png` },
+  ],
   draw: [
     { label: 'the plan', args: (p) => ['draw', p], given: asIs },
     { label: '--out', args: (p) => ['draw', PLAN, '--out', `${p}.svg`], given: (p) => `${p}.svg` },
@@ -171,6 +177,8 @@ const PLAN_READERS: ReadonlyArray<readonly [label: string, args: (plan: string) 
   ['sheet', (p) => ['sheet', p, '--layout', 'check']],
   ['tidy', (p) => ['tidy', p]],
   ['occupancy', (p) => ['occupancy', p]],
+  ['mark', (p) => ['mark', 'start', '--plan', p]],
+  ['diff', (p) => ['diff', p]],
   ['write --replace', (p) => ['write', ROOMS, '--plan', p, '--replace']],
 ]
 
@@ -195,6 +203,8 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plans', call: tool('grid_compare', { plans: ['@', PLAN] }), given: asIs },
     { arg: 'plans', call: tool('grid_compare', { plans: [PLAN, '@'] }), given: asIs },
   ],
+  // WRT-8: the earlier version is read from the markers file beside the plan, or the project's .git.
+  grid_diff: [{ arg: 'plan', call: tool('grid_diff', { plan: '@' }), given: asIs }],
   grid_areas: [{ arg: 'plan', call: tool('grid_areas', { plan: '@' }), given: asIs }],
   grid_takeoff: [
     { arg: 'plan', call: tool('grid_takeoff', { plan: '@' }), given: asIs },
@@ -202,6 +212,10 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'rates', call: tool('grid_takeoff', { plan: PLAN, for: 'estimate', rates: '@' }), given: asIs },
   ],
   grid_schedule: [{ arg: 'plan', call: tool('grid_schedule', { plan: '@' }), given: asIs }],
+  // CNT-9: the three tools that ask across the parts read the plan only.
+  grid_fields: [{ arg: 'plan', call: tool('grid_fields', { plan: '@' }), given: asIs }],
+  grid_find: [{ arg: 'plan', call: tool('grid_find', { plan: '@', kind: ['door'] }), given: asIs }],
+  grid_count: [{ arg: 'plan', call: tool('grid_count', { plan: '@', kind: ['room'], by: 'use' }), given: asIs }],
   grid_measure: [{ arg: 'plan', call: tool('grid_measure', { plan: '@', what: 'room', room: 'lounge' }), given: asIs }],
   grid_view: [{ arg: 'plan', call: tool('grid_view', { plan: '@', kind: 'plan' }), given: asIs }],
   grid_describe: [{ arg: 'plan', call: tool('grid_describe', { plan: '@' }), given: asIs }],
@@ -210,6 +224,7 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_preview: [{ arg: 'plan', call: tool('grid_preview', { plan: '@', view: '2d', note: 'A look' }), given: asIs }],
   grid_export: [{ arg: 'plan', call: tool('grid_export', { plan: '@', format: 'glb' }), given: asIs }],
   grid_sheet: [{ arg: 'plan', call: tool('grid_sheet', { plan: '@', layout: 'check' }), given: asIs }],
+  grid_mark_start: [{ arg: 'plan', call: tool('grid_mark_start', { plan: '@' }), given: asIs }],
   // MSG-10: its marks file is the plan's name beside the plan, never a path of its own.
   grid_mark_seen: [{ arg: 'plan', call: tool('grid_mark_seen', { plan: '@', line: 1, code: 'room/too-small', reason: 'Seen', by: 'Owner' }), given: asIs }],
   grid_write_rooms: [{ arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` }],
@@ -246,6 +261,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_rename_room: [
     { arg: 'plan', call: tool('grid_rename_room', { plan: '@', room: 'lounge', name: 'Lounge' }), given: asIs },
     { arg: 'out', call: tool('grid_rename_room', { plan: PLAN, room: 'lounge', name: 'Lounge', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  // WRT-6: squaring a scan reads the plan and writes it, or another file.
+  grid_square_scan: [
+    { arg: 'plan', call: tool('grid_square_scan', { plan: '@', all: true }), given: asIs },
+    { arg: 'out', call: tool('grid_square_scan', { plan: PLAN, all: true, out: '@.json' }), given: (p) => `${p}.json` },
   ],
 }
 

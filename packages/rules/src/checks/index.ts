@@ -1,8 +1,10 @@
 export * from './types'
 export { FIGURE_LIMITS, FIGURE_RULES, HABITABLE_USES, RULE_BUILDINGS, RULE_FIGURES, RULE_READ_FOR, RULE_USES, RULES, ruleReadsBuilding, rulesForUse } from './catalogue'
 export type { FigureRuleId } from './catalogue'
-export { basisOf, checkLocalRules } from './check'
+export { basisOf, checkLocalRules, SUBJECT as FIGURE_CHECK_SUBJECTS } from './check'
 export type { CheckOptions } from './check'
+export { noPlaceText, PlaceRefused, placeFor, placeRefusalText, planPlace, requestedPlace, WITHOUT_PLACE } from './place'
+export type { PlaceFrom, PlaceUsed, WithoutPlace } from './place'
 export {
   ESCAPE_TOP_LEVEL,
   FIGURE_KEYS,

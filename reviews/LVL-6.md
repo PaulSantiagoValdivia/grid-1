@@ -224,3 +224,97 @@ Each once, at the end, in this order:
 | `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1` | 264 files; 4,993 passed, 4 skipped, 1 failed (1,097 s): the scoreboard test, on checks fed 15 → 16 not yet stored |
 | `npm run scoreboard` | "Better than the stored figures": checks the plan can feed 15 → 16, the rest the same; stored with `--write-current` |
 | `scoreboard/__tests__/scoreboard.test.ts` alone, after storing | 1 file, 19 tests passed |
+
+## After merging main at 0477e96
+
+Asked to merge `main` at ca2db98 (WRT-6, HND-2, MSG-5, CNT-9); by the time of the merge `main`
+stood at 0477e96, which adds COD-3 (the place stored with the plan) and WRT-8 (`grid diff`) on top
+of ca2db98. COD-3 was asked for by name, so `main` was merged as it stood, 0477e96. Nothing was
+pushed and `main` was not touched.
+
+### The conflicts and how each was resolved
+
+Both sides kept whole in every file.
+
+- **`CHANGELOG.md`**: LVL-6's line, then main's (WRT-8, COD-3, CNT-9, WRT-6). LVL-6's line now
+  also says the IFC's base quantities are those under the roof.
+- **`docs/result-contract.md`**: LVL-6's changelog entry first, then main's six (WRT-8, COD-3,
+  CNT-9, MSG-5, WRT-6), every one kept. The code table merged on its own: `opening/above-roof`,
+  `floor/rooflight-misplaced`, `floor/dormers-not-drawn` sit beside `plan/no-walls`,
+  `plan/value-assumed` and `plan/mark-no-part`.
+- **`docs/tool-server.md`**: main's new `grid_diff` row, then LVL-6's `grid_areas` row (main left
+  that row as it was).
+- **`packages/cli/src/command/planText.ts`**: both limits, LVL-6's rooflight ids on a floor's roof,
+  then CNT-9's facts on walls, rooms, openings and floors.
+- **`packages/cli/src/mcp/readTools.ts`**: a room's `grid_areas` line says WRT-6's sureness and,
+  after it, LVL-6's headroom bands.
+- **`packages/cli/src/quantities/areas.ts`** (6 hunks): both imports; a room carries `headroom`
+  and `sureness`, a floor and the plan both too; `rules` lists the headroom rule, then the
+  sureness rule, each only when it applies.
+- **`packages/floorplan/src/geometry/validate.ts`**: main's MSG-5 `followOn(…, noWalls ? 'plan' :
+  null)` round `opening/missing-wall`, with LVL-6's line on rooflights in the message.
+- **`packages/floorplan/src/types/floorplan.ts`** (3 hunks): both import lines (CNT-9's
+  `PROPERTIES_MAX`, `factKey`, COD-3's `placeProblem`, LVL-6's `roofFrame`, `roofTop`). In
+  `withFloorHeights`, a wall with no height takes the roof's top (LVL-6) or the floor's height
+  (LVL-1), and either way is marked `HEIGHT_FROM_FLOOR` (WRT-6), so its height reads as not stated
+  and is never written back. The floor schema holds `roof` (LVL-6) and `properties` (CNT-9), both
+  optional and never defaulted; `site.country` (COD-3) and `marks` (WRT-6) merged on their own.
+- **`packages/floorplan/src/geometry/export/ifc.ts`** (4 hunks):
+  - imports: LVL-6's `FloorRoof` and roof helpers, HND-2's `multiArea`;
+  - `writeWall`: HND-2's `outline` (kept for the footprint quantity) with LVL-6's clipping of the
+    body by the roof's planes;
+  - the helpers: LVL-6's `ROOF_TYPES`, `roofBase`, `writeSlopedRoof`, `writeRooflights` and
+    HND-2's `piecesPerimeter`, `writeSlabQuantities`, `describeSlab` and the slab notes, all kept;
+  - the roof: LVL-6's sloped `IfcRoof` over a clipped slab and its rooflights, and HND-2's
+    quantities and `Grid_Slab` on the roof slab. A floor that states no roof writes exactly what
+    main writes, so no IFC golden file changed.
+
+### The IFC's quantities under the roof
+
+HND-2 writes base quantities from the element as written; under a stated roof that would have been
+the box LVL-6 had just removed (the lab's "49% too large", now in the numbers). So:
+
+- a **space**'s `GrossVolume` is the clipped body's volume and its `Height` its highest point;
+- a **wall**'s `Height` is its highest point, its `GrossSideArea` the face under its cut top and
+  its `GrossVolume` the clipped body's, the net figures less its openings as before;
+- a **stated roof**'s slab has its `GrossArea` on the slope (with its rooflights' rectangles), its
+  `Width` the thickness measured upright, its `GrossVolume` the plan area times that thickness, and
+  with rooflights a `NetArea` and `NetVolume` less them.
+
+The volumes come from `volumeUnder` (new in `geometry/roofs.ts`): the footprint under the lowest of
+the planes the body is clipped by, each plane integrated exactly over its part. Tests:
+`roofs-lab.test.ts` (the loft bedroom's quantity is 51.23 m³ and its height 3.6 m; h17's is 97.72
+m³), `roofs.test.ts` (the gable wall's quantity volume within 1% of the 3D wall, its height 3.6 m,
+its side 13.8 m²; the mono-pitch room's 131.67 m³; the gable roof slab's area on the slope and its
+volume). `test-support/ifcVolume.ts` gains `quantityOf`, and its `named` finds a space by its
+LongName, since HND-2 made a space's Name its number (the four IFC volume tests failed on that
+until then). `docs/commands.md` says how the quantities are taken under a roof.
+
+### For the owner (after the merge)
+
+- **The IFC's quantities under a roof are the cut ones** (above), for walls and the roof slab as
+  well as for spaces. Main's figures for a floor with no stated roof are unchanged.
+- **A stated roof's slab is still `Assumed` in `Grid_Slab`**: its shape, eaves and pitch are the
+  plan's, but its outline, eaves line and thickness are Grid's. Its `Note` says which is which.
+  Saying `Assumed` false would need a field on the roof for its thickness.
+- **A wall that rises to the roof records its height as not stated** (WRT-6's `unstated`), as one
+  that takes the floor's height does, so rooms text and the plan file never write the roof's
+  top into it.
+- **Merged at 0477e96, not ca2db98**: `main` had moved on to COD-3's merge (with WRT-8) and COD-3
+  was named in the task.
+
+### The checks run after this merge
+
+| Check | Result |
+|---|---|
+| `npm run build` | passed, exit 0 |
+| `npm run typecheck` | passed, every workspace, `scripts` and `scoreboard` |
+| `npm run lint` | passed, no problems |
+| `npm run check:licenses` | "Checked 363 licences in package-lock.json: none is GPL, LGPL, AGPL, MPL, EPL." |
+| The floorplan tests either side touched (IFC golden, structure and export tests, roofs, roofs-lab, tolerances, areas, validation, types, rooms, facts, held, room numbers, diffs) | 32 files, 775 passed; no IFC golden file changed |
+| The cli, rules and viewer tests either side touched (tools, server, facts, schedules, quantities with `roofs.test.ts`, causes, place, coverage, the e2e files, all of `packages/rules`) | 47 files, 703 passed |
+| `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1` | 284 files; 5,207 passed, 4 skipped, 2 failed (517 s): both in `scoreboard/__tests__/causes.test.ts` (W-7, 88 lines and 41 beneath where 90 and 43 are held; MS-14, no escape line on the hotel). That file is main's at 0477e96, unchanged here: COD-3 applies no figure without a place, and main fixed the two cases after 0477e96 (73d0af3, 7b90435), so they come with the next merge |
+| `npm run scoreboard` | "Same as the stored figures": rooms measured wrong 197, damage silent 278, turns 18, mistakes named 5, checks fed 16, rooms not measured 735, sound plans with a warning 95 |
+
+`scoreboard/current.json` merged on its own: turns 16 → 18 from main (WRT-8), checks fed 15 → 16
+from LVL-6.

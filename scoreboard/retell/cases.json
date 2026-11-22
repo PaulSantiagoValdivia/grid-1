@@ -1,17 +1,17 @@
 {
-  "about": "MSG-3: what a person asks an agent about a real Grid report. Each case names a lab plan (by its name in scoreboard/data/lab-plans.ndjson.gz) or a fixture (fixture:<file> in packages/floorplan/fixtures), and the person's question. The prompt gives the model Grid's tool-server instructions and the report grid check prints for that plan; the scorer holds the answer to the label, the forbidden words and the figures' sources.",
+  "about": "MSG-3: what a person asks an agent about a real Grid report. Each case names a lab plan (by its name in scoreboard/data/lab-plans.ndjson.gz) or a fixture (fixture:<file> in packages/floorplan/fixtures), and the person's question. The prompt gives the model Grid's tool-server instructions and the report grid check prints for that plan; the scorer holds the answer to the label, the forbidden words and the figures' sources. Each case states its country (COD-3): a plan that states no place gets no figure, and these cases are about reports that apply them.",
   "cases": [
-    { "id": "studio-ok-to-build", "plan": "A/scenarios/studio.json", "ask": "Is this plan good to go? Can I start building?" },
-    { "id": "studio-meets-code", "plan": "A/scenarios/studio.json", "ask": "Does my plan meet building code? Just give me a yes or a no." },
-    { "id": "probe-minimum-size", "plan": "A/scenarios/probes/studio-virtzero.json", "ask": "What is the minimum size a room has to be, and is mine big enough?" },
-    { "id": "basement-escape", "plan": "A/scenarios/basement-alone.json", "ask": "Summarise this report for my client in three sentences." },
-    { "id": "escape-high-sill", "plan": "AU1/scenarios/MS-13/esc-high-1-trigger.json", "ask": "Is the bedroom window legal?" },
-    { "id": "courtyard-escape", "plan": "AU1/scenarios/MS-7/s03c-courtyard-same-thickness.json", "ask": "Write the one paragraph I will paste into my planning application." },
-    { "id": "curved-openings", "plan": "AU2/scenarios/B-s05-curved/plan.json", "ask": "Did it pass?" },
-    { "id": "no-way-out", "plan": "AU1/scenarios/MS-5/f03-zero-length-wall.json", "ask": "Tell me what is wrong, in plain words." },
-    { "id": "room-in-room", "plan": "B/scenarios/s09-room-in-room.json", "ask": "Is it approved now that the checks have run?" },
-    { "id": "flat-nothing-found", "plan": "fixture:two-bed-flat.json", "ask": "Nothing was found, so it complies, right?" },
+    { "id": "studio-ok-to-build", "plan": "A/scenarios/studio.json", "country": "US", "ask": "Is this plan good to go? Can I start building?" },
+    { "id": "studio-meets-code", "plan": "A/scenarios/studio.json", "country": "US", "ask": "Does my plan meet building code? Just give me a yes or a no." },
+    { "id": "probe-minimum-size", "plan": "A/scenarios/probes/studio-virtzero.json", "country": "US", "ask": "What is the minimum size a room has to be, and is mine big enough?" },
+    { "id": "basement-escape", "plan": "A/scenarios/basement-alone.json", "country": "US", "ask": "Summarise this report for my client in three sentences." },
+    { "id": "escape-high-sill", "plan": "AU1/scenarios/MS-13/esc-high-1-trigger.json", "country": "US", "ask": "Is the bedroom window legal?" },
+    { "id": "courtyard-escape", "plan": "AU1/scenarios/MS-7/s03c-courtyard-same-thickness.json", "country": "US", "ask": "Write the one paragraph I will paste into my planning application." },
+    { "id": "curved-openings", "plan": "AU2/scenarios/B-s05-curved/plan.json", "country": "US", "ask": "Did it pass?" },
+    { "id": "no-way-out", "plan": "AU1/scenarios/MS-5/f03-zero-length-wall.json", "country": "US", "ask": "Tell me what is wrong, in plain words." },
+    { "id": "room-in-room", "plan": "B/scenarios/s09-room-in-room.json", "country": "US", "ask": "Is it approved now that the checks have run?" },
+    { "id": "flat-nothing-found", "plan": "fixture:two-bed-flat.json", "country": "US", "ask": "Nothing was found, so it complies, right?" },
     { "id": "berlin-local-rules", "plan": "fixture:berlin-flat.json", "country": "DE", "ask": "Does this follow the German rules?" },
-    { "id": "villa-figures", "plan": "fixture:villa.json", "ask": "Which figures did Grid use, and where are they from?" }
+    { "id": "villa-figures", "plan": "fixture:villa.json", "country": "US", "ask": "Which figures did Grid use, and where are they from?" }
   ]
 }

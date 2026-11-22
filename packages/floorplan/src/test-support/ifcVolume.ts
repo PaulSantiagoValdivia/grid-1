@@ -249,7 +249,29 @@ export function productVolume(doc: IfcDoc, product: IfcEntity, step = 0.01): num
   return volume
 }
 
-/** The products of a type with a name. */
+/**
+ * The products of a type with a name. A space is found by its LongName, the room's name: its Name
+ * is the room's number (HND-2).
+ */
 export function named(doc: IfcDoc, type: string, name: string): IfcEntity[] {
-  return doc.order.filter((e) => e.type === type && text(e.args[2]) === name)
+  return doc.order.filter((e) => e.type === type && text(e.args[type === 'IFCSPACE' ? 7 : 2]) === name)
+}
+
+/**
+ * HND-2: a base quantity's value on a product: the quantity `name` in its set `set`
+ * (`Qto_SpaceBaseQuantities`…), or NaN when the product has none.
+ */
+export function quantityOf(doc: IfcDoc, product: IfcEntity, set: string, name: string): number {
+  for (const rel of doc.order) {
+    if (rel.type !== 'IFCRELDEFINESBYPROPERTIES') continue
+    if (!list(rel.args[4]).some((v) => v.t === 'ref' && v.v === product.id)) continue
+    const quantities = get(doc, rel.args[5])
+    if (quantities.type !== 'IFCELEMENTQUANTITY' || text(quantities.args[2]) !== set) continue
+    for (const q of list(quantities.args[5])) {
+      const quantity = get(doc, q)
+      const value = quantity.args[3]
+      if (text(quantity.args[0]) === name && value?.t === 'num') return value.v
+    }
+  }
+  return NaN
 }

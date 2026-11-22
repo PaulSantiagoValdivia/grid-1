@@ -58,7 +58,10 @@ describe('ARE-9 the lab flat (AR-6): net, gross internal and gross external, eac
 describe('ARE-9 per floor, net plus walls plus unclaimed floor is the gross', () => {
   it.each(fixtureNames)('%s: within 1e-6 m², on every floor, and the rooms match the spaces', (name) => {
     const plan = fixture(name)
-    for (const areas of [planAreaFigures(plan), planAreaFigures(twoFloors(plan))]) {
+    // A fixture of one floor is also stacked on itself; one of several floors (CNT-9's stand-in
+    // for S-10) already is, and `twoFloors` would put its upper walls on the ground floor.
+    const stacked = (plan.floors?.length ?? 0) > 1 ? [] : [twoFloors(plan)]
+    for (const areas of [plan, ...stacked].map((p) => planAreaFigures(p))) {
       for (const f of areas.floors) {
         expect(Math.abs(f.offSpace!)).toBeLessThan(1e-6)
         expect(Math.abs(f.grossExternal! - (f.net + f.walls! + f.unclaimed!))).toBeLessThan(1e-6)

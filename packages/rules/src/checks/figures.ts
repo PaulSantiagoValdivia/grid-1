@@ -15,6 +15,7 @@
 
 import type { RuleCitation } from '@ongrid/floorplan/geometry'
 import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
+import { countryOf } from '@ongrid/floorplan/types/places'
 import type { AppliedFigure, RuleFigures } from './types'
 
 export const FIGURE_KEYS = [
@@ -279,9 +280,13 @@ export function isPlausible(key: FigureKey, value: number): boolean {
   return typeof value === 'number' && Number.isFinite(value) && value >= spec.min && value <= spec.max
 }
 
-/** Whether the baselines apply where the plan will be built. No country stated means yes. */
+/**
+ * Whether the baselines apply for a country: the US, however Grid's list lets it be written (`US`,
+ * `usa`, `United States`; COD-3, lab CH-3). No country here means yes: whether a plan that states
+ * no place gets a figure at all is the full check's decision (`placeFor`, `WITHOUT_PLACE`).
+ */
 export function baselineApplies(country: string | undefined): boolean {
-  return country === undefined || country.trim() === '' || country.trim().toUpperCase() === 'US'
+  return country === undefined || country.trim() === '' || countryOf(country)?.code === 'US'
 }
 
 /**

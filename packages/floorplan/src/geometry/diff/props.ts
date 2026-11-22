@@ -77,13 +77,32 @@ function holesProp(before: Room, after: Room): PropChange | null {
   return { key: 'holes', before: before.holes === undefined ? null : a, after: after.holes === undefined ? null : b }
 }
 
+/**
+ * Whether two wall lists go round the same ring (WRT-8, lab U-4): the same walls in the same
+ * cyclic order, from any wall and either way round. A room whose list starts at another wall is
+ * the same outline; walls in another order are not.
+ */
+export function sameRing(a: readonly string[], b: readonly string[]): boolean {
+  const n = a.length
+  if (n !== b.length) return false
+  if (n === 0) return true
+  for (const step of [1, -1]) {
+    for (let start = 0; start < n; start++) {
+      if (b[start] !== a[0]) continue
+      let all = true
+      for (let i = 0; i < n && all; i++) all = a[i] === b[(((start + step * i) % n) + n) % n]
+      if (all) return true
+    }
+  }
+  return false
+}
+
 export function roomProps(before: Room, after: Room, epsilon: number): PropChange[] {
-  const sameBoundary =
-    before.boundary.length === after.boundary.length &&
-    before.boundary.every((id, i) => id === after.boundary[i])
+  const sameBoundary = sameRing(before.boundary, after.boundary)
   return present([
     exact('name', before.name, after.name),
-    // C3 gives the order meaning, so the same walls in another order are a change.
+    // C3 gives the order meaning: the same walls in another order are a change. The same ring
+    // from another wall, or the other way round, is the same outline (WRT-8, lab U-4).
     sameBoundary ? null : { key: 'boundary', before: [...before.boundary], after: [...after.boundary] },
     // ARE-6. No holes stated and an empty list are the same room.
     holesProp(before, after),

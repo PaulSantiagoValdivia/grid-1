@@ -9,6 +9,7 @@
 
 import type { PlanFix } from '@ongrid/floorplan/geometry'
 import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
+import type { PlaceUsed } from '../checks/place'
 
 /** Raised when a field changes meaning or is taken away; adding a field or a code keeps it. */
 export const RESULT_VERSION = 1 as const
@@ -22,8 +23,10 @@ export const RESULT_VERSION = 1 as const
  *   file Grid does not read (MSG-4): an unknown field or room use, or an empty plan.
  * - `finding`: what a plan check found (a way out, a door, a room's size, an escape window).
  * - `not-checked`: something a check could not look at in this plan, and why.
+ * - `to-confirm` (WRT-6): a value the plan marks assumed, for the person to confirm. Last, so the
+ *   numbers of the other lines do not move when an agent marks what it assumed.
  */
-export const LINE_KINDS = ['refused', 'left-out', 'worth-a-look', 'finding', 'not-checked'] as const
+export const LINE_KINDS = ['refused', 'left-out', 'worth-a-look', 'finding', 'not-checked', 'to-confirm'] as const
 export type LineKind = (typeof LINE_KINDS)[number]
 
 /**
@@ -41,6 +44,31 @@ export type ThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item' 
 export interface Thing {
   readonly kind: ThingKind
   readonly id: string
+}
+
+/**
+ * MSG-5: the line a line follows from, by its code and the id of the part it is about (`''` for
+ * the plan as a whole; for `plan/duplicate-id`, the id it names). Fixing that part clears both.
+ */
+export interface Cause {
+  readonly code: string
+  readonly id: string
+}
+
+/**
+ * MSG-5 (lab MS-4, W-6): a note a check did not give, because it rests on a part that could not
+ * be drawn. It comes back once those parts are drawn, if it still holds.
+ */
+export interface HeldNote {
+  /** The code its line would have. */
+  readonly code: string
+  readonly thing: Thing
+  /** The floor it is on. */
+  readonly floor: string
+  /** The other parts it names, as its line would. */
+  readonly also: readonly string[]
+  /** The rooms and openings that could not be drawn that it waits for, by id. */
+  readonly waitsFor: readonly string[]
 }
 
 export interface ResultLine {
@@ -71,6 +99,21 @@ export interface ResultLine {
    * makes it (`calls`). Several when more than one would do.
    */
   readonly fixes?: readonly PlanFix[]
+  /**
+   * MSG-5: on a line that follows from another: that line, by code and id. It is listed right
+   * under it, and goes away when that is fixed. A line with none is a problem of its own.
+   */
+  readonly causedBy?: Cause
+  /**
+   * MSG-5: on a line that stands for the same note on several parts (lab MS-14): each of them,
+   * `thing` first. Its message lists their names.
+   */
+  readonly each?: readonly Thing[]
+  /**
+   * MSG-5: on `floor/not-checked-rooms-not-drawn` and `floor/not-checked-doors-not-drawn`: the
+   * notes held back because they rest on the parts the line names.
+   */
+  readonly held?: readonly HeldNote[]
 }
 
 export interface GridResult {
@@ -83,7 +126,15 @@ export interface GridResult {
   readonly count: number
   /** The same lines counted by kind. They add up to `count`. */
   readonly counts: Readonly<Record<LineKind, number>>
-  /** Every line, refusals first, then by kind in `LINE_KINDS` order. */
+  /**
+   * MSG-5 (lab W-7): how many lines follow from no other and are not `not-checked`: the problems
+   * to act on. The lines that follow from one (`causedBy`) go away with it.
+   */
+  readonly problems: number
+  /**
+   * Every line, refusals first, then by kind in `LINE_KINDS` order. MSG-5: a line that follows
+   * from another comes right under it, whatever its kind.
+   */
   readonly lines: readonly ResultLine[]
   /** What the plan was checked against: `local-lookup` once a looked-up figure was applied. */
   readonly basis: 'general-baseline' | 'local-lookup'
@@ -100,4 +151,12 @@ export interface GridResult {
   readonly figures: readonly AppliedFigure[]
   /** What these checks never look at, whatever the plan: the same lines every time. */
   readonly limits: readonly string[]
+  /**
+   * COD-3: the place the figure checks were for, from Grid's list (`country`, the two-letter
+   * code; `name`, Grid's name; `from`: `request`, `plan` or `assumed`). Null when no place is
+   * stated, and then no figure was applied; null too when the plan was refused.
+   */
+  readonly place: PlaceUsed | null
+  /** COD-3: only when the plan was read and states no place: how many lines the US figures would have given. */
+  readonly withoutPlace?: { readonly usLines: number }
 }

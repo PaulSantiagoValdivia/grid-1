@@ -66,12 +66,36 @@
  *   needed). All four are optional and
  *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
  *   north, and its y runs up (C4).
+ *
+ * C8 · Where a value came from (WRT-6, lab WR-15, AE-4, AU3-6)
+ *   A value may say where it came from: given by the person, measured, scanned or assumed, and
+ *   how sure it is (`tolerance`, metres). It says so in the plan's `marks`, one list beside the
+ *   parts, by part, id and value: no number becomes an object and no part changes shape.
+ *   A value a wall leaves out stays not stated: the reading fills its thickness, height and kind
+ *   for the geometry (the derived layer: a height from the wall's floor, else `WALL_DEFAULTS`)
+ *   and says which in `unstated`, which is never written back (`statedWall`). Version 1.
+ *
+ * C9 · Facts of the person's own (CNT-9)
+ *   A wall, an opening, a room and a floor MAY carry facts of the person's own in `properties`:
+ *   a name and a value, text, a number or true or false (a fire rating, a department, a head
+ *   count). They sit in that one object, never as loose fields, so a misspelt field of the
+ *   format is still named (MSG-4). A room MAY state its room number in `number`. Grid checks
+ *   nothing against a fact. Optional and never defaulted (version 1).
+ *
+ * C10 · The place (COD-3)
+ *   `site.country` names the country the building will be built in, by a name or a code on
+ *   Grid's list (`places.ts`); any other text is refused, naming the field and never the text.
+ *   It picks the figures the checks apply (`@ongrid/rules`); a plan that states no place gets
+ *   no figure applied, and its report says so. Optional and never defaulted (version 1).
  */
 import { z } from 'zod'
-import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
+import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
+import { factKey } from './facts'
+import { placeProblem } from './places'
 import { roofFrame, roofTop } from './roofFrame'
 
 export * from './planText'
+export * from './facts'
 
 /**
  * The error `parseFloorPlan` throws and one problem it lists. Callers take them from here and
@@ -88,6 +112,13 @@ export type { ZodIssue as PlanSchemaIssue } from 'zod'
 const text = (kind: TextKind) =>
   z.string().superRefine((value, ctx) => {
     const problem = textProblem(value, kind)
+    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
+  })
+
+/** COD-3: a place, by a name or a code on Grid's list. A refusal names the field and the rule, never the text. */
+const placeText = () =>
+  z.string().superRefine((value, ctx) => {
+    const problem = textProblem(value, 'name') ?? placeProblem(value)
     if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
   })
 
@@ -112,6 +143,33 @@ const finite = (): z.ZodNumber =>
 
 // Coordinate pair [x, y] in meters (floor plan space, see C4)
 const Vec2 = z.tuple([finite(), finite()])
+
+/**
+ * CNT-9 (C9): facts of the person's own, by name: text (one line, at most a name's length), a
+ * finite number, or true or false. A name is one line and not blank; two names one part carries
+ * may not differ only in capitals, spaces, dashes or underscores (`factKey`), and a part carries
+ * at most `PROPERTIES_MAX`. A fact the schema refuses is left out on its own, not with the others
+ * (`readParts.ts`). Grid checks nothing against a fact.
+ */
+export const PropertiesSchema = z
+  .record(
+    text('name').pipe(z.string().refine((name) => name.trim().length > 0, { message: 'is blank: a fact needs a name' })),
+    z.union([text('name').pipe(z.string().min(1)), finite(), z.boolean()]),
+  )
+  .superRefine((facts, ctx) => {
+    const names = Object.keys(facts)
+    if (names.length > PROPERTIES_MAX) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `has ${names.length.toLocaleString('en-US')} facts; one part may carry at most ${PROPERTIES_MAX}` })
+      return
+    }
+    const seen = new Map<string, string>()
+    for (const name of names) {
+      const key = factKey(name)
+      const first = seen.get(key)
+      if (first === undefined) seen.set(key, name)
+      else ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'names the same fact as another name on this part, in other capitals or spaces' })
+    }
+  })
 
 /** C5: the floor an entity belongs to when it does not name one. */
 export const DEFAULT_FLOOR_ID = 'ground'
@@ -244,6 +302,8 @@ export const FloorSchema = z.object({
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
   building: BuildingTypeSchema.optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -259,16 +319,75 @@ export const WALL_DEFAULTS = {
   virtual: { thickness: 0, height: 0 },
 } as const
 
-/** Fills the thickness and height a wall leaves out, by whether it is virtual. */
+/**
+ * WRT-6 (lab AU3-6): what a solid wall may leave out, which the reading fills (`WALL_DEFAULTS`,
+ * or its floor's stated height) and records in `unstated`, so a value left out stays "not
+ * stated" for everything that reads the plan back or writes it again.
+ */
+export const UNSTATED_WALL_VALUES = ['thickness', 'height', 'kind'] as const
+export type UnstatedWallValue = (typeof UNSTATED_WALL_VALUES)[number]
+
+/**
+ * Set by `withFloorHeights` on a wall whose height it took from the wall's floor, so that
+ * `withWallDefaults` records the height as not stated. A symbol, so no file can write it.
+ */
+const HEIGHT_FROM_FLOOR = Symbol('height from the floor')
+
+/**
+ * Fills the thickness and height a wall leaves out, by whether it is virtual, and records what a
+ * solid wall left out in `unstated` (WRT-6). A file's own `unstated` is not read: it is the
+ * reading's, and `readingNotes` names it as a field Grid does not know.
+ */
 function withWallDefaults(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
-  const wall = raw as Record<string, unknown>
-  const defaults = wall.virtual === true ? WALL_DEFAULTS.virtual : WALL_DEFAULTS.solid
+  const wall: Record<string, unknown> = { ...(raw as Record<string, unknown>) }
+  delete wall.unstated
+  const virtual = wall.virtual === true
+  const defaults = virtual ? WALL_DEFAULTS.virtual : WALL_DEFAULTS.solid
+  const left: UnstatedWallValue[] = []
+  if (!virtual) {
+    if (wall.thickness === undefined) left.push('thickness')
+    if (wall.height === undefined || (raw as Record<symbol, unknown>)[HEIGHT_FROM_FLOOR] === true) left.push('height')
+    if (wall.kind === undefined) left.push('kind')
+  }
   return {
     ...wall,
     thickness: wall.thickness === undefined ? defaults.thickness : wall.thickness,
     height: wall.height === undefined ? defaults.height : wall.height,
+    ...(left.length > 0 ? { unstated: left } : {}),
   }
+}
+
+/**
+ * A wall as its file states it (WRT-6): without the values the reading filled in and without
+ * `unstated`, for whatever writes a wall back, so a default never lands in a file that stated
+ * none. A wall that left nothing out is returned as it is.
+ */
+export function statedWall<T extends { readonly unstated?: readonly UnstatedWallValue[] }>(wall: T): Omit<T, 'unstated'> {
+  if (wall.unstated === undefined) return wall
+  const { unstated, ...rest } = wall
+  const out: Record<string, unknown> = { ...rest }
+  for (const key of unstated) delete out[key]
+  return out as Omit<T, 'unstated'>
+}
+
+/** Whether a wall's height was left out of its file, so the reading filled it (WRT-6). */
+export function heightStated(wall: { readonly unstated?: readonly UnstatedWallValue[] }): boolean {
+  return !(wall.unstated ?? []).includes('height')
+}
+
+/**
+ * WRT-6 (lab AU3-6): whether a solid wall's height is stated by nothing, not by the wall and not
+ * by its floor, so the reading gave it Grid's default (`WALL_DEFAULTS`). A height its floor
+ * states is stated, once, on the floor. A dividing line has no height to state.
+ */
+export function heightByDefault(
+  plan: { readonly floors?: readonly { readonly id: string; readonly height?: number | undefined }[] | undefined },
+  wall: { readonly virtual?: boolean | undefined; readonly floor?: string | undefined; readonly unstated?: readonly UnstatedWallValue[] | undefined },
+): boolean {
+  if (wall.virtual === true || heightStated(wall)) return false
+  const floor = wall.floor ?? DEFAULT_FLOOR_ID
+  return (plan.floors ?? []).find((f) => f.id === floor)?.height === undefined
 }
 
 export const WallSchema = z.preprocess(
@@ -289,6 +408,11 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+      properties: PropertiesSchema.optional(),
+      // WRT-6: what the file left out and the reading filled in (`withWallDefaults`). Grid's
+      // reading only: never in a file, and written back by `statedWall` without those values.
+      unstated: z.array(z.enum(UNSTATED_WALL_VALUES)).optional(),
     })
     .superRefine((wall, ctx) => {
       // A solid wall needs some thickness and height; a dividing line may have none.
@@ -537,6 +661,12 @@ export const RoomSchema = z.object({
   // bedroom", "Consult A"), beside the fixed `use`. Grid keeps it and reads nothing from it.
   // Optional and never defaulted (version 1).
   roomType: text('name').optional(),
+  // CNT-9 (C9): the room's number as the person states it, text: "101", "G.04", "B-12a". The
+  // schedules give it in place of the number Grid counts, and the IFC space takes it as its name.
+  // Optional and never defaulted (version 1).
+  number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -584,6 +714,8 @@ export const OpeningSchema = z.object({
   swing: z.enum(['left', 'right']).optional(),
   // WRT-3: what its place is kept from when an edit changes its wall (OpeningAnchorSchema).
   anchor: OpeningAnchorSchema.optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const ReferenceImageSchema = z.object({
@@ -810,6 +942,11 @@ export const SiteSchema = z
     longitude: finite().min(-180).max(180).optional(),
     elevation: finite().optional(),
     ground: finite().optional(),
+    // COD-3: the country the building will be built in, by its name or its two- or three-letter
+    // code (ISO 3166-1), as Grid's list (`places.ts`) has it. It picks the figures the checks
+    // apply; with none stated, no figure is applied. Kept as written; a report names the place
+    // from the list, never from this text.
+    country: placeText().optional(),
   })
   .superRefine((site, ctx) => {
     if ((site.latitude === undefined) !== (site.longitude === undefined)) {
@@ -818,14 +955,61 @@ export const SiteSchema = z
   })
 
 /**
+ * WRT-6 (lab WR-15, AE-4): where a value came from. `given` by the person, `measured` (taped or
+ * lasered), `scanned` (from a capture of the building) or `assumed` by whoever wrote the plan.
+ */
+export const MARK_SOURCES = ['given', 'measured', 'scanned', 'assumed'] as const
+export type MarkSource = (typeof MARK_SOURCES)[number]
+
+/** WRT-6: the parts a mark can be on, and the values of each it can name. */
+export const MARKED_VALUES = {
+  wall: ['start', 'end', 'thickness', 'height', 'kind'],
+  room: ['name', 'use', 'height', 'floorOffset'],
+  opening: ['type', 'offset', 'width', 'height', 'sill', 'hinge', 'swing'],
+  floor: ['name', 'level', 'elevation', 'height', 'slab'],
+  item: ['kind', 'at', 'size', 'height', 'turn'],
+} as const satisfies Record<string, readonly string[]>
+export type MarkedPart = keyof typeof MARKED_VALUES
+export const MARKED_PARTS = Object.keys(MARKED_VALUES) as MarkedPart[]
+
+/** The values a mark's tolerance can be on: lengths. A word (a kind, a use, a name) has none. */
+export const MARKED_LENGTHS: ReadonlySet<string> = new Set(['start', 'end', 'thickness', 'height', 'floorOffset', 'offset', 'width', 'sill', 'elevation', 'slab', 'at', 'size'])
+
+/**
+ * WRT-6: a mark on one value of one part, or on the part as a whole (no `value`): where it came
+ * from and, where that matters, how sure it is. `tolerance` is in metres, give or take, on each
+ * length the mark covers: a scanned wall within 0.02 m. A mark on a value wins over a mark on its
+ * part. The marks are one list beside the parts, so no part and no number changes shape: a plan
+ * with none reads exactly as before. Optional and never defaulted (version 1).
+ */
+export const MarkSchema = z
+  .object({
+    part: z.enum(MARKED_PARTS as [MarkedPart, ...MarkedPart[]]),
+    id: text('id').pipe(z.string().min(1)),
+    value: text('id').pipe(z.string().min(1)).optional(),
+    source: z.enum(MARK_SOURCES),
+    tolerance: finite().positive().optional(),
+  })
+  .superRefine((mark, ctx) => {
+    const values: readonly string[] = MARKED_VALUES[mark.part]
+    if (mark.value !== undefined && !values.includes(mark.value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['value'], message: `names a value a ${mark.part} mark cannot be on: one of ${values.join(', ')}, or none for the whole ${mark.part}` })
+    }
+    if (mark.tolerance !== undefined && mark.value !== undefined && !MARKED_LENGTHS.has(mark.value)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['tolerance'], message: `is on ${mark.value}, which is not a length: a tolerance is in metres, on a length` })
+    }
+  })
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
- * as read, before the wall's own default (2.7 m) fills the gap, because after that a wall that
- * said 2.7 cannot be told from one that said nothing (lab AU3-6). A floor that states no
- * height, or a plan with no floor list, leaves every wall as it was.
+ * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
+ * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
+ * stated 2.7 can still be told from one that said nothing. A floor that states no height, or a
+ * plan with no floor list, leaves every wall as it was.
  *
  * LVL-6: on a floor that states its `roof`, such a wall rises to the roof instead: it takes the
  * roof's top (its ridge, or a flat roof's eaves), and the roof cuts it to its slope. A gable drawn
- * with no height is then the gable's shape.
+ * with no height is then the gable's shape. Its height is recorded as not stated all the same.
  */
 function withFloorHeights(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
@@ -866,7 +1050,7 @@ function withFloorHeights(raw: unknown): unknown {
     if (w.height !== undefined || w.virtual === true) return wall
     const floor = floorOfRaw(w)
     const height = tops.get(floor) ?? heights.get(floor)
-    return height === undefined ? wall : { ...w, height }
+    return height === undefined ? wall : { ...w, height, [HEIGHT_FROM_FLOOR]: true }
   })
   return { ...plan, walls }
 }
@@ -912,6 +1096,9 @@ export const FloorPlanFieldsSchema = z.object({
   yAxis: z.enum(Y_AXES).optional(),
   front: FrontSchema.optional(),
   site: SiteSchema.optional(),
+  // WRT-6 (C8): where values came from, given, measured, scanned or assumed, and how sure each is
+  // (`MarkSchema`). Optional and never defaulted (version 1).
+  marks: parts(MarkSchema, 'marks').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -962,6 +1149,7 @@ export type Annotation = z.infer<typeof AnnotationSchema>
 export type SketchItem = z.infer<typeof SketchItemSchema>
 export type Front = z.infer<typeof FrontSchema>
 export type Site = z.infer<typeof SiteSchema>
+export type Mark = z.infer<typeof MarkSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

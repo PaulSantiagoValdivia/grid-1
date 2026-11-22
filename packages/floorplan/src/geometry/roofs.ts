@@ -331,6 +331,52 @@ export function wallPeak(plan: FloorPlan, wall: Wall): number {
   return profile === null ? wall.height : Math.max(...profile.map((p) => p.z))
 }
 
+/**
+ * LVL-6 with HND-2: the volume of `pieces` swept up from 0 to the lowest of `planes`, in cubic
+ * metres: each plane over the part of the pieces where it is the lowest, its height there
+ * integrated exactly (a plane's mean over a polygon is its height at the centroid). This is the
+ * volume of an extrusion clipped by those planes, as the IFC writes a wall or a space under the
+ * roof. The planes are in the pieces' frame and stay above 0 over them.
+ */
+export function volumeUnder(planes: readonly RoofPlane[], pieces: MultiPolygon): number {
+  if (planes.length === 0 || pieces.length === 0) return 0
+  const xs = pieces.flatMap((polygon) => polygon.flatMap((ring) => ring.map(([x]) => x)))
+  const ys = pieces.flatMap((polygon) => polygon.flatMap((ring) => ring.map(([, y]) => y)))
+  const grow = 1 + Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys)
+  const [x0, x1, y0, y1] = [Math.min(...xs) - grow, Math.max(...xs) + grow, Math.min(...ys) - grow, Math.max(...ys) + grow]
+  // A plane given twice would count its part twice.
+  const distinct = planes.filter((plane, i) => planes.findIndex((p) => p.z0 === plane.z0 && p.gx === plane.gx && p.gy === plane.gy) === i)
+  let volume = 0
+  distinct.forEach((plane, i) => {
+    let region: Vec2[] = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }]
+    distinct.forEach((other, j) => {
+      if (j === i || region.length < 3) return
+      region = clipConvex(region, (p) => planeAt(other, p) - planeAt(plane, p))
+    })
+    if (region.length < 3 || ringArea(region) <= 0) return
+    const under = cutOutline('intersection', pieces, [[ringOf(region)]])
+    for (const polygon of under ?? []) {
+      polygon.forEach((ring, k) => {
+        let a = 0
+        let mx = 0
+        let my = 0
+        for (let n = 0; n < ring.length; n++) {
+          const [px, py] = ring[n]!
+          const [qx, qy] = ring[(n + 1) % ring.length]!
+          const cross = px * qy - qx * py
+          a += cross / 2
+          mx += ((px + qx) * cross) / 6
+          my += ((py + qy) * cross) / 6
+        }
+        // The outer ring counts, its holes are taken off, whichever way each runs.
+        const sign = (k === 0 ? 1 : -1) * Math.sign(a)
+        volume += sign * (plane.z0 * a + plane.gx * mx + plane.gy * my)
+      })
+    }
+  })
+  return volume
+}
+
 // ---------------------------------------------------------------------------------------------
 // Rooflights
 

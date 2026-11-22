@@ -60,8 +60,11 @@ another's printed text.
 
 - **The room schedule** (`grid_schedule` with `of=rooms`): one row per room, with its number,
   name, use, net area, height and floor, then each floor's total, named by its floor, and the
-  total of all floors. The plan holds no room numbers: Grid numbers the rooms 1, 2, 3… floor by
-  floor from the lowest, then by id, so the schedule is the same whatever the order of the file.
+  total of all floors. Grid numbers the rooms 1, 2, 3… floor by floor from the lowest, then by
+  id, so the schedule is the same whatever the order of the file. A room that states its number
+  in the plan (CNT-9) is given that number, and the rooms that state one come first on their
+  floor, in its order; each row carries the room's facts of the person's own, and the CSV has a
+  column for each ([Facts of your own](plan-file.md#facts-of-your-own-and-room-numbers)).
   The height follows the rule in [tool-server.md](tool-server.md) (a height the room states, or
   the lowest solid wall round it). A room Grid could not draw is listed with no area, and the
   totals say they leave it out.
@@ -69,7 +72,9 @@ another's printed text.
   opening once, numbered by floor, then doors, doorless openings and windows, each by id, with
   its size (the hole in the wall) and what lies on its two sides: a room's name, `outside`,
   `nothing drawn` or `a room left out`. A door between two rooms is one row, not one for each
-  room. Without `of`, `grid_schedule` groups the openings by type and size, as before.
+  room. Each row carries the opening's facts of the person's own, a fire rating say, and the CSV
+  has a column for each. Without `of`, `grid_schedule` groups the openings by type and size, as
+  before.
 
 With `format=csv`, numbers are bare (a dot for decimals, no units in the cell, never a negative
 zero), so a spreadsheet reads them as numbers; the units are in the column names. A row that

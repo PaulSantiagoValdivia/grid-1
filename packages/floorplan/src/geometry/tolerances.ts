@@ -116,6 +116,17 @@ export const TOLERANCES = {
       '15 degrees) may be one straight side, when they touch end to end.',
     basis: own
   },
+  // WRT-6 (lab AE-4): squaring a scan.
+  squareWithin: {
+    kind: 'tolerance',
+    value: 0.0523,
+    unit: 'sine',
+    decides:
+      'When a scan is squared, a wall whose direction is closer than this (the sine of about 3 ' +
+      'degrees) to one of the plan\'s main directions is turned onto it; a wall further off is ' +
+      'left as it is and named.',
+    basis: own
+  },
   sameFace: {
     kind: 'tolerance',
     value: 1e-6,
@@ -317,6 +328,17 @@ export const TOLERANCES = {
     value: 0.1,
     unit: 'm',
     decides: 'And a removed room and an added one whose centres are closer than this may be the same.',
+    basis: own
+  },
+  diffPlace: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'When two versions are compared by what stands where (WRT-8): two walls whose ends are this ' +
+      'close, either way round, once the drawing is moved to its new origin, stand in the same ' +
+      'place, and so do two openings whose middles are this close. An opening has stayed where it ' +
+      'was in its room when it moved along its wall by less than this beyond the room itself.',
     basis: own
   },
 

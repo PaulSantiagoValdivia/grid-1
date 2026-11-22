@@ -14,10 +14,12 @@
     "./types/readParts": "./src/types/readParts.ts",
     "./types/sheet": "./src/types/sheet.ts",
     "./types/units": "./src/types/units.ts",
+    "./types/places": "./src/types/places.ts",
     "./export": "./src/export/planExport.ts",
     "./notes": "./src/notes/notes.ts",
     "./rooms": "./src/rooms/index.ts",
     "./test-support/plans": "./src/test-support/plans.ts",
+    "./test-support/facts": "./src/test-support/facts.ts",
     "./test-support/lab": "./src/test-support/lab.ts"
   },
   "scripts": {

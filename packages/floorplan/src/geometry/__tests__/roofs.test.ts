@@ -6,7 +6,7 @@
  * x 0.15 to 7.85 and y 0.15 to 5.85, 43.89 m²), on a floor that states its roof.
  */
 import { describe, expect, it } from 'vitest'
-import { named, parseIfc, productVolume } from '../../test-support/ifcVolume'
+import { named, parseIfc, productVolume, quantityOf } from '../../test-support/ifcVolume'
 import { parseFloorPlan, type FloorPlan } from '../../types/floorplan'
 import { compileRoomsText } from '../../rooms/compile'
 import { readRoomsText } from '../../rooms/read'
@@ -176,6 +176,11 @@ describe('the walls under it', () => {
     const mesh = closedVolume(wallMesh(east)!)
     expect(Math.abs(productVolume(doc, wall!, 0.005) - mesh) / mesh).toBeLessThan(0.01)
     expect(doc.order.some((e) => e.type === 'IFCBOOLEANCLIPPINGRESULT')).toBe(true)
+    // HND-2's base quantities are the cut wall's: its volume, its highest point and its side.
+    expect(Math.abs(quantityOf(doc, wall!, 'Qto_WallBaseQuantities', 'GrossVolume') - mesh) / mesh).toBeLessThan(0.01)
+    expect(quantityOf(doc, wall!, 'Qto_WallBaseQuantities', 'Height')).toBeCloseTo(3.6, 9)
+    // The east gable, 6 m on its line from 1 m at the eaves to 3.6 m at the ridge.
+    expect(quantityOf(doc, wall!, 'Qto_WallBaseQuantities', 'GrossSideArea')).toBeCloseTo(6 * 1 + (6 * 2.6) / 2, 6)
   })
 })
 
@@ -204,6 +209,7 @@ describe('the rooms under it', () => {
     const doc = parseIfc(toIfc(box({ shape: 'mono-pitch', eaves: 2.4, ridge: 3.6, highSide: 'north' }), OPTIONS))
     const [space] = named(doc, 'IFCSPACE', 'Room')
     expect(Math.abs(productVolume(doc, space!) - 131.67) / 131.67).toBeLessThan(0.02)
+    expect(quantityOf(doc, space!, 'Qto_SpaceBaseQuantities', 'GrossVolume')).toBeCloseTo(131.67, 6)
   })
 })
 
@@ -229,6 +235,9 @@ describe('the roof itself', () => {
     expect(element!.args[8]).toEqual({ t: 'enum', v: 'GABLE_ROOF' })
     const [slab] = named(doc, 'IFCSLAB', 'Ground roof slab')
     expect(Math.abs(productVolume(doc, slab!, 0.005) - roof.area * roof.thickness) / (roof.area * roof.thickness)).toBeLessThan(0.01)
+    // Its base quantities: the area on the slope, the volume on plan times its upright thickness.
+    expect(quantityOf(doc, slab!, 'Qto_SlabBaseQuantities', 'GrossArea')).toBeCloseTo(roof.slopeArea, 6)
+    expect(quantityOf(doc, slab!, 'Qto_SlabBaseQuantities', 'GrossVolume')).toBeCloseTo(roof.area * roof.thickness, 6)
     expect(toObj(buildScene(plan))).toContain('o roof_ground')
   })
 

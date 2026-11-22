@@ -185,6 +185,11 @@ export interface SceneShow {
   readonly above: boolean
   /** `use` fills each room by its use; null gives every room the look's one fill. */
   readonly colourBy: 'use' | null
+  /**
+   * CNT-9: parts picked out, by id, each in its colour: a room's fill at half strength over its
+   * own, a wall, door, window or opening laid over in the colour. Null for none.
+   */
+  readonly paint?: ReadonlyMap<string, string> | null
 }
 
 /** Everything shown, rooms in one fill. */
@@ -262,6 +267,15 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     // A disc of paper under the "?", so the dashed line never runs through it. Not a halo of
     // stroke under the text: Skia, which draws the PNG, does not honour `paint-order`.
     undecidedDisc: { fill: look.paper } as Attrs,
+    // WRT-6 (lab WR-15): what the plan marks assumed, for the person to confirm: a dashed line in
+    // the look's warning colour, with the undecided door's pen and dash, in every look.
+    assumed: {
+      fill: 'none',
+      stroke: look.warning,
+      'stroke-width': width('undecided'),
+      'stroke-dasharray': dashes('undecided'),
+      'stroke-linejoin': 'round'
+    } as Attrs,
     extension: { stroke: look.dimension, 'stroke-width': width('extension') } as Attrs,
     tick: { stroke: look.dimension, 'stroke-width': width('tick'), 'stroke-linecap': 'butt' } as Attrs,
     dimensionLine: (room: boolean): Attrs =>
@@ -508,9 +522,12 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   const live: SceneLive = { ...STILL, ...input.live }
   const paint = paints(look, mpp, input.paperScale)
   const show: SceneShow = { ...SHOW_ALL, ...input.show }
+  const picked = show.paint ?? null
   const fillOf = (id: string): Attrs => {
+    const colour = picked?.get(id)
     const use = show.colourBy === 'use' ? input.uses?.get(id) : undefined
-    return use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+    const base = use === undefined ? paint.room : { ...paint.room, fill: USE_FILLS[use] }
+    return colour === undefined ? base : { ...base, fill: colour, 'fill-opacity': 0.45 }
   }
   const out: SvgNode[] = []
 
@@ -806,6 +823,39 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     }
     if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
     if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
+  }
+
+  // WRT-6 (lab WR-15): what the plan marks assumed, drawn in its own style: a dashed line round
+  // each assumed room, wall and fixture and across each assumed opening, over the walls so it
+  // shows on every one. Drawing, not a target: clicks reach the parts underneath.
+  const assumed: SvgNode[] = []
+  for (const room of drawing.rooms) if (room.assumed) assumed.push(el('path', { d: roomPathOf(room), 'data-part': 'assumed-room', 'data-id': room.id, ...paint.assumed }, [], `room:${room.id}`))
+  for (const wall of drawing.walls) {
+    if (!wall.assumed) continue
+    if (wall.virtual) assumed.push(el('path', { d: virtualPath(wall.centerline), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}`))
+    else wall.slices.forEach((slice, index) => assumed.push(el('path', { d: pathOf(slice), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}:${index}`)))
+  }
+  for (const opening of drawing.openings) if (opening.assumed) assumed.push(lineEl('assumed-opening', across(opening, 0), { 'data-id': opening.id, ...paint.assumed }))
+  for (const item of drawing.items) if (item.assumed) assumed.push(el('path', { d: pathOf(item.outline), 'data-part': 'assumed-item', 'data-id': item.id, ...paint.assumed }, [], `item:${item.id}`))
+  if (assumed.length > 0) out.push(el('g', { 'data-part': 'assumed', 'pointer-events': 'none', role: 'img', 'aria-label': 'Assumed, to confirm' }, assumed, 'assumed'))
+  // CNT-9: the walls, doors, windows and openings picked out, over the drawing, each in its
+  // colour. Drawing, not a target: clicks reach the part underneath.
+  if (picked !== null && picked.size > 0) {
+    const pen = lengthText(3 * mpp)
+    for (const wall of drawing.walls) {
+      const colour = picked.get(wall.id)
+      if (colour === undefined) continue
+      if (wall.virtual) {
+        out.push(el('path', { d: virtualPath(wall.centerline), 'data-part': 'picked', 'data-id': wall.id, fill: 'none', stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${wall.id}`))
+        continue
+      }
+      out.push(el('g', { 'data-part': 'picked', 'data-id': wall.id, 'pointer-events': 'none' }, wall.slices.map((slice, index) => el('path', { d: pathOf(slice), fill: colour, 'fill-opacity': 0.75 }, [], String(index))), `picked:${wall.id}`))
+    }
+    for (const opening of drawing.openings) {
+      const colour = picked.get(opening.id)
+      if (colour === undefined) continue
+      out.push(el('path', { d: pathOf(stripAcross(opening.from, opening.to, opening.normal, opening.thickness)), 'data-part': 'picked', 'data-id': opening.id, fill: colour, 'fill-opacity': 0.85, stroke: colour, 'stroke-width': pen, 'pointer-events': 'none' }, [], `picked:${opening.id}`))
+    }
   }
 
   // A stair the plan states (LVL-3), on both floors it joins, as the core lays out its symbol

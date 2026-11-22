@@ -32,7 +32,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { labPlanText } from '../../test-support/lab'
-import { named, parseIfc, productVolume } from '../../test-support/ifcVolume'
+import { named, parseIfc, productVolume, quantityOf } from '../../test-support/ifcVolume'
 import { parseFloorPlan, type FloorPlan } from '../../types/floorplan'
 import { planForFloor } from '../floors'
 import { validatePlan } from '../validate'
@@ -101,6 +101,9 @@ describe('the attic bedroom of the converted loft (VE-5)', () => {
     const hand = 3.8 * 2 * (2.85 + (1.3 / 3) * (9 - 0.0225))
     expect(hand.toFixed(2)).toBe('51.23')
     expect(Math.abs(volume - hand) / hand).toBeLessThan(0.02)
+    // HND-2's base quantities say the same volume: the clipped space's, not a box's.
+    expect(quantityOf(doc, space!, 'Qto_SpaceBaseQuantities', 'GrossVolume')).toBeCloseTo(hand, 6)
+    expect(quantityOf(doc, space!, 'Qto_SpaceBaseQuantities', 'Height')).toBeCloseTo(3.6, 9)
   })
 })
 
@@ -112,6 +115,7 @@ describe('the attic over the house with knee walls (VE-5)', () => {
     const hand = 6.55 * 2 * (2.85 * 1.2 + 0.45 * (9 - 0.0225))
     expect(hand.toFixed(2)).toBe('97.72')
     expect(Math.abs(volume - hand) / hand).toBeLessThan(0.02)
+    expect(quantityOf(doc, space!, 'Qto_SpaceBaseQuantities', 'GrossVolume')).toBeCloseTo(hand, 6)
   })
 
   it('draws its gables as gables: 1.2 m at the knee walls, 3.9 m at the ridge, the window in the east one kept', () => {

@@ -33,6 +33,10 @@ Notes for agents and people changing this repository.
   `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
   CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind
   needs its symbol there and a decision first. A fixture is never a wall or a room.
+- `packages/floorplan/src/types/facts.ts` (CNT-9): facts of the person's own, in `properties` on
+  walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
+  checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
+  sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,
@@ -46,7 +50,7 @@ Notes for agents and people changing this repository.
   the one drawing function, `planScene`, applies to the same geometry: `working` for the screen
   and every picture an agent gets, `technical` for sheets and `grid draw`, black on white with
   line weights in millimetres on paper from a pen set chosen by scale (1:50, 1:100, 1:200).
-- `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `edit`, `check`,
+- `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `edit`, `mark`, `diff`, `check`,
   `describe`, `draw`, `export`, `sheet`, `tidy`, `serve` and `mcp`, in `src/command/`. `write`
   (WRT-2) writes a plan from rooms text, the main way to write one; `describe --as rooms` reads
   it back. `tidy` (MSG-12) lists the
@@ -61,12 +65,14 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 22 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 28 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
-  export, the sheet, the seen mark (MSG-10, `seenTool.ts`), and the tools that change the plan).
+  export, the sheet, the start marker (WRT-8), the seen mark (MSG-10, `seenTool.ts`), and the tools
+  that change the plan).
   Each is written once in `readTools.ts`, `writeTools.ts`, `reportTool.ts` or `seenTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
-  check. The measuring is in `src/quantities/`, the changes in `src/edit/`, the views in
+  check. The measuring is in `src/quantities/` (CNT-9's asking across parts by their fields and
+  facts, for `grid_fields`, `grid_find` and `grid_count`, in `query.ts`), the changes in `src/edit/`, the views in
   `src/draw/views.ts`. `src/mcp/__tests__/tools.test.ts` fails when a tool loses its prefix,
   title, hint, examples or output schema, or when the order changes; `replay/replay.test.ts`
   replays the lab's five Y conversations and holds the score. A description starts "Use this
@@ -78,6 +84,12 @@ Notes for agents and people changing this repository.
   tools in `src/mcp/editTools.ts` and the verbs of `grid edit` (`src/command/edit.ts`), made
   from the tools' own arguments. `edit/__tests__/requests.test.ts` replays the lab's six flat
   requests (WR-2) against the hand-made versions in `packages/floorplan/fixtures/edits/`.
+- `grid diff` and `grid mark` (WRT-8, `packages/cli/src/versions/`, tools `grid_diff` and
+  `grid_mark_start` in `src/mcp/diffTools.ts`): the plan against a start marker
+  (`plan.markers.json` beside it, at most `MARKERS_MAX`) or its last commit, read from the
+  project's own `.git` without running git (`git.ts`). The comparison is the core's
+  `compareBuildings` (`packages/floorplan/src/geometry/diff/building.ts`), which pairs by place
+  first (`place.ts`); the picture is the viewer's `comparisonPicture`.
 - `grid mcp` is the same server under the name agents start it by: `npx -y ongrid mcp` (CMD-9).
   `src/mcp/protocol.ts` answers both eras of the protocol: `initialize` for older clients, and
   for 2026-07-28 clients the version in each request's `_meta` and `server/discover`; a version
