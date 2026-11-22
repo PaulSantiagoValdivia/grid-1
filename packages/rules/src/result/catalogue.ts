@@ -505,6 +505,12 @@ export const CODES = {
     variant: { says: (s) => (s.also[0] === undefined ? 'one' : '') }
   },
   'flat/zone-without-room': {},
+  // --- Buildings (CNT-6) ----------------------------------------------------------------------
+  // The buildings list's own faults, as the flats list's: the building is read without what it
+  // names wrongly. The found is the check's own sentence, with the ids.
+  'plan/building-duplicate-id': {},
+  'plan/building-unknown-floor': {},
+  'plan/building-floor-in-two': {},
 
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},
@@ -565,11 +571,20 @@ export const CODES = {
   'opening/to-undrawn-space': {
     values: (s): Values => ({ wording: grouped(s, planCheckSaids.doorToUndrawnSpace(s.name)) })
   },
+  // CNT-6 (lab EL-4, R-10): homes kept apart, and each flat's front door.
+  'opening/between-homes': {
+    values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
+  },
+  'flat/no-front-door': {
+    values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
+  },
   'opening/door-out-above-ground': {
     values: (s): Values => ({
-      wording: grouped(s, planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
+      // CNT-6: on a floor above the ground only by what it states lies below it, no height is said.
+      wording: s.finding !== undefined && s.finding.elevation === undefined && s.finding.said !== undefined ? s.finding.said : grouped(s, planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
       height: num(metresText(s.finding?.elevation ?? 0))
-    })
+    }),
+    variant: { found: (s) => (s.finding !== undefined && s.finding.elevation === undefined ? 'below' : '') }
   },
   'opening/below-ground': {
     values: (s): Values => {
@@ -665,6 +680,10 @@ export const CODES = {
   },
   'floor/not-checked-way-out-not-drawn': {
     values: (s): Values => ({ wording: planCheckSaids.wayOutNotDrawn(s.floorName) })
+  },
+  // CNT-6 (lab R-10): a flat entered from a landing the plan does not draw.
+  'floor/not-checked-way-out-common-parts': {
+    values: (s): Values => ({ wording: planCheckSaids.wayOutThroughCommonParts(s.floorName) })
   },
   // MSG-5: with the notes held back because they rest on what could not be drawn.
   'floor/not-checked-rooms-not-drawn': {

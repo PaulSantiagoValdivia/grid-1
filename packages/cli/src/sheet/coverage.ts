@@ -72,6 +72,10 @@ export const SHEET_COVERAGE = {
   // type as a table, from the same rows as grid_schedule of=flats. A flat type is in that table.
   flats: { shown: 'drawn and tabled' },
   flatTypes: { shown: 'tabled' },
+  // CNT-6: each floor's page already measures its floor; a building's own figures are the sum of
+  // its floors', in grid_areas. Context shapes are drawn on the floor they stand on, in no table.
+  buildings: { shown: 'not shown', why: "Each floor's page measures that floor; a building's own areas and height are in grid_areas (CNT-6)." },
+  context: { shown: 'drawn' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**

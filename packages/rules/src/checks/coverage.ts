@@ -38,6 +38,7 @@ const SKIP_ORDER: readonly SkipReason[] = [
   'waits_for_part',
   'no_stairs',
   'way_out_not_drawn',
+  'way_out_through_common_parts',
   'alone_off_ground',
   'above_escape_storeys',
   'no_ground_level',
@@ -129,6 +130,8 @@ export function planCheckScopes(
 ): Map<string, [string, FloorScope][]> {
   const noStairs = new Set(base.notChecked.filter((n) => n.reason === 'no_stairs').map((n) => n.floor))
   const wayOutNotDrawn = new Set(base.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
+  // CNT-6: the way out goes on through common parts the plan does not draw.
+  const throughCommon = new Set(base.notChecked.filter((n) => n.reason === 'way_out_through_common_parts').map((n) => n.floor))
   const scopes = new Map<string, [string, FloorScope][]>(base.rules.map((rule) => [rule.id, []]))
   const ground = statedGround(plan) !== null
   const add = (rule: string, floor: string, scope: FloorScope): void => {
@@ -157,7 +160,7 @@ export function planCheckScopes(
 
     // The floor's way out: looked at when its routes ran and its door out is drawn.
     const floorReason: SkipReason | null =
-      drawn.length === 0 ? 'no_rooms' : !followed ? 'no_stairs' : wayOutNotDrawn.has(floor.id) ? 'way_out_not_drawn' : null
+      drawn.length === 0 ? 'no_rooms' : !followed ? 'no_stairs' : wayOutNotDrawn.has(floor.id) ? 'way_out_not_drawn' : throughCommon.has(floor.id) ? 'way_out_through_common_parts' : null
     add('floor-has-exit', floor.id, floorReason === null ? { lookedAt: [floor.id], skipped: {} } : { lookedAt: [], skipped: { [floorReason]: [floor.id] } })
 
     // A door on every room: on every floor, but not the one room of a floor the plan cannot reach.

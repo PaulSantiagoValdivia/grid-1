@@ -7,6 +7,7 @@
  */
 import { limit, metresText, passageText, planCheckWordings as wordings, planFloors, type RuleFinding, type RulesReport, type WordingPart } from '../geometry'
 import type { FloorPlan } from '../types/floorplan'
+import { english, said } from '../messages/say'
 
 /** A run of text; `name` marks a room or floor name as the plan writes it. */
 export type NoteText = WordingPart
@@ -54,9 +55,11 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
   const doors = new Set(plan.openings.filter((o) => o.type === 'door').map((o) => o.id))
   const roomName = (id: string): string => roomNames.get(id) ?? id
   const floorName = (id: string): string => floorNames.get(id) ?? id
+  const flatNames = new Map((plan.flats ?? []).map((f) => [f.id, f.name ?? f.id] as const))
+  const flatName = (id: string): string => flatNames.get(id) ?? id
 
   // A floor whose only door out leads to a space not drawn words its cut-off rooms the longer way.
-  const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
+  const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn' || n.reason === 'way_out_through_common_parts').map((n) => n.floor))
 
   const noteOf = (finding: RuleFinding): PlanNote => {
     const room = finding.rooms[0] ?? null
@@ -102,10 +105,26 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           title: wordings.doorToUndrawnSpace(roomName(room!)),
           detail: [words("If that space is a shared landing or a stair, draw it as a room, or mark the wall as exterior if the door leads outside.")]
         }
+      // CNT-6 (lab EL-4, R-10): homes kept apart, and a flat's front door.
+      case 'door_between_homes': {
+        const other = finding.rooms[1]
+        const open = finding.openings[0] !== undefined && !plan.openings.some((o) => o.id === finding.openings[0])
+        return {
+          ...base,
+          title: wordings.betweenHomes(roomName(room!), other === undefined ? null : roomName(other), open),
+          detail: [words(english(said('check.detail.betweenHomes')))]
+        }
+      }
+      case 'flat_without_front_door':
+        return {
+          ...base,
+          title: wordings.flatWithoutFrontDoor(flatName(finding.flat ?? '')),
+          detail: [words(english(said('check.detail.flatWithoutFrontDoor')))]
+        }
       case 'door_to_outside_above_ground':
         return {
           ...base,
-          title: wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation ?? 0)),
+          title: finding.elevation === undefined ? [words(finding.message)] : wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation)),
           detail: [words('It is not counted as a way out. If it opens onto a balcony, a terrace or an outside stair, draw that as a room.')]
         }
       case 'stair_out_of_line':
