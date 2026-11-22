@@ -73,6 +73,9 @@ describe('grid describe', () => {
         const run = grid(['describe', 'two-bed-flat.json', '--length', length, `--for=${audience}`])
         expect(run.status).toBe(0)
         sizes[`${length} ${audience}`] = Buffer.byteLength(run.out)
+        // MSG-3: the label is the first line at every length, for both readers; the cards no
+        // longer hold it themselves (describe.test.ts), so it is held here.
+        expect(run.out.split('\n')[0], `${length} ${audience}`).toBe(GENERAL_GUIDANCE_LABEL)
         // The label, then the one line (MSG-3).
         if (length === 'line') expect(run.out.trimEnd().split('\n')).toEqual([GENERAL_GUIDANCE_LABEL, expect.any(String)])
         if (audience === 'agent') expect(run.out).toContain(length === 'line' ? 'into lounge' : 'bed2')

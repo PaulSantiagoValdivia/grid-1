@@ -120,60 +120,139 @@ when it retells a report.
 
 ## Tests whose expected values changed, and why
 
-All of these change because the output changed on purpose, as the card asks. None was removed.
+This list is read from `git diff $(git merge-base claude/msg-3 main)..claude/msg-3` over the test
+files, the snapshots and the golden files, after merging main at 4abf0b6. It holds every file in
+which a line with `expect(` or a pinned value was removed: 17 test files (36 removed `expect(`
+lines in 16 of them, and pinned strings on their own lines in four, `result.test.ts` among
+them), and two lines in each of four golden files. Every one changes because the output changed on
+purpose, as the card asks.
 
-- `floorplan/src/geometry/export/__tests__/dxf.test.ts`, "does not flip Y": it now reads the
-  plan's coordinates before the label's TEXT entity. The label sits above the plan (y 3.5
-  over a top edge at 3.1) and is not the plan's geometry.
+No test was deleted and no expectation was dropped: each removed one has its replacement in the
+same place. One check moved from one test to another, and is named under `describe.test.ts`.
+
+### The label first in a tool answer
+
+- `cli/src/mcp/__tests__/server.test.ts`: `grid_preview`'s text is the label, then
+  "Showing floor "ground" in 3d." (1 expectation). The refusal on the next line is unchanged:
+  refusals carry no label.
+- `cli/src/command/__tests__/paths.e2e.test.ts`: the three export answers through the tool
+  server (DXF and IFC in one `toEqual`, OBJ, GLB) start with the label line, then "Wrote …"
+  (3 expectations).
+- `cli/src/edit/__tests__/requests.test.ts` (WRT-3's receipts): the receipt's lines are read
+  one line further down, after the label. Four `split('\n')[0]` or `[1]` reads move by one,
+  and the rename test's `slice(0, 3)` becomes the label on line 0 and `slice(1, 4)` for the same
+  three lines (5 expectations).
+
+### The label first in a command's output
+
+- `cli/src/command/__tests__/write.test.ts`: `grid write` starts with the label, then
+  "Wrote plan.json from rooms text" (1 expectation).
+- `cli/src/command/__tests__/describe.e2e.test.ts` (6 expectations):
+  - the default description's first line is the label, and the card's first line is the second;
+  - its last line is "This describes the plan and checks nothing: grid check runs the checks."
+    instead of the label, which no longer closes the card;
+  - a `line` description is two lines, the label and the line (was one line), in the length
+    loop and in the project test, where `startsWith` now includes the label;
+  - the whole `line` output for the front door into a bedroom starts with the label line.
+
+### The label row in a CSV
+
+- `cli/src/mcp/__tests__/replay/replay.test.ts`, builder 8: each CSV matches the label row in
+  one quoted cell and then its header (2 expectations).
+- `cli/src/mcp/__tests__/schedules.test.ts` (ARE-12): the opening schedule's CSV has
+  `2 + 13` rows (was `1 + 13`) and its first data row is row 2; the rooms CSV's first two rows
+  are the label and the header (was the header only); the loop that checks numbers are bare
+  starts at row 2 (3 expectations, and the loop's start).
+
+### The label in pictures and export files
+
+- `viewer/src/picture/__tests__/picture.dom.test.tsx`: the SVG file is the app's drawing, then
+  the label group, then `</svg>`, and nothing else. Before, it ended right after the drawing
+  (1 expectation).
+- `cli/src/draw/__tests__/drawStill.test.ts`: no expected value changed. The pixel-for-pixel
+  check against `planStill` now draws with `label: false`, and a new test checks that the label
+  changes the top 30 rows and nothing under them.
+- `floorplan/src/geometry/export/__tests__/dxf.test.ts`, "does not flip Y": no expected value
+  changed. The Y values are read from the file up to the label's TEXT entity, which is written
+  last and sits above the plan (y 3.5 over a top edge at 3.1); it is not the plan's geometry.
 - `…/ifc.test.ts`, "document skeleton": `FILE_DESCRIPTION` holds the view definition and then
-  the label.
-- `…/gltf.test.ts`, "writes no date or version-dependent text": `asset` has `extras` beside
-  `generator` and `version`.
-- `…/golden/*.ifc` (four files) were regenerated with `-u`. The diff is exactly the two label
-  strings in each file, read before committing.
-- `viewer/src/picture/__tests__/picture.dom.test.tsx`: the SVG file is the app's drawing
-  followed by the label group, and nothing else. Before, it ended right after the drawing.
-- `cli/src/draw/__tests__/drawStill.test.ts`: the pixel-for-pixel check against `planStill`
-  draws with `label: false`. A new test checks that the label changes only the top 30 rows.
-- `cli/src/mcp/__tests__/replay/replay.test.ts`, builder 8: each CSV starts with the label row,
-  then its header.
-- `cli/src/mcp/__tests__/server.test.ts`: `grid_preview`'s text is the label, then "Showing
-  floor …".
-- `cli/src/command/__tests__/write.test.ts`: the output starts with the label.
-- `cli/src/command/__tests__/describe.e2e.test.ts`: the label is the first line, a `line`
-  description is two lines (the label and the line), and the card ends with "This describes the
-  plan and checks nothing: grid check runs the checks."
-- `cli/src/describe/__tests__/describe.test.ts`: a card ends with its "checks nothing" sentence.
-  The label is now added by `describePlan`, and the e2e tests hold it there.
-- `cli/src/command/__tests__/paths.e2e.test.ts`: the export answers through the tool server
-  lead with the label.
-- `cli/src/edit/__tests__/requests.test.ts` (WRT-3, merged from main): each receipt's lines are
-  read after the label, one line further down.
-- `cli/src/mcp/__tests__/schedules.test.ts` (ARE-12, merged from main): the CSVs' rows are read
-  after the label row.
-- `cli/src/command/__tests__/coverage.test.ts` (COD-2, merged from main): the figure line and the
-  sill's `needed` in the new wording, still with "read for homes".
-- `cli/src/mcp/__tests__/reportProblem.test.ts` (CMD-13, merged from main): the test's path line
-  goes first in the answer it hands the draft. `grid_check`'s answer is now longer (the label,
-  and COD-4's eight lines), and the draft cuts a long answer, so a path appended at the end was
-  cut before it could be replaced.
-- `rules/src/notes/__tests__/notes.test.ts`: the note for a bedroom with no escape opening says
-  "The check looks for a window or a door … and finds none", not "It needs …".
-- `cli/src/command/__tests__/coverage.test.ts` and `grid.e2e.test.ts`: a check that looked at
-  no rooms reads `Nothing was checked for "…": it looked at no rooms.`
-- `rules/src/checks/__tests__/rounding.test.ts` and `rules/src/notes/__tests__/notes.test.ts`:
-  the notes give "the figure used here" instead of "need" or "needs". The figures and their
-  digits are unchanged (ARE-7).
-- `floorplan/src/geometry/__tests__/passable.test.ts` and `rules/src/result/__tests__/result.test.ts`:
-  "get through" instead of "pass through".
-- Merging main at 666bb01 (SHT-7, LVL-3, MSG-7, QAR-4, QAR-3) changed no test: main's new
-  tests pass as they are, with the label first and the figure wordings above.
+  the label (1 expectation).
+- `…/golden/basement.ifc`, `odd-walls.ifc`, `one-floor.ifc` and `three-floors.ifc`: regenerated
+  with `-u`. Each changes in exactly two lines, the label in `FILE_DESCRIPTION` and as the
+  `IfcProject` Description, read before committing.
+- `…/gltf.test.ts`, "writes no date or version-dependent text": `asset` has the keys `extras`,
+  `generator` and `version` (was `generator` and `version`); `extras` holds the label
+  (1 expectation).
 
-New tests: `floorplan/src/export/__tests__/label.test.ts` (one per file type: DXF, IFC, GLB and
-OBJ, for a plan and an empty plan); `cli/src/__tests__/label.test.ts` (the SVG of every fixture
-from `grid draw`, the PNG, and the rule in the instructions and the skill);
-`cli/src/mcp/__tests__/tools.test.ts` (every tool leads with the label and carries it in its
-data); `scoreboard/__tests__/approvalWords.test.ts`; and
+### Figures given as the figure used here
+
+- `rules/src/checks/__tests__/rounding.test.ts` (ARE-7), 5 expectations: "need at least 6.5 m²"
+  becomes "is at least 6.5 m²"; "needs at least 0.46 m²" and "needs at least 0.4575 m²" become
+  "on this floor: at least …"; "It needs to be 1.118 m or lower." and "It needs to be 0.775 m
+  or lower." become "The figure used here is a sill … or lower.". The figures and their digits
+  are unchanged.
+- `rules/src/notes/__tests__/notes.test.ts`, 5 note details:
+  - the two room-size notes (6.5 m², and 9 m² looked up) say "The figure used here for a room
+    people sleep or live in is at least …" instead of "Rooms people sleep or live in need at
+    least …";
+  - the window too small to escape through says "The figures used here for a bedroom on this
+    floor: at least …" instead of "A bedroom on this floor needs at least …";
+  - the window too high says "The figure used here is a sill 1.118 m or lower." instead of
+    "It needs to be 1.118 m or lower.";
+  - a bedroom with no escape opening says "The check looks for a window or a door … and finds
+    none" instead of "It needs a window or a door …".
+  The basis and status sentences after them are unchanged.
+- `cli/src/command/__tests__/coverage.test.ts` (COD-2), 2 of its 3 expectations: the figure line
+  in `grid check` reads "is 6.5 m² (habitableRoomMinArea). Basis: …, read 2026-11-14 for homes.
+  Status ai-found", still with what it was read for; the sill's `needed` reads "the figure used
+  here, a sill at most 1.118 m above the floor (…, status ai-found); this check's figures were
+  read for homes".
+
+### A check that looked at nothing
+
+- `cli/src/command/__tests__/coverage.test.ts`, its third expectation, and
+  `cli/src/command/__tests__/grid.e2e.test.ts` (1 expectation): a check that looked at no rooms
+  reads `Nothing was checked for "Rooms people live or sleep in have a minimum floor area": it
+  looked at no rooms.` instead of "…: looked at no rooms; 0 findings."
+
+### "get through" instead of "pass through"
+
+- `floorplan/src/geometry/__tests__/passable.test.ts`: the finding's message in two tests and
+  the note's title in a third (3 expectations).
+- `rules/src/result/__tests__/result.test.ts`: the record's `message`, and its `needed`, now
+  "Grid's own size for a person to get through" (was "to pass") (1 expectation, two fields).
+
+### The check that moved
+
+- `cli/src/describe/__tests__/describe.test.ts`: the card test for every plan, both readers and
+  the longer lengths checked that the card held the label. The card no longer holds it:
+  `describePlan` puts it first. The test now checks the card's closing sentence ("checks
+  nothing: grid check runs the checks." for a person, "CHECKS none here: grid check." for an
+  agent) and still that no card says a plan complies. Its title and an unused import changed
+  with it (1 expectation).
+- So that the label is still held at every length, `describe.e2e.test.ts`'s length loop now
+  checks that the first line is the label for each of the three lengths and both readers. It
+  was added in this round; before, only the default length and `line` were checked there.
+
+### Added to existing files, nothing changed
+
+- `cli/src/mcp/__tests__/tools.test.ts`: two expectations for every tool, that the answer's
+  first line holds the label and that its data carries `label`.
+- `cli/src/__tests__/label.test.ts` (on main since earlier cards): the SVG of every fixture from
+  `grid draw`, the PNG, and the rule in the instructions and the skill.
+
+### Merges of main
+
+- Main's own tests that read past the label (WRT-3's receipts, ARE-12's schedules, COD-2's
+  figures) are counted above, in their files. CMD-13's `reportProblem.test.ts` is not: an
+  earlier version of this list named it, but main made the same change itself (f29ccb8), so the
+  branch no longer differs from main there.
+- Merging main at 4abf0b6 (WRT-7) changed no test: its new tests (`display.test.ts`,
+  `units.test.ts`, the lengths test in `tools.test.ts`) read no first line of an answer or CSV,
+  no figure wording and no whole SVG, and they hold as they are.
+
+New test files: `floorplan/src/export/__tests__/label.test.ts` (one per file type: DXF, IFC, GLB
+and OBJ, for a plan and an empty plan); `scoreboard/__tests__/approvalWords.test.ts`; and
 `scoreboard/__tests__/retell.test.ts`.
 
 ## For the owner
