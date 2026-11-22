@@ -47,9 +47,10 @@ own, then what each measure does not take off and cannot say. Its data adds `byU
   countries and GB, CH, NO and IS, the outside face for US. With
   no country, or any other, both are given, and the text says why. Either or both can be asked
   for with `gross`.
-- **No standard's name.** The README's new "Measuring areas" section holds the measures table
-  (ARE-8's first done-when); a test fails when it and `MEASURES` differ. Another test reads every
-  source file of the four packages, the README, AGENTS.md and the result contract, and fails if
+- **No standard's name.** The new page `docs/areas.md`, "Measuring areas", linked from the README's
+  documentation list, holds the measures table (ARE-8's first done-when); a test fails when it and
+  `MEASURES` differ. Another test reads every source file of the four packages, the README,
+  AGENTS.md and every page in `docs/`, and fails if
   one names a measuring standard (the list is built from parts in the test). The figure records
   file in `packages/rules` is the one place allowed. No figure record for a measuring rule was
   added: none is needed until a named local rule is wanted, and the card says that needs a
@@ -138,6 +139,19 @@ areas answer is not part of the check's result record, and its notes carry no co
 - ARE-14: party walls, outdoor weighting, free floor and per-flat or per-zone figures.
 - ARE-8's card can be checked against its done-when: the measures table and the grep test are
   here.
+
+## Merged with main at e7cf925 (MSG-2, CMD-15, QAR-10, the README split)
+
+- `packages/cli/src/quantities/areas.ts`: MSG-2 had added a state to every room and figure
+  (proven, not proven, not looked at) in the old `planAreas`. They are carried onto the new one:
+  each room keeps `state` and `doubts`, a room Grid could not draw is listed with no area, and
+  every total has its `states` entry. Gross areas are `not-looked-at` only where the library has
+  none. MSG-2's note naming the rooms a total leaves out is kept; the library's own note saying
+  the same is not printed twice.
+- `grid_areas` text: each figure keeps its rule and gets MSG-2's state after the number.
+- The README is main's. The "Measuring areas" section is now `docs/areas.md`, linked from the
+  README's documentation list; the `grid_areas` row is updated in `docs/tool-server.md`.
+  AGENTS.md is main's, with the areas line added.
 
 ## Checks run
 

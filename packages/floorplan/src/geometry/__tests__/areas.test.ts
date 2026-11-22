@@ -156,9 +156,8 @@ describe('ARE-8 which gross measure comes first', () => {
 describe('ARE-8 the measures table', () => {
   const ROOT = resolve(__dirname, '../../../../..')
 
-  it('is in the README in the same words as MEASURES', () => {
-    const readme = readFileSync(join(ROOT, 'README.md'), 'utf8')
-    const section = readme.slice(readme.indexOf('### Measuring areas'))
+  it('is in docs/areas.md in the same words as MEASURES', () => {
+    const section = readFileSync(join(ROOT, 'docs', 'areas.md'), 'utf8')
     const rows = section
       .split('\n')
       .filter((line) => /^\| (Net|Gross)/.test(line))
@@ -180,7 +179,7 @@ describe('ARE-8 the measures table', () => {
       }
     }
     for (const pkg of readdirSync(join(ROOT, 'packages'))) walk(join(ROOT, 'packages', pkg, 'src'))
-    files.push(join(ROOT, 'README.md'), join(ROOT, 'AGENTS.md'), join(ROOT, 'docs', 'result-contract.md'))
+    files.push(join(ROOT, 'README.md'), join(ROOT, 'AGENTS.md'), ...readdirSync(join(ROOT, 'docs')).filter((name) => name.endsWith('.md')).map((name) => join(ROOT, 'docs', name)))
     // Figure records carry their document, edition and clause (`packages/rules`).
     const records = join(ROOT, 'packages', 'rules', 'src', 'checks', 'figures.ts')
     const found = files.filter((file) => file !== records && pattern.test(readFileSync(file, 'utf8'))).map((file) => relative(ROOT, file))

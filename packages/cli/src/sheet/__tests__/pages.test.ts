@@ -67,7 +67,7 @@ describe('the client layout (VEW-7)', () => {
     const made = sheetPages(house, words, layout, { name: 'two-floor-house', date })
     for (const floor of areas.floors) {
       const page = made.pages.find((p) => p.picture?.kind === 'plan' && p.picture.floor === floor.floor)!
-      const shown = sumText(floor.rooms.map((r) => r.net), floor.net, 1)
+      const shown = sumText(floor.rooms.map((r) => r.net ?? 0), floor.net, 1)
       expect(page.table!.rows.map((r) => [r.name, r.area])).toEqual(floor.rooms.map((r, i) => [r.name, shown.parts[i]]))
       expect(page.table!.total).toMatchObject({ name: 'Net area', area: shown.total })
     }

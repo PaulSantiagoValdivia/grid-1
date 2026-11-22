@@ -38,7 +38,15 @@ export const wordings = {
   /** `country` as the caller stated it. */
   noFiguresForPlace: (what: FigureSubject, country: string): WordingPart[] => [
     words(`${what} were not checked: the figures here are from US model codes, and this plan is for ${country}`)
-  ]
+  ],
+  /** MSG-2 (lab CH-4): `count` bedrooms on a floor above the third storey. */
+  aboveEscapeStoreys: (floor: string, count: number): WordingPart[] => [
+    words('On '),
+    name(floor),
+    words(`, escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: ${count}`)
+  ],
+  /** MSG-2 (lab CH-1): a plan with walls and no rooms. */
+  noRooms: (): WordingPart[] => [words('No check that looks at rooms ran: the plan has no rooms')]
 }
 
 /** The same wordings as report lines. */
@@ -48,5 +56,7 @@ export const messages = {
   escapeWindowTooSmall: (room: string): string => wordingText(wordings.escapeWindowTooSmall(room)),
   escapeWindowTooHigh: (room: string): string => wordingText(wordings.escapeWindowTooHigh(room)),
   noUse: (floor: string, count: number): string => wordingText(wordings.noUse(floor, count)),
-  noFiguresForPlace: (what: FigureSubject, country: string): string => wordingText(wordings.noFiguresForPlace(what, country))
+  noFiguresForPlace: (what: FigureSubject, country: string): string => wordingText(wordings.noFiguresForPlace(what, country)),
+  aboveEscapeStoreys: (floor: string, count: number): string => wordingText(wordings.aboveEscapeStoreys(floor, count)),
+  noRooms: (): string => wordingText(wordings.noRooms())
 }

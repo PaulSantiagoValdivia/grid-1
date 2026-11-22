@@ -55,7 +55,7 @@ export interface MeasureRule {
 }
 
 /**
- * The measures table. The README's "Measuring areas" section holds the same table; a test fails
+ * The measures table. `docs/areas.md` holds the same table; a test fails
  * when the two differ.
  */
 export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
