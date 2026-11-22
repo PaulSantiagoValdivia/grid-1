@@ -13,6 +13,9 @@ const ORDER = [
   'grid_areas',
   'grid_takeoff',
   'grid_schedule',
+  'grid_fields',
+  'grid_find',
+  'grid_count',
   'grid_measure',
   'grid_view',
   'grid_describe',
@@ -34,7 +37,7 @@ const ORDER = [
   'grid_square_scan',
 ]
 
-const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
+const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_fields', 'grid_find', 'grid_count', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
 const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room', 'grid_square_scan'])
 
 interface Listed {
@@ -80,8 +83,10 @@ describe('tools/list', () => {
     // 21 since CMD-13: a problem report the person decides to file.
     // 22 since MSG-10: a note the person sets aside as seen, which writes a file of its own.
     // 23 since WRT-6: squaring a scan is an explicit step that says how far each wall moved
-    // (lab AE-4), not a side effect of another change.
-    expect((await listed()).length).toBeLessThanOrEqual(23)
+    // (lab AE-4), not a side effect of another change. 26 since CNT-9: asking across the parts
+    // by their facts is three short calls, one per request (what can be asked, which parts, how
+    // many or how much by group).
+    expect((await listed()).length).toBeLessThanOrEqual(26)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -175,6 +180,9 @@ describe('the tools on a two-bedroom flat', () => {
     grid_areas: {},
     grid_takeoff: {},
     grid_schedule: {},
+    grid_fields: {},
+    grid_find: { kind: ['door'], fields: ['width'] },
+    grid_count: { kind: ['room'], by: 'use', sum: ['area'] },
     grid_measure: { what: 'room', room: 'hall' },
     grid_view: { kind: 'plan' },
     grid_describe: {},

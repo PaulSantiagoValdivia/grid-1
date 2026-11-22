@@ -1,6 +1,9 @@
 /**
  * Two rooms knocked into one (WRT-3, lab WR-2): the stretch of the wall between them is taken
  * out, the first room takes in the second, and the doors and windows in the stretch go with it.
+ * The merged room keeps the first room's facts of the person's own and its number, and takes the
+ * second's facts it does not carry (CNT-9); what the second said otherwise is named, never kept
+ * in silence. The pieces of a cut wall each keep the wall's facts.
  *
  * Two rooms of different uses are never made one use in silence (CNT-8, lab AB-9): the call says
  * the merged room's use, or keeps both rooms as zones of one open-plan room (`zones`). Then the
@@ -15,7 +18,7 @@
  * Pure: a survey in, a patch out.
  */
 import { cross, dot, signedArea, sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
-import { statedWall } from '@ongrid/floorplan/types/floorplan'
+import { factOf, statedWall } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import type { Survey, SurveyRoom } from '../quantities/survey'
 import { type OpeningChange, type Patch, type RoomChange } from './edits'
@@ -210,29 +213,56 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
   const rooms = new Map<string, RoomChange>()
   const addRooms: Record<string, unknown>[] = []
   const merged = line === null ? aId : request.id ?? freshId(used, `${aId}-${bId}`)
+  const mergedName = request.name ?? (line === null ? A.facts.name : `${A.facts.name} and ${B.facts.name}`)
+  // CNT-9: the merged room keeps the facts of the first room, and takes the second's it does not
+  // carry, with zones or without. With zones the two rooms keep their own facts as zones as well.
+  const notKept: string[] = []
+  const aFacts = aRoom.properties ?? {}
+  const bFacts = bRoom.properties ?? {}
+  const taken = Object.entries(bFacts).filter(([fact]) => factOf(aRoom, fact) === undefined)
+  const differ = Object.entries(bFacts).filter(([fact, value]) => factOf(aRoom, fact) !== undefined && factOf(aRoom, fact) !== value)
+  const mergedFacts = taken.length > 0 ? { ...aFacts, ...Object.fromEntries(taken) } : null
+  if (taken.length > 0) said.push(`${request.name !== undefined || line !== null ? quoted(mergedName) : an} takes the facts of ${bn} it did not carry: ${taken.map(([fact]) => quoted(fact)).join(', ')}.`)
+  if (differ.length > 0) notKept.push(`${bn} said otherwise of ${differ.map(([fact]) => quoted(fact)).join(', ')}; the merged room keeps what ${an} says${line === null ? '' : `, and ${bn} keeps its own as a zone`}.`)
   if (line === null) {
     const change: RoomChange = { boundary: joined }
     if (request.name !== undefined) change.name = request.name
     if (request.use !== undefined) change.use = request.use
     // One of the two states no use: the merged room takes the other's, so no use is lost.
     else if (aRoom.use === undefined && bRoom.use !== undefined) change.use = bRoom.use
+    if (mergedFacts !== null) change.properties = mergedFacts
     rooms.set(aId, change)
     if (request.name === undefined) guessed.push(`The merged room keeps the id, name and use of ${an} (${change.use ?? aRoom.use ?? 'no use'}); pass name or use to change them.`)
+    if (bRoom.number !== undefined) notKept.push(`The room number of ${bn}, ${quoted(bRoom.number)}, is gone with it${aRoom.number !== undefined ? `; the merged room keeps ${quoted(aRoom.number)}` : ''}.`)
     // A zone of the room that is gone is a zone of the merged room now.
     for (const zone of zonesOf(bId)) rooms.set(zone, { partOf: aId })
   } else {
     if (used.has(merged) && request.id !== undefined) throw new EditRefused(`The plan already has a part with id ${quoted(merged)}; pass another new_room.`)
     used.add(merged)
-    // Each room becomes a zone of the merged room, bounded by its own walls and the new line.
+    // Each room becomes a zone of the merged room, bounded by its own walls and the new line. It
+    // keeps its facts and any number it states (CNT-9), though a zone is numbered by its room.
     const zoneBoundary = (room: SurveyRoom, listed: readonly string[]): string[] => {
       const k = listed.indexOf(wall.id)
       return [...listed.slice(0, k), ...piecesBeside(room, wall, [...pieces, line]), ...listed.slice(k + 1)]
     }
     rooms.set(aId, { boundary: zoneBoundary(A, aRoom.boundary), partOf: merged })
     rooms.set(bId, { boundary: zoneBoundary(B, bRoom.boundary), partOf: merged })
-    const name = request.name ?? `${A.facts.name} and ${B.facts.name}`
-    addRooms.push({ id: merged, name, boundary: joined, ...(request.use === undefined ? {} : { use: request.use }), ...(aRoom.floor === undefined ? {} : { floor: aRoom.floor }) })
-    if (request.name === undefined) guessed.push(`The merged room is called ${quoted(name)}; pass name to call it something else.`)
+    // The merged room gets what a merged room gets without zones: the first room's number and facts.
+    const facts = mergedFacts ?? (Object.keys(aFacts).length > 0 ? aFacts : null)
+    addRooms.push({
+      id: merged,
+      name: mergedName,
+      boundary: joined,
+      ...(request.use === undefined ? {} : { use: request.use }),
+      ...(aRoom.floor === undefined ? {} : { floor: aRoom.floor }),
+      ...(aRoom.number === undefined ? {} : { number: aRoom.number }),
+      ...(facts === null ? {} : { properties: { ...facts } }),
+    })
+    if (aRoom.number !== undefined) said.push(`${quoted(mergedName)} takes the room number of ${an}, ${quoted(aRoom.number)}.`)
+    if (bRoom.number !== undefined) {
+      notKept.push(`The room number of ${bn}, ${quoted(bRoom.number)}, stays on it as a zone but is not shown: a zone is numbered by its room${aRoom.number !== undefined ? `, and the merged room keeps ${quoted(aRoom.number)}` : ''}.`)
+    }
+    if (request.name === undefined) guessed.push(`The merged room is called ${quoted(mergedName)}; pass name to call it something else.`)
     if (request.id === undefined) guessed.push(`The merged room's id is ${quoted(merged)}; pass new_room for another.`)
   }
   // Other rooms that named the wall now name the pieces beside them.
@@ -292,5 +322,6 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
     ...(addRooms.length === 0 ? {} : { addRooms }),
     // A door that joined either room joins the merged room now: the same space, not a change.
     roomsBecome: line === null ? new Map([[bId, aId]]) : new Map([[aId, merged], [bId, merged]]),
+    notKept,
   }
 }

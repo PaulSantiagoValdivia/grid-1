@@ -14,8 +14,10 @@ import {
   figureUsedText,
   GENERAL_GUIDANCE_LABEL,
   inspectPlan,
+  problemsIn,
   roomsLookedAt,
   type AppliedFigure,
+  type Cause,
   type CheckCoverage,
   type GridResult,
   type LineKind,
@@ -191,7 +193,8 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   }
   const floor = floorOption(plan, request.floor)
   const options = country === undefined ? {} : { country: country.toUpperCase() }
-  const full = checkLocalRules(plan, options)
+  // MSG-5: with what the reader left out, so the report holds back what the record holds back.
+  const full = checkLocalRules(plan, { ...options, leftOut: loaded.leftOut ?? [] })
   // The file's text (MSG-6), so the record names what the reader did and the words the schema
   // drops (MSG-4).
   const result = inspectPlan(loaded.text ?? plan, options)
@@ -218,7 +221,28 @@ export function checkOnFloor(loaded: LoadedPlan, whole: CheckResult, floor: stri
 export function resultOnFloor(result: GridResult, floor: string): GridResult {
   const lines = result.lines.filter((line) => line.floor === null || line.floor === floor)
   const counts = Object.fromEntries(Object.keys(result.counts).map((kind) => [kind, lines.filter((l) => l.kind === kind).length])) as Record<LineKind, number>
-  return { ...result, lines, count: lines.length, counts, coverage: coverageOnFloor(result.coverage, floor) }
+  return { ...result, lines, count: lines.length, counts, problems: problemsIn(lines), coverage: coverageOnFloor(result.coverage, floor) }
+}
+
+/**
+ * MSG-5 (lab W-7): how many of the lines are problems of their own, when some follow from
+ * others: " 1 problem; 19 lines follow from it." Empty when every line stands alone.
+ */
+export function problemsText(result: GridResult): string {
+  const following = result.lines.filter((line) => line.causedBy !== undefined).length
+  if (following === 0) return ''
+  const problems = `${result.problems} ${result.problems === 1 ? 'problem' : 'problems'}`
+  return ` ${problems}; ${following} ${following === 1 ? 'line follows' : 'lines follow'} from ${result.problems === 1 ? 'it' : 'them'}.`
+}
+
+/** The line a line follows from, as `wall "w1" (wall/zero-length)` or `the plan (plan/no-walls)`. */
+export function causeText(cause: Cause): string {
+  return `${cause.id === '' ? 'the plan' : JSON.stringify(cause.id)} (${cause.code})`
+}
+
+/** MSG-5: the notes a "could not be drawn" line holds back, one line each: `room "p01" (room/no-door), waits for "corridor"`. */
+export function heldText(line: ResultLine): string[] {
+  return (line.held ?? []).map((note) => `${note.thing.kind} ${JSON.stringify(note.thing.id)} (${note.code}), waits for ${note.waitsFor.map((id) => JSON.stringify(id)).join(', ')}`)
 }
 
 /** What each kind of line is called in a list. */
@@ -265,8 +289,19 @@ export interface TextOptions {
 function lineText(result: CheckResult, index: number, floorCount: number, details: boolean): string[] {
   const line = result.result.lines[index]!
   const where = floorCount > 1 && line.floor !== null && line.thing.kind !== 'floor' ? ` on ${JSON.stringify(line.floor)}` : ''
-  const head = `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`
-  return details ? [head, `      found: ${line.found}`, `      needed: ${line.needed}`, `      fix: ${line.fix}`] : [head]
+  // MSG-5: a line that follows from another is set under it, says which, and names the notes it holds back.
+  const indent = line.causedBy === undefined ? '' : '    '
+  const head = `${indent}  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`
+  const cause = line.causedBy === undefined ? [] : [`${indent}      follows from: ${causeText(line.causedBy)}`]
+  if (!details) return [head, ...cause]
+  return [
+    head,
+    ...cause,
+    `${indent}      found: ${line.found}`,
+    `${indent}      needed: ${line.needed}`,
+    `${indent}      fix: ${line.fix}`,
+    ...heldText(line).map((held) => `${indent}      held back: ${held}`),
+  ]
 }
 
 /** MSG-10: the figures the lines used, once each, as the figure used here with its basis and status. */
@@ -322,8 +357,9 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
   if (record.count === 0) {
     lines.push('', `To look at: nothing. ${NOTHING_FOUND}`)
   } else {
-    lines.push('', `To look at (${record.count}): ${countsText(record)}${seen > 0 ? `; ${seen} of them seen, listed under Seen` : ''}.`)
+    lines.push('', `To look at (${record.count}): ${countsText(record)}${seen > 0 ? `; ${seen} of them seen, listed under Seen` : ''}.${problemsText(record)}`)
     // Numbered by place in the whole plan's record: `grid draw` marks each with its number (MSG-8).
+    // MSG-5: a line that follows from another is set under it, and says which (`lineText`).
     // WRT-6 (lab WR-15): what was assumed comes last, under its own heading, for the person. A
     // seen one is under Seen with the others (MSG-10), so the heading comes before the first open one.
     const confirmSeen = record.lines.filter((line, index) => line.kind === 'to-confirm' && states[index]?.state === 'seen').length
@@ -336,7 +372,7 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
         lines.push('', `To confirm (${record.counts['to-confirm']}${confirmSeen > 0 ? `; ${confirmSeen} of them seen, listed under Seen` : ''}): what the plan marks assumed, not given or measured. Ask the person.`)
       }
       lines.push(...lineText(result, index, floorCount, true))
-      if (state?.state === 'back') lines.push(`      ${seenBeforeText(state)}.`)
+      if (state?.state === 'back') lines.push(`${line.causedBy === undefined ? '' : '    '}      ${seenBeforeText(state)}.`)
     })
     if (record.counts.finding === 0) lines.push('', `No findings. ${NOTHING_FOUND}`)
     if (seen > 0) {

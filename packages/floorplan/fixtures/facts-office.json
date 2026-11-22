@@ -1,0 +1,41 @@
+{
+  "version": "1",
+  "units": "m",
+  "projectId": "facts-office",
+  "floors": [
+    { "id": "ground", "name": "Ground floor", "level": 0, "properties": { "fire compartment": "FC-1", "occupancy": 18 } },
+    { "id": "first", "name": "First floor", "level": 1, "properties": { "fire compartment": "FC-2" } }
+  ],
+  "walls": [
+    { "id": "gs", "start": [0, 0], "end": [12, 0], "thickness": 0.3, "height": 3, "kind": "exterior", "properties": { "U-value": 0.18 } },
+    { "id": "ge", "start": [12, 0], "end": [12, 8], "thickness": 0.3, "height": 3, "kind": "exterior", "properties": { "U-value": 0.18 } },
+    { "id": "gn", "start": [12, 8], "end": [0, 8], "thickness": 0.3, "height": 3, "kind": "exterior", "properties": { "U-value": 0.18 } },
+    { "id": "gw", "start": [0, 8], "end": [0, 0], "thickness": 0.3, "height": 3, "kind": "exterior", "properties": { "U-value": 0.18 } },
+    { "id": "gx1", "start": [4, 0], "end": [4, 8], "thickness": 0.15, "height": 3, "kind": "interior", "properties": { "fire rating": "EI 30", "acoustic rating": 45 } },
+    { "id": "gx2", "start": [8, 0], "end": [8, 8], "thickness": 0.15, "height": 3, "kind": "interior", "properties": { "fire rating": "EI 60", "acoustic rating": 50 } },
+    { "id": "fs", "start": [0, 0], "end": [12, 0], "thickness": 0.3, "height": 3, "kind": "exterior", "floor": "first", "properties": { "U-value": 0.18 } },
+    { "id": "fe", "start": [12, 0], "end": [12, 8], "thickness": 0.3, "height": 3, "kind": "exterior", "floor": "first", "properties": { "U-value": 0.18 } },
+    { "id": "fn", "start": [12, 8], "end": [0, 8], "thickness": 0.3, "height": 3, "kind": "exterior", "floor": "first", "properties": { "U-value": 0.18 } },
+    { "id": "fw", "start": [0, 8], "end": [0, 0], "thickness": 0.3, "height": 3, "kind": "exterior", "floor": "first", "properties": { "U-value": 0.18 } },
+    { "id": "fx2", "start": [8, 0], "end": [8, 8], "thickness": 0.15, "height": 3, "kind": "interior", "floor": "first", "properties": { "fire rating": "EI 60", "acoustic rating": 50 } }
+  ],
+  "rooms": [
+    { "id": "g-reception", "name": "Reception", "number": "G.01", "use": "other", "boundary": ["gs", "gx1", "gn", "gw"], "properties": { "department": "Front of house", "head count": 2, "finish": "Stone" } },
+    { "id": "g-office", "name": "Open office", "number": "G.02", "use": "other", "boundary": ["gs", "gx2", "gn", "gx1"], "properties": { "department": "Sales", "head count": 8, "finish": "Carpet" } },
+    { "id": "g-meeting", "name": "Meeting room", "number": "G.03", "use": "other", "boundary": ["gs", "ge", "gn", "gx2"], "properties": { "department": "Sales", "head count": 6, "finish": "Carpet" } },
+    { "id": "f-studio", "name": "Studio", "number": "1.01", "use": "other", "floor": "first", "boundary": ["fs", "fx2", "fn", "fw"], "properties": { "department": "Design", "head count": 12, "finish": "Timber" } },
+    { "id": "f-store", "name": "Store", "number": "1.02", "use": "storage", "floor": "first", "boundary": ["fs", "fe", "fn", "fx2"], "properties": { "department": "Design", "finish": "Vinyl" } }
+  ],
+  "openings": [
+    { "id": "d-entry", "wall": "gs", "type": "door", "offset": 1.5, "width": 1, "height": 2.1, "hinge": "start", "swing": "left", "properties": { "fire rating": "EI 30", "door set": "DS-01", "self-closing": true } },
+    { "id": "d-g1", "wall": "gx1", "type": "door", "offset": 3, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left", "properties": { "fire rating": "EI 30", "door set": "DS-02", "self-closing": true } },
+    { "id": "d-g2", "wall": "gx2", "type": "door", "offset": 3, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left", "properties": { "door set": "DS-02", "self-closing": false } },
+    { "id": "d-f1", "wall": "fx2", "type": "door", "offset": 3, "width": 0.9, "height": 2.1, "hinge": "start", "swing": "left", "properties": { "fire rating": "EI 60", "door set": "DS-03", "self-closing": true } },
+    { "id": "w-g1", "wall": "gs", "type": "window", "offset": 5.5, "width": 1.2, "sill": 0.9, "height": 1.2, "properties": { "glazing": "double", "openable": true } },
+    { "id": "w-g2", "wall": "ge", "type": "window", "offset": 3, "width": 1.5, "sill": 0.9, "height": 1.2, "properties": { "glazing": "double", "openable": false } },
+    { "id": "w-g3", "wall": "gw", "type": "window", "offset": 3, "width": 1.2, "sill": 0.9, "height": 1.2, "properties": { "glazing": "triple", "openable": true } },
+    { "id": "w-f1", "wall": "fs", "type": "window", "offset": 2, "width": 1.5, "sill": 0.9, "height": 1.2, "properties": { "glazing": "double", "openable": true } },
+    { "id": "w-f2", "wall": "fn", "type": "window", "offset": 5, "width": 1.5, "sill": 0.9, "height": 1.2, "properties": { "glazing": "double", "openable": false } },
+    { "id": "w-f3", "wall": "fe", "type": "window", "offset": 3, "width": 1.2, "sill": 0.9, "height": 1.2, "properties": { "glazing": "triple", "openable": true } }
+  ]
+}

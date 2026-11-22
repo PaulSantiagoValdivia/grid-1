@@ -4,6 +4,7 @@
  * frame, leaf or clear width.
  */
 import { compareIds, planForFloor, roomNumbers, tolerance } from '@ongrid/floorplan/geometry'
+import { factText, type Facts } from '@ongrid/floorplan/types/floorplan'
 import type { OpeningFacts } from '../describe/facts'
 import { AREA_RULES, planAreas } from './areas'
 import { HEIGHT_RULE, roomHeight } from './measure'
@@ -67,13 +68,17 @@ export function planSchedule(
 // Both are data first. The tool's text, its CSV and the sheet's tables are written from the same
 // rows, so no part reads another's printed text (lab AB-4, AU7-1). Rows are in one order whatever
 // the order of the file: floors by level, then by id, rooms and openings by id (`compareIds`,
-// QAR-5). Room numbers count up in that order; the plan file holds none. The numbering is the
-// library's (`roomNumbers`), so the IFC file gives every room the same number (HND-2).
+// QAR-5). Room numbers count up in that order; a room that states its own number (CNT-9) comes
+// first on its floor, by that number, and is given it; every row carries its part's facts. The
+// numbering is the library's (`roomNumbers`), so the IFC file gives every room the same number
+// (HND-2).
 
 /** A room as the room schedule lists it. */
 export interface RoomScheduleRow {
   /** 1, 2, 3… across the floors, in the schedule's order. Grid's, not the plan's. */
   readonly number: number
+  /** CNT-9: the number the plan states for the room, which the schedule gives in place of Grid's; null when it states none. */
+  readonly roomNumber: string | null
   readonly id: string
   readonly name: string
   readonly use: string | null
@@ -84,6 +89,8 @@ export interface RoomScheduleRow {
   readonly state: NumberState
   /** In metres, by ARE-10's rule; null when the plan gives none. */
   readonly height: number | null
+  /** CNT-9: the room's facts of the person's own, by name, as the plan gives them. */
+  readonly properties: Facts
   /**
    * CNT-8, only on a room with zones: each zone, measured, by id. A zone is no row of
    * its own: its floor is in its room's area, so a column of areas adds up to the total.
@@ -130,6 +137,8 @@ export interface OpeningScheduleRow {
   readonly sill: number
   /** A room's name, or what lies there when no room does (`outside`, `nothing drawn`, `a room left out`). */
   readonly between: readonly [string, string]
+  /** CNT-9: the opening's facts of the person's own, by name, as the plan gives them. */
+  readonly properties: Facts
 }
 
 export interface OpeningSchedule {
@@ -140,7 +149,17 @@ export interface OpeningSchedule {
 }
 
 export const ROOM_SCHEDULE_RULE =
-  'Rooms are numbered by Grid, floor by floor from the lowest, then by id; the plan holds no room numbers. Areas are net, as grid_areas measures them; heights are as grid_measure gives them.'
+  'Rooms are listed floor by floor from the lowest: on each floor, the rooms that state a number in the plan first, by that number and given it, then the others by id, numbered by Grid. Areas are net, as grid_areas measures them; heights are as grid_measure gives them.'
+
+/** CNT-9: the number a room schedule row is shown by: the plan's own, else Grid's. */
+export function shownNumber(row: Pick<RoomScheduleRow, 'number' | 'roomNumber'>): string {
+  return row.roomNumber ?? String(row.number)
+}
+
+/** CNT-9: a row's facts in words, `fire rating "EI 30", head count 12`; empty when it carries none. */
+export function factsText(properties: Facts): string {
+  return Object.entries(properties).map(([name, value]) => `${JSON.stringify(name)} ${typeof value === 'string' ? JSON.stringify(value) : factText(value)}`).join(', ')
+}
 
 /** A row the schedule cannot write: it is named, never left out in silence. */
 export class ScheduleRowError extends Error {
@@ -171,8 +190,9 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
     const storey = planForFloor(survey.plan, floor.id)
     const places = figures.rooms.filter((room) => room.zoneOf === undefined)
     const byId = new Map(places.map((room) => [room.id, room] as const))
+    const own = new Map(storey.rooms.map((r) => [r.id, r] as const))
     // HND-2: the library's numbers, which number no zone (CNT-8), so the IFC gives the same.
-    for (const { number, id } of numbered.filter((n) => n.floor === floor.id)) {
+    for (const { number, stated, id } of numbered.filter((n) => n.floor === floor.id)) {
       const room = byId.get(id)
       if (room === undefined) continue
       const zones = figures.rooms
@@ -181,6 +201,7 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
         .map((zone) => ({ id: zone.id, name: zone.name, use: zone.use, area: zone.net }))
       rows.push({
         number,
+        roomNumber: stated,
         id: room.id,
         name: room.name,
         use: room.use,
@@ -189,6 +210,7 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
         area: room.net,
         state: room.state,
         height: roomHeight(storey, room.id).value,
+        properties: own.get(id)?.properties ?? {},
         ...(zones.length === 0 ? {} : { zones }),
       })
     }
@@ -211,6 +233,7 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
     const facts = survey.facts.floors.find((f) => f.id === floor.id)!
     const named = new Map(facts.rooms.map((room) => [room.id, room.name] as const))
     const side = (s: OpeningFacts['sides'][number]): string => (typeof s === 'object' ? named.get(s.room) ?? s.room : s)
+    const stated = new Map(survey.plan.openings.map((o) => [o.id, o] as const))
     for (const opening of [...facts.openings].sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || compareIds(a.id, b.id))) {
       counts[opening.type] += 1
       rows.push({
@@ -223,6 +246,7 @@ export function openingSchedule(survey: Survey, options: { floors?: readonly str
         height: opening.height,
         sill: opening.sill,
         between: [side(opening.sides[0]), side(opening.sides[1])],
+        properties: stated.get(opening.id)?.properties ?? {},
       })
     }
   }
@@ -243,34 +267,53 @@ function textCell(schedule: string, row: number, what: string, value: unknown): 
   return value
 }
 
+/** CNT-9: every fact name the rows carry, in the order first met: one column each. */
+function factColumns(rows: readonly { readonly properties: Facts }[]): string[] {
+  const names = new Set<string>()
+  for (const row of rows) for (const name of Object.keys(row.properties)) names.add(name)
+  return [...names]
+}
+
+/** CNT-9: a row's facts under the fact columns; empty where it carries none. */
+function factCells(properties: Facts, columns: readonly string[]): Cell[] {
+  return columns.map((column) => {
+    const value = properties[column]
+    return value === undefined ? null : typeof value === 'number' ? value : factText(value)
+  })
+}
+
 /** The room schedule as CSV: one row per room, then each floor's total and the total of all floors. */
 export function roomScheduleCsv(schedule: RoomSchedule): string {
   const name = 'room schedule'
+  const columns = factColumns(schedule.rows)
   const rows: Cell[][] = schedule.rows.map((r, i) => {
     const n = i + 1
     const area = numberCell(name, n, 'area', r.area, r.state === 'not-looked-at')
     return [
-      numberCell(name, n, 'number', r.number, false), textCell(name, n, 'room id', r.id), textCell(name, n, 'name', r.name), r.use,
+      r.roomNumber ?? numberCell(name, n, 'number', r.number, false), textCell(name, n, 'room id', r.id), textCell(name, n, 'name', r.name), r.use,
       area, area === null ? null : sqFt(area), numberCell(name, n, 'height', r.height, true), textCell(name, n, 'floor', r.floorName), r.state,
+      ...factCells(r.properties, columns),
     ]
   })
   const totals = [...schedule.floors, schedule.total].map((t): Cell[] => {
     const area = numberCell(name, rows.length + 1, 'total area', t.area, false)!
-    return [null, '', t.floor === null ? 'Total, all floors' : `Total, ${t.floorName}`, null, area, sqFt(area), null, t.floorName ?? 'all', t.state.state]
+    return [null, '', t.floor === null ? 'Total, all floors' : `Total, ${t.floorName}`, null, area, sqFt(area), null, t.floorName ?? 'all', t.state.state, ...columns.map(() => null)]
   })
-  return csv(['number', 'room id', 'name', 'use', 'area m2', 'area sq ft', 'height m', 'floor', 'state'], [...rows, ...totals])
+  return csv(['number', 'room id', 'name', 'use', 'area m2', 'area sq ft', 'height m', 'floor', 'state', ...columns], [...rows, ...totals])
 }
 
 /** The opening schedule as CSV: one row per opening, each listed once. */
 export function openingScheduleCsv(schedule: OpeningSchedule): string {
   const name = 'opening schedule'
+  const columns = factColumns(schedule.rows)
   const rows: Cell[][] = schedule.rows.map((r, i) => {
     const n = i + 1
     return [
       numberCell(name, n, 'number', r.number, false), textCell(name, n, 'id', r.id), textCell(name, n, 'type', r.type),
       numberCell(name, n, 'width', r.width, false), numberCell(name, n, 'height', r.height, false), numberCell(name, n, 'sill', r.sill, false),
       textCell(name, n, 'floor', r.floorName), textCell(name, n, 'room on one side', r.between[0]), textCell(name, n, 'room on the other side', r.between[1]), 1,
+      ...factCells(r.properties, columns),
     ]
   })
-  return csv(['number', 'id', 'type', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2', 'count'], rows)
+  return csv(['number', 'id', 'type', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2', 'count', ...columns], rows)
 }

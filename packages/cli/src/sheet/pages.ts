@@ -18,7 +18,7 @@ import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { quoted } from '../fs/projectFiles'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
-import { openingSchedule, roomSchedule } from '../quantities/schedule'
+import { factsText, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
 import { surveyPlan } from '../quantities/survey'
 import { sqFt } from '../quantities/units'
 
@@ -331,8 +331,9 @@ function scheduleBodies(loaded: LoadedPlan, name: string): Body[] {
   const openings = openingSchedule(survey)
   const several = rooms.floors.length > 1
   const roomRows: SheetRow[] = rooms.rows.map((r) => ({
-    name: `${r.number}. ${r.name}`,
-    detail: [r.use ?? 'use not said', r.height === null ? 'height not known' : `${metresText(r.height)} m high`, ...(several ? [r.floorName] : [])].join(', '),
+    // CNT-9: a stated room number wins over Grid's, and the room's own facts close the detail.
+    name: `${shownNumber(r)}. ${r.name}`,
+    detail: [r.use ?? 'use not said', r.height === null ? 'height not known' : `${metresText(r.height)} m high`, ...(several ? [r.floorName] : []), ...(Object.keys(r.properties).length > 0 ? [factsText(r.properties)] : [])].join(', '),
     area: r.area === null ? 'not measured' : areaText(r.area, 1),
   }))
   for (const t of rooms.floors) if (several) roomRows.push({ name: `Total, ${t.floorName}`, detail: `${t.rooms} rooms`, area: areaText(t.area, 1) })
@@ -345,7 +346,7 @@ function scheduleBodies(loaded: LoadedPlan, name: string): Body[] {
   }
   const openingRows: SheetRow[] = openings.rows.map((r) => ({
     name: `${r.number}. ${r.type} ${r.id}`,
-    detail: `${metresText(r.width)} × ${metresText(r.height)} m${r.type === 'window' ? `, sill ${metresText(r.sill)} m` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}`,
+    detail: `${metresText(r.width)} × ${metresText(r.height)} m${r.type === 'window' ? `, sill ${metresText(r.sill)} m` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
     area: '1',
   }))
   const c = openings.counts
