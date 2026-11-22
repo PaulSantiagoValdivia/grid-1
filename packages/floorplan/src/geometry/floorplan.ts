@@ -23,9 +23,14 @@ import { brokenOnFloor, validatePlan } from './validate'
 import type { PlanStep } from './steps'
 import type { PlanNote, PlanSketch } from './writing'
 import { planNotes, planSketch, sketchExtent } from './writing'
+import { planOrientation } from './orientation'
 import { planSteps } from './steps'
 import type { RiserLine, StairLayout } from './stairs'
 import { planStairs } from './stairs'
+import type { StairSymbol } from './stairSymbol'
+import { stairSymbol } from './stairSymbol'
+import type { LiftSymbol } from './liftSymbol'
+import { liftSymbol } from './liftSymbol'
 import { wholePlan } from './floors'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
@@ -46,6 +51,8 @@ export interface PlanWall {
   readonly slices: readonly Vec2[][]
   /** The axis, for drawing virtual walls as a line. */
   readonly centerline: readonly [Vec2, Vec2]
+  /** How thick it is, in metres: 0 for a virtual wall, which is a line (SHT-4: where its faces are). */
+  readonly thickness: number
 }
 
 export interface PlanRoom {
@@ -117,21 +124,36 @@ export interface PlanStair {
   readonly risers: number
   readonly riserHeight: number
   readonly going: number
+  /**
+   * SHT-11: the symbol as this floor draws it: on the lower floor cut at `planCutHeight`, with a
+   * break line and the part above it marked to be dashed; on the upper floor whole. Every line
+   * the drawing draws for the stair is here.
+   */
+  readonly symbol: StairSymbol
 }
 
 /** A laid-out stair as the floor `floor` draws it; on a plan that is no slice, as its lower floor does. */
 export function planStair(stair: StairLayout, floor: string | null): PlanStair {
+  const end = floor !== null && floor === stair.upper.floor ? 'upper' : 'lower'
   return {
     id: stair.id,
     name: stair.name,
-    end: floor !== null && floor === stair.upper.floor ? 'upper' : 'lower',
+    end,
     flights: stair.flights.map((f) => ({ outline: f.outline, riserLines: f.riserLines })),
     landings: stair.landings.map((l) => l.outline),
     line: stair.line,
     risers: stair.risers,
     riserHeight: stair.riserHeight,
-    going: stair.going
+    going: stair.going,
+    symbol: stairSymbol(stair, end)
   }
+}
+
+/** SHT-11: a room used as a lift shaft, with its symbol: a cross in the shaft. */
+export interface PlanLift {
+  /** The room's id. */
+  readonly id: string
+  readonly lines: LiftSymbol['lines']
 }
 
 export interface Bounds {
@@ -167,6 +189,8 @@ export interface PlanDrawing {
    * when the plan states none.
    */
   readonly stairs: readonly PlanStair[]
+  /** SHT-11: the rooms used as a lift that could be drawn, each with its cross. Empty with none. */
+  readonly lifts: readonly PlanLift[]
   /**
    * The rooms that could not be drawn, each as the box round the walls it lists that the plan
    * holds (MSG-8). A room none of whose walls can be found has no box and is not here.
@@ -178,6 +202,12 @@ export interface PlanDrawing {
   readonly sketch: readonly PlanSketch[]
   /** SHT-7: the notes, tags, symbols and key written on the drawing. */
   readonly notes: readonly PlanNote[]
+  /**
+   * CNT-3: the plan's stated north, for the drawing's north arrow: the way north points, in
+   * radians counter-clockwise from +Y. Null when the plan states no north, or places a north
+   * symbol of its own on this floor (which then points to it).
+   */
+  readonly north: { readonly turn: number } | null
   /** SHT-7: the box round the sketch layer, so a view frames it too; null with none. */
   readonly sketchBounds: Bounds | null
   /** Envelope of the whole drawing, for computing the viewBox. */
@@ -261,7 +291,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       virtual: wall.virtual === true,
       exposure: wallExposure(index, wall.id),
       slices,
-      centerline: wallCenterline(wall)
+      centerline: wallCenterline(wall),
+      thickness: wall.virtual ? 0 : wall.thickness
     })
 
     for (const slice of slices) extent.push(...slice)
@@ -288,6 +319,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   }
 
   const rooms: PlanRoom[] = []
+  const lifts: PlanLift[] = []
   const undrawn: UndrawnRoom[] = []
   for (const room of plan.rooms) {
     const shape = broken.has(room.id) ? null : tryRoomShape(room, index)
@@ -297,6 +329,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       continue
     }
     const { polygon, holes } = shape
+    if (room.use === 'lift') lifts.push({ id: room.id, lines: liftSymbol(polygon, holes).lines })
     rooms.push({
       id: room.id,
       name: room.name,
@@ -340,7 +373,9 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const sketch = planSketch(plan)
   const notes = planNotes(plan, (id) => rooms.find((room) => room.id === id)?.labelAt)
   const sketchBounds = sketch.length === 0 ? null : computeBounds(sketchExtent(sketch))
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, sketch, notes, sketchBounds, bounds: computeBounds(extent), issues }
+  const stated = planOrientation(plan).north
+  const north = stated === null || notes.some((note) => note.kind === 'symbol' && note.symbol === 'north') ? null : { turn: (stated * Math.PI) / 180 }
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, sketch, notes, north, sketchBounds, bounds: computeBounds(extent), issues }
 }
 
 /**

@@ -11,7 +11,7 @@ clause, place, day read and status, and none is carried yet.
 
 | Measure | What it measures | Not taken off | What the plan cannot say |
 |---|---|---|---|
-| Net area | Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it. | Nothing inside a room is taken off: fixed units, a column drawn without walls and floor under a low ceiling all count. | The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside. |
+| Net area | Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it; a stair drawn as a room on floor after floor counts once, on the floor it rises from. | Nothing inside a room is taken off: fixed units, a column drawn without walls and floor under a low ceiling all count. | The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside. |
 | Gross internal area | Gross internal area is the floor inside the inside face of the walls that face outside, with the inner walls and partitions counted. | Inner walls, partitions, stairs and floor no room claims are not taken off. | Which walls face outside is worked out from the rooms beside them; the plan cannot say whether floor no room claims, such as a courtyard or a light well, is covered, so it counts. |
 | Gross external area | Gross external area is the floor inside the outside face of the walls, every wall counted. | Outer walls, inner walls and floor no room claims are not taken off. | The plan cannot say which walls are shared with a neighbour, so a shared wall counts in full, and a wall standing apart counts too. |
 
@@ -21,6 +21,18 @@ walls or outside them, the answer says how much floor that is, and the sum takes
 gross internal area leaves out the walls that face outside, stretch by stretch, as Grid works
 them out from the rooms beside them, with the corners between them; a floor with no such wall
 has none. A room Grid could not draw is named and left out of every figure.
+
+A stair is counted once (SHT-11, lab DR-5). Where rooms used as a stair lie one over the other
+on neighbouring floors, joined as the way-out check joins them (they share at least half of the
+smaller one), they are one stair, and its floor is counted on the floor it rises from: the
+lowest of them. The stair rooms over it keep their own area in the room list, marked with the
+room they are counted with (`countedWith`), and are in no net figure, no area by use and no
+circulation figure; the answer says so in a note. The gross areas still hold them, so on every
+floor the gross external area is the net area plus those stair rooms (`overStairs`), the rooms
+named outside, the walls and the floor no room claims. The same holds when only some floors are
+asked for: a floor's stair room over the stair below is counted on the floor below. A stair the
+plan states (`stairs`) adds no floor of its own: its flights stand in rooms already measured. A
+lift shaft drawn on every floor is still counted on every floor.
 
 Which gross area comes first follows the country the plan will be built in: the inside face of
 the outer walls in the UK and most of Europe, the outside face for homes in the US. With no
@@ -69,7 +81,7 @@ area, each opening once as the schedule counts it, and each floor's outline.
 
 | Key | Line | Assumed |
 |---|---|---|
-| `floor:<use>` | Floor finish: the net area of the rooms of that use. The plan holds no finishes, so the person decides which finish a use gets, by the key they price | no |
+| `floor:<use>` | Floor finish: the net area of the rooms of that use, so a stair is counted once, on the floor it rises from. The plan holds no finishes, so the person decides which finish a use gets, by the key they price | no |
 | `ceiling` | Ceilings: a flat ceiling as big as the floor below it | yes |
 | `wall_finish:<use>` | Inside wall faces of the rooms of that use, at the height of each wall, less every door, window and opening at full size; both faces of an inside wall count | no |
 | `skirting` | Each room's inside perimeter less the width of its doors and doorless openings | no |

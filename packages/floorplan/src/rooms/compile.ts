@@ -10,18 +10,21 @@
  * The language, one statement per line (`#` starts a comment; lengths are metres):
  *
  *   plan "<name>"
+ *   building <home|office|shop|...>    what kind of building the plan is (CNT-5)
  *   based on <revision>                the plan this text was read from (written by the read-back)
  *   walls outside <t> inside <t> [interior|partition] height <h>      the thickness rule
  *   walltype <t> <kind>                every inside wall of that thickness gets that kind
  *   sizes inside|centre|outside        what a room's size measures to, when its line does not say
  *   doors height <h>   windows sill <s> height <h>                    defaults
- *   floor <id> "<name>" [level <n>] [height <h>] [elevation <e>] [slab <s>]
+ *   floor <id> "<name>" [level <n>] [height <h>] [elevation <e>] [slab <s>] [building <kind>]
  *   room <id> "<name>" <use|-> <width> x <depth> [inside|centre|outside] <where> [...]
  *   room <id> "<name>" <use|-> polygon x,y x,y x,y ...                 inside faces
  *       <where>: at x,y (the south-west inside corner)
  *                <north|south|east|west> of <room or unit> [align <side|centre>] [shift <m>] [until <room>] [open]
  *                inside <room> corner <ne|nw|se|sw> [wall <t> [kind]]  cuts that corner out of the room
  *       then:    walls <t> [kind]  height <h>  floor <m> (its floor above or below the storey's)  first-wall <wall id>
+ *                tenure <private|shared|common|commercial>  type "<the firm's own room type>"
+ *       <use>:   one of Grid's uses, or a word that plainly means one (`USE_WORDS`): 'wc' is toilet
  *       a size may be '*': the room stretches as far as the room named after 'until'
  *   wall between <room> and <room> [<side>] [<t>] [kind|virtual] [height <h>] [id <id>] [reversed]
  *   wall <room> <side> [<t>] [kind] [height <h>] [id <id>] [reversed]  an outside wall
@@ -37,7 +40,7 @@
  *
  * Pure: text in, a plan and a report out. Nothing here reads or writes a file.
  */
-import { ROOM_USES, WallKindSchema, type FloorPlan, type Opening, type Room, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
+import { BUILDING_TYPES, ROOM_TENURES, ROOM_USES, WallKindSchema, readUse, type BuildingType, type FloorPlan, type Opening, type Room, type RoomTenure, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
 import { indexPlan } from '../geometry/plan'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
@@ -48,6 +51,14 @@ type Box = readonly [number, number, number, number]
 
 const KINDS: readonly WallKind[] = WallKindSchema.options
 const USES: readonly string[] = ROOM_USES
+const TENURES: readonly string[] = ROOM_TENURES
+const BUILDINGS: readonly string[] = BUILDING_TYPES
+
+/** CNT-5: a use word as the plan file reads it (`readUse`): a use, or a word that plainly means one. */
+function roomUseOf(word: string): RoomUse | null {
+  const read = readUse(word)
+  return typeof read === 'string' && USES.includes(read) ? (read as RoomUse) : null
+}
 const S2 = Math.sqrt(0.5)
 const DIRS: Readonly<Record<string, P>> = { north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] }
 const DIAG: Readonly<Record<string, P>> = { ne: [S2, S2], nw: [-S2, S2], se: [S2, -S2], sw: [-S2, -S2] }
@@ -169,6 +180,9 @@ interface RoomDraft {
   /** LVL-7: how far the room's floor stands above or below its storey's floor level. */
   floorOffset: number | null
   firstWall: string | null
+  /** CNT-5: who the room is for, and the firm's own room type. */
+  tenure: RoomTenure | null
+  roomType: string | null
   /** The size as written and what it measures to, for the answer. */
   size: { w: number | null; d: number | null; basis: SizeBasis } | null
 }
@@ -185,6 +199,8 @@ interface FloorDraft {
   height: number | null
   elevation: number | null
   slab: number | null
+  /** CNT-5: the floor's own kind of building. */
+  building: BuildingType | null
   rooms: Map<string, RoomDraft>
   inst: Map<string, string[]>
   between: Map<string, WallSay>
@@ -321,6 +337,8 @@ class Compiler {
   private readonly lines: string[]
   name: string | null = null
   basedOn: string | null = null
+  /** CNT-5: what kind of building the plan is. */
+  building: BuildingType | null = null
   private rule = { outside: 0.3, inside: 0.1, height: 2.7, kind: 'interior' as WallKind }
   private dflt = { doorH: 2.1, winSill: 0.9, winH: 1.2 }
   private tkinds = new Map<number, WallKind>()
@@ -425,6 +443,10 @@ class Compiler {
       case 'plan':
         this.name = t[1] ?? null
         return
+      case 'building':
+        if (t.length !== 2 || !BUILDINGS.includes(t[1]!)) this.stop('rooms/syntax', at, `line ${at}: write 'building <kind>': one of ${BUILDINGS.join(', ')}.`)
+        this.building = t[1] as BuildingType
+        return
       case 'based':
         if (t[1] !== 'on' || t.length !== 3) this.stop('rooms/syntax', at, `line ${at}: write 'based on <revision>', as the read-back writes it.`)
         this.basedOn = t[2]!
@@ -483,7 +505,7 @@ class Compiler {
         this.stop(
           'rooms/syntax',
           at,
-          `line ${at}: '${kw}' is not a word this way of writing knows. A line starts with one of: plan, based, walls, walltype, sizes, doors, windows, floor, room, wall, door, window, opening, unit, place, repeat, copy, rename, remove, raw.`
+          `line ${at}: '${kw}' is not a word this way of writing knows. A line starts with one of: plan, building, based, walls, walltype, sizes, doors, windows, floor, room, wall, door, window, opening, unit, place, repeat, copy, rename, remove, raw.`
         )
     }
   }
@@ -517,8 +539,12 @@ class Compiler {
         else if (w === 'elevation') fl.elevation = v
         else fl.slab = v
         i += 2
+      } else if (w === 'building' && i + 1 < t.length) {
+        if (!BUILDINGS.includes(t[i + 1]!)) this.stop('rooms/syntax', at, `line ${at}: '${t[i + 1]}' is not a kind of building Grid knows. Use one of: ${BUILDINGS.join(', ')}.`)
+        fl.building = t[i + 1] as BuildingType
+        i += 2
       } else {
-        this.stop('rooms/syntax', at, `line ${at}: '${w}' is not understood on a floor line. Known words: level, height, elevation, slab.`)
+        this.stop('rooms/syntax', at, `line ${at}: '${w}' is not understood on a floor line. Known words: level, height, elevation, slab, building.`)
       }
     }
     if (this.floors.some((f) => f.id === fl.id)) this.stop('rooms/duplicate-id', at, `line ${at}: floor '${fl.id}' is already written.`)
@@ -570,12 +596,12 @@ class Compiler {
     const [, id, name, useWord] = t as [string, string, string, string]
     let use: RoomUse | undefined
     if (useWord === '-') use = undefined
-    else if (USES.includes(useWord)) use = useWord as RoomUse
+    else if (roomUseOf(useWord) !== null) use = roomUseOf(useWord)!
     else {
-      this.stop('rooms/unknown-use', at, `line ${at}: '${useWord}' is not a room use Grid knows. Use one of: ${USES.join(', ')}; or '-' for none. A name can say more: "Office", "WC".`)
+      this.stop('rooms/unknown-use', at, `line ${at}: '${useWord}' is not a room use Grid knows. Use one of: ${USES.join(', ')}; or '-' for none. The room's name keeps the person's own word: "Pooja room", "Bryggers".`)
     }
     const fl = this.floor()
-    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, floorOffset: null, firstWall: null, size: null }
+    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, floorOffset: null, firstWall: null, tenure: null, roomType: null, size: null }
     const mx = ctx?.mx === true
     const my = ctx?.my === true
     let W: string | null = null
@@ -638,6 +664,13 @@ class Compiler {
       } else if (w === 'first-wall' && i + 1 < t.length) {
         room.firstWall = t[i + 1]!
         i += 2
+      } else if (w === 'tenure' && i + 1 < t.length) {
+        if (!TENURES.includes(t[i + 1]!)) this.stop('rooms/syntax', at, `line ${at}: '${t[i + 1]}' is not a tenure Grid knows. Use one of: ${TENURES.join(', ')}.`)
+        room.tenure = t[i + 1] as RoomTenure
+        i += 2
+      } else if (w === 'type' && i + 1 < t.length) {
+        room.roomType = t[i + 1]!
+        i += 2
       } else if ((w === 'walls' || w === 'wall') && i + 1 < t.length) {
         const T = numberOf(t[i + 1]!, at)
         let kind: WallKind | null = null
@@ -657,7 +690,7 @@ class Compiler {
         this.stop(
           'rooms/syntax',
           at,
-          `line ${at}: '${w}' is not understood on a room line. After the use, write a size ('3.0 x 4.4' = east-west by north-south, inside faces; add 'centre' or 'outside' to measure to the walls' centre lines or outside faces) or 'polygon x,y x,y ...', then where it goes: 'at x,y', '<north|south|east|west> of <room>' with optional 'align', 'shift', 'until', 'open', or 'inside <room> corner <ne|nw|se|sw>'. 'walls <t> [kind]' sets this room's own wall thickness.`
+          `line ${at}: '${w}' is not understood on a room line. After the use, write a size ('3.0 x 4.4' = east-west by north-south, inside faces; add 'centre' or 'outside' to measure to the walls' centre lines or outside faces) or 'polygon x,y x,y ...', then where it goes: 'at x,y', '<north|south|east|west> of <room>' with optional 'align', 'shift', 'until', 'open', or 'inside <room> corner <ne|nw|se|sw>'. 'walls <t> [kind]' sets this room's own wall thickness; 'tenure <private|shared|common|commercial>' and 'type "<text>"' say who it is for and the firm's own room type.`
         )
       }
     }
@@ -1069,8 +1102,8 @@ class Compiler {
     const use = t[4]
     if (use === '-') r.use = undefined
     else if (use !== undefined) {
-      if (!USES.includes(use)) this.stop('rooms/unknown-use', at, `line ${at}: '${use}' is not a room use Grid knows. Use one of: ${USES.join(', ')}; or '-'.`)
-      r.use = use as RoomUse
+      if (roomUseOf(use) === null) this.stop('rooms/unknown-use', at, `line ${at}: '${use}' is not a room use Grid knows. Use one of: ${USES.join(', ')}; or '-'.`)
+      r.use = roomUseOf(use)!
     }
     r.id = fresh
     r.name = name
@@ -1767,8 +1800,10 @@ class Compiler {
         ...(f.elevation !== null ? { elevation: f.elevation } : {}),
         ...(f.height !== null ? { height: f.height } : {}),
         ...(f.slab !== null ? { slab: f.slab } : {}),
+        ...(f.building !== null ? { building: f.building } : {}),
       }))
     }
+    if (this.building !== null) plan.building = this.building
     const multi = this.floors.length > 1
     // An id written on two floors gets its floor's id in front, so it stays one id in the plan.
     const count = new Map<string, number>()
@@ -1824,6 +1859,8 @@ class Compiler {
             ...(this.explicitFloors ? { floor: fl.id } : {}),
             ...(room.height !== null ? { height: room.height } : {}),
             ...(room.floorOffset !== null ? { floorOffset: room.floorOffset } : {}),
+            ...(room.tenure !== null ? { tenure: room.tenure } : {}),
+            ...(room.roomType !== null ? { roomType: room.roomType } : {}),
           }
           plan.rooms.push(item)
           const area = Math.abs(signedArea(room.poly))
@@ -1939,6 +1976,7 @@ function newFloor(id: string, name: string, level: number): FloorDraft {
     height: null,
     elevation: null,
     slab: null,
+    building: null,
     rooms: new Map(),
     inst: new Map(),
     between: new Map(),

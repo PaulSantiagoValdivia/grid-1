@@ -9,8 +9,9 @@
  *   strong contrast, with lines in screen pixels.
  * - `technical`: sheets and files to hand on. Black on white, cut walls outlined heaviest with a
  *   grey tone inside, windows as a break in the wall with two face lines and a glass line, and a
- *   door with no stated swing marked as undecided. Its lines are in millimetres on paper, from a
- *   pen set chosen by the output scale (1:50, 1:100 or 1:200).
+ *   door with no stated swing marked as undecided, and dimensions with 45-degree ticks and
+ *   their numbers along the line (SHT-4). Its lines are in millimetres on paper, from a pen set
+ *   chosen by the output scale (1:50, 1:100 or 1:200).
  * - `dark`: the working look on dark paper, as the app's dark theme.
  *
  * The app's stylesheets (`plan-tokens.css`, `canvas2d/plan.css`) say the working look again in
@@ -94,10 +95,12 @@ export const LINE_PX = {
   jamb: 1,
   /** A step between rooms at different levels (LVL-7). */
   step: 1.5,
-  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  /** A stair's flights, landings, risers and walking line (LVL-3), its break line and a lift's cross (SHT-11). */
   stair: 0.75,
-  /** How long the head of a stair's arrow is. */
-  stairArrow: 8,
+  /** SHT-11: the outline of the floor above, dashed. */
+  above: 1,
+  /** SHT-11: the dashes of what lies above the cut: the floor above, and a stair past its break line. */
+  aboveDash: [4, 3],
   /** A fixture's symbol (CNT-12). */
   fixture: 0.75,
   doorLeaf: 1.5,
@@ -131,11 +134,29 @@ export const USE_FILLS: Readonly<Record<RoomUse, string>> = {
   dining: '#f2e1d3',
   kitchen: '#e3efd9',
   bathroom: '#d8eeee',
+  // CNT-5: the uses past homes, each near its group's colour and as pale.
+  toilet: '#d5e9ec',
+  utility: '#e6eadc',
+  study: '#efe6d6',
+  office: '#e8e6f2',
+  meeting: '#e2e2f0',
+  reception: '#eee7ef',
+  retail: '#f3e4e4',
+  classroom: '#e4eddf',
+  treatment: '#dcecf0',
+  waiting: '#e8eff1',
+  sport: '#e1ecdf',
+  changing: '#dde9e5',
+  staff: '#efe9dd',
+  worship: '#f1e6da',
+  assembly: '#ebe2ea',
   corridor: '#ecebe6',
   stair: '#e5e0ee',
   // LVL-3: a lift shaft, beside the stair's colour.
   lift: '#e0e3ec',
   storage: '#e9e4dc',
+  plant: '#e4e2de',
+  parking: '#e7e7e3',
   other: '#f0f0ee'
 }
 
@@ -175,11 +196,15 @@ export type LinePart =
   | 'jamb'
   | 'step'
   | 'fixture'
-  /** A stair's flights, landings, risers and walking line (LVL-3). */
+  /** A stair's flights, landings, risers and walking line (LVL-3), its break line and a lift's cross (SHT-11). */
   | 'stair'
+  /** SHT-11: the outline of the floor above. */
+  | 'above'
   | 'doorLeaf'
   | 'doorArc'
   | 'dimension'
+  /** The 45-degree tick at each end of a dimension line, in a look that draws one (SHT-4). */
+  | 'tick'
   | 'extension'
   | 'leader'
   | 'windowFace'
@@ -187,7 +212,7 @@ export type LinePart =
   | 'undecided'
 
 /** The parts of the drawing a look gives a dash pattern. */
-export type DashPart = 'virtual' | 'roomDimension' | 'undecided'
+export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above'
 
 /** Lines for the screen: widths and dashes in screen pixels, whatever the zoom. */
 export interface ScreenLines {
@@ -230,6 +255,11 @@ export interface Look {
   readonly glass: boolean
   /** A door with no stated hinge or swing gets its own "undecided" mark, not a plain gap. */
   readonly undecidedDoors: boolean
+  /**
+   * Dimensions as a drawing gives them (SHT-4): a 45-degree tick at each end of the line and
+   * the number along it. Otherwise plain ends and the number upright, as on screen.
+   */
+  readonly draftedDimensions: boolean
 }
 
 /** The names a look is chosen by. */
@@ -247,16 +277,18 @@ const SCREEN_LINES: ScreenLines = {
     step: LINE_PX.step,
     fixture: LINE_PX.fixture,
     stair: LINE_PX.stair,
+    above: LINE_PX.above,
     doorLeaf: LINE_PX.doorLeaf,
     doorArc: LINE_PX.doorArc,
     dimension: LINE_PX.dimension,
+    tick: LINE_PX.dimension,
     extension: LINE_PX.extension,
     leader: LINE_PX.leader,
     windowFace: LINE_PX.opening,
     glass: LINE_PX.opening,
     undecided: LINE_PX.opening
   },
-  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3] }
+  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash }
 }
 
 /**
@@ -280,16 +312,18 @@ const PAPER_LINES: PaperLines = {
     step: 'medium',
     fixture: 'finest',
     stair: 'finest',
+    above: 'fine',
     doorLeaf: 'medium',
     doorArc: 'finest',
     dimension: 'finest',
+    tick: 'fine',
     extension: 'finest',
     leader: 'finest',
     windowFace: 'fine',
     glass: 'fine',
     undecided: 'fine'
   },
-  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8] }
+  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1] }
 }
 
 /** Black on white: the technical look's colours. Walls are a grey tone inside a black outline. */
@@ -318,7 +352,8 @@ export const WORKING_LOOK: Look = {
   ink: LIGHT_LOOK.wall,
   wallOutline: null,
   glass: false,
-  undecidedDoors: false
+  undecidedDoors: false,
+  draftedDimensions: false
 }
 
 /** The working look on dark paper: the app's dark theme. */
@@ -332,7 +367,8 @@ export const TECHNICAL_LOOK: Look = {
   ink: '#000000',
   wallOutline: '#000000',
   glass: true,
-  undecidedDoors: true
+  undecidedDoors: true,
+  draftedDimensions: true
 }
 
 export const LOOKS: Readonly<Record<LookName, Look>> = {

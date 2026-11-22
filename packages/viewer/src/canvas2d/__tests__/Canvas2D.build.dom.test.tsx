@@ -147,7 +147,9 @@ describe('Canvas2D plays a build', () => {
     expect(container.querySelectorAll('[data-part="dimension"]').length).toBe(0)
 
     act(() => clock.finish())
-    expect(container.querySelectorAll('[data-part="dimension"]').length).toBe(6)
+    // SHT-4: the chains outside (3 openings and 5 walls below, 3 walls on each other side), an
+    // overall size on each side, and the two rooms' widths and depths.
+    expect(container.querySelectorAll('[data-part="dimension"]').length).toBe(27)
   })
 
   it('never hides a dimension that did not change', () => {
@@ -165,7 +167,9 @@ describe('Canvas2D plays a build', () => {
     const { container, stopAt } = playing(house(), next)
     stopAt('o3', 0.1)
     const dims = parts(container, '[data-part="dimension"]')
-    expect(dims.length).toBe(6)
+    // SHT-4: the window starts a chain of openings on the right, which pushes that side's walls
+    // chain (3) and overall size out: those 4 move, so they wait with the 3 new ones.
+    expect(dims.length).toBe(23)
     for (const dim of dims) expect(opacity(dim)).toBe(1)
   })
 

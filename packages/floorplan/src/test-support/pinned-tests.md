@@ -91,6 +91,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
 | CH-6 (the size half) | MSG-18 | `packages/rules/src/checks/__tests__/rules-check.test.ts`, "lab failures fixed by MSG-18"; the lab's three cases in `geometry/__tests__/passable.test.ts` |
 | MS-8 | MSG-16 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-16"; the corner, junction and dividing-line cases in `geometry/__tests__/openingPlaces.test.ts`, the lab's own MS-8 and CP4-11 plans in `scoreboard/__tests__/openingPlaces.test.ts` |
+| S-8 (a door swing that hits a table names the table) | CNT-13 | `geometry/__tests__/useIndicators.test.ts`, "a door swing that hits a fixture names it (S-8)"; the line in `packages/rules/src/result/__tests__/useLines.test.ts`. The table is a kitchen run labelled "Table 2": tables are furniture, which the plan does not hold yet (CNT-11) |
 
 ## Probes that never failed
 

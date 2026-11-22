@@ -212,3 +212,25 @@ whole: the changelog for agents in `docs/result-contract.md` (CNT-9's entry firs
 and MSG-3's) and `docs/tool-server.md` (both new sections, ARE-13's `grid_takeoff` row and
 CNT-9's `grid_schedule` row). MSG-3 now starts every CSV with the label, so the two schedule CSV
 checks in `packages/cli/src/mcp/__tests__/facts.test.ts` read the header from the second row.
+
+## After merging main at 25747b7
+
+Main was merged again at `25747b7` (SHT-4, CNT-3, MSG-10, CNT-5, SHT-11, CNT-13). Thirteen files
+conflicted; every one keeps both sides.
+
+- **Tools: 25.** MSG-10's `grid_mark_seen` stays where main put it, after `grid_sheet` and before
+  the tools that change the plan; CNT-9's three stay after `grid_schedule`. Main's 22 plus three
+  is 25, in `tools.test.ts` (with a line saying why), `server.test.ts`, `AGENTS.md`,
+  `docs/commands.md` and the agents' changelog. The tool lists in `tools.test.ts` and
+  `everyPath.e2e.test.ts` had already merged with both sides.
+- **The convention is now C8.** CNT-3 took C7 on main for north, front and site, so the facts of
+  the person's own are C8 in `types/floorplan.ts` and `AGENTS.md`. The numbered list above still
+  says C7, as it was written. The schema keeps CNT-5's `building` on a floor and `tenure` and
+  `roomType` on a room beside CNT-9's `properties` and `number`; the known-field lists in the tests
+  matched without a change.
+- **`grid_view`**: `hide` takes SHT-11's `above`, and `colour` still takes a field or fact, with
+  `highlight`. In the viewer the picture options, the key's entries and the scene keep SHT-11's
+  floor above and dashed stair beside CNT-9's picked parts; the north arrow (CNT-3) is drawn after.
+- **IFC**: both imports kept: the facts' sets and the room-number names beside CNT-3's `TrueNorth`
+  and site.
+- **Changelogs**: CNT-9's entry first, then main's in main's order.

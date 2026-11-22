@@ -52,6 +52,16 @@ export function itemNoun(item: Pick<Item, 'id' | 'kind' | 'label'>): string {
   return `${word} ${quoted(item.id)}`
 }
 
+/**
+ * CNT-13: an item named inside a sentence: its kind and id, `kitchen run "k1"`, with the label
+ * first when the plan states one, `"Table 2" (kitchen run "t2")`. Both are the plan's own words,
+ * so both are quoted.
+ */
+export function itemName(item: Pick<Item, 'id' | 'kind' | 'label'>): string {
+  const kind = `${isItemKind(item.kind) ? ITEM_KIND_WORDS[item.kind] : 'item'} ${quoted(item.id)}`
+  return item.label === undefined || item.label.trim() === '' ? kind : `${quoted(item.label)} (${kind})`
+}
+
 const m = (value: number): string => `${metresText(value)} m`
 
 // ── Where it stands ──────────────────────────────────────────────────────────────────────────

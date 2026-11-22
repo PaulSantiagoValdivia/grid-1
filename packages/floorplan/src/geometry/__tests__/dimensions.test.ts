@@ -1,14 +1,22 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan } from '../plan'
+import type { PlanDrawing, PlanRoom } from '../floorplan'
 import { buildFloorPlan } from '../floorplan'
+import { planFloors, planForFloor } from '../floors'
+import { parseFloorPlan } from '../../types/floorplan'
+import { signedDistanceToOutline } from '../innerPoint'
+import type { Dimension, DimensionSide } from '../dimensions'
 import {
   boundsWithDimensions,
   buildDimensions,
   dimensionAxes,
   openingDimensions,
+  outsideDimensions,
   overallDimensions,
+  planAxes,
   roomDimensions
 } from '../dimensions'
 
@@ -17,26 +25,146 @@ const plan: FloorPlan = JSON.parse(
 )
 const drawing = buildFloorPlan(plan)
 
-describe('overall dimensions', () => {
-  const dims = overallDimensions(drawing.bounds)
+const DATA = resolve(__dirname, '../../../../../scoreboard/data')
+let lab: { name: string; text: string }[] | null = null
+function labPlans(): { name: string; text: string }[] {
+  lab ??= gunzipSync(readFileSync(resolve(DATA, 'lab-plans.ndjson.gz')))
+    .toString('utf8')
+    .split('\n')
+    .filter((l) => l.length > 0)
+    .map((l) => JSON.parse(l) as { name: string; text: string })
+  return lab
+}
+function labPlan(name: string): FloorPlan {
+  const line = labPlans().find((p) => p.name === name)
+  if (line === undefined) throw new Error(`no lab plan named ${name}`)
+  return parseFloorPlan(JSON.parse(line.text))
+}
+/**
+ * A third of the lab's plans, the size tests of thousands of walls left out: every drawing is
+ * built, which is what takes the time.
+ */
+function labSample(): { name: string; text: string }[] {
+  return labPlans().filter((p, i) => i % 3 === 0 && p.text.length < 40_000)
+}
+const floorDrawing = (p: FloorPlan, floor: string): PlanDrawing => buildFloorPlan(planForFloor(p, floor))
+const byId = (dims: readonly Dimension[], id: string): Dimension => {
+  const dim = dims.find((d) => d.id === id)
+  if (!dim) throw new Error(`no dimension ${id} in ${dims.map((d) => d.id).join(', ')}`)
+  return dim
+}
 
-  it('measures the full width and height of the plan', () => {
+/** 1 mm: the chains must add up to the overall size to within it (SHT-4). */
+const MM = 0.001
+
+/** Each side's chains, by kind, in the order they are drawn. */
+function chainsOf(dims: readonly Dimension[]): Map<DimensionSide, Map<string, Dimension[]>> {
+  const out = new Map<DimensionSide, Map<string, Dimension[]>>()
+  for (const dim of dims) {
+    if (!dim.side) continue
+    const side = out.get(dim.side) ?? new Map<string, Dimension[]>()
+    side.set(dim.kind, [...(side.get(dim.kind) ?? []), dim])
+    out.set(dim.side, side)
+  }
+  return out
+}
+
+/** Every chain adds up to its side's overall size, and joins up end to end. */
+function expectChainsAddUp(dims: readonly Dimension[], name: string): number {
+  let checked = 0
+  const overall = new Map<'across' | 'up', number>()
+  for (const dim of dims) if (dim.kind === 'overall') overall.set(dim.side === 'bottom' || dim.side === 'top' ? 'across' : 'up', dim.value)
+  for (const [side, chains] of chainsOf(dims)) {
+    const total = overall.get(side === 'bottom' || side === 'top' ? 'across' : 'up')
+    expect(total, `${name}: overall for ${side}`).toBeDefined()
+    for (const [kind, chain] of chains) {
+      const sum = chain.reduce((s, d) => s + d.value, 0)
+      expect(Math.abs(sum - total!), `${name}: ${side} ${kind} chain adds up`).toBeLessThanOrEqual(MM)
+      for (let i = 1; i < chain.length; i++) {
+        const gap = Math.hypot(chain[i]!.from.x - chain[i - 1]!.to.x, chain[i]!.from.y - chain[i - 1]!.to.y)
+        expect(gap, `${name}: ${side} ${kind} chain joins up`).toBeLessThanOrEqual(MM)
+      }
+      checked++
+    }
+  }
+  return checked
+}
+
+/** Whether the dimension line stays on the room's floor: the test's own reading of "inside". */
+function lineInRoom(dim: Dimension, room: PlanRoom): boolean {
+  const shift = { x: dim.normal.x * dim.offset, y: dim.normal.y * dim.offset }
+  for (let i = 0; i <= 20; i++) {
+    const t = i / 20
+    const p = { x: dim.from.x + (dim.to.x - dim.from.x) * t + shift.x, y: dim.from.y + (dim.to.y - dim.from.y) * t + shift.y }
+    if (signedDistanceToOutline(p, room.polygon, room.holes) < -0.011) return false
+  }
+  return true
+}
+
+describe('overall dimensions', () => {
+  const dims = overallDimensions(drawing)
+
+  it('measures the full width and height of the plan, to the outer faces of its walls', () => {
     const values = dims.map((d) => d.value).sort((a, b) => a - b)
     // The envelope includes half a wall on each side: 8 + 0.25 and 5 + 0.25.
     expect(values[0]).toBeCloseTo(5.25)
     expect(values[1]).toBeCloseTo(8.25)
+    for (const dim of dims) expect(dim.measuredTo).toEqual(['face', 'face'])
   })
 
   it('places them outside the envelope, not on top of it', () => {
     for (const dim of dims) {
-      const line = {
-        x: dim.labelAt.x,
-        y: dim.labelAt.y
-      }
-      const outsideBelow = line.y < drawing.bounds.min.y
-      const outsideLeft = line.x < drawing.bounds.min.x
+      const outsideBelow = dim.labelAt.y < drawing.bounds.min.y
+      const outsideLeft = dim.labelAt.x < drawing.bounds.min.x
       expect(outsideBelow || outsideLeft).toBe(true)
     }
+  })
+})
+
+describe('chains outside the plan (SHT-4)', () => {
+  const dims = outsideDimensions(drawing)
+
+  it('gives the openings nearest, then the walls, then the overall size, on each side', () => {
+    const bottom = chainsOf(dims).get('bottom')!
+    expect([...bottom.keys()]).toEqual(['opening', 'wall', 'overall'])
+    const offsets = [...bottom.values()].map((chain) => chain[0]!.offset)
+    expect(offsets).toEqual([...offsets].sort((a, b) => a - b))
+    // The door o1 is 0.9 m wide, 1.05 m along w1 from its axis end: 1.05 + 0.125 to the corner.
+    expect(bottom.get('opening')!.map((d) => Number(d.value.toFixed(3)))).toEqual([1.175, 0.9, 6.175])
+    // The walls: the corner, the room, the partition, the room, the corner.
+    expect(bottom.get('wall')!.map((d) => Number(d.value.toFixed(3)))).toEqual([0.25, 4.8, 0.15, 2.8, 0.25])
+  })
+
+  it('adds up: the openings and the walls each sum to the overall size within 1 mm', () => {
+    expect(expectChainsAddUp(dims, 'fixture')).toBeGreaterThanOrEqual(4)
+  })
+
+  it('adds up on every floor of a third of the lab plans', () => {
+    let chains = 0
+    for (const { name, text } of labSample()) {
+      let p: FloorPlan
+      try {
+        p = parseFloorPlan(JSON.parse(text))
+      } catch {
+        continue
+      }
+      for (const floor of planFloors(p)) chains += expectChainsAddUp(outsideDimensions(floorDrawing(p, floor.id)), `${name} ${floor.id}`)
+    }
+    expect(chains).toBeGreaterThan(300)
+  }, 120_000)
+
+  it('dimensions a house turned 15 degrees along its walls (DR-2): 9 × 10, not 11.20 × 11.91', () => {
+    const turned = buildFloorPlan(labPlan('G/scenarios/s09a-house-turned-15.json'))
+    const { u } = planAxes(turned.walls)
+    expect((Math.atan2(u.y, u.x) * 180) / Math.PI).toBeCloseTo(15, 1)
+    const outside = outsideDimensions(turned)
+    expect(byId(outside, 'overall-width').value).toBeCloseTo(9, 3)
+    expect(byId(outside, 'overall-height').value).toBeCloseTo(10, 3)
+    expectChainsAddUp(outside, 'turned house')
+  })
+
+  it('gives a plan with no walls none', () => {
+    expect(outsideDimensions({ ...drawing, walls: [], openings: [] })).toEqual([])
   })
 })
 
@@ -88,6 +216,83 @@ describe('room dimensions', () => {
     }
     expect(roomDimensions(sliver)).toEqual([])
   })
+
+  it('dimensions the L-shaped living room side by side, not as its box of 6.79 × 7.70 (DR-2)', () => {
+    const odd = floorDrawing(labPlan('F/scenarios/odd-house.json'), 'ground')
+    const living = odd.rooms.find((r) => r.id === 'g-living')!
+    const dims = roomDimensions(living, odd.walls)
+    const values = dims.map((d) => Number(d.value.toFixed(2))).sort((a, b) => a - b)
+    // Seven sides: the south wall, the east wall, the bay, the north wall, the kitchen's two
+    // walls and the hall's.
+    expect(values).toEqual([2, 2.7, 2.88, 3.79, 3.91, 5.79, 6.79])
+    expect(values).not.toContain(7.7)
+    for (const dim of dims) expect(lineInRoom(dim, living), dim.id).toBe(true)
+  })
+
+  it('dimensions the living room of a house turned 15 degrees as 4.30 × 5.00 (DR-2), not 5.45 × 5.94', () => {
+    const turned = buildFloorPlan(labPlan('G/scenarios/s09a-house-turned-15.json'))
+    const living = turned.rooms.find((r) => r.id === 'living')!
+    const dims = roomDimensions(living, turned.walls)
+    expect(dims.map((d) => d.id)).toEqual(['living-width', 'living-depth'])
+    expect(byId(dims, 'living-width').value).toBeCloseTo(4.3, 3)
+    expect(byId(dims, 'living-depth').value).toBeCloseTo(5, 3)
+    // Every room of the turned house is a rectangle: width × depth is its area.
+    for (const room of turned.rooms) {
+      const [a, b] = roomDimensions(room, turned.walls)
+      expect(a!.value * b!.value, room.id).toBeCloseTo(room.area, 2)
+    }
+  })
+
+  it('keeps every room dimension line inside its room, on every floor of a third of the lab plans', () => {
+    let rooms = 0
+    for (const { name, text } of labSample()) {
+      let p: FloorPlan
+      try {
+        p = parseFloorPlan(JSON.parse(text))
+      } catch {
+        continue
+      }
+      for (const floor of planFloors(p)) {
+        const d = floorDrawing(p, floor.id)
+        for (const room of d.rooms) {
+          for (const dim of roomDimensions(room, d.walls)) expect(lineInRoom(dim, room), `${name} ${dim.id}`).toBe(true)
+          rooms++
+        }
+      }
+    }
+    expect(rooms).toBeGreaterThan(500)
+  }, 120_000)
+})
+
+describe('what each dimension measures to (SHT-4)', () => {
+  it('records it for both ends of every dimension: centre line, wall face or finish', () => {
+    for (const dim of buildDimensions(drawing, { openings: true })) {
+      expect(dim.measuredTo, dim.id).toHaveLength(2)
+      for (const end of dim.measuredTo) expect(['centre-line', 'face', 'finish'], dim.id).toContain(end)
+    }
+  })
+
+  it('measures a room to the dividing line it stops at, and to the faces of its walls', () => {
+    const dims = buildDimensions(drawing)
+    // The dining room runs from the face of w1 up to the dividing line v1.
+    expect(byId(dims, 'r1-depth').measuredTo).toEqual(['face', 'centre-line'])
+    expect(byId(dims, 'r1-width').measuredTo).toEqual(['face', 'face'])
+    expect(byId(dims, 'r2-depth').measuredTo).toEqual(['centre-line', 'face'])
+    expect(byId(dims, 'r3-width').measuredTo).toEqual(['face', 'face'])
+  })
+
+  it('measures the chains outside to the faces of the walls, and to a dividing line that meets them', () => {
+    const dims = outsideDimensions(drawing)
+    for (const dim of dims.filter((d) => d.side === 'bottom')) expect(dim.measuredTo, dim.id).toEqual(['face', 'face'])
+    // v1, the dividing line between the dining room and the kitchen, meets w4 on the left side.
+    const left = dims.filter((d) => d.side === 'left' && d.kind === 'wall')
+    expect(left.map((d) => d.measuredTo)).toEqual([
+      ['face', 'face'],
+      ['face', 'centre-line'],
+      ['centre-line', 'face'],
+      ['face', 'face']
+    ])
+  })
 })
 
 describe('opening dimensions', () => {
@@ -109,18 +314,23 @@ describe('opening dimensions', () => {
 })
 
 describe('layers', () => {
-  it('defaults to overall plus rooms, without openings', () => {
+  it('defaults to the chains, the overall size and the rooms, without each opening on its wall', () => {
     const kinds = new Set(buildDimensions(drawing).map((d) => d.kind))
+    expect(kinds).toEqual(new Set(['opening', 'wall', 'overall', 'room']))
+    expect(buildDimensions(drawing).some((d) => d.id === 'o3-width')).toBe(false)
+  })
+
+  it('can be asked for each opening on its wall too', () => {
+    expect(buildDimensions(drawing, { openings: true }).some((d) => d.id === 'o3-width')).toBe(true)
+  })
+
+  it('can leave the chains off, keeping the overall size', () => {
+    const kinds = new Set(buildDimensions(drawing, { chains: false }).map((d) => d.kind))
     expect(kinds).toEqual(new Set(['overall', 'room']))
   })
 
-  it('can be asked for openings too', () => {
-    const kinds = new Set(buildDimensions(drawing, { openings: true }).map((d) => d.kind))
-    expect(kinds.has('opening')).toBe(true)
-  })
-
   it('can be turned off entirely', () => {
-    expect(buildDimensions(drawing, { overall: false, rooms: false })).toEqual([])
+    expect(buildDimensions(drawing, { overall: false, chains: false, rooms: false })).toEqual([])
   })
 })
 

@@ -11,7 +11,7 @@ import { basePlans, soundPlans } from '../src/damage'
 
 const ROOM_FAULT = /^room\/(overlap|space-mismatch|not-enclosed|inside-no-host)$/
 
-const gap = (f: FloorAreaFigures): number => f.grossExternal! - (f.net + f.outsideRooms + f.walls! + f.unclaimed! - f.offSpace!)
+const gap = (f: FloorAreaFigures): number => f.grossExternal! - (f.net + f.overStairs + f.outsideRooms + f.walls! + f.unclaimed! - f.offSpace!)
 
 function read(text: string): FloorPlan | null {
   try {

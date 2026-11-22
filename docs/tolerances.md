@@ -45,6 +45,8 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `touchLength` | tolerance | 0.02 m | How long that contact must be |
 | `slit` | tolerance | 0.003 m | Half the width of a slit that does not join two spaces |
 | `lineInside` | tolerance | 0.05 m | The shortest stretch of a dividing line, or of a wall, inside a room that a message names |
+| `squareCorner` | tolerance | 0.0175 sine | Directions this close to a right angle are square: a room with four square corners is dimensioned by its width and depth, any other side by side, and a wall this close to one of the plan's main directions is dimensioned in the chains outside it (SHT-4) |
+| `chainPoint` | tolerance | 0.001 m | Two points of a chain of dimensions outside the plan closer than this are one point (SHT-4) |
 | `roomsWallWidest` | tolerance | 0.6 m | The widest gap between two rooms written rooms first that is still one wall between them; a wider gap that is not a room is refused |
 | `roomsTouch` | tolerance | 0.02 m | Rooms written rooms first closer than this touch with no wall between them, refused unless they are open to each other |
 | `roomsFaceStep` | tolerance | 0.002 m | Faces of rooms written rooms first further out of line than this are named as sizes that do not add up |
@@ -63,10 +65,20 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `passableSill` | limit | 0.3 m | Grid's own size, not a code figure: one whose sill stands higher than this above its floor is named and is not a way through |
 | `itemIntoWall` | tolerance | 0.005 m | How far a fixture may reach into a solid wall's body and still stand against its face; past it, `item/into-wall` names the wall |
 | `itemAboveRoom` | tolerance | 0.001 m | How far a fixture may rise past the height of its room; past it, `item/too-tall` names both heights |
+| `useOpenLeaf` | limit | 0.05 m | Grid's own size, not a code figure: what an open door leaf and its stop take of a doorway; the clear width a door leaves is its hole less this (CNT-13) |
+| `useApproachDepth` | limit | 0.3 m | Grid's own size, not a code figure: a fixture within this of a doorway's or a window's hole, across its width, stands in front of it (`item/blocks-doorway`, `item/blocks-window`) |
+| `useDoorwayClear` | limit | 0.8 m | Grid's own size, not a code figure: Grid's own indicator for the clear width a doorway leaves, when the person gives none |
+| `usePassageWidth` | limit | 0.9 m | Grid's own size, not a code figure: Grid's own indicator for the way through a room, clear of its fixtures, when the person gives no body or trolley width |
+| `useTurningCircle` | limit | 1.5 m | Grid's own size, not a code figure: Grid's own indicator for the turning circle tried in a room's free floor, when the person gives none |
+| `useClearSpace` | limit | 0.6 m | Grid's own size, not a code figure: Grid's own indicator for the clear floor in front of and beside a fixture, when the person gives none |
+| `useRaster` | tolerance | 0.02 m | The step of the grid the way through a room is measured on: the widest body is found to within about this |
+| `useRasterCells` | limit | 250000 count | The most points one room's way through is measured on; a bigger room is measured on a coarser grid, and the answer says the step |
 | `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
 | `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
 | `stairRoomOverlap` | tolerance | 0.5 ratio | Rooms used as a stair (or a lift) on neighbouring floors that share at least this of the smaller one are one stair (or shaft); less, and they are named as out of line |
 | `stairStepLength` | limit | 0.63 m | A stair that states no number of risers gets the number that brings twice the riser plus the going nearest this |
+| `planCutHeight` | limit | 1.2 m | How high above a floor its plan is cut: a stair rising from the floor is drawn solid up to this height, with a break line there, and dashed above (SHT-11) |
+| `aboveSameEdge` | tolerance | 0.02 m | A stretch of the outline of the floor above this close to the outline of the floor drawn, along it, is the same wall face, and is not drawn dashed (SHT-11) |
 | `largest` | limit | 10000000 m | The largest coordinate or size Grid accepts (10,000 km); past it the part is refused |
 | `farFromOrigin` | limit | 500 m | A plan reaching further from the origin gets a warning |
 | `wallThinnest` | limit | 0.02 m | A thinner solid wall is questioned; a line with no substance should be virtual |
