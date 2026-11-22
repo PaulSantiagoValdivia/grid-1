@@ -929,9 +929,63 @@ outline's schema refusal (`types/floorplan.ts` 53 → 54) and the commands' new 
   passed when run alone. Main's tests pass unchanged.
 - Not run here: the full suite and the scoreboard.
 
-### For the owner (fbe5160e and 65e37ca1)
+## After merging main at ed8b9f75
 
-33. **The ratchet was raised twice, 1274 → 1329 → 1442**, by main's new text of the kinds MSG-11
+Main moved once more: CNT-4 (flats and flat types: `flats` and `flatTypes` in the plan, a new
+kind of thing, `flat`, six `flat/` codes, the flat schedule on the sheet and in `grid_schedule
+of=flats`, each flat's outline on the drawing). Seven files conflicted: `CHANGELOG.md`,
+`docs/result-contract.md`, cli `describe/card.ts`, `sheet/pages.ts`, floorplan
+`geometry/validate.ts`, rules `result/catalogue.ts` and `result/inspect.ts`. Main adds no tool.
+
+### How the conflicts were resolved
+
+- **The flats' faults** (floorplan `geometry/flats.ts`): each issue says its sentence by key
+  (`issue.flat/*`, with `issue.part.flatTypes.*` for what follows an unknown type) and carries it
+  as `said` (`withSaid`); `message` is its English, word for word. The file is at none and joins
+  the list held at none.
+- **The record** (`result/catalogue.ts`, `inspect.ts`): the six codes are logic only;
+  `flat/duplicate-type` takes the type as `{type}`, with a `.one` wording when there is none.
+  A flat is named by `thing.flat` (`Flat "Flat A"`, `Vivienda "Flat A"`), and `thing.at.flat` and
+  `report.thing.flat` name it in a refusal and in the report.
+- **The sheet** (`sheet/pages.ts`): the flat schedule and its mix by type are `sheet.flat*` keys;
+  its areas stay in square metres, as CNT-4 writes them, with the sheet's decimal mark (`mark`).
+- **The description** (`describe/card.ts`): MSG-11's `describe.unsaid.flats`, under main's
+  condition that the plan lists no flats.
+- **Docs**: `CHANGELOG.md` keeps every Unreleased line; the contract's MSG-11 section adds a
+  paragraph on CNT-4, before main's new section.
+
+New keys (46), in `en.ts` with main's English and in `es.ts` as a draft: `thing.flat`,
+`thing.at.flat`, `report.thing.flat`, `issue.flat/*` (7), `issue.part.flatTypes.*` (3),
+`line.flat/*` (19), `sheet.flatSchedule`, `.heading` and `sheet.flat.*` (12). Tests: rules
+`language.test.ts` says `flat/unknown-room` and `flat/unknown-type` in main's English and in
+Spanish; sheet `language.test.ts`, "the flat schedule in Spanish (MSG-11, CNT-4)".
+
+### The ownWords guard
+
+`floorplan/src/geometry/flats.ts` is at none. `mcp/readTools.ts` 296 → 306 (`tools`) and
+`sheet/coverage.ts` 26 → 27 (`developer`) are not counted. The ratchet moves from 1442 to 1452:
+`rooms/compile.ts` 116 → 117 (flats in rooms text), `types/floorplan.ts` 54 → 55 (the schema),
+`geometry/areas.ts` 36 → 37 and cli `quantities/areas.ts` 8 → 9 (the area rules for flats),
+`quantities/schedule.ts` 7 → 10 (the flat schedule's rules), `command/planText.ts` 18 → 19 and
+`write.ts` 29 → 31 (the commands' refusals).
+
+### Results after ed8b9f75
+
+- `npm run build`: `dist/grid.mjs` 635,968 bytes, under main's cap of 650,000 (not touched); the
+  Spanish chunk 171,976 bytes.
+- `npm run typecheck`, `npm run lint`: clean.
+- Rules `src`, floorplan `messages/`, `geometry/` (CNT-4's flats tests among them), `types/`,
+  `export/`, `rooms/`, `scan/` and viewer `picture/` and `page/`: 179 files, 3,823 tests pass (1
+  skipped).
+- The CLI's guard, `describe/`, `draw/`, `sheet/`, `mcp/` (tools, server, replay, flats, phases,
+  preview, massing), `command/` (everyPath, grid.e2e, language.e2e, preview.e2e), `quantities/`,
+  `edit/`, `preview/`, `versions/`, `firm/`, `taped/`, `brief/` and `seen/`: 96 files, 1,227 tests
+  pass (1 skipped). Main's tests pass unchanged.
+- Not run here: the full suite and the scoreboard.
+
+### For the owner (fbe5160e, 65e37ca1 and ed8b9f75)
+
+33. **The ratchet was raised three times, 1274 → 1329 → 1442 → 1452**, by main's new text of the kinds MSG-11
     left for later (the lists are above). The largest parts are HND-12's scan notes and
     refusals (76) and BRF-4's site limits (29), CNT-10's change takeoff (18): each would move as
     rooms text, the measures and the takeoffs move, not before.
@@ -952,3 +1006,8 @@ outline's schema refusal (`types/floorplan.ts` 53 → 54) and the commands' new 
 39. **The preview page** (`viewer/src/page/previewPage.ts`) and the preview's server and record
     stay English; the page takes no language yet. `grid_preview` answers in English, as the other
     tools do, and its picture is `grid_view`'s, which takes no language from it.
+40. **"Flat" is "vivienda"** in the Spanish draft (the flat schedule is "Cuadro de viviendas", the
+    mix by type "Mezcla por tipo"). A flat's line names it by its name (`Flat "Flat A"`), as main
+    does; its found names it by id, as the drawing check does.
+41. **The flat schedule on the sheet stays in square metres** in every display, as CNT-4 writes
+    it; in Spanish its figures take the comma.

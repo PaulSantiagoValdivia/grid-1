@@ -17,6 +17,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
+- [Flats and flat types](#flats-and-flat-types): `flat/unknown-room`, `flat/room-in-two`, `flat/unknown-type`, `flat/duplicate-id`, `flat/duplicate-type`, `flat/zone-without-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
@@ -44,14 +45,15 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id | 64 characters | the same |
 | the trace image's path, the base plan's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
-| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site or taped lengths | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats or flat types | 50,000 of each | |
+| the rooms one flat lists | 50,000, and at least one | |
 | the floors one opening pattern repeats on | 200 | |
 | the points of the site's boundary, of one of its things, or of a floor's outline | 2,000 | |
 | the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
@@ -530,6 +532,58 @@ dividing line, each keeps its id, name and use, and a new room holds them.
 `partOf` is optional and never defaulted, so a plan written before it reads with no key added
 (version 1). Rooms text has no word for it yet: a floor with zones is read back in Grid's own
 terms, so nothing is lost.
+
+## Flats and flat types
+
+A plan may say which rooms make each flat (a dwelling, a unit), in `flats` (CNT-4, C18), and
+state each kind of flat once, in `flatTypes`:
+
+```json
+"flatTypes": [{ "id": "one-bed", "name": "One bedroom" }],
+"flats": [
+  { "id": "A", "name": "Flat A", "type": "one-bed", "rooms": ["A-living", "A-bed1", "A-kitchen", "A-hall", "A-bath"] },
+  { "id": "B", "name": "Flat B", "type": "one-bed", "rooms": ["B-living", "B-bed1", "B-kitchen", "B-hall", "B-bath"], "mirrored": true }
+]
+```
+
+| Field | What it states |
+|---|---|
+| `flatTypes[].id`, `name` | A kind of flat, stated once and placed many times |
+| `flats[].id`, `name` | The flat; its name is read as its id when it states none |
+| `flats[].type` | The flat type it is, by id |
+| `flats[].rooms` | Its rooms, by id, at least one; on one floor or on several, for a duplex |
+| `flats[].mirrored` | The flat is its type's mirror image (a handed flat) |
+
+A flat is a named group of rooms, never a room: it adds no floor and closes no outline, and it is
+never read from the rooms' names. What reads it:
+
+- **Areas.** `grid_areas` gives each flat's net area, the rooms it lists counted as the net counts
+  them, floor by floor for a duplex, and the rooms in no flat apart ([areas.md](areas.md)).
+- **Schedules.** `grid_schedule of=flats` lists each flat with its type, rooms, bedrooms and area,
+  and the mix by type; the room schedule says each room's flat.
+- **The drawing.** Each flat's outline is drawn on its floors: a chain line along the middle of
+  the walls round its rooms, in the paper's colour over the walls, so one line runs between two
+  flats and a doorway breaks it.
+- **The IFC.** Each flat is an `IfcZone` grouping the spaces of its rooms
+  (`IfcRelAssignsToGroup`), on every storey it is on, with its id, type, whether it is mirrored
+  and its net area in `Grid_Flat`.
+
+Rooms text writes both from a unit that is a flat type ([rooms-first.md](rooms-first.md#many-of-one-room-floors-copied-and-walls-through-floors)).
+Nothing in the list is refused; what is wrong in it is named, worth a look, and the flat is read
+without it:
+
+| Code | What it says |
+|---|---|
+| `flat/unknown-room` | A flat names a room the plan does not have, with the room most likely meant; it is not counted |
+| `flat/room-in-two` | A flat names a room another flat names too; it is counted in the flat whose id comes first only |
+| `flat/unknown-type` | A flat is of a type the flat types do not state, with the type most likely meant |
+| `flat/duplicate-id` | Two flats have one id; the first is read and the other left out |
+| `flat/duplicate-type` | A flat type is stated twice; the first is read |
+| `flat/zone-without-room` | A flat names a [zone](#zones-inside-one-room) and not its room: the zone's floor is counted in its room, so it adds nothing |
+
+Both lists are optional and never defaulted, so a plan written before them reads with no key
+added (version 1). Grid's edits do not carry a flat yet: a room merged or split away is named by
+`flat/unknown-room` until the flat lists the room that is there now.
 
 ## Rooms with holes
 

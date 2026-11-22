@@ -20,7 +20,7 @@ import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
-import { factsText, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
+import { factsText, flatSchedule, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
 import { surveyPlan } from '../quantities/survey'
 import { displayFor, sqFt } from '../quantities/units'
 import { showLength, type Display } from '@ongrid/floorplan/types/units'
@@ -483,11 +483,45 @@ function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
     total: { name: w.say('sheet.inAll'), detail: w.say('sheet.openingCounts', { doors: c.door, windows: c.window, openings: c.opening }), area: String(c.door + c.window + c.opening) },
     note: openings.rule,
   }
-  const body = (title: string, table: SheetTable): Body => ({
+  const body = (title: string, table: SheetTable, notes: readonly string[] = []): Body => ({
     kind: 'summary', floor: null, topLine: `${name} / ${title}`, title, subtitle: null,
-    paragraphs: [], figures: [], table, picture: null, notes: [],
+    paragraphs: [], figures: [], table, picture: null, notes: [...notes],
   })
-  return [body(w.say('sheet.roomSchedule'), roomTable), body(w.say('sheet.openingSchedule'), openingTable)]
+  const bodies = [body(w.say('sheet.roomSchedule'), roomTable), body(w.say('sheet.openingSchedule'), openingTable)]
+  // CNT-4: on a plan that lists flats, the flats and the mix by type, from grid_schedule of=flats's rows.
+  // MSG-11: in the sheet's words; the areas are in square metres, as CNT-4 writes them, with the sheet's decimal mark.
+  if ((loaded.plan.flats ?? []).length > 0) {
+    const flats = flatSchedule(survey)
+    const m2 = (area: number): string => units.mark(areaText(area, 1))
+    const flatRows: SheetRow[] = flats.rows.map((r) => ({
+      name: `${r.number}. ${r.name}`,
+      detail: [
+        r.typeName ?? w.say('sheet.flat.noType'),
+        ...(r.mirrored ? [w.say('sheet.flat.mirrored')] : []),
+        w.say('sheet.roomCount', { count: r.rooms }),
+        w.say(r.bedrooms === 1 ? 'sheet.flat.bedrooms.one' : 'sheet.flat.bedrooms.many', { count: r.bedrooms }),
+        ...(several ? [r.floors.join(w.say('join.and'))] : []),
+      ].join(w.say('join.comma')),
+      area: m2(r.area),
+    }))
+    flatRows.push({ name: w.say('sheet.flat.none'), detail: w.say('sheet.flat.none.detail'), area: m2(flats.notInFlats) })
+    const flatTable: SheetTable = {
+      heading: w.say('sheet.flatSchedule.heading'),
+      rows: flatRows,
+      total: { name: w.say('sheet.flat.all'), detail: w.say('sheet.flat.count', { count: flats.total.flats }), area: m2(flats.total.area) },
+      note: flats.rules[1]!,
+    }
+    const mix = flats.mix.map((m) =>
+      w.say(m.flats === 1 ? 'sheet.flat.mixType.one' : 'sheet.flat.mixType.many', {
+        name: m.name,
+        count: m.flats,
+        mirrored: m.mirrored === 0 ? '' : w.say('sheet.flat.mixMirrored', { count: m.mirrored }),
+        area: m2(m.area),
+      })
+    )
+    bodies.push(body(w.say('sheet.flatSchedule'), flatTable, [w.say('sheet.flat.mix', { mix: mix.join(' ') }), flats.rules[0]!]))
+  }
+  return bodies
 }
 
 export function sheetPages(loaded: LoadedPlan, words: SheetWords | null, layout: SheetLayout, options: SheetOptions): Sheet {

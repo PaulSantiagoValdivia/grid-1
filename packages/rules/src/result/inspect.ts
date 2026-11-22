@@ -375,6 +375,8 @@ function namesOf(plan: FloorPlan, stated: FloorPlan = plan): Names {
   // LVL-8: a pattern is on its wall's floor.
   const patterns = new Map<string, NonNullable<FloorPlan['patterns']>[number]>()
   for (const pattern of stated.patterns ?? []) if (!patterns.has(pattern.id)) patterns.set(pattern.id, pattern)
+  const flats = new Map<string, NonNullable<FloorPlan['flats']>[number]>()
+  for (const flat of plan.flats ?? []) if (!flats.has(flat.id)) flats.set(flat.id, flat)
   const floorName = (id: string): string => floorNames.get(id) ?? id
   const roomName = (id: string): string => rooms.get(id)?.name || id
   return {
@@ -416,6 +418,12 @@ function namesOf(plan: FloorPlan, stated: FloorPlan = plan): Names {
         case 'pattern': {
           const wall = walls.get(patterns.get(id)?.wall ?? '')
           return { label: noun('pattern', id), name: id, floor: wall ? floorOf(wall) : null }
+        }
+        case 'flat': {
+          // CNT-4: a flat by its name; on the floor of its first room, and on none when it holds none.
+          const flat = flats.get(id)
+          const first = flat?.rooms.map((room) => rooms.get(room)).find((room) => room !== undefined)
+          return { label: noun('flat', flat?.name ?? id), name: flat?.name ?? id, floor: first === undefined ? null : floorOf(first) }
         }
         case 'item': {
           // A fixture by its kind: `Toilet "wc1"` (CNT-12). One of a kind Grid does not hold is an `Item`.

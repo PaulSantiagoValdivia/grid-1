@@ -47,12 +47,12 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/main.ts': [60, 'command'],
   'packages/cli/src/command/options.ts': [9, 'command'],
   'packages/cli/src/command/plan.ts': [29, 'command'],
-  'packages/cli/src/command/planText.ts': [18, 'command'],
+  'packages/cli/src/command/planText.ts': [19, 'command'],
   'packages/cli/src/command/scan.ts': [22, 'command'],
   'packages/cli/src/command/section.ts': [6, 'command'],
   'packages/cli/src/command/sheet.ts': [3, 'command'],
   'packages/cli/src/command/tidy.ts': [12, 'command'],
-  'packages/cli/src/command/write.ts': [29, 'command'],
+  'packages/cli/src/command/write.ts': [31, 'command'],
   'packages/cli/src/describe/card.ts': [13, 'agentForm'],
   'packages/cli/src/describe/facts.ts': [2, 'notYet'],
   'packages/cli/src/describe/walk.ts': [4, 'agentForm'],
@@ -82,7 +82,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/editTools.ts': [69, 'tools'],
   'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
   'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [296, 'tools'],
+  'packages/cli/src/mcp/readTools.ts': [306, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
@@ -95,7 +95,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/preview/localServer.ts': [6, 'agent'],
   'packages/cli/src/preview/record.ts': [4, 'command'],
   'packages/cli/src/quantities/access.ts': [49, 'notYet'],
-  'packages/cli/src/quantities/areas.ts': [8, 'notYet'],
+  'packages/cli/src/quantities/areas.ts': [9, 'notYet'],
   'packages/cli/src/quantities/change.ts': [18, 'notYet'],
   'packages/cli/src/quantities/compare.ts': [19, 'notYet'],
   'packages/cli/src/quantities/estimate.ts': [27, 'notYet'],
@@ -105,7 +105,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/measure.ts': [3, 'notYet'],
   'packages/cli/src/quantities/query.ts': [26, 'tools'],
   'packages/cli/src/quantities/rates.ts': [36, 'notYet'],
-  'packages/cli/src/quantities/schedule.ts': [7, 'notYet'],
+  'packages/cli/src/quantities/schedule.ts': [10, 'notYet'],
   'packages/cli/src/quantities/site.ts': [19, 'notYet'],
   'packages/cli/src/quantities/state.ts': [3, 'notYet'],
   'packages/cli/src/quantities/sun.ts': [13, 'notYet'],
@@ -114,13 +114,13 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/walked.ts': [1, 'notYet'],
   'packages/cli/src/report/draft.ts': [16, 'notYet'],
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
-  'packages/cli/src/sheet/coverage.ts': [26, 'developer'],
+  'packages/cli/src/sheet/coverage.ts': [27, 'developer'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
   'packages/cli/src/sheet/sheetFile.ts': [7, 'command'],
   'packages/cli/src/versions/diff.ts': [10, 'notYet'],
   'packages/cli/src/versions/git.ts': [19, 'notYet'],
   'packages/cli/src/versions/markers.ts': [19, 'notYet'],
-  'packages/floorplan/src/geometry/areas.ts': [36, 'notYet'],
+  'packages/floorplan/src/geometry/areas.ts': [37, 'notYet'],
   'packages/floorplan/src/geometry/camera.ts': [1, 'agent'],
   'packages/floorplan/src/geometry/diff/building.ts': [25, 'notYet'],
   'packages/floorplan/src/geometry/diff/churn.ts': [2, 'notYet'],
@@ -145,13 +145,13 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/wallFaults.ts': [3, 'notYet'],
   'packages/floorplan/src/notes/notes.ts': [17, 'notYet'],
   'packages/floorplan/src/rooms/answer.ts': [6, 'notYet'],
-  'packages/floorplan/src/rooms/compile.ts': [116, 'notYet'],
+  'packages/floorplan/src/rooms/compile.ts': [117, 'notYet'],
   'packages/floorplan/src/rooms/read.ts': [21, 'notYet'],
   'packages/floorplan/src/rooms/words.ts': [4, 'notYet'],
   'packages/floorplan/src/scan/evidence.ts': [2, 'notYet'],
   'packages/floorplan/src/scan/roomModel.ts': [22, 'notYet'],
   'packages/floorplan/src/scan/toPlan.ts': [30, 'notYet'],
-  'packages/floorplan/src/types/floorplan.ts': [54, 'notYet'],
+  'packages/floorplan/src/types/floorplan.ts': [55, 'notYet'],
   'packages/floorplan/src/types/places.ts': [7, 'notYet'],
   'packages/floorplan/src/types/planText.ts': [5, 'notYet'],
   'packages/floorplan/src/types/sheet.ts': [16, 'notYet'],
@@ -241,8 +241,10 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // (3), a rooms text size refusal (1) and the preview page (5); and HND-12 and BRF-4 113: the
     // phone scan's refusals and notes (floorplan scan/ 54, command/scan.ts 22), the site limits'
     // measures (29), the area rules for an outline (4), the outline's schema refusal (1) and the
-    // commands' new options (main 2, write 1) (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1442)
+    // commands' new options (main 2, write 1); and CNT-4 10: the flats in rooms text (1), the
+    // schema (1), the area rules (1, and the CLI's 1), the flat schedule's rules (3) and the
+    // commands' refusals (planText 1, write 2) (reviews/MSG-11.md, "After merging main").
+    expect(left).toBeLessThanOrEqual(1452)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {
@@ -269,7 +271,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
       'packages/cli/src/taped/table.ts',
       'packages/floorplan/src/geometry/export/gltf.ts',
       // After merging main at fbe5160e: CNT-10's phases, a part that stands when its wall does not.
-      'packages/floorplan/src/geometry/phases.ts'
+      'packages/floorplan/src/geometry/phases.ts',
+      // After merging main at ed8b9f75: CNT-4's flats list and its faults.
+      'packages/floorplan/src/geometry/flats.ts'
     ]) {
       expect(counts.get(file), file).toBe(0)
     }

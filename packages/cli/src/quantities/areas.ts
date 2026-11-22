@@ -13,7 +13,7 @@
  * are in no figure.
  */
 import { MEASURES, floorOf, floorRoofShape, headroomBands, planMarks, roomHeadroom, wallSureness, type GrossMeasure, type HeadroomBand, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
-import { planAreaFigures } from '@ongrid/floorplan/geometry/areas'
+import { FLAT_AREA_RULE, planAreaFigures, type FlatAreaFigure } from '@ongrid/floorplan/geometry/areas'
 import type { MarkSource } from '@ongrid/floorplan/types/floorplan'
 import type { Survey, SurveyRoom } from './survey'
 import { FIXTURE_RULES, planFixtures } from './fixtures'
@@ -26,6 +26,9 @@ export const AREA_RULES = {
   grossExternal: MEASURES.grossExternal.measures,
   circulation: 'Circulation is the rooms whose use is corridor or stair, a stair counted once, as a share of the gross internal area.',
 } as const
+
+/** CNT-4: what a flat's area measures, said only on a plan that lists flats. */
+export const FLAT_RULE = FLAT_AREA_RULE
 
 /**
  * WRT-6 (lab AE-4, AE-13): how sure an area is, from the marks on the walls round it. `source`
@@ -111,8 +114,18 @@ export interface FloorAreas {
   }
 }
 
+/** CNT-4 (lab EL-1): a flat's area, from the plan's flats list, with its state (MSG-2). */
+export interface FlatAreas extends FlatAreaFigure {
+  /** Proven, not proven (a room of it in doubt or left out) or not looked at (none measured). */
+  readonly state: AreaState
+}
+
 export interface PlanAreas {
   readonly floors: readonly FloorAreas[]
+  /** CNT-4: each flat of the plan's flats list on the floors given, in plan order; empty with none. */
+  readonly flats: readonly FlatAreas[]
+  /** CNT-4: the net area of the rooms in no flat: the common parts. Null when the plan lists no flats. */
+  readonly notInFlats: number | null
   readonly net: number
   readonly grossInternal: number | null
   readonly grossExternal: number | null
@@ -330,8 +343,26 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   // WRT-6: the plan's band adds up the rooms its net counts, so no zone's band (CNT-8) and no
   // stair room's counted with the one below (SHT-11) is added twice.
   const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter(inTotals)), net)
+  // CNT-4: each flat's figure is the library's; its state is that of the rooms it counts and the
+  // rooms of it Grid could not draw.
+  const listed = new Map(floors.flatMap((f) => f.rooms).map((room) => [key(room.floor, room.id), room] as const))
+  const floorOfRoom = new Map(survey.plan.rooms.map((room) => [room.id, floorOf(room)] as const))
+  const flats: FlatAreas[] = figures.flats.map((flat) => {
+    const own = [...flat.rooms, ...flat.leftOut].flatMap((id) => {
+      const room = listed.get(key(floorOfRoom.get(id) ?? '', id))
+      return room === undefined ? [] : [room]
+    })
+    return { ...flat, state: sumState(own) }
+  })
+  const hasFlats = (survey.plan.flats ?? []).length > 0
+  if (hasFlats) {
+    const outOfFlats = flats.filter((flat) => flat.leftOut.length > 0)
+    if (outOfFlats.length > 0) notes.push(`A flat's area leaves out the rooms of it Grid could not draw: ${outOfFlats.map((flat) => `${JSON.stringify(flat.name)} (${flat.leftOut.map((id) => JSON.stringify(id)).join(', ')})`).join('; ')}.`)
+  }
   return {
     floors,
+    flats,
+    notInFlats: hasFlats ? figures.notInFlats : null,
     net,
     grossInternal,
     grossExternal: figures.grossExternal.area,
@@ -344,7 +375,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     grossWhy,
     headroom: floorBands.length === 0 ? null : addBands(floorBands),
     measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal, ...(floorBands.length === 0 ? [] : [MEASURES.headroom])],
-    rules: [...Object.values(AREA_RULES), ...(taken.size === 0 ? [] : [FIXTURE_RULES.free]), ...(floorBands.length === 0 ? [] : [MEASURES.headroom.measures]), ...(sureness === undefined ? [] : [SURENESS_RULE])],
+    rules: [...Object.values(AREA_RULES), ...(hasFlats ? [FLAT_RULE] : []), ...(taken.size === 0 ? [] : [FIXTURE_RULES.free]), ...(floorBands.length === 0 ? [] : [MEASURES.headroom.measures]), ...(sureness === undefined ? [] : [SURENESS_RULE])],
     notes,
     ...(sureness === undefined ? {} : { sureness }),
     states: {

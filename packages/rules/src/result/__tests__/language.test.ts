@@ -297,3 +297,40 @@ describe("walls past a floor's outline, in Spanish (BRF-4, after merging main at
     }
   })
 })
+
+describe('the flats list, in Spanish (CNT-4, after merging main at ed8b9f75)', () => {
+  const plan = {
+    version: '1',
+    units: 'm',
+    walls: [
+      { id: 's', start: [0, 0], end: [4, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'e', start: [4, 0], end: [4, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'n', start: [4, 3], end: [0, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'w', start: [0, 3], end: [0, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+    ],
+    rooms: [{ id: 'hall', name: 'Hall', use: 'corridor', boundary: ['s', 'e', 'n', 'w'] }],
+    openings: [],
+    flatTypes: [{ id: 'one-bed', name: 'One bedroom' }],
+    flats: [{ id: 'A', name: 'Flat A', type: 'two-bed', rooms: ['hall', 'hal'] }],
+  }
+
+  it('says the lines in Spanish, the flat by its name, with the same codes, things and values', () => {
+    const english = inspectPlan(plan)
+    const spanish = inspectPlan(plan, { language: 'es' })
+    const room = (r: GridResult) => r.lines.find((l) => l.code === 'flat/unknown-room')!
+    const type = (r: GridResult) => r.lines.find((l) => l.code === 'flat/unknown-type')!
+    expect(room(english).message).toBe('Flat "Flat A" names a room the plan does not have')
+    expect(room(english).found).toBe('Flat "A" names room "hal", which the plan does not have, so it is not counted in the flat; "hall" is the room most likely meant')
+    expect(type(english).found).toBe('Flat "A" is of type "two-bed", which the plan\'s flat types do not state: they are "one-bed"')
+    expect(room(spanish).message).toBe('Vivienda "Flat A" nombra una estancia que el plano no tiene')
+    expect(type(spanish).found).toBe('La vivienda "A" es del tipo "two-bed", que los tipos de vivienda del plano no indican: son "one-bed"')
+    for (const pick of [room, type]) {
+      const [en, es] = [pick(english), pick(spanish)]
+      expect([es.code, es.kind, es.thing, es.also, es.values]).toEqual([en.code, en.kind, en.thing, en.also, en.values])
+      for (const text of [es.message, es.found, es.needed, es.fix]) {
+        expect(approvalWords(text)).toEqual([])
+        expect(text).not.toMatch(/\{[A-Za-z]/)
+      }
+    }
+  })
+})

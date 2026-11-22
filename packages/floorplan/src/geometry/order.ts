@@ -62,7 +62,7 @@ function byId<T extends { readonly id: string }>(parts: readonly T[]): T[] {
     .map(({ part }) => part)
 }
 
-/** The plan with its walls, rooms, openings, items and stairs in id order. The plan given is not changed. */
+/** The plan with its walls, rooms, openings, items, stairs, flat types and flats in id order. The plan given is not changed. */
 export function inIdOrder(plan: FloorPlan): FloorPlan {
   return {
     ...plan,
@@ -71,6 +71,9 @@ export function inIdOrder(plan: FloorPlan): FloorPlan {
     openings: byId(plan.openings),
     ...(plan.items !== undefined && { items: byId(plan.items) }),
     // LVL-3: only a plan that states stairs gains the key.
-    ...(plan.stairs !== undefined && { stairs: byId(plan.stairs) })
+    ...(plan.stairs !== undefined && { stairs: byId(plan.stairs) }),
+    // CNT-4: the flat types and the flats, so the IFC's zones do not hang on the list's order.
+    ...(plan.flatTypes !== undefined && { flatTypes: byId(plan.flatTypes) }),
+    ...(plan.flats !== undefined && { flats: byId(plan.flats) })
   }
 }

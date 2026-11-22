@@ -5,7 +5,7 @@ walltype 0.25 interior
 walltype 0.3 interior
 windows sill 0.9 height 1.4
 
-unit flat1 fh=west
+unit flat1 flat "One bedroom" "Flat {n}" fh=west
   room living  "Flat {n} Living room" living   5.265 x 4.365
   room bed1    "Flat {n} Bedroom"     bedroom  4.29 x 4.365  east of living
   room kitchen "Flat {n} Kitchen"     kitchen  3.765 x 2.815 north of living
@@ -21,7 +21,7 @@ unit flat1 fh=west
   window w-kitchen in kitchen west, 0.775 from north, 1.2 wide, sill 1.0, height 1.1
 end
 
-unit flat2 fh=east
+unit flat2 flat "Two bedrooms" "Flat {n}" fh=east
   room kitchen "Flat {n} Kitchen"     kitchen  3.265 x 3.615
   room hall    "Flat {n} Hall"        corridor 6.08 x 3.615  east of kitchen
   room bath    "Flat {n} Bathroom"    bathroom 3.09 x 3.615  east of hall

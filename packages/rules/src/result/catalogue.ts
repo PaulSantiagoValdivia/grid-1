@@ -440,6 +440,19 @@ export const CODES = {
   'pattern/no-wall-above': {},
   'pattern/overlaps-opening': {},
   'pattern/id-clash': {},
+  // --- Flats (CNT-4) --------------------------------------------------------------------------
+  // The flats list's own faults. Each is worth a look: the flat is read without what it names
+  // wrongly, and nothing else changes. The found is the check's own sentence, with the ids.
+  'flat/unknown-room': {},
+  'flat/room-in-two': {},
+  'flat/unknown-type': {},
+  'flat/duplicate-id': {},
+  'flat/duplicate-type': {
+    values: (s): Values => (s.also[0] === undefined ? {} : { type: name(s.also[0]) }),
+    variant: { says: (s) => (s.also[0] === undefined ? 'one' : '') }
+  },
+  'flat/zone-without-room': {},
+
   // --- Fixtures (CNT-12) ----------------------------------------------------------------------
   'item/too-large': {},
   'item/no-size': {},

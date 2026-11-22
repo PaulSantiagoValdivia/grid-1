@@ -132,10 +132,10 @@ function hashOf(value: unknown): string {
   return createHash('sha256').update(canonical(value)).digest('hex').slice(0, 16)
 }
 
-type Lists = Readonly<Record<'wall' | 'room' | 'opening' | 'item' | 'stair' | 'floor' | 'pattern', readonly { readonly id: string }[]>>
+type Lists = Readonly<Record<'wall' | 'room' | 'opening' | 'item' | 'stair' | 'floor' | 'pattern' | 'flat', readonly { readonly id: string }[]>>
 
 function listsOf(plan: FloorPlan): Lists {
-  return { wall: plan.walls, room: plan.rooms, opening: plan.openings, item: plan.items ?? [], stair: plan.stairs ?? [], floor: plan.floors ?? [], pattern: plan.patterns ?? [] }
+  return { wall: plan.walls, room: plan.rooms, opening: plan.openings, item: plan.items ?? [], stair: plan.stairs ?? [], floor: plan.floors ?? [], pattern: plan.patterns ?? [], flat: plan.flats ?? [] }
 }
 
 /** Everything on one floor, and its entry in `floors`: a note about a floor is about all of it. */
@@ -176,6 +176,8 @@ const FILE_LISTS: Readonly<Record<Exclude<MarkedPart['kind'], 'plan'>, readonly 
   floor: ['floors'],
   // LVL-8: an opening pattern, as its file states it.
   pattern: ['patterns'],
+  // CNT-4: a flat, as its file states it.
+  flat: ['flats'],
   unknown: ['walls', 'rooms', 'openings', 'items', 'stairs', 'floors', 'annotations', 'sketch', 'patterns'],
 }
 

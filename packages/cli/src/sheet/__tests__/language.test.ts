@@ -3,7 +3,8 @@ import { resolve } from 'path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { validatePlan } from '@ongrid/floorplan/geometry'
 import { loadLanguage, say } from '@ongrid/floorplan/messages'
-import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, parseFloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { duplexHouse } from '@ongrid/floorplan/test-support/plans'
 import { approvalWords } from '@ongrid/rules'
 import { planToSvg } from '@ongrid/viewer/src/picture'
 import { NOTHING_FOUND } from '../../command/check'
@@ -177,5 +178,25 @@ describe("a sheet in Spanish in the person's own units (MSG-11, WRT-7)", () => {
     expect(client!.pages[0]!.figures.find((f) => f.label === 'superficie interior bruta')!.value).toMatch(/^\d+\.\d m²$/)
     const [commaFeet] = both(inUnits({ length: 'ft-in', area: 'm2', decimal: 'comma' }))
     expect(commaFeet!.pages[0]!.figures.find((f) => f.label === 'superficie interior bruta')!.value).toMatch(/^\d+,\d m²$/)
+  })
+})
+
+describe('the flat schedule in Spanish (MSG-11, CNT-4)', () => {
+  const plan = parseFloorPlan(duplexHouse())
+  const loaded: LoadedPlan = { file: 'duplex.json', plan, ...validatePlan(plan) }
+
+  it('titles, rows, total and mix in Spanish, the names as written and the areas with a decimal comma', () => {
+    const spanish = sheetPages(loaded, null, 'check', { name: 'duplex', date, language: 'es' })
+    const english = sheetPages(loaded, null, 'check', { name: 'duplex', date })
+    const page = spanish.pages.find((p) => p.title === 'Cuadro de viviendas')!
+    expect(page.table!.heading).toBe('Cuadro de viviendas / m²')
+    expect(page.table!.rows.map((r) => r.name)).toEqual(english.pages.find((p) => p.title === 'Flat schedule')!.table!.rows.map((r) => r.name).map((n) => (n === 'In no flat' ? 'En ninguna vivienda' : n)))
+    expect(page.table!.rows[0]!.detail).toMatch(/^Two-storey flat, \d+ estancias, \d+ dormitorios?/)
+    expect(page.table!.total!.name).toBe('Todas las viviendas')
+    for (const row of [...page.table!.rows, page.table!.total!]) expect(row.area).toMatch(/^\d+,\d$/)
+    expect(page.notes[0]).toMatch(/^Mezcla por tipo\. Two-storey flat: 1 vivienda, \d+,\d m² en total\./)
+    const own = [page.title ?? '', page.table!.heading, page.table!.total!.name, page.table!.total!.detail ?? '', ...page.table!.rows.map((r) => r.detail ?? ''), page.notes[0]!].join('\n').replaceAll('Two-storey flat', '')
+    expect(own).not.toMatch(/\b(flats?|rooms|bedrooms?|mirrored|in all|no type)\b/)
+    expect(own).not.toMatch(/\{[A-Za-z][A-Za-z0-9]*\}/)
   })
 })

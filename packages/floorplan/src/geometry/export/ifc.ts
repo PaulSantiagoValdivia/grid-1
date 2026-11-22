@@ -49,6 +49,7 @@ import { multiArea, piecesAsRings, ringOf } from '../polygons'
 import { tolerance } from '../tolerances'
 import { tryRoomShape } from '../room'
 import { roomZones } from '../zones'
+import { planFlats } from '../flats'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
 import { brokenOnFloor, validatePlan } from '../validate'
@@ -62,7 +63,7 @@ import type { Phase } from '../../types/floorplan'
 import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { roomFloorArea } from '../room'
-import { MEASURES } from '../areas'
+import { FLAT_AREA_RULE, MEASURES, planAreaFigures } from '../areas'
 import { roomNumbers, shownRoomNumber, type RoomNumber } from '../roomNumbers'
 import { nearOrigin } from './origin'
 import { area } from '../vec2'
@@ -2009,6 +2010,44 @@ function factValue(value: Facts[string]): string {
 }
 
 /**
+ * CNT-4: each flat of the plan's flats list as an IfcZone, grouping the spaces of its rooms
+ * through one IfcRelAssignsToGroup, on every floor it is on (a duplex's spaces are on two storeys).
+ * Name is the flat's name and ObjectType its type's; `Grid_Flat`, Grid's own set, holds its id,
+ * its type, whether it is its type's mirror image and its net area with the rule it follows
+ * (ARE-9's net, counted as the areas count it). A flat none of whose rooms has a space is not
+ * written. Written after the storeys, so a plan with no flats writes the same file as before.
+ */
+function writeZones(building: Context, plan: FloorPlan, storeys: readonly Storey[]): void {
+  if ((plan.flats ?? []).length === 0) return
+  const figures = planAreaFigures(plan)
+  const byFloor = new Map(storeys.map((storey) => [storey.model.floor.id, storey] as const))
+  const rule = MEASURES.net
+  const resolvedFlats = new Map(planFlats(plan).map((f) => [f.id, f] as const))
+  for (const flat of figures.flats) {
+    const resolved = resolvedFlats.get(flat.id)
+    const spaces = (resolved?.rooms ?? []).flatMap(({ id, floor }) => {
+      const space = byFloor.get(floor)?.spaces.get(id)
+      return space === undefined ? [] : [space]
+    })
+    if (spaces.length === 0) continue
+    const c = building
+    // IfcZone (GlobalId, OwnerHistory, Name, Description, ObjectType).
+    const zone = c.w.add('IFCZONE', str(c.guid('zone', flat.id)), ref(c.owner), str(flat.name), NULL, flat.type === null ? NULL : str(flat.typeName ?? flat.type))
+    // IfcRelAssignsToGroup (GlobalId, OwnerHistory, Name, Description, RelatedObjects, RelatedObjectsType, RelatingGroup).
+    c.w.add('IFCRELASSIGNSTOGROUP', str(c.guid('zone-group', flat.id)), ref(c.owner), NULL, NULL, refs(spaces), NULL, ref(zone))
+    propertySet(c, `grid-flat:${flat.id}`, 'Grid_Flat', [
+      property(c, 'Id', identifier(flat.id)),
+      ...(flat.type === null ? [] : [property(c, 'Type', identifier(flat.type))]),
+      ...(flat.typeName === null ? [] : [property(c, 'TypeName', label(flat.typeName))]),
+      property(c, 'Mirrored', booleanValue(flat.mirrored)),
+      property(c, 'Area', `IFCAREAMEASURE(${real(flat.net)})`),
+      property(c, 'AreaMeasure', label(rule.name)),
+      property(c, 'AreaRule', textValue(FLAT_AREA_RULE))
+    ], zone)
+  }
+}
+
+/**
  * CNT-9: each part's facts of the person's own as one property set, `Grid_Properties`, of one
  * IfcPropertySingleValue per fact, in the order the plan gives them, related to its element by an
  * IfcRelDefinesByProperties. The set's name is Grid's own: `Pset_` names are the standard's. The
@@ -2224,6 +2263,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeSlabs(c, plan, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
+  writeZones(c, plan, storeys)
   writeFacts(c)
   writePhases(c)
   writeLeftOut(c, building, options.leftOut ?? [])

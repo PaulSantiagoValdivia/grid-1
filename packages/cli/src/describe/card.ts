@@ -266,8 +266,11 @@ function unsaid(facts: PlanFacts, names: PersonNames, w: Words): { person: strin
       person.push(t(w, all ? 'describe.unsaid.connect.all' : one ? 'describe.unsaid.connect.one' : 'describe.unsaid.connect.some', { floors: listed(w, unjoined.map((id) => names.floor(id))), stairs: marked }))
       agent.push(`how floors connect (no stair joins ${unjoined.join(' ')}${stairs ? `; ${stairs} with use stair` : ''})`)
     }
-    person.push(t(w, 'describe.unsaid.flats'))
-    agent.push('which rooms make each flat')
+    // CNT-4: a plan that lists its flats says which rooms make each.
+    if (!facts.flatsListed) {
+      person.push(t(w, 'describe.unsaid.flats'))
+      agent.push('which rooms make each flat')
+    }
   }
   return { person, agent }
 }
