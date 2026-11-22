@@ -9,6 +9,7 @@
  * `drawStill`, never drawn here.
  */
 import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_LANGUAGE, say, type Language } from '@ongrid/floorplan/messages'
 import type { SKRSContext2D } from '@napi-rs/canvas'
 import { loadCanvas } from '../draw/canvas'
 import { drawPlan } from '../draw/drawPlan'
@@ -253,7 +254,7 @@ export async function layoutSheet(sheet: Sheet): Promise<Sheet> {
       current = {
         ...current,
         kind: page.kind,
-        title: page.title === null ? null : `${page.title} (continued)`,
+        title: page.title === null ? null : say(sheet.language ?? DEFAULT_LANGUAGE, 'sheet.continued', { title: page.title }),
         subtitle: null, figures: [], picture: null, paragraphs: [], notes: [], table: null,
       }
     }
@@ -311,11 +312,11 @@ export async function floorPictureBox(sheet: Sheet): Promise<{ top: number; widt
   return { top, width: PLAN_BOX.width * scale, height: PLAN_BOX.height * scale }
 }
 
-async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, box: { top: number; width: number; height: number }): Promise<void> {
+async function drawFloorPicture(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, box: { top: number; width: number; height: number }, language: Language): Promise<void> {
   if (page.picture?.kind !== 'plan') return
   // The frame is in plan metres and the box has one size on every floor: one scale throughout.
   // The picture is `grow` times the box, cut to it; its PNG has `PLAN_SCALE` pixels per point.
-  const { options, grow } = planPictureOptions(page.picture)
+  const { options, grow } = planPictureOptions(page.picture, language)
   // A box shrunk to fit under a tall header prints the plan smaller: its scale's N grows.
   const paperScale = (options.paperScale! * PLAN_BOX.width) / box.width
   // SHT-7: the page has its own title and the plan its own box, so the band under the drawing
@@ -352,12 +353,12 @@ function drawSummaryFigures(ctx: Ctx, page: SheetPage, y: number): void {
   })
 }
 
-async function drawPage(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, box: { top: number; width: number; height: number }): Promise<void> {
+async function drawPage(ctx: Ctx, canvas: Canvas, plan: FloorPlan, page: SheetPage, box: { top: number; width: number; height: number }, language: Language): Promise<void> {
   const flowing = piecesOf(page)
   if (page.kind === 'cover' && page.picture) return drawCover(ctx, canvas, plan, page, flowing)
   const head = header(ctx, page, true)
   const at = region(ctx, page, 0)
-  if (page.picture?.kind === 'plan') await drawFloorPicture(ctx, canvas, plan, page, box)
+  if (page.picture?.kind === 'plan') await drawFloorPicture(ctx, canvas, plan, page, box, language)
   else if (page.figures.length > 0) drawSummaryFigures(ctx, page, head + 30)
   flow(ctx, flowing, at.x, at.width, at.y)
 }
@@ -372,7 +373,7 @@ export async function sheetPdf(plan: FloorPlan, sheet: Sheet): Promise<{ pdf: Ui
     const ctx = doc.beginPage(A3.width, A3.height) as Ctx
     ctx.fillStyle = PAPER
     ctx.fillRect(0, 0, A3.width, A3.height)
-    await drawPage(ctx, canvas, plan, page, box)
+    await drawPage(ctx, canvas, plan, page, box, laid.language ?? DEFAULT_LANGUAGE)
     footer(ctx, page)
     doc.endPage()
   }

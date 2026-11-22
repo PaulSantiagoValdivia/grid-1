@@ -26,7 +26,10 @@ import { OUTSIDE, wayGraph } from '../quantities/measure'
 import { crossingOf } from '../quantities/walked'
 import type { Survey, SurveyRoom } from '../quantities/survey'
 import { compassOf, type Compass } from './facts'
-import { PersonNames, type DescribeAudience } from './card'
+import { DEFAULT_LANGUAGE, num, say, type MessageKey, type Value, type Values } from '@ongrid/floorplan/messages'
+import { PersonNames, type DescribeAudience, type Words } from './card'
+
+const ENGLISH: Words = { language: DEFAULT_LANGUAGE, options: {} }
 
 /** How high the eye of a walk's pictures is above the floor, as grid_view kind=eye takes it. */
 export const WALK_EYE_HEIGHT = 1.6
@@ -344,32 +347,57 @@ function m(value: number): string {
 const KIND_LETTER: Record<WalkThing['kind'], string> = { door: 'd', window: 'w', opening: 'o', 'open side': 'v', fixture: 'f' }
 const BEYOND_AGENT: Record<string, string> = { outside: 'OUT', 'nothing drawn': 'NONE', 'a room left out': 'LEFT' }
 
-export const WALK_PERSON_CLOSE = 'This describes the plan as it is walked and checks nothing: grid check runs the checks.'
+/** MSG-11: the person's close, in English; `describe.walk.close` in every language. */
+export const WALK_PERSON_CLOSE = say('en', 'describe.walk.close')
 export const WALK_AGENT_CLOSE = 'CHECKS none here: grid check.'
 
-function personThing(thing: WalkThing, names: PersonNames): string {
-  if (thing.kind === 'fixture') return `the ${thing.label ?? 'fixture'}`
-  const to = thing.to === null ? '' : thing.to === 'outside' ? ' to outside' : thing.to === 'nothing drawn' || thing.to === 'a room left out' ? `, with ${thing.to} beyond` : ` to ${names.room(thing.to)}`
-  if (thing.kind === 'window') return `a window ${m(thing.width)} m wide`
-  if (thing.kind === 'open side') return `the open side${to}, ${m(thing.width)} m long`
-  return `${thing.kind === 'door' ? 'a door' : 'an opening'} ${m(thing.width)} m wide${to}`
+/** MSG-11: the person's form in its language (`describe.walk.*`); the agent's stays as it is. */
+const t = (w: Words, key: MessageKey, values?: Values): string => say(w.language, key, values, w.options)
+/** A length in metres, with the language's decimal mark. */
+const fig = (value: number): Value => num(m(value))
+
+function personThing(thing: WalkThing, names: PersonNames, w: Words): string {
+  if (thing.kind === 'fixture') return thing.label === undefined ? t(w, 'describe.walk.thing.fixture.unnamed') : t(w, 'describe.walk.thing.fixture', { label: thing.label })
+  const to =
+    thing.to === null ? '' : thing.to === 'outside' ? t(w, 'describe.walk.to.outside') : thing.to === 'nothing drawn' ? t(w, 'describe.walk.to.nothing') : thing.to === 'a room left out' ? t(w, 'describe.walk.to.leftOut') : t(w, 'describe.walk.to.room', { room: names.room(thing.to) })
+  if (thing.kind === 'window') return t(w, 'describe.walk.thing.window', { width: fig(thing.width) })
+  if (thing.kind === 'open side') return t(w, 'describe.walk.thing.openSide', { to, length: fig(thing.width) })
+  return t(w, thing.kind === 'door' ? 'describe.walk.thing.door' : 'describe.walk.thing.opening', { width: fig(thing.width), to })
 }
 
-const sideways = (across: number): string => (Math.abs(across) < STRAIGHT ? 'straight ahead' : `${m(Math.abs(across))} m to your ${across > 0 ? 'left' : 'right'}`)
-const besideYou = (across: number): string => (Math.abs(across) < STRAIGHT ? 'where you stand' : `${m(Math.abs(across))} m to your ${across > 0 ? 'left' : 'right'}`)
-const along = (ahead: number): string => (ahead < STRAIGHT ? 'beside you' : `${m(ahead)} m ahead`)
+const toSide = (w: Words, across: number): string => t(w, across > 0 ? 'describe.walk.where.toLeft' : 'describe.walk.where.toRight', { distance: fig(Math.abs(across)) })
+const sideways = (w: Words, across: number): string => (Math.abs(across) < STRAIGHT ? t(w, 'describe.walk.where.straight') : toSide(w, across))
+const besideYou = (w: Words, across: number): string => (Math.abs(across) < STRAIGHT ? t(w, 'describe.walk.where.here') : toSide(w, across))
+const along = (w: Words, ahead: number): string => (ahead < STRAIGHT ? t(w, 'describe.walk.where.beside') : t(w, 'describe.walk.where.ahead', { distance: fig(ahead) }))
 
-function personStop(n: number, stop: WalkStop, names: PersonNames): string[] {
+function personStop(n: number, stop: WalkStop, names: PersonNames, w: Words): string[] {
   const lines: string[] = []
-  const via = stop.viaKind === null ? '' : stop.viaKind === 'open side' ? ' across the open side' : ` through ${stop.viaKind === 'door' ? 'a door' : 'an opening'}${stop.viaWidth === null ? '' : ` ${m(stop.viaWidth)} m wide`}`
-  const came = stop.from === null ? ', where the walk starts, standing in its middle' : stop.from === 'outside' ? `, in from outside${via}` : `, from ${names.room(stop.from)}${via}`
-  lines.push(`${n}. ${names.room(stop.room)}${came}. Facing ${stop.facing}, it is ${m(stop.across)} m across and ${m(stop.deep)} m deep, ${(Math.round(stop.area * 10) / 10).toFixed(1)} m².`)
-  const list = (things: readonly WalkThing[], where: (t: WalkThing) => string): string => things.map((t) => `${personThing(t, names)}, ${where(t)}`).join('; ')
-  const reach = (r: number | null): string => (r === null ? '' : `, ${m(r)} m away`)
-  lines.push(`   Ahead${reach(stop.reach.ahead)}: ${stop.ahead.length === 0 ? 'a plain wall' : list(stop.ahead, (t) => sideways(t.across))}.`)
-  lines.push(`   On your left${reach(stop.reach.left)}: ${stop.left.length === 0 ? 'a plain wall' : list(stop.left, (t) => along(t.ahead))}.`)
-  lines.push(`   On your right${reach(stop.reach.right)}: ${stop.right.length === 0 ? 'a plain wall' : list(stop.right, (t) => along(t.ahead))}.`)
-  if (stop.behind.length > 0) lines.push(`   ${stop.via === null ? 'Behind you' : 'In the wall you stand in'}: ${list(stop.behind, (t) => besideYou(t.across))}.`)
+  const wide: Values = stop.viaWidth === null ? {} : { width: fig(stop.viaWidth) }
+  const via =
+    stop.viaKind === null
+      ? ''
+      : stop.viaKind === 'open side'
+        ? t(w, 'describe.walk.via.openSide')
+        : t(w, `describe.walk.via.${stop.viaKind === 'door' ? 'door' : 'opening'}${stop.viaWidth === null ? '' : '.wide'}` as MessageKey, wide)
+  const came = stop.from === null ? t(w, 'describe.walk.came.start') : stop.from === 'outside' ? t(w, 'describe.walk.came.outside', { via }) : t(w, 'describe.walk.came.room', { room: names.room(stop.from), via })
+  lines.push(
+    t(w, 'describe.walk.stop', {
+      n,
+      room: names.room(stop.room),
+      came,
+      facing: t(w, `describe.c.${stop.facing}` as MessageKey),
+      across: fig(stop.across),
+      deep: fig(stop.deep),
+      area: num((Math.round(stop.area * 10) / 10).toFixed(1)),
+    })
+  )
+  const list = (things: readonly WalkThing[], where: (t: WalkThing) => string): string =>
+    things.length === 0 ? t(w, 'describe.walk.plainWall') : things.map((thing) => t(w, 'describe.walk.item', { thing: personThing(thing, names, w), where: where(thing) })).join(t(w, 'join.semicolon'))
+  const reach = (r: number | null): string => (r === null ? '' : t(w, 'describe.walk.reach', { distance: fig(r) }))
+  lines.push(`   ${t(w, 'describe.walk.ahead', { reach: reach(stop.reach.ahead), things: list(stop.ahead, (x) => sideways(w, x.across)) })}`)
+  lines.push(`   ${t(w, 'describe.walk.left', { reach: reach(stop.reach.left), things: list(stop.left, (x) => along(w, x.ahead)) })}`)
+  lines.push(`   ${t(w, 'describe.walk.right', { reach: reach(stop.reach.right), things: list(stop.right, (x) => along(w, x.ahead)) })}`)
+  if (stop.behind.length > 0) lines.push(`   ${t(w, stop.via === null ? 'describe.walk.behind' : 'describe.walk.inWall', { things: list(stop.behind, (x) => besideYou(w, x.across)) })}`)
   return lines
 }
 
@@ -395,36 +423,37 @@ function agentStop(n: number, stop: WalkStop): string {
   ].join(' | ')
 }
 
-const START_PERSON: Record<NonNullable<FloorWalk['start']>, string> = {
-  front: 'It starts at the front door the plan names.',
-  'way in': 'The plan names no front door: it starts at the widest door from outside into a corridor, or the widest door from outside when none leads into one.',
-  stair: 'No door leads in from outside on this floor: it starts in the stair room, where the stairs arrive.',
-  'first room': 'No door leads in from outside and no room is a stair: it starts in the first room of the floor.',
+const START_KEY: Record<NonNullable<FloorWalk['start']>, MessageKey> = {
+  front: 'describe.walk.start.front',
+  'way in': 'describe.walk.start.wayIn',
+  stair: 'describe.walk.start.stair',
+  'first room': 'describe.walk.start.firstRoom',
 }
 
 /** The walk in words, for a person (names only, never an id) or an agent (terse, with every id). */
-export function walkText(survey: Survey, walk: PlanWalk, audience: DescribeAudience, pictures: ReadonlyMap<WalkStop, string> = new Map()): string {
+export function walkText(survey: Survey, walk: PlanWalk, audience: DescribeAudience, pictures: ReadonlyMap<WalkStop, string> = new Map(), w: Words = ENGLISH): string {
   const lines: string[] = []
   if (audience === 'person') {
-    const names = new PersonNames(survey.facts)
-    lines.push('The plan walked room by room. In each room you stand in the doorway you came in by, at its middle, facing in square to the wall; what is in the room is said by the wall it is on, with how far its middle is. Metres, inside the walls; directions are on the drawing, north at the top.')
-    if (walk.mirrored) lines.push('The plan says its y runs down the page: the drawing is the building mirrored, and left and right are read the right way round.')
+    const names = new PersonNames(survey.facts, w)
+    lines.push(t(w, 'describe.walk.intro'))
+    if (walk.mirrored) lines.push(t(w, 'describe.walk.mirrored'))
     for (const floor of walk.floors) {
       lines.push('')
       if (floor.repeats !== null) {
-        lines.push(`${names.floor(floor.floor)} is laid out like ${names.floor(floor.repeats)}: the same walk.`)
+        lines.push(t(w, 'describe.walk.repeats', { floor: names.floor(floor.floor), of: names.floor(floor.repeats) }))
         continue
       }
-      lines.push(`${names.floor(floor.floor)}: ${floor.stops.length} ${floor.stops.length === 1 ? 'room' : 'rooms'} walked. ${floor.start === null ? 'It has no room to walk.' : START_PERSON[floor.start]}`)
+      const start = t(w, floor.start === null ? 'describe.walk.start.none' : START_KEY[floor.start])
+      lines.push(t(w, floor.stops.length === 1 ? 'describe.walk.floor.one' : 'describe.walk.floor.many', { floor: names.floor(floor.floor), count: floor.stops.length, start }))
       floor.stops.forEach((stop, i) => {
-        lines.push(...personStop(i + 1, stop, names))
+        lines.push(...personStop(i + 1, stop, names, w))
         const picture = pictures.get(stop)
-        if (picture !== undefined) lines.push(`   Picture: ${picture}, at eye height (${m(WALK_EYE_HEIGHT)} m), a step in, looking ahead.`)
+        if (picture !== undefined) lines.push(`   ${t(w, 'describe.walk.picture', { picture, height: fig(WALK_EYE_HEIGHT) })}`)
       })
-      if (floor.notReached.length > 0) lines.push(`Not reached through any door, opening or open side: ${floor.notReached.map((id) => names.room(id)).join(', ')}.`)
+      if (floor.notReached.length > 0) lines.push(t(w, 'describe.walk.notReached', { rooms: floor.notReached.map((id) => names.room(id)).join(t(w, 'join.comma')) }))
     }
     lines.push('')
-    lines.push(WALK_PERSON_CLOSE)
+    lines.push(t(w, 'describe.walk.close'))
   } else {
     lines.push('KEY walk: n room <from via(OUT=outside, START=no doorway) | facing WxD(across x deep from the doorway) m2 | A(head) wall dist: things, left (L) or right (R) of you, 0=straight | L(eft wall) dist, R(ight wall) dist: things, +metres ahead | B(ehind, the wall you stand in): things L/R. Thing: id d/w/o/v(open side)/f(fixture) width >other side. Ways on are walked left to right, depth first.')
     if (walk.mirrored) lines.push('Y DOWN: the drawing is the building mirrored; L and R are the building\'s.')

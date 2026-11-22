@@ -35,6 +35,7 @@ import { cutOutline, multiArea, piecesAsRings, ringOf } from './polygons'
 import { tolerance } from './tolerances'
 import { validatePlan } from './validate'
 import type { Vec2 } from './vec2'
+import { english, joined, said, type Said } from '../messages/say'
 
 /** The building seen from above: its outside face, every floor at or above the ground floor. */
 export interface Footprint {
@@ -80,6 +81,11 @@ export interface SiteMeasures {
   readonly footprint: Footprint | null
   /** Why there is no footprint, in a sentence; null when there is one. */
   readonly why: string | null
+  /**
+   * MSG-11: the same, by its key (`check.siteWhy.*`), so a line says it in any language; null when
+   * there is a footprint. Not enumerable, so the measures compare and print as before.
+   */
+  readonly whySaid?: Said | null
   /** Each edge of the boundary, in order, when the boundary is sound and there is a footprint. */
   readonly edges: readonly EdgeDistance[]
   /** Each face of the footprint, in order round each piece. */
@@ -187,17 +193,19 @@ export function siteMeasures(plan: FloorPlan, options: SiteOptions = {}): SiteMe
   const broken = options.broken ?? validatePlan(plan, index, { spaces: false }).broken
   const floors = footprintFloors(plan)
   const outlines: { floor: string; pieces: MultiPolygon }[] = []
-  const unknown: string[] = []
+  const unknown: Said[] = []
   for (const floor of floors) {
     const outline = slabOutline(plan, floor, broken)
-    if (!outlineKnown(outline)) unknown.push(`Floor ${JSON.stringify(floor)}: ${outline.reason}.`)
+    // The outline's own reason is English (`outline.ts`), as the other measures give it.
+    if (!outlineKnown(outline)) unknown.push(said('check.siteWhy.floor', { floor: JSON.stringify(floor), reason: outline.reason }))
     else if (outline.pieces.length > 0) outlines.push({ floor, pieces: outline.pieces })
   }
   const none = { boundary, edges: [], faces: [], coverage: null, covered: null }
-  if (unknown.length > 0) return { ...none, footprint: null, why: `The building's outline could not be worked out. ${unknown.join(' ')}` }
-  if (outlines.length === 0) return { ...none, footprint: null, why: 'No floor at or above the ground floor has walls that close a floor, so the building has no outline to measure from.' }
+  const without = (why: Said): SiteMeasures => Object.defineProperty({ ...none, footprint: null, why: english(why) }, 'whySaid', { value: why, enumerable: false })
+  if (unknown.length > 0) return without(said('check.siteWhy.outline', { floors: joined(unknown, 'join.space') }))
+  if (outlines.length === 0) return without(said('check.siteWhy.noFloor'))
   const pieces = cutOutline('union', outlines[0]!.pieces, outlines.slice(1).map((o) => o.pieces))
-  if (pieces === null || pieces.length === 0) return { ...none, footprint: null, why: 'The floors\' outlines could not be joined into one shape.' }
+  if (pieces === null || pieces.length === 0) return without(said('check.siteWhy.notJoined'))
   const footprint: Footprint = { pieces, area: multiArea(pieces), floors: outlines.map((o) => o.floor) }
   if (boundary === null || boundary.problem !== null) return { ...none, footprint, why: null }
 

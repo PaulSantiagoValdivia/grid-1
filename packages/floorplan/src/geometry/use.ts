@@ -16,9 +16,11 @@
 import { floorOf } from './floors'
 import type { Holes } from './innerPoint'
 import { pointInPolygon, poleOfInaccessibility } from './innerPoint'
-import { isItemKind, itemFootprint, itemName, itemNoun, type Item } from './items'
+import { isItemKind, itemFootprint, itemName, itemNounSaid, type Item } from './items'
 import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
-import { quoted } from '../types/planText'
+import type { Said, Value } from '../messages/say'
+import { english, name, num, said } from '../messages/say'
+import { withSaid } from './issueWords'
 import { metresText } from './rounding'
 import { limit, tolerance } from './tolerances'
 import type { Issue } from './validate'
@@ -484,7 +486,8 @@ export interface ItemUseIssue extends Issue {
   readonly hits: readonly string[]
 }
 
-const m = (value: number): string => `${metresText(value)} m`
+/** A length in metres, as a figure: the sentence writes the unit. */
+const m = (value: number): Value => num(metresText(value))
 
 /**
  * The drawing's use checks on the fixtures (CNT-13), both worth a look: a fixture standing in
@@ -498,11 +501,12 @@ export function itemUseIssues(plan: FloorPlan, index: PlanIndex, broken: Readonl
   if (items.length === 0) return []
   const depth = limit('useApproachDepth')
   const found: { item: number; opening: number; issue: ItemUseIssue }[] = []
-  const say = (item: Item, opening: Opening, code: string, message: string): void => {
+  const measured = said('issue.part.approach', { depth: m(depth) })
+  const say = (item: Item, opening: Opening, code: string, sentence: Said): void => {
     found.push({
       item: items.indexOf(item),
       opening: plan.openings.indexOf(opening),
-      issue: { entity: 'item', id: item.id, code, message, severity: 'warning', hits: [opening.id] }
+      issue: withSaid({ entity: 'item', id: item.id, code, message: english(sentence), severity: 'warning', hits: [opening.id] }, sentence)
     })
   }
   for (const opening of plan.openings) {
@@ -520,7 +524,15 @@ export function itemUseIssues(plan: FloorPlan, index: PlanIndex, broken: Readonl
           item,
           opening,
           'item/blocks-window',
-          `${itemNoun(item)}, ${m(item.height)} high, stands in front of window ${quoted(opening.id)}, whose sill is at ${m(opening.sill)}: it covers ${m(by.covers)} of the window's ${m(opening.width)}. Measured within Grid's own approach depth of ${m(depth)}: an indicator, not a rule.`
+          said('issue.item/blocks-window', {
+            item: itemNounSaid(item),
+            height: m(item.height),
+            window: name(opening.id),
+            sill: m(opening.sill),
+            covers: m(by.covers),
+            width: m(opening.width),
+            measured
+          })
         )
       }
       continue
@@ -529,12 +541,20 @@ export function itemUseIssues(plan: FloorPlan, index: PlanIndex, broken: Readonl
     for (const id of all.narrowedBy) {
       const item = here.find((i) => i.id === id)!
       const alone = doorwayClearance(wall, opening, obstacles.filter((o) => o.id === id))
-      const leaf = all.leaf > 0 ? `, less ${m(all.leaf)} for the open leaf` : ''
+      const leaf = all.leaf > 0 ? said('issue.item/blocks-doorway.leaf', { leaf: m(all.leaf) }) : ''
       say(
         item,
         opening,
         'item/blocks-doorway',
-        `${itemNoun(item)} stands in front of ${opening.type} ${quoted(opening.id)}: it covers ${m(alone.covered)} of its ${m(opening.width)} hole, and the doorway leaves ${m(all.clear)} clear${leaf}. Measured within Grid's own approach depth of ${m(depth)}: an indicator, not a rule.`
+        said('issue.item/blocks-doorway', {
+          item: itemNounSaid(item),
+          front: said(`issue.part.inFrontOf.${opening.type}`, { id: name(opening.id) }),
+          covered: m(alone.covered),
+          width: m(opening.width),
+          clear: m(all.clear),
+          leaf,
+          measured
+        })
       )
     }
   }

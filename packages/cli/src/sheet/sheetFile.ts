@@ -9,6 +9,8 @@ import { parseSheetWords, SheetWordsRefused, type SheetWords } from '@ongrid/flo
 import { exportBaseOf, writeBesidePlan } from '../command/export'
 import { loadPlan, PlanRefused, type LoadedPlan } from '../command/plan'
 import { UsageError } from '../command/options'
+import { askedLanguage, languageFor } from '../command/language'
+import type { Language } from '@ongrid/floorplan/messages'
 import { quoted, type Project } from '../fs/projectFiles'
 import { sheetPages, SHEET_LAYOUTS, type SheetLayout } from './pages'
 import { sheetPdf } from './pdf'
@@ -16,7 +18,13 @@ import { sheetPdf } from './pdf'
 export const SHEET_FILE = 'sheet.json'
 const SHEET_FILE_MAX_BYTES = 64 * 1024
 
-export interface SheetRequest { readonly layout?: string; readonly sheet?: string; readonly out?: string }
+/** `lang`: MSG-11's `--lang`, as given; read with `sheetLanguage`. */
+export interface SheetRequest { readonly layout?: string; readonly sheet?: string; readonly out?: string; readonly lang?: string }
+
+/** The language a sheet request asks for (`--lang`), refused by name when Grid does not write it; undefined when none is asked. */
+export function sheetLanguage(request: SheetRequest): Language | undefined {
+  return askedLanguage(request.lang)
+}
 
 export function checkSheetRequest(request: SheetRequest): SheetLayout {
   const layouts = SHEET_LAYOUTS.join(' or ')
@@ -28,6 +36,7 @@ export function checkSheetRequest(request: SheetRequest): SheetLayout {
   if (request.out !== undefined && path.extname(request.out).toLowerCase() !== '.pdf') {
     throw new UsageError('--out must name a .pdf file.')
   }
+  sheetLanguage(request)
   return request.layout as SheetLayout
 }
 
@@ -82,11 +91,15 @@ export interface MadeSheet {
   readonly note?: string
 }
 
-/** Reads the plan and makes the sheet. `grid sheet --out` writes it where it is told. */
-export async function makeSheet(project: Project, planFile: string, layout: SheetLayout, words: SheetWords | null): Promise<MadeSheet> {
+/**
+ * Reads the plan and makes the sheet. `grid sheet --out` writes it where it is told. MSG-11: its
+ * words are in `language` when one is asked for, else the plan's own (`display.language`), else
+ * English.
+ */
+export async function makeSheet(project: Project, planFile: string, layout: SheetLayout, words: SheetWords | null, language?: Language): Promise<MadeSheet> {
   const loaded = loadPlan(project, planFile)
   const { base, note } = exportBaseOf(planFile)
-  const sheet = sheetPages(loaded, words, layout, { name: base, date: new Date() })
+  const sheet = sheetPages(loaded, words, layout, { name: base, date: new Date(), language: await languageFor(language, loaded.plan) })
   // The laid-out sheet is the one written: text that did not fit flows onto continuation pages.
   const { pdf, sheet: laidOut } = await sheetPdf(loaded.plan, sheet)
   const pages = laidOut.pages.map((page) => (page.floor === null ? { kind: page.kind, title: page.title } : { kind: page.kind, title: page.title, floor: page.floor }))
@@ -109,8 +122,8 @@ export interface SheetDone {
  * Makes the sheet and writes it into `exports/` beside the plan, replacing an earlier copy, as
  * `grid export` writes its files. The command and the tool server both call this.
  */
-export async function sheetIntoProject(project: Project, planFile: string, layout: SheetLayout, words: SheetWords | null): Promise<SheetDone> {
-  const { loaded, pdf, pages, fileName, note } = await makeSheet(project, planFile, layout, words)
+export async function sheetIntoProject(project: Project, planFile: string, layout: SheetLayout, words: SheetWords | null, language?: Language): Promise<SheetDone> {
+  const { loaded, pdf, pages, fileName, note } = await makeSheet(project, planFile, layout, words, language)
   const written = writeBesidePlan(project, planFile, fileName, pdf)
   return note === undefined ? { loaded, written, pages } : { loaded, written, pages, note }
 }

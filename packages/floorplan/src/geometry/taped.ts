@@ -14,6 +14,7 @@
  * Pure: a plan in, plain data out.
  */
 import { DEFAULT_FLOOR_ID, type Taped } from '../types/floorplan'
+import { english, joined, name, num, said, type Said, type Value } from '../messages/say'
 import { indexPlan, type FloorPlan, type PlanIndex, type Wall } from './plan'
 import { roomOutline, type RoomOutline } from './room'
 import { fixedText } from './rounding'
@@ -174,44 +175,66 @@ export function tapedLengths(plan: FloorPlan, given?: PlanIndex): TapedRow[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// In words: one wording, for the record's lines, `grid check` and every change's answer.
+// In words: one wording, for the record's lines, `grid check` and every change's answer. MSG-11:
+// each is a sentence by key (`line.part.taped.*`), said in the reader's language; the `…Text`
+// forms are its English.
 
-const q = (id: string): string => JSON.stringify(id)
-const m = (value: number): string => `${fixedText(value, 3)} m`
+const metres = (value: number): Said => said('issue.part.metres', { n: num(fixedText(value, 3)) })
+const walls = (ids: readonly string[]): Value => joined(ids.map(name), 'join.comma', 'join.and')
 
-/** What was taped: `the side along wall "ext-s"`, `corner "ext-s"/"ext-w" to corner "row"/"bed-hall"`. */
-export function tapedWhatText(row: Pick<TapedRow, 'what' | 'walls'>): string {
-  if (row.what === 'side') return `the side along wall ${q(row.walls[0] ?? '')}`
+/**
+ * What was taped: `the side along wall "ext-s"`, `corner "ext-s"/"ext-w" to corner "row"/"bed-hall"`;
+ * with `capital`, as a sentence starts it.
+ */
+export function tapedWhatSaid(row: Pick<TapedRow, 'what' | 'walls'>, capital = false): Said {
+  if (row.what === 'side') return said(capital ? 'line.part.taped.Side' : 'line.part.taped.side', { wall: name(row.walls[0] ?? '') })
   const [a = '', b = '', c = '', d = ''] = row.walls
-  return `corner ${q(a)}/${q(b)} to corner ${q(c)}/${q(d)}`
+  return said(capital ? 'line.part.taped.Corners' : 'line.part.taped.corners', { a: name(a), b: name(b), c: name(c), d: name(d) })
 }
 
 /** The two figures: `3.552 m drawn against 3.470 m taped, 0.082 m longer`; the taped one alone when nothing is drawn. */
-export function tapedFiguresText(row: Pick<TapedRow, 'taped' | 'drawn' | 'off'>): string {
-  if (row.drawn === null || row.off === null) return m(row.taped)
-  const off = Math.abs(row.off) < tolerance('lengthEqual') ? 'the same' : `${m(Math.abs(row.off))} ${row.off > 0 ? 'longer' : 'shorter'}`
-  return `${m(row.drawn)} drawn against ${m(row.taped)} taped, ${off}`
+export function tapedFiguresSaid(row: Pick<TapedRow, 'taped' | 'drawn' | 'off'>): Said {
+  if (row.drawn === null || row.off === null) return metres(row.taped)
+  const off =
+    Math.abs(row.off) < tolerance('lengthEqual')
+      ? said('line.part.taped.same')
+      : said(row.off > 0 ? 'line.part.taped.longer' : 'line.part.taped.shorter', { off: metres(Math.abs(row.off)) })
+  return said('line.part.taped.figures', { drawn: metres(row.drawn), taped: metres(row.taped), off })
 }
 
 /** How close they may be: `0.010 m`. */
-export const tapedWithinText = (row: Pick<TapedRow, 'within'>): string => m(row.within)
+export const tapedWithinSaid = (row: Pick<TapedRow, 'within'>): Said => metres(row.within)
 
-/** Why a taped length is not measured, in words, or null when it is. */
-export function tapedMissingText(row: Pick<TapedRow, 'missing' | 'missingWalls' | 'room'>): string | null {
-  const walls = (row.missingWalls ?? []).map(q)
-  const list = walls.length <= 1 ? walls.join('') : `${walls.slice(0, -1).join(', ')} and ${walls.at(-1)}`
+/** Why a taped length is not measured, or null when it is. */
+export function tapedMissingSaid(row: Pick<TapedRow, 'missing' | 'missingWalls' | 'room'>): Said | null {
+  const list = walls(row.missingWalls ?? [])
   switch (row.missing) {
     case undefined:
       return null
     case 'no-room':
-      return `the plan has no room ${q(row.room)}`
+      return said('line.part.taped.missing.no-room', { room: name(row.room) })
     case 'no-wall':
-      return `the plan has no wall ${list}`
+      return said('line.part.taped.missing.no-wall', { walls: list })
     case 'not-the-rooms':
-      return `wall${walls.length === 1 ? '' : 's'} ${list} ${walls.length === 1 ? 'is' : 'are'} not one of the room's`
+      return said((row.missingWalls ?? []).length === 1 ? 'line.part.taped.missing.not-the-rooms.one' : 'line.part.taped.missing.not-the-rooms.many', { walls: list })
     case 'no-corner':
-      return `walls ${list} make no corner of the room`
+      return said('line.part.taped.missing.no-corner', { walls: list })
     case 'not-drawn':
-      return 'the room\'s outline cannot be drawn'
+      return said('line.part.taped.missing.not-drawn')
   }
+}
+
+/** `tapedWhatSaid` in English. */
+export const tapedWhatText = (row: Pick<TapedRow, 'what' | 'walls'>): string => english(tapedWhatSaid(row))
+
+/** `tapedFiguresSaid` in English. */
+export const tapedFiguresText = (row: Pick<TapedRow, 'taped' | 'drawn' | 'off'>): string => english(tapedFiguresSaid(row))
+
+/** `tapedWithinSaid` in English. */
+export const tapedWithinText = (row: Pick<TapedRow, 'within'>): string => english(tapedWithinSaid(row))
+
+/** `tapedMissingSaid` in English, or null when it is measured. */
+export function tapedMissingText(row: Pick<TapedRow, 'missing' | 'missingWalls' | 'room'>): string | null {
+  const sentence = tapedMissingSaid(row)
+  return sentence === null ? null : english(sentence)
 }

@@ -8,7 +8,8 @@
  */
 
 import type { PlanFix, TapedRow } from '@ongrid/floorplan/geometry'
-import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
+import type { Language } from '@ongrid/floorplan/messages'
+import type { LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
 import type { PlaceUsed } from '../checks/place'
 import type { FirmFigure, FirmUsed } from './firm'
 
@@ -101,6 +102,12 @@ export interface ResultLine {
    */
   readonly fixes?: readonly PlanFix[]
   /**
+   * MSG-11: the figures, names, ids and places the line's words were made with, by the names
+   * its wording gives them (`{width}` is `width`): a figure as a number, rounded as the words
+   * give it. Absent when there are none. The same in every language.
+   */
+  readonly values?: Readonly<Record<string, string | number>>
+  /**
    * MSG-5: on a line that follows from another: that line, by code and id. It is listed right
    * under it, and goes away when that is fixed. A line with none is a problem of its own.
    */
@@ -124,8 +131,10 @@ export interface ResultLine {
 
 export interface GridResult {
   readonly resultVersion: typeof RESULT_VERSION
-  /** First in every record and every rendering of it. */
-  readonly label: typeof GENERAL_GUIDANCE_LABEL
+  /** First in every record and every rendering of it, in the record's language. */
+  readonly label: string
+  /** MSG-11: the language the record's words are in, when it is not English. */
+  readonly language?: Language
   /** False when the plan was refused: then the lines are its refusals and nothing else ran. */
   readonly read: boolean
   /** How many lines there are: the one number for how much there is to look at. */

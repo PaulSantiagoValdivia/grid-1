@@ -20,8 +20,10 @@ import type { FloorGraph } from './graph'
 import { floorJoins } from '../floorJoins'
 import { indexPlan } from '../plan'
 import type { Vec2 } from '../vec2'
-import { messages, overBoundaryText, setbackShortText } from './messages'
+import { english, said, withSentence, type MessageKey } from '../../messages/say'
+import { messages, saids, shiftedBoxSaid, shiftedHowSaid, shiftWays } from './messages'
 import { siteMeasures } from '../site'
+import { boundaryEdgeSaid } from '../plot'
 import type { FindingCode, HeldFinding, NotChecked, RuleFinding, RulesReport } from './types'
 import type { Opening } from '../plan'
 import { roomWallIds } from '../plan'
@@ -46,7 +48,6 @@ const RULE_OF: Record<FindingCode, string> = {
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
-const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1)
 
 /** One floor as the routes read it. */
 interface FloorRoutes {
@@ -425,15 +426,21 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
   for (const below of openingsBelowGround(plan, elevations)) {
     const room = below.rooms[0]
     const depth = below.wholly ? below.topBelow : below.sillBelow
-    findings.push({
-      code: 'opening_below_ground',
-      ruleId: RULE_OF.opening_below_ground,
-      floor: below.floor,
-      rooms: [...below.rooms],
-      openings: [below.opening],
-      message: messages.belowGround(below.type, room === undefined ? null : roomName(room), below.wall, below.wholly, metresText(depth)),
-      belowGround: { foot: Number(metresText(below.sillBelow)), top: Number(metresText(below.topBelow)), wholly: below.wholly }
-    })
+    const sentence = saids.belowGround(below.type, room === undefined ? null : roomName(room), below.wall, below.wholly, metresText(depth))
+    findings.push(
+      withSentence(
+        {
+          code: 'opening_below_ground',
+          ruleId: RULE_OF.opening_below_ground,
+          floor: below.floor,
+          rooms: [...below.rooms],
+          openings: [below.opening],
+          message: english(sentence),
+          belowGround: { foot: Number(metresText(below.sillBelow)), top: Number(metresText(below.topBelow)), wholly: below.wholly }
+        } as const,
+        sentence
+      )
+    )
   }
 
   // The building against its plot (BRF-3, lab EL-16): over an edge of the boundary, or nearer an
@@ -443,13 +450,10 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
     const site = siteMeasures(plan)
     // A boundary that crosses itself is the drawing check's to name (`plan/boundary-crosses`).
     if (site.boundary !== null && site.boundary.problem === null && site.footprint === null) {
-      notChecked.push({
-        reason: 'boundary_not_measured',
-        floor: '',
-        rooms: [],
-        openings: [],
-        message: `No distance to the plot's boundary was measured: ${site.why === null ? 'the building has no outline' : lowerFirst(site.why)}`
-      })
+      // MSG-11: one wording per reason, the reason's own sentence after the colon.
+      const why = site.whySaid ?? null
+      const sentence = why === null ? said('check.boundaryNotMeasured.none') : said(why.key.replace('check.siteWhy.', 'check.boundaryNotMeasured.') as MessageKey, why.values)
+      notChecked.push(withSentence({ reason: 'boundary_not_measured', floor: '', rooms: [], openings: [], message: english(sentence) } as const, sentence))
     }
     for (const at of site.edges) {
       if (at.past === 0 && at.short === null) continue
@@ -465,14 +469,12 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
         asked: asked === null ? null : { distance: asked.distance, from: asked.from, source: asked.source },
         northStated: site.boundary!.northStated
       }
-      findings.push(
+      const named = boundaryEdgeSaid(site.boundary!.edges, edge)
+      const sentence =
         at.past > 0
-          ? { ...finding('over_boundary', at.floor, [], overBoundaryText(metresText(at.past), edge.name)), boundary }
-          : {
-              ...finding('setback_short', at.floor, [], setbackShortText(metresText(at.distance, 2, asked!.distance), edge.name, metresText(asked!.distance), asked!.source)),
-              boundary
-            }
-      )
+          ? saids.overBoundary(metresText(at.past), named)
+          : saids.setbackShort(metresText(at.distance, 2, asked!.distance), named, metresText(asked!.distance), asked!.source)
+      findings.push(withSentence({ ...finding(at.past > 0 ? 'over_boundary' : 'setback_short', at.floor, [], english(sentence)), boundary }, sentence))
     }
   }
 
@@ -482,42 +484,35 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
     const lowerFloors = [...new Set(out.lower.map((r) => r.floor))]
     const upperFloors = [...new Set(out.upper.map((r) => r.floor))]
     const code = out.kind === 'stair' ? 'stair_out_of_line' : 'lift_out_of_line'
-    findings.push(
-      finding(
-        code,
-        upperFloor,
-        [...out.upper.map((r) => r.room), ...out.lower.map((r) => r.room)],
-        messages.outOfLine(
-          out.kind,
-          out.upper.map((r) => roomName(r.room)),
-          upperFloors.map(floorName),
-          out.lower.map((r) => roomName(r.room)),
-          lowerFloors.map(floorName)
-        )
-      )
+    const sentence = saids.outOfLine(
+      out.kind,
+      out.upper.map((r) => roomName(r.room)),
+      upperFloors.map(floorName),
+      out.lower.map((r) => roomName(r.room)),
+      lowerFloors.map(floorName)
     )
+    findings.push(withSentence(finding(code, upperFloor, [...out.upper.map((r) => r.room), ...out.lower.map((r) => r.room)], english(sentence)), sentence))
   }
 
   // LVL-5 (lab WR-9): stair rooms, or lift shafts, that join the one below but are moved from it.
   for (const moved of joins.shifted) {
     const code = moved.kind === 'stair' ? 'stair_shifted' : 'lift_shifted'
-    const box = (b: { readonly min: Vec2; readonly max: Vec2 }): string => `(${metresText(b.min.x, 2)}, ${metresText(b.min.y, 2)}) to (${metresText(b.max.x, 2)}, ${metresText(b.max.y, 2)})`
-    const ways = [
-      moved.by.x === 0 ? null : `${metresText(Math.abs(moved.by.x), 2)} m ${moved.by.x > 0 ? 'east' : 'west'}`,
-      moved.by.y === 0 ? null : `${metresText(Math.abs(moved.by.y), 2)} m ${moved.by.y > 0 ? 'north' : 'south'}`
-    ].filter((w): w is string => w !== null)
-    // A shaft that is not moved as a whole: the sides that stand off the shaft's below.
-    const way = (side: string, by: number): string => (side === 'east' || side === 'west' ? (by > 0 ? 'east' : 'west') : by > 0 ? 'north' : 'south')
-    const sides = moved.sides.map((s) => `its ${s.side} side ${metresText(Math.abs(s.by), 2)} m ${way(s.side, s.by)}`)
-    const how = ways.length > 0 ? `is ${ways.join(' and ')} of` : `has ${sides.join(' and ')} of ${sides.length === 1 ? 'that' : 'those'} of`
+    // MSG-11: how far and which way, and where each stands, by key (`check.shifted.*`). A shaft
+    // that is not moved as a whole: the sides that stand off the shaft's below.
+    const how = shiftedHowSaid(shiftWays({ east: moved.by.x, north: moved.by.y, sides: moved.sides }, 2))
     const pair = (b: { readonly min: Vec2; readonly max: Vec2 }) => ({ min: [b.min.x, b.min.y] as const, max: [b.max.x, b.max.y] as const })
-    findings.push({
-      ...finding(
-        code,
-        moved.upper.floor,
-        [moved.upper.room, moved.lower.room],
-        messages.shifted(moved.kind, roomName(moved.upper.room), floorName(moved.upper.floor), roomName(moved.lower.room), floorName(moved.lower.floor), how, box(moved.upperBox), box(moved.lowerBox))
-      ),
+    const sentence = saids.shifted(
+      moved.kind,
+      roomName(moved.upper.room),
+      floorName(moved.upper.floor),
+      roomName(moved.lower.room),
+      floorName(moved.lower.floor),
+      how,
+      shiftedBoxSaid(moved.upperBox),
+      shiftedBoxSaid(moved.lowerBox)
+    )
+    findings.push(withSentence({
+      ...finding(code, moved.upper.floor, [moved.upper.room, moved.lower.room], english(sentence)),
       shift: {
         east: Number(metresText(moved.by.x, 3)),
         north: Number(metresText(moved.by.y, 3)),
@@ -525,7 +520,7 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
         upper: pair(moved.upperBox),
         lower: pair(moved.lowerBox)
       }
-    })
+    }, sentence))
   }
 
   // MSG-5 (lab MS-4, W-6): a note that rests on a part that could not be drawn is held back, and

@@ -29,14 +29,15 @@ import { tryRoomPolygon } from './room'
 import { intersectionArea, polygonArea } from './polygons'
 import { TOLERANCES, tolerance, tolerancesAsStated } from './tolerances'
 import type { Vec2 } from './vec2'
+import { name, num, said, type Said } from '../messages/say'
 
 /** A room that names a room it is not a zone of, and why. */
 export interface ZoneFault {
   readonly zone: string
   /** The id it names in `partOf`. */
   readonly room: string
-  /** Why it is not a zone of that room, in a clause. */
-  readonly why: string
+  /** Why it is not a zone of that room, in a clause (MSG-11: by its key, `issue.room/zone-not-in-room.*`). */
+  readonly why: Said
 }
 
 export interface RoomZones {
@@ -56,7 +57,6 @@ export const NO_ZONES: RoomZones = { zoneOf: new Map(), zones: new Map(), lines:
 /** As in `nesting.ts`: tried as drawn first, then with every point rounded to these grids. */
 const GRIDS = TOLERANCES.joinGrids.values
 
-const m2 = (value: number): string => `${value.toFixed(2)} m²`
 
 /** How much of `zone` lies outside `room`, in square metres; both moved next to the origin first. */
 function outsideOf(zone: readonly Vec2[], room: readonly Vec2[]): number {
@@ -85,20 +85,20 @@ function findZones(index: PlanIndex): RoomZones {
   for (const zone of rooms) {
     const named = zone.partOf
     if (named === undefined) continue
-    const fault = (why: string): void => {
+    const fault = (why: Said): void => {
       faults.push({ zone: zone.id, room: named, why })
     }
     const room = byId.get(named)
     if (named === zone.id) {
-      fault('a room cannot be a zone of itself')
+      fault(said('issue.room/zone-not-in-room.itself'))
       continue
     }
     if (room === undefined || floorOf(room) !== floorOf(zone)) {
-      fault(`the plan has no room ${JSON.stringify(named)} on floor ${JSON.stringify(floorOf(zone))}`)
+      fault(said('issue.room/zone-not-in-room.noRoom', { room: name(named), floor: name(floorOf(zone)) }))
       continue
     }
     if (room.partOf !== undefined) {
-      fault(`room ${JSON.stringify(named)} is a zone itself, of room ${JSON.stringify(room.partOf)}; a zone is part of a room, not of a zone`)
+      fault(said('issue.room/zone-not-in-room.zoneOfZone', { room: name(named), of: name(room.partOf) }))
       continue
     }
     const inner = tryRoomPolygon(zone, index)
@@ -109,11 +109,11 @@ function findZones(index: PlanIndex): RoomZones {
       try {
         outside = outsideOf(inner, outer)
       } catch (error) {
-        fault(`its outline could not be compared with the room's (${error instanceof Error ? error.message : String(error)})`)
+        fault(said('issue.room/zone-not-in-room.notCompared', { error: error instanceof Error ? error.message : String(error) }))
         continue
       }
       if (outside >= tolerance('areaReported')) {
-        fault(`${m2(outside)} of it lies outside room ${JSON.stringify(named)}`)
+        fault(said('issue.room/zone-not-in-room.outside', { area: num(outside.toFixed(2)), room: name(named) }))
         continue
       }
     }

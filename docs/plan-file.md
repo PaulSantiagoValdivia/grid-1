@@ -186,9 +186,10 @@ the edge, chosen per person:
 
   | Field | Takes | Left out |
   |---|---|---|
-  | `length` | `m`, `cm`, `mm` or `ft-in` | (required in `display`) |
+  | `length` | `m`, `cm`, `mm` or `ft-in` | `m` |
   | `area` | `m2` or `ft2` | `ft2` with `ft-in`, else `m2` |
-  | `decimal` | `point` (2.40) or `comma` (2,40) | `point` |
+  | `decimal` | `point` (2.40) or `comma` (2,40) | the language's: `comma` for `es`, else `point` |
+  | `language` | `en` or `es`: the language Grid writes its own words in (MSG-11, [Languages](languages.md)) | `en` |
   | `precision` | decimals shown, 0 to 5; in feet and inches, the inch in 2^n parts (0 whole inches, 3 eighths) | 2 for m, 1 for cm, 0 for mm and ft-in |
 
   A call's `units` and `decimal` (`--units`, `--decimal` on `grid draw`) win over the plan's
@@ -196,7 +197,10 @@ the edge, chosen per person:
   `2860`. The drawing's room areas and dimensions, and the figures of `grid_areas`,
   `grid_takeoff`, `grid_schedule`, `grid_measure` and `grid_view`, and the sheet's figures,
   tables and drawings, follow the display. The check's report and the edit answers are still in
-  metres. The exports stay in metres and say so in the file, as DXF, IFC and glTF expect.
+  metres; the check's report and the sheet follow its language and decimal mark (MSG-11). The
+  exports stay in metres and say so in the file, as DXF, IFC and glTF expect. A room's `use` may
+  be written by its label in a language Grid writes (`dormitorio` is `bedroom`); its `name` is
+  never translated.
 
 ## Floor levels and heights
 

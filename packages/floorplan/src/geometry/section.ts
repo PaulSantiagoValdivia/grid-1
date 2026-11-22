@@ -59,7 +59,7 @@ import { metresText } from './rounding'
 import type { Vec2 } from './vec2'
 import { add, dot, length, perp, scale, signedArea, sub } from './vec2'
 import type { Bounds } from './floorplan'
-import { quoted } from '../types/planText'
+import { english, joined as joinedValues, name, num, said, withSentence, type Name, type Said, type Value } from '../messages/say'
 
 /** Which side of the line the section looks toward, walking from its first point to its second. */
 export type SectionToward = 'left' | 'right'
@@ -144,8 +144,10 @@ export interface SectionAssumption {
   readonly kind: SectionAssumptionKind
   /** What it is about: floor, wall, room or stair ids. */
   readonly ids: readonly string[]
-  /** In a sentence, for the list under the drawing. */
+  /** In a sentence, for the list under the drawing: its English. */
   readonly words: string
+  /** MSG-11: the same sentence by key and values, to say in another language. Not enumerable. */
+  readonly said?: Said
   /** Whether its cut parts are hatched (`pieces`); a level, a height or a ground is listed only. */
   readonly hatched: boolean
   /** The cut parts it is about, joined; empty when it is not hatched. */
@@ -529,48 +531,55 @@ export function planSection(stated: FloorPlan, line: SectionLine): PlanSection {
   }
   if (groundTo - cursor > none) segments.push([snap(cursor), snap(groundTo)])
 
-  // What is taken, in the order it is listed.
-  const nameOf = (id: string): string => {
+  // What is taken, in the order it is listed. MSG-11: each sentence by key (`drawing.section.taken.*`),
+  // carried as `said`; `words` is its English.
+  const nameOf = (id: string): Name => {
     const floor = floors.find((f) => f.id === id)
-    return quoted(floor?.name || id)
+    return name(floor?.name || id)
+  }
+  const ids = (list: readonly string[]): Value => joinedValues(list.map(name), 'join.comma')
+  const many = (n: number): 'one' | 'many' => (n === 1 ? 'one' : 'many')
+  const taken = (note: Omit<SectionAssumption, 'words' | 'said'>, sentence: Said): void => {
+    notes.push(withSentence({ ...note, words: english(sentence) }, sentence))
   }
   for (const { floor, rings } of unstatedSlabs) {
     const thickness = envelope.floors.find((f) => f.floor === floor.id)?.slab?.thickness ?? 0
-    notes.push({ kind: 'slab', ids: [floor.id], words: `The slab under ${nameOf(floor.id)} is taken as ${metresText(thickness)} m thick: the floor states no slab.`, hatched: true, pieces: joined(rings) })
+    taken({ kind: 'slab', ids: [floor.id], hatched: true, pieces: joined(rings) }, said('drawing.section.taken.slab', { floor: nameOf(floor.id), thickness: num(metresText(thickness)) }))
   }
   for (const { floor, rings, thickness, shape } of roofRings) {
     // LVL-6: a roof the floor states stands at its eaves; the section does not draw a slope yet.
-    const words = shape === null
-      ? `The roof over ${nameOf(floor.id)} is taken as flat and ${metresText(thickness)} m thick, on its walls: the plan states no roof.`
+    const values = { floor: nameOf(floor.id), thickness: num(metresText(thickness)) }
+    const sentence = shape === null
+      ? said('drawing.section.taken.roof.none', values)
       : shape === 'flat'
-        ? `The roof over ${nameOf(floor.id)} is drawn flat at its eaves, as the floor states it, and taken as ${metresText(thickness)} m thick.`
-        : `The roof over ${nameOf(floor.id)} is stated as a ${shape} roof, but a section does not draw its slope yet: it is drawn flat at its eaves, ${metresText(thickness)} m thick, and the walls under it are not cut to it.`
-    notes.push({ kind: 'roof', ids: [floor.id], words, hatched: true, pieces: joined(rings) })
+        ? said('drawing.section.taken.roof.flat', values)
+        : said('drawing.section.taken.roof.sloped', { ...values, shape: said(`drawing.section.roofShape.${shape}`) })
+    taken({ kind: 'roof', ids: [floor.id], hatched: true, pieces: joined(rings) }, sentence)
   }
-  for (const [floor, ids] of defaultHeights) {
-    const rings = parts.filter((p) => p.kind === 'wall' && p.floor === floor && ids.includes(p.id)).flatMap((p) => p.rings)
-    notes.push({ kind: 'wall-height', ids, words: `${ids.length === 1 ? 'A wall' : `${ids.length} walls`} cut on ${nameOf(floor)} ${ids.length === 1 ? 'states' : 'state'} no height, nor does the floor: Grid's default is taken (${ids.map((id) => quoted(id)).join(', ')}).`, hatched: true, pieces: joined(rings) })
+  for (const [floor, wallIds] of defaultHeights) {
+    const rings = parts.filter((p) => p.kind === 'wall' && p.floor === floor && wallIds.includes(p.id)).flatMap((p) => p.rings)
+    taken({ kind: 'wall-height', ids: wallIds, hatched: true, pieces: joined(rings) }, said(`drawing.section.taken.wallHeight.${many(wallIds.length)}`, { count: wallIds.length, floor: nameOf(floor), ids: ids(wallIds) }))
   }
   if (markedWalls.length > 0) {
     const rings = parts.filter((p) => p.kind === 'wall' && markedWalls.includes(p.id)).flatMap((p) => p.rings)
-    notes.push({ kind: 'marked', ids: markedWalls, words: `The plan marks ${markedWalls.length === 1 ? 'a wall' : `${markedWalls.length} walls`} cut here as assumed: ${markedWalls.map((id) => quoted(id)).join(', ')}.`, hatched: true, pieces: joined(rings) })
+    taken({ kind: 'marked', ids: markedWalls, hatched: true, pieces: joined(rings) }, said(`drawing.section.taken.marked.${many(markedWalls.length)}`, { count: markedWalls.length, ids: ids(markedWalls) }))
   }
-  if (!ground.stated) notes.push({ kind: 'ground', ids: [], words: `The ground is taken at ${levelText(ground.level)}, the ground floor's level: the site states no ground level.`, hatched: false, pieces: [] })
+  if (!ground.stated) taken({ kind: 'ground', ids: [], hatched: false, pieces: [] }, said('drawing.section.taken.ground', { level: num(levelText(ground.level)) }))
   for (const level of levels) {
-    if (level.source === 'worked-out') notes.push({ kind: 'level', ids: [level.floor], words: `The level of ${nameOf(level.floor)}, ${levelText(level.level)}, is worked out from the floors below it, their heights and slabs: the floor states no elevation.`, hatched: false, pieces: [] })
+    if (level.source === 'worked-out') taken({ kind: 'level', ids: [level.floor], hatched: false, pieces: [] }, said('drawing.section.taken.level', { floor: nameOf(level.floor), level: num(levelText(level.level)) }))
   }
   const unstatedRooms = rooms.filter((r) => !r.heightStated)
   if (unstatedRooms.length > 0) {
-    const names = [...new Set(unstatedRooms.map((r) => quoted(r.name || r.room)))]
-    notes.push({ kind: 'room-height', ids: unstatedRooms.map((r) => r.room), words: `${unstatedRooms.length === 1 ? 'A room' : `${unstatedRooms.length} rooms`} cut ${unstatedRooms.length === 1 ? 'states' : 'state'} no height, so ${unstatedRooms.length === 1 ? 'it is' : 'each is'} drawn up to what is over its storey: ${names.join(', ')}.`, hatched: false, pieces: [] })
+    const names = [...new Set(unstatedRooms.map((r) => r.name || r.room))]
+    taken({ kind: 'room-height', ids: unstatedRooms.map((r) => r.room), hatched: false, pieces: [] }, said(`drawing.section.taken.roomHeight.${many(unstatedRooms.length)}`, { count: unstatedRooms.length, names: ids(names) }))
   }
   const stairRooms = new Set(laid.flatMap((s) => [s.lower.room, s.upper.room]).filter((r): r is string => r !== null))
   const bare = rooms.filter((r) => plan.rooms.some((room) => room.id === r.room && floorOf(room) === r.floor && room.use === 'stair') && !stairRooms.has(r.room))
   if (bare.length > 0) {
-    notes.push({ kind: 'no-stair', ids: bare.map((r) => r.room), words: `No stair is stated in ${bare.length === 1 ? 'the stair room' : `${bare.length} stair rooms`} cut (${bare.map((r) => quoted(r.room)).join(', ')}): no flight is drawn, only the room and the opening over it.`, hatched: false, pieces: [] })
+    taken({ kind: 'no-stair', ids: bare.map((r) => r.room), hatched: false, pieces: [] }, said(`drawing.section.taken.noStair.${many(bare.length)}`, { count: bare.length, ids: ids(bare.map((r) => r.room)) }))
   }
   if (workedRisers.length > 0) {
-    notes.push({ kind: 'risers', ids: workedRisers, words: `The risers of ${workedRisers.map((id) => quoted(id)).join(', ')} are worked out by Grid: the plan states no number of risers.`, hatched: false, pieces: [] })
+    taken({ kind: 'risers', ids: workedRisers, hatched: false, pieces: [] }, said('drawing.section.taken.risers', { ids: ids(workedRisers) }))
   }
 
   const cut = joined(parts.flatMap((p) => p.rings))

@@ -29,7 +29,10 @@ import { add, cross, distance, dot, length, lerp, perp, scale, signedArea, sub, 
 import type { WallEnds } from './wall'
 import { wallParts, wallSlicePolygon } from './wall'
 import { wallJoints } from './joints'
-import { itemName } from './items'
+import { itemNameSaid } from './items'
+import type { Said } from '../messages/say'
+import { english, joined, said } from '../messages/say'
+import { withSaid } from './issueWords'
 
 /** One door's swing, as the caller knows it. Either half may be missing. */
 export interface DoorSwingValues {
@@ -43,17 +46,13 @@ export interface DoorSweepIssue extends Issue {
   readonly hits: readonly string[]
 }
 
-const MESSAGES = {
-  'opening/swing-without-hinge':
-    "This door is missing which side it hangs on, so it's drawn without a swing.",
-  'opening/hinge-without-swing':
-    "This door is missing which way it opens, so it's drawn without a swing.",
-  'opening/door-blocked': 'This door hits a wall when it opens.',
-  'opening/door-hits-item': 'This door hits a fixture when it opens.',
-  'opening/doors-collide': 'These two doors hit each other when they open.'
-} as const
-
-type SweepCode = keyof typeof MESSAGES
+/** The sweep's codes; each says its sentence under `issue.<code>` (`messages/en.ts`). */
+type SweepCode =
+  | 'opening/swing-without-hinge'
+  | 'opening/hinge-without-swing'
+  | 'opening/door-blocked'
+  | 'opening/door-hits-item'
+  | 'opening/doors-collide'
 
 /** Below `noArea` a polygon is a line or a point: shapes that only touch. */
 const noArea = (polygon: readonly Vec2[]): boolean => Math.abs(signedArea(polygon)) < tolerance('noArea')
@@ -220,8 +219,8 @@ function narrowestWidth(polygon: readonly Vec2[]): number {
   return narrowest === Infinity ? 0 : narrowest
 }
 
-function warning(code: SweepCode, id: string, hits: readonly string[] = [], message: string = MESSAGES[code]): DoorSweepIssue {
-  return { code, entity: 'opening', id, message, severity: 'warning', hits }
+function warning(code: SweepCode, id: string, hits: readonly string[] = [], sentence: Said = said(`issue.${code}`)): DoorSweepIssue {
+  return withSaid({ code, entity: 'opening', id, message: english(sentence), severity: 'warning', hits }, sentence)
 }
 
 /**
@@ -283,7 +282,7 @@ export function validateFloorDoorSweeps(
   // CNT-13: the fixtures this storey draws stand on the floor, so a leaf hits them as it hits a
   // wall. Each is named by its kind and id, and its label when the plan states one.
   const stated = new Map((slice.items ?? []).map((item) => [item.id, item] as const))
-  const fixtures = drawing.items.map((item) => ({ id: item.id, outline: item.outline, name: itemName(stated.get(item.id) ?? { id: item.id, kind: item.kind }) }))
+  const fixtures = drawing.items.map((item) => ({ id: item.id, outline: item.outline, name: itemNameSaid(stated.get(item.id) ?? { id: item.id, kind: item.kind }) }))
   const nearFixtures = boxIndex(fixtures.map((f) => boxOfPoints(f.outline)))
 
   // Plan order, not the drawing's (by wall, then offset): "the first door"
@@ -333,8 +332,8 @@ export function validateFloorDoorSweeps(
       .map((i) => fixtures[i]!)
       .filter((f) => reachesInto(frame, f.outline))
     if (struck.length > 0) {
-      const message = `This door hits ${struck.map((f) => f.name).join(', ')} when it opens.`
-      issues.push(warning('opening/door-hits-item', drawn.id, struck.map((f) => f.id), message))
+      const sentence = said('issue.opening/door-hits-item', { items: joined(struck.map((f) => f.name), 'join.comma') })
+      issues.push(warning('opening/door-hits-item', drawn.id, struck.map((f) => f.id), sentence))
     }
 
     sweeps.push({

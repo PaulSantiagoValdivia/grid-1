@@ -194,6 +194,9 @@ import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } f
 import { factKey } from './facts'
 import { placeProblem } from './places'
 import { roofFrame, roofTop } from './roofFrame'
+import { en } from '../messages/en'
+import { LANGUAGES } from '../messages/languages'
+import { roomUseOfLabel } from '../messages/uses'
 import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
@@ -302,22 +305,10 @@ export const BuildingTypeSchema = z.enum(BUILDING_TYPES)
 
 export type BuildingType = z.infer<typeof BuildingTypeSchema>
 
-/** Each kind of building as a sentence names it, with its article: "this plan is an office". */
-export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = {
-  home: 'a home',
-  office: 'an office',
-  shop: 'a shop',
-  food: 'a café, restaurant or bar',
-  hotel: 'a hotel or hostel',
-  school: 'a school',
-  health: 'a health building, such as a clinic',
-  sport: 'a sports building',
-  assembly: 'a building people gather in, such as a hall',
-  industry: 'a workshop or factory',
-  warehouse: 'a warehouse',
-  parking: 'a car park',
-  other: 'another kind of building',
-}
+/** Each kind of building as a sentence names it, with its article: "this plan is an office" (MSG-11: `check.building.*`, in English). */
+export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = Object.fromEntries(
+  BUILDING_TYPES.map((type) => [type, en[`check.building.${type}`]])
+) as Record<BuildingType, string>
 
 /** The four sides of the drawing: north is +Y (C4). */
 export const COMPASS_SIDES = ['north', 'east', 'south', 'west'] as const
@@ -805,14 +796,18 @@ export function foldUseWord(word: string): string {
 }
 
 /**
- * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; and a
- * word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is `staff`.
- * Anything else is left as it is, for the schema to read as unstated and `readingNotes` to name.
+ * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; the
+ * use's label in a language Grid writes (MSG-11, `USE_LABELS`), so `dormitorio` is `bedroom`;
+ * and a word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is
+ * `staff`. Anything else is left as it is, for the schema to read as unstated and
+ * `readingNotes` to name.
  */
 export function readUse(value: unknown): unknown {
   if (typeof value !== 'string') return value
   const lower = value.toLowerCase()
   if ((ROOM_USES as readonly string[]).includes(lower)) return lower
+  const labelled = roomUseOfLabel(value)
+  if (labelled !== null) return labelled
   const folded = foldUseWord(value)
   if ((ROOM_USES as readonly string[]).includes(folded) && !FIGURE_READ_USES.includes(folded)) return folded
   return Object.hasOwn(USE_WORDS, folded) ? USE_WORDS[folded] : value
@@ -1674,9 +1669,13 @@ export const FloorPlanFieldsSchema = z.object({
   // WRT-7: how the person reads lengths and areas: the unit, the area unit, the decimal mark and
   // the precision (`types/units.ts`). It never changes a stored number: the file is in metres.
   // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  // MSG-11: `language` is the language Grid writes its words in for this plan (`en`, `es`); a
+  // language with a decimal comma writes one unless `decimal` says otherwise. With a language,
+  // `length` may be left out: then lengths are in metres.
   display: z
     .object({
-      length: z.enum(['m', 'cm', 'mm', 'ft-in']),
+      length: z.enum(['m', 'cm', 'mm', 'ft-in']).optional(),
+      language: z.enum(LANGUAGES).optional(),
       area: z.enum(['m2', 'ft2']).optional(),
       decimal: z.enum(['point', 'comma']).optional(),
       precision: z.number().int().min(0).max(5).optional(),
