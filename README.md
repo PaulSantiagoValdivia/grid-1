@@ -98,6 +98,7 @@ Each page answers one kind of question, so read only the one you need.
 | Know what an area figure means: net, gross internal and gross external, and which comes first where; the room schedule and the door and window schedule | [docs/areas.md](docs/areas.md) |
 | Know the figure behind a check, and when Grid asks whether a size is meant | [docs/tolerances.md](docs/tolerances.md) |
 | Read what `grid check` and `grid_check` return: the record and every message code | [docs/result-contract.md](docs/result-contract.md) |
+| Add or change a sentence Grid writes, or add a language: the message files, `--lang`, room uses by language | [docs/languages.md](docs/languages.md) |
 | Change Grid itself | [AGENTS.md](AGENTS.md) |
 
 ## Licence

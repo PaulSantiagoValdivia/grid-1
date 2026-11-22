@@ -30,6 +30,10 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | Entry | Kind | Value | What it decides |
 |---|---|---|---|
 | `openingOverrun` | tolerance | 0.001 m | How far an opening may run past either end of its wall, below the floor, above its wall or into the next opening, and still fit; also how far it may run into a wall that meets its wall, or a wall end into it (MSG-16). A refusal states the overrun and the offset that fits |
+| `arcEnds` | tolerance | 0.005 m | How far a curved wall's end may lie from where its sweep takes its start, and its two ends differ in radius, and still be one arc (CNT-18); further, `wall/arc-ends-apart` names it |
+| `arcSagitta` | tolerance | 0.001 m | How far the straight pieces a curved wall is traced, checked and drawn with may stand off its curve at their middle |
+| `arcStep` | tolerance | 0.03 radian | The most a curved wall turns along one straight piece, so a small round room still measures within a few hundredths of a percent of its true area |
+| `arcPiecesMost` | limit | 1000 count | The most straight pieces one curved wall is traced with; a longer curve is traced with this many, a little further off it |
 | `gap` | tolerance | 0.02 m | A wall reaches the wall it meets when its end is within half the thicker wall plus this. The spaces check lengthens every wall by this much at both ends; the wall faults name a gap or an overrun past it, and two walls on top of each other when their bodies overlap by more than this |
 | `wallContact` | tolerance | 0.01 m | Slack past the walls' bodies when a room outline is traced: walls that touch, carry on in a row or reach a corner |
 | `strayCorner` | tolerance | 1 m | A room corner further than this from both its walls is not a corner, and the wall list is out of order |
@@ -99,6 +103,12 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `sectionGroundRun` | limit | 1 m | How far the ground line of a section runs past the building on each side (LVL-9) |
 | `elevationMarkOffset` | limit | 1.2 m | How far outside the drawing and its dimensions an elevation mark stands on a plan (LVL-9) |
 | `aboveSameEdge` | tolerance | 0.02 m | A stretch of the outline of the floor above this close to the outline of the floor drawn, along it, is the same wall face, and is not drawn dashed (SHT-11) |
+| `wideSingleLeaf` | limit | 1.5 m | A door at least this wide that states no kind is taken as one swinging leaf and asked about (`opening/wide-single-leaf`, CNT-14) |
+| `foldingPanel` | limit | 0.6 m | The widest panel a folding door is drawn and checked with: it folds in as many panels as this needs, two at least, and sweeps a strip one panel deep (CNT-14) |
+| `frameFace` | limit | 0.05 m | How wide a door's or window's frame, and the frame round each part of a window that opens, is drawn in 3D (CNT-14) |
+| `frameDepth` | limit | 0.07 m | How deep a window's frame is drawn in 3D, in the middle of its wall; a door's frame lines the wall's whole depth (CNT-14) |
+| `leafThickness` | limit | 0.04 m | How thick a door leaf or panel is drawn in 3D, hung from the face of the wall it opens toward (CNT-14) |
+| `glassThickness` | limit | 0.02 m | How thick a window's glass is drawn in 3D, in the middle of its frame (CNT-14) |
 | `facadeFacing` | tolerance | 0.0175 sine | A face of the building is drawn on a facade when it turns at least this much (about one degree) toward the side the facade is seen from (LVL-8) |
 | `facadeOnFace` | tolerance | 0.01 m | A wall whose outside face lies within this of a stretch of the floor's outline is the wall that stretch of a facade shows, with its height and openings (LVL-8) |
 | `facadeSameDepth` | tolerance | 0.05 m | Faces of a facade within this of each other, front to back, are one plane, drawn with one line weight; a face set back further is drawn lighter (LVL-8) |

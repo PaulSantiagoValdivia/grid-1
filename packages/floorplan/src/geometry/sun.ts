@@ -26,7 +26,7 @@ import { floorOf } from './floors'
 import { planFacing, type CompassPoint, type PlanFacing, type WallFacing } from './orientation'
 import { roomFloorArea, tryRoomShape } from './room'
 import { add, dot, scale, sub, type Vec2 } from './vec2'
-import { wallAxis } from './wall'
+import { wallAxis, wallPointAt } from './wall'
 
 /** One window in a window wall. */
 export interface SunWindow {
@@ -116,7 +116,8 @@ export function planSunTable(plan: FloorPlan, index: PlanIndex = indexPlan(plan)
         faces: stretch.faces,
         windows,
         windowArea: windows.reduce((sum, w) => sum + w.area, 0),
-        depth: depthFrom(stretch, wall.thickness, wallAxis(wall).start, shape.polygon)
+        // A curved wall's depth is taken from the middle of the part that faces this way (CNT-18).
+        depth: depthFrom(stretch, wall.thickness, wall.arc === undefined ? wallAxis(wall).start : wallPointAt(wall, (stretch.from + stretch.to) / 2), shape.polygon)
       })
     }
     walls.sort((a, b) => a.bearing - b.bearing || (a.wall < b.wall ? -1 : a.wall > b.wall ? 1 : a.from - b.from))

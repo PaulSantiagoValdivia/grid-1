@@ -47,7 +47,7 @@ the same facts as data; a view also returns its picture. A length argument is me
 | `grid_mark_seen` | Sets a note of `grid_check` aside as seen, with the person's reason and the name or role they give, in `plan.seen.json` beside the plan; or takes the mark off (see below) |
 | `grid_write_brief` | Writes the brief beside the plan from the person's words, before the first room: room areas and counts, inside sizes, the footprint, rooms that must or must not touch, and the person's own figures, each with its level, its quote and whether it was given or assumed, and what is still open; answers with each line met or missed ([brief.md](brief.md)) |
 | `grid_write_rooms` | Writes the plan from rooms text, as `grid write`: the walls, their kinds, the room boundaries and the openings' places worked out. With `layout` (`tidy` or `sizes`) in place of `rooms`, a first layout from the brief beside the plan, with each size not kept and by how much ([brief.md](brief.md#a-first-layout-from-the-brief)); with `scan`, from a phone room scan, as `grid write --scan`, with what was assumed and the scan kept beside the plan ([commands.md](commands.md#a-plan-from-a-phone-room-scan-grid-write---scan)). It takes one of `rooms`, `layout` and `scan` |
-| `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
+| `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into, which side it is hinged on as seen from a room, its kind), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom (`how`), or turns it a quarter or half round (`turn`: 90, 180, 270 or -90 degrees, counter-clockwise as Grid draws it) |
 | `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share. Two rooms of different uses need `use`, or `zones` to keep both as zones of one open-plan room ([Zones inside one room](plan-file.md#zones-inside-one-room)); left out, the call is refused and asks. The verdict names any use the plan no longer has |
@@ -84,7 +84,9 @@ plan, which no export, sheet or tool reads ([People are kept out of the plan](pl
 `leftOutParts`, each part with its `kind`, `id`, `place` (for a part left out when the plan was
 read), `floor` and `code` (the line of `grid_check` that leaves it out). The file carries the
 same note ([What an export leaves out](commands.md#what-an-export-leaves-out-hnd-6)). An export
-that would hold no wall, room or fixture is refused, and nothing is written.
+that would hold no wall, room or fixture is refused, and nothing is written. `approximated` lists
+the curved walls, and the rooms along them, that the file writes with their curve as straight
+pieces (CNT-18), each with its `kind`, `id` and `floor`; empty for a plan with no curved wall.
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.
@@ -139,6 +141,18 @@ say a plan complies, is approved, meets code or has passed anything; give each f
 figure used here, with its basis and its status. The plugin's skill carries the same words.
 `npm run retell` scores how well a model keeps to them (see the scoreboard's
 [README](../scoreboard/README.md#the-retelling-set)).
+
+## The person's language
+
+`grid_check`, `grid_describe`, `grid_view` and `grid_sheet` take `language` (`en` or `es`; the
+plan's own `display.language` when left out): Grid's own words, the label first, come back in that
+language, with its decimal mark (MSG-11). The codes, kinds, ids, figures and each line's `values`
+are the same in every language, so an agent can retell a result in any language from the codes
+and values. Room names stay as written. The tools' own descriptions stay in English. For
+`grid_view`, the picture's words follow the language (a plan's key and marks, a facade's or a
+section's title, caption, level names and list of what Grid took); the answer's text stays the
+tool's English, and a section's `assumed` keeps its English `words`. The Spanish words are a draft
+translation, not reviewed yet ([Languages](languages.md)).
 
 ## A camera you can set, and saved views
 

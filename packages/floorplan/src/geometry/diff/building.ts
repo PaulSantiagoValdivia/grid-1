@@ -440,6 +440,11 @@ export function compareBuildings(earlierStated: FloorPlan, laterStated: FloorPla
     range('width')
     range('height')
     range('sill')
+    // CNT-14: a door or window of another kind, or another part that opens.
+    if ((before.kind ?? null) !== (opening.kind ?? null)) words.push(opening.kind === undefined ? `no kind stated now (was ${before.kind})` : `now ${opening.kind}${before.kind === undefined ? '' : ` (was ${before.kind})`}`)
+    const part = (o: Opening): string => (o.opens === undefined ? 'the whole of it' : `${metresText(o.opens.width)}${o.opens.height === undefined ? '' : ` × ${metresText(o.opens.height)}`} m`)
+    const partMoved = (a: number | undefined, b: number | undefined): boolean => (a === undefined) !== (b === undefined) || (a !== undefined && b !== undefined && Math.abs(a - b) > tolerance('diffLength'))
+    if (partMoved(before.opens?.width, opening.opens?.width) || partMoved(before.opens?.height, opening.opens?.height)) words.push(`part that opens ${part(before)} → ${part(opening)}`)
     const handBefore = handing(before, wallsBefore.get(before.wall))
     const handAfter = handing(opening, wallsAfter.get(opening.wall))
     if (!sameWay(handBefore.hinge, handAfter.hinge)) words.push(opening.hinge === undefined ? 'hinge no longer stated' : before.hinge === undefined ? 'hinge now stated' : 'hung from the other jamb')

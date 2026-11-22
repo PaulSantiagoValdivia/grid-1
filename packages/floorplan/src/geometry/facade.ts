@@ -30,7 +30,8 @@
  * `outline` is the facade's silhouette above the ground. Stairs stand inside the building and are
  * not seen.
  *
- * Opening patterns (C12) are expanded first (`withPatterns`). Pure, and never throws.
+ * Opening patterns (C12) are expanded first (`withPatterns`). A curved wall (C21) is seen by the
+ * straight pieces the outline follows it by, each standing for the wall. Pure, and never throws.
  */
 
 import { planInState } from './phases'
@@ -48,6 +49,8 @@ import { tolerance } from './tolerances'
 import { brokenOnFloor } from './validate'
 import { planeAt, topAt, wallTopProfile } from './roofs'
 import type { Vec2 } from './vec2'
+import { straightPieces, wallPointAt } from './wall'
+import { curveFault, wallCurve } from './arc'
 
 /** The sides a facade is drawn for: the drawing's four (C4). */
 export const FACADE_SIDES = COMPASS_SIDES
@@ -222,7 +225,7 @@ interface Cover {
 }
 
 /** The walls whose face lies on the edge, and where along it. */
-function coversOf(edge: { a: Vec2; e: Vec2; length: number }, walls: readonly Wall[]): Cover[] {
+function coversOf(edge: { a: Vec2; e: Vec2; length: number }, walls: readonly Wall[], owners: ReadonlyMap<Wall, Wall> = new Map()): Cover[] {
   const near = tolerance('facadeOnFace')
   const outward = { x: edge.e.y, y: -edge.e.x }
   const along = (p: Vec2): number => (p.x - edge.a.x) * edge.e.x + (p.y - edge.a.y) * edge.e.y
@@ -240,10 +243,16 @@ function coversOf(edge: { a: Vec2; e: Vec2; length: number }, walls: readonly Wa
     const half = (wall.thickness / 2) * sign
     const p = { x: sx + normal.x * half, y: sy + normal.y * half }
     const q = { x: wall.end[0] + normal.x * half, y: wall.end[1] + normal.y * half }
-    if (off(p) > near || off(q) > near) continue
+    // A piece of a curved wall lies on the curve, which bows off a straightened edge of the
+    // outline by up to the edge's sagitta (CNT-18).
+    const owner = owners.get(wall)
+    const curve = owner === undefined ? null : wallCurve(owner)
+    const bow = curve === null ? 0 : (edge.length * edge.length) / (8 * (curve.radius + owner!.thickness / 2))
+    if (off(p) > near + bow || off(q) > near + bow) continue
     const t0 = Math.max(0, Math.min(along(p), along(q)))
     const t1 = Math.min(edge.length, Math.max(along(p), along(q)))
-    if (t1 - t0 > tolerance('noLength')) covers.push({ wall, t0, t1 })
+    // A straight piece of a curved wall stands for the wall (CNT-18).
+    if (t1 - t0 > tolerance('noLength')) covers.push({ wall: owners.get(wall) ?? wall, t0, t1 })
   }
   return covers
 }
@@ -287,7 +296,7 @@ function stretchesOf(edge: { length: number }, covers: readonly Cover[], thickes
 function openingsIn(
   wall: Wall,
   openings: readonly Opening[],
-  edge: { a: Vec2; e: Vec2 },
+  edge: { a: Vec2; e: Vec2; length: number },
   stretch: { t0: number; t1: number },
   across: Vec2,
   floorLevel: number
@@ -297,13 +306,22 @@ function openingsIn(
   const dx = wall.end[0] - sx
   const dy = wall.end[1] - sy
   const length = Math.hypot(dx, dy)
-  const at = (s: number): Vec2 => ({ x: sx + (dx / length) * s, y: sy + (dy / length) * s })
+  // Along a curved wall's curve (CNT-18): its openings' edges are on the curve.
+  const at = (s: number): Vec2 => (wall.arc !== undefined ? wallPointAt(wall, s) : { x: sx + (dx / length) * s, y: sy + (dy / length) * s })
   const along = (p: Vec2): number => (p.x - edge.a.x) * edge.e.x + (p.y - edge.a.y) * edge.e.y
   const point = (t: number): Vec2 => ({ x: edge.a.x + edge.e.x * t, y: edge.a.y + edge.e.y * t })
   const out: FacadeOpening[] = []
   for (const opening of openings) {
     if (!Number.isFinite(opening.offset) || !Number.isFinite(opening.width)) continue
-    const middle = along(at(opening.offset + opening.width / 2))
+    const centre = at(opening.offset + opening.width / 2)
+    // On a curved wall, an opening is seen on the stretch of the outline beside it, not on every
+    // stretch its middle projects onto (CNT-18).
+    const curve = wallCurve(wall)
+    if (curve !== null) {
+      const off = Math.abs((centre.x - edge.a.x) * edge.e.y - (centre.y - edge.a.y) * edge.e.x)
+      if (off > wall.thickness / 2 + tolerance('facadeOnFace') + (edge.length * edge.length) / (8 * (curve.radius + wall.thickness / 2))) continue
+    }
+    const middle = along(centre)
     if (middle < stretch.t0 - tolerance('noLength') || middle > stretch.t1 + tolerance('noLength')) continue
     const ends = [along(at(opening.offset)), along(at(opening.offset + opening.width))].map((t) => dot(point(t), across))
     out.push({
@@ -425,7 +443,17 @@ export function planFacade(stated: FloorPlan, side: FacadeSide): Facade {
     if (env === undefined || env.outline === null || env.outline.length === 0 || storey === undefined) continue
     const slice = planForFloor(plan, floor.id)
     const broken = brokenOnFloor(slice)
-    const walls = slice.walls.filter((w) => w.virtual !== true && !broken.has(w.id) && isFiniteWall(w) && w.thickness > 0 && (w.start[0] !== w.end[0] || w.start[1] !== w.end[1]))
+    const walls = slice.walls.filter(
+      (w) => w.virtual !== true && !broken.has(w.id) && isFiniteWall(w) && w.thickness > 0 && (w.arc !== undefined ? curveFault(w) === null : w.start[0] !== w.end[0] || w.start[1] !== w.end[1])
+    )
+    // CNT-18: a curved wall's face is found along the outline by its straight pieces, each standing for it.
+    const owners = new Map<Wall, Wall>()
+    const faces = walls.flatMap((w) => {
+      if (w.arc === undefined) return [w]
+      const pieces = straightPieces(w)
+      for (const piece of pieces) owners.set(piece, w)
+      return pieces
+    })
     const thickest = Math.max(0, ...walls.map((w) => w.thickness))
     const openingsOf = new Map<string, Opening[]>()
     for (const opening of slice.openings) {
@@ -434,7 +462,7 @@ export function planFacade(stated: FloorPlan, side: FacadeSide): Facade {
     }
     const edges = edgesFacing(env.outline, direction)
     for (const edge of edges) {
-      for (const stretch of stretchesOf(edge, coversOf(edge, walls), thickest)) {
+      for (const stretch of stretchesOf(edge, coversOf(edge, faces, owners), thickest)) {
         add({
           kind: 'wall',
           floor: floor.id,

@@ -37,7 +37,9 @@ export function baseRefusal(touched: readonly string[], file: string): string {
 }
 
 /** What a change to an opening alters of the opening itself, rather than how it is hung or kept. */
-const SHAPE_KEYS: readonly (keyof OpeningChange)[] = ['offset', 'width', 'height', 'sill', 'type', 'wall']
+// CNT-14: a door or window of another kind is another door or window, so its old self is kept too;
+// a door rehung (`hinge`, `swing`) is the same door.
+const SHAPE_KEYS: readonly (keyof OpeningChange)[] = ['offset', 'width', 'height', 'sill', 'type', 'wall', 'kind']
 
 /** An id the plan does not use: `<id>-before`, then `-before-2` and on. */
 function freeId(taken: Set<string>, id: string): string {
@@ -47,11 +49,15 @@ function freeId(taken: Set<string>, id: string): string {
   return next
 }
 
-/** Whether a wall lies along another, on its line and within its length: a piece it was cut into. */
+/**
+ * Whether a wall lies along another, on its line and within its length: a piece it was cut into.
+ * No edit cuts a curved wall (CNT-18, `refuseCurved`), so nothing is a piece of one: taken out,
+ * it stays, to be demolished.
+ */
 function pieceOf(piece: RawRecord, wall: Wall): boolean {
   const start = piece['start'] as [number, number] | undefined
   const end = piece['end'] as [number, number] | undefined
-  if (start === undefined || end === undefined) return false
+  if (start === undefined || end === undefined || wall.arc !== undefined) return false
   const axis = wallAxis(wall)
   const near = (p: [number, number]): boolean => {
     const dx = p[0] - axis.start.x

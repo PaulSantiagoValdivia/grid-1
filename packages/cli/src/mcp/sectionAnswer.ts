@@ -8,13 +8,15 @@ import { levelText, type SectionLine } from '@ongrid/floorplan/geometry/section'
 import { sectionView } from '../draw/views'
 import { namedLook, type LookName } from '../draw/viewNames'
 import { m, type Answer } from './toolkit'
+import type { Language } from '@ongrid/floorplan/messages'
 
 const q = (text: string): string => JSON.stringify(text)
 const count = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`
 
-export async function sectionAnswer(plan: FloorPlan, line: SectionLine, asked: LookName): Promise<Answer> {
+/** MSG-11: the picture's own words are in `language`; the answer's text stays the tool's English, as a facade's does. */
+export async function sectionAnswer(plan: FloorPlan, line: SectionLine, asked: LookName, language?: Language): Promise<Answer> {
   const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`
-  const view = await sectionView(plan, line, asked)
+  const view = await sectionView(plan, line, asked, language)
   const { section } = view
   const walls = section.parts.filter((p) => p.kind === 'wall').length
   const stairs = section.parts.filter((p) => p.kind === 'stair').length

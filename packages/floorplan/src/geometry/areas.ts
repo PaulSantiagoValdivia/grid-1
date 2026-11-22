@@ -41,6 +41,8 @@ import { planFlats } from './flats'
 import { statedOutline } from './massing'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
+import { wallLength, wallSegments } from './wall'
+import { curveFault } from './arc'
 
 /** The three measures, and the floor by headroom band (LVL-6). */
 export type Measure = 'net' | 'grossInternal' | 'grossExternal' | 'headroom'
@@ -266,7 +268,7 @@ export function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<s
   return wallsOnFloor(plan, floor).filter(
     (wall) =>
       !broken.has(wall.id) &&
-      (wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
+      (wall.arc !== undefined ? curveFault(wall) === null : wall.start[0] !== wall.end[0] || wall.start[1] !== wall.end[1]) &&
       (wall.virtual === true || wall.thickness > 0)
   )
 }
@@ -306,25 +308,36 @@ interface Run {
   readonly start: Vec2
   readonly dir: Vec2
   readonly length: number
+  /** Where the run lies along its wall's axis: all of a straight wall, one chord of a curve. */
+  readonly from: number
+  readonly to: number
 }
 
+/** Each wall as runs: a straight wall one, a curved wall one per chord (CNT-18). */
 const runsOf = (walls: readonly Wall[]): Run[] =>
-  walls.map((wall) => {
-    const start = { x: wall.start[0], y: wall.start[1] }
-    const dx = wall.end[0] - start.x
-    const dy = wall.end[1] - start.y
-    const length = Math.hypot(dx, dy)
-    return { wall, start, dir: { x: dx / length, y: dy / length }, length }
-  })
+  walls.flatMap((wall) =>
+    wallSegments(wall).map((segment) => ({ wall, start: segment.start, dir: segment.dir, length: segment.length, from: segment.from, to: segment.to }))
+  )
 
 /**
  * The stretches of the solid walls that face outside, as strips, with the corners made good
  * between two of them (MSG-13): what gross internal takes off the outline, and what a parapet
- * stands on (LVL-4). Empty when no wall faces outside.
+ * stands on (LVL-4). Empty when no wall faces outside. A curved wall's stretches, along its
+ * curve, are cut by its chords, each strip along its own chord.
  */
 function outerStrips(runs: readonly Run[], sides: ReadonlyMap<string, WallSides>, lineHalf: number, snap: (v: number) => number): Polygon[] {
   const join = tolerance('gap')
-  const outer = runs.filter((r) => r.wall.virtual !== true).flatMap((r) => outerStretches(sides.get(r.wall.id), r.length).map((s) => ({ run: r, s })))
+  const outer = runs
+    .filter((r) => r.wall.virtual !== true)
+    .flatMap((r) => {
+      const whole = r.wall.arc === undefined ? r.length : wallLength(r.wall)
+      const scale = r.to - r.from === 0 ? 1 : r.length / (r.to - r.from)
+      return outerStretches(sides.get(r.wall.id), whole).flatMap(([from, to]): { run: Run; s: readonly [number, number] }[] => {
+        const a = Math.max(from, r.from)
+        const b = Math.min(to, r.to)
+        return b - a > tolerance('noLength') ? [{ run: r, s: [(a - r.from) * scale, (b - r.from) * scale] as const }] : []
+      })
+    })
   const cuts: Polygon[] = outer.map(({ run, s: [from, to] }) => {
     const a = from <= tolerance('noLength') ? -join : from
     const b = to >= run.length - tolerance('noLength') ? run.length + join : to
@@ -337,9 +350,10 @@ function outerStrips(runs: readonly Run[], sides: ReadonlyMap<string, WallSides>
   return cuts
 }
 
+/** How far the walls reach from the origin, along a curve too. */
 const reachOf = (walls: readonly Wall[]): number => {
   let reach = 0
-  for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
+  for (const run of runsOf(walls)) reach = Math.max(reach, Math.abs(run.start.x), Math.abs(run.start.y), Math.abs(run.start.x + run.dir.x * run.length), Math.abs(run.start.y + run.dir.y * run.length))
   return reach
 }
 

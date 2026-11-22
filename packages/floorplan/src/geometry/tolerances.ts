@@ -72,6 +72,47 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Curved walls (CNT-18) ─────────────────────────────────────────────────────────────────
+  arcEnds: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'How far a curved wall\'s end may lie from where its sweep takes its start round its centre, ' +
+      'and how far the two ends may differ in their distance from the centre, and still be one ' +
+      'arc; further, `wall/arc-ends-apart` names the wall and where its end should be.',
+    basis: own
+  },
+  arcSagitta: {
+    kind: 'tolerance',
+    value: 0.001,
+    unit: 'm',
+    decides:
+      'How far the straight pieces a curved wall is traced, checked and drawn with may stand off ' +
+      'its curve at their middle. Smaller pieces are taken where this alone would leave too few ' +
+      '(`arcStep`).',
+    basis: own
+  },
+  arcStep: {
+    kind: 'tolerance',
+    value: 0.03,
+    unit: 'radian',
+    decides:
+      'The most a curved wall turns through along one of its straight pieces, so that a small ' +
+      'round room measures within a few hundredths of a percent of its true area: a straight ' +
+      'piece cuts off a sliver of the curve, and the sliver shrinks with the square of this.',
+    basis: own
+  },
+  arcPiecesMost: {
+    kind: 'limit',
+    value: 1000,
+    unit: 'count',
+    decides:
+      'The most straight pieces one curved wall is traced with; a curve longer than these pieces ' +
+      'can follow within `arcSagitta` is traced with this many, a little further off it.',
+    basis: own
+  },
+
   // ── Walls that meet ───────────────────────────────────────────────────────────────────────
   gap: {
     kind: 'tolerance',
@@ -743,6 +784,60 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Kinds of door and window (CNT-14) ─────────────────────────────────────────────────────
+  wideSingleLeaf: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'A door at least this wide that states no kind is taken as one swinging leaf, as every door ' +
+      'without one is, and is asked about (`opening/wide-single-leaf`): a leaf this wide is rare, ' +
+      'and the door may be a pair, a sliding, folding, roller or garage door. It only asks.',
+    basis: own
+  },
+  foldingPanel: {
+    kind: 'limit',
+    value: 0.6,
+    unit: 'm',
+    decides:
+      'The widest panel a folding door is drawn and checked with: it folds in as many panels as ' +
+      'this needs, two at least, and sweeps a strip as deep as one panel on the face it opens to.',
+    basis: own
+  },
+  frameFace: {
+    kind: 'limit',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'How wide the frame round a door or window, and round each part of a window that opens, is ' +
+      'drawn in 3D. The plan holds no frame: it only draws the model.',
+    basis: own
+  },
+  frameDepth: {
+    kind: 'limit',
+    value: 0.07,
+    unit: 'm',
+    decides:
+      'How deep a window\'s frame is drawn in 3D, in the middle of its wall (no deeper than the ' +
+      'wall). A door\'s frame lines the whole depth of its wall. It only draws the model.',
+    basis: own
+  },
+  leafThickness: {
+    kind: 'limit',
+    value: 0.04,
+    unit: 'm',
+    decides:
+      'How thick a door leaf or panel is drawn in 3D, hung from the face of the wall it opens ' +
+      'toward. It only draws the model.',
+    basis: own
+  },
+  glassThickness: {
+    kind: 'limit',
+    value: 0.02,
+    unit: 'm',
+    decides: 'How thick a window\'s glass is drawn in 3D, in the middle of its frame. It only draws the model.',
+    basis: own
+  },
   // ── Facades and opening patterns (LVL-8) ──────────────────────────────────────────────────
   facadeFacing: {
     kind: 'tolerance',

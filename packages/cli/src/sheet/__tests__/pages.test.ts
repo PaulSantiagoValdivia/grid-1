@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { floorOf, planFloors, validatePlan } from '@ongrid/floorplan/geometry'
 import { areaText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import { said } from '@ongrid/floorplan/messages'
 import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { checkOnFloor, checkPlan, NOTHING_FOUND } from '../../command/check'
 import type { LoadedPlan } from '../../command/plan'
@@ -191,7 +192,7 @@ describe('the check layout (VEW-7)', () => {
   })
 
   it('lists a drawing problem on no floor once, on the summary', () => {
-    const issue = { code: 'test', entity: 'plan' as const, id: 'p', message: 'A plan-wide problem.', severity: 'warning' as const }
+    const issue = { code: 'test', entity: 'plan' as const, id: 'p', message: 'A plan-wide problem.', said: said('issue.part.error', { error: 'A plan-wide problem.' }), severity: 'warning' as const }
     const loaded: LoadedPlan = { ...house, issues: [...house.issues, issue] }
     const made = sheetPages(loaded, null, 'check', { name: 'x', date })
     const line = 'Worth a look, plan "p": A plan-wide problem.'

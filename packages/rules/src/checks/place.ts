@@ -14,7 +14,8 @@
 
 import type { FloorPlan } from '@ongrid/floorplan/geometry'
 import { countryName, countryOf, PLACE_TEXT_MAX } from '@ongrid/floorplan/types/places'
-import { messages } from './messages'
+import type { Said } from '@ongrid/floorplan/messages'
+import { messages, saids } from './messages'
 
 /** Where the place came from: the caller's request, the plan, or assumed when neither states one. */
 export type PlaceFrom = 'request' | 'plan' | 'assumed'
@@ -80,4 +81,9 @@ export function placeFor(
 /** COD-3: what a report says when no place is stated: no figure was applied, and how many lines the US figures would have given. */
 export function noPlaceText(usLines: number): string {
   return messages.noPlace(usLines)
+}
+
+/** The same, by its key and values (MSG-11), to say in any language. */
+export function noPlaceSaid(usLines: number): Said {
+  return saids.noPlace(usLines)
 }

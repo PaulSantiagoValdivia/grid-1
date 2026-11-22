@@ -10,6 +10,7 @@
  * Pure: text and numbers in, text and numbers out.
  */
 import { limit, tolerance } from '../geometry/tolerances'
+import { LANGUAGE_DECIMAL, type Language } from '../messages/languages'
 
 export const LENGTH_UNITS = ['m', 'cm', 'mm', 'ft-in'] as const
 export type LengthUnit = (typeof LENGTH_UNITS)[number]
@@ -28,6 +29,8 @@ export interface Display {
    * inches, the inch is split into 2 ** precision parts (0: whole inches, 1: halves, 3: eighths).
    */
   readonly precision?: number
+  /** MSG-11: the language Grid's words are written in; English when not given. */
+  readonly language?: Language
 }
 
 export const METRES: Display = { length: 'm', area: 'm2', decimal: 'point' }
@@ -161,6 +164,17 @@ export function displayOf(length: LengthUnit, decimal: DecimalMark = 'point', ar
   return { length, area: area ?? (length === 'ft-in' ? 'ft2' : 'm2'), decimal, ...(precision !== undefined ? { precision } : {}) }
 }
 
+/**
+ * MSG-11: the display a plan's own `display` states: metres when it names no length unit, and a
+ * language's own decimal mark (a comma for Spanish) unless it names one.
+ */
+export function statedDisplay(stated: { readonly length?: LengthUnit | undefined; readonly area?: AreaUnit | undefined; readonly decimal?: DecimalMark | undefined; readonly precision?: number | undefined; readonly language?: Language | undefined }): Display {
+  const length = stated.length ?? 'm'
+  const decimal = stated.decimal ?? LANGUAGE_DECIMAL[stated.language ?? 'en']
+  const display = displayOf(length, decimal, stated.area, stated.precision)
+  return stated.language === undefined ? display : { ...display, language: stated.language }
+}
+
 /** The units a plan file may state for its lengths, with metres per unit. Grid writes metres. */
 export const FILE_UNITS: Readonly<Record<string, { metres: number; name: string }>> = {
   m: { metres: 1, name: 'metres' },
@@ -173,12 +187,23 @@ export const FILE_UNITS: Readonly<Record<string, { metres: number; name: string 
 /** Every length a plan file holds, by list: the fields, and those that are a point or a pair. */
 const LENGTH_FIELDS: Readonly<Record<string, readonly string[]>> = {
   walls: ['start', 'end', 'thickness', 'height'],
-  openings: ['offset', 'width', 'sill', 'height'],
+  // CNT-14: the part of a door or window that opens is a length too.
+  openings: ['offset', 'width', 'sill', 'height', 'opens.width', 'opens.height'],
   rooms: ['height', 'floorOffset'],
   floors: ['elevation', 'height', 'slab'],
   items: ['at', 'size', 'height'],
   // LVL-8: an opening pattern's spacing, and the lengths of the opening and the margins in it.
-  patterns: ['spacing', 'opening.width', 'opening.sill', 'opening.height', 'margins.start', 'margins.end'],
+  patterns: ['spacing', 'opening.width', 'opening.sill', 'opening.height', 'opening.opens.width', 'opening.opens.height', 'margins.start', 'margins.end'],
+}
+
+/** `part` with the length at `path` (a field, or a field inside a field) scaled, when it is there. */
+function scaledAt(part: Record<string, unknown>, path: readonly string[], scaled: (v: unknown) => unknown): Record<string, unknown> {
+  const [head, ...rest] = path as [string, ...string[]]
+  if (!(head in part)) return part
+  if (rest.length === 0) return { ...part, [head]: scaled(part[head]) }
+  const nested = part[head]
+  if (typeof nested !== 'object' || nested === null || Array.isArray(nested)) return part
+  return { ...part, [head]: scaledAt(nested as Record<string, unknown>, rest, scaled) }
 }
 
 /**
@@ -200,16 +225,8 @@ export function planInMetres<T>(raw: T): { raw: T; from: string | null } {
     if (!Array.isArray(plan[list])) continue
     out[list] = (plan[list] as unknown[]).map((part) => {
       if (typeof part !== 'object' || part === null || Array.isArray(part)) return part
-      const next: Record<string, unknown> = { ...(part as Record<string, unknown>) }
-      for (const field of fields) {
-        const [outer, inner] = field.split('.') as [string, string | undefined]
-        if (inner === undefined) {
-          if (outer in next) next[outer] = scaled(next[outer])
-          continue
-        }
-        const nested = next[outer]
-        if (typeof nested === 'object' && nested !== null && !Array.isArray(nested) && inner in nested) next[outer] = { ...(nested as Record<string, unknown>), [inner]: scaled((nested as Record<string, unknown>)[inner]) }
-      }
+      let next: Record<string, unknown> = { ...(part as Record<string, unknown>) }
+      for (const field of fields) next = scaledAt(next, field.split('.'), scaled)
       return next
     })
   }

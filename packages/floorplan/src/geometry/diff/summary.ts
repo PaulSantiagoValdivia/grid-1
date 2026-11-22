@@ -89,6 +89,9 @@ export function makeSummarizer(base: FloorPlan, head: FloorPlan): Summarizer {
     if (virtual) parts.push(virtual.after === true ? 'made virtual' : 'made solid')
     const floor = prop(change, 'floor')
     if (floor) parts.push(`moved to ${quoted(floorName(text(floor.after)))}`)
+    // CNT-18: a wall made curved, made straight, or curved another way.
+    const arc = prop(change, 'arc')
+    if (arc) parts.push(arc.before === null ? 'made curved' : arc.after === null ? 'made straight' : 'curve changed')
     return `Wall ${parts.join('; ')}`
   }
 

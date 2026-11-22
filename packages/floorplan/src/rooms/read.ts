@@ -16,8 +16,10 @@
 import { heightByDefault, safeParseFloorPlan, statedWall, type FloorPlan, type Opening, type Room, type Wall } from '../types/floorplan'
 import { indexPlan } from '../geometry/plan'
 import { planFloors } from '../geometry/floors'
+import { english, said } from '../messages/say'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
+import { doorKindOf, kindFits, sweepsFloor, swingNeeds } from '../geometry/openingKinds'
 import { compileRoomsText, RAW_FLOOR_KEYS, type RoomsResult } from './compile'
 import { planRevision } from './stamp'
 import { metres } from './words'
@@ -140,7 +142,9 @@ function openingDiffers(a: Opening, b: Opening): string | null {
   if (!sameNumber(a.offset, b.offset) || !sameNumber(a.width, b.width)) return 'stands elsewhere along its wall'
   if (!sameNumber(a.sill, b.sill) || !sameNumber(a.height, b.height)) return 'has another sill or height'
   if (a.hinge !== b.hinge || a.swing !== b.swing) return 'hangs or swings another way'
-  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing', ...FACTS_CARRIED])
+  if (a.kind !== b.kind) return 'is of another kind'
+  if (!sameNumber(a.opens?.width ?? 0, b.opens?.width ?? 0) || !sameNumber(a.opens?.height ?? 0, b.opens?.height ?? 0)) return 'opens in another part'
+  return otherKeys(a, b, ['id', 'wall', 'type', 'offset', 'width', 'sill', 'height', 'hinge', 'swing', 'kind', 'opens', ...FACTS_CARRIED])
 }
 
 interface Difference {
@@ -357,14 +361,26 @@ function openingLine(o: Opening, wall: Wall, plan: FloorPlan, polys: Map<string,
     if (!sameNumber(o.sill, 0)) line += `, sill ${metres(o.sill)}`
     if (!sameNumber(o.height, rule.doorH)) line += `, height ${metres(o.height)}`
   }
+  // CNT-14: its kind and the part that opens. A kind its type does not take cannot be written.
+  if (o.kind !== undefined) {
+    if (!kindFits(o.type, o.kind)) return null
+    line += `, ${o.kind}`
+  }
+  if (o.opens !== undefined) line += `, part ${metres(o.opens.width)}${o.opens.height !== undefined ? ` x ${metres(o.opens.height)}` : ''}`
   if (o.type === 'door') {
-    if (o.swing === undefined && o.hinge === undefined) line += ', no-swing'
-    else if (o.swing === undefined || o.hinge === undefined) return null
+    const kind = doorKindOf(o.kind)
+    // A pair needs only the face it opens to; a door that slides, rolls or lifts, neither.
+    const needs = swingNeeds(kind)
+    const into = o.swing === undefined ? undefined : o.swing === 'left' ? left : right
+    const hingeDir: P = o.hinge === 'start' ? [-dir[0], -dir[1]] : dir
+    if (!sweepsFloor(kind)) {
+      if (into !== undefined) line += into === null ? ', opens out' : `, opens into ${local.get(into) ?? into}`
+      if (o.hinge !== undefined) line += `, hinged ${compassOf(hingeDir, DIRS)}`
+    } else if (o.swing === undefined && o.hinge === undefined) line += ', no-swing'
+    else if (o.swing === undefined || (needs.hinge && o.hinge === undefined)) return null
     else {
-      const into = o.swing === 'left' ? left : right
-      line += into === null ? ', opens out' : `, opens into ${local.get(into) ?? into}`
-      const hingeDir: P = o.hinge === 'start' ? [-dir[0], -dir[1]] : dir
-      line += `, hinged ${compassOf(hingeDir, DIRS)}`
+      line += into === null || into === undefined ? ', opens out' : `, opens into ${local.get(into) ?? into}`
+      if (o.hinge !== undefined) line += `, hinged ${compassOf(hingeDir, DIRS)}`
     }
   }
   return line
@@ -640,6 +656,14 @@ export function readRoomsText(plan: FloorPlan, options: ReadOptions = {}): Rooms
   let changes: string[] = []
   if (plan.walls.length + plan.rooms.length + plan.openings.length === 0) {
     return { text: textOf(plan, rule, options.name, drafts, raw), rawFloors: [], rawOpenings: [], changes: [] }
+  }
+  // CNT-18: rooms text writes straight walls. A floor with a curved wall is given in Grid's own
+  // terms, which keep the curve, whatever was asked for, so writing it again loses nothing.
+  for (const wall of plan.walls) {
+    const floor = floorOf(wall)
+    if (wall.arc === undefined || raw.has(floor) || !floors.includes(floor)) continue
+    raw.add(floor)
+    why.set(floor, english(said('describe.rooms.curved', { wall: quote(wall.id) })))
   }
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
     const text = textOf(plan, rule, options.name, drafts, raw)

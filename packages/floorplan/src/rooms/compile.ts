@@ -39,6 +39,10 @@
  *   door|window|opening <id> in <room> <side>, <place>, <w> wide [...]
  *       <place>: centred | <m> from <north|south|east|west> [of <room>]
  *       then:    sill <m>, height <m>, opens into <room>|in|out, hinged <direction>, no-swing
+ *                hinged left|right [seen from <room>|outside]  as seen from the room it opens into
+ *                unless named (CNT-14); a kind: single, double, sliding, pocket, folding, roller,
+ *                garage (doors), single, double, sliding, fixed, high-level (windows); and
+ *                part <w> [x <h>], the part that opens
  *   unit <name> [setting=default ...] ... end      rooms and openings written once
  *   unit <name> flat "<type name>" ["<flat name>"] [setting=default ...] ... end
  *       a flat type (CNT-4): every placement of it is a flat of that type in the plan's flats,
@@ -64,7 +68,9 @@
  *
  * Pure: text in, a plan and a report out. Nothing here reads or writes a file.
  */
-import { BUILDING_TYPES, ROOM_TENURES, ROOM_USES, WALL_DEFAULTS, WallKindSchema, readUse, type BuildingType, type FloorPlan, type Opening, type Room, type RoomTenure, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
+import { BUILDING_TYPES, DOOR_KINDS, OPENING_KINDS, ROOM_TENURES, ROOM_USES, WALL_DEFAULTS, WINDOW_KINDS, WallKindSchema, readUse, type BuildingType, type FloorPlan, type Opening, type OpeningKind, type Room, type RoomTenure, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
+import { doorKindOf, kindFits, sweepsFloor } from '../geometry/openingKinds'
+import { hingeSeenFrom } from '../geometry/handing'
 import { indexPlan } from '../geometry/plan'
 import { tryRoomPolygon } from '../geometry/room'
 import { tolerance } from '../geometry/tolerances'
@@ -1851,6 +1857,10 @@ class Compiler {
     let height: number | null = null
     let opens: string | null = null
     let hinged: string | null = null
+    // CNT-14: its kind, the side it is hinged on as seen from a room, and the part that opens.
+    let openingKind: OpeningKind | null = null
+    let seenFrom: string | null = null
+    let part: { width: number; height?: number } | null = null
     while (i < t.length) {
       const w = t[i]!
       if (w === 'centred' || w === 'centered') {
@@ -1889,13 +1899,33 @@ class Compiler {
       } else if (w === 'hinged' && i + 1 < t.length) {
         hinged = t[i + 1]!
         i += 2
-      } else if (w === 'sliding') {
-        this.stop('rooms/syntax', at, `line ${at}: Grid has no sliding door (only a hinged door, a window, or an opening with no door). Write it as an 'opening' and say so in the room's name, or as a door with a swing.`)
+        // CNT-14: 'hinged left|right', as seen from the room it opens into unless 'seen from <room>' says.
+        const seen = t[i] === 'as' && t[i + 1] === 'seen' && t[i + 2] === 'from' ? 3 : t[i] === 'seen' && t[i + 1] === 'from' ? 2 : 0
+        if (seen > 0) {
+          if (hinged !== 'left' && hinged !== 'right') this.stop('rooms/syntax', at, `line ${at}: 'seen from' goes with 'hinged left' or 'hinged right'.`)
+          if (i + seen >= t.length) this.stop('rooms/syntax', at, `line ${at}: write 'seen from <room>' or 'seen from outside'.`)
+          seenFrom = t[i + seen]!
+          i += seen + 1
+        }
+      } else if ((OPENING_KINDS as readonly string[]).includes(w)) {
+        if (kind === 'opening' || !kindFits(kind, w)) {
+          this.stop('rooms/syntax', at, `line ${at}: a ${kind === 'opening' ? 'doorless opening' : kind} cannot be '${w}'. ${kind === 'window' ? `A window is ${WINDOW_KINDS.join(', ')}` : kind === 'door' ? `A door is ${DOOR_KINDS.join(', ')}` : 'An opening has no kind'}.`)
+        }
+        if (openingKind !== null) this.stop('rooms/syntax', at, `line ${at}: ${kind} '${oid}' is given two kinds, '${openingKind}' and '${w}'.`)
+        openingKind = w as OpeningKind
+        i++
+      } else if (w === 'part' && i + 1 < t.length) {
+        part = { width: numberOf(t[i + 1]!, at) }
+        i += 2
+        if (t[i] === 'x' && i + 1 < t.length) {
+          part = { ...part, height: numberOf(t[i + 1]!, at) }
+          i += 2
+        }
       } else {
         this.stop(
           'rooms/syntax',
           at,
-          `line ${at}: '${w}' is not understood on a ${kind} line. Write the place ('centred' or '<m> from <north|south|east|west> [of <room>]'), '<m> wide', and optionally 'sill <m>', 'height <m>', 'opens into <room>|out|in', 'hinged <north|south|east|west>', 'no-swing'.`
+          `line ${at}: '${w}' is not understood on a ${kind} line. Write the place ('centred' or '<m> from <north|south|east|west> [of <room>]'), '<m> wide', and optionally 'sill <m>', 'height <m>', 'opens into <room>|out|in', 'hinged <north|south|east|west>' or 'hinged left|right [seen from <room>]', 'no-swing', a kind (${OPENING_KINDS.join(', ')}) and 'part <m> [x <m>]'.`
         )
       }
     }
@@ -1973,12 +2003,19 @@ class Compiler {
       return null
     }
     const item: { -readonly [K in keyof Opening]: Opening[K] } = { id: oid, wall: w.id, type: kind, offset: r4(offset), width: r4(width), sill: openingSill, height: openingHeight }
+    if (openingKind !== null) item.kind = openingKind
+    if (part !== null) item.opens = { width: r4(part.width), ...(part.height !== undefined ? { height: r4(part.height) } : {}) }
+    // CNT-14: a door that slides, rolls or lifts needs no swing: nothing is guessed for it.
+    const swingless = kind === 'door' && !sweepsFloor(doorKindOf(openingKind))
     let said = ''
     if (kind === 'door' && opens === '<none') said = '; swing not decided (Grid draws a plain gap)'
+    else if (kind === 'door' && swingless && opens === null && hinged === null) said = `; ${openingKind}, which sweeps nothing`
     else if (kind === 'door') {
       const guessed: string[] = []
       let target: string | null
-      if (opens === null) {
+      if (opens === null && swingless) {
+        target = null
+      } else if (opens === null) {
         target = between ? between.B : e.room.id
         guessed.push(`opens into '${target}'`)
       } else if (opens === '<out') target = other.length > 0 ? other[0]!.id : null
@@ -1990,30 +2027,46 @@ class Compiler {
         }
       }
       const mid = mul(add(P0, P1), 0.5)
-      let tp: P
       const step = tolerance('stepPastFace')
-      if (target === null) tp = add(mid, mul(e.n, 1))
-      else if (target === e.room.id) tp = sub(mid, mul(e.n, step))
-      else tp = add(mid, mul(e.n, r.t + step))
-      item.swing = sideOf(tp) > 0 ? 'left' : 'right'
-      let hp: P
+      // The face of the wall a room is on: the room the line is in, another, or the outside (null).
+      const faceOf = (room: string | null): 'left' | 'right' => {
+        const tp = room === null ? add(mid, mul(e.n, 1)) : room === e.room.id ? sub(mid, mul(e.n, step)) : add(mid, mul(e.n, r.t + step))
+        return sideOf(tp) > 0 ? 'left' : 'right'
+      }
+      const stated = !(opens === null && swingless)
+      if (stated) item.swing = faceOf(target)
+      let hp: P | null
       if (hinged === null) {
-        if (fromEnd !== null) {
+        // A pair hangs from both jambs and a door that slides, rolls or lifts from neither: no guess.
+        if (openingKind === 'double' || swingless) hp = null
+        else if (fromEnd !== null) {
           hp = fromEnd === 'hi' ? P1 : P0
           guessed.push('hinged at the jamb nearer the corner it was measured from')
         } else {
           hp = o0 < o1 ? P0 : P1
           guessed.push("hinged at the jamb nearer the wall's start")
         }
+      } else if (hinged === 'left' || hinged === 'right') {
+        // CNT-14: as seen from a room, the room it opens into unless another is named.
+        let from: string | null = target
+        if (seenFrom !== null) {
+          from = seenFrom === 'outside' ? null : seenFrom
+          if (from !== null && !r.rooms.some((x) => x.id === from)) {
+            this.stop('rooms/door-side', at, `line ${at}: door '${oid}' cannot be seen from '${from}': it joins ${r.rooms.map((x) => x.id).join(' and ')}${other.length > 0 ? '' : ' and the outside'}.`)
+          }
+        } else if (!stated) {
+          this.stop('rooms/syntax', at, `line ${at}: 'hinged ${hinged}' needs a room to see it from: write 'opens into <room>' or 'hinged ${hinged} seen from <room>'.`)
+        }
+        hp = hingeSeenFrom(faceOf(from), hinged) === 'start' ? (o0 < o1 ? P0 : P1) : o0 < o1 ? P1 : P0
       } else {
         if (!Object.hasOwn(COMPASS, hinged) || Math.abs(dot(u, COMPASS[hinged]!)) < 0.3) {
-          this.stop('rooms/syntax', at, `line ${at}: 'hinged ${hinged}' does not name one end of this wall. Use one of the two directions the wall runs in.`)
+          this.stop('rooms/syntax', at, `line ${at}: 'hinged ${hinged}' does not name one end of this wall. Use one of the two directions the wall runs in, or left or right.`)
         }
         hp = dot(u, COMPASS[hinged]!) > 0 ? P1 : P0
       }
-      item.hinge = Math.abs(param(hp) - offset) < eps() ? 'start' : 'end'
+      if (hp !== null) item.hinge = Math.abs(param(hp) - offset) < eps() ? 'start' : 'end'
       if (guessed.length > 0) this.guesses.push(`Line ${at}: door '${oid}' did not say everything, so: ${guessed.join('; ')}.`)
-      said = `; opens into ${target ?? 'the outside'}`
+      said = stated ? `; opens into ${target ?? 'the outside'}` : `; ${openingKind}, which sweeps nothing`
     }
     const joins = other.length > 0 ? `${e.room.id} and ${other[0]!.id}` : `${e.room.id} and the outside`
     const loName = compassOf([-u[0], -u[1]], DIRS)

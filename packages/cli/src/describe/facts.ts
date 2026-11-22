@@ -23,7 +23,10 @@ import {
   roomZones,
   sub,
   tolerance,
-  wallAxis,
+  wallCurve,
+  wallFrameAt,
+  wallLength,
+  wallSegments,
   type Floor,
   type FloorPlan,
   type Opening,
@@ -116,6 +119,8 @@ export interface WallFacts {
   readonly heightNotStated: boolean
   readonly kind: Wall['kind']
   readonly virtual: boolean
+  /** CNT-18: a curved wall's centre, radius, sweep in degrees and length along the curve. */
+  readonly curve?: { readonly centre: Vec2; readonly radius: number; readonly sweep: number; readonly length: number }
 }
 
 /** A floor laid out like an earlier one: same walls, rooms and openings, other ids. */
@@ -302,23 +307,40 @@ function shapeOf(polygon: readonly Vec2[], area: number): RoomShape {
  * they cover. `toward` is +1 for a room on the side the wall's normal points at, -1 for the other.
  */
 function faceStretches(wall: Wall, polygon: readonly Vec2[], toward: 1 | -1): Array<readonly [number, number]> {
-  const axis = wallAxis(wall)
   const half = wall.virtual === true ? 0 : wall.thickness / 2
-  const off = (point: Vec2): number => dot(sub(point, axis.start), axis.normal) * toward - half
   const stretches: Array<readonly [number, number]> = []
-  for (let i = 0; i < polygon.length; i++) {
-    const p = polygon[i]!
-    const q = polygon[(i + 1) % polygon.length]!
-    const edge = sub(q, p)
-    const length = Math.hypot(edge.x, edge.y)
-    if (length < tolerance('noLength')) continue
-    if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
-    if (Math.abs(off(p)) > ON_FACE_M || Math.abs(off(q)) > ON_FACE_M) continue
-    const a = dot(sub(p, axis.start), axis.dir)
-    const b = dot(sub(q, axis.start), axis.dir)
-    stretches.push([Math.min(a, b), Math.max(a, b)])
+  // A curved wall piece by piece (CNT-18): each stretch along the curve, where its piece is.
+  const curved = wall.arc !== undefined
+  for (const axis of wallSegments(wall)) {
+    const along = axis.length === 0 ? 1 : (axis.to - axis.from) / axis.length
+    const off = (point: Vec2): number => dot(sub(point, axis.start), axis.normal) * toward - half
+    for (let i = 0; i < polygon.length; i++) {
+      const p = polygon[i]!
+      const q = polygon[(i + 1) % polygon.length]!
+      const edge = sub(q, p)
+      const length = Math.hypot(edge.x, edge.y)
+      if (length < tolerance('noLength')) continue
+      if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
+      if (Math.abs(off(p)) > ON_FACE_M || Math.abs(off(q)) > ON_FACE_M) continue
+      let a = dot(sub(p, axis.start), axis.dir)
+      let b = dot(sub(q, axis.start), axis.dir)
+      if (curved) {
+        if (Math.max(a, b) < -ON_FACE_M || Math.min(a, b) > axis.length + ON_FACE_M) continue
+        a = axis.from + Math.min(Math.max(a, 0), axis.length) * along
+        b = axis.from + Math.min(Math.max(b, 0), axis.length) * along
+      }
+      stretches.push([Math.min(a, b), Math.max(a, b)])
+    }
   }
-  return stretches
+  if (!curved) return stretches
+  // Pieces in a row along the curve are one stretch.
+  const joined: Array<[number, number]> = []
+  for (const [lo, hi] of [...stretches].sort((x, y) => x[0] - y[0])) {
+    const last = joined.at(-1)
+    if (last !== undefined && lo <= last[1] + ON_FACE_M) last[1] = Math.max(last[1], hi)
+    else joined.push([lo, hi])
+  }
+  return joined
 }
 
 /** The stretch of the room's side on the wall's face that holds the point `along` the axis. */
@@ -333,7 +355,8 @@ function sideOf(
   toward: 1 | -1,
   outlines: ReadonlyMap<string, RoomOutline>,
 ): OpeningSide {
-  const axis = wallAxis(wall)
+  // Where the opening is: on a curved wall the way the curve runs at its middle (CNT-18).
+  const axis = wallFrameAt(wall, opening.offset + opening.width / 2)
   const inward = { x: -axis.normal.x * toward, y: -axis.normal.y * toward }
   const polygon = outlines.get(room)!.polygon
   const stretch = faceStretch(wall, polygon, toward, opening.offset + opening.width / 2)
@@ -341,13 +364,21 @@ function sideOf(
   return {
     room,
     face: compassOf(inward),
-    corners: stretch === null
+    // A whole circle has no corners to measure from (CNT-18).
+    corners: stretch === null || wallCurve(wall)?.closed === true
       ? null
       : [
           { toward: compassOf(back), distance: opening.offset - stretch[0] },
           { toward: compassOf(axis.dir), distance: stretch[1] - (opening.offset + opening.width) },
         ],
   }
+}
+
+/** CNT-18: a curved wall's curve, for its facts. */
+function curveFacts(wall: Wall): Pick<WallFacts, 'curve'> {
+  const curve = wallCurve(wall)
+  if (curve === null || wall.arc === undefined) return {}
+  return { curve: { centre: curve.centre, radius: curve.radius, sweep: wall.arc.sweep, length: curve.length } }
 }
 
 /** What is past an opening's side with no room on it, read as the way-out check reads it. */
@@ -391,7 +422,7 @@ function layoutOf(storey: FloorPlan): { key: string; ids: string[] } {
   const n = (value: number): string => value.toFixed(4)
   const wallKey = new Map<string, string>()
   for (const wall of storey.walls) {
-    wallKey.set(wall.id, [n(wall.start[0]), n(wall.start[1]), n(wall.end[0]), n(wall.end[1]), n(wall.thickness), n(wall.height), wall.kind, wall.virtual === true].join(','))
+    wallKey.set(wall.id, [n(wall.start[0]), n(wall.start[1]), n(wall.end[0]), n(wall.end[1]), n(wall.thickness), n(wall.height), wall.kind, wall.virtual === true, ...(wall.arc === undefined ? [] : [n(wall.arc.centre[0]), n(wall.arc.centre[1]), n(wall.arc.sweep)])].join(','))
   }
   const entries: Array<[string, string]> = [
     ...storey.walls.map((wall): [string, string] => [`w${wallKey.get(wall.id)}`, wall.id]),
@@ -400,7 +431,7 @@ function layoutOf(storey: FloorPlan): { key: string; ids: string[] } {
       room.id,
     ]),
     ...storey.openings.map((o): [string, string] => [
-      `o${[wallKey.get(o.wall), o.type, n(o.offset), n(o.width), n(o.sill), n(o.height), o.hinge ?? '', o.swing ?? ''].join(',')}`,
+      `o${[wallKey.get(o.wall), o.type, n(o.offset), n(o.width), n(o.sill), n(o.height), o.hinge ?? '', o.swing ?? '', o.kind ?? ''].join(',')}`,
       o.id,
     ]),
   ]
@@ -470,7 +501,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
   const openSides: OpenSide[] = []
   for (const wall of storey.walls) {
     if (wall.virtual !== true) continue
-    const [left, right] = sidesAt(wall, wallAxis(wall).length / 2, index, outlines)
+    const [left, right] = sidesAt(wall, wallLength(wall) / 2, index, outlines)
     if (left !== null && right !== null && left !== right) openSides.push({ wall: wall.id, rooms: [left, right] })
   }
 
@@ -483,6 +514,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     heightNotStated: heightByDefault(plan, wall),
     kind: wall.kind,
     virtual: wall.virtual === true,
+    ...curveFacts(wall),
   }))
 
   return {

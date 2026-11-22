@@ -11,7 +11,7 @@
 
 import * as THREE from 'three'
 import type { FloorPlan, Opening, Vec3 } from '@ongrid/floorplan/geometry'
-import { pointAlong, tolerance, wallAxis } from '@ongrid/floorplan/geometry'
+import { openingChord, tolerance } from '@ongrid/floorplan/geometry'
 import type { InFlight } from '../preview/playback'
 import { progressOf, removalProgress } from '../preview/progress'
 
@@ -69,9 +69,10 @@ export function slabOpacity(inFlight: readonly InFlight[], roomId: string): numb
  * model coordinates (z up). Highlighted while the opening's step plays.
  */
 export function openingOutline(opening: Opening, wall: Wall): Vec3[][] {
-  const axis = wallAxis(wall)
-  const a = pointAlong(axis, opening.offset)
-  const b = pointAlong(axis, opening.offset + opening.width)
+  // The hole is straight between its edges, on a curved wall the chord between them (CNT-18).
+  const axis = openingChord(wall, opening.offset, opening.offset + opening.width)
+  const a = axis.start
+  const b = axis.end
   const bottom = opening.sill
   const top = opening.sill + opening.height
   const reach = wall.thickness / 2 + OUTLINE_GAP

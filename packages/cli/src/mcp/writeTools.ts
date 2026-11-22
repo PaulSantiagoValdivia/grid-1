@@ -9,18 +9,20 @@
  */
 import { baseRefusal, baseTouched, phasedPatch } from '../edit/phases'
 import { planInMetres } from '@ongrid/floorplan/types/units'
+import { OPENING_KINDS, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { keptDerived, LAYOUT_SHAPES, type LayoutShape } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
-import { checkExportRequest, dxfProfileLine, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
+import { approximatedText, checkExportRequest, dxfProfileLine, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
 import { DXF_PROFILE_FILE, DxfProfileRefused } from '../export/dxfProfile'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, readingAfter, TURNS, turnPlanBy, type Direction, type From, type Mirror, type Patch, type Turn } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
+import { askedLanguage } from '../command/language'
 import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
 import { writeScanIntoProject } from '../command/scan'
 import type { SheetLayout } from '../sheet/pages'
@@ -28,7 +30,7 @@ import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
 import { ROOM_NAMES_TRAVEL } from './protocol'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan, type Survey } from '../quantities/survey'
-import { openingBetween } from './readTools'
+import { LANGUAGE_ARG, openingBetween } from './readTools'
 import { briefAnswer } from '../brief/answer'
 import { BRIEF_OUTPUT } from './briefTool'
 import { writeLayout } from '../brief/layout'
@@ -93,6 +95,8 @@ const exportTool: GridTool = {
     leftOutParts: listSchema(
       objectSchema({ kind: STRING, id: NULLABLE_STRING, place: NULLABLE_STRING, floor: NULLABLE_STRING, code: NULLABLE_STRING }, ['kind', 'id', 'place', 'floor', 'code'])
     ),
+    // CNT-18: the curved walls and the rooms along them the file writes as straight pieces.
+    approximated: listSchema(objectSchema({ kind: STRING, id: STRING, floor: NULLABLE_STRING }, ['kind', 'id', 'floor'])),
     note: { type: ['string', 'null'] },
     dxfProfile: { type: ['string', 'null'] },
   }),
@@ -113,9 +117,11 @@ const exportTool: GridTool = {
       // HND-6: what this file leaves out, which the file says too.
       const left = leftOutText(done.leftOut)
       if (left !== null) lines.push(left)
+      const curves = approximatedText(done.approximated)
+      if (curves !== null) lines.push(curves)
       // HND-1: a DXF names the project's profile when its layers and pens came from one.
       if (done.dxfProfile !== null) lines.push(dxfProfileLine(done.dxfProfile))
-      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, note: done.note ?? null, dxfProfile: done.dxfProfile } }
+      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, approximated: done.approximated, note: done.note ?? null, dxfProfile: done.dxfProfile } }
     } catch (error) {
       if (error instanceof PathRefused || error instanceof PlanRefused || error instanceof ExportWriteFailed || error instanceof DxfProfileRefused) throw new ToolRefusal(error.message)
       if (error instanceof UsageError) throw new ToolRefusal(asArguments(error.message))
@@ -166,6 +172,7 @@ const sheetTool: GridTool = {
         return value
       },
     },
+    language: LANGUAGE_ARG,
   },
   outputSchema: objectSchema({ written: STRING, layout: STRING, pages: { type: 'array', items: objectSchema({ kind: STRING, title: NULLABLE_STRING, floor: STRING }, ['kind', 'title']) }, leftOut: { type: 'number' }, note: { type: ['string', 'null'] } }),
   async run(args, context) {
@@ -179,7 +186,7 @@ const sheetTool: GridTool = {
         : given !== undefined
           ? parseSheetWords(given, planFloors(loaded.plan).map((floor) => floor.id))
           : readSheetWords(project, file, loaded, undefined)
-      const done = await sheetIntoProject(project, file, layout, words)
+      const done = await sheetIntoProject(project, file, layout, words, askedLanguage(args['language'], 'language'))
       const written = project.relative(done.written)
       const lines = [`Wrote ${quoted(written)} in the project folder: ${done.pages.length} pages.`]
       if (done.note) lines.push(done.note)
@@ -308,10 +315,10 @@ const changeOpeningTool: GridTool = {
   title: 'Change or remove a door or window',
   hint: 'change-plan',
   description:
-    'Use this when the person asks to make a door or window wider or narrower, change which room a door opens into, raise or lower a sill, turn a window into a door, or take a door or window out: "bathroom door to 90 cm, opening outwards", "block the kitchen door", "a 4 m opening to the garden". '
+    'Use this when the person asks to make a door or window wider or narrower, change which room a door opens into or which side it is hinged on, make it a sliding, double, folding, pocket, roller or garage door (or a fixed, sliding or high-level window), raise or lower a sill, turn a window into a door, or take a door or window out: "bathroom door to 90 cm, opening outwards", "hinged on the left as seen from the bedroom", "make the dock door a roller door", "block the kitchen door", "a 4 m opening to the garden". '
     + 'It changes one opening in place and answers with what changed and the area verdict. A width that does not fit is refused with the free stretches of the wall, and nothing is written. '
     + 'To move it to another wall, pass room and side ("the bathroom door to its north wall"); to place it, from and distance, as rooms text does ("0.25 from west"): from a side of room, or without room from an end of its wall. Given from, it keeps that distance when walls move later (its anchor). '
-    + 'Do not use to move a wall (grid_move_room_side). Grid has doors, windows and doorless openings only: no bifold, sliding or roof windows. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
+    + 'Do not use to move a wall (grid_move_room_side). Grid has no roof windows. It replaces the plan file unless out is given. Lengths are metres, or text with their unit (12\'6", 360 cm).',
   args: {
     plan: PLAN_ARG,
     decimal: DECIMAL_IN_ARG,
@@ -322,7 +329,10 @@ const changeOpeningTool: GridTool = {
     sill: { type: 'number', length: true, description: 'Windows: the new sill above the floor, in metres.', examples: [0.9, 0.6], minimum: 0, maximum: 5 },
     type: { type: 'string', enum: ['door', 'window', 'opening'], description: 'Make it a door, a window or a doorless opening.', examples: ['door', 'opening'] },
     opens_into: { type: 'string', id: true, description: 'Doors: the room id it opens into, or "outside".', examples: ['hall', 'outside'] },
-    hinge: { type: 'string', enum: ['start', 'end'], description: 'Doors: the end of the opening it hangs from, start being nearer the wall\'s start.', examples: ['start', 'end'] },
+    hinge: { type: 'string', enum: ['start', 'end'], description: 'Doors: the end of the opening it hangs from, start being nearer the wall\'s start. For a sliding, pocket or folding door, the end it opens toward. hinged says the same in the person\'s terms.', examples: ['start', 'end'] },
+    hinged: { type: 'string', enum: ['left', 'right'], description: 'Doors: the side it is hinged on as seen from a room, standing in it and facing the door: from seen_from, else the room it opens into.', examples: ['left', 'right'] },
+    seen_from: { type: 'string', id: true, description: 'Doors, with hinged: the room id it is seen from, or "outside". The room it opens into when left out.', examples: ['bedroom', 'hall'] },
+    kind: { type: 'string', enum: [...OPENING_KINDS], description: 'Its kind. A door: single (one swinging leaf, what a door with no kind is), double, sliding, pocket, folding, roller or garage. A window: single, double, sliding, fixed or high-level. A sliding, pocket, roller or garage door sweeps nothing and needs no swing.', examples: ['sliding', 'double', 'roller'] },
     remove: { type: 'boolean', description: 'true to take the opening out and leave the wall solid. Takes nothing else.', examples: [true] },
     room: { type: 'string', id: true, description: 'A room: with side, the opening moves to that side of it; with from, it is measured from that room\'s side.', examples: ['bath', 'hall'] },
     side: { type: 'string', enum: DIRECTIONS, description: 'With room: the side of that room whose wall it moves to.', examples: ['north'] },
@@ -336,6 +346,7 @@ const changeOpeningTool: GridTool = {
       const id = openingArg(survey.plan, args['opening'])
       if (args['room'] !== undefined) roomArg(survey.plan, args['room'])
       if (args['opens_into'] !== undefined && args['opens_into'] !== 'outside') roomArg(survey.plan, args['opens_into'], 'opens_into room')
+      if (args['seen_from'] !== undefined && args['seen_from'] !== 'outside') roomArg(survey.plan, args['seen_from'], 'seen_from room')
       const patch = changeOpening(survey, id, {
         ...(args['width'] !== undefined ? { width: args['width'] as number } : {}),
         ...(args['keep'] !== undefined ? { keep: args['keep'] as (typeof KEEPS)[number] } : {}),
@@ -344,6 +355,9 @@ const changeOpeningTool: GridTool = {
         ...(args['type'] !== undefined ? { type: args['type'] as 'door' | 'window' | 'opening' } : {}),
         ...(args['opens_into'] !== undefined ? { opensInto: args['opens_into'] as string } : {}),
         ...(args['hinge'] !== undefined ? { hinge: args['hinge'] as 'start' | 'end' } : {}),
+        ...(args['hinged'] !== undefined ? { hinged: args['hinged'] as 'left' | 'right' } : {}),
+        ...(args['seen_from'] !== undefined ? { seenFrom: args['seen_from'] as string } : {}),
+        ...(args['kind'] !== undefined ? { kind: args['kind'] as OpeningKind } : {}),
         ...(args['remove'] === true ? { remove: true } : {}),
         ...(args['room'] !== undefined ? { room: args['room'] as string } : {}),
         ...(args['side'] !== undefined ? { side: args['side'] as Direction } : {}),

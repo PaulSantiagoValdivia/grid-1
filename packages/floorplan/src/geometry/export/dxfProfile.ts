@@ -30,6 +30,7 @@ export const DXF_CATEGORIES = [
   'door-swings',
   'windows',
   'openings',
+  'openings-above',
   // CNT-10: an opening to be demolished, as a dashed outline where it stood.
   'openings-demolished',
   'fixtures',
@@ -95,6 +96,9 @@ export const NEUTRAL_DXF_PROFILE: DxfProfile = {
     'door-swings': pen('GRID-DOOR-SWINGS', 0.13),
     windows: pen('GRID-WINDOWS', 0.18),
     openings: pen('GRID-OPENINGS', 0.18),
+    // CNT-14: what a door's or window's symbol shows above the cut or hidden in the wall, dashed,
+    // in the technical look's pen for what lies above (fine, 0.18 at 1:100).
+    'openings-above': pen('GRID-OPENINGS-ABOVE', 0.18, 7, 'dashed'),
     'openings-demolished': pen('GRID-OPENINGS-DEMOLISHED', 0.18, 7, 'dashed'),
     fixtures: pen('GRID-FIXTURES', 0.13),
     dimensions: pen('GRID-DIMENSIONS', 0.13),

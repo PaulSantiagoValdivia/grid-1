@@ -44,7 +44,8 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | Field | What it holds |
 |---|---|
 | `resultVersion` | `1`. Raised only when a field changes meaning or is taken away. |
-| `label` | "General guidance, not your local rules". |
+| `label` | "General guidance, not your local rules", in the record's language (MSG-11). |
+| `language` | Only when the record is not in English: `es`. See "Languages". |
 | `read` | `false` when the plan was refused. Then the lines are its refusals and nothing else ran. |
 | `count` | How many lines there are: the one number for how much there is to look at. |
 | `counts` | The same lines by kind. They add up to `count`. |
@@ -75,6 +76,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `needed` | What would be right. |
 | `fix` | What to change. A suggestion: the plan is the author's. |
 | `figures` | Only on a finding that compared the plan with a figure: those figures, as in `figures` above. |
+| `values` | Only when the line's words name a figure, a name, an id or a place (MSG-11): those values, by the names its wording gives them, the same in every language. A figure is a number, rounded as the words give it. |
 | `causedBy` | Only on a line that follows from another (MSG-5): that line, as `{ code, id }`, the id of the part it is about (`""` for the plan; for `plan/duplicate-id`, the id it names). The line is listed under it and goes away when it is fixed. |
 | `each` | Only on a line that stands for the same note on several parts (MSG-5): each of them, `{ kind, id }`, `thing` first. Its message lists their names. |
 | `held` | Only on `floor/not-checked-rooms-not-drawn` and `floor/not-checked-doors-not-drawn` (MSG-5): the notes held back because they rest on what the line names, each `{ code, thing, floor, also, waitsFor }`. `waitsFor` holds the ids of the rooms and openings that could not be drawn. |
@@ -143,10 +145,13 @@ list them under the drawing (MSG-8). The numbers follow the record the drawing w
 
 ### One wording per code
 
-A line's `message` is made by its code's wording in `catalogue.ts`, and nowhere else. A
-finding's wording is its check's own (`checks/messages.ts`, and `planCheckWordings` in
-`@ongrid/floorplan`), so the report's `message`, the notes a person reads and the record say
-the same words. A test fails when one code is worded two ways (AU4-1).
+A line's `message` is made by its code's wording, and nowhere else: the words are keys of the
+message files (`line.<code>.says`, `.found`, `.needed`, `.fix` in
+`packages/floorplan/src/messages/`, one file per language, MSG-11), and `catalogue.ts` says which
+values each takes. A finding's wording is its check's own (`check.*` keys, said by
+`checks/messages.ts` and `planCheckSaids` in `@ongrid/floorplan`), so the report's `message`, the
+notes a person reads and the record say the same words. A test fails when one code is worded two
+ways (AU4-1).
 
 ### The label, and words no line uses
 
@@ -165,6 +170,17 @@ plan or the reader needs. A check that looked at nothing says "Nothing was check
 `scoreboard/__tests__/approvalWords.test.ts` holds the reports and the exports of the lab's
 plans to this, and `src/__tests__/label.test.ts` in `packages/cli` holds every output to the
 label.
+
+## Languages
+
+A record is said in one language (MSG-11): English unless the call asks for another
+(`inspectPlan(raw, { language: 'es' })`, `grid check --lang es`, `language` on `grid_check`) or
+the plan states one (`display.language`). The codes, the kinds, the things, the figures, `fixes`
+and `values` do not change with the language; `label`, `message`, `found`, `needed` and `fix`
+do, and so do the checks' titles, the coverage reasons and the limits. A wording comes from the
+message files, one per language (`docs/languages.md`), never written twice. Spanish is a draft
+translation no person has reviewed yet, and its figures have a decimal comma unless the plan's
+display chooses a point. Names from the plan are never translated.
 
 ## The codes
 
@@ -207,6 +223,8 @@ label.
 | `plan/same-level` | {thing} is at the same level as another floor | each floor at its own level, or an elevation in metres on each |
 | `wall/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `wall/zero-length` | {thing} has no length | a start and an end at different points |
+| `wall/arc-ends-apart` | {thing} does not end where its curve takes it | an end on the circle where the sweep takes the start round the centre |
+| `wall/arc-too-tight` | {thing} curves round too small a radius | a radius, from the centre to the start, over half the wall's thickness |
 | `wall/no-thickness` | {thing} has no thickness | a thickness above 0, or a virtual wall for a line with no substance |
 | `wall/no-height` | {thing} has no height | a height above 0, or a virtual wall for a line with no substance |
 | `wall/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
@@ -238,6 +256,9 @@ label.
 | `opening/door-blocked` | {thing} hits a wall when it opens | floor clear of walls where its leaf swings |
 | `opening/door-hits-item` | {thing} hits {the fixtures, by kind and id} when it opens | floor clear of fixtures where its leaf swings |
 | `opening/doors-collide` | {thing} hits another door when they open | door sweeps that do not overlap |
+| `opening/wide-single-leaf` | {thing} states no kind, so it is drawn and checked as one swinging leaf this wide | its kind: single, double, sliding, pocket, folding, roller or garage |
+| `opening/kind-not-for-type` | {thing} states a kind it cannot be, so it is drawn with no kind | a door kind on a door (single, double, sliding, pocket, folding, roller, garage) and a window kind on a window (single, double, sliding, fixed, high-level); none on a doorless opening |
+| `opening/part-too-large` | {thing} states a part that opens that cannot open there, so it is taken as the whole opening | a part that opens no wider and no higher than its opening, on a door or a window that is not fixed |
 | `opening/crosses-wall` | {thing} runs into a wall that meets its wall | an opening within the clear run of its wall, between the walls that meet it |
 | `opening/fills-wall` | {thing} is as long as its wall | some wall left beside an opening |
 | `opening/on-dividing-line` | {thing} is on a dividing line | a door or window in a wall |
@@ -329,6 +350,7 @@ label.
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", these rooms could not be drawn, so they and what rests on them were not checked: "{room}", … | rooms that can be drawn |
 | `floor/not-checked-doors-not-drawn` | On "{floor}", {this window, these doors, these doors and windows} could not be drawn, so {it, they} and what rests on {it, them} were not checked: "{id}", … | {a window, doors, doors and windows} that can be drawn |
+| `floor/not-checked-door-swings` | On "{floor}", {count} doors state no swing, so whether they open clear was not checked: {doors} | the hinge ("start" or "end") and the swing ("left" or "right") of each door that swings or folds; a sliding, pocket, roller or garage door ("kind") needs neither |
 | `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {place} | figures for the place, looked up and given to the check |
@@ -677,6 +699,173 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: kinds of door and window, their handing and the part that opens (CNT-14)
+
+- A door or window may state its `kind` and the part of it that opens (`opens`); see
+  [Kinds of door and window](plan-file.md#kinds-of-door-and-window-their-handing-and-the-part-that-opens).
+  A door with no kind is one swinging leaf, as before; nothing changes for a plan that states none.
+- The door-swing check knows the kinds: a pair sweeps a quarter disc from each jamb, a folding
+  door a strip one panel deep, and a sliding, pocket, roller or garage door sweeps nothing, so it
+  is never `opening/door-blocked`, `opening/door-hits-item` or `opening/doors-collide`, and needs
+  no swing. A pair needs only its `swing`: `opening/hinge-without-swing` is given for a pair that
+  states a hinge and no swing, never `opening/swing-without-hinge`.
+- New code, not checked: `floor/not-checked-door-swings`, one line per floor naming the doors
+  (in `also`) whose kind swings or folds and that state neither `hinge` nor `swing`. Before, they
+  were left out in silence. It follows from nothing and is no problem (`problems`).
+- New codes, worth a look: `opening/wide-single-leaf` (a door 1.5 m wide or more, `wideSingleLeaf`,
+  that states no kind; on a plan that may not be in metres it follows from `plan/units-question`),
+  `opening/kind-not-for-type` (a kind its type does not take, read as no kind) and
+  `opening/part-too-large` (a part that opens larger than the opening, or on a fixed window or a
+  doorless opening, read as the whole opening). They are door warnings in the drawing too.
+- The escape check measures a window by the part that opens when the plan states one, and a
+  `fixed` window as opening nothing. The limit it states now reads "Windows are measured by the
+  part that opens where the plan states it, else as drawn: the part that opens may be smaller".
+- `grid_change_opening` takes `kind`, `hinged` (`left` or `right`, as seen from a room) and
+  `seen_from` (a room id or `outside`; the room it opens into when left out). `grid_write_rooms`
+  reads a kind word, `hinged left|right [seen from <room>]` and `part <w> [x <h>]` on a door or
+  window line, and `grid_describe as=rooms` writes them back.
+- `grid_schedule`: grouped, a row has `kind` (null when not stated) and each kind and size is a
+  row of its own, `2 × sliding door …`; the CSV adds a `kind` column only when some opening
+  states one. With `of=openings`, each row has `kind`, `opens` (`width`, `height`, or null) and
+  `handing` (`opens into "Hall", hinged on the left`, or null), in the text too; the CSV adds
+  `kind`, `opens width m`, `opens height m` and `handing` columns only when some row has one.
+- The 3D files (OBJ, GLB) hold each door's and window's `frame_`, `leaf_` and `glass_` objects,
+  the glass in a material of its own; the IFC fills each door and window with its frame, leaves
+  and glass (the glass styled), and types it by kind (`door:sliding:2.2x2.1`, IFC operation
+  `DOUBLE_DOOR_SLIDING`, `ROLLINGUP`, …). A door's leaves hang closed from the face of the wall it
+  opens toward.
+- `grid_diff` names a door or window of another kind (`now sliding (was double)`) and another part
+  that opens (`part that opens the whole of it → 0.5 m`) among its change lines.
+- A door or window pattern (LVL-8) carries its opening's `kind` and `opens`, with its `hinge` and
+  `swing`, into every opening it makes.
+- In the DXF (with HND-1's blocks), a door or window of a kind other than one leaf, or one that
+  states its part, is a block of its own named with its kind (`GRID-DOOR-SLIDING-2400x200`), and
+  what its symbol shows above the cut or hidden in the wall is dashed on `GRID-OPENINGS-ABOVE`
+  (the profile's category `openings-above`), a layer listed only when something is drawn on it.
+- With MSG-11, CNT-14's four codes are said in every language Grid writes, from the message
+  files like every other code: `opening/wide-single-leaf`'s `values` hold `wide` (1.5, in metres)
+  and `floor/not-checked-door-swings`' hold `count` (the doors are in `also`). The sheet's
+  schedule of doors and windows names each kind (`puerta corredera`) and says the part that opens
+  and a door's handing in the sheet's language; `grid_schedule`'s `handing` stays English, as the
+  other measures do.
+- With CNT-18, a door or window of any kind may stand on a curved wall: it is drawn, checked
+  and swept from its straight hole (the chord between its edges), and its frame, leaves and glass
+  stand square to that chord in 3D, the OBJ, the GLB and the IFC. A handing said in rooms
+  (`opens_into`, `hinged`) reads the curve's faces as it reads a straight wall's.
+
+### 2026-11-22: a curved wall (CNT-18)
+
+- A wall may state `arc`: `{ centre: [x, y], sweep }`, the angle in degrees it turns through
+  round `centre` from `start` to `end` (counter-clockwise positive; 360 is a whole circle, its
+  `start` and `end` one point). Offsets, widths and lengths along it are along the curve, and an
+  opening's hole is the straight chord between its edges. Every figure (areas, lengths, routes,
+  facing) follows the curve; a plan with no curved wall answers exactly as before.
+- New codes, errors about a wall (`thing.kind` `wall`), which leave the wall out of every view,
+  measure and export: `wall/arc-ends-apart`, its end is not on the circle where the sweep takes
+  its start (further than `arcEnds`, 5 mm), and `wall/arc-too-tight`, its radius is no more than
+  half its thickness. An `arc` the reader cannot read (no centre, a sweep of 0) is read as not
+  stated, as a hinge is (`plan/value-left-out`), and the wall is drawn straight.
+- `grid_export` adds `approximated`: each curved wall, and each room along one, that the file
+  writes with its curve as straight pieces, as `{ kind: "wall" | "room", id, floor }`, and a
+  line in its text that says so. The DXF writes a curved wall's faces as true arcs and names only
+  the rooms; the IFC writes its axis as a true arc and names the walls and the rooms; the OBJ and
+  the GLB name both. The file says it too, beside what it leaves out: `Grid_Approximated` in an
+  IFC, the left-out layer in a DXF (`GRID-LEFT-OUT`, or the profile's), comment lines in an OBJ,
+  `asset.extras.gridApproximated` in a GLB. In the DXF a curved wall's outline and its fill (HND-1's
+  hatch) have their faces as true arcs, on HND-1's wall layers and pens. A plan with no curved wall gets none of it, and its files are as they were.
+- `grid_describe` gives a curved wall's centre and sweep (`arc(5,5 360°)` for an agent, "curving
+  360° anticlockwise round 5, 5 (radius 3, 18.85 along the curve)" for a person). Read back as
+  rooms text, a floor with a curved wall is given in Grid's own terms (`raw` lines), which keep
+  the curve.
+- The edits that move, cut or measure from a side of a room refuse a curved wall, naming it
+  (`isError: true`): rooms text and the room edits draw straight walls. `grid_change_opening`
+  changes an opening on a curved wall along the curve, measured from its start or its end;
+  `grid_mirror` mirrors a curved wall's centre and turns its sweep the other way.
+  `grid_square_scan` leaves a curved wall as it is, says so among what it guessed, and refuses to
+  square a wall whose end meets one.
+- The IFC's base quantities (HND-2) measure a curved wall along its curve: `Length` is its length
+  along the arc, `GrossFootprintArea` and the volumes its body by the straight pieces.
+- With VEW-9, CNT-10 and VEW-4: `grid_measure what=route` and `grid_describe length=walk` walk
+  through a door in a curved wall square to its straight hole, and cross a curved dividing line
+  at the middle, along the curve, of the stretch the two rooms share; `grid_takeoff for=change`
+  measures a curved wall to be demolished or new along its curve, and a whole circle has no ends
+  to make good; a click on the preview's 3D picture meets a curved wall along its curve. A curved
+  wall in a plan with phases is drawn and exported on its phase's layer, with its arc.
+- With MSG-11: `wall/arc-ends-apart` and `wall/arc-too-tight` are said in every language, as
+  the other wall codes are; `grid_describe` gives a curved wall in the language asked
+  for ("en curva de 180° en sentido antihorario…"). The refusals of an edit on a curved wall, the
+  export's line on its approximations and the files' notes stay English, from keys of the message
+  files, as the other edits' and exports' words do.
+
+### 2026-11-22: every language, starting with Spanish (MSG-11)
+
+- `inspectPlan(raw, { language })`, `grid check --lang`, and a `language` argument on `grid_check`,
+  `grid_describe`, `grid_view` and `grid_sheet`: `en` (the default) or `es`. Left out, the plan's
+  own `display.language`. The codes, kinds, things, ids, figures, `fixes` and `values` are the
+  same in every language; the `label`, each line's `message`, `found`, `needed` and `fix`, the
+  checks' titles, the coverage reasons and the limits are said in the language. A Spanish record
+  writes figures with a decimal comma unless the plan's `display.decimal` says otherwise.
+- The record has `language` when it is not English. Each line has `values` when its words name a
+  figure, a name, an id or a place: the values its wording was made with, by the names the
+  wording gives them (`{width}` is `width`), a figure as a number rounded as the words give it.
+- A room's use may be written by its label in any language Grid writes: `dormitorio` is
+  `bedroom`, and is checked as one. A room's name is never translated.
+- The Spanish words are a draft translation, not reviewed by a person yet. Retell from the codes
+  and values when in doubt; the label is "Orientación general, no sus normas locales".
+- No line in Spanish uses cumple, aprobado, conforme, homologado, certificado, válido, autorizado
+  or their kin (`approvalWords`).
+- The codes the same day's MSG-5, COD-3, CNT-8, LVL-6 and LVL-8 add (`plan/no-walls`,
+  `opening/above-roof`, `room/zone-not-in-room`, `floor/rooflight-misplaced`,
+  `floor/dormers-not-drawn`, and the six `pattern/…` codes) are said in every language too, and so
+  is a facade's caption. A line for several rooms (MSG-5) has its own wording for many in each language
+  (`check.<wording>.many`), the same English as before. So are BRF-3's: the plot check's title,
+  limit and skip reasons, `plan/setback-short`, `plan/over-boundary`, `plan/boundary-crosses`,
+  `plan/not-checked-boundary` and `plan/site-things-drawn-only`, the boundary's edges by name
+  (`the east boundary` is `la linde este`), and `grid describe`'s lines on the plot. Their lines'
+  `values` hold `edge`, `distance`, `past` and `asked`.
+- CNT-17's `plan/not-checked-access` is said in every language too (its counts of rooms and
+  routes by key), and LVL-9's section picture in `grid_view` (`kind=section`) and `grid draw
+  --section` takes the language: its title, level names, heights and list of what Grid took. The
+  section's data keeps `assumed[].words` in English, as the tool's text; `grid_measure
+  what=access` answers in English, as the other measures do.
+- COD-8's `firm/` lines are said in every language too: their message, found, needed and fix,
+  the heading "The firm's own standards" over them in `grid check` and `grid_check`'s text
+  (`Las normas propias del estudio`), the counts and the full report's list of the standards.
+  Their `values` hold `figure`, `measured` and `file`; the record's `firm.heading` stays the
+  English heading, as data. Where a part was measured (`found`) is said by key too; why a firm's
+  file was not read (`firm/not-read`'s found) keeps the reader's English.
+- HND-11's `room/taped-differs` and `plan/taped-not-measured` are said in every language too,
+  and so are `plan/far-from-origin`'s new words (the site's origin it measures from) and the
+  "Taped against drawn" table in `grid check` and `grid_check`'s text (`Con cinta frente al
+  dibujo`). Their lines' `values` hold `taped`, `drawn`, `off` and `within`, in metres; the
+  record's `taped` rows are data and the same in every language. The table in every change's
+  answer stays English, as the rest of that answer.
+- CNT-10's `plan/read-after-work`, `opening/phase-wall` and `room/phase-wall` are said in every
+  language too, and so are the drawing key's phases (`Muro existente`, `Muro nuevo`, `A demoler`)
+  and `grid_describe`'s sentence on the work. `plan/read-after-work`'s `values` hold `existing`,
+  `demolished` and `new` (counts of walls, openings and rooms together) and `base`. VEW-9's walk
+  (`grid_describe length=walk`, for a person) takes the language, its pictures named in it
+  (`imagen 1`); the agent's form of the walk stays as it is. WRT-7's sheet in the person's units
+  takes the language too: Spanish words, the display's units, and the language's decimal mark
+  unless the display states one. `grid_measure what=route`, `grid_takeoff for=change` and the
+  preview answer in English, as the other measures and tools do.
+- BRF-4's `floor/past-outline` is said in every language too, and so is a floor outline too far
+  from the origin to join. HND-12's scan notes and refusals (`grid write --scan`, `grid_write_rooms
+  scan`) and BRF-4's site limits (`grid_measure what=site`) answer in English, as rooms text and
+  the other measures do.
+- CNT-4's six `flat/` codes are said in every language too, a flat is named by key (`Vivienda
+  "A"`), and so are the sheet's flat schedule and its mix by type (`Cuadro de viviendas`, its areas
+  with the language's decimal mark). `grid_areas`' and `grid_schedule of=flats`' answers stay
+  English, as the other measures do.
+- LVL-5's `wall/through-floor`, `floor/out-of-line`, `room/stair-shifted` and `room/lift-shifted`
+  are said in every language too, and so are `floor/not-checked-doors-not-drawn`'s wordings by
+  the openings' type (`esta ventana`, `estas puertas`) and `room/cross-floor`'s new `needed` and
+  `fix`. A shifted stair's or shaft's lines have `values` `ways` (east or north, in metres) or
+  `sideWays` (its sides, for a shaft not moved as a whole); the finding's `shift` is data and the
+  same in every language. A coordinate pair in Spanish is written `(1,20; 0,00)`.
+- BRF-6's first layout (`grid_write_rooms layout`, `grid write --layout`) and the alignment offered
+  for a door between rooms that share no wall answer in English, as rooms text does.
 
 ### 2026-11-22: a first layout from the brief, and a door's alignment (BRF-6)
 

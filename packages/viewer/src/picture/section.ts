@@ -31,6 +31,8 @@ import type { Picture, PictureOptions } from './planSvg'
 import { DEFAULT_WIDTH, lookOf } from './planSvg'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
+import { DEFAULT_LANGUAGE, LANGUAGE_DECIMAL, num, said, type Language } from '@ongrid/floorplan/messages'
+import { drawingText, saidText, type DrawingWords } from './words'
 
 export interface SectionPictureOptions {
   /** Width in pixels. 1200 by default. */
@@ -43,6 +45,8 @@ export interface SectionPictureOptions {
   readonly paperScale?: number
   /** The section's name on the drawing and in the list under it. `A` by default. */
   readonly label?: string
+  /** MSG-11: the language of its words; the plan's own display language when left out. */
+  readonly language?: Language
 }
 
 /** A section's picture, with the section it was drawn from, for the words that go with it. */
@@ -73,12 +77,22 @@ interface LevelLabel {
   readonly part: string
 }
 
+/**
+ * MSG-11: the words of a section: its language, the call's or the plan's own, with that
+ * language's decimal mark, or the one the plan's display states. English keeps the point, as a
+ * section writes its levels in metres whatever the display says.
+ */
+function sectionWords(plan: FloorPlan, asked: Language | undefined): DrawingWords {
+  const language = asked ?? plan.display?.language ?? DEFAULT_LANGUAGE
+  return { language, decimal: language === DEFAULT_LANGUAGE ? 'point' : (plan.display?.decimal ?? LANGUAGE_DECIMAL[language]) }
+}
+
 /** The levels beside the drawing: every floor on the left; the roofs and the ground on the right. */
-function levelLabels(section: PlanSection): { left: LevelLabel[]; right: LevelLabel[] } {
+function levelLabels(section: PlanSection, tongue: DrawingWords): { left: LevelLabel[]; right: LevelLabel[] } {
   const left = section.levels.map((l) => ({ level: l.level, words: `${levelText(l.level)} ${l.name || l.floor}`, part: 'section-level' }))
   const right: LevelLabel[] = [
-    ...section.roofs.map((r) => ({ level: r.level, words: `${levelText(r.level)} Roof`, part: 'section-roof-level' })),
-    { level: section.ground.level, words: `${levelText(section.ground.level)} Ground`, part: 'section-ground-level' }
+    ...section.roofs.map((r) => ({ level: r.level, words: drawingText(tongue, 'drawing.section.roof', { level: levelText(r.level) }), part: 'section-roof-level' })),
+    { level: section.ground.level, words: drawingText(tongue, 'drawing.section.ground', { level: levelText(section.ground.level) }), part: 'section-ground-level' }
   ]
   return { left, right }
 }
@@ -86,8 +100,8 @@ function levelLabels(section: PlanSection): { left: LevelLabel[]; right: LevelLa
 const widest = (labels: readonly LevelLabel[]): number => Math.max(0, ...labels.map((l) => estimateTextWidth(l.words, TEXT_PX.dimension)))
 
 /** What the picture frames: the section, with room beside it for the level marks, in pixels. */
-function frameOf(section: PlanSection, width: number, height: number | undefined): { framed: Bounds; width: number; height: number } {
-  const { left, right } = levelLabels(section)
+function frameOf(section: PlanSection, width: number, height: number | undefined, tongue: DrawingWords): { framed: Bounds; width: number; height: number } {
+  const { left, right } = levelLabels(section, tongue)
   const leftPx = widest(left) + TICK_PX + GAP_PX
   const rightPx = widest(right) + TICK_PX + GAP_PX
   const base = section.bounds
@@ -123,15 +137,15 @@ function levelMark(label: LevelLabel, x: number, side: 'left' | 'right', mpp: nu
 }
 
 /** The band under the drawing: the section's name and line, then what was taken, hatched first. */
-function sectionKey(section: PlanSection, label: string, width: number, look: Look): PictureKey {
+function sectionKey(section: PlanSection, label: string, width: number, look: Look, tongue: DrawingWords): PictureKey {
   const nodes: SvgNode[] = []
   const text = (y: number, words: string, x = KEY_MARGIN_PX, size: number = TEXT_PX.warning): SvgNode => el('text', { x, y: n(y), fill: look.colors.label, 'font-family': look.colors.font, 'font-size': size }, [words])
   const { from, to, toward } = section.line
-  const point = (p: Vec2): string => `(${metresText(p.x)}, ${metresText(p.y)})`
+  const point = (p: Vec2) => said('drawing.section.point', { x: num(metresText(p.x)), y: num(metresText(p.y)) })
   let y = KEY_MARGIN_PX + TEXT_PX.title
-  nodes.push(el('text', { 'data-part': 'title', x: KEY_MARGIN_PX, y: n(y), fill: look.colors.label, 'font-family': look.colors.font, 'font-size': TEXT_PX.title }, [`Section ${label}–${label}`]))
+  nodes.push(el('text', { 'data-part': 'title', x: KEY_MARGIN_PX, y: n(y), fill: look.colors.label, 'font-family': look.colors.font, 'font-size': TEXT_PX.title }, [drawingText(tongue, 'drawing.section.name', { label })]))
   y += KEY_LINE_PX
-  nodes.push(el('g', { 'data-part': 'section-line' }, [text(y, `Cut from ${point(from)} to ${point(to)}, looking to the ${toward} of the line. Heights in metres from the ground floor's floor level.`)]))
+  nodes.push(el('g', { 'data-part': 'section-line' }, [text(y, drawingText(tongue, `drawing.section.line.${toward}`, { from: point(from), to: point(to) }))]))
   const hatched = section.assumed.filter((a) => a.hatched)
   const listed = section.assumed.filter((a) => !a.hatched)
   const inner = Math.max(width - 2 * KEY_MARGIN_PX - 30, 80)
@@ -146,13 +160,13 @@ function sectionKey(section: PlanSection, label: string, width: number, look: Lo
   }
   if (hatched.length > 0) {
     y += KEY_LINE_PX
-    nodes.push(text(y, 'Hatched: taken by Grid, not stated in the plan'))
-    for (const a of hatched) entry(a.words, el('rect', { 'data-part': 'key-swatch', x: 0, y: 0, width: 22, height: 10, fill: `url(#${HATCH_ID}-key)`, stroke: look.colors.labelSoft, 'stroke-width': 0.5 }))
+    nodes.push(text(y, drawingText(tongue, 'drawing.section.hatched')))
+    for (const a of hatched) entry(saidText(tongue, a.words, a.said), el('rect', { 'data-part': 'key-swatch', x: 0, y: 0, width: 22, height: 10, fill: `url(#${HATCH_ID}-key)`, stroke: look.colors.labelSoft, 'stroke-width': 0.5 }))
   }
   if (listed.length > 0) {
     y += KEY_LINE_PX
-    nodes.push(text(y, 'Also taken, not stated in the plan'))
-    for (const a of listed) entry(a.words, null)
+    nodes.push(text(y, drawingText(tongue, 'drawing.section.listed')))
+    for (const a of listed) entry(saidText(tongue, a.words, a.said), null)
   }
   // The key's own hatch, in pixels: the drawing's is in metres.
   nodes.unshift(hatchDefs(`${HATCH_ID}-key`, HATCH_PX, 1, look.colors.label))
@@ -175,9 +189,10 @@ export function sectionPicture(plan: FloorPlan, line: SectionLine, options: Sect
   const section = planSection(plan, line)
   const look = lookOf(options.look)
   const label = options.label ?? 'A'
+  const tongue = sectionWords(plan, options.language)
   const requested = options.width ?? DEFAULT_WIDTH
   if (!Number.isInteger(requested) || requested < 1) throw new RangeError(`The picture's width must be a whole number of pixels, at least 1: got ${requested}`)
-  const { framed, width, height } = frameOf(section, requested, options.height)
+  const { framed, width, height } = frameOf(section, requested, options.height, tongue)
   const view = fitTo(framed, width / height, 0)
   const mpp = view.width / width
   const lines = lineMetres(look, mpp, options.paperScale)
@@ -224,7 +239,7 @@ export function sectionPicture(plan: FloorPlan, line: SectionLine, options: Sect
   for (const room of section.rooms) {
     const across = (room.to - room.from) / mpp
     const tall = room.height / mpp
-    const height = `${metresText(room.height)} m`
+    const height = drawingText(tongue, 'drawing.section.height', { height: num(metresText(room.height)) })
     const name = room.name || room.room
     const at = { x: (room.from + room.to) / 2, y: room.floorLevel + room.height / 2 }
     const attrs = { 'data-part': 'section-room', 'data-id': room.room, 'data-floor': room.floor, 'data-height': n(room.height), 'data-height-stated': String(room.heightStated) }
@@ -238,24 +253,15 @@ export function sectionPicture(plan: FloorPlan, line: SectionLine, options: Sect
   nodes.push(el('g', { 'data-part': 'section-rooms' }, roomNodes))
 
   // The levels beside the drawing.
-  const { left, right } = levelLabels(section)
+  const { left, right } = levelLabels(section, tongue)
   const leftX = section.bounds.min.x - GAP_PX * mpp
   const rightX = section.bounds.max.x + GAP_PX * mpp
   const markStroke = lines.width('elevationLevel')
   nodes.push(el('g', { 'data-part': 'section-levels' }, [...left.map((l) => levelMark(l, leftX, 'left', mpp, look, markStroke)), ...right.map((l) => levelMark(l, rightX, 'right', mpp, look, markStroke))]))
 
-  const key = sectionKey(section, label, width, look)
+  const key = sectionKey(section, label, width, look, tongue)
   const cutRooms = new Set(section.rooms.map((r) => `${r.floor}\u0000${r.room}`)).size
-  return {
-    width,
-    height,
-    view,
-    look,
-    rooms: cutRooms,
-    undecidedDoors: [],
-    nodes,
-    key,
-    title: `Section ${label}–${label} through ${cutRooms} ${cutRooms === 1 ? 'room' : 'rooms'}`,
-    section
-  }
+  const title = drawingText(tongue, cutRooms === 1 ? 'drawing.section.title.one' : 'drawing.section.title.many', { section: said('drawing.section.name', { label }), count: cutRooms })
+  const picture: SectionPicture = { width, height, view, look, rooms: cutRooms, undecidedDoors: [], nodes, key, title, section }
+  return tongue.language === DEFAULT_LANGUAGE ? picture : { ...picture, language: tongue.language }
 }

@@ -64,7 +64,8 @@ export const CAPABILITIES = {
   roof: { what: 'holds a roof', probe: schema('floors', [{ id: 'ground', name: 'Ground', level: 0, roof: { shape: 'gable', eaves: 2.7, pitch: 35 } }]) },
   fixtures: { what: 'holds fixtures (WC, basin, kitchen units)', probe: schema('rooms.0.fixtures', [{ type: 'wc' }]) },
   furniture: { what: 'holds furniture', probe: schema('furniture', [{ type: 'table', at: [1, 1], size: [1.8, 0.9] }]) },
-  'door-leaves': { what: 'holds doors with several leaves (bifold, double)', probe: schema('openings.0.leaves', 2) },
+  // CNT-14: a door's kind (`folding`, `double`) says how many leaves it has; the lab's agents wrote `leaves`.
+  'door-leaves': { what: 'holds doors with several leaves (bifold, double)', probe: schema('openings.0.kind', 'folding') },
   // CNT-13: the clear width a doorway leaves, worked out from its hole, an open leaf and the fixtures in front of it.
   'clear-width': {
     what: 'gives the clear width a door leaves',
@@ -142,7 +143,8 @@ export const CAPABILITIES = {
   },
   'local-rules': { what: 'checks the rules of the place named', probe: none },
   permission: { what: 'says whether a design is allowed (never: Grid gives general guidance only)', probe: none },
-  'openable-part': { what: 'holds the part of a window that opens, and its glass', probe: none },
+  // CNT-14: the part of a door or window that opens (`opens`); its glass is drawn in 3D.
+  'openable-part': { what: 'holds the part of a window that opens, and its glass', probe: schema('openings.0.opens', { width: 0.6, height: 1 }) },
   services: { what: 'holds services (fans, ducts)', probe: none },
   'exit-side': { what: 'knows which side of an exit door is out', probe: none },
   // LVL-3: a lift shaft is a room used as a lift on each floor it serves.

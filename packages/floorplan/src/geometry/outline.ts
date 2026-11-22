@@ -20,6 +20,7 @@ import type { FloorPlan } from './plan'
 import { boxOfRings, cornerFills, inPolygon, multiArea, pointInside, strip, union } from './polygons'
 import { farReason, outlineFarReason } from './spaces'
 import { statedOutline } from './massing'
+import { straightPieces } from './wall'
 import { TOLERANCES, tolerance } from './tolerances'
 
 export interface FloorOutline {
@@ -50,7 +51,8 @@ export function outlineKnown(result: FloorOutline | FloorOutlineUnknown): result
  * join or the polygon library fails on every grid.
  */
 export function slabOutline(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): FloorOutline | FloorOutlineUnknown {
-  const walls = floorWalls(plan, floor, broken)
+  // A curved wall is joined as its straight pieces, as `spaces.ts` joins it (CNT-18).
+  const walls = floorWalls(plan, floor, broken).flatMap(straightPieces)
   // BRF-4 (C17): the outline the floor states, joined with what its walls enclose.
   const outline = statedOutline(plan, floor)
   const far = farReason(walls) ?? outlineFarReason(floor, outline)

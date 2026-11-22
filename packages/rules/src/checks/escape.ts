@@ -3,11 +3,12 @@
  * someone can climb through.
  *
  * Reads `Room.use` and `Wall.kind` as declared and never guesses either. A window is
- * measured as drawn: the plan does not say how much of it opens, so a note says "as
- * drawn", and a window that opens only in part needs a bigger frame than these figures.
+ * measured by the part of it that opens when the plan states one (CNT-14, `opens`), and a fixed
+ * window opens nothing; otherwise it is measured as drawn, so a note says "as drawn", and a
+ * window that opens only in part needs a bigger frame than these figures.
  */
 
-import { indexPlan, overFigure, roomZones, rounded, shownAgainst, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
+import { indexPlan, overFigure, partHeight, partWidth, roomZones, rounded, shownAgainst, statedKind, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
 import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { RULE_USES } from './catalogue'
 import type { FloorScope } from './coverage'
@@ -45,14 +46,16 @@ interface Measured {
   readonly area: number
 }
 
-/** A window as drawn, compared as it is and never rounded first (ARE-7). */
-const measure = (opening: Opening): Measured => ({
-  id: opening.id,
-  width: opening.width,
-  height: opening.height,
-  sill: opening.sill,
-  area: opening.width * opening.height
-})
+/**
+ * A window as drawn, compared as it is and never rounded first (ARE-7): the part of it that opens
+ * when the plan states one, and nothing for a fixed window (CNT-14). The part opens from the sill.
+ */
+const measure = (opening: Opening): Measured => {
+  const fixed = opening.type === 'window' && statedKind(opening.type, opening.kind) === 'fixed'
+  const width = fixed ? 0 : partWidth(opening.width, opening.opens)
+  const height = fixed ? 0 : partHeight(opening.height, opening.opens)
+  return { id: opening.id, width, height, sill: opening.sill, area: width * height }
+}
 
 /**
  * What a finding carries: lengths to the millimetre and areas to 0.01 m², or to the digits

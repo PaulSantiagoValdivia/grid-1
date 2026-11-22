@@ -15,7 +15,9 @@
  */
 
 import { ITEM_KINDS, type Item, type ItemKind } from '../types/floorplan'
-import { quoted } from '../types/planText'
+import type { Said, Value } from '../messages/say'
+import { english, joined, name, num, said } from '../messages/say'
+import { pointSaid, withSaid } from './issueWords'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { openingsOf } from './plan'
 import { floorOf, planFloors } from './floors'
@@ -46,24 +48,33 @@ export function isItemKind(kind: string): kind is ItemKind {
   return (ITEM_KINDS as readonly string[]).includes(kind)
 }
 
-/** An item's name in a line: its label when it has one, else its kind, then its id. */
+/** An item's name starting a line: its kind, then its id (`itemNounSaid`, in English). */
 export function itemNoun(item: Pick<Item, 'id' | 'kind' | 'label'>): string {
-  const kind = isItemKind(item.kind) ? ITEM_KIND_WORDS[item.kind] : 'item'
-  const word = `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`
-  return `${word} ${quoted(item.id)}`
+  return english(itemNounSaid(item))
 }
 
 /**
  * CNT-13: an item named inside a sentence: its kind and id, `kitchen run "k1"`, with the label
  * first when the plan states one, `"Table 2" (kitchen run "t2")`. Both are the plan's own words,
- * so both are quoted.
+ * so both are quoted. In English; `itemNameSaid` by its key and values.
  */
 export function itemName(item: Pick<Item, 'id' | 'kind' | 'label'>): string {
-  const kind = `${isItemKind(item.kind) ? ITEM_KIND_WORDS[item.kind] : 'item'} ${quoted(item.id)}`
-  return item.label === undefined || item.label.trim() === '' ? kind : `${quoted(item.label)} (${kind})`
+  return english(itemNameSaid(item))
 }
 
-const m = (value: number): string => `${metresText(value)} m`
+/** `itemNoun` by its key and values (MSG-11). */
+export function itemNounSaid(item: Pick<Item, 'id' | 'kind'>): Said {
+  return said(`issue.part.Item.${isItemKind(item.kind) ? item.kind : 'item'}`, { id: name(item.id) })
+}
+
+/** `itemName` by its key and values (MSG-11). */
+export function itemNameSaid(item: Pick<Item, 'id' | 'kind' | 'label'>): Said {
+  const kind = said(`issue.part.item.${isItemKind(item.kind) ? item.kind : 'item'}`, { id: name(item.id) })
+  return item.label === undefined || item.label.trim() === '' ? kind : said('issue.part.labelled', { label: name(item.label), kind })
+}
+
+/** A length in metres, as a figure: the sentence writes the unit. */
+const m = (value: number): Value => num(metresText(value))
 
 // ── Where it stands ──────────────────────────────────────────────────────────────────────────
 
@@ -328,7 +339,8 @@ export function wallsRunInto(footprint: readonly Vec2[], walls: readonly { reado
 
 // ── What is worth a look ─────────────────────────────────────────────────────────────────────
 
-const issue = (id: string, code: string, message: string, severity: Issue['severity']): Issue => ({ entity: 'item', id, code, message, severity })
+const issue = (id: string, code: string, sentence: Said, severity: Issue['severity']): Issue =>
+  withSaid({ entity: 'item', id, code, message: english(sentence), severity }, sentence)
 
 const held = (value: number): boolean => Number.isFinite(value) && Math.abs(value) <= tolerance('largest')
 
@@ -363,19 +375,19 @@ export function itemIssues(plan: FloorPlan, index: PlanIndex, broken: Set<string
   const floors = planFloors(plan)
   const floorIds = floors.map((f) => f.id)
   const floorHeights = new Map(floors.map((f) => [f.id, f.height] as const))
-  const kinds = ITEM_KINDS.map((k) => quoted(k)).join(', ')
+  const kinds = joined(ITEM_KINDS.map(name), 'join.comma')
 
   const sound: Item[] = []
   for (const item of items) {
-    const noun = itemNoun(item)
+    const noun = itemNounSaid(item)
     const numbers = [item.at[0], item.at[1], item.size[0], item.size[1], item.height, item.turn ?? 0]
     if (!numbers.every(held)) {
-      issues.push(issue(item.id, 'item/too-large', `${noun} has a number that is not finite or is past the ${m(tolerance('largest'))} Grid accepts. Give every size and place in metres.`, 'error'))
+      issues.push(issue(item.id, 'item/too-large', said('issue.item/too-large', { item: noun, largest: m(tolerance('largest')) }), 'error'))
       broken.add(item.id)
       continue
     }
     if (!(item.size[0] > 0 && item.size[1] > 0 && item.height > 0)) {
-      issues.push(issue(item.id, 'item/no-size', `${noun} has no size: its width, depth and height must each be above 0.`, 'error'))
+      issues.push(issue(item.id, 'item/no-size', said('issue.item/no-size', { item: noun }), 'error'))
       broken.add(item.id)
       continue
     }
@@ -384,7 +396,7 @@ export function itemIssues(plan: FloorPlan, index: PlanIndex, broken: Set<string
         issue(
           item.id,
           'item/unknown-kind',
-          `Item ${quoted(item.id)} is a ${quoted(item.kind)}, a kind the plan does not hold yet. It holds fixed fixtures: ${kinds}. Loose furniture, points and seats come later; until then the item is left out, and nothing else of the plan changes.`,
+          said('issue.item/unknown-kind', { item: name(item.id), kind: name(item.kind), kinds }),
           'error'
         )
       )
@@ -392,7 +404,7 @@ export function itemIssues(plan: FloorPlan, index: PlanIndex, broken: Set<string
       continue
     }
     if ((itemIds.get(item.id) ?? 0) > 1 || otherIds.has(item.id)) {
-      issues.push(issue(item.id, 'item/duplicate-id', `${noun} has an id that names another part of the plan too. Give every item an id of its own.`, 'error'))
+      issues.push(issue(item.id, 'item/duplicate-id', said('issue.item/duplicate-id', { item: noun }), 'error'))
       broken.add(item.id)
       continue
     }
@@ -403,7 +415,9 @@ export function itemIssues(plan: FloorPlan, index: PlanIndex, broken: Set<string
         issue(
           item.id,
           'item/unknown-floor',
-          `${noun} sits on floor ${quoted(floor)}, which the plan does not have` + (nearest === null ? '.' : `; the nearest it has is ${quoted(nearest)}.`),
+          nearest === null
+            ? said('issue.item/unknown-floor', { item: noun, floor: name(floor) })
+            : said('issue.item/unknown-floor.nearest', { item: noun, floor: name(floor), nearest: name(nearest) }),
           'error'
         )
       )
@@ -430,20 +444,31 @@ export function itemIssues(plan: FloorPlan, index: PlanIndex, broken: Set<string
   }
 
   for (const item of sound) {
-    const noun = itemNoun(item)
+    const noun = itemNounSaid(item)
     const room = itemRoom(item, rooms)
     if (room === null && rooms.some(({ room: r }) => floorOf(r) === floorOf(item))) {
-      issues.push(issue(item.id, 'item/outside-rooms', `${noun} stands in no room: its middle, at (${metresText(item.at[0])}, ${metresText(item.at[1])}), is outside every room on its floor.`, 'warning'))
+      const at = pointSaid(metresText(item.at[0]), metresText(item.at[1]))
+      issues.push(issue(item.id, 'item/outside-rooms', said('issue.item/outside-rooms', { item: noun, at }), 'warning'))
     }
     const into = wallsRunInto(itemFootprint(item), wallsByFloor.get(floorOf(item)) ?? [])
     if (into.length > 0) {
-      const named = into.slice(0, 3).map((w) => `${quoted(w.wall)} by ${m(w.depth)}`).join(', ')
-      issues.push(issue(item.id, 'item/into-wall', `${noun} runs into ${into.length === 1 ? 'wall' : 'walls'} ${named}${into.length > 3 ? ` and ${into.length - 3} more` : ''}. Move it clear of the wall's face, or make it smaller.`, 'warning'))
+      const named = joined(
+        into.slice(0, 3).map((w) => said('issue.item/into-wall.by', { wall: name(w.wall), depth: m(w.depth) })),
+        'join.comma'
+      )
+      const more = into.length > 3 ? said('issue.item/into-wall.more', { n: into.length - 3 }) : ''
+      const key = into.length === 1 ? 'issue.item/into-wall.one' : 'issue.item/into-wall.many'
+      issues.push(issue(item.id, 'item/into-wall', said(key, { item: noun, walls: named, more }), 'warning'))
     }
     const height = roomHeightOf(room, index, floorHeights.get(floorOf(item)))
     if (height !== null && item.height > height + tolerance('itemAboveRoom')) {
-      const where = room === null ? `its floor, ${quoted(floorOf(item))}` : `room ${quoted(room.name || room.id)}`
-      issues.push(issue(item.id, 'item/too-tall', `${noun} is ${m(item.height)} high, ${m(item.height - height)} higher than ${where}, which is ${m(height)} high.`, 'warning'))
+      const where =
+        room === null
+          ? said('issue.item/too-tall.floor', { floor: name(floorOf(item)) })
+          : said('issue.item/too-tall.room', { room: name(room.name || room.id) })
+      issues.push(
+        issue(item.id, 'item/too-tall', said('issue.item/too-tall', { item: noun, height: m(item.height), over: m(item.height - height), where, room: m(height) }), 'warning')
+      )
     }
   }
   return issues

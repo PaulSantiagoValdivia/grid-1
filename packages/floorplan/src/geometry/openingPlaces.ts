@@ -27,13 +27,16 @@ import type { FloorPlan, Opening, PlanIndex, Wall } from './plan'
 import { openingsOf } from './plan'
 import { floorOf } from './floors'
 import { cross, sub } from './vec2'
-import type { WallAxis } from './wall'
-import { openingSpan, wallAxis } from './wall'
+import type { WallSegment } from './wall'
+import { openingSpan, wallAxis, wallSegments } from './wall'
+import { curveFault, wallCurve } from './arc'
 import { tolerance } from './tolerances'
 import { metresText } from './rounding'
 import { wallSides } from './exposure'
 import { boxIndex, boxOfPoints, widenBox } from './boxIndex'
-import { quoted } from '../types/planText'
+import type { Said } from '../messages/say'
+import { english, name, num, said } from '../messages/say'
+import { withSaid } from './issueWords'
 
 /** An `Issue`, plus the other things it names, so the result can list them. */
 export interface PlaceIssue extends Issue {
@@ -54,19 +57,46 @@ interface Cover {
 
 const half = (wall: Wall): number => (wall.virtual ? 0 : wall.thickness / 2)
 
+/**
+ * A wall as this check measures it: its straight pieces along its axis (one for a straight wall,
+ * the chords of a curve, CNT-18), how long it is, and whether it is a whole circle with no ends.
+ */
+interface Course {
+  readonly segments: readonly WallSegment[]
+  readonly length: number
+  readonly closed: boolean
+}
+
 /** Walls that cannot be measured are validation's to report, and are left out here. */
-function axisOf(wall: Wall): WallAxis | null {
+function courseOf(wall: Wall): Course | null {
   if (![...wall.start, ...wall.end].every(Number.isFinite)) return null
+  if (wall.arc !== undefined) {
+    if (curveFault(wall) !== null) return null
+    const curve = wallCurve(wall)!
+    return { segments: wallSegments(wall), length: curve.length, closed: curve.closed }
+  }
   if (wall.start[0] === wall.end[0] && wall.start[1] === wall.end[1]) return null
-  return wallAxis(wall)
+  const axis = wallAxis(wall)
+  return { segments: [{ ...axis, from: 0, to: axis.length }], length: axis.length, closed: false }
 }
 
 /**
  * Where `other`'s body stands across `wall`, or null when they do not meet. The two axes' lines
  * cross at `s` along `wall` and `u` along `other`; they meet when that point lies on both walls,
- * each reaching half the other's thickness plus `gap` past its ends.
+ * each reaching half the other's thickness plus `gap` past its ends. A curved wall is tried
+ * piece by piece, and the first piece that meets is taken.
  */
-function coverOf(wall: Wall, a: WallAxis, other: Wall, b: WallAxis): Cover | null {
+function coverOf(wall: Wall, course: Course, other: Wall, otherCourse: Course): Cover | null {
+  for (const a of course.segments) {
+    for (const b of otherCourse.segments) {
+      const cover = coverOfPieces(wall, course, a, other, otherCourse, b)
+      if (cover !== null) return cover
+    }
+  }
+  return null
+}
+
+function coverOfPieces(wall: Wall, course: Course, a: WallSegment, other: Wall, otherCourse: Course, b: WallSegment): Cover | null {
   const sine = cross(a.dir, b.dir)
   if (Math.abs(sine) < tolerance('parallel')) return null
   const gap = tolerance('gap')
@@ -79,16 +109,26 @@ function coverOf(wall: Wall, a: WallAxis, other: Wall, b: WallAxis): Cover | nul
   const d = sub(b.start, a.start)
   const s = cross(d, b.dir) / sine
   const u = cross(d, a.dir) / sine
-  if (s < -reachOnWall || s > a.length + reachOnWall) return null
-  if (u < -reachOnOther || u > b.length + reachOnOther) return null
+  // Only at an end of the wall itself does the meeting reach past a piece.
+  const lowA = !course.closed && a.from <= 0 ? -reachOnWall : 0
+  const highA = !course.closed && a.to >= course.length ? a.length + reachOnWall : a.length
+  const lowB = !otherCourse.closed && b.from <= 0 ? -reachOnOther : 0
+  const highB = !otherCourse.closed && b.to >= otherCourse.length ? b.length + reachOnOther : b.length
+  if (s < lowA || s > highA) return null
+  if (u < lowB || u > highB) return null
 
-  const body = half(other) / Math.abs(sine)
-  const otherEnds = u <= reachOnOther || u >= b.length - reachOnOther
-  const wallEnds = s <= reachOnWall || s >= a.length - reachOnWall
+  // Along each wall's own axis: a chord is a little shorter than the curve it stands for.
+  const scaleA = a.length === 0 ? 1 : (a.to - a.from) / a.length
+  const scaleB = b.length === 0 ? 1 : (b.to - b.from) / b.length
+  const at = a.from + s * scaleA
+  const atOther = b.from + u * scaleB
+  const body = (half(other) / Math.abs(sine)) * scaleA
+  const otherEnds = !otherCourse.closed && (atOther <= reachOnOther || atOther >= otherCourse.length - reachOnOther)
+  const wallEnds = !course.closed && (at <= reachOnWall || at >= course.length - reachOnWall)
   return {
     wall: other.id,
-    from: Math.max(0, s - body),
-    to: Math.min(a.length, s + body),
+    from: Math.max(0, at - body),
+    to: Math.min(course.length, at + body),
     how: otherEnds && !wallEnds ? 'end' : 'across',
     height: other.height
   }
@@ -96,22 +136,22 @@ function coverOf(wall: Wall, a: WallAxis, other: Wall, b: WallAxis): Cover | nul
 
 /** The covers on every wall, by wall id, for the walls given (one floor's, not broken). */
 function coversOf(walls: readonly Wall[]): Map<string, Cover[]> {
-  const axes = walls.map(axisOf)
+  const courses = walls.map(courseOf)
   const boxes = walls.map((wall, i) => {
-    const axis = axes[i]
-    if (!axis) return boxOfPoints([])
+    const course = courses[i]
+    if (!course) return boxOfPoints([])
     const reach = tolerance('mitreReach') * (half(wall) + tolerance('gap'))
-    return widenBox(boxOfPoints([axis.start, axis.end]), reach)
+    return widenBox(boxOfPoints(course.segments.flatMap((segment) => [segment.start, segment.end])), reach)
   })
   const near = boxIndex(boxes)
   const covers = new Map<string, Cover[]>()
   walls.forEach((wall, i) => {
-    const a = axes[i]
+    const a = courses[i]
     if (!a) return
     const list: Cover[] = []
     for (const j of near.near(boxes[i]!)) {
       const other = walls[j]!
-      const b = axes[j]
+      const b = courses[j]
       if (j === i || !b || other.virtual || other.id === wall.id) continue
       const cover = coverOf(wall, a, other, b)
       if (cover && cover.to > cover.from) list.push(cover)
@@ -134,25 +174,17 @@ function clearRuns(length: number, covers: readonly { from: number; to: number }
 }
 
 /** What to say about where an opening of `width` fits on its wall, clear of `covers`. */
-function whereItFits(length: number, covers: readonly Cover[], width: number, middle: number): string {
+function whereItFits(length: number, covers: readonly Cover[], width: number, middle: number): Said {
   const fits = clearRuns(length, covers).filter((run) => run.to - run.from >= width)
-  if (fits.length === 0) return 'No stretch of the wall clear of the walls that meet it is that wide.'
+  if (fits.length === 0) return said('issue.opening/crosses-wall.noStretch')
   const best = fits.reduce((x, y) =>
     Math.abs((x.from + x.to) / 2 - middle) <= Math.abs((y.from + y.to) / 2 - middle) ? x : y
   )
-  return `An offset from ${metresText(best.from)} to ${metresText(best.to - width)} m keeps it clear.`
+  return said('issue.opening/crosses-wall.fits', { from: num(metresText(best.from)), to: num(metresText(best.to - width)) })
 }
 
-const WORD: Record<Opening['type'], string> = { door: 'Door', window: 'Window', opening: 'Opening' }
-
-const warning = (entity: Issue['entity'], id: string, code: string, message: string, hits: readonly string[]): PlaceIssue => ({
-  entity,
-  id,
-  code,
-  message,
-  severity: 'warning',
-  hits
-})
+const warning = (entity: Issue['entity'], id: string, code: string, sentence: Said, hits: readonly string[]): PlaceIssue =>
+  withSaid({ entity, id, code, message: english(sentence), severity: 'warning', hits }, sentence)
 
 /**
  * The checks on where each opening stands, for the walls and openings that are not broken.
@@ -172,12 +204,12 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
   for (const walls of byFloor.values()) {
     const covers = coversOf(walls)
     for (const wall of walls) {
-      const axis = axisOf(wall)
+      const axis = courseOf(wall)
       if (!axis) continue
       const here = covers.get(wall.id) ?? []
       for (const opening of openingsOf(index, wall.id)) {
         if (broken.has(opening.id)) continue
-        const what = `${WORD[opening.type]} ${quoted(opening.id)}`
+        const what = said(`issue.part.Named.${opening.type}`, { id: name(opening.id) })
         const span = openingSpan(opening)
 
         if (wall.virtual && opening.type !== 'opening') {
@@ -186,8 +218,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
               'opening',
               opening.id,
               'opening/on-dividing-line',
-              `${what} is on dividing line ${quoted(wall.id)}, which has no wall to ${opening.type === 'door' ? 'hang it in' : 'set it in'}. ` +
-                `If the rooms are open to each other there, make it a doorless opening; otherwise put it on a wall.`,
+              said(opening.type === 'door' ? 'issue.opening/on-dividing-line.door' : 'issue.opening/on-dividing-line', { opening: what, line: name(wall.id) }),
               [wall.id]
             )
           )
@@ -199,7 +230,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
               'opening',
               opening.id,
               'opening/fills-wall',
-              `${what} is as long as wall ${quoted(wall.id)} (${metresText(axis.length)} m): nothing of the wall is left either side of it.`,
+              said('issue.opening/fills-wall', { opening: what, wall: name(wall.id), length: num(metresText(axis.length)) }),
               [wall.id]
             )
           )
@@ -217,8 +248,15 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
                 'wall',
                 cover.wall,
                 'wall/ends-in-opening',
-                `Wall ${quoted(cover.wall)} ends on wall ${quoted(wall.id)} inside ${what.toLowerCase()}, which runs from ` +
-                  `${metresText(span.from)} to ${metresText(span.to)} m along it. Move the wall or the ${opening.type} so they do not meet.`,
+                said('issue.wall/ends-in-opening', {
+                  wall: name(cover.wall),
+                  on: name(wall.id),
+                  // As the line has always written it: the opening's id in small letters.
+                  inside: said(`issue.part.inside.${opening.type}`, { id: name(opening.id.toLowerCase()) }),
+                  from: num(metresText(span.from)),
+                  to: num(metresText(span.to)),
+                  it: said(`issue.part.the.${opening.type}`)
+                }),
                 [opening.id, wall.id]
               )
             )
@@ -228,9 +266,13 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
                 'opening',
                 opening.id,
                 'opening/crosses-wall',
-                `${what} on wall ${quoted(wall.id)} runs ${metresText(into)} m into wall ${quoted(cover.wall)}, which meets it there: ` +
-                  `it is cut through its own wall only, so wall ${quoted(cover.wall)} stands across it. ` +
-                  whereItFits(axis.length, here, opening.width, (span.from + span.to) / 2),
+                said('issue.opening/crosses-wall', {
+                  opening: what,
+                  wall: name(wall.id),
+                  into: num(metresText(into)),
+                  other: name(cover.wall),
+                  fits: whereItFits(axis.length, here, opening.width, (span.from + span.to) / 2)
+                }),
                 [cover.wall, wall.id]
               )
             )
@@ -256,8 +298,7 @@ export function openingPlaceIssues(plan: FloorPlan, index: PlanIndex, broken: Re
                 'opening',
                 opening.id,
                 'opening/window-between-rooms',
-                `${what} in wall ${quoted(wall.id)} has rooms on both sides, ${quoted(a)} and ${quoted(b)}: ` +
-                  `it may be a borrowed light. If it is meant to look outside, the wall is not an outside wall.`,
+                said('issue.opening/window-between-rooms', { opening: what, wall: name(wall.id), a: name(a), b: name(b) }),
                 [wall.id, a, b]
               )
             )
@@ -282,7 +323,7 @@ export function wallEndInOpening(
 ): { readonly opening: Opening; readonly nearest: number | null } | null {
   const wall = index.wallsById.get(wallId)
   if (!wall) return null
-  const axis = axisOf(wall)
+  const axis = courseOf(wall)
   if (!axis) return null
   const halfWidth = thickness / 2
   const overrun = tolerance('openingOverrun')

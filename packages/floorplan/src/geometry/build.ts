@@ -20,7 +20,8 @@ import type { PlanWall } from './floorplan'
 import type { Vec2 } from './vec2'
 import { TOLERANCES } from './tolerances'
 import { centroid, dot, fromTuple, signedArea, sub } from './vec2'
-import { pointAlong, wallAxis } from './wall'
+import { pointAlong, wallAxis, wallPointAt } from './wall'
+import { curveFault } from './arc'
 import { tryRoomPolygon } from './room'
 import { wallExposure } from './exposure'
 
@@ -62,7 +63,10 @@ function wallChange(prev: Wall, next: Wall): WallChange {
   const prevDelta = [prev.end[0] - prev.start[0], prev.end[1] - prev.start[1]]
   const nextDelta = [next.end[0] - next.start[0], next.end[1] - next.start[1]]
 
-  if (!sameShape || !same(prevDelta, nextDelta)) return 'retrace'
+  // CNT-18: a wall made curved, straight, or curved another way is drawn again.
+  const arcOf = (wall: Wall): number[] => (wall.arc === undefined ? [] : [...wall.arc.centre, wall.arc.sweep])
+  const sameArc = arcOf(prev).length === arcOf(next).length && arcOf(prev).every((v, i) => near(v, arcOf(next)[i]!))
+  if (!sameShape || !same(prevDelta, nextDelta) || !sameArc) return 'retrace'
   if (!same(prev.start, next.start)) return 'move'
   if (!near(prev.height, next.height)) return 'raise'
   return 'none'
@@ -106,6 +110,7 @@ function wallEnd(wall: Wall): Vec2 {
 function openingCentre(opening: Opening, wall: Wall | undefined): Vec2 | undefined {
   if (!wall) return undefined
   try {
+    if (wall.arc !== undefined) return curveFault(wall) === null ? wallPointAt(wall, opening.offset + opening.width / 2) : undefined
     return pointAlong(wallAxis(wall), opening.offset + opening.width / 2)
   } catch {
     return undefined
@@ -323,6 +328,16 @@ function clipBehind(polygon: readonly Vec2[], origin: Vec2, axis: Vec2, limit: n
 export function traceWall(wall: PlanWall, t: number): Vec2[][] {
   if (t >= 1) return wall.slices.map((slice) => [...slice])
   if (t <= 0 || wall.slices.length === 0) return []
+  // CNT-18: a curved wall is traced round its curve: what of each run it has turned through.
+  if (wall.curve !== undefined) {
+    const { centre, startAngle, sweep } = wall.curve
+    const turn = 2 * Math.PI
+    const reached = (p: Vec2): boolean => {
+      const angle = (((Math.sign(sweep) * (Math.atan2(p.y - centre.y, p.x - centre.x) - startAngle)) % turn) + turn) % turn
+      return angle <= t * Math.abs(sweep)
+    }
+    return wall.slices.map((slice) => slice.filter(reached)).filter((slice) => slice.length >= 3 && Math.abs(signedArea(slice)) > TOLERANCES.noArea.value)
+  }
 
   const [start, end] = wall.centerline
   const axis = sub(end, start)

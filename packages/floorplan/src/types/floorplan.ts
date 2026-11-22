@@ -174,6 +174,7 @@
  *   out from the list (`geometry/flats.ts`), never from the rooms' names. Ids a flat names that
  *   are no room or no type are named and left out of its figures, never refused. Both optional
  *   and never defaulted (version 1).
+ *
  * C19 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
  *   C5 put every wall on one floor. Reopened: a wall MAY state `through`, the highest floor it rises
  *   through. It stands on its own `floor` and on every floor above it up to that one, in order of
@@ -187,6 +188,25 @@
  *   A floor whose outline does not lie over the floor below it, and a stair or lift room that does
  *   not lie over the one below, are said, unless the floor or room states `overhang: "meant"`.
  *   All optional and never defaulted (version 1): a plan that states none reads as before.
+ *
+ * C20 · Kinds of door and window (CNT-14)
+ *   A door or window MAY state its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that
+ *   opens (`opens`). Its handing stays in the wall's terms (`hinge`, `swing`, C2): the person's
+ *   terms, the room it opens into and the side it is hinged on as seen from a room, are turned
+ *   into them when written (`handingFromRooms`). For a door that slides, rolls or lifts, `hinge`
+ *   names the end it opens toward and `swing` the face it runs on. A door with no kind is a single
+ *   swinging leaf. Optional and never defaulted (version 1).
+ *
+ * C21 · A curved wall (CNT-18)
+ *   A wall MAY be an arc of a circle: `arc.centre` is the circle's middle and `arc.sweep` the
+ *   angle the wall turns through from `start` to `end` round it, in degrees, counter-clockwise
+ *   positive as `turn` and `north` are; 360 (or -360) is a whole circle, whose `start` and `end`
+ *   are one point. The radius is the distance from the centre to `start`, and `end` must lie on
+ *   the circle where the sweep takes `start` (`wall/arc-ends-apart`). C1 holds about the curve:
+ *   the wall grows thickness/2 on each side of it, `left` is the side on the left going from
+ *   `start` to `end`. C2 holds along the curve: an opening's `offset` and `width` are measured
+ *   along it, and its hole is straight between its two edges, as a door's leaf is. Optional and
+ *   never defaulted, so a plan with no curved wall reads exactly as before (version 1).
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -194,6 +214,10 @@ import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } f
 import { factKey } from './facts'
 import { placeProblem } from './places'
 import { roofFrame, roofTop } from './roofFrame'
+import { en } from '../messages/en'
+import { LANGUAGES } from '../messages/languages'
+import { roomUseOfLabel } from '../messages/uses'
+import { english, said } from '../messages/say'
 import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
@@ -302,22 +326,10 @@ export const BuildingTypeSchema = z.enum(BUILDING_TYPES)
 
 export type BuildingType = z.infer<typeof BuildingTypeSchema>
 
-/** Each kind of building as a sentence names it, with its article: "this plan is an office". */
-export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = {
-  home: 'a home',
-  office: 'an office',
-  shop: 'a shop',
-  food: 'a café, restaurant or bar',
-  hotel: 'a hotel or hostel',
-  school: 'a school',
-  health: 'a health building, such as a clinic',
-  sport: 'a sports building',
-  assembly: 'a building people gather in, such as a hall',
-  industry: 'a workshop or factory',
-  warehouse: 'a warehouse',
-  parking: 'a car park',
-  other: 'another kind of building',
-}
+/** Each kind of building as a sentence names it, with its article: "this plan is an office" (MSG-11: `check.building.*`, in English). */
+export const BUILDING_TYPE_TEXT: Readonly<Record<BuildingType, string>> = Object.fromEntries(
+  BUILDING_TYPES.map((type) => [type, en[`check.building.${type}`]])
+) as Record<BuildingType, string>
 
 /** The four sides of the drawing: north is +Y (C4). */
 export const COMPASS_SIDES = ['north', 'east', 'south', 'west'] as const
@@ -501,7 +513,7 @@ function withWallDefaults(raw: unknown): unknown {
   const face = filled['face']
   const thickness = virtual ? 0 : filled['thickness']
   if (isFace(face) && isEndPair(filled['start']) && isEndPair(filled['end']) && typeof thickness === 'number' && Number.isFinite(thickness) && thickness >= 0) {
-    const [start, end] = centreFromFace(filled['start'], filled['end'], face, thickness)
+    const [start, end] = centreFromFace(filled['start'], filled['end'], face, thickness, arcOf(filled))
     delete filled['face']
     return { ...filled, start, end, placedBy: face }
   }
@@ -544,18 +556,55 @@ function shiftedLine(start: Pair, end: Pair, by: number): [[number, number], [nu
   ]
 }
 
+/** CNT-18 (C21): a curved wall's arc, as a file states it, when it can be read. */
+export interface WallCurveOf {
+  readonly centre: Pair
+  readonly sweep: number
+}
+
+/** CNT-18: a wall's `arc`, as its file states it or as Grid reads it, or undefined when it has none it can read. */
+function arcOf(wall: Readonly<Record<string, unknown>>): WallCurveOf | undefined {
+  const arc = wall['arc']
+  if (typeof arc !== 'object' || arc === null || Array.isArray(arc)) return undefined
+  const { centre, sweep } = arc as Record<string, unknown>
+  return isEndPair(centre) && typeof sweep === 'number' && Number.isFinite(sweep) && sweep !== 0 ? { centre, sweep } : undefined
+}
+
+/**
+ * CNT-18: the curve `start`→`end` round `arc.centre` moved `by` metres to its left (to its right
+ * when negative): each end along its own radius, since a curve's faces are circles round the same
+ * centre. Going counter-clockwise the left is toward the centre. Null when an end is on the
+ * centre or the move would take it through the centre.
+ */
+function shiftedArc(start: Pair, end: Pair, by: number, arc: WallCurveOf): [[number, number], [number, number]] | null {
+  const at = (p: Pair): [number, number] | null => {
+    const r = Math.hypot(p[0] - arc.centre[0], p[1] - arc.centre[1])
+    const to = r - Math.sign(arc.sweep) * by
+    if (!(r > 0) || !(to > 0)) return null
+    return [arc.centre[0] + ((p[0] - arc.centre[0]) * to) / r, arc.centre[1] + ((p[1] - arc.centre[1]) * to) / r]
+  }
+  const s = at(start)
+  const e = at(end)
+  return s === null || e === null ? null : [s, e]
+}
+
+/** A wall's line moved to its left: along its radius for a curve, square to it for a straight line. */
+function shifted(start: Pair, end: Pair, by: number, arc: WallCurveOf | undefined): [[number, number], [number, number]] | null {
+  return arc === undefined ? shiftedLine(start, end, by) : shiftedArc(start, end, by, arc)
+}
+
 /**
  * HND-11: a wall's centre line from the face its file gives: half the thickness away from that
  * face, into the wall's body. A left face has the body on its right. A line of no length is
  * returned as it is.
  */
-export function centreFromFace(start: Pair, end: Pair, face: WallFace, thickness: number): [[number, number], [number, number]] {
-  return shiftedLine(start, end, (face === 'left' ? -1 : 1) * (thickness / 2)) ?? [[start[0], start[1]], [end[0], end[1]]]
+export function centreFromFace(start: Pair, end: Pair, face: WallFace, thickness: number, arc?: WallCurveOf): [[number, number], [number, number]] {
+  return shifted(start, end, (face === 'left' ? -1 : 1) * (thickness / 2), arc) ?? [[start[0], start[1]], [end[0], end[1]]]
 }
 
 /** HND-11: the face line a file gives a wall placed by its face, from the wall's centre line. */
-export function faceFromCentre(start: Pair, end: Pair, face: WallFace, thickness: number): [[number, number], [number, number]] {
-  const [s, e] = shiftedLine(start, end, (face === 'left' ? 1 : -1) * (thickness / 2)) ?? [[start[0], start[1]], [end[0], end[1]]]
+export function faceFromCentre(start: Pair, end: Pair, face: WallFace, thickness: number, arc?: WallCurveOf): [[number, number], [number, number]] {
+  const [s, e] = shifted(start, end, (face === 'left' ? 1 : -1) * (thickness / 2), arc) ?? [[start[0], start[1]], [end[0], end[1]]]
   return [
     [written(s[0]), written(s[1])],
     [written(e[0]), written(e[1])],
@@ -579,13 +628,15 @@ function movingThickness(wall: Readonly<Record<string, unknown>>): number {
  * so (`placedBy`) keeps saying so. Every change that moves a wall end goes through here, so no
  * centre point ever lands in a file as a face.
  */
-export function wallWithEnds<T extends Record<string, unknown>>(wall: T, ends: { readonly start?: Pair | undefined; readonly end?: Pair | undefined }, mirrored = false): T {
+export function wallWithEnds<T extends Record<string, unknown>>(wall: T, ends: { readonly start?: Pair | undefined; readonly end?: Pair | undefined; readonly arc?: WallCurveOf | undefined }, mirrored = false): T {
   const face = wall['face']
   if (isFace(face) && isEndPair(wall['start']) && isEndPair(wall['end'])) {
     const thickness = movingThickness(wall)
-    const [s, e] = centreFromFace(wall['start'], wall['end'], face, thickness)
+    // CNT-18: a curved wall's face is found from its arc as it was, and written from its new one.
+    const before = arcOf(wall)
+    const [s, e] = centreFromFace(wall['start'], wall['end'], face, thickness, before)
     const now = mirrored ? otherFace(face) : face
-    const [start, end] = faceFromCentre(ends.start ?? s, ends.end ?? e, now, thickness)
+    const [start, end] = faceFromCentre(ends.start ?? s, ends.end ?? e, now, thickness, ends.arc ?? before)
     return { ...wall, start, end, face: now }
   }
   const placed = wall['placedBy']
@@ -640,6 +691,18 @@ export function heightByDefault(
   return (plan.floors ?? []).find((f) => f.id === floor)?.height === undefined
 }
 
+/**
+ * CNT-18 (C21): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
+ * and never more than a whole turn.
+ */
+export const WallArcSchema = z.object({
+  centre: Vec2,
+  sweep: finite().refine((value) => value !== 0 && Math.abs(value) <= 360, {
+    // MSG-11: its words are a key of the message files, said in English as the schema's are.
+    message: english(said('read.arc.sweep')),
+  }),
+})
+
 export const WallSchema = z.preprocess(
   withWallDefaults,
   z
@@ -662,6 +725,9 @@ export const WallSchema = z.preprocess(
       // on each floor between, and its height is measured from this floor's level. Optional and
       // never defaulted: unstated, the wall stands on its own floor only (version 1).
       through: text('id').pipe(z.string().min(1)).optional(),
+      // CNT-18 (C21): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
+      // Optional and never defaulted: unstated, the wall is straight (version 1).
+      arc: WallArcSchema.optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
       // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
@@ -805,14 +871,18 @@ export function foldUseWord(word: string): string {
 }
 
 /**
- * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; and a
- * word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is `staff`.
- * Anything else is left as it is, for the schema to read as unstated and `readingNotes` to name.
+ * A use as Grid reads it (MSG-4, CNT-5): whatever its capitals, so `Bedroom` is `bedroom`; the
+ * use's label in a language Grid writes (MSG-11, `USE_LABELS`), so `dormitorio` is `bedroom`;
+ * and a word that plainly means a use (`USE_WORDS`), so `WC` is `toilet` and `staff room` is
+ * `staff`. Anything else is left as it is, for the schema to read as unstated and
+ * `readingNotes` to name.
  */
 export function readUse(value: unknown): unknown {
   if (typeof value !== 'string') return value
   const lower = value.toLowerCase()
   if ((ROOM_USES as readonly string[]).includes(lower)) return lower
+  const labelled = roomUseOfLabel(value)
+  if (labelled !== null) return labelled
   const folded = foldUseWord(value)
   if ((ROOM_USES as readonly string[]).includes(folded) && !FIGURE_READ_USES.includes(folded)) return folded
   return Object.hasOwn(USE_WORDS, folded) ? USE_WORDS[folded] : value
@@ -968,6 +1038,32 @@ export const OpeningAnchorSchema = z
     }
   })
 
+/**
+ * CNT-14 (C20): the kinds of door, and of window, a plan may state. A door with no kind is a
+ * single swinging leaf, as every door was before (version 1). `single` and `double` are one or
+ * two hinged leaves; `sliding` slides along its wall, `pocket` into it; `folding` folds to one
+ * side in panels; `roller` rolls up and `garage` lifts overhead. A window may be `single` or
+ * `double` (one or two hinged casements), `sliding`, `fixed` (nothing opens) or `high-level` (set
+ * high in its wall, above the plan's cut). A window with no kind is drawn and measured as before.
+ */
+export const DOOR_KINDS = ['single', 'double', 'sliding', 'pocket', 'folding', 'roller', 'garage'] as const
+export const WINDOW_KINDS = ['single', 'double', 'sliding', 'fixed', 'high-level'] as const
+export const OPENING_KINDS = ['single', 'double', 'sliding', 'pocket', 'folding', 'roller', 'garage', 'fixed', 'high-level'] as const
+export type DoorKind = (typeof DOOR_KINDS)[number]
+export type WindowKind = (typeof WINDOW_KINDS)[number]
+export type OpeningKind = (typeof OPENING_KINDS)[number]
+
+/**
+ * CNT-14: the part of a door or window that opens, when it is not the whole of it: a door's leaf
+ * beside a fixed panel, the main leaf of a pair, a window's casement. `width` is along the wall and
+ * `height` from its foot; unstated, the height is the opening's. It is at the end the door hangs
+ * from (`hinge`), else at the wall's start end. Unstated, the whole opening opens (version 1).
+ */
+export const OpeningPartSchema = z.object({
+  width: finite().positive(),
+  height: finite().positive().optional(),
+})
+
 export const OpeningSchema = z.object({
   id: text('id'),
   wall: text('id'),
@@ -986,6 +1082,11 @@ export const OpeningSchema = z.object({
   // geometry/wall.ts `wallFaces`.
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
+  // CNT-14 (C20): its kind (`DOOR_KINDS`, `WINDOW_KINDS`) and the part of it that opens
+  // (`OpeningPartSchema`). Optional and never defaulted (version 1): a door that states no kind is
+  // one swinging leaf, and the whole of an opening opens.
+  kind: z.enum(OPENING_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
   // WRT-3: what its place is kept from when an edit changes its wall (OpeningAnchorSchema).
   anchor: OpeningAnchorSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
@@ -1009,6 +1110,9 @@ export const PatternOpeningSchema = z.object({
   height: finite().positive(),
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
+  // CNT-14 (C20): its kind and the part of it that opens, carried into every opening it makes.
+  kind: z.enum(OPENING_KINDS).optional(),
+  opens: OpeningPartSchema.optional(),
 })
 
 /**
@@ -1585,7 +1689,7 @@ function withFloorHeights(raw: unknown): unknown {
       const w = wall as Record<string, unknown>
       if (w.virtual === true || floorOfRaw(w) !== id || !isPair(w.start) || !isPair(w.end)) return []
       // HND-11: a wall placed by its face frames the roof on its centre line, as it is read.
-      const [start, end] = isFace(w.face) ? centreFromFace(w.start, w.end, w.face, movingThickness(w)) : [w.start, w.end]
+      const [start, end] = isFace(w.face) ? centreFromFace(w.start, w.end, w.face, movingThickness(w), arcOf(w)) : [w.start, w.end]
       return [{ start, end, outside: w.kind === 'exterior' }]
     })
     const outside = lines.filter((l) => l.outside)
@@ -1674,9 +1778,13 @@ export const FloorPlanFieldsSchema = z.object({
   // WRT-7: how the person reads lengths and areas: the unit, the area unit, the decimal mark and
   // the precision (`types/units.ts`). It never changes a stored number: the file is in metres.
   // Optional and never defaulted (version 1). One that cannot be read is read as unstated.
+  // MSG-11: `language` is the language Grid writes its words in for this plan (`en`, `es`); a
+  // language with a decimal comma writes one unless `decimal` says otherwise. With a language,
+  // `length` may be left out: then lengths are in metres.
   display: z
     .object({
-      length: z.enum(['m', 'cm', 'mm', 'ft-in']),
+      length: z.enum(['m', 'cm', 'mm', 'ft-in']).optional(),
+      language: z.enum(LANGUAGES).optional(),
       area: z.enum(['m2', 'ft2']).optional(),
       decimal: z.enum(['point', 'comma']).optional(),
       precision: z.number().int().min(0).max(5).optional(),
@@ -1700,6 +1808,7 @@ export type Floor = z.infer<typeof FloorSchema>
 export type WallKind = z.infer<typeof WallKindSchema>
 export type Phase = z.infer<typeof PhaseSchema>
 export type Wall = z.infer<typeof WallSchema>
+export type WallArc = z.infer<typeof WallArcSchema>
 export type RoomUse = z.infer<typeof RoomUseSchema>
 export type RoomTenure = z.infer<typeof RoomTenureSchema>
 export type Room = z.infer<typeof RoomSchema>
@@ -1714,6 +1823,7 @@ export type Rooflight = z.infer<typeof RooflightSchema>
 export type RoofShape = (typeof ROOF_SHAPES)[number]
 export type LoweredZone = z.infer<typeof LoweredZoneSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
+export type OpeningPart = z.infer<typeof OpeningPartSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type Annotation = z.infer<typeof AnnotationSchema>

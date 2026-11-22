@@ -16,10 +16,11 @@
  * Pure: no DOM measuring, so it runs in tests and on every render without layout reads.
  */
 import type { Dimension, PlanOpening, Rect, Vec2 } from '@ongrid/floorplan/geometry'
-import { areaText, doorSwing, metresText, poleOfInaccessibility, rectOf, rectTouchesPolygon, spotsInside, tolerance } from '@ongrid/floorplan/geometry'
+import { areaText, doorSwing, metresText, openingSymbol, poleOfInaccessibility, rectOf, rectTouchesPolygon, spotsInside, symbolPoints, tolerance } from '@ongrid/floorplan/geometry'
 import { TEXT_PX } from '../picture/look'
 import { showArea, showLength, type Display } from '@ongrid/floorplan/types/units'
 import type { DoorHanding } from './doorHanding'
+import { ENGLISH_WORDS, wordsOf, type DrawingWords } from '../picture/words'
 
 export interface Box {
   readonly minX: number
@@ -75,15 +76,25 @@ export interface LabelStyle {
  * drawing, and the boxes placed round them, are written one way.
  */
 let drawingDisplay: Display | null = null
+/** MSG-11: the language of the drawing being made, kept apart: a display of plain metres is dropped, its language is not. */
+let drawingLanguage: DrawingWords = ENGLISH_WORDS
 
 export function withDisplay<T>(display: Display | undefined, draw: () => T): T {
   const before = drawingDisplay
+  const beforeWords = drawingLanguage
   drawingDisplay = display === undefined || (display.length === 'm' && display.area === 'm2' && display.decimal === 'point' && display.precision === undefined) ? null : display
+  drawingLanguage = wordsOf(display)
   try {
     return draw()
   } finally {
     drawingDisplay = before
+    drawingLanguage = beforeWords
   }
+}
+
+/** MSG-11: the language and decimal mark the drawing being made writes its own words in. */
+export function drawingWords(): DrawingWords {
+  return drawingLanguage
 }
 
 /** A room's area as its tag prints it, rounded the core's one way (ARE-7), in the drawing's display. */
@@ -189,6 +200,11 @@ export function placeDimensionLabel(dim: Dimension, blocks: readonly Box[], mete
 /** The box a door's leaf sweeps, hinge to open leaf. `null` for a door with no swing drawn. */
 export function doorSwingBox(opening: PlanOpening, handing: DoorHanding | undefined, metersPerPixel: number): Box | null {
   if (opening.type !== 'door') return null
+  // CNT-14: a door that states its kind or the part that opens keeps labels off its kind's symbol.
+  if (handing?.kind !== undefined || handing?.opens !== undefined) {
+    const symbol = openingSymbol(opening, handing)
+    return symbol === null ? null : grow(rectOf(symbolPoints(symbol)), PADDING_PX * metersPerPixel)
+  }
   const swing = doorSwing(opening, handing?.hinge, handing?.swing)
   if (!swing) return null
   const { center, radius, from } = swing.arc

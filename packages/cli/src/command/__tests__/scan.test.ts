@@ -60,10 +60,13 @@ describe('grid write --scan (lab AE-2)', () => {
     expect(run.out).toContain('Problems in the drawing: 0 → 0.')
 
     const result = inspectPlan(readFileSync(join(dir, 'plan.json'), 'utf8'))
-    // Nothing refused, left out, worth a look, found or not checked: the only lines are the six
-    // values the scan does not give, to confirm with the person.
-    expect(result.counts).toEqual({ refused: 0, 'left-out': 0, 'worth-a-look': 0, finding: 0, 'not-checked': 0, 'to-confirm': 6 })
-    expect(result.lines.every((l) => l.code === 'plan/value-assumed')).toBe(true)
+    // Nothing refused, left out, worth a look or found: the six values the scan does not give, to
+    // confirm with the person, and (CNT-14) the four doors whose swing the scan does not say, as
+    // not checked. A scan states no kind and no part that opens: each door is one leaf.
+    expect(result.counts).toEqual({ refused: 0, 'left-out': 0, 'worth-a-look': 0, finding: 0, 'not-checked': 1, 'to-confirm': 6 })
+    expect(result.lines.filter((l) => l.code !== 'plan/value-assumed').map((l) => [l.code, l.also])).toEqual([['floor/not-checked-door-swings', ['door-1', 'door-2', 'door-3', 'door-4']]])
+    const written = read(dir, 'plan.json') as { openings: Array<Record<string, unknown>> }
+    expect(written.openings.filter((o) => 'kind' in o || 'opens' in o)).toEqual([])
 
     const evidence = read(dir, 'plan.scan.json')
     expect(evidence).toMatchObject({ kind: 'grid-scan-evidence', version: 1, format: 'apple-room-model', capture: { identifier: SCAN.ids['capture'], version: 2 } })

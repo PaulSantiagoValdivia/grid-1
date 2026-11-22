@@ -35,7 +35,8 @@ import { floorSpaces, spacesKnown } from './spaces'
 import { tolerance, tolerancesAsStated } from './tolerances'
 import type { Vec2 } from './vec2'
 import { dot, sub } from './vec2'
-import { wallAxis } from './wall'
+import { wallFrameAt, wallLength, wallSegments } from './wall'
+import { curveFault } from './arc'
 
 /**
  * Whether the wall separates two rooms or faces the outside, as every view and export shows it.
@@ -169,28 +170,31 @@ class Buckets<T> {
 }
 
 function listedCover(wall: Wall, rooms: readonly Traced[]): { from: number; to: number; room: string; left: boolean }[] {
-  const axis = wallAxis(wall)
   const half = wall.virtual === true ? 0 : wall.thickness / 2
   const near = tolerance('wallContact')
   const cover: { from: number; to: number; room: string; left: boolean }[] = []
-  for (const traced of rooms) {
-    if (!traced.walls.has(wall.id)) continue
-    for (const polygon of [traced.polygon, ...traced.holes]) {
-      for (let i = 0; i < polygon.length; i++) {
-        const a = polygon[i]!
-        const b = polygon[(i + 1) % polygon.length]!
-        const e = sub(b, a)
-        const length = Math.hypot(e.x, e.y)
-        if (length < tolerance('noLength')) continue
-        const offA = dot(sub(a, axis.start), axis.normal)
-        const offB = dot(sub(b, axis.start), axis.normal)
-        if (Math.abs(Math.abs(offA) - half) > near || Math.abs(Math.abs(offB) - half) > near) continue
-        // The room lies to the left of its counter-clockwise outline, and of its clockwise holes,
-        // so on the face the edge's left points to.
-        const left = dot({ x: -e.y, y: e.x }, axis.normal) > 0
-        const s0 = Math.max(0, Math.min(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
-        const s1 = Math.min(axis.length, Math.max(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
-        if (s1 - s0 > tolerance('noLength')) cover.push({ from: s0, to: s1, room: traced.room.id, left })
+  // A curved wall is read piece by piece (CNT-18): a room traced along it has one edge per piece.
+  for (const axis of wallSegments(wall)) {
+    const along = axis.length === 0 ? 1 : (axis.to - axis.from) / axis.length
+    for (const traced of rooms) {
+      if (!traced.walls.has(wall.id)) continue
+      for (const polygon of [traced.polygon, ...traced.holes]) {
+        for (let i = 0; i < polygon.length; i++) {
+          const a = polygon[i]!
+          const b = polygon[(i + 1) % polygon.length]!
+          const e = sub(b, a)
+          const length = Math.hypot(e.x, e.y)
+          if (length < tolerance('noLength')) continue
+          const offA = dot(sub(a, axis.start), axis.normal)
+          const offB = dot(sub(b, axis.start), axis.normal)
+          if (Math.abs(Math.abs(offA) - half) > near || Math.abs(Math.abs(offB) - half) > near) continue
+          // The room lies to the left of its counter-clockwise outline, and of its clockwise holes,
+          // so on the face the edge's left points to.
+          const left = dot({ x: -e.y, y: e.x }, axis.normal) > 0
+          const s0 = Math.max(0, Math.min(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
+          const s1 = Math.min(axis.length, Math.max(dot(sub(a, axis.start), axis.dir), dot(sub(b, axis.start), axis.dir)))
+          if (s1 - s0 > tolerance('noLength')) cover.push({ from: axis.from + s0 * along, to: axis.from + s1 * along, room: traced.room.id, left })
+        }
       }
     }
   }
@@ -225,8 +229,8 @@ function bodiesOf(walls: readonly Wall[]): Body[] {
   return walls.flatMap((wall) => {
     if (wall.virtual === true || !(wall.thickness > 0)) return []
     try {
-      const axis = wallAxis(wall)
-      return [{ wall, start: axis.start, dir: axis.dir, normal: axis.normal, length: axis.length, half: wall.thickness / 2 }]
+      if (curveFault(wall) !== null) return []
+      return wallSegments(wall).map((axis) => ({ wall, start: axis.start, dir: axis.dir, normal: axis.normal, length: axis.length, half: wall.thickness / 2 }))
     } catch {
       return []
     }
@@ -243,14 +247,17 @@ const inBody = (p: Vec2, b: Body): boolean => {
 type Enclosed = (p: Vec2) => boolean
 
 function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>, bodies: Buckets<Body>, enclosed: Enclosed): WallSides {
-  let axis
+  const detached: WallSides = { wall: wall.id, stated: wall.kind, stretches: [], worked: 'detached', exposure: wall.kind === 'exterior' ? 'exterior' : 'detached', differs: null }
+  // A curve that cannot be built (CNT-18) has no length to work its sides out along.
+  if (curveFault(wall) !== null) return detached
+  let total: number
   try {
-    axis = wallAxis(wall)
+    total = wallLength(wall)
   } catch {
-    return { wall: wall.id, stated: wall.kind, stretches: [], worked: 'detached', exposure: wall.kind === 'exterior' ? 'exterior' : 'detached', differs: null }
+    return detached
   }
   const cover = listedCover(wall, listing)
-  const cuts = [...new Set([0, axis.length, ...cover.flatMap((c) => [c.from, c.to])])].sort((a, b) => a - b)
+  const cuts = [...new Set([0, total, ...cover.flatMap((c) => [c.from, c.to])])].sort((a, b) => a - b)
   const step = (wall.virtual === true ? 0 : wall.thickness / 2) + tolerance('stepPastFace')
   const raw: WallStretch[] = []
   for (let i = 0; i + 1 < cuts.length; i++) {
@@ -262,11 +269,11 @@ function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>,
     const right = [...new Set(on.filter((c) => !c.left).map((c) => c.room))]
     // A side no listed room covers: the room just past that face, if any. A face that looks into
     // the body of another wall, where two walls meet, looks at neither a room nor the outside.
-    const centre = { x: axis.start.x + axis.dir.x * mid, y: axis.start.y + axis.dir.y * mid }
+    const { point: centre, normal } = wallFrameAt(wall, mid)
     const blocked = [false, false]
     for (const [side, sign, k] of [[left, 1, 0], [right, -1, 1]] as const) {
       if (side.length > 0) continue
-      const probe = { x: centre.x + axis.normal.x * step * sign, y: centre.y + axis.normal.y * step * sign }
+      const probe = { x: centre.x + normal.x * step * sign, y: centre.y + normal.y * step * sign }
       const held = roomHolding(probe, rooms.near(probe))
       if (held !== null) side.push(held)
       else blocked[k] = bodies.near(probe).some((b) => b.wall !== wall && inBody(probe, b))

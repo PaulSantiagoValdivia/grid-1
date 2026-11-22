@@ -130,7 +130,8 @@ describe('the facts in the schedules (done when 1)', () => {
     expect(rows.find((r) => r.id === 'd-entry')!.properties).toEqual({ 'fire rating': 'EI 30', 'door set': 'DS-01', 'self-closing': true })
     const csv = (await ok('grid_schedule', { plan: 'office.json', of: 'openings', format: 'csv' })).text.split('\n')
     expect(csv[0]).toBe('"General guidance, not your local rules"')
-    expect(csv[1]).toBe('number,id,type,width m,height m,sill m,floor,side 1,side 2,count,fire rating,door set,self-closing,glazing,openable')
+    // CNT-14: the doors state their swing, so the schedule says their handing.
+    expect(csv[1]).toBe('number,id,type,width m,height m,sill m,handing,floor,side 1,side 2,count,fire rating,door set,self-closing,glazing,openable')
     const facts = rows.reduce((n, r) => n + Object.keys(r.properties).length, 0)
     expect(facts).toBe(11 + 12)
   })

@@ -12,6 +12,7 @@ import type { Look } from './look'
 import { TEXT_PX, lengthText, lineMetres } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
+import { ENGLISH_WORDS, drawingText, type DrawingWords } from './words'
 
 const n = (value: number): string => lengthText(value)
 const pixelGroup = (at: Vec2, mpp: number): string => `translate(${n(at.x)} ${n(-at.y)}) scale(${n(mpp)})`
@@ -25,16 +26,8 @@ const DISC_PX = 12
 /** How far under a room's label point its level stands, in pixels: below the name and the area. */
 const LEVEL_DY_PX = 32
 
-const SHORT: Readonly<Record<CompassPoint, string>> = {
-  north: 'N',
-  'north-east': 'NE',
-  east: 'E',
-  'south-east': 'SE',
-  south: 'S',
-  'south-west': 'SW',
-  west: 'W',
-  'north-west': 'NW'
-}
+/** MSG-11: the letters of the way a side faces, in the drawing's language (`drawing.mark.faces.*`). */
+const short = (faces: CompassPoint, words: DrawingWords): string => drawingText(words, `drawing.mark.faces.${faces}`)
 
 /** A triangle pointing along `dir` (on the plan, y up), from `from` px out to `to` px, in a pixel group. */
 function arrow(dir: Vec2, from: number, to: number, half: number): string {
@@ -45,7 +38,7 @@ function arrow(dir: Vec2, from: number, to: number, half: number): string {
 }
 
 /** The marks' elements, over the drawing and under the north arrow. `mpp` is metres per pixel. */
-export function drawingMarkNodes(marks: DrawingMarks, look: Look, mpp: number, paperScale?: number): SvgNode[] {
+export function drawingMarkNodes(marks: DrawingMarks, look: Look, mpp: number, paperScale?: number, words: DrawingWords = ENGLISH_WORDS): SvgNode[] {
   const lines = lineMetres(look, mpp, paperScale)
   const ink = look.ink
   const nodes: SvgNode[] = []
@@ -82,7 +75,7 @@ export function drawingMarkNodes(marks: DrawingMarks, look: Look, mpp: number, p
       el('g', { 'data-part': 'elevation-mark', 'data-faces': mark.faces, 'data-facade': mark.facade, transform: pixelGroup(mark.at, mpp) }, [
         el('path', { d: arrow(mark.look, DISC_PX - 2, DISC_PX + 9, 7), fill: ink }),
         el('circle', { r: DISC_PX, fill: look.colors.paper, stroke: ink, 'stroke-width': n(lines.width('mark') / mpp) }),
-        el('text', { y: '4', ...name, 'font-size': TEXT_PX.dimension }, [SHORT[mark.faces]])
+        el('text', { y: '4', ...name, 'font-size': TEXT_PX.dimension }, [short(mark.faces, words)])
       ])
     )
   }

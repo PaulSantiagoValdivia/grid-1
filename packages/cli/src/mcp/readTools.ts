@@ -7,11 +7,14 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, limit, planFloors, planOrientation, planStoreys, tolerance, viewSetting, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
+import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, kindWords, limit, planFloors, planOrientation, planStoreys, tolerance, viewSetting, wallPointAt, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
 import { CameraRefused, cameraFor, eyeCamera, lensProblem, settingOfCamera, type CameraAsk } from '../draw/cameraAsk'
 import { PATH_MAX } from '../fs/projectFiles'
-import { FIRM_HEADING, GENERAL_GUIDANCE_LABEL, buildingKindsText, confirmedFigure, figureUsedText, inspectPlan, isFirmLine, type ResultLine } from '@ongrid/rules'
-import { causeText, checkPlan, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmStandardsText, KIND_WORDS, placeText, type PlaceWords, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, problemsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { GENERAL_GUIDANCE_LABEL, confirmedFigure, figureUsedSaid, inspectPlan, isFirmLine, type ResultLine } from '@ongrid/rules'
+import { causeText, checkPlan, checkTitle, countsText, coverageSummary, firmHeadingText, firmNoNoteText, firmSectionTitle, firmStandardsText, kindWord, limitsText, nothingCheckedText, partsText, placeText, type PlaceWords, problemsText, readForText, restText, ruleText, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { askedLanguage, languageFor } from '../command/language'
+import { inLanguage, t, tv } from '../command/words'
+import { LANGUAGES, say, type Language } from '@ongrid/floorplan/messages'
 import { readSeen, type SeenState } from '../seen/marks'
 import { firmForCheck } from '../firm/measure'
 import { describePlan, describeRooms, describeWalk, walkOf } from '../command/describe'
@@ -193,6 +196,14 @@ function comparisonLines(c: Comparison): string[] {
   }
   if (c.openingsChanged.length > 0) lines.push(`  Openings changed: ${some(c.openingsChanged, (o) => `${o.type} ${q(o.id)}: ${o.changes.join(', ')}`)}.`)
   return lines
+}
+
+/** MSG-11: the language Grid writes its words in; the codes and values are the same in every language. */
+export const LANGUAGE_ARG: ArgSpec = {
+  type: 'string',
+  enum: [...LANGUAGES],
+  description: "The language Grid writes its own words in: the label, each line's message, found, needed and fix, and the report. The plan's own display.language when left out, else en. Codes and values are the same in every language; room names stay as written.",
+  examples: ['es']
 }
 
 const compareTool: GridTool = {
@@ -703,7 +714,11 @@ function listSchedule(survey: Survey, of: 'rooms' | 'openings' | 'flats', floor:
   const s = openingSchedule(survey, floors === undefined ? {} : { floors })
   const data = { rows: s.rows, counts: s.counts, rule: s.rule }
   if (asCsv) return { text: openingScheduleCsv(s), data }
-  const lines = s.rows.map((r) => `${r.number}. ${r.type} ${q(r.id)}, ${q(r.floorName)}: ${lengthText(r.width, units)} wide × ${lengthText(r.height, units)} high${r.type === 'window' ? `, sill ${lengthText(r.sill, units, 'height')}` : ''}, ${r.between[0]} ↔ ${r.between[1]}${Object.keys(r.properties).length === 0 ? '' : `; ${factsText(r.properties)}`}`)
+  // CNT-14: its kind, the part that opens and its handing, where the plan states them.
+  const kindOf = (r: (typeof s.rows)[number]): string => (r.type === 'opening' ? r.type : kindWords(r.type, r.kind))
+  const partOf = (r: (typeof s.rows)[number]): string =>
+    `${r.opens === null ? '' : `, opens ${lengthText(r.opens.width, units)} × ${lengthText(r.opens.height, units)}`}${r.handing === null ? '' : `, ${r.handing}`}`
+  const lines = s.rows.map((r) => `${r.number}. ${kindOf(r)} ${q(r.id)}, ${q(r.floorName)}: ${lengthText(r.width, units)} wide × ${lengthText(r.height, units)} high${r.type === 'window' ? `, sill ${lengthText(r.sill, units, 'height')}` : ''}${partOf(r)}, ${r.between[0]} ↔ ${r.between[1]}${Object.keys(r.properties).length === 0 ? '' : `; ${factsText(r.properties)}`}`)
   if (lines.length === 0) lines.push('The plan has no openings.')
   lines.push(`In all, each counted once: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
   return { text: lines.join('\n'), data }
@@ -715,8 +730,8 @@ const scheduleTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, how many toilets, basins, showers, baths or kitchen runs there are and where, or for the flats, the area of each flat or the unit mix. '
-    + 'It groups every door, window and doorless opening by type and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame or leaf, so a clear width is not known. '
-    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height, floor and, on a plan that lists flats, its flat, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size and the rooms on its two sides; with of=flats, every flat the plan lists with its type, rooms, bedrooms and net area, and the mix by type (how many of each, how many mirrored). All as text or CSV. '
+    + 'It groups every door, window and doorless opening by type, kind (sliding, double, fixed… when the plan states one) and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame, so a clear width is not known. '
+    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height, floor and, on a plan that lists flats, its flat, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size, its kind, the part that opens and its handing where the plan states them, and the rooms on its two sides; with of=flats, every flat the plan lists with its type, rooms, bedrooms and net area, and the mix by type (how many of each, how many mirrored). All as text or CSV. '
     + 'Do not use for wall or plaster quantities (grid_takeoff). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
@@ -765,11 +780,13 @@ const scheduleTool: GridTool = {
     const fixtureData = f === null || f.rows.length === 0 ? {} : { fixtures: f.rows.map((r) => ({ id: r.id, kind: r.kind, label: r.label, floor: r.floor, room: r.room, size: r.size, height: r.height })), fixtureCounts: f.counts }
     const data = { rows: s.rows, counts: s.counts, rule: s.rule, ...fixtureData }
     if (args['format'] === 'csv') {
-      const rows = s.rows.flatMap((row) => row.items.map((item) => [row.type, item.id, row.width, row.height, row.sill, item.floor, name(item.between[0]).replace(/"/g, ''), name(item.between[1]).replace(/"/g, '')]))
-      for (const r of f?.rows ?? []) rows.push([r.kind, r.id, r.size[0], r.height, '', r.floor, r.room === null ? 'no room' : name(r.room).replace(/"/g, ''), ''])
-      return { text: csv(['type', 'id', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2'], rows), data }
+      // CNT-14: a kind column only when some opening states its kind, so a plan with none is as before.
+      const kinds = s.rows.some((row) => row.kind !== null)
+      const rows = s.rows.flatMap((row) => row.items.map((item) => [row.type, ...(kinds ? [row.kind ?? ''] : []), item.id, row.width, row.height, row.sill, item.floor, name(item.between[0]).replace(/"/g, ''), name(item.between[1]).replace(/"/g, '')]))
+      for (const r of f?.rows ?? []) rows.push([r.kind, ...(kinds ? [''] : []), r.id, r.size[0], r.height, '', r.floor, r.room === null ? 'no room' : name(r.room).replace(/"/g, ''), ''])
+      return { text: csv(['type', ...(kinds ? ['kind'] : []), 'id', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2'], rows), data }
     }
-    const lines = types?.length === 1 && types[0] === 'fixture' ? [] : s.rows.map((row) => `${row.count} × ${row.type} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units, 'height')}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
+    const lines = types?.length === 1 && types[0] === 'fixture' ? [] : s.rows.map((row) => `${row.count} × ${row.type === 'opening' ? row.type : kindWords(row.type, row.kind)} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units, 'height')}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
     const onlyFixtures = types !== undefined && types.every((t) => t === 'fixture')
     if (lines.length === 0 && !onlyFixtures) lines.push(args['narrower_than'] !== undefined ? `Nothing of that kind is narrower than ${m(args['narrower_than'] as number)} m.` : 'The plan has no openings of that kind.')
     if (!onlyFixtures) lines.push(`In all: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
@@ -1561,13 +1578,13 @@ function marksText(marks: DrawingMarksAsked): string {
  * LVL-8: grid_view's facade: one side of the drawing in elevation, with what it shows in words and
  * as data (the side, the walls and openings seen, each floor's level, the ground).
  */
-async function facadeAnswer(plan: FloorPlan, args: Record<string, unknown>): Promise<{ text: string; data: Record<string, unknown>; image: { data: Uint8Array; mimeType: 'image/png' } }> {
+async function facadeAnswer(plan: FloorPlan, args: Record<string, unknown>, language: Language = 'en'): Promise<{ text: string; data: Record<string, unknown>; image: { data: Uint8Array; mimeType: 'image/png' } }> {
   if (args['side'] === undefined) throw new ToolRefusal(`kind=facade needs side: the side of the drawing to draw, one of ${FACADE_SIDES.join(', ')} (north is the top of the drawing).`)
   const side = args['side'] as FacadeSide
   const asked = (args['look'] as LookName | undefined) ?? 'working'
   const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`
   const { facadeView } = await import('../draw/views')
-  const view = await facadeView(plan, { side, look: asked })
+  const view = await facadeView(plan, { side, look: asked, language })
   const { facade } = view
   const count = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`
   const levels = facade.levels.map((l) => `${q(l.name)} at ${m(l.level)} m`).join(', ')
@@ -1638,6 +1655,7 @@ const viewTool: GridTool = {
     colour: { type: 'string', maxLength: 120, description: 'For plan: use fills each room by its use and lists the uses in the key; any other field or fact, by name as grid_fields lists it (department, fire rating), colours each room, wall, door and window by its value, with a key: grid_count\'s view passes it. One fill for every room when left out.', examples: ['use', 'department', 'fire rating'] },
     highlight: { type: 'array', description: 'For plan: rooms, walls, doors, windows or openings to pick out, by id, in one colour with a key: grid_find\'s view passes its ids here. Nothing picked out when left out.', examples: [['d1', 'd4'], ['office-2']], items: { id: true }, minItems: 1, maxItems: 2000 },
     key: { type: 'boolean', description: 'For plan: true to add a key under the drawing, even where the plan asks for none.', examples: [true] },
+    language: LANGUAGE_ARG,
     cut: {
       type: 'object',
       description: 'For section, and for plan with marks section: the line to cut along, from one point of the plan to another, in metres. Every floor is cut along it.',
@@ -1663,14 +1681,17 @@ const viewTool: GridTool = {
     const stray = ['floor', 'from', 'side', 'bearing', 'tilt', 'distance', 'lens', 'camera', 'view', 'turn', 'tilt_by', 'room', 'toward', 'eye_height', 'look', 'dimensions', 'ids', 'crop', 'hide', 'colour', 'key', 'highlight', 'marks', 'cut'].filter((key) => args[key] !== undefined && !allowed[kind]!.includes(key))
     if (stray.length > 0) throw new ToolRefusal(`kind=${kind} takes ${allowed[kind]!.join(', ')}, not ${stray.join(', ')}.`)
     const plan = survey.plan
-    if (kind === 'facade') return facadeAnswer(plan, args)
+    // MSG-11: the drawing's own words in the language asked for, else the plan's own.
+    const language = await languageFor(askedLanguage(args['language'], 'language'), loaded.plan)
+    const inTongue = language === 'en' ? {} : { language }
+    if (kind === 'facade') return facadeAnswer(plan, args, language)
     if (kind === 'section') {
       const cut = args['cut'] as CutArg | undefined
       if (cut === undefined) throw new ToolRefusal('kind=section needs cut: the line to cut along, as {"from": [x, y], "to": [x, y]} in metres.')
       const line = asToolArg(() => sectionLineOf(cut.from, cut.to, towardOf(args['toward'] as string | undefined, 'toward'), 'cut'))
       // Loaded only for a section: the drawing and the words that go with it.
       const { sectionAnswer } = await import('./sectionAnswer')
-      return sectionAnswer(plan, line, (args['look'] as LookName | undefined) ?? 'working')
+      return sectionAnswer(plan, line, (args['look'] as LookName | undefined) ?? 'working', language)
     }
     // LVL-9: the marks for the plan's other drawings; cut and toward only for a section's line on it.
     const markWords = args['marks'] === undefined ? null : asToolArg(() => readMarks(args['marks'] as string[], 'marks'))
@@ -1689,8 +1710,8 @@ const viewTool: GridTool = {
       const shown = floor ?? survey.facts.floors[0]?.id ?? 'ground'
       const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
       // What went wrong, numbered as grid_check numbers it, marked on the drawing (MSG-8).
-      const faults = inspectPlan(plan).lines
-      const display = args['units'] === undefined && args['decimal'] === undefined ? undefined : displayFor(args['units'], args['decimal'], plan)
+      const faults = inspectPlan(plan, { ...inTongue, ...(plan.display?.decimal ? { decimal: plan.display.decimal } : {}) }).lines
+      const display = args['units'] === undefined && args['decimal'] === undefined ? undefined : displayFor(args['units'], args['decimal'], plan, language)
       // SHT-7: what the picture shows, read as grid draw reads --hide, --colour and --key.
       let shownParts
       const colour = args['colour'] as string | undefined
@@ -1704,7 +1725,7 @@ const viewTool: GridTool = {
       const painted = paintOf(survey, shown, colour === 'use' ? undefined : colour, args['highlight'] as string[] | undefined)
       if (painted !== null) shownParts = { ...shownParts, show: { ...shownParts.show, paint: painted.paint, paintKey: painted.key } }
       const dimensions = args['dimensions'] !== false && shownParts.showDimensions
-      const view = await planView(plan, { floor: shown, look: asked, dimensions, ids: withIds, faults, show: shownParts.show, ...(display ? { display } : {}), ...(crop ? { frame: cropFrame(crop) } : {}), ...(marksOnPlan ? { marks: marksOnPlan } : {}) })
+      const view = await planView(plan, { floor: shown, look: asked, dimensions, ids: withIds, faults, show: shownParts.show, ...inTongue, ...(display ? { display } : {}), ...(crop ? { frame: cropFrame(crop) } : {}), ...(marksOnPlan ? { marks: marksOnPlan } : {}) })
       const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. ${plan.north === undefined ? 'North is the top of the drawing; the plan holds no real north.' : `The north arrow in its top-right corner points to the north the plan states, ${northWords(wrapDegrees(plan.north))}; the sides named in other answers are the drawing's, north at the top.`} Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
       const undecided = view.undecidedDoors ?? []
@@ -1760,7 +1781,7 @@ const viewTool: GridTool = {
         throw error
       }
       const { cameraView } = await import('../draw/views')
-      const view = await cameraView(plan, camera)
+      const view = await cameraView(plan, camera, language)
       // LVL-4: the whole of a building of several floors is drawn closed, with its roofs; one floor
       // alone, or a floor cut away, is drawn open from above, as the 3D view draws it.
       const roofed = camera.cut === null && planFloors(plan).length > 1
@@ -1795,13 +1816,13 @@ const viewTool: GridTool = {
       const facts = survey.facts.openings.get(target)
       if (!facts) throw new ToolRefusal('That opening can\'t be drawn; grid_check says why.')
       const wall = plan.walls.find((w) => w.id === facts.wall)!
-      const t = (facts.offset + facts.width / 2) / Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
-      toward = { x: wall.start[0] + (wall.end[0] - wall.start[0]) * t, y: wall.start[1] + (wall.end[1] - wall.start[1]) * t }
+      // The opening's middle, along a curved wall's curve too (CNT-18).
+      toward = wallPointAt(wall, facts.offset + facts.width / 2)
       looking = `${facts.type} ${q(target)}`
     }
     const { cameraView, eyeStand } = await import('../draw/views')
     const camera = eyeCamera(plan, { room: id, polygon: room.polygon, stand: eyeStand(room.polygon, toward), height, toward })
-    const view = await cameraView(plan, camera)
+    const view = await cameraView(plan, camera, language)
     const heading = wrapDegrees(drawingBearing(camera.bearing, planOrientation(plan)) + 180)
     const sills = windows.map((w) => ({ id: w.id, sill: w.sill, top: w.sill + w.height, seenOver: w.sill < height }))
     const sillText = sills.length === 0
@@ -1838,6 +1859,7 @@ const describeTool: GridTool = {
     as: { type: 'string', enum: ['rooms'], description: 'rooms: the plan as rooms text, to change and write again with grid_write_rooms. Takes no length or for.', examples: ['rooms'] },
     floor: { ...FLOOR_ARG, description: 'For length=walk: the floor to walk. Every floor when left out, a floor laid out like an earlier one said once.' },
     pictures: { type: 'boolean', description: 'For length=walk: true to add a picture at eye height from each doorway, looking ahead, in the order of the walk. false when left out.', examples: [true, false] },
+    language: LANGUAGE_ARG,
   },
   outputSchema: objectSchema({ length: { type: ['string', 'null'] }, for: { type: ['string', 'null'] }, as: { type: ['string', 'null'] }, text: STRING, pictures: { type: 'array' } }, ['length', 'for', 'as', 'text']),
   async run(args, context) {
@@ -1845,8 +1867,10 @@ const describeTool: GridTool = {
       throw new ToolRefusal('as=rooms reads the plan back as rooms text, which has no length or for: leave them out.')
     }
     const { loaded } = readPlan(context, args['plan'])
+    // MSG-11: the description in the language asked for, else the plan's own.
+    const language = await languageFor(askedLanguage(args['language'], 'language'), loaded.plan)
     if (args['as'] === 'rooms') {
-      const text = describeRooms(loaded)
+      const text = describeRooms(loaded, { language })
       return { text, data: { length: null, for: null, as: 'rooms', text } }
     }
     const length = (args['length'] as (typeof DESCRIBE_LENGTHS)[number] | undefined) ?? 'rooms'
@@ -1858,12 +1882,13 @@ const describeTool: GridTool = {
     }
     if (length === 'walk') {
       // VEW-9: the walk, and a picture from each doorway when asked, at most WALK_PICTURES_MAX.
+      // MSG-11: in the language asked for; a picture is named in it too.
       const { survey, walk } = walkOf(loaded, floor)
       const shots = args['pictures'] === true ? await walkPictures(survey, walk, WALK_PICTURES_MAX) : []
-      const names = new Map(shots.map((shot, i) => [shot.stop, `picture ${i + 1}`]))
+      const names = new Map(shots.map((shot, i) => [shot.stop, say(language, 'describe.walk.pictureName', { n: i + 1 })]))
       const stops = walk.floors.reduce((sum, floor) => sum + floor.stops.length, 0)
       const more = args['pictures'] === true && stops > shots.length ? `\nPictures of the first ${shots.length} doorways of ${stops}: pass floor to walk one floor at a time.` : ''
-      const text = `${describeWalk(survey, walk, audience, names).trimEnd()}${more}`
+      const text = `${describeWalk(survey, walk, audience, names, { language }).trimEnd()}${more}`
       const pictures = shots.map((shot, i) => ({ picture: i + 1, room: shot.stop.room, floor: shot.stop.floor, eyeHeight: WALK_EYE_HEIGHT, heading: shot.stop.heading }))
       return {
         text,
@@ -1871,7 +1896,7 @@ const describeTool: GridTool = {
         ...(shots.length === 0 ? {} : { images: shots.map((shot) => ({ data: shot.png, mimeType: 'image/png' as const })) }),
       }
     }
-    const text = describePlan(loaded, length, audience)
+    const text = describePlan(loaded, length, audience, { language })
     return { text, data: { length, for: audience, as: null, text } }
   },
 }
@@ -1888,7 +1913,8 @@ export const COUNTRY_ARG: ArgSpec = {
 }
 
 /** COD-3: how grid_check's first line names the place it was given. */
-const TOOL_PLACE: PlaceWords = { request: 'the country argument', give: 'give country' }
+const TOOL_PLACE: PlaceWords = 'tool'
+
 
 /** MSG-10: a line's seen state as data: the mark, and with `back` the parts that changed since. */
 function seenData(state: SeenState | undefined): Record<string, unknown> | undefined {
@@ -1902,8 +1928,10 @@ function seenData(state: SeenState | undefined): Record<string, unknown> | undef
 /** One line of grid_check's list. COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for. */
 function toolLine(result: CheckResult, index: number): string {
   const line = result.result.lines[index]!
+  const needed = usedFigures(line) ? t('tool.check.needed', { needed: line.needed }) : ''
   // MSG-5: a line that follows from another is set under it, and says so.
-  return `  ${line.causedBy ? '  ' : ''}${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''}${line.causedBy ? ` Follows from ${causeText(line.causedBy)}.` : ` Fix: ${line.fix}`} [${line.code}]`
+  const words = { kind: kindWord(line.kind), thing: thingText(line), message: line.message, needed, code: line.code }
+  return `  ${line.causedBy ? '  ' : ''}${result.numbers[index]}. ${line.causedBy ? t('tool.check.line.follows', { ...words, cause: causeText(line.causedBy) }) : t('tool.check.line', { ...words, fix: line.fix })}`
 }
 
 const checkTool: GridTool = {
@@ -1921,9 +1949,12 @@ const checkTool: GridTool = {
     floor: { ...FLOOR_ARG, description: 'Only what was found on this floor. Every floor when left out.' },
     country: COUNTRY_ARG,
     full: { type: 'boolean', description: 'true for the whole report: the checks run, every figure with its basis and status, each check\'s coverage and what these checks never look at. Short when left out.', examples: [true] },
+    language: LANGUAGE_ARG,
   },
   outputSchema: objectSchema({
     label: STRING,
+    // MSG-11: the language the words are in: en or es.
+    language: STRING,
     // MSG-1: the one list and the one count, as docs/result-contract.md sets them out.
     count: { type: 'number' },
     // MSG-5: the lines that follow from no other: the problems to act on.
@@ -1942,6 +1973,8 @@ const checkTool: GridTool = {
       figures: { type: 'array' },
       // MSG-7: the change that would clear the line, as data, and the same as a call to retry.
       fixes: { type: 'array' },
+      // MSG-11: the figures, names and places the line's words were made with, as data.
+      values: { type: 'object' },
       calls: listSchema(objectSchema({ tool: STRING, arguments: { type: 'object' } }, ['tool', 'arguments'])),
       // MSG-5: the line this one follows from; the parts a line for several stands for; the notes held back.
       causedBy: objectSchema({ code: STRING, id: STRING }),
@@ -2002,8 +2035,8 @@ const checkTool: GridTool = {
         notes: { type: 'number' },
       }, ['measure', 'value', 'unit', 'name', 'note', 'uses', 'kinds', 'lookedAt', 'notes'])),
     }, ['heading', 'file', 'read', 'standards']),
-  }, ['label', 'count', 'problems', 'lines', 'seenCount', 'marksFile', 'marksProblem', 'findings', 'notChecked', 'drawing', 'coverage', 'limits', 'place', 'withoutPlace', 'taped']),
-  run(args, context) {
+  }, ['label', 'language', 'count', 'problems', 'lines', 'seenCount', 'marksFile', 'marksProblem', 'findings', 'notChecked', 'drawing', 'coverage', 'limits', 'place', 'withoutPlace', 'taped']),
+  async run(args, context) {
     const { loaded, project, file } = readPlan(context, args['plan'])
     const floor = floorArg(loaded.plan, args['floor'])
     const full = args['full'] === true
@@ -2011,7 +2044,9 @@ const checkTool: GridTool = {
     try {
       // COD-8: the firm's own standards beside the plan, when it has a file of them.
       const firm = firmForCheck(project, file, loaded.plan)
-      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}), ...(firm ? { firm } : {}) }, 'country')
+      // MSG-11: the language asked for, else the plan's own, with its messages loaded.
+      const language = await languageFor(askedLanguage(args['language'], 'language'), loaded.plan)
+      result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}), ...(firm ? { firm } : {}), ...(language === 'en' ? {} : { language }) }, 'country')
       result = withSeen(result, loaded, readSeen(project, file))
     } catch (error) {
       throw asRefusal(error)
@@ -2024,100 +2059,106 @@ const checkTool: GridTool = {
     }))
     const notChecked = result.report.notChecked.map((n) => ({ floor: n.floor, message: n.message }))
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
-    const record = result.result
-    const states = result.seen?.states ?? []
-    const seen = seenCount(result)
-    // COD-3: right after the label, the place and the figures applied, or that none was.
-    const lines: string[] = [GENERAL_GUIDANCE_LABEL, placeText(result.report, TOOL_PLACE)]
-    if (result.seen?.problem) lines.push(`The seen marks were not read: ${result.seen.problem}. Every note is listed as new.`)
-    const seenWords = seen > 0 ? `; ${seen} of them seen, under Seen` : ''
-    const checksRun = result.report.rules.length === 0 ? `Checks run: none. ${NOTHING_CHECKED}` : `Checks run: ${result.report.rules.length}.`
-    // NOTHING_FOUND: an empty list only means these checks found nothing.
-    lines.push(`To look at: ${record.count === 0 ? `nothing. ${NOTHING_FOUND}` : `${record.count} (${countsText(record)}${seenWords}).${problemsText(record)}`} ${checksRun}`)
-    if (full) for (const rule of result.report.rules) lines.push(`  - ${rule.title} (${rule.source.label})`)
-    // A seen line is listed under Seen, never left out (MSG-10).
-    const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
-    // COD-8: the firm's own standards under their own heading, apart from the code figures.
-    const firmOpen = open.filter((index) => isFirmLine(record.lines[index]!)).length
-    let firmHeading = false
-    for (const index of open.slice(0, 12)) {
-      if (isFirmLine(record.lines[index]!) && !firmHeading && record.firm !== undefined) {
-        firmHeading = true
-        lines.push(firmHeadingText(record.firm, firmOpen))
-      }
-      lines.push(toolLine(result, index))
-      const state = states[index]
-      if (state?.state === 'back') lines.push(`${record.lines[index]!.causedBy ? '  ' : ''}      ${seenBeforeText(state)}.`)
-    }
-    if (open.length > 12) lines.push(`  … ${open.length - 12} more in the data, each with what was found and needed.`)
-    // COD-8: firm lines past the first 12 still have their heading, so none is read as a code's.
-    if (!firmHeading && firmOpen > 0 && record.firm !== undefined) lines.push(`${firmHeadingText(record.firm, firmOpen)} They are in the data, each with its code firm/….`)
-    // WRT-6 (lab WR-15): what was assumed, for the person to confirm, named even past the first 12.
-    // A seen one is under Seen with the others (MSG-10).
-    const toConfirm = open.map((index) => record.lines[index]!).filter((line) => line.kind === 'to-confirm')
-    if (toConfirm.length > 0) lines.push(`To confirm with the person (${toConfirm.length}), assumed and not given: ${toConfirm.slice(0, 8).map((line) => line.message).join('; ')}${toConfirm.length > 8 ? `; and ${toConfirm.length - 8} more in the data` : ''}.`)
-    if (seen > 0) {
-      lines.push(`Seen (${seen}): ${SEEN_HEADING_NOTE}.`)
-      record.lines.forEach((line, index) => {
+    return inLanguage(result.language, result.decimal, () => {
+      const record = result.result
+      const states = result.seen?.states ?? []
+      const seen = seenCount(result)
+      // COD-3: right after the label, the place and the figures applied, or that none was.
+      const lines: string[] = [result.label, placeText(result.report, TOOL_PLACE)]
+      if (result.seen?.problem) lines.push(t('report.seenUnread', { problem: result.seen.problem }))
+      const seenWords = seen > 0 ? t('tool.check.ofThemSeen', { count: seen }) : ''
+      const checksRun = result.report.rules.length === 0 ? t('report.checksRun.none') : t('report.checksRun', { count: result.report.rules.length })
+      // NOTHING_FOUND: an empty list only means these checks found nothing.
+      lines.push(`${record.count === 0 ? t('report.toLook.none') : t('tool.check.toLook', { count: record.count, counts: countsText(record), seen: seenWords })}${record.count === 0 ? '' : problemsText(record)} ${checksRun}`)
+      if (full) for (const rule of result.report.rules) lines.push(`  - ${ruleText(rule)}`)
+      // A seen line is listed under Seen, never left out (MSG-10).
+      const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
+      // COD-8: the firm's own standards under their own heading, apart from the code figures.
+      const firmOpen = open.filter((index) => isFirmLine(record.lines[index]!)).length
+      let firmHeading = false
+      for (const index of open.slice(0, 12)) {
+        if (isFirmLine(record.lines[index]!) && !firmHeading && record.firm !== undefined) {
+          firmHeading = true
+          lines.push(firmHeadingText(record.firm, firmOpen))
+        }
+        lines.push(toolLine(result, index))
         const state = states[index]
-        if (state?.state === 'seen') lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Seen ${seenByText(state.mark)}. [${line.code}]`)
-      })
-    }
-    // MSG-7: each line one call would clear carries that call, ready to send.
-    const withCalls = record.lines.map((line, index) => {
-      const withFix = withFixCalls(line, args['plan'])
-      const mark = seenData(states[index])
-      return mark === undefined ? withFix : { ...withFix, seen: mark }
-    })
-    const callable = withCalls.filter((line) => line.calls !== undefined).length
-    if (callable > 0) lines.push(`${callable === 1 ? 'One line carries' : `${callable} lines carry`} the call that would fix it, under calls in the data.`)
-    if (record.counts.finding === 0 && record.count > 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
-    else if (record.count > 0 && record.lines.every((line) => line.kind !== 'finding' || isFirmLine(line))) lines.push('No findings outside the firm\'s own standards: that only means these checks found nothing, not that the plan meets any rule.')
-    // COD-8: a firm's file whose standards gave no note still says it was read.
-    const firmNone = firmNoNoteText(record)
-    if (firmNone !== null) lines.push(firmNone)
-    // HND-11 (lab WR-14): each length taped on site against the drawing, after every run.
-    lines.push(...tapedTable(record.taped ?? []))
-    if (full) {
-      // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
-      const rooms = result.rooms
-      lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
-      for (const check of record.coverage) {
-        const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
-        const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
-        lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}${readFor}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
+        if (state?.state === 'back') lines.push(`${record.lines[index]!.causedBy ? '  ' : ''}      ${seenBeforeText(state)}.`)
       }
-      // MSG-3: each figure as the figure used here, with its basis and status.
-      if (record.figures.length > 0) lines.push(`Figures used (${record.figures.length}):`, ...record.figures.map((figure) => `  ${figureUsedText(figure)}`))
-      // COD-8: the firm's own standards, apart from the code figures.
-      if (record.firm !== undefined && record.firm.read) lines.push(`${FIRM_HEADING} in ${JSON.stringify(record.firm.file)} (${record.firm.standards.length}):`, ...firmStandardsText(record.firm).map((text) => `  ${text}.`))
-      // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
-      lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
-    } else {
-      // MSG-10: the counts, the gaps with their reasons, and where the rest is.
-      lines.push(...coverageSummary(result).filter((line) => line !== '').map((line) => line.replace(/^ {2}- /, '  ')), restText(result.report, 'full=true'))
-    }
-    return {
-      text: lines.join('\n'),
-      data: {
-        label: GENERAL_GUIDANCE_LABEL,
-        count: record.count,
-        problems: record.problems,
-        lines: withCalls,
-        seenCount: seen,
-        marksFile: result.seen?.file ?? '',
-        marksProblem: result.seen?.problem ?? null,
-        findings,
-        notChecked,
-        drawing,
-        coverage: record.coverage,
-        limits: record.limits,
-        place: record.place,
-        ...(record.withoutPlace ? { withoutPlace: record.withoutPlace } : {}),
-        taped: record.taped ?? [],
-        ...(record.firm ? { firm: record.firm } : {}),
-      },
-    }
+      if (open.length > 12) lines.push(`  ${t('tool.check.more', { count: open.length - 12 })}`)
+      // COD-8: firm lines past the first 12 still have their heading, so none is read as a code's.
+      if (!firmHeading && firmOpen > 0 && record.firm !== undefined) lines.push(t('tool.check.firm.more', { heading: firmHeadingText(record.firm, firmOpen) }))
+      // WRT-6 (lab WR-15): what was assumed, for the person to confirm, named even past the first 12.
+      // A seen one is under Seen with the others (MSG-10).
+      const toConfirm = open.map((index) => record.lines[index]!).filter((line) => line.kind === 'to-confirm')
+      if (toConfirm.length > 0) {
+        const more = toConfirm.length > 8 ? t('tool.check.confirmMore', { count: toConfirm.length - 8 }) : ''
+        lines.push(t('tool.check.toConfirm', { count: toConfirm.length, list: toConfirm.slice(0, 8).map((line) => line.message).join('; '), more }))
+      }
+      if (seen > 0) {
+        lines.push(t('report.seenHeading', { count: seen }))
+        record.lines.forEach((line, index) => {
+          const state = states[index]
+          if (state?.state === 'seen') lines.push(`  ${result.numbers[index]}. ${t('tool.check.seenLine', { kind: kindWord(line.kind), thing: thingText(line), message: line.message, by: seenByText(state.mark), code: line.code })}`)
+        })
+      }
+      // MSG-7: each line one call would clear carries that call, ready to send.
+      const withCalls = record.lines.map((line, index) => {
+        const withFix = withFixCalls(line, args['plan'])
+        const mark = seenData(states[index])
+        return mark === undefined ? withFix : { ...withFix, seen: mark }
+      })
+      const callable = withCalls.filter((line) => line.calls !== undefined).length
+      if (callable > 0) lines.push(callable === 1 ? t('tool.check.calls.one') : t('tool.check.calls.many', { count: callable }))
+      if (record.counts.finding === 0 && record.count > 0) lines.push(t('tool.check.noFindings'))
+      else if (record.count > 0 && record.lines.every((line) => line.kind !== 'finding' || isFirmLine(line))) lines.push(t('tool.check.firm.noCodeFindings'))
+      // COD-8: a firm's file whose standards gave no note still says it was read.
+      const firmNone = firmNoNoteText(record)
+      if (firmNone !== null) lines.push(firmNone)
+      // HND-11 (lab WR-14): each length taped on site against the drawing, after every run.
+      lines.push(...tapedTable(record.taped ?? []))
+      if (full) {
+        // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
+        const rooms = result.rooms
+        lines.push(t('report.lookedAtByOne', { summary: rooms.rooms === 0 ? t('tool.check.rooms.none') : t('tool.check.rooms', { lookedAt: rooms.lookedAt, rooms: partsText(rooms.rooms, 'room') }) }))
+        for (const check of record.coverage) {
+          const skipped = check.skippedCount === 0 ? '' : t('report.gap', { count: check.skippedCount, whys: [...new Set(check.skipped.map((s) => (s.said === undefined ? s.why : tv(s.said))))].join('; ') })
+          const readFor = readForText(check)
+          lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(checkTitle(check), check.looksAt)}${skipped}${readFor}.` : `  ${t('tool.check.coverage', { title: checkTitle(check), parts: partsText(check.lookedAtCount, check.looksAt), skipped, readFor })}`)
+        }
+        // MSG-3: each figure as the figure used here, with its basis and status.
+        if (record.figures.length > 0) lines.push(t('report.section', { title: t('report.figuresUsed'), count: record.figures.length }), ...record.figures.map((figure) => `  ${tv(figureUsedSaid(figure))}`))
+        // COD-8: the firm's own standards, apart from the code figures.
+        if (record.firm !== undefined && record.firm.read) lines.push(t('report.section', { title: firmSectionTitle(record.firm), count: record.firm.standards.length }), ...firmStandardsText(record.firm).map((text) => `  ${text}.`))
+        // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
+        lines.push(t('tool.check.never', { count: record.limits.length }), ...limitsText(record.limits).map((limit) => `  ${limit}.`))
+      } else {
+        // MSG-10: the counts, the gaps with their reasons, and where the rest is.
+        lines.push(...coverageSummary(result).filter((line) => line !== '').map((line) => line.replace(/^ {2}- /, '  ')), restText(result.report, 'full=true'))
+      }
+      return {
+        text: lines.join('\n'),
+        data: {
+          label: result.label,
+          language: result.language ?? 'en',
+          count: record.count,
+          problems: record.problems,
+          lines: withCalls,
+          seenCount: seen,
+          marksFile: result.seen?.file ?? '',
+          marksProblem: result.seen?.problem ?? null,
+          findings,
+          notChecked,
+          drawing,
+          coverage: record.coverage,
+          limits: record.limits,
+          place: record.place,
+          ...(record.withoutPlace ? { withoutPlace: record.withoutPlace } : {}),
+          taped: record.taped ?? [],
+          ...(record.firm ? { firm: record.firm } : {}),
+        },
+      }
+    })
   },
 }
 

@@ -92,7 +92,13 @@ export function turnPlan(plan: FloorPlan, id: PlanTurnId): FloorPlan {
     const to: readonly [number, number] = [a * v[0] + b * v[1], c * v[0] + d * v[1]]
     return Object.keys(SIDES).find((name) => SIDES[name]![0] === to[0] && SIDES[name]![1] === to[1]) ?? from
   }
-  const walls = plan.walls.map((wall): Wall => ({ ...wall, start: map(wall.start), end: map(wall.end) }))
+  // CNT-18: a curved wall's centre goes with its ends, and a mirror turns its sweep the other way.
+  const walls = plan.walls.map((wall): Wall => ({
+    ...wall,
+    start: map(wall.start),
+    end: map(wall.end),
+    ...(wall.arc === undefined ? {} : { arc: { centre: map(wall.arc.centre), sweep: mirrored ? -wall.arc.sweep : wall.arc.sweep } }),
+  }))
   const openings = plan.openings.map((opening): Opening => {
     let next: Opening = opening
     if (mirrored && opening.swing !== undefined) next = { ...next, swing: opening.swing === 'left' ? 'right' : 'left' }

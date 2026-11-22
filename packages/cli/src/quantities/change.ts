@@ -15,8 +15,10 @@ import {
   sub,
   tolerance,
   validatePlan,
-  wallAxis,
+  wallCurve,
+  wallLength,
   wallRise,
+  wallSegments,
   wallStandsOn,
   type FloorPlan,
   type Opening,
@@ -73,14 +75,18 @@ function overlap(a: Opening, b: Opening): number {
   return along > 0 && up > 0 ? along * up : 0
 }
 
-/** Whether a point lies on a wall: on its axis, within half its thickness and the joint tolerance. */
+/**
+ * Whether a point lies on a wall: on its axis, within half its thickness and the joint tolerance.
+ * A curved wall (CNT-18) is looked along piece by piece, the chords of its curve.
+ */
 function endsOn(point: readonly [number, number], wall: Wall): boolean {
-  const axis = wallAxis(wall)
   const p = { x: point[0], y: point[1] }
-  const along = dot(sub(p, axis.start), axis.dir)
-  const across = Math.abs(dot(sub(p, axis.start), axis.normal))
   const slack = wall.thickness / 2 + tolerance('wallContact')
-  return across <= slack && along >= -slack && along <= axis.length + slack
+  return wallSegments(wall).some((axis) => {
+    const along = dot(sub(p, axis.start), axis.dir)
+    const across = Math.abs(dot(sub(p, axis.start), axis.normal))
+    return across <= slack && along >= -slack && along <= axis.length + slack
+  })
 }
 
 /**
@@ -120,14 +126,16 @@ export function planChange(plan: FloorPlan, options: { floors?: readonly string[
 
   for (const wall of walls) {
     if (wall.virtual === true) continue
-    const length = wallAxis(wall).length
+    // CNT-18: a curved wall's length is along its curve.
+    const length = wallLength(wall)
     if (length < tolerance('noLength')) continue
     const holes = inWall(wall).reduce((sum, o) => sum + hole(o, rise(wall)), 0)
     const p = phase(wall.id)
     if (p === 'demolished') {
       wallLine('demolish', 'demolish:wall', wall, CHANGE_RULES.demolishWall, 'Walls to be demolished', Math.max(0, length * rise(wall) - holes))
       add({ key: 'make_good:floor', what: 'Floor made good where walls are demolished', unit: 'm2', rule: CHANGE_RULES.floor, list: 'make good', order: [0] }, length * wall.thickness)
-      for (const end of [wall.start, wall.end]) {
+      // A whole circle (CNT-18) has no ends.
+      for (const end of wallCurve(wall)?.closed === true ? [] : [wall.start, wall.end]) {
         const stays = walls.find((other) => other.id !== wall.id && other.virtual !== true && phase(other.id) === 'existing' && endsOn(end, other))
         if (stays !== undefined) add({ key: 'make_good:wall_end', what: 'Wall faces made good where a demolished wall met them', unit: 'm', rule: CHANGE_RULES.wallEnd, list: 'make good', order: [1] }, rise(stays))
       }
