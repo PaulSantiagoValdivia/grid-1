@@ -596,6 +596,28 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: sections, and the marks on a plan (LVL-9)
+
+- `grid_view` takes `kind` `section`: a cut along `cut` (`{ "from": [x, y], "to": [x, y] }`, in
+  metres) through every floor, looking to the `toward` side of it (`left`, the default, or
+  `right`, walking from `from` to `to`), in `look`. The answer's `data` gains `section`: the
+  line, `levels` (each floor's `level` and `source`, `stated`, `datum` or `worked-out`), `roofs`,
+  `ground` (`level`, `stated`), `rooms` (`floorLevel`, `height`, `heightStated`), `cut` (each part
+  cut: `kind`, `id`, `floor`), `shapes` (how many connected shapes they join into) and `assumed`
+  (`kind`, `ids`, `words`, `hatched`). The text says the same, and lists every line of `assumed`.
+- `grid_view` with `kind` `plan` takes `marks` (`levels`, `elevations`, `section`); `section`
+  needs `cut`, and `cut` and `toward` are refused on a plan without it. A plan with no `marks`
+  is drawn as before.
+- `grid draw` takes `--section`, `--toward` and `--marks` the same way.
+- `kind=section` refuses VEW-3's camera arguments (`bearing`, `tilt`, `distance`, `eye_height`,
+  `lens`, `room`, `camera`, `view`, `turn`, `tilt_by`) by name, and `kind=3d` refuses `cut`,
+  `toward` and `marks`; `grid draw` refuses `--section` and `--marks` with `--view`. A section's
+  `data` has `view` null.
+- After LVL-8: `kind=facade` refuses `cut`, `toward` and `marks`, and `kind=section` refuses
+  `side`; `grid draw` refuses `--section` and `--marks` with `--facade`.
+- No new code in the result record: a section and its marks are pictures. `resultVersion`
+  stays 1.
+
 ### 2026-11-22: repeat, mirror and turn, and a mirrored plan recognised (WRT-4)
 
 - `grid_diff` data gains `turn`: null, or `id` (`mirror-left-right`, `mirror-top-bottom`,

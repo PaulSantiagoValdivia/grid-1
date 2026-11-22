@@ -1,0 +1,261 @@
+/**
+ * LVL-9: a section as a picture.
+ *
+ * Nothing here works out the section: the core does (`planSection`), and gives the cut parts
+ * joined, what lies beyond them farthest first, the ground, the levels, the rooms and what it
+ * took. This paints them, in the plan's looks and paper line weights (SHT-1):
+ *
+ * - what lies beyond the cut first, farthest first, each face filled with paper so it hides what is
+ *   behind it, in the light `beyond` line;
+ * - the cut parts solid, in the walls' tone, under the heavy outline the plan's cut walls have
+ *   (written twice the `cut` pen, its inner half under the fill), or solid with no outline in a
+ *   screen look;
+ * - what the section takes that the plan does not state, hatched over the cut;
+ * - the ground line, twice as heavy as the cut, running past the building;
+ * - each room's name and height, and the level of every floor, roof and the ground beside the
+ *   drawing;
+ * - under it, the section's name and line, and the list of what was taken.
+ *
+ * Pure: no DOM, no React.
+ */
+import type { FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import type { Bounds, PlanSection, SectionLine, SectionPiece, Vec2 } from '@ongrid/floorplan/geometry'
+import { levelText, metresText, planSection } from '@ongrid/floorplan/geometry'
+import { estimateTextWidth } from '../canvas2d/labelPlacement'
+import { fitTo, pathOf } from '../canvas2d/viewport'
+import type { PictureKey } from './faults'
+import { wrapText } from './faults'
+import { TEXT_PX, lengthText, lineMetres } from './look'
+import type { Look } from './look'
+import type { Picture, PictureOptions } from './planSvg'
+import { DEFAULT_WIDTH, lookOf } from './planSvg'
+import type { Attrs, SvgNode } from './svgNode'
+import { el } from './svgNode'
+
+export interface SectionPictureOptions {
+  /** Width in pixels. 1200 by default. */
+  readonly width?: number
+  /** Height in pixels. By default it follows the section's shape, between 0.4 and 2.5 times the width. */
+  readonly height?: number
+  /** A named look or one of your own, as for a plan: `working` by default. */
+  readonly look?: PictureOptions['look']
+  /** N in 1:N for a paper look's pens, as for a plan; the picture's own when left out. */
+  readonly paperScale?: number
+  /** The section's name on the drawing and in the list under it. `A` by default. */
+  readonly label?: string
+}
+
+/** A section's picture, with the section it was drawn from, for the words that go with it. */
+export interface SectionPicture extends Picture {
+  readonly section: PlanSection
+}
+
+const MIN_SHAPE = 0.4
+const MAX_SHAPE = 2.5
+/** The id of the hatch pattern: one per picture, which holds one section. */
+const HATCH_ID = 'section-hatch'
+/** How far apart the hatch lines are, in pixels. */
+const HATCH_PX = 6
+/** The level marks: the tick's length, the gap to the drawing and the room their words take, in pixels. */
+const TICK_PX = 36
+const GAP_PX = 14
+const KEY_MARGIN_PX = 16
+const KEY_LINE_PX = 17
+
+const n = (value: number): string => lengthText(value)
+const pixelGroup = (at: Vec2, mpp: number): string => `translate(${n(at.x)} ${n(-at.y)}) scale(${n(mpp)})`
+const piecesPath = (pieces: readonly SectionPiece[]): string => pieces.map((p) => pathOf(p.outline) + p.holes.map(pathOf).join('')).join('')
+const lineOf = (a: Vec2, b: Vec2): string => `M${a.x.toFixed(4)},${(-a.y).toFixed(4)}L${b.x.toFixed(4)},${(-b.y).toFixed(4)}`
+
+interface LevelLabel {
+  readonly level: number
+  readonly words: string
+  readonly part: string
+}
+
+/** The levels beside the drawing: every floor on the left; the roofs and the ground on the right. */
+function levelLabels(section: PlanSection): { left: LevelLabel[]; right: LevelLabel[] } {
+  const left = section.levels.map((l) => ({ level: l.level, words: `${levelText(l.level)} ${l.name || l.floor}`, part: 'section-level' }))
+  const right: LevelLabel[] = [
+    ...section.roofs.map((r) => ({ level: r.level, words: `${levelText(r.level)} Roof`, part: 'section-roof-level' })),
+    { level: section.ground.level, words: `${levelText(section.ground.level)} Ground`, part: 'section-ground-level' }
+  ]
+  return { left, right }
+}
+
+const widest = (labels: readonly LevelLabel[]): number => Math.max(0, ...labels.map((l) => estimateTextWidth(l.words, TEXT_PX.dimension)))
+
+/** What the picture frames: the section, with room beside it for the level marks, in pixels. */
+function frameOf(section: PlanSection, width: number, height: number | undefined): { framed: Bounds; width: number; height: number } {
+  const { left, right } = levelLabels(section)
+  const leftPx = widest(left) + TICK_PX + GAP_PX
+  const rightPx = widest(right) + TICK_PX + GAP_PX
+  const base = section.bounds
+  const shape = base.width > 0 && base.height > 0 ? base.height / base.width : 0.5
+  const tall = height ?? Math.max(1, Math.round(width * Math.min(Math.max(shape, MIN_SHAPE), MAX_SHAPE)))
+  let framed = base
+  // The labels are in pixels and the frame in metres: a few rounds settle how many metres they take.
+  for (let round = 0; round < 4; round++) {
+    const mpp = fitTo(framed, width / tall).width / width
+    const min = { x: base.min.x - leftPx * mpp, y: base.min.y - TEXT_PX.dimension * 2 * mpp }
+    const max = { x: base.max.x + rightPx * mpp, y: base.max.y + TEXT_PX.dimension * 2 * mpp }
+    framed = { min, max, width: max.x - min.x, height: max.y - min.y }
+  }
+  return { framed, width, height: tall }
+}
+
+/** Words at a point of the section, in pixels: centred, upright. */
+function words(at: Vec2, text: string, mpp: number, attrs: Attrs, dy = 0): SvgNode {
+  return el('g', { transform: pixelGroup(at, mpp) }, [el('text', { y: n(dy), ...attrs }, [text])])
+}
+
+/** A level mark: a tick at its height, a small triangle on it, and its words over it. */
+function levelMark(label: LevelLabel, x: number, side: 'left' | 'right', mpp: number, look: Look, stroke: number): SvgNode {
+  const sign = side === 'left' ? -1 : 1
+  const at = { x, y: label.level }
+  const tick = `M0,0L${sign * TICK_PX},0`
+  const triangle = `M${sign * 8},0L${sign * 8 - 4},-6L${sign * 8 + 4},-6Z`
+  return el('g', { 'data-part': label.part, transform: pixelGroup(at, mpp) }, [
+    el('path', { d: tick, fill: 'none', stroke: look.colors.dimension, 'stroke-width': n(stroke / mpp) }),
+    el('path', { d: triangle, fill: look.colors.dimension }),
+    el('text', { x: sign * (TICK_PX + 4), y: '4', 'text-anchor': side === 'left' ? 'end' : 'start', fill: look.colors.dimensionText, 'font-family': look.colors.font, 'font-size': TEXT_PX.dimension }, [label.words])
+  ])
+}
+
+/** The band under the drawing: the section's name and line, then what was taken, hatched first. */
+function sectionKey(section: PlanSection, label: string, width: number, look: Look): PictureKey {
+  const nodes: SvgNode[] = []
+  const text = (y: number, words: string, x = KEY_MARGIN_PX, size: number = TEXT_PX.warning): SvgNode => el('text', { x, y: n(y), fill: look.colors.label, 'font-family': look.colors.font, 'font-size': size }, [words])
+  const { from, to, toward } = section.line
+  const point = (p: Vec2): string => `(${metresText(p.x)}, ${metresText(p.y)})`
+  let y = KEY_MARGIN_PX + TEXT_PX.title
+  nodes.push(el('text', { 'data-part': 'title', x: KEY_MARGIN_PX, y: n(y), fill: look.colors.label, 'font-family': look.colors.font, 'font-size': TEXT_PX.title }, [`Section ${label}–${label}`]))
+  y += KEY_LINE_PX
+  nodes.push(el('g', { 'data-part': 'section-line' }, [text(y, `Cut from ${point(from)} to ${point(to)}, looking to the ${toward} of the line. Heights in metres from the ground floor's floor level.`)]))
+  const hatched = section.assumed.filter((a) => a.hatched)
+  const listed = section.assumed.filter((a) => !a.hatched)
+  const inner = Math.max(width - 2 * KEY_MARGIN_PX - 30, 80)
+  const entry = (words: string, swatch: SvgNode | null): void => {
+    const lines = wrapText(words, TEXT_PX.warning, inner)
+    y += 4
+    nodes.push(el('g', { 'data-part': 'section-taken' }, [
+      ...(swatch === null ? [] : [el('g', { transform: `translate(${KEY_MARGIN_PX} ${n(y + 4)})` }, [swatch])]),
+      ...lines.map((line, i) => text(y + KEY_LINE_PX * (i + 1) - 4, line, KEY_MARGIN_PX + 30))
+    ]))
+    y += KEY_LINE_PX * lines.length
+  }
+  if (hatched.length > 0) {
+    y += KEY_LINE_PX
+    nodes.push(text(y, 'Hatched: taken by Grid, not stated in the plan'))
+    for (const a of hatched) entry(a.words, el('rect', { 'data-part': 'key-swatch', x: 0, y: 0, width: 22, height: 10, fill: `url(#${HATCH_ID}-key)`, stroke: look.colors.labelSoft, 'stroke-width': 0.5 }))
+  }
+  if (listed.length > 0) {
+    y += KEY_LINE_PX
+    nodes.push(text(y, 'Also taken, not stated in the plan'))
+    for (const a of listed) entry(a.words, null)
+  }
+  // The key's own hatch, in pixels: the drawing's is in metres.
+  nodes.unshift(hatchDefs(`${HATCH_ID}-key`, HATCH_PX, 1, look.colors.label))
+  return { height: Math.ceil(y + KEY_MARGIN_PX), nodes }
+}
+
+function hatchDefs(id: string, spacing: number, stroke: number, colour: string): SvgNode {
+  return el('defs', {}, [
+    el('pattern', { id, patternUnits: 'userSpaceOnUse', width: n(spacing), height: n(spacing), patternTransform: 'rotate(45)' }, [
+      el('line', { x1: 0, y1: 0, x2: 0, y2: n(spacing), stroke: colour, 'stroke-width': n(stroke) })
+    ])
+  ])
+}
+
+/**
+ * The section of `plan` along `line` as a picture, framed with its level marks, and the list of
+ * what it took under it.
+ */
+export function sectionPicture(plan: FloorPlan, line: SectionLine, options: SectionPictureOptions = {}): SectionPicture {
+  const section = planSection(plan, line)
+  const look = lookOf(options.look)
+  const label = options.label ?? 'A'
+  const requested = options.width ?? DEFAULT_WIDTH
+  if (!Number.isInteger(requested) || requested < 1) throw new RangeError(`The picture's width must be a whole number of pixels, at least 1: got ${requested}`)
+  const { framed, width, height } = frameOf(section, requested, options.height)
+  const view = fitTo(framed, width / height, 0)
+  const mpp = view.width / width
+  const lines = lineMetres(look, mpp, options.paperScale)
+  const paper = look.colors.paper
+  const nodes: SvgNode[] = []
+
+  nodes.push(hatchDefs(HATCH_ID, HATCH_PX * mpp, lines.width('hatch'), look.lines.unit === 'mm' ? look.ink : paper))
+
+  // What lies beyond, farthest first: each face hides what is behind it.
+  const beyond: SvgNode[] = section.beyond.map((face) =>
+    face.edge === null
+      ? el('path', { 'data-part': 'section-beyond', 'data-kind': face.kind, 'data-id': face.id, d: piecesPath(face.pieces), fill: paper, 'fill-rule': 'evenodd', stroke: look.colors.dimension, 'stroke-width': n(lines.width('elevationBack')), 'stroke-linejoin': 'round' })
+      : el('path', { 'data-part': 'section-beyond', 'data-kind': face.kind, 'data-id': face.id, 'data-edge': 'true', d: lineOf(face.edge[0], face.edge[1]), fill: 'none', stroke: look.colors.dimension, 'stroke-width': n(lines.width('elevationBack')) })
+  )
+  nodes.push(el('g', { 'data-part': 'section-beyond-group' }, beyond))
+
+  // The cut: solid, under the heavy outline in a paper look.
+  const cutPath = piecesPath(section.cut)
+  if (cutPath !== '') {
+    const cut: SvgNode[] = []
+    if (look.wallOutline !== null) {
+      cut.push(el('path', { 'data-part': 'section-cut-outline', d: cutPath, fill: 'none', stroke: look.wallOutline, 'stroke-width': n(2 * lines.width('wallOutline')), 'stroke-linejoin': 'miter' }))
+    }
+    cut.push(el('path', { 'data-part': 'section-cut', d: cutPath, fill: look.colors.wall, 'fill-rule': 'evenodd' }))
+    nodes.push(el('g', { 'data-part': 'section-cut-group' }, cut))
+  }
+
+  // What was taken, hatched over the cut.
+  const hatched = section.assumed.filter((a) => a.hatched && a.pieces.length > 0)
+  if (hatched.length > 0) {
+    nodes.push(el('g', { 'data-part': 'section-hatch-group' }, hatched.map((a) => el('path', { 'data-part': 'section-hatch', 'data-kind': a.kind, 'data-ids': a.ids.join(' '), d: piecesPath(a.pieces), fill: `url(#${HATCH_ID})`, 'fill-rule': 'evenodd' }))))
+  }
+
+  // The ground outside the building, in a facade's ground line (LVL-8), so the two drawings match.
+  const g = section.ground
+  if (g.segments.length > 0) {
+    const d = g.segments.map(([a, b]) => lineOf({ x: a, y: g.level }, { x: b, y: g.level })).join('')
+    nodes.push(el('path', { 'data-part': 'section-ground', 'data-stated': String(g.stated), d, fill: 'none', stroke: look.ink, 'stroke-width': n(lines.width('elevationGround')), 'stroke-linecap': 'butt' }))
+  }
+
+  // Each room: its name and height, where the line crosses it longest, when they fit.
+  const roomWords: Attrs = { 'text-anchor': 'middle', fill: look.colors.label, 'font-family': look.colors.font, 'font-size': TEXT_PX.roomArea }
+  const roomNodes: SvgNode[] = []
+  for (const room of section.rooms) {
+    const across = (room.to - room.from) / mpp
+    const tall = room.height / mpp
+    const height = `${metresText(room.height)} m`
+    const name = room.name || room.room
+    const at = { x: (room.from + room.to) / 2, y: room.floorLevel + room.height / 2 }
+    const attrs = { 'data-part': 'section-room', 'data-id': room.room, 'data-floor': room.floor, 'data-height': n(room.height), 'data-height-stated': String(room.heightStated) }
+    const fits = (text: string): boolean => estimateTextWidth(text, TEXT_PX.roomArea) + 8 <= across
+    if (tall >= TEXT_PX.roomArea * 3 && fits(name) && fits(height)) {
+      roomNodes.push(el('g', attrs, [words(at, name, mpp, roomWords, -2), words(at, height, mpp, { ...roomWords, fill: look.colors.labelSoft }, TEXT_PX.roomArea + 2)]))
+    } else if (tall >= TEXT_PX.roomArea * 1.5 && fits(height)) {
+      roomNodes.push(el('g', attrs, [words(at, height, mpp, { ...roomWords, fill: look.colors.labelSoft }, 4)]))
+    }
+  }
+  nodes.push(el('g', { 'data-part': 'section-rooms' }, roomNodes))
+
+  // The levels beside the drawing.
+  const { left, right } = levelLabels(section)
+  const leftX = section.bounds.min.x - GAP_PX * mpp
+  const rightX = section.bounds.max.x + GAP_PX * mpp
+  const markStroke = lines.width('elevationLevel')
+  nodes.push(el('g', { 'data-part': 'section-levels' }, [...left.map((l) => levelMark(l, leftX, 'left', mpp, look, markStroke)), ...right.map((l) => levelMark(l, rightX, 'right', mpp, look, markStroke))]))
+
+  const key = sectionKey(section, label, width, look)
+  const cutRooms = new Set(section.rooms.map((r) => `${r.floor}\u0000${r.room}`)).size
+  return {
+    width,
+    height,
+    view,
+    look,
+    rooms: cutRooms,
+    undecidedDoors: [],
+    nodes,
+    key,
+    title: `Section ${label}–${label} through ${cutRooms} ${cutRooms === 1 ? 'room' : 'rooms'}`,
+    section
+  }
+}

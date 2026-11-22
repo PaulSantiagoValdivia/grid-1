@@ -1,7 +1,7 @@
 /**
  * The named views the tool server draws: a floor plan, a sheet of plans side by side at one
- * scale, a facade (LVL-8), the 3D model from a side of the drawing, and an eye-level view from
- * inside a room.
+ * scale, a facade (LVL-8), the 3D model from a side of the drawing, an eye-level view from inside
+ * a room, and a section along a line (LVL-9).
  *
  * Every picture is the viewer's own drawing (`planPicture`, `planStill`): only the camera and
  * the frame are chosen here. A 3D picture is taken from one camera record (VEW-3, `cameraAsk.ts`).
@@ -11,6 +11,9 @@ import { poleOfInaccessibility, type Bounds, type CameraRecord, type FloorPlan, 
 import { LOOKS as PICTURE_LOOKS, comparisonPicture, facadePicture, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
 import { resolveFloor, type BuildingComparison, type Facade, type FacadeSide } from '@ongrid/floorplan/geometry'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
+import { sectionPicture } from '@ongrid/viewer/src/picture/section'
+import type { PlanSection, SectionLine } from '@ongrid/floorplan/geometry/section'
+import type { DrawingMarksAsked } from '@ongrid/floorplan/geometry/drawingMarks'
 import { planStill } from '@ongrid/viewer/src/still'
 import { loadCanvas } from './canvas'
 import { drawPlan, pictureToPng } from './drawPlan'
@@ -37,7 +40,7 @@ export interface PlanView {
 
 export async function planView(
   plan: FloorPlan,
-  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; display?: Display; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow },
+  options: { floor?: string; look: LookName; dimensions: boolean; ids?: boolean; display?: Display; frame?: Bounds; faults?: readonly FaultLine[]; show?: PictureShow; marks?: DrawingMarksAsked },
 ): Promise<PlanView> {
   // VEW-2's check view: every room, door and window carries its id. VEW-6: a frame crops.
   // MSG-8: the result record's lines, marked on the drawing and listed under it.
@@ -47,11 +50,20 @@ export async function planView(
     ...(options.faults ? { faults: options.faults } : {}),
     // SHT-7: what the picture shows.
     ...(options.show ? { show: options.show } : {}),
+    // LVL-9: the marks for the plan's other drawings.
+    ...(options.marks ? { marks: options.marks } : {}),
   }
   const picture = planPicture(plan, { floor: options.floor ?? null, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const boxes = pixelBoxes(partBounds(plan, options.floor), picture)
   return { png, width: picture.width, height: fullHeight(picture), pxPerMetre: picture.width / picture.view.width, boxes, undecidedDoors: picture.undecidedDoors }
+}
+
+/** LVL-9: a section along a line through every floor, with the section it was drawn from. */
+export async function sectionView(plan: FloorPlan, line: SectionLine, look: LookName): Promise<PlanView & { readonly section: PlanSection }> {
+  const picture = sectionPicture(plan, line, { look: lookOf(look) })
+  const png = await pictureToPng(picture)
+  return { png, width: picture.width, height: fullHeight(picture), pxPerMetre: picture.width / picture.view.width, section: picture.section }
 }
 
 /**
