@@ -596,6 +596,26 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: a plan from a phone room scan (HND-12)
+
+- `grid_write_rooms` takes `scan`, a room scan file in the project (Apple's room model as JSON),
+  in place of `rooms`; `rooms` is no longer required, and passing both or neither is refused.
+  The answer's data gains `scan`: `null` for rooms text, else `evidence` (the file kept beside
+  the plan, `<plan>.scan.json`), `paired` (each wall made from two faces: `wall`, `faces`,
+  `thickness`), `oneSided` (the walls with a face on one side only), `areas` (each room's `area`
+  beside the scan's `scanArea`, `from` `floor outline` or `wall faces`, and `difference`, a
+  fraction), `assumed` (`text`, `parts` with `part` and `id`, and `value` or null), `leftOut` and
+  `match` (`kept`, `fresh`, and `gone` with `scanId`, `part` and `id`). `rooms`, `walls`,
+  `openings`, `warnings`, `verdict`, `drawingProblems`, `brief` and `reminder` are as for rooms
+  text; `guesses` is empty.
+- A plan written from a scan marks every part `scanned` and each assumed value `assumed`, so
+  `grid_check` gives one `plan/value-assumed` line (`to-confirm`) for each outside wall's
+  thickness and each fixture's turn. No new message code and no new tool.
+- A refusal of the scan has a code of its own in its text's place (`scan/not-read`,
+  `scan/no-walls`, `scan/same-id`, `scan/not-closed`, `scan/outline`, `scan/plan-changed`,
+  `scan/same-file`, or a rooms-writing code such as `scan/gap`), and names the part and the
+  limit, never the scan's text.
+
 ### 2026-11-22: repeat, mirror and turn, and a mirrored plan recognised (WRT-4)
 
 - `grid_diff` data gains `turn`: null, or `id` (`mirror-left-right`, `mirror-top-bottom`,

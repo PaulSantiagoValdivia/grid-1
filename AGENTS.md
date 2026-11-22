@@ -35,6 +35,13 @@ Notes for agents and people changing this repository.
   so exporters and checks see plain openings only; the commands that write the plan keep the
   patterns. `facade.ts` works out a side of the building in elevation (`planFacade`) from the
   floors' outlines, levels, slabs and roofs; the viewer's `picture/facade.ts` only draws it.
+- `packages/floorplan/src/scan/` (HND-12): a phone room scan read in, Apple's room model first.
+  `roomModel.ts` reads the scan (its shape in Grid's words is in its header), `toPlan.ts` pairs
+  each wall's two faces and writes the rooms through `compileRoomsText`, marking every part
+  `scanned` and listing what it assumed, and `evidence.ts` is the scan kept beside the plan
+  (`<plan>.scan.json`, written by `packages/cli/src/command/scan.ts`), keyed by the scan's ids,
+  which a re-scan is matched to. Test scans are invented in `test-support/roomScan.ts`, never
+  copied from a real scan or Apple's samples.
 - `packages/floorplan/src/geometry/items.ts` (CNT-12): the plan's fixtures (`items`, C6 in
   `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
   CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind
@@ -58,7 +65,8 @@ Notes for agents and people changing this repository.
   line weights in millimetres on paper from a pen set chosen by scale (1:50, 1:100, 1:200).
 - `packages/cli`: the `grid` command (`ongrid` runs the same file): `init`, `write`, `edit`, `mark`, `diff`, `check`,
   `describe`, `draw`, `export`, `sheet`, `tidy`, `serve` and `mcp`, in `src/command/`. `write`
-  (WRT-2) writes a plan from rooms text, the main way to write one; `describe --as rooms` reads
+  (WRT-2) writes a plan from rooms text, the main way to write one, or with `--scan` from a phone
+  room scan (HND-12); `describe --as rooms` reads
   it back. `tidy` (MSG-12) lists the
   library's wall faults and makes the chosen fixes on the plan file as read. `describe` (VEW-5, `src/describe/`)
   prints the plan in three lengths, for a person (never an id) or an agent (`--for agent`). A

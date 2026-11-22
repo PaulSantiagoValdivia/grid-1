@@ -969,6 +969,9 @@ apart, in `plan.seen.json` beside the plan ([a note set aside as seen](tool-serv
   middle, puts each corner back where the new lines cross, and answers with how far each wall
   turned and how far its ends moved. A wall further off is left as it is and named. The marks
   stay.
+- **Written from a scan.** `grid write --scan` marks every part it draws `scanned` and each
+  value it assumed `assumed` (an outside wall's thickness, a fixture's turn), and keeps the scan
+  beside the plan in `plan.scan.json`, not in the plan ([a plan from a phone room scan](commands.md#a-plan-from-a-phone-room-scan-grid-write---scan)).
 
 | Code | What it says |
 |---|---|
