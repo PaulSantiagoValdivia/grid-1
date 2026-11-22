@@ -134,4 +134,20 @@ Tests: `packages/cli/src/mcp/__tests__/estimate.test.ts` (36, one skipped under 
 
 ## Checks run
 
-CHECKS_LINE
+On `main` at 666bb01 plus this branch (load average about 250):
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: clean.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,679 passed, 4 skipped
+  (timing guards under load, this branch's 26-room timing test among them), of 4,683 in 237
+  files (1,213 s). No failure.
+- `npm run scoreboard`: 197, 386, 16, 2, 11, 735, 95. Same as stored.
+- The call's time, measured through the tool server on the 26-room floor at a load average of 40
+  to 50: 193 ms cold, then 47 to 144 ms.
+
+After merging `main` at 6fce2ae (MSG-3, MSG-16, WRT-7): two conflicts. In `readTools.ts`, WRT-7's
+display units (`displayFor`, `decimal`) now also write the estimate; in `docs/result-contract.md`
+both changelog entries are kept. One expectation changed: the estimate's CSV test, since MSG-3
+opens every CSV with the label line. Typecheck and lint clean; the affected tests
+(`packages/cli/src/mcp`, `quantities`, `everyPath.e2e`, the sheet pages, `shell`, `spaces`, `areas`,
+`tolerances`, `packages/rules/src/result`) passed, 441 of 441 with 1 timing test skipped. The
+scoreboard was not run again after the merge.
