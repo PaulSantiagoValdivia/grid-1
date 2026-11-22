@@ -8,13 +8,15 @@
  * Every format writes the plan's parts in id order (QAR-5), so the same building gives the
  * same bytes whatever order its file lists them in.
  *
+ * LVL-8: opening patterns are expanded into plain openings before any format reads the plan.
+ *
  * HND-6: every export also says what it leaves out (`leftOut`), and the file says it too, each
  * format in its own way (see `geometry/export/leftOut.ts`). `empty` says the file holds nothing
  * of the plan: the library still writes it, and the command and the tool server refuse it.
  */
 import type { FloorPlan } from '../types/floorplan'
 import type { ReadFault } from '../types/readParts'
-import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, planFloors, planForFloor, resolveFloor, roomNumbers, shownRoomNumber, toDxf, toGlb, toIfc, toObj } from '../geometry'
+import { buildFloorPlan, buildScene, dxfFactsOf, inIdOrder, planFloors, planForFloor, resolveFloor, roomNumbers, shownRoomNumber, toDxf, toGlb, toIfc, toObj, withPatterns } from '../geometry'
 import type { DxfProfile } from '../geometry/export/dxfProfile'
 import type { LeftOutPart } from '../geometry/export/leftOut'
 import { exportContents } from './leftOut'
@@ -79,7 +81,10 @@ export function exportFileName(projectName: string, format: ExportFormat, floorN
   return `${floor ? `${base}-${floor}` : base}.${format}`
 }
 
-export function exportPlan(plan: FloorPlan, format: ExportFormat, options: PlanExportOptions): PlanExport {
+export function exportPlan(stated: FloorPlan, format: ExportFormat, options: PlanExportOptions): PlanExport {
+  // LVL-8: every format reads plain openings; a pattern is expanded into them first, so a plan
+  // with a pattern exports exactly what the same plan with those openings written out does.
+  const plan = withPatterns(stated)
   const filter = { name: FILTER_NAMES[format], extensions: [format] }
   const ordered = inIdOrder(plan)
   if (format === 'ifc') {
