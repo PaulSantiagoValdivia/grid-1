@@ -499,7 +499,9 @@ describe('the built file', () => {
     // comparison's mirror test take it to 525,055 bytes, under the same cap, with no new dependency;
     // merged with LVL-8's facades and opening patterns and HND-1's DXF from main, 532,807 bytes,
     // still under it, so the cap stays.
-    // BRF-3's plot adds about 7,000 more.
-    expect(statSync(bundle).size).toBeLessThan(550_000)
+    // BRF-3's plot adds about 7,000 more. 560 kB since BRF-6: the first layout from the brief and
+    // the alignment offered for a door between rooms that do not touch take it from 539,491 to
+    // about 551,400 bytes, with no new dependency.
+    expect(statSync(bundle).size).toBeLessThan(560_000)
   })
 })

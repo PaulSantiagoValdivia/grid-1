@@ -15,7 +15,7 @@
  */
 import { expandPatterns, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
-import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, statedWall } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
 import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
 import { TextNotDecoded } from '../fs/textEncoding'
@@ -34,6 +34,10 @@ export const WRITE_OPTIONS: OptionSpecs = {
   '--replace': {
     takesValue: false,
     help: 'Write over a plan that was not written from this rooms text, or was changed since. Grid refuses that otherwise, with the difference.',
+  },
+  '--layout': {
+    takesValue: true,
+    help: 'In place of a rooms file: a first layout from the brief beside the plan. tidy: a rectangle; sizes: every size kept.',
   },
   '--json': { takesValue: false, help: 'Print the answer as JSON.' },
   ...PROJECT_OPTION,
@@ -174,7 +178,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   if (plan.floors !== undefined) next['floors'] = plan.floors
   // CNT-5: a `building` line sets what kind of building it is; without one, the file's stays.
   if (plan.building !== undefined) next['building'] = plan.building
-  next['walls'] = plan.walls
+  // WRT-6: a height the text did not state stays out of the file; the reading fills it again.
+  next['walls'] = plan.walls.map(statedWall)
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings
   next['written'] = stampFor(plan)

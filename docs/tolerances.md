@@ -60,6 +60,9 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `diffRoomCentre` | tolerance | 0.1 m | And whose centres are this close |
 | `briefAbout` | tolerance | 0.05 ratio | A size the person asked for as a figure, not as at least or at most, is met when the drawn size is within this share of it, above or below (BRF-1) |
 | `nameSize` | tolerance | 0.02 ratio | A size written in a room's name and the size drawn differ when they are further apart than this share of the size named (BRF-1) |
+| `layoutHall` | limit | 1.1 m | Grid's own size, not a code figure. How wide the hall a first layout adds is, when the brief names no corridor (BRF-6) |
+| `layoutRooms` | limit | 10 count | The most rooms a first layout places; every way of sharing them between its two rows is tried (BRF-6) |
+| `layoutRowOrders` | limit | 6 count | The most rooms in one row of a first layout whose every order is tried for the rooms the brief wants to touch (BRF-6) |
 | `diffPlace` | tolerance | 0.05 m | Two walls whose ends are this close, or two openings whose middles are, stand in the same place when two versions are compared by what stands where (WRT-8) |
 | `setbackShort` | tolerance | 0.005 m | The building stands short of a set-back the person asked for when its outside face is more than this nearer the boundary than their figure; less rounds to the figure (`plan/setback-short`, BRF-3) |
 | `pastBoundary` | tolerance | 0.005 m | The building stands over an edge of the plot's boundary when its outside face reaches more than this past it (`plan/over-boundary`, BRF-3) |

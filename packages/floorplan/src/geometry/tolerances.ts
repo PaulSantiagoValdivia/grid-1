@@ -362,6 +362,33 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── A first layout from the brief (BRF-6) ─────────────────────────────────────────────────
+  layoutHall: {
+    kind: 'limit',
+    value: 1.1,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. How wide the hall a first layout adds is, when the ' +
+      'brief names no corridor.',
+    basis: own
+  },
+  layoutRooms: {
+    kind: 'limit',
+    value: 10,
+    unit: 'count',
+    decides:
+      'The most rooms a first layout places: every way of sharing them between its two rows is tried.',
+    basis: own
+  },
+  layoutRowOrders: {
+    kind: 'limit',
+    value: 6,
+    unit: 'count',
+    decides:
+      'The most rooms in a row of a first layout whose every order is tried; a longer row keeps the brief\'s order.',
+    basis: own
+  },
+
   // ── The plot (BRF-3) ──────────────────────────────────────────────────────────────────────
   setbackShort: {
     kind: 'tolerance',

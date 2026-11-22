@@ -9,7 +9,7 @@
  */
 import { planInMetres } from '@ongrid/floorplan/types/units'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { keptDerived } from '@ongrid/floorplan/rooms'
+import { keptDerived, LAYOUT_SHAPES, type LayoutShape } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
@@ -29,12 +29,14 @@ import { surveyPlan, type Survey } from '../quantities/survey'
 import { openingBetween } from './readTools'
 import { briefAnswer } from '../brief/answer'
 import { BRIEF_OUTPUT } from './briefTool'
+import { writeLayout } from '../brief/layout'
 import {
   asRefusal,
   FLOOR_ARG,
   floorArg,
   listSchema,
   NULLABLE_STRING,
+  NUMBER,
   objectSchema,
   openingArg,
   PLAN_ARG,
@@ -453,6 +455,21 @@ const mirrorTool: GridTool = {
 /** The rooms text a tool call may pass, at most. */
 export const ROOMS_TEXT_MAX = 200_000
 
+/** BRF-6: a first layout's part of the answer, or null when rooms text was written. */
+const LAYOUT_OUTPUT = {
+  type: ['object', 'null'],
+  properties: {
+    shape: STRING,
+    rooms: STRING,
+    outline: listSchema(NUMBER),
+    added: NULLABLE_STRING,
+    notKept: listSchema(objectSchema({ room: STRING, name: STRING, text: STRING, by: NUMBER })),
+    notPlaced: listSchema(STRING),
+    touch: objectSchema({ wished: NUMBER, held: NUMBER }),
+  },
+  required: ['shape', 'rooms', 'outline', 'added', 'notKept', 'notPlaced', 'touch'],
+}
+
 const ROOMS_EXAMPLE = [
   'walls outside 0.3 inside 0.1 height 2.6',
   'room living "Living room" living 4.4 x 4.2',
@@ -473,18 +490,20 @@ const writeRoomsTool: GridTool = {
     + 'To change a plan, read it back with grid_describe as=rooms, change that text and pass it here: rooms text read from an older plan, or written over a plan changed some other way, is refused with the difference, and nothing is written (replace=true writes over it). Overlapping rooms and gaps that are neither wall nor room are refused, naming both rooms. '
     + 'A size may say centre or outside (8 x 10 outside: to the outside faces); inside is the default. What rooms cannot say (a free-standing wall, a room with a hole) is written raw, as one line of Grid\'s own JSON: raw wall {...}. '
     + `${ROOM_NAMES_TRAVEL} `
+    + 'In place of rooms, layout=tidy writes a first layout from the brief (grid_write_brief) in a rectangle, naming each size not kept and by how much; layout=sizes keeps every size. '
     + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file. Units are metres.',
   args: {
     plan: { ...PLAN_ARG, description: 'The plan file to write, inside the project folder, ending in .json. The project\'s own plan.json when left out.' },
     rooms: {
       type: 'string',
       lines: true,
-      required: true,
       maxLength: ROOMS_TEXT_MAX,
       description: 'The rooms text, one statement a line. A room: room <id> "<name>" <use or -> <width> x <depth> [inside|centre|outside] <at x,y | north|south|east|west of <room> [align ...] [until <room>]>. An opening: door|window|opening <id> between <room> and <room> | in <room> <side>, <m> from <side> | centred, <m> wide [, sill <m>, height <m>, opens into <room>|in|out, hinged <direction>]. The first line sets the walls: walls outside <t> inside <t> height <h>.',
       examples: [ROOMS_EXAMPLE],
     },
     replace: { type: 'boolean', description: 'true to write over a plan that was not written from this text, or was changed since. Refused with the difference when left out.', examples: [true] },
+    // BRF-6: a first layout from the brief, in place of rooms text.
+    layout: { type: 'string', enum: [...LAYOUT_SHAPES], description: 'In place of rooms: a first layout from the brief beside the plan. tidy: a rectangle; sizes: every size kept.', examples: ['tidy'] },
   },
   outputSchema: objectSchema({
     written: STRING,
@@ -498,15 +517,20 @@ const writeRoomsTool: GridTool = {
     // BRF-1: the brief's lines, and the one reminder when a first plan has no brief beside it.
     brief: BRIEF_OUTPUT,
     reminder: NULLABLE_STRING,
+    layout: LAYOUT_OUTPUT,
   }),
   run(args, context) {
     const project = projectOf(context)
+    const shape = args['layout'] as LayoutShape | undefined
+    if ((args['rooms'] === undefined) === (shape === undefined)) throw new ToolRefusal(shape === undefined ? 'Pass rooms, the rooms text to write, or layout (tidy or sizes) to write a first layout from the brief beside the plan.' : 'Pass rooms or layout, not both: layout writes a first layout from the brief, in place of rooms text.')
     try {
       const file = planFileOf(project, args['plan'])
-      const done = writeRoomsIntoProject(project, args['rooms'] as string, file, { replace: args['replace'] === true, brief: true })
+      const options = { replace: args['replace'] === true, brief: true }
+      const laid = shape === undefined ? null : writeLayout(project, file, shape, options)
+      const done = laid?.done ?? writeRoomsIntoProject(project, args['rooms'] as string, file, options)
       const r = done.result
       return {
-        text: done.lines.join('\n'),
+        text: (laid?.lines ?? done.lines).join('\n'),
         data: {
           written: done.written,
           rooms: r.rooms.map((x) => ({ id: x.id, name: x.name, floor: x.floor, width: x.width, depth: x.depth, area: x.area, basis: x.basis })),
@@ -518,6 +542,7 @@ const writeRoomsTool: GridTool = {
           drawingProblems: done.drawingProblems,
           brief: done.brief,
           reminder: done.reminder,
+          layout: laid?.layout ?? null,
         },
       }
     } catch (error) {

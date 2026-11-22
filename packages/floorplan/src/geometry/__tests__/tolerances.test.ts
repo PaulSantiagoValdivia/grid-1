@@ -84,7 +84,7 @@ describe('the tolerance table', () => {
     }
   })
 
-  it('holds the size a person passes through as Grid\'s own, saying it is not a code figure (MSG-18), the use indicators (CNT-13) and the headroom bands (LVL-6)', () => {
+  it('holds the size a person passes through as Grid\'s own, saying it is not a code figure (MSG-18), the use indicators (CNT-13), the headroom bands (LVL-6) and the hall of a first layout (BRF-6)', () => {
     const passable = {
       passableWidth: 0.4,
       passableHeight: 1.2,
@@ -96,7 +96,8 @@ describe('the tolerance table', () => {
       useTurningCircle: 1.5,
       useClearSpace: 0.6,
       headroomLow: 1.5,
-      headroomFull: 2.2
+      headroomFull: 2.2,
+      layoutHall: 1.1
     } as const
     for (const [name, value] of Object.entries(passable)) {
       const entry: ToleranceEntry = TOLERANCES[name as keyof typeof passable]
