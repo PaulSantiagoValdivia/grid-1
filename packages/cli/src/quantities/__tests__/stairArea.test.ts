@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { stairRoomHouse } from '@ongrid/floorplan/test-support/plans'
 import { planAreas } from '../areas'
+import { planEstimate } from '../estimate'
 import { surveyPlan } from '../survey'
 
 const STAIR = 1.85 * 3.8
@@ -24,5 +25,12 @@ describe('a stair counted once in grid_areas (SHT-11)', () => {
     expect(over.net).toBeCloseTo(STAIR, 9)
     expect(over.countedWith).toEqual({ floor: 'ground', room: 'ground-stair' })
     expect(areas.notes.some((note) => note.includes('its floor is counted once, there'))).toBe(true)
+  })
+
+  it('counts the stair once in the estimate\'s floor finish, as in the net area (SHT-11 with ARE-13)', () => {
+    const survey = surveyPlan(stairRoomHouse())
+    const floor = planEstimate(survey).lines.find((line) => line.key === 'floor:stair')!
+    expect(floor.quantity).toBeCloseTo(planAreas(survey).byUse['stair']!, 9)
+    expect(floor.quantity).toBeCloseTo(STAIR, 9)
   })
 })

@@ -76,7 +76,7 @@ area, each opening once as the schedule counts it, and each floor's outline.
 
 | Key | Line | Assumed |
 |---|---|---|
-| `floor:<use>` | Floor finish: the net area of the rooms of that use. The plan holds no finishes, so the person decides which finish a use gets, by the key they price | no |
+| `floor:<use>` | Floor finish: the net area of the rooms of that use, so a stair is counted once, on the floor it rises from. The plan holds no finishes, so the person decides which finish a use gets, by the key they price | no |
 | `ceiling` | Ceilings: a flat ceiling as big as the floor below it | yes |
 | `wall_finish:<use>` | Inside wall faces of the rooms of that use, at the height of each wall, less every door, window and opening at full size; both faces of an inside wall count | no |
 | `skirting` | Each room's inside perimeter less the width of its doors and doorless openings | no |
