@@ -555,7 +555,15 @@ its text, which says the same.
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). |
+| `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was) and `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
+
+A line of the brief (BRF-1, [brief.md](brief.md)) has a `state` (`met`, `missed`, `open`, or
+`differs` for a size in a room's name), `wish` (`room`, `rooms`, `footprint`, `touch`, a figure's
+name, `open` or `name`), `level` (`must`, `should`, `avoid`; null for a name), `source`
+(`given`, `assumed`; null for a name), `quote`, `asked` and `drawn` (as text, `"4.5"`, `"11.93"`;
+null when there is none), `unit`, `parts` (each `{ kind, id }`) and `text`. A line met says only
+that the drawing holds what was asked; no line is a score, and none says a plan is allowed.
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -571,6 +579,27 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: the brief beside the plan, met or missed after every change (BRF-1)
+
+- A new tool, `grid_write_brief`, writes what the person asked for into `<plan>.brief.json`
+  beside the plan, never the plan, in one call and before the first room if need be: room wishes
+  (`name` or `use`, `count`, `area`, `at_least`, `at_most`, `inside`), `footprint`, `touch`, the
+  person's own `figures` (`door_width`, `corridor_width`, `turning_circle`, `step`,
+  `ceiling_height`, under the heading "The person's own figures: theirs, not from any code or
+  standard.") and `open`. Each wish has a `level` (`must`, `should`, `avoid`) and a `source`
+  (`given`, which needs `quote`, or `assumed`). A figure Grid does not know is refused with the
+  ones it knows. Left without `brief`, it reads the brief and writes nothing. With WRT-6's `grid_square_scan`, CNT-9's three reading tools and WRT-8's `grid_diff` and `grid_mark_start`, the tools are 29.
+- Every change to the plan, and `grid_write_rooms`, adds `brief` to its receipt: `{ file,
+  problem, lines }`, each line met, missed, open or differs, with `asked` and `drawn` in words.
+  The text adds the lines, at most 12, missed first. A brief that can't be read is one line and
+  never refuses the change.
+- Until the brief gives a room a size, a size in the room's name (m², ft², mats) is read against
+  the room, as a line `differs` when it is more than 2% off (`nameSize`).
+- `grid_write_rooms` adds `reminder`: one line when a plan is first written with no brief beside
+  it, never a refusal.
+- No new code in the result record: the brief's lines are in the change receipts, not in
+  `grid_check`. `resultVersion` stays 1.
 
 ### 2026-11-22: zones inside one room (CNT-8)
 

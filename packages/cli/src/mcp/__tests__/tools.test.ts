@@ -27,6 +27,7 @@ const ORDER = [
   'grid_sheet',
   'grid_mark_start',
   'grid_mark_seen',
+  'grid_write_brief',
   'grid_write_rooms',
   'grid_change_opening',
   'grid_move_room_side',
@@ -90,7 +91,8 @@ describe('tools/list', () => {
     // many or how much by group).
     // 28 since WRT-8: what a change did (grid_diff), and the start marker it compares with
     // where there is no git (grid_mark_start).
-    expect((await listed()).length).toBeLessThanOrEqual(28)
+    // 29 since BRF-1: the brief, what the person asked for, written before the first room.
+    expect((await listed()).length).toBeLessThanOrEqual(29)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -200,6 +202,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_sheet: { plan: 'plan.json', layout: 'check' },
     grid_mark_start: { plan: 'noted.json' },
     grid_mark_seen: { plan: 'noted.json', line: 1, code: 'plan/unknown-field', reason: 'Kept for our own tool', by: 'Owner' },
+    grid_write_brief: { plan: 'plan.json', brief: { rooms: [{ name: 'Bathroom', area: 4.5, level: 'must', source: 'given', quote: 'a bathroom of 4.5 square metres' }], figures: { door_width: { value: 0.8, level: 'must', source: 'given', quote: 'doors of 80 cm' } } } },
     grid_write_rooms: { plan: 'written.json', rooms: 'walls outside 0.3 inside 0.1 height 2.6\nroom living "Living" living 4 x 4\nroom bed "Bed" bedroom 3 x 4 east of living\ndoor d1 between living and bed, centred, 0.8 wide, opens into bed\ndoor front in living south, centred, 0.9 wide, opens in\n' },
     grid_change_opening: { opening: 'door-bath', width: 0.8, out: 'changed.json' },
     grid_move_room_side: { room: 'bed2', side: 'north', by: 0.5, out: 'moved.json' },

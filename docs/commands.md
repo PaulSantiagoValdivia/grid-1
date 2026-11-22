@@ -25,17 +25,17 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | Command | What it does |
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
-| `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)) |
+| `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)). With a brief beside the plan, it says each line met or missed ([the brief](brief.md)) |
 | `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below) |
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d] [--look <name>] [--hide <parts>] [--colour use] [--key] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
-| `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror`, `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`) |
+| `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror`, `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`), and the same lines of [the brief](brief.md) |
 | `grid mark [<name>] [--plan <plan.json>] [--remove]` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside it, for `grid diff` to compare with: no git needed. At most 5 (see below) |
 | `grid diff [<plan>] [--since <name>\|git] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 28 tools in [the tool server](tool-server.md) |
+| `grid serve` | Starts the tool server on standard input and output, with the 29 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes
