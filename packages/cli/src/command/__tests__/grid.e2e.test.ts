@@ -538,8 +538,8 @@ describe('the built file', () => {
     // BRF-3's plot adds about 7,000 more. 600 kB since CNT-17: its accessibility measurements,
     // merged with BRF-3 and WRT-4 from main, make it 555,889 bytes, again with no new dependency.
     // HND-12's phone room scan (its reader, the face pairing and the evidence beside the plan,
-    // about 34,000 bytes) takes it, merged with LVL-9, CNT-17 and COD-8 from main, to 574,675
-    // bytes, under the same cap, with no new dependency.
+    // about 34,000 bytes) takes it, merged with LVL-9, CNT-17, COD-8 and HND-11 from main, to
+    // 576,955 bytes, under the same cap, with no new dependency.
     expect(statSync(bundle).size).toBeLessThan(600_000)
   })
 })

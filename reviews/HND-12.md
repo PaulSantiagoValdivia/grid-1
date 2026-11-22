@@ -140,6 +140,10 @@ Run on the shared laptop with two workers, while about ten other sessions ran th
   tests) pass but for the same speed test (5.0 s), with the load average at about 280. Timed by
   hand then, `grid check` on the sample flat took 0.54 to 1.25 s; it reads the scan code only to
   load it.
+- After merging main at 90a933b (HND-11): build 576,955 bytes; typecheck and lint clean; the
+  affected tests (36 files, 504 tests: the scan, rooms, types, taped, result, every-path, tools,
+  server, write, writeRooms, fileAccess and grid.e2e tests) pass but for the same speed test
+  (3.9 s); the scoreboard says "Same as the stored figures" (451.7 s).
 
 ## Tests added and changed, and why
 
@@ -193,7 +197,7 @@ Run on the shared laptop with two workers, while about ten other sessions ran th
   across the drawing. Which way is up is then one of four; `grid_mirror turn` turns it.
 - **The bundle cap is 600 kB.** Before merging main this step raised it from 550 kB (574,019
   bytes); CNT-17 on main raised it to the same 600 kB, so the cap is main's. Merged, the built file
-  is 574,675 bytes (after merging main with LVL-9, CNT-17 and COD-8), about 34,000 of them this step's (the reader 4.4 kB, the face pairing 19.5 kB, the evidence 1.3 kB, the
+  is 576,955 bytes (after merging main with LVL-9, CNT-17, COD-8 and HND-11), about 34,000 of them this step's (the reader 4.4 kB, the face pairing 19.5 kB, the evidence 1.3 kB, the
   command 5.8 kB), with no new dependency.
 - **Refusal codes** (`scan/not-read`, `scan/no-walls`, `scan/same-id`, `scan/not-closed`,
   `scan/outline`, `scan/plan-changed`, `scan/same-file`, and rooms-writing codes as `scan/gap`)
