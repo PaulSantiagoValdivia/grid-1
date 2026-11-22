@@ -16,3 +16,4 @@ export {
 } from './figures'
 export type { FigureKey, FigureSpec, FigureUnit, Provenance, SourceCitation, Verification, VerificationStatus } from './figures'
 export { figuresFromSheet } from './fromSheet'
+export { coverageOnFloor, LOOKS_AT, roomsLookedAt, skipWhy } from './coverage'

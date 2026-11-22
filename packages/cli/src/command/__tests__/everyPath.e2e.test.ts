@@ -1,0 +1,481 @@
+import { spawn, spawnSync } from 'child_process'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join, resolve } from 'path'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { LINK_CASES_SKIPPED_ON_WINDOWS, T5_TRACE_IMAGE_PATHS } from '../../fs/__tests__/attackCases'
+
+/**
+ * CMD-15: every path a command or a tool takes, through every slot that takes one, and the
+ * trace image a plan names. `paths.e2e.test.ts` holds the deeper cases for check, draw, export
+ * and grid_export; this file holds the breadth. The slots are listed by hand, and the tests
+ * fail when a command or a tool with a path argument is added without its slot here.
+ *
+ * Run as a person and an agent's host run Grid: the built file, as its own Node process, with
+ * a project in a temporary folder.
+ */
+
+const cli = resolve(__dirname, '../../..')
+const bundle = join(cli, 'dist', 'grid.mjs')
+const sample = readFileSync(join(cli, 'fixtures', 'two-bed-flat.json'), 'utf8')
+const windows = process.platform === 'win32'
+const PLAN = 'two-bed-flat.json'
+const ROOMS = 'flat.rooms'
+
+const made: string[] = []
+let base: string
+/** The project folder, and its real path (macOS puts temporary folders behind a link). */
+let project: string
+let real: string
+/** A folder beside the project, holding what must never be read or written. */
+let outside: string
+/** The rooms text of the sample plan, for grid write and grid_write_rooms. */
+let roomsText: string
+
+function tempDir(prefix: string): string {
+  const path = mkdtempSync(join(tmpdir(), prefix))
+  made.push(path)
+  return path
+}
+
+function linkFolder(target: string, path: string): void {
+  symlinkSync(target, path, windows ? 'junction' : 'dir')
+}
+
+/** Every file under a folder, with `/` between names, sorted. Links are listed, not followed. */
+function tree(folder: string, prefix = ''): string[] {
+  return readdirSync(folder, { withFileTypes: true }).flatMap((entry) => {
+    const name = `${prefix}${entry.name}`
+    return entry.isDirectory() ? tree(join(folder, entry.name), `${name}/`) : [name]
+  }).sort()
+}
+
+interface Run {
+  readonly status: number | null
+  readonly out: string
+  readonly err: string
+}
+
+function grid(args: readonly string[], options: { cwd?: string; env?: NodeJS.ProcessEnv } = {}): Run {
+  const run = spawnSync(process.execPath, [bundle, ...args], { cwd: options.cwd ?? project, env: options.env ?? process.env, timeout: 30_000 })
+  if (run.error) throw run.error
+  return { status: run.status, out: run.stdout.toString('utf8'), err: run.stderr.toString('utf8') }
+}
+
+interface Call {
+  readonly name: string
+  readonly arguments: Record<string, unknown>
+}
+
+interface ToolAnswer {
+  readonly text: string
+  readonly isError: boolean
+}
+
+/** Starts `grid serve`, sends the requests, and gives each answer's text in order. */
+function rpc(requests: ReadonlyArray<{ method: string; params?: unknown }>, options: { cwd?: string; args?: string[]; env?: NodeJS.ProcessEnv } = {}): Promise<unknown[]> {
+  return new Promise((done, fail) => {
+    const child = spawn(process.execPath, [bundle, 'serve', ...(options.args ?? [])], {
+      cwd: options.cwd ?? project,
+      env: options.env ?? process.env,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+    let out = ''
+    child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString() })
+    child.on('error', fail)
+    child.on('close', () => {
+      try {
+        const replies = out.split('\n').filter((line) => line.trim()).map((line) => JSON.parse(line) as { id: number })
+        expect(replies.map((reply) => reply.id)).toEqual(requests.map((_, i) => i + 1))
+        done(replies)
+      } catch (error) {
+        fail(error)
+      }
+    })
+    child.stdin.end(requests.map((request, i) => `${JSON.stringify({ jsonrpc: '2.0', id: i + 1, ...request })}\n`).join(''))
+  })
+}
+
+async function callTools(calls: readonly Call[], options: { cwd?: string; args?: string[]; env?: NodeJS.ProcessEnv } = {}): Promise<ToolAnswer[]> {
+  const replies = await rpc(calls.map((call) => ({ method: 'tools/call', params: call })), options) as Array<{
+    result?: { content: Array<{ text: string }>; isError?: boolean }
+    error?: { message: string }
+  }>
+  return replies.map((reply) => reply.error
+    ? { text: reply.error.message, isError: true }
+    : { text: reply.result!.content.map((part) => part.text).join('\n'), isError: reply.result!.isError === true })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Every slot that takes a path
+
+/** One way to hand a command a path: its arguments, and the path as the refusal quotes it. */
+interface CommandSlot {
+  readonly label: string
+  readonly args: (path: string) => string[]
+  /** The path as given: some slots need an extension added to get past their own check. */
+  readonly given: (path: string) => string
+}
+
+const asIs = (path: string): string => path
+
+/** Every command, and each place it takes a path to read or write inside the project. */
+const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
+  // Its folder is the project folder itself, refused by other rules (paths.e2e and init.e2e).
+  init: [],
+  write: [
+    { label: 'the rooms text', args: (p) => ['write', p, '--plan', 'new.json'], given: asIs },
+    { label: '--plan', args: (p) => ['write', ROOMS, '--plan', `${p}.json`], given: (p) => `${p}.json` },
+  ],
+  check: [{ label: 'the plan', args: (p) => ['check', p], given: asIs }],
+  describe: [{ label: 'the plan', args: (p) => ['describe', p], given: asIs }],
+  draw: [
+    { label: 'the plan', args: (p) => ['draw', p], given: asIs },
+    { label: '--out', args: (p) => ['draw', PLAN, '--out', `${p}.svg`], given: (p) => `${p}.svg` },
+  ],
+  export: [
+    { label: 'the plan', args: (p) => ['export', p, '--format', 'dxf'], given: asIs },
+    { label: '--out', args: (p) => ['export', PLAN, '--format', 'dxf', '--out', `${p}.dxf`], given: (p) => `${p}.dxf` },
+  ],
+  sheet: [
+    { label: 'the plan', args: (p) => ['sheet', p, '--layout', 'check'], given: asIs },
+    { label: '--sheet', args: (p) => ['sheet', PLAN, '--layout', 'client', '--sheet', p], given: asIs },
+    { label: '--out', args: (p) => ['sheet', PLAN, '--layout', 'check', '--out', `${p}.pdf`], given: (p) => `${p}.pdf` },
+  ],
+  tidy: [
+    { label: 'the plan', args: (p) => ['tidy', p], given: asIs },
+    { label: '--out', args: (p) => ['tidy', PLAN, '--apply', 'all', '--out', `${p}.json`], given: (p) => `${p}.json` },
+  ],
+  edit: [
+    { label: 'the plan', args: (p) => ['edit', 'rename', p, '--room', 'lounge', '--name', 'Lounge'], given: asIs },
+    { label: '--out', args: (p) => ['edit', 'rename', PLAN, '--room', 'lounge', '--name', 'Lounge', '--out', `${p}.json`], given: (p) => `${p}.json` },
+  ],
+  // The tool server: its tools' paths are below. --project is the project folder itself.
+  serve: [],
+  mcp: [],
+}
+
+/** The commands that read a plan file, as they are given one. */
+const PLAN_READERS: ReadonlyArray<readonly [label: string, args: (plan: string) => string[]]> = [
+  ['check', (p) => ['check', p]],
+  ['describe', (p) => ['describe', p]],
+  ['draw', (p) => ['draw', p]],
+  ['draw --3d', (p) => ['draw', p, '--3d', '--out', 'still.png']],
+  ['export', (p) => ['export', p, '--format', 'ifc']],
+  ['sheet', (p) => ['sheet', p, '--layout', 'check']],
+  ['tidy', (p) => ['tidy', p]],
+  ['write --replace', (p) => ['write', ROOMS, '--plan', p, '--replace']],
+]
+
+/** One way to hand a tool a path. */
+interface ToolSlot {
+  readonly arg: string
+  readonly call: (path: string) => Call
+  readonly given: (path: string) => string
+}
+
+/** A call with `path` put in for `"@"`, and for `"@.json"` with its ending kept. */
+function tool(name: string, args: Record<string, unknown>): (path: string) => Call {
+  return (path) => ({
+    name,
+    arguments: JSON.parse(JSON.stringify(args).replace(/"@(\.json)?"/g, (_, end?: string) => JSON.stringify(`${path}${end ?? ''}`))) as Record<string, unknown>,
+  })
+}
+
+/** The other arguments each tool needs to get as far as its paths. `@` is the path under test. */
+const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
+  grid_compare: [
+    { arg: 'plans', call: tool('grid_compare', { plans: ['@', PLAN] }), given: asIs },
+    { arg: 'plans', call: tool('grid_compare', { plans: [PLAN, '@'] }), given: asIs },
+  ],
+  grid_areas: [{ arg: 'plan', call: tool('grid_areas', { plan: '@' }), given: asIs }],
+  grid_takeoff: [{ arg: 'plan', call: tool('grid_takeoff', { plan: '@' }), given: asIs }],
+  grid_schedule: [{ arg: 'plan', call: tool('grid_schedule', { plan: '@' }), given: asIs }],
+  grid_measure: [{ arg: 'plan', call: tool('grid_measure', { plan: '@', what: 'room', room: 'lounge' }), given: asIs }],
+  grid_view: [{ arg: 'plan', call: tool('grid_view', { plan: '@', kind: 'plan' }), given: asIs }],
+  grid_describe: [{ arg: 'plan', call: tool('grid_describe', { plan: '@' }), given: asIs }],
+  grid_check: [{ arg: 'plan', call: tool('grid_check', { plan: '@' }), given: asIs }],
+  grid_preview: [{ arg: 'plan', call: tool('grid_preview', { plan: '@', view: '2d', note: 'A look' }), given: asIs }],
+  grid_export: [{ arg: 'plan', call: tool('grid_export', { plan: '@', format: 'glb' }), given: asIs }],
+  grid_sheet: [{ arg: 'plan', call: tool('grid_sheet', { plan: '@', layout: 'check' }), given: asIs }],
+  grid_write_rooms: [{ arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` }],
+  grid_change_opening: [
+    { arg: 'plan', call: tool('grid_change_opening', { plan: '@', opening: 'bed2-door', hinge: 'end' }), given: asIs },
+    { arg: 'out', call: tool('grid_change_opening', { plan: PLAN, opening: 'bed2-door', hinge: 'end', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_move_room_side: [
+    { arg: 'plan', call: tool('grid_move_room_side', { plan: '@', room: 'kitchen', side: 'east', by: 0.2 }), given: asIs },
+    { arg: 'out', call: tool('grid_move_room_side', { plan: PLAN, room: 'kitchen', side: 'east', by: 0.2, out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_mirror: [
+    { arg: 'plan', call: tool('grid_mirror', { plan: '@', how: 'left-right' }), given: asIs },
+    { arg: 'out', call: tool('grid_mirror', { plan: PLAN, how: 'left-right', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_merge_rooms: [
+    { arg: 'plan', call: tool('grid_merge_rooms', { plan: '@', room: 'bed1', with: 'bed2' }), given: asIs },
+    { arg: 'out', call: tool('grid_merge_rooms', { plan: PLAN, room: 'bed1', with: 'bed2', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_split_room: [
+    { arg: 'plan', call: tool('grid_split_room', { plan: '@', room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store' }), given: asIs },
+    { arg: 'out', call: tool('grid_split_room', { plan: PLAN, room: 'bed1', side: 'west', size: 1.5, new_room: 'store', new_name: 'Store', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_add_room: [
+    { arg: 'plan', call: tool('grid_add_room', { plan: '@', room: 'porch', name: 'Porch', against: 'lounge', side: 'north', width: 3, depth: 2, in_the_way: 'remove' }), given: asIs },
+    { arg: 'out', call: tool('grid_add_room', { plan: PLAN, room: 'porch', name: 'Porch', against: 'lounge', side: 'north', width: 3, depth: 2, in_the_way: 'remove', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_stretch: [
+    { arg: 'plan', call: tool('grid_stretch', { plan: '@', side: 'east', by: 0.3 }), given: asIs },
+    { arg: 'out', call: tool('grid_stretch', { plan: PLAN, side: 'east', by: 0.3, out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+  grid_rename_room: [
+    { arg: 'plan', call: tool('grid_rename_room', { plan: '@', room: 'lounge', name: 'Lounge' }), given: asIs },
+    { arg: 'out', call: tool('grid_rename_room', { plan: PLAN, room: 'lounge', name: 'Lounge', out: '@.json' }), given: (p) => `${p}.json` },
+  ],
+}
+
+/** The plan-reading call of every tool that reads one. */
+const PLAN_TOOLS: ReadonlyArray<readonly [name: string, call: (plan: string) => Call]> = Object.entries(TOOL_SLOTS)
+  .filter(([name]) => name !== 'grid_write_rooms')
+  .map(([name, slots]) => [name, slots[0]!.call] as const)
+
+// ---------------------------------------------------------------------------------------------
+
+beforeAll(() => {
+  if (!existsSync(bundle)) throw new Error('dist/grid.mjs is missing: run npm run build first (npm test does it)')
+  const dir = tempDir('grid-rooms-')
+  writeFileSync(join(dir, PLAN), sample)
+  const run = grid(['describe', PLAN, '--as', 'rooms'], { cwd: dir })
+  expect(run.status).toBe(0)
+  roomsText = run.out
+})
+
+beforeEach(() => {
+  base = tempDir('grid-every-path-')
+  project = join(base, 'project')
+  outside = join(base, 'outside')
+  mkdirSync(project)
+  mkdirSync(outside)
+  real = realpathSync.native(project)
+  writeFileSync(join(project, PLAN), sample)
+  writeFileSync(join(project, ROOMS), roomsText)
+  writeFileSync(join(outside, 'victim.json'), sample)
+  writeFileSync(join(outside, 'victim.svg'), 'victim')
+})
+
+afterAll(() => {
+  for (const path of made) rmSync(path, { recursive: true, force: true })
+})
+
+/** A refusal: exit 1, one line on standard error naming the path and the project folder. */
+function expectCommandRefused(run: Run, given: string, ...words: string[]): void {
+  expect({ status: run.status, out: run.out }).toEqual({ status: 1, out: '' })
+  expect(run.err.trimEnd().split('\n')).toHaveLength(1)
+  expect(run.err.startsWith('grid: ')).toBe(true)
+  expect(run.err).toContain(JSON.stringify(given))
+  expect(run.err).toContain(JSON.stringify(real))
+  for (const word of words) expect(run.err).toContain(word)
+}
+
+function expectToolRefused(answer: ToolAnswer, given: string, ...words: string[]): void {
+  expect(answer.isError).toBe(true)
+  expect(answer.text).toContain(JSON.stringify(given))
+  expect(answer.text).toContain(JSON.stringify(real))
+  for (const word of words) expect(answer.text).toContain(word)
+}
+
+function expectOutsideUntouched(): void {
+  expect(tree(outside)).toEqual(['victim.json', 'victim.svg'])
+  expect(readFileSync(join(outside, 'victim.svg'), 'utf8')).toBe('victim')
+  expect(readFileSync(join(outside, 'victim.json'), 'utf8')).toBe(sample)
+}
+
+describe('the slots this file lists', () => {
+  it('cover every command grid --help lists', () => {
+    const help = grid(['--help']).out
+    const commands = [...help.split('Commands:')[1]!.split('\n\n')[0]!.matchAll(/^ {2}([a-z]+)\s/gm)].map((m) => m[1])
+    expect(commands.sort()).toEqual(Object.keys(COMMAND_SLOTS).sort())
+  })
+
+  it('cover every tool argument that is a path, and no other', async () => {
+    const [reply] = await rpc([{ method: 'tools/list' }]) as Array<{ result: { tools: Array<{ name: string; inputSchema: { properties: Record<string, unknown> } }> } }>
+    const pathArgs = reply!.result.tools.flatMap((t) => Object.keys(t.inputSchema.properties)
+      .filter((arg) => ['plan', 'plans', 'out'].includes(arg))
+      .map((arg) => `${t.name} ${arg}`))
+    const listed = [...new Set(Object.entries(TOOL_SLOTS).flatMap(([name, slots]) => slots.map((slot) => `${name} ${slot.arg}`)))]
+    expect(listed.sort()).toEqual(pathArgs.sort())
+    // No other free text argument of any tool is described as a file, a folder or a path.
+    const others = reply!.result.tools.flatMap((t) => Object.entries(t.inputSchema.properties as Record<string, { type?: unknown; enum?: unknown; description?: string }>)
+      .filter(([arg, schema]) => !['plan', 'plans', 'out'].includes(arg)
+        && JSON.stringify(schema.type).includes('string') && schema.enum === undefined
+        && /\b(file|folder|path)\b/i.test(schema.description ?? ''))
+      .map(([arg]) => `${t.name} ${arg}`))
+    expect(others).toEqual([])
+  }, 20_000)
+})
+
+const commandCases = Object.values(COMMAND_SLOTS).flat()
+
+describe('the six T-5 paths, given to every command in every slot that takes a path', () => {
+  it.each(T5_TRACE_IMAGE_PATHS)('%j', (path, why) => {
+    for (const slot of commandCases) {
+      expectCommandRefused(grid(slot.args(path)), slot.given(path), why)
+    }
+    expect(tree(project)).toEqual([ROOMS, PLAN].sort())
+    expectOutsideUntouched()
+  }, 120_000)
+})
+
+describe('the six T-5 paths, given to every tool in every argument that takes a path', () => {
+  it('are refused, naming the path and the project folder', async () => {
+    const slots = Object.values(TOOL_SLOTS).flat()
+    const calls = T5_TRACE_IMAGE_PATHS.flatMap(([path]) => slots.map((slot) => slot.call(path)))
+    const answers = await callTools(calls)
+    let i = 0
+    for (const [path, why] of T5_TRACE_IMAGE_PATHS) {
+      for (const slot of slots) expectToolRefused(answers[i++]!, slot.given(path), why)
+    }
+    expect(tree(project)).toEqual([ROOMS, PLAN].sort())
+    expectOutsideUntouched()
+  }, 60_000)
+})
+
+describe('a symbolic link out of the project, in every slot', () => {
+  beforeEach(() => {
+    linkFolder(outside, join(project, 'linked'))
+  })
+
+  it('is refused by every command', () => {
+    // Refused at the link, before what is beyond it is looked at, so the name needn't be there.
+    for (const slot of commandCases) {
+      expectCommandRefused(grid(slot.args('linked/victim')), slot.given('linked/victim'), 'through a symbolic link')
+    }
+    expect(tree(project)).toEqual(['linked', ROOMS, PLAN].sort())
+    expectOutsideUntouched()
+  }, 120_000)
+
+  it('is refused by every tool', async () => {
+    const slots = Object.values(TOOL_SLOTS).flat()
+    const answers = await callTools(slots.map((slot) => slot.call('linked/victim')))
+    slots.forEach((slot, i) => expectToolRefused(answers[i]!, slot.given('linked/victim'), 'through a symbolic link'))
+    expect(tree(project)).toEqual(['linked', ROOMS, PLAN].sort())
+    expectOutsideUntouched()
+  }, 60_000)
+})
+
+describe('the trace image a plan names (T-5)', () => {
+  /** A copy of the sample plan whose trace image is `path`. */
+  function tracePlan(name: string, path: string): string {
+    writeFileSync(join(project, name), JSON.stringify({ ...JSON.parse(sample) as object, referenceImage: { path, opacity: 0.4 } }))
+    return name
+  }
+
+  it.each(T5_TRACE_IMAGE_PATHS)('%j makes every command refuse the plan', (path, why) => {
+    const plan = tracePlan('traced.json', path)
+    for (const [, args] of PLAN_READERS) {
+      expectCommandRefused(grid(args(plan)), path, 'referenceImage.path', why)
+    }
+    expect(tree(project)).toEqual([ROOMS, PLAN, plan].sort())
+    expectOutsideUntouched()
+  }, 120_000)
+
+  it('makes every tool refuse the plan, for each of the six', async () => {
+    const plans = T5_TRACE_IMAGE_PATHS.map(([path], i) => tracePlan(`traced-${i}.json`, path))
+    const calls = plans.flatMap((plan) => PLAN_TOOLS.map(([, call]) => call(plan)))
+    const answers = await callTools(calls)
+    answers.forEach((answer, i) => {
+      const [path, why] = T5_TRACE_IMAGE_PATHS[Math.floor(i / PLAN_TOOLS.length)]!
+      expectToolRefused(answer, path, 'referenceImage.path', why)
+    })
+    expect(answers).toHaveLength(T5_TRACE_IMAGE_PATHS.length * PLAN_TOOLS.length)
+    expect(tree(project)).toEqual([ROOMS, PLAN, ...plans].sort())
+    expectOutsideUntouched()
+  }, 60_000)
+
+  it('is refused through a link to a folder outside, by the command and the tool server', async () => {
+    linkFolder(outside, join(project, 'linked'))
+    const plan = tracePlan('traced.json', 'linked/victim.svg')
+    expectCommandRefused(grid(['check', plan]), 'linked/victim.svg', 'referenceImage.path', 'through a symbolic link')
+    const [answer] = await callTools([{ name: 'grid_check', arguments: { plan } }])
+    expectToolRefused(answer!, 'linked/victim.svg', 'referenceImage.path', 'through a symbolic link')
+  }, 20_000)
+
+  it.skipIf(windows)(`is refused through a link to a file outside (${LINK_CASES_SKIPPED_ON_WINDOWS})`, async () => {
+    symlinkSync(join(outside, 'victim.svg'), join(project, 'trace.png'))
+    const plan = tracePlan('traced.json', 'trace.png')
+    expectCommandRefused(grid(['describe', plan]), 'trace.png', 'referenceImage.path', 'through a symbolic link')
+    const [answer] = await callTools([{ name: 'grid_describe', arguments: { plan } }])
+    expectToolRefused(answer!, 'trace.png', 'referenceImage.path', 'through a symbolic link')
+  }, 20_000)
+
+  it('starts from the project folder, wherever Grid runs, and need not be there yet', async () => {
+    mkdirSync(join(project, 'assets'))
+    writeFileSync(join(project, 'assets', 'reference.png'), 'png')
+    mkdirSync(join(project, 'plans'))
+    writeFileSync(join(project, 'plans', 'a.json'), JSON.stringify({ ...JSON.parse(sample) as object, referenceImage: { path: 'assets/reference.png' } }))
+    writeFileSync(join(project, 'plans', 'b.json'), JSON.stringify({ ...JSON.parse(sample) as object, referenceImage: { path: 'assets/later.png' } }))
+    const work = join(base, 'elsewhere')
+    mkdirSync(work)
+    for (const plan of ['a.json', 'b.json']) {
+      expect(grid(['check', join('plans', plan)]).status).toBe(0)
+      expect(grid(['check', join('..', 'project', 'plans', plan), '--project', project], { cwd: work }).status).toBe(0)
+    }
+    const answers = await callTools([
+      { name: 'grid_check', arguments: { plan: 'plans/a.json' } },
+      { name: 'grid_check', arguments: { plan: 'plans/b.json' } },
+    ], { cwd: work, args: ['--project', project] })
+    for (const answer of answers) expect(answer.isError).toBe(false)
+    // Inside the project folder by its text, but outside once `..` is followed.
+    tracePlan('up.json', 'assets/../../outside/victim.svg')
+    expectCommandRefused(grid(['check', 'up.json']), 'assets/../../outside/victim.svg', 'referenceImage.path', 'outside the project folder')
+  }, 20_000)
+})
+
+describe('every file Grid writes lands under the project folder', () => {
+  it('from a folder outside the project, with --project, by the command and the tool server', async () => {
+    const work = join(base, 'elsewhere')
+    const home = join(base, 'home')
+    const temp = join(base, 'temp')
+    for (const folder of [work, home, temp]) mkdirSync(folder)
+    mkdirSync(join(project, 'plans'))
+    writeFileSync(join(project, 'plans', 'flat.json'), sample)
+    // Where else a program might write: the home folder and the temporary folder, made empty here.
+    const env = { ...process.env, HOME: home, USERPROFILE: home, TMPDIR: temp, TMP: temp, TEMP: temp }
+    const plan = join('..', 'project', 'plans', 'flat.json')
+    const at = ['--project', project]
+    const runs = [
+      ...['dxf', 'ifc', 'obj', 'glb'].map((format) => grid(['export', plan, '--format', format, ...at], { cwd: work, env })),
+      grid(['export', plan, '--format', 'dxf', '--out', '../project/plans/copy.dxf', ...at], { cwd: work, env }),
+      grid(['draw', plan, '--out', '../project/plans/flat.svg', ...at], { cwd: work, env }),
+      grid(['draw', plan, '--png', '--out', '../project/plans/flat.png', ...at], { cwd: work, env }),
+      grid(['sheet', plan, '--layout', 'check', ...at], { cwd: work, env }),
+      // The sample has no wall fault, so this writes nothing; its --out is still checked.
+      grid(['tidy', plan, '--apply', 'all', '--out', '../project/plans/tidied.json', ...at], { cwd: work, env }),
+      grid(['write', `../project/${ROOMS}`, '--plan', '../project/plans/written.json', ...at], { cwd: work, env }),
+    ]
+    for (const run of runs) expect([run.status, run.err]).toEqual([0, expect.any(String)])
+    const answers = await callTools([
+      { name: 'grid_export', arguments: { plan: 'plans/flat.json', format: 'glb' } },
+      { name: 'grid_sheet', arguments: { plan: 'plans/flat.json', layout: 'check' } },
+      { name: 'grid_mirror', arguments: { plan: 'plans/flat.json', how: 'left-right', out: 'plans/mirrored.json' } },
+      { name: 'grid_move_room_side', arguments: { plan: 'plans/flat.json', room: 'kitchen', side: 'east', by: 0.2, out: 'plans/wider.json' } },
+      { name: 'grid_change_opening', arguments: { plan: 'plans/flat.json', opening: 'bed2-door', hinge: 'end', out: 'plans/hinged.json' } },
+      { name: 'grid_write_rooms', arguments: { plan: 'plans/tool.json', rooms: roomsText } },
+    ], { cwd: work, args: at, env })
+    for (const answer of answers) expect(answer).toEqual({ text: expect.any(String), isError: false })
+
+    const sheets = tree(join(project, 'plans', 'exports')).filter((name) => name.endsWith('.pdf'))
+    expect(sheets).toHaveLength(1)
+    expect(tree(project)).toEqual([
+      ROOMS, PLAN,
+      'plans/.gitignore', 'plans/copy.dxf',
+      'plans/exports/flat.dxf', 'plans/exports/flat.glb', 'plans/exports/flat.ifc', 'plans/exports/flat.obj', `plans/exports/${sheets[0]}`,
+      'plans/flat.json', 'plans/flat.png', 'plans/flat.svg',
+      'plans/hinged.json', 'plans/mirrored.json', 'plans/tool.json', 'plans/wider.json', 'plans/written.json',
+    ].sort())
+    // The original is left as it was: each change went to its out.
+    expect(readFileSync(join(project, 'plans', 'flat.json'), 'utf8')).toBe(sample)
+    expect(readdirSync(base).sort()).toEqual(['elsewhere', 'home', 'outside', 'project', 'temp'])
+    for (const folder of [work, home, temp]) expect(tree(folder)).toEqual([])
+    expectOutsideUntouched()
+  }, 120_000)
+})

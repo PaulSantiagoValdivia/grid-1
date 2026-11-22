@@ -283,6 +283,10 @@ function noticeCode(notice: NotChecked): string {
       return 'floor/not-checked-no-use'
     case 'no_figures_for_place':
       return notice.ruleId === 'habitable-room-area' ? 'plan/not-checked-sizes-for-place' : 'plan/not-checked-escapes-for-place'
+    case 'above_escape_storeys':
+      return 'floor/not-checked-above-escape-storeys'
+    case 'no_rooms':
+      return 'plan/not-checked-no-rooms'
   }
 }
 
@@ -324,6 +328,7 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
     basis: report?.basis ?? 'general-baseline',
     ...(report?.lookupNotice ? { lookupNotice: report.lookupNotice } : {}),
     checks: report?.rules ?? [],
+    coverage: report?.coverage ?? [],
     figures: report?.figures ?? [],
     limits: report?.limits ?? [...PLAN_LIMITS, ...FIGURE_LIMITS]
   }

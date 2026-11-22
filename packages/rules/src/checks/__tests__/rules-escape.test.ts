@@ -221,10 +221,23 @@ describe('figures looked up for another country', () => {
 })
 
 describe('which rooms are not checked', () => {
-  it('a bedroom on level 3 gets no finding and no notice', () => {
+  // MSG-2 (lab CH-4, M-2): it used to pass in silence, with no notice; now it is said.
+  it('a bedroom on level 3 gets no finding, and a notice that names it as not checked', () => {
     const report = checkLocalRules(bedroom([], { level: 3 }))
     expect(report.findings.filter((f) => ESCAPE.includes(f.code))).toEqual([])
-    expect(JSON.stringify(report.notChecked)).not.toMatch(/escape/i)
+    const above = report.notChecked.filter((n) => n.reason === 'above_escape_storeys')
+    expect(above).toHaveLength(1)
+    expect(above[0]!.rooms).toHaveLength(1)
+    expect(above[0]!.message).toMatch(/escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: 1$/)
+    const coverage = report.coverage.find((c) => c.ruleId === 'escape-opening')!
+    expect(coverage.lookedAtCount).toBe(0)
+    expect(coverage.skipped.map((s) => s.reason)).toEqual(['above_escape_storeys'])
+  })
+
+  it('a bedroom on level 2 is looked at, and gets no such notice', () => {
+    const report = checkLocalRules(bedroom([], { level: 2 }))
+    expect(report.notChecked.filter((n) => n.reason === 'above_escape_storeys')).toEqual([])
+    expect(report.coverage.find((c) => c.ruleId === 'escape-opening')!.lookedAtCount).toBe(1)
   })
 
   it.each(['living', 'other'])('a room whose use is %s', (use) => {
