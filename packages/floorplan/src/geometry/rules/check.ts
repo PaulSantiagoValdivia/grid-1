@@ -10,6 +10,7 @@ import type { FloorPlan } from '../plan'
 import { planFloors, planForFloor, wholePlan } from '../floors'
 import { validatePlan } from '../validate'
 import { floorElevations } from '../elevations'
+import { groundLevel, openingsBelowGround } from '../ground'
 import { limit } from '../tolerances'
 import type { ShortOf } from './graph'
 import { metresText } from '../rounding'
@@ -32,7 +33,8 @@ const RULE_OF: Record<FindingCode, string> = {
   door_to_outside_above_ground: 'door-leads-somewhere',
   stair_out_of_line: 'stairs-line-up',
   lift_out_of_line: 'stairs-line-up',
-  opening_too_small_to_pass: 'room-has-door'
+  opening_too_small_to_pass: 'room-has-door',
+  opening_below_ground: 'openings-above-ground'
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -78,7 +80,9 @@ function floorFindings(
   floor: FloorRoutes,
   joined: ReadonlySet<string>,
   roomName: (id: string) => string,
-  loneRoomReached: boolean
+  loneRoomReached: boolean,
+  /** Rooms marked as a void (LVL-4): no room to stand in, so they need no door and no route. */
+  voids: ReadonlySet<string>
 ): { findings: RuleFinding[]; doorless: string[] } {
   const { graph } = floor
   const findings: RuleFinding[] = []
@@ -98,11 +102,12 @@ function floorFindings(
   // A floor that is one open room and that no stair joins is reached by a stair the plan does
   // not draw: it is not a room without a door.
   const loneRoom = loneRoomReached && graph.rooms.length === 1
-  const doorless = loneRoom ? [] : graph.rooms.filter((room) => !touched.has(room))
+  const doorless = loneRoom ? [] : graph.rooms.filter((room) => !touched.has(room) && !voids.has(room))
   for (const room of doorless) {
     findings.push(finding('room_without_door', floor.id, [room], messages.roomWithoutDoor(roomName(room))))
   }
-  return { findings, doorless }
+  // A void is left out of the routes as a room without a door is: nothing there to get out of.
+  return { findings, doorless: [...doorless, ...graph.rooms.filter((room) => voids.has(room))] }
 }
 
 /**
@@ -244,13 +249,16 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
 
   // The way out is checked from the ground floor: the floor at level 0, or the only floor there
   // is, unless it stands above the ground (LVL-1, lab VE-8: a flat whose only floor is the
-  // third). A floor a stair joins to it, directly or through other floors, is checked with it,
-  // its routes followed down the stair to a door (LVL-3, lab VE-1). Any other floor is said to be
-  // unchecked, never passed: a balcony door upstairs is not a way out.
+  // third). With the site's ground level stated (LVL-4, lab VE-7), the floor nearest the ground,
+  // and a floor stands above the ground by its height over that level. A floor a stair joins to
+  // it, directly or through other floors, is checked with it, its routes followed down the stair
+  // to a door (LVL-3, lab VE-1). Any other floor is said to be unchecked, never passed: a balcony
+  // door upstairs is not a way out.
   const elevations = floorElevations(plan)
-  const standsAt = (id: string): number => elevations.floors.get(id)?.floorLevel ?? 0
-  const aboveGround = (id: string): boolean => standsAt(id) > limit('outsideDoorAboveGround')
-  const ground = (floors.length === 1 ? floors : floors.filter((f) => f.level === 0)).filter((f) => !aboveGround(f.id))
+  const site = groundLevel(plan, elevations)
+  const standsAt = (id: string): number => site.above.get(id) ?? 0
+  const aboveGround = site.aboveGround
+  const ground = site.groundFloors
   const groundIds = new Set(ground.map((f) => f.id))
   const openingIds = new Set(plan.openings.map((o) => o.id))
 
@@ -306,7 +314,8 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
   const doorless = new Set<string>()
   for (const floor of floors) {
     const checked = checkedGroups.has(find(floor.id))
-    const own = floorFindings(routes.get(floor.id)!, joined, roomName, !checked)
+    const voids = new Set(planForFloor(plan, floor.id).rooms.filter((room) => room.void === true).map((room) => room.id))
+    const own = floorFindings(routes.get(floor.id)!, joined, roomName, !checked, voids)
     findings.push(...own.findings)
     for (const room of own.doorless) doorless.add(at(floor.id, room))
   }
@@ -363,6 +372,21 @@ export function checkPlanSanity(plan: FloorPlan): RulesReport {
         message: messages.noStairs(floorName(floor.id))
       })
     }
+  }
+
+  // Doors and windows in outside walls below the ground the site states (LVL-4, lab VE-7).
+  for (const below of openingsBelowGround(plan, elevations)) {
+    const room = below.rooms[0]
+    const depth = below.wholly ? below.topBelow : below.sillBelow
+    findings.push({
+      code: 'opening_below_ground',
+      ruleId: RULE_OF.opening_below_ground,
+      floor: below.floor,
+      rooms: [...below.rooms],
+      openings: [below.opening],
+      message: messages.belowGround(below.type, room === undefined ? null : roomName(room), below.wall, below.wholly, metresText(depth)),
+      belowGround: { foot: Number(metresText(below.sillBelow)), top: Number(metresText(below.topBelow)), wholly: below.wholly }
+    })
   }
 
   // Stair rooms, or lift shafts, that do not line up from one floor to the next (LVL-3, AU2).

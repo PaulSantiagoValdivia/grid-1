@@ -15,14 +15,16 @@ describe('the rules', () => {
     expect(new Set(RULES.map((r) => r.id)).size).toBe(RULES.length)
   })
 
-  it('are the five plan checks, none of which needs a figure', () => {
+  it('are the six plan checks, none of which needs a figure', () => {
     expect(RULES.map((r) => r.id)).toEqual([
       'floor-has-exit',
       'room-has-door',
       'room-reaches-exit',
       'door-leads-somewhere',
       // LVL-3: a stair or a lift drawn on each floor lines up.
-      'stairs-line-up'
+      'stairs-line-up',
+      // LVL-4: no door or window below the ground the site states.
+      'openings-above-ground'
     ])
   })
 

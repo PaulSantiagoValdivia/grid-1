@@ -17,10 +17,15 @@ Grid say that a plan complies with anything.
 - Fixtures are obstacles now (CNT-13). A door that swings into one names it ("Door "d1" hits "Table 2" (kitchen run "table-2") when it opens"), and `grid check` says when a fixture stands in front of a doorway or in front of a window above its sill. `grid_measure what=use` gives a room's use indicators: can a wheelchair turn, the clear width each doorway leaves, the way through, the floor in front of and beside each fixture and a blocked window; `what=route` with a `width` says whether a body or a trolley that wide gets through. Each says what it measured and against which width, yours or Grid's own indicator, never a rule.
 - `grid check` and `grid_check` are short by default and about your plan: what to look at, the figures those notes used, and what each check looked at. `--full` (or `full` for the tool) gives the whole report. A note you have looked at can be set aside as seen, with why and who (`grid check --seen 3 --reason … --by …`, or `grid_mark_seen`): it stays listed under Seen, in `plan.seen.json` beside the plan, and comes back as new when its part of the plan changes (MSG-10).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
-- The IFC file arrives with its data: each room carries its number, its use and its net area with the rule it follows; walls, spaces, slabs, doors and windows carry base quantities; walls are typed by kind and thickness with a material, doors and windows by size. Slabs and roofs Grid works out are marked assumed, and a plan at survey coordinates is written near the origin (HND-2).
+- The IFC file arrives with its data: each room carries its number, its use and its net area with the rule it follows; walls, spaces, slabs, roofs, ceilings, doors and windows carry base quantities; walls are typed by kind and thickness with a material, doors and windows by size. Slabs and roofs Grid works out are marked assumed, and a plan at survey coordinates is written near the origin (HND-2).
 
 Grid has not been released yet. The first release will hold:
 
+- Every floor has a slab from its outline, open over its stairs, lift shafts and voids, and every
+  part with nothing above has a flat roof, with a parapet when the floor states one: in the 3D
+  view, the OBJ, glTF and IFC files, and `grid_takeoff`, whose slab and roof lines are marked
+  assumed. A room can carry a ceiling with lowered zones, and the site a ground level: a door or
+  window below it is named.
 - `grid write` writes a plan from rooms text, with each room's size and neighbours, and works
   out the walls; `grid describe --as rooms` reads any plan back the same way.
 - `grid check` gives one list of what to look at in a plan, with one count: parts that cannot

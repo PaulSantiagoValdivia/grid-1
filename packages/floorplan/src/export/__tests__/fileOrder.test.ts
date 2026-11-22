@@ -111,6 +111,8 @@ describe('exports whatever the order of the file (QAR-5)', () => {
     expect(objects).toEqual([
       'wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'wall_w5', 'wall_w6', 'wall_w7', 'wall_w8', 'wall_w9', 'wall_w10',
       'floor_r1', 'floor_r2', 'floor_r10',
+      // LVL-4: the floor's slab, after the parts of the plan; the floor above covers all of it, so no roof.
+      'slab_ground',
     ])
   })
 })

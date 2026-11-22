@@ -25,7 +25,7 @@
  */
 
 import polygonClipping from 'polygon-clipping'
-import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
+import type { MultiPolygon, Polygon } from 'polygon-clipping'
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan } from './plan'
 import { floorOf, planFloors } from './floors'
@@ -34,7 +34,7 @@ import { floorSpaces, spacesKnown, type FloorSpaces } from './spaces'
 import { planWallSides, type WallSides } from './exposure'
 import { validatePlan } from './validate'
 import { floorJoins } from './floorJoins'
-import { cornerFills, polygonArea, strip, union } from './polygons'
+import { cornerFills, inPolygon, polygonArea, strip, union } from './polygons'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 
@@ -209,7 +209,7 @@ const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b
 const nameOf = (room: Room): string => (room.name.trim() === '' ? room.id : room.name)
 
 /** The walls `floorSpaces` joins on this floor, in plan order. */
-function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): Wall[] {
+export function floorWalls(plan: FloorPlan, floor: string, broken: ReadonlySet<string>): Wall[] {
   return plan.walls.filter(
     (wall) =>
       floorOf(wall) === floor &&
@@ -243,16 +243,53 @@ function outerStretches(sides: WallSides | undefined, length: number): (readonly
   return out.filter(([from, to]) => to - from >= tolerance('lineInside'))
 }
 
-const inRing = (p: Vec2, ring: readonly Pair[]): boolean => {
-  let odd = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [ax, ay] = ring[i]!
-    const [bx, by] = ring[j]!
-    if (ay > p.y !== by > p.y && p.x < ((bx - ax) * (p.y - ay)) / (by - ay) + ax) odd = !odd
-  }
-  return odd
+
+/**
+ * The floor inside the inside face of the walls that face outside, inner walls counted: the
+ * floor's outline, as `spaces.ts` joins it, less the outer stretches of wall, keeping the parts
+ * that hold enclosed floor. Null with a reason when no wall on the floor faces outside.
+ */
+interface Run {
+  readonly wall: Wall
+  readonly start: Vec2
+  readonly dir: Vec2
+  readonly length: number
 }
-const inPolygon = (p: Vec2, polygon: Polygon): boolean => inRing(p, polygon[0]!) && !polygon.slice(1).some((ring) => inRing(p, ring))
+
+const runsOf = (walls: readonly Wall[]): Run[] =>
+  walls.map((wall) => {
+    const start = { x: wall.start[0], y: wall.start[1] }
+    const dx = wall.end[0] - start.x
+    const dy = wall.end[1] - start.y
+    const length = Math.hypot(dx, dy)
+    return { wall, start, dir: { x: dx / length, y: dy / length }, length }
+  })
+
+/**
+ * The stretches of the solid walls that face outside, as strips, with the corners made good
+ * between two of them (MSG-13): what gross internal takes off the outline, and what a parapet
+ * stands on (LVL-4). Empty when no wall faces outside.
+ */
+function outerStrips(runs: readonly Run[], sides: ReadonlyMap<string, WallSides>, lineHalf: number, snap: (v: number) => number): Polygon[] {
+  const join = tolerance('gap')
+  const outer = runs.filter((r) => r.wall.virtual !== true).flatMap((r) => outerStretches(sides.get(r.wall.id), r.length).map((s) => ({ run: r, s })))
+  const cuts: Polygon[] = outer.map(({ run, s: [from, to] }) => {
+    const a = from <= tolerance('noLength') ? -join : from
+    const b = to >= run.length - tolerance('noLength') ? run.length + join : to
+    const at = { x: run.start.x + run.dir.x * a, y: run.start.y + run.dir.y * a }
+    return strip(at, run.dir, b - a, run.wall.thickness / 2, 0, snap)
+  })
+  // The corners made good between two outer stretches go with them.
+  const outerRuns = outer.map(({ run, s: [from, to] }) => ({ wall: run.wall, start: { x: run.start.x + run.dir.x * from, y: run.start.y + run.dir.y * from }, dir: run.dir, length: to - from }))
+  cuts.push(...cornerFills(outerRuns, lineHalf, snap))
+  return cuts
+}
+
+const reachOf = (walls: readonly Wall[]): number => {
+  let reach = 0
+  for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
+  return reach
+}
 
 /**
  * The floor inside the inside face of the walls that face outside, inner walls counted: the
@@ -262,43 +299,37 @@ const inPolygon = (p: Vec2, polygon: Polygon): boolean => inRing(p, polygon[0]!)
 function insideFace(walls: readonly Wall[], spaces: FloorSpaces, sides: ReadonlyMap<string, WallSides>): number | string {
   if (spaces.spaces.length === 0) return 0
   const join = tolerance('gap')
-  let reach = 0
-  for (const wall of walls) reach = Math.max(reach, ...wall.start.map(Math.abs), ...wall.end.map(Math.abs))
-  const runs = walls.map((wall) => {
-    const start = { x: wall.start[0], y: wall.start[1] }
-    const dx = wall.end[0] - start.x
-    const dy = wall.end[1] - start.y
-    const length = Math.hypot(dx, dy)
-    return { wall, start, dir: { x: dx / length, y: dy / length }, length }
-  })
-  const outer = runs.filter((r) => r.wall.virtual !== true).flatMap((r) => outerStretches(sides.get(r.wall.id), r.length).map((s) => ({ run: r, s })))
-  if (outer.length === 0) return 'no wall on this floor faces outside, so the inside face of the outer walls is not known'
+  const reach = reachOf(walls)
+  const runs = runsOf(walls)
+  const solid = runs.filter((r) => r.wall.virtual !== true)
+  if (outerStrips(solid, sides, 0, (v) => v).length === 0) return 'no wall on this floor faces outside, so the inside face of the outer walls is not known'
   let failure: unknown = null
   for (const grid of TOLERANCES.joinGrids.values) {
     try {
       const steps = grid === 0 ? 0 : Math.round(1 / grid)
       const snap = grid === 0 ? (v: number) => v : (v: number) => Math.round(v * steps) / steps
       const lineHalf = Math.max(TOLERANCES.lineHalfWidth.value, 5 * grid, reach * TOLERANCES.farNoise.value)
-      const solid = runs.filter((r) => r.wall.virtual !== true)
       const bodies: Polygon[] = runs.map((r) => strip(r.start, r.dir, r.length, r.wall.virtual === true ? lineHalf : r.wall.thickness / 2, join, snap))
       const frame = union([...bodies, ...cornerFills(solid, lineHalf, snap)])
       const filled = union(frame.map((polygon) => [polygon[0]!]))
-      const cuts: Polygon[] = outer.map(({ run, s: [from, to] }) => {
-        const a = from <= tolerance('noLength') ? -join : from
-        const b = to >= run.length - tolerance('noLength') ? run.length + join : to
-        const at = { x: run.start.x + run.dir.x * a, y: run.start.y + run.dir.y * a }
-        return strip(at, run.dir, b - a, run.wall.thickness / 2, 0, snap)
-      })
-      // The corners made good between two outer stretches go with them.
-      const outerRuns = outer.map(({ run, s: [from, to] }) => ({ wall: run.wall, start: { x: run.start.x + run.dir.x * from, y: run.start.y + run.dir.y * from }, dir: run.dir, length: to - from }))
-      cuts.push(...cornerFills(outerRuns, lineHalf, snap))
-      const rest: MultiPolygon = polygonClipping.difference(filled, ...cuts)
+      const rest: MultiPolygon = polygonClipping.difference(filled, ...outerStrips(solid, sides, lineHalf, snap))
       return sum(rest.filter((piece) => spaces.spaces.some((space) => inPolygon(space.at, piece))).map(polygonArea))
     } catch (error) {
       failure = error
     }
   }
   return `the outer walls could not be cut from the floor (${failure instanceof Error ? failure.message : String(failure)})`
+}
+
+/**
+ * The walls of one floor that face outside, as strips along them (LVL-4: what a parapet stands
+ * on): the same stretches gross internal takes off. `walls` are the floor's walls as `floorSpaces`
+ * joins them. Empty when none faces outside.
+ */
+export function outerWallBand(walls: readonly Wall[], sides: ReadonlyMap<string, WallSides>): Polygon[] {
+  const solid = runsOf(walls).filter((r) => r.wall.virtual !== true)
+  const lineHalf = Math.max(TOLERANCES.lineHalfWidth.value, reachOf(walls) * TOLERANCES.farNoise.value)
+  return outerStrips(solid, sides, lineHalf, (v) => v)
 }
 
 function floorFigures(

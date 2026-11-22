@@ -36,10 +36,15 @@ import { indexPlan, openingsOf } from '../plan'
 import {
   isDrawnWall,
   isFiniteWall,
+  roofOver,
   SLAB_THICKNESS,
   stackFloors,
   type StoreyLevel
 } from '../elevations'
+import type { MultiPolygon } from 'polygon-clipping'
+import { planEnvelope, roomCeiling } from '../envelope'
+import { multiArea, piecesAsRings, ringOf } from '../polygons'
+import { tolerance } from '../tolerances'
 import { tryRoomShape } from '../room'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
@@ -539,11 +544,6 @@ function deriveLevels(models: readonly FloorModel[]): Map<string, StoreyLevel> {
   )
 }
 
-/** The slab a floor stands on: its stated thickness, else `SLAB_THICKNESS`. */
-function slabUnder(floor: Floor): number {
-  return floor.slab !== undefined && Number.isFinite(floor.slab) && floor.slab >= 0 ? floor.slab : SLAB_THICKNESS
-}
-
 interface Storey {
   readonly id: number
   readonly placement: number
@@ -551,6 +551,8 @@ interface Storey {
   readonly elevation: number
   /** The height of its level: what spaces are extruded to. */
   readonly height: number
+  /** Its rooms' spaces, by room id, as they are written. */
+  readonly spaces: Map<string, number>
 }
 
 function writeStorey(
@@ -578,7 +580,8 @@ function writeStorey(
     placement: placementId,
     model,
     elevation: level.floorLevel,
-    height: level.clearHeight
+    height: level.clearHeight,
+    spaces: new Map()
   }
 }
 
@@ -1253,106 +1256,278 @@ function footprintProfile(c: Context, footprint: Footprint): number {
 type SlabKind = 'FLOOR' | 'BASESLAB' | 'ROOF'
 
 /**
- * A slab under or over a room, as an IfcSlab extruded `thickness` up from
- * `bottom` (relative to its storey). It covers the room's footprint only: slabs
- * under walls wait for a building outline, the same limit the 3D view has.
+ * How thick a ceiling is drawn. IFC has no ceiling without a body; a thin board over the room,
+ * its underside at the ceiling's height, is enough for a viewer to show it. Not a figure of the
+ * building: the plan states no ceiling build-up.
  */
+const CEILING_DEPTH = 0.02
+
+/** An outline's pieces, each extruded `thickness` up from the element's placement, as one body. */
+function piecesShape(c: Context, pieces: MultiPolygon, thickness: number): number | null {
+  const solids = piecesAsRings(pieces)
+    .filter((piece) => piece.outline.length >= 3)
+    .map((piece) => extrusion(c, footprintProfile(c, piece), thickness))
+  if (solids.length === 0) return null
+  return productShape(c, [
+    c.w.add('IFCSHAPEREPRESENTATION', ref(c.shared.bodyContext), str('Body'), str('SweptSolid'), refs(solids))
+  ])
+}
+
+/** An IfcSlab over `pieces`, extruded `thickness` up from `bottom` (relative to its storey). */
 function writeSlab(
   c: Context,
   storey: Storey,
-  room: Room,
-  footprint: Footprint,
+  key: readonly [string, string],
+  name: string,
+  pieces: MultiPolygon,
   kind: SlabKind,
   bottom: number,
-  thickness: number
-): number {
-  const slabPlacement = placement(c.w, storey.placement, [0, 0, bottom])
-  const profile = footprintProfile(c, footprint)
-  const shape = productShape(c, [
-    bodyRepresentation(c, extrusion(c, profile, thickness))
-  ])
-  const roof = kind === 'ROOF'
-
-  const slab = c.w.add(
-    'IFCSLAB',
-    str(c.guid(roof ? 'roof' : 'slab', room.id)),
-    ref(c.owner),
-    str(`${room.name} ${roof ? 'roof' : 'floor slab'}`),
-    NULL,
-    NULL,
-    ref(slabPlacement),
-    ref(shape),
-    NULL,
-    en(kind)
-  )
-  const key = `${roof ? 'roof' : 'slab'}:${room.id}`
-  writeSlabQuantities(c, key, slab, footprint, thickness)
-  // The plan holds no slab or roof (LVL-4 will): this one is Grid's, and says so.
-  propertySet(c, key, 'Grid_Slab', [
-    property(c, 'Assumed', booleanValue(true)),
-    property(c, 'Note', textValue(roof ? ROOF_NOTE : SLAB_NOTE))
-  ], slab)
-  return slab
+  thickness: number,
+  parent: number = storey.placement
+): { id: number; placement: number } | null {
+  if (!(thickness > 0) || pieces.length === 0) return null
+  const slabPlacement = placement(c.w, parent, [0, 0, bottom])
+  const shape = piecesShape(c, pieces, thickness)
+  if (shape === null) return null
+  const id = c.w.add('IFCSLAB', str(c.guid(key[0], key[1])), ref(c.owner), str(name), NULL, NULL, ref(slabPlacement), ref(shape), NULL, en(kind))
+  return { id, placement: slabPlacement }
 }
 
-const SLAB_NOTE =
-  `The plan holds no slab: Grid puts one under each room, the room's footprint, as thick as its floor states or ${SLAB_THICKNESS} m, and solid down to that under a raised room.`
-const ROOF_NOTE =
-  `The plan holds no roof: Grid puts a flat one, ${SLAB_THICKNESS} m thick, over each room of the top floor, the room's footprint.`
+const footprintPieces = (footprint: Footprint): MultiPolygon => [[ringOf(footprint.outline), ...footprint.holes.map(ringOf)]]
 
-/** HND-2: `Qto_SlabBaseQuantities`, from the slab as written: its footprint and its thickness. */
-function writeSlabQuantities(c: Context, key: string, slab: number, footprint: Footprint, thickness: number): void {
-  const gross = footprintArea(footprint)
+/** The length round the outer edge of every piece, its holes not counted. */
+const piecesPerimeter = (pieces: MultiPolygon): number =>
+  piecesAsRings(pieces).reduce((sum, piece) => sum + perimeter(piece.outline), 0)
+
+/**
+ * HND-2: `Qto_SlabBaseQuantities`, from the slab as written: its body's outline and its
+ * thickness, and, when openings void it, its net area and volume, the body less them.
+ */
+function writeSlabQuantities(c: Context, key: string, slab: number, body: MultiPolygon, thickness: number, net?: number): void {
+  const gross = multiArea(body)
   quantitySet(c, key, 'Qto_SlabBaseQuantities', [
     ['LENGTH', 'Width', thickness, 'Its thickness.'],
-    ['LENGTH', 'Perimeter', perimeter(footprint.outline)],
+    ['LENGTH', 'Perimeter', piecesPerimeter(body)],
     ['AREA', 'GrossArea', gross],
-    ['VOLUME', 'GrossVolume', gross * thickness]
+    ...(net === undefined ? [] : [['AREA', 'NetArea', net, 'The gross area less the openings that void it.'] as const]),
+    ['VOLUME', 'GrossVolume', gross * thickness],
+    ...(net === undefined ? [] : [['VOLUME', 'NetVolume', net * thickness] as const])
   ], slab)
 }
 
 /**
- * Every storey's floor slabs, and the roof over the top storey: a storey's
- * ceiling is the floor slab of the one above it. The lowest storey's slabs are
- * base slabs. Floors sharing the top or bottom level all count as it.
- *
- * Written after everything else, in a containment relation of their own per
- * storey (a storey may contain elements through several), so adding slabs left
- * every earlier entity of the file as it was.
+ * HND-2 on LVL-4's slabs: the plan states no slab or roof outline, so every slab and roof is
+ * Grid's reading of the walls (`planEnvelope`), and `Grid_Slab` says so: `Assumed` true, whether
+ * the thickness is the plan's, and what Grid took, in words, as the take-off says it.
  */
-function writeSlabs(building: Context, storeys: readonly Storey[]): void {
+function describeSlab(c: Context, key: string, slab: number, thicknessStated: boolean, note: string): void {
+  propertySet(c, key, 'Grid_Slab', [
+    property(c, 'Assumed', booleanValue(true)),
+    property(c, 'ThicknessStated', booleanValue(thicknessStated)),
+    property(c, 'Note', textValue(note))
+  ], slab)
+}
+
+const slabNote = (thicknessStated: boolean): string =>
+  'The plan states no slab: Grid takes the floor\'s outline, to the outside face of its walls, open over its stairs, lift shafts and voids, ' +
+  (thicknessStated ? 'as thick as the floor states.' : `${SLAB_THICKNESS} m thick: the floor states no slab thickness.`)
+const sunkenNote = (thicknessStated: boolean): string =>
+  'The plan states no slab: Grid puts one under this room, set below its storey, over its footprint, ' +
+  (thicknessStated ? 'as thick as the floor\'s slab states.' : `${SLAB_THICKNESS} m thick: the floor states no slab thickness.`)
+const RAISED_NOTE =
+  'The plan states no slab: Grid fills under this room, set above its storey, over its footprint, from the storey\'s floor up to the room\'s.'
+const roofNote = (thickness: number): string =>
+  `The plan states no roof: Grid puts a flat one, ${thickness} m thick, over every part of the floor with nothing above, on its walls, with no overhang and no fall.`
+
+/**
+ * Every storey's slab, its openings, the roof over its parts with nothing above, its parapet and
+ * its rooms' ceilings (LVL-4), from the floor's outline (`planEnvelope`):
+ *
+ * - one IfcSlab per floor, the one it stands on, over the whole outline, walls and all: a base
+ *   slab on the lowest level. Each stair, lift shaft and void that opens it is an
+ *   IfcOpeningElement voiding it, as a door voids a wall. A room set below its storey (LVL-7) is
+ *   cut out of it and gets a slab of its own, lower down; a room set above it gets a slab from the
+ *   storey's floor up to its own.
+ * - an IfcRoof (a flat roof) aggregating an IfcSlab `ROOF` over every part with nothing above, on
+ *   the floor's walls, and, with a parapet stated, an IfcWall `Parapet` along its edge.
+ * - an IfcCovering `CEILING` for each room that states a ceiling, and one for each lowered zone.
+ *
+ * Written after everything else, in a containment relation of their own per storey, so the walls,
+ * openings and spaces keep the entities they always had.
+ */
+function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey[]): void {
   if (storeys.length === 0) return
-  const levels = storeys.map((storey) => storey.model.floor.level)
-  const lowest = Math.min(...levels)
-  const highest = Math.max(...levels)
+  const floors = new Map(storeys.map((storey) => [storey.model.floor.id, { floorLevel: storey.elevation, clearHeight: storey.height }] as const))
+  let envelope: ReturnType<typeof planEnvelope>
+  try {
+    envelope = planEnvelope(plan, { elevations: { floors, roof: roofOver(floors) } })
+  } catch {
+    return
+  }
+  const byFloor = new Map(envelope.floors.map((f) => [f.floor, f] as const))
 
   for (const storey of storeys) {
     const { index, broken, floor } = storey.model
     const c = onFloor(building, floor.id)
-    const slabs: number[] = []
+    const contained: number[] = []
+    const env = byFloor.get(floor.id)
+    const roomNames = new Map(index.plan.rooms.map((room) => [room.id, room.name || room.id] as const))
 
+    try {
+      const slab = env?.slab ?? null
+      if (slab !== null) {
+        const kind: SlabKind = slab.kind === 'base' ? 'BASESLAB' : 'FLOOR'
+        const written = writeSlab(c, storey, ['floor-slab', floor.id], `${floor.name} slab`, slab.body, kind, -slab.thickness, slab.thickness)
+        if (written !== null) {
+          contained.push(written.id)
+          const key = `floor-slab:${floor.id}`
+          writeSlabQuantities(c, key, written.id, slab.body, slab.thickness, slab.openings.length === 0 ? undefined : slab.area)
+          describeSlab(c, key, written.id, slab.thicknessStated, slabNote(slab.thicknessStated))
+          for (const opening of slab.openings) {
+            const shape = piecesShape(c, opening.pieces, slab.thickness + 2 * VOID_CLEARANCE)
+            if (shape === null) continue
+            const over = opening.room === null ? opening.via : roomNames.get(opening.room) ?? opening.room
+            const hole = c.w.add(
+              'IFCOPENINGELEMENT',
+              str(c.guid('slab-opening', `${opening.kind}:${opening.via}`)),
+              ref(c.owner),
+              str(`Opening over ${over}`),
+              NULL,
+              str(opening.kind === 'void' ? 'Void' : opening.kind === 'lift' ? 'Lift shaft' : 'Stair'),
+              ref(placement(c.w, written.placement, [0, 0, -VOID_CLEARANCE])),
+              ref(shape),
+              NULL
+            )
+            relate(c, 'IFCRELVOIDSELEMENT', `slab:${floor.id}:${opening.kind}:${opening.via}`, ref(written.id), ref(hole))
+            quantitySet(c, `slab-opening:${opening.kind}:${opening.via}`, 'Qto_OpeningElementBaseQuantities', [
+              ['LENGTH', 'Depth', slab.thickness],
+              ['AREA', 'Area', opening.area, 'On plan, inside the floor\'s outline.']
+            ], hole)
+          }
+        }
+        // LVL-7: a room set below its storey stands on a slab of its own, lower down.
+        for (const sunk of slab.sunken) {
+          const piece = writeSlab(c, storey, ['slab', sunk.room], `${roomNames.get(sunk.room) ?? sunk.room} floor slab`, sunk.pieces, kind, sunk.offset - slab.thickness, slab.thickness)
+          if (piece === null) continue
+          contained.push(piece.id)
+          writeSlabQuantities(c, `slab:${sunk.room}`, piece.id, sunk.pieces, slab.thickness)
+          describeSlab(c, `slab:${sunk.room}`, piece.id, slab.thicknessStated, sunkenNote(slab.thicknessStated))
+        }
+      }
+    } catch {
+      // A slab that cannot be built is left out; the rest still exports.
+    }
+
+    // LVL-7: a room set above its storey stands on a slab from the storey's floor up to its own.
     for (const room of index.plan.rooms) {
       if (broken.has(room.id)) continue
+      const offset = roomFloorOffset(room)
+      if (!(offset > tolerance('sameFloorLevel'))) continue
       try {
         const footprint = roomFootprint(storey, room)
         if (!footprint) continue
-        const base = floor.level === lowest ? 'BASESLAB' : 'FLOOR'
-        const under = slabUnder(floor)
-        // LVL-7: the slab's top is the room's floor. A raised room's slab is solid down to the
-        // storey's slab; a sunken one's is the storey's slab, lower down.
-        const top = roomFloorOffset(room)
-        const bottom = Math.min(top, 0) - under
-        slabs.push(writeSlab(c, storey, room, footprint, base, bottom, top - bottom))
-        if (floor.level === highest) {
-          slabs.push(writeSlab(c, storey, room, footprint, 'ROOF', storey.height, SLAB_THICKNESS))
-        }
+        const raised = writeSlab(c, storey, ['slab', room.id], `${room.name} floor slab`, footprintPieces(footprint), 'FLOOR', 0, offset)
+        if (raised === null) continue
+        contained.push(raised.id)
+        writeSlabQuantities(c, `slab:${room.id}`, raised.id, footprintPieces(footprint), offset)
+        // Its thickness is the room's stated rise above its storey.
+        describeSlab(c, `slab:${room.id}`, raised.id, true, RAISED_NOTE)
       } catch {
         // A room that cannot be built is left out.
       }
     }
 
-    if (slabs.length > 0) {
-      relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `slabs:${floor.id}`, refs(slabs), ref(storey.id))
+    try {
+      const roof = env?.roof ?? null
+      if (roof !== null) {
+        const bottom = roof.bottom - storey.elevation
+        const element = c.w.add(
+          'IFCROOF',
+          str(c.guid('roof-element', floor.id)),
+          ref(c.owner),
+          str(`${floor.name} roof`),
+          NULL,
+          NULL,
+          ref(placement(c.w, storey.placement, [0, 0, 0])),
+          NULL,
+          NULL,
+          en('FLAT_ROOF')
+        )
+        const slab = writeSlab(c, storey, ['roof-slab', floor.id], `${floor.name} roof slab`, roof.pieces, 'ROOF', bottom, roof.thickness)
+        if (slab !== null) {
+          aggregate(c, `roof:${floor.id}`, element, [slab.id])
+          // IFC2x3 has no base quantities for a roof: its slab carries them.
+          writeSlabQuantities(c, `roof-slab:${floor.id}`, slab.id, roof.pieces, roof.thickness)
+          describeSlab(c, `roof-slab:${floor.id}`, slab.id, false, roofNote(roof.thickness))
+        }
+        contained.push(element)
+        if (roof.parapet !== null) {
+          const shape = piecesShape(c, roof.parapet.pieces, roof.parapet.height)
+          if (shape !== null) {
+            const parapet = c.w.add(
+              'IFCWALL',
+              str(c.guid('parapet', floor.id)),
+              ref(c.owner),
+              str(`${floor.name} parapet`),
+              NULL,
+              str('Parapet'),
+              ref(placement(c.w, storey.placement, [0, 0, bottom + roof.thickness])),
+              ref(shape),
+              NULL
+            )
+            contained.push(parapet)
+            const footprint = multiArea(roof.parapet.pieces)
+            quantitySet(c, `parapet:${floor.id}`, 'Qto_WallBaseQuantities', [
+              ['LENGTH', 'Height', roof.parapet.height, 'Above the roof.'],
+              ['AREA', 'GrossFootprintArea', footprint],
+              ['VOLUME', 'GrossVolume', footprint * roof.parapet.height]
+            ], parapet)
+          }
+        }
+      }
+    } catch {
+      // A roof that cannot be built is left out.
+    }
+
+    // The rooms' ceilings, each covering its space.
+    for (const room of index.plan.rooms) {
+      if (broken.has(room.id) || room.ceiling === undefined) continue
+      try {
+        const pieces = roomCeiling(room, index, storey.height) ?? []
+        const coverings: number[] = []
+        const offset = roomFloorOffset(room)
+        for (const piece of pieces) {
+          const shape = piecesShape(c, piece.pieces, CEILING_DEPTH)
+          if (shape === null) continue
+          const covering = c.w.add(
+            'IFCCOVERING',
+            str(c.guid('ceiling', `${room.id}:${piece.zone ?? ''}`)),
+            ref(c.owner),
+            str(piece.zone === null ? `${room.name} ceiling` : `${room.name} ceiling, lowered zone ${piece.zone}`),
+            NULL,
+            NULL,
+            ref(placement(c.w, storey.placement, [0, 0, offset + piece.height])),
+            ref(shape),
+            NULL,
+            en('CEILING')
+          )
+          coverings.push(covering)
+          // The board's depth is drawn, not the plan's, so only its area is a quantity.
+          quantitySet(c, `ceiling:${room.id}:${piece.zone ?? ''}`, 'Qto_CoveringBaseQuantities', [
+            ['AREA', 'GrossArea', piece.area, 'On plan, inside the room\'s walls.']
+          ], covering)
+        }
+        if (coverings.length === 0) continue
+        contained.push(...coverings)
+        const space = storey.spaces.get(room.id)
+        if (space !== undefined) relate(c, 'IFCRELCOVERSSPACES', `ceiling:${room.id}`, ref(space), refs(coverings))
+      } catch {
+        // A ceiling that cannot be built is left out.
+      }
+    }
+
+    if (contained.length > 0) {
+      relate(c, 'IFCRELCONTAINEDINSPATIALSTRUCTURE', `slabs:${floor.id}`, refs(contained), ref(storey.id))
     }
   }
 }
@@ -1449,7 +1624,7 @@ function writeStair(c: Context, storey: Storey, stair: StairLayout): number {
       NULL,
       en('LANDING')
     )
-    writeSlabQuantities(c, `landing:${stair.id}:${i}`, slab, { outline: landing.outline, holes: [] }, landing.top - landing.bottom)
+    writeSlabQuantities(c, `landing:${stair.id}:${i}`, slab, footprintPieces({ outline: landing.outline, holes: [] }), landing.top - landing.bottom)
     parts.push(slab)
   })
   aggregate(c, `stair:${stair.id}`, element, parts)
@@ -1502,7 +1677,10 @@ function writeStoreyContents(building: Context, storey: Storey): void {
     if (broken.has(room.id)) continue
     try {
       const space = writeSpace(c, storey, room)
-      if (space !== null) spaces.push(space)
+      if (space !== null) {
+        spaces.push(space)
+        storey.spaces.set(room.id, space)
+      }
     } catch {
       // A room that cannot be built is left out.
     }
@@ -1780,7 +1958,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     building,
     storeys.map((storey) => storey.id)
   )
-  writeSlabs(c, storeys)
+  writeSlabs(c, plan, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
   writeLeftOut(c, building, options.leftOut ?? [])

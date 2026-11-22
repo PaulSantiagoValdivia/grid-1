@@ -17,7 +17,7 @@ import { planAreaFigures, MEASURES } from '../../areas'
 import { roomNumbers } from '../../roomNumbers'
 import { limit } from '../../tolerances'
 import { toIfc } from '../ifc'
-import { ballroomWithStage, flat, genkanFlat, stairHouse } from '../../../test-support/plans'
+import { ballroomWithStage, edit, flat, genkanFlat, stairHouse } from '../../../test-support/plans'
 import { entity, num, nums, ofType, parseDoc, ref, refs, str, walk, type Doc, type Entity, type Value } from './step-reader'
 
 const FLOORPLAN_FIXTURES = resolve(__dirname, '../../../../fixtures')
@@ -44,6 +44,21 @@ function farFlat(): FloorPlan {
   return { ...plan, walls: plan.walls.map((wall) => ({ ...wall, start: move(wall.start), end: move(wall.end) })) }
 }
 
+/**
+ * LVL-4's parts no fixture states: a parapet on the roof, a ceiling with a lowered zone, a room
+ * set below its storey (its own slab, lower down) and a void opening the slab.
+ */
+function shellFlat(): FloorPlan {
+  return edit(flat(), (p) => {
+    p.floors = [{ id: 'ground', name: 'Ground floor', level: 0, parapet: 1.1, slab: 0.3 }]
+    const [hall, kitchen, bedroom, bathroom] = p.rooms
+    hall!.void = true
+    kitchen!.ceiling = { lowered: [{ name: 'Bulkhead', points: [[4, 3], [10, 3], [10, 4], [4, 4]], height: 2.3 }] }
+    bedroom!.ceiling = {}
+    bathroom!.floorOffset = -0.1
+  })
+}
+
 const PLANS: [string, () => FloorPlan][] = [
   ...jsonIn(FLOORPLAN_FIXTURES, '.json'),
   ...jsonIn(CLI_FIXTURES, '.json'),
@@ -54,7 +69,8 @@ PLANS.push(
   ['test-support genkanFlat', () => genkanFlat()],
   ['test-support ballroomWithStage', () => ballroomWithStage()],
   ['test-support flat with a fixture', flatWithFixture],
-  ['two-bed flat at survey coordinates', farFlat]
+  ['two-bed flat at survey coordinates', farFlat],
+  ['test-support flat with a parapet, ceilings, a void and a sunken room', shellFlat]
 )
 
 const OPTIONS = { projectId: 'structure', projectName: 'Structure', timestamp: new Date('2026-11-22T00:00:00Z') } as const
@@ -64,7 +80,7 @@ const OPTIONS = { projectId: 'structure', projectName: 'Structure', timestamp: n
 // ---------------------------------------------------------------------------
 
 /** IfcRoot's subtypes Grid writes that are objects (they can hold properties, types and materials). */
-const ELEMENTS = new Set(['IFCWALLSTANDARDCASE', 'IFCDOOR', 'IFCWINDOW', 'IFCSLAB', 'IFCFURNISHINGELEMENT', 'IFCSTAIR', 'IFCSTAIRFLIGHT', 'IFCOPENINGELEMENT'])
+const ELEMENTS = new Set(['IFCWALLSTANDARDCASE', 'IFCWALL', 'IFCDOOR', 'IFCWINDOW', 'IFCSLAB', 'IFCROOF', 'IFCCOVERING', 'IFCFURNISHINGELEMENT', 'IFCSTAIR', 'IFCSTAIRFLIGHT', 'IFCOPENINGELEMENT'])
 const SPATIAL = new Set(['IFCPROJECT', 'IFCSITE', 'IFCBUILDING', 'IFCBUILDINGSTOREY', 'IFCSPACE'])
 const TYPES = new Set(['IFCWALLTYPE', 'IFCDOORSTYLE', 'IFCWINDOWSTYLE'])
 const RELATIONS = new Set([
@@ -74,7 +90,8 @@ const RELATIONS = new Set([
   'IFCRELDEFINESBYTYPE',
   'IFCRELASSOCIATESMATERIAL',
   'IFCRELVOIDSELEMENT',
-  'IFCRELFILLSELEMENT'
+  'IFCRELFILLSELEMENT',
+  'IFCRELCOVERSSPACES'
 ])
 const PROPERTY_SETS = new Set(['IFCPROPERTYSET', 'IFCELEMENTQUANTITY'])
 const QUANTITIES = new Set(['IFCQUANTITYLENGTH', 'IFCQUANTITYAREA', 'IFCQUANTITYVOLUME'])
@@ -85,9 +102,12 @@ const AGGREGATES: Readonly<Record<string, ReadonlySet<string>>> = {
   IFCSITE: new Set(['IFCBUILDING']),
   IFCBUILDING: new Set(['IFCBUILDINGSTOREY']),
   IFCBUILDINGSTOREY: new Set(['IFCSPACE']),
-  IFCSTAIR: new Set(['IFCSTAIRFLIGHT', 'IFCSLAB'])
+  IFCSTAIR: new Set(['IFCSTAIRFLIGHT', 'IFCSLAB']),
+  // LVL-4: a flat roof is its slab.
+  IFCROOF: new Set(['IFCSLAB'])
 }
-const CONTAINED = new Set(['IFCWALLSTANDARDCASE', 'IFCDOOR', 'IFCWINDOW', 'IFCSLAB', 'IFCFURNISHINGELEMENT', 'IFCSTAIR'])
+/** What a storey contains: LVL-4's roof, its parapet (an IfcWall) and the ceilings among them. */
+const CONTAINED = new Set(['IFCWALLSTANDARDCASE', 'IFCWALL', 'IFCDOOR', 'IFCWINDOW', 'IFCSLAB', 'IFCROOF', 'IFCCOVERING', 'IFCFURNISHINGELEMENT', 'IFCSTAIR'])
 const TYPED: Readonly<Record<string, string>> = { IFCWALLTYPE: 'IFCWALLSTANDARDCASE', IFCDOORSTYLE: 'IFCDOOR', IFCWINDOWSTYLE: 'IFCWINDOW' }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +158,10 @@ const typedNumber = (value: Value | undefined): number => {
   if (value?.t === 'num') return value.v
   if (value?.t === 'typed' && value.v.t === 'num') return value.v.v
   throw new Error(`expected a number, got ${JSON.stringify(value)}`)
+}
+const enumOf = (value: Value | undefined): string => {
+  if (value?.t === 'enum') return value.v
+  throw new Error(`expected an enumeration, got ${JSON.stringify(value)}`)
 }
 const typedText = (value: Value | undefined): string => {
   if (value?.t === 'typed' && value.v.t === 'str') return value.v.v
@@ -225,12 +249,18 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
     }
   }
   for (const rel of ofType(doc, 'IFCRELVOIDSELEMENT')) {
-    expect(entity(doc, ref(rel.args[4])).type).toBe('IFCWALLSTANDARDCASE')
+    // A door voids its wall; a stair, lift shaft or void its floor's slab (LVL-4).
+    expect(['IFCWALLSTANDARDCASE', 'IFCSLAB']).toContain(entity(doc, ref(rel.args[4])).type)
     expect(entity(doc, ref(rel.args[5])).type).toBe('IFCOPENINGELEMENT')
   }
   for (const rel of ofType(doc, 'IFCRELFILLSELEMENT')) {
     expect(entity(doc, ref(rel.args[4])).type).toBe('IFCOPENINGELEMENT')
     expect(['IFCDOOR', 'IFCWINDOW']).toContain(entity(doc, ref(rel.args[5])).type)
+  }
+  for (const rel of ofType(doc, 'IFCRELCOVERSSPACES')) {
+    expect(entity(doc, ref(rel.args[4])).type).toBe('IFCSPACE')
+    expect(refs(rel.args[5]).length).toBeGreaterThan(0)
+    for (const id of refs(rel.args[5])) expect(entity(doc, id).type).toBe('IFCCOVERING')
   }
 
   // 4. At least one storey, and the chain up to the project.
@@ -243,9 +273,10 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
   // 5. Every element stands in exactly one storey.
   for (const e of doc.order.filter((x) => CONTAINED.has(x.type))) {
     const parts = on(e).aggregatedBy
-    // A stair's landing is part of its stair, not of a storey.
+    // A stair's landing is part of its stair, and a roof's slab of its roof, not of a storey.
     if (e.type === 'IFCSLAB' && parts.length > 0) {
-      expect(parts.map((p) => p.type)).toEqual(['IFCSTAIR'])
+      expect(parts).toHaveLength(1)
+      expect(['IFCSTAIR', 'IFCROOF']).toContain(parts[0]!.type)
       expect(on(e).containers).toHaveLength(0)
     } else {
       expect(on(e).containers.map((s) => s.type), `${e.type} ${str(e.args[2])}`).toEqual(['IFCBUILDINGSTOREY'])
@@ -313,8 +344,31 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
     const qto = sets.get('Qto_SlabBaseQuantities')
     expect(qto, str(slab.args[2])).toBeDefined()
     for (const name of ['Width', 'Perimeter', 'GrossArea', 'GrossVolume']) expect(qto!.has(name), name).toBe(true)
-    if (aggregatedBy.length === 0) expect(sets.get('Grid_Slab')?.get('Assumed')).toEqual({ t: 'typed', name: 'IFCBOOLEAN', v: { t: 'enum', v: 'T' } })
+    if (qto!.has('NetArea')) expect(typedNumber(qto!.get('NetArea'))).toBeLessThan(typedNumber(qto!.get('GrossArea')))
+    // Every slab but a stair's landing is worked out from the walls (LVL-4), and says so, once.
+    const landing = aggregatedBy.some((e) => e.type === 'IFCSTAIR')
+    if (!landing) expect(sets.get('Grid_Slab')?.get('Assumed')).toEqual({ t: 'typed', name: 'IFCBOOLEAN', v: { t: 'enum', v: 'T' } })
   }
+  // One floor slab per storey: LVL-4's, never one under each room as well.
+  const floorSlabs = slabs.filter((s) => ['FLOOR', 'BASESLAB'].includes(enumOf(s.args[8])) && on(s).aggregatedBy.length === 0)
+  const perStorey = new Map<number, number>()
+  for (const slab of floorSlabs) {
+    // A room set above or below its storey has a piece of its own; the floor's slab says it is the floor's.
+    const note = on(slab).sets.get('Grid_Slab')?.get('Note')
+    if (!typedText(note).includes("the floor's outline")) continue
+    const storey = on(slab).containers[0]!.id
+    perStorey.set(storey, (perStorey.get(storey) ?? 0) + 1)
+  }
+  for (const [, count] of perStorey) expect(count).toBe(1)
+  const roofs = ofType(doc, 'IFCROOF')
+  for (const roof of roofs) expect(on(roof).sets.size, 'IFC2x3 has no roof quantities: its slab holds them').toBe(0)
+  const coverings = ofType(doc, 'IFCCOVERING')
+  for (const covering of coverings) {
+    expect(enumOf(covering.args[8])).toBe('CEILING')
+    expect(on(covering).sets.get('Qto_CoveringBaseQuantities')?.has('GrossArea'), str(covering.args[2])).toBe(true)
+  }
+  const parapets = ofType(doc, 'IFCWALL')
+  for (const parapet of parapets) expect(on(parapet).sets.get('Qto_WallBaseQuantities')?.has('Height'), str(parapet.args[2])).toBe(true)
   const fillers = [...ofType(doc, 'IFCDOOR'), ...ofType(doc, 'IFCWINDOW')]
   for (const filler of fillers) {
     const name = filler.type === 'IFCDOOR' ? 'Qto_DoorBaseQuantities' : 'Qto_WindowBaseQuantities'
@@ -328,7 +382,18 @@ function checkFile(plan: FloorPlan, text: string, measured: FloorPlan = plan): R
   const holes = ofType(doc, 'IFCOPENINGELEMENT').filter((o) => !filled.has(o.id))
   for (const hole of holes) expect(on(hole).sets.has('Qto_OpeningElementBaseQuantities'), str(hole.args[2])).toBe(true)
 
-  return { storeys: storeys.length, spaces: spaces.length, walls: walls.length, slabs: slabs.length, fillers: fillers.length, holes: holes.length }
+  return {
+    storeys: storeys.length,
+    spaces: spaces.length,
+    walls: walls.length,
+    slabs: slabs.length,
+    fillers: fillers.length,
+    holes: holes.length,
+    roofs: roofs.length,
+    coverings: coverings.length,
+    parapets: parapets.length,
+    slabHoles: ofType(doc, 'IFCRELVOIDSELEMENT').filter((r) => entity(doc, ref(r.args[4])).type === 'IFCSLAB').length
+  }
 }
 
 describe('HND-2 every IFC Grid writes for the repository\'s plans is whole', () => {
@@ -347,7 +412,7 @@ describe('HND-2 every IFC Grid writes for the repository\'s plans is whole', () 
 
   it('looked at rooms, walls, slabs, doors and windows, and doorless openings across them', () => {
     // Runs after the files above: the sums are of everything they checked.
-    for (const key of ['spaces', 'walls', 'slabs', 'fillers', 'holes']) expect(totals[key] ?? 0, key).toBeGreaterThan(0)
+    for (const key of ['spaces', 'walls', 'slabs', 'fillers', 'holes', 'roofs', 'coverings', 'parapets', 'slabHoles']) expect(totals[key] ?? 0, key).toBeGreaterThan(0)
   })
 })
 

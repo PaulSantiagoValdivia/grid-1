@@ -168,12 +168,18 @@ the file says that too.
   - spaces: height, perimeter, footprint (`GrossFloorArea`), net area (`NetFloorArea`), volume;
   - walls: length on the axis, thickness, height, footprint with corners joined, side area and
     volume, gross and less every opening in the wall;
-  - slabs and roofs: thickness, perimeter, area and volume;
+  - slabs, roof slabs and stair landings: thickness, perimeter, area and volume, and for a slab
+    a stair, lift shaft or void opens, its net area and volume too (IFC2x3 has no roof set: the
+    roof's slab carries it);
   - doors and windows: width, height and area of the hole in the wall; a doorless opening the
-    same, with its depth.
-- **Slabs.** The plan holds no slab or roof yet, so the ones in the file are Grid's: under each
-  room, and a flat roof over each room of the top floor. Each says so in `Grid_Slab`
-  (`Assumed`, and a `Note`).
+    same, with its depth; an opening in a slab its depth and area;
+  - ceilings (`Qto_CoveringBaseQuantities`): their area; parapets: height, footprint and volume.
+- **Slabs.** They are the ones the 3D view draws ([Slabs, roofs, ceilings and the
+  ground](plan-file.md#slabs-roofs-ceilings-and-the-ground)): one per floor over its outline, a
+  piece of its own under a room set above or below its storey, and a flat roof over every part
+  with nothing above. The plan states no slab or roof outline, so each is Grid's and says so in
+  `Grid_Slab`: `Assumed`, `ThicknessStated` (whether the floor states its slab's thickness) and
+  a `Note` on what Grid took.
 - **Walls** are typed by the kind the plan states and their thickness (`Exterior wall 0.3 m`),
   the same grouping the estimate prices (`wall:exterior:0.3` is the type's tag). Each type
   carries a one-layer material set, with one material per kind; its walls carry the set's
