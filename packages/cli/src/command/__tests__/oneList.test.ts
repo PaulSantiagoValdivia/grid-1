@@ -42,7 +42,7 @@ describe('the MS-18 plan', () => {
     expect(text.split('\n')[0]).toBe('General guidance, not your local rules')
     expect(text).toContain(`To look at (${result.result.count}): ${result.result.count} worth a look.`)
     expect(text).not.toMatch(/\b0 notes|Notes: 0|To look at: nothing/)
-    expect(text).toMatch(/^ {2}- worth a look, opening "d1": Door "d1" hits another door when they open\. \[opening\/doors-collide\]$/m)
+    expect(text).toMatch(/^ {2}\d+\. worth a look, opening "d1": Door "d1" hits another door when they open\. \[opening\/doors-collide\]$/m)
     expect(text).toMatch(/^ {6}fix: Turn one of them/m)
   })
 
