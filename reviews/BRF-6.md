@@ -240,3 +240,9 @@ For the owner, from this merge:
     refused together; a first layout from a brief does not use a scan's rooms, and a scan does not
     take the brief's sizes. Joining them (packing the brief inside a scanned outline) would be new
     work.
+
+## After merging main at ed8b9f75
+
+Merged CNT-4 (flats) (e5cde883). Conflicts only in the two changelogs, every entry kept. After the
+merge: build, typecheck and lint clean; the tests either side touched, 52 files (532 passed, 1
+skipped) and 37 files (531 passed); scoreboard "Same as the stored figures".
