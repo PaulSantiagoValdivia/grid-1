@@ -194,6 +194,7 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_view: [{ arg: 'plan', call: tool('grid_view', { plan: '@', kind: 'plan' }), given: asIs }],
   grid_describe: [{ arg: 'plan', call: tool('grid_describe', { plan: '@' }), given: asIs }],
   grid_check: [{ arg: 'plan', call: tool('grid_check', { plan: '@' }), given: asIs }],
+  grid_report_problem: [{ arg: 'plan', call: tool('grid_report_problem', { plan: '@', tool: 'grid_check', expected: 'The plan read.' }), given: asIs }],
   grid_preview: [{ arg: 'plan', call: tool('grid_preview', { plan: '@', view: '2d', note: 'A look' }), given: asIs }],
   grid_export: [{ arg: 'plan', call: tool('grid_export', { plan: '@', format: 'glb' }), given: asIs }],
   grid_sheet: [{ arg: 'plan', call: tool('grid_sheet', { plan: '@', layout: 'check' }), given: asIs }],
@@ -212,9 +213,13 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   ],
 }
 
-/** The plan-reading call of every tool that reads one. */
+/**
+ * The plan-reading call of every tool that reads one and follows its trace image. CMD-13's
+ * grid_report_problem never follows it: the draft leaves it out, and a refused trace image is
+ * one of the failures it reports (reportProblem.test.ts holds that the path is not in the draft).
+ */
 const PLAN_TOOLS: ReadonlyArray<readonly [name: string, call: (plan: string) => Call]> = Object.entries(TOOL_SLOTS)
-  .filter(([name]) => name !== 'grid_write_rooms')
+  .filter(([name]) => name !== 'grid_write_rooms' && name !== 'grid_report_problem')
   .map(([name, slots]) => [name, slots[0]!.call] as const)
 
 // ---------------------------------------------------------------------------------------------

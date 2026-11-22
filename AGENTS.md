@@ -58,10 +58,11 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 15 tools named
-  `grid_…`, in a fixed order (reading tools by the requests they answer, then the preview, the
-  export, the sheet, and the tools that change the plan). Each is written once in `readTools.ts` or
-  `writeTools.ts`; `toolkit.ts` turns its argument list into both the input schema and the
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 16 tools named
+  `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
+  last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
+  export, the sheet, and the tools that change the plan). Each is written once in `readTools.ts`,
+  `writeTools.ts` or `reportTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
   check. The measuring is in `src/quantities/`, the changes in `src/edit/`, the views in
   `src/draw/views.ts`. `src/mcp/__tests__/tools.test.ts` fails when a tool loses its prefix,
   title, hint, examples or output schema, or when the order changes; `replay/replay.test.ts`

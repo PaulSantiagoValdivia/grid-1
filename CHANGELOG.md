@@ -26,8 +26,11 @@ Grid has not been released yet. The first release will hold:
 - `grid describe`, `grid draw`, `grid export` and `grid sheet` describe a plan, draw it, export
   it and lay it out as an A3 sheet in PDF.
 - `grid init` makes a folder a Grid project, where the commands read its `plan.json`.
+- An agent that meets a problem in Grid can draft an issue about it with `grid_report_problem`:
+  the plan cut down and cleared of names and paths. Grid sends nothing; you decide whether to
+  file it.
 - Who sits where is kept in a file of its own beside the plan, `plan.occupancy.json`, linked to
   its rooms and desks. No export or sheet carries it; `grid occupancy` lists it by room.
-- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 15 tools.
+- `grid serve`, or `grid mcp`, is the tool server an agent uses, with 16 tools.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.

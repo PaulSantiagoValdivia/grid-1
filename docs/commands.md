@@ -27,7 +27,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 15 tools in [the tool server](tool-server.md) |
+| `grid serve` | Starts the tool server on standard input and output, with the 16 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes

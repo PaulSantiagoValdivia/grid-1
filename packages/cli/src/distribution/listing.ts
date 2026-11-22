@@ -136,6 +136,8 @@ function skill(): string {
     '   truth: to change a plan, read it back with `grid_describe` as=rooms, change the text and',
     '   write it again. For one door or wall, `grid_change_opening`, `grid_move_room_side` or',
     '   `grid_mirror`; each says what it changed. Change the plan only when asked.',
+    '6. When a Grid tool\'s answer looks wrong, `grid_report_problem` drafts an issue about it.',
+    '   Grid sends nothing: show the person the draft and let them decide whether to file it.',
     '',
     ROOM_NAMES_TRAVEL,
     '',

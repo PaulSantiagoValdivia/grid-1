@@ -17,6 +17,7 @@ const ORDER = [
   'grid_view',
   'grid_describe',
   'grid_check',
+  'grid_report_problem',
   'grid_preview',
   'grid_export',
   'grid_sheet',
@@ -26,7 +27,7 @@ const ORDER = [
   'grid_mirror',
 ]
 
-const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_preview'])
+const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
 const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror'])
 
 interface Listed {
@@ -65,7 +66,8 @@ describe('tools/list', () => {
 
   it('keeps about a dozen tools', async () => {
     // 15 since WRT-2: writing rooms first, the main way to write a plan, has its own tool.
-    expect((await listed()).length).toBeLessThanOrEqual(15)
+    // 16 since CMD-13: a problem report the person decides to file.
+    expect((await listed()).length).toBeLessThanOrEqual(16)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -141,6 +143,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_view: { kind: 'plan' },
     grid_describe: {},
     grid_check: {},
+    grid_report_problem: { tool: 'grid_measure', arguments: { what: 'room', room: 'hall' }, expected: 'The hall measured to its inside faces.' },
     grid_preview: { view: '2d' },
     grid_export: { plan: 'plan.json', format: 'dxf' },
     grid_sheet: { plan: 'plan.json', layout: 'check' },

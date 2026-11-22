@@ -1,7 +1,8 @@
 /**
  * The tools of `grid serve`, in the order `tools/list` gives them: the tools that read the
- * plan first, ordered by the requests they answer most often (lab entry Y-2), then the preview,
- * the export, and last the tools that change the plan.
+ * plan first, ordered by the requests they answer most often (lab entry Y-2), with the problem
+ * report last of them (CMD-13), then the preview, the export, and last the tools that change
+ * the plan.
  *
  * Every path an agent passes goes through the project's resolver (`fs/projectFiles.ts`):
  * inside the project folder or refused, with a message naming the path and the folder. The
@@ -12,6 +13,7 @@ import type { PathRefused, Project } from '../fs/projectFiles'
 import { FontsMissing } from '../sheet/fonts'
 import type { ServerTool, ToolAnswer } from './protocol'
 import { READ_TOOLS } from './readTools'
+import { reportProblemTool } from './reportTool'
 import { readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
 import { WRITE_TOOLS } from './writeTools'
 
@@ -20,6 +22,8 @@ export { EXPORT_TOOL_NAME, PREVIEW_TOOL_NAME } from './writeTools'
 /** Every tool, in its fixed order. */
 export const GRID_TOOLS: readonly GridTool[] = [
   ...READ_TOOLS,
+  // CMD-13: the last of the reading tools, for the rarest request: telling Grid's makers.
+  reportProblemTool,
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'read'),
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'write-file'),
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'change-plan'),
@@ -37,7 +41,10 @@ async function answer(tool: GridTool, raw: unknown, context: ToolContext): Promi
 
 export function serverTool(tool: GridTool, context: ToolContext): ServerTool {
   const definition = toolDefinition(tool)
-  return { definition, call: (raw) => answer(tool, raw, context) }
+  return {
+    definition,
+    call: (raw, request) => answer(tool, raw, request?.protocolVersion === undefined ? context : { ...context, protocolVersion: request.protocolVersion }),
+  }
 }
 
 /**
