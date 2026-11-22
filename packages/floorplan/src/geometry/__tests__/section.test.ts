@@ -161,7 +161,7 @@ describe('the levels of a section (LVL-9 done-when 2)', () => {
 
   it('hatches and lists walls whose height nothing states', () => {
     const plan = twoFloorHouse()
-    const bare = parseFloorPlan({ ...plan, walls: plan.walls.map(({ height: _height, ...w }) => w) })
+    const bare = parseFloorPlan({ ...plan, walls: plan.walls.map((w) => Object.fromEntries(Object.entries(w).filter(([key]) => key !== 'height'))) })
     const section = planSection(bare, line)
     const walls = section.assumed.filter((a) => a.kind === 'wall-height')
     expect(walls.map((a) => a.hatched)).toEqual([true, true])
