@@ -13,8 +13,8 @@
  * are in no figure.
  */
 import { MEASURES, floorOf, floorRoofShape, headroomBands, planMarks, roomHeadroom, wallSureness, type GrossMeasure, type HeadroomBand, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
-import { FLAT_AREA_RULE, planAreaFigures, type FlatAreaFigure, type PlanAreaFigures } from '@ongrid/floorplan/geometry/areas'
-import type { MarkSource } from '@ongrid/floorplan/types/floorplan'
+import { FLAT_AREA_RULE, planAreaFigures, type FlatAreaFigure, type OutdoorAreaFigure, type PlanAreaFigures } from '@ongrid/floorplan/geometry/areas'
+import type { MarkSource, OutdoorKind } from '@ongrid/floorplan/types/floorplan'
 import type { Survey, SurveyRoom } from './survey'
 import { FIXTURE_RULES, planFixtures } from './fixtures'
 import { joinStates, lessRooms, NOT_LOOKED_AT, roomDoubts, roomState, sumState, type AreaState, type NumberState } from './state'
@@ -72,6 +72,8 @@ export interface RoomArea {
   readonly headroom?: { readonly bands: readonly HeadroomBand[]; readonly lowest: number; readonly highest: number }
   /** CNT-8, only on a zone: the room it is part of. Measured, and in no total: its floor is its room's. */
   readonly zoneOf?: string
+  /** CNT-7 (C26), only on an outdoor space: its kind and whether a roof covers it. Measured, and in no total. */
+  readonly outdoor?: { readonly kind: OutdoorKind; readonly roofed: boolean }
   /**
    * WRT-6: only on a room whose walls the plan marks: where they came from and how sure the area
    * is. A zone's band is its own, and is added into no total (CNT-8).
@@ -144,6 +146,8 @@ export interface PlanAreas {
   readonly grossWhy: string | null
   /** LVL-6: the floor by headroom band, over the floors that state their roof; null when none does. */
   readonly headroom: readonly HeadroomBand[] | null
+  /** CNT-7 (C26): the outdoor spaces, listed apart from every total; only on a plan that has one. */
+  readonly outdoor?: OutdoorAreaFigure
   /** The three measures, each with what it measures, does not take off and cannot say, and area by headroom where a floor states its roof. */
   readonly measures: readonly MeasureRule[]
   readonly rules: readonly string[]
@@ -208,7 +212,7 @@ function sumSureness(rooms: readonly RoomArea[], total: number): AreaSureness | 
   return { source, plusMinus, percent: plusMinus === null || total <= 0 ? null : (100 * plusMinus) / total }
 }
 /** The rooms the totals count: no outside room, no zone (CNT-8), no stair room counted with the one below (SHT-11). */
-const inTotals = (room: RoomArea): boolean => !room.outside && room.zoneOf === undefined && room.countedWith === undefined
+const inTotals = (room: RoomArea): boolean => !room.outside && room.outdoor === undefined && room.zoneOf === undefined && room.countedWith === undefined
 
 const key = (floor: string, id: string): string => `${floor}\u0000${id}`
 
@@ -263,13 +267,14 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
         ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
         ...headroomOf(f.floor, id, net),
         ...(figure === undefined || figure.zoneOf === null ? {} : { zoneOf: figure.zoneOf }),
+        ...(figure?.outdoor === undefined ? {} : { outdoor: figure.outdoor }),
         ...(sureness === undefined ? {} : { sureness }),
       }
     })
     // CNT-8: a zone is in no total; its floor is counted in its room's, by the zone's use.
     // SHT-11: nor is a stair room counted with the one below, nor the zones of such a room.
     const inside = rooms.filter(inTotals)
-    const zones = rooms.filter((room) => !room.outside && room.zoneOf !== undefined && inside.some((r) => r.id === room.zoneOf))
+    const zones = rooms.filter((room) => !room.outside && room.outdoor === undefined && room.zoneOf !== undefined && inside.some((r) => r.id === room.zoneOf))
     const useOf = (room: RoomArea): string => room.use ?? (room.zoneOf === undefined ? null : rooms.find((r) => r.id === room.zoneOf)?.use) ?? NOT_SAID
     const byUseState: Record<string, AreaState> = {}
     const usesHere = [
@@ -377,9 +382,10 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     reader: figures.reader,
     grossWhy,
     headroom: floorBands.length === 0 ? null : addBands(floorBands),
-    measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal, ...(floorBands.length === 0 ? [] : [MEASURES.headroom])],
+    measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal, ...(floorBands.length === 0 ? [] : [MEASURES.headroom]), ...(figures.outdoor === undefined ? [] : [MEASURES.outdoor])],
     rules: [...Object.values(AREA_RULES), ...(hasFlats ? [FLAT_RULE] : []), ...(taken.size === 0 ? [] : [FIXTURE_RULES.free]), ...(floorBands.length === 0 ? [] : [MEASURES.headroom.measures]), ...(sureness === undefined ? [] : [SURENESS_RULE])],
     notes,
+    ...(figures.outdoor === undefined ? {} : { outdoor: figures.outdoor }),
     ...(sureness === undefined ? {} : { sureness }),
     states: {
       net: netState,

@@ -28,6 +28,8 @@
  *                inside <room> corner <ne|nw|se|sw> [wall <t> [kind]]  cuts that corner out of the room
  *       then:    walls <t> [kind]  height <h>  floor <m> (its floor above or below the storey's)  first-wall <wall id>
  *                tenure <private|shared|common|commercial>  type "<the firm's own room type>"
+ *                outdoor <garden|courtyard|terrace|balcony|light-well|porch|carport|other> [roofed|unroofed]
+ *                                 the room is outdoor space (CNT-7, C26), roofed or not
  *                through <floor>  the room, and so its walls, stands on every floor written after this
  *                                 one up to that floor too, in the same place (WRT-4): a stair or lift
  *                                 core, a shaft, a block's outside walls
@@ -68,7 +70,7 @@
  *
  * Pure: text in, a plan and a report out. Nothing here reads or writes a file.
  */
-import { BUILDING_TYPES, DOOR_KINDS, OPENING_KINDS, ROOM_TENURES, ROOM_USES, WALL_DEFAULTS, WINDOW_KINDS, WallKindSchema, readUse, type BuildingType, type FloorPlan, type Opening, type OpeningKind, type Room, type RoomTenure, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
+import { BUILDING_TYPES, DOOR_KINDS, OPENING_KINDS, OUTDOOR_KINDS, ROOM_TENURES, ROOM_USES, WALL_DEFAULTS, WINDOW_KINDS, WallKindSchema, readUse, type BuildingType, type FloorPlan, type Opening, type OpeningKind, type Room, type OutdoorKind, type RoomTenure, type RoomUse, type Wall, type WallKind } from '../types/floorplan'
 import { doorKindOf, kindFits, sweepsFloor } from '../geometry/openingKinds'
 import { hingeSeenFrom } from '../geometry/handing'
 import { indexPlan } from '../geometry/plan'
@@ -251,6 +253,9 @@ interface RoomDraft {
   /** CNT-5: who the room is for, and the firm's own room type. */
   tenure: RoomTenure | null
   roomType: string | null
+  /** CNT-7 (C26): the outdoor kind, and whether a roof covers it when the line says. */
+  outdoor: OutdoorKind | null
+  roofed: boolean | null
   /** The size as written and what it measures to, for the answer. */
   size: { w: number | null; d: number | null; basis: SizeBasis } | null
   /** WRT-4: the last floor the room rises through, when it stands on the floors after its own too. */
@@ -785,7 +790,7 @@ class Compiler {
       this.stop('rooms/unknown-use', at, `line ${at}: '${useWord}' is not a room use Grid knows. Use one of: ${USES.join(', ')}; or '-' for none. The room's name keeps the person's own word: "Pooja room", "Bryggers".`)
     }
     const fl = this.floor()
-    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, floorOffset: null, firstWall: null, tenure: null, roomType: null, size: null, through: null, risenFrom: null }
+    const room: RoomDraft = { id, name, use, line: at, poly: [], box: [0, 0, 0, 0], wallsT: null, wallsKind: null, height: null, floorOffset: null, firstWall: null, tenure: null, roomType: null, outdoor: null, roofed: null, size: null, through: null, risenFrom: null }
     const mx = ctx?.mx === true
     const my = ctx?.my === true
     let W: string | null = null
@@ -852,6 +857,12 @@ class Compiler {
         if (!TENURES.includes(t[i + 1]!)) this.stop('rooms/syntax', at, `line ${at}: '${t[i + 1]}' is not a tenure Grid knows. Use one of: ${TENURES.join(', ')}.`)
         room.tenure = t[i + 1] as RoomTenure
         i += 2
+      } else if (w === 'outdoor' && i + 1 < t.length && (OUTDOOR_KINDS as readonly string[]).includes(t[i + 1]!)) {
+        room.outdoor = t[i + 1] as OutdoorKind
+        i += 2
+      } else if ((w === 'roofed' || w === 'unroofed') && room.outdoor !== null) {
+        room.roofed = w === 'roofed'
+        i++
       } else if (w === 'type' && i + 1 < t.length) {
         room.roomType = t[i + 1]!
         i += 2
@@ -878,7 +889,7 @@ class Compiler {
         this.stop(
           'rooms/syntax',
           at,
-          `line ${at}: '${w}' is not understood on a room line. After the use, write a size ('3.0 x 4.4' = east-west by north-south, inside faces; add 'centre' or 'outside' to measure to the walls' centre lines or outside faces) or 'polygon x,y x,y ...', then where it goes: 'at x,y', '<north|south|east|west> of <room>' with optional 'align', 'shift', 'until', 'open', or 'inside <room> corner <ne|nw|se|sw>'. 'walls <t> [kind]' sets this room's own wall thickness; 'through <floor>' stands it on every floor after this one up to that floor; 'tenure <private|shared|common|commercial>' and 'type "<text>"' say who it is for and the firm's own room type.`
+          `line ${at}: '${w}' is not understood on a room line. After the use, write a size ('3.0 x 4.4' = east-west by north-south, inside faces; add 'centre' or 'outside' to measure to the walls' centre lines or outside faces) or 'polygon x,y x,y ...', then where it goes: 'at x,y', '<north|south|east|west> of <room>' with optional 'align', 'shift', 'until', 'open', or 'inside <room> corner <ne|nw|se|sw>'. 'walls <t> [kind]' sets this room's own wall thickness; 'through <floor>' stands it on every floor after this one up to that floor; 'tenure <private|shared|common|commercial>' and 'type "<text>"' say who it is for and the firm's own room type; 'outdoor <${OUTDOOR_KINDS.join('|')}>', then 'roofed' or 'unroofed', marks it as outdoor space.`
         )
       }
     }
@@ -2151,6 +2162,8 @@ class Compiler {
             ...(room.floorOffset !== null ? { floorOffset: room.floorOffset } : {}),
             ...(room.tenure !== null ? { tenure: room.tenure } : {}),
             ...(room.roomType !== null ? { roomType: room.roomType } : {}),
+            ...(room.outdoor !== null ? { outdoor: room.outdoor } : {}),
+            ...(room.roofed !== null ? { roofed: room.roofed } : {}),
           }
           plan.rooms.push(item)
           const area = Math.abs(signedArea(room.poly))

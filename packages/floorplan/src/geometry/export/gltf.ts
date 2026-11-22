@@ -107,6 +107,8 @@ interface Part {
   readonly mesh: Mesh
   /** CNT-14: drawn in the glass material. */
   readonly glass?: true
+  /** CNT-7 (C26): an outdoor space's floor says so in its node's `extras` (lab EL-18). */
+  readonly outdoor?: { readonly kind: string; readonly roofed: boolean }
 }
 
 /** Everything the scene could build, walls first, then room floors, stairs, columns (CNT-16), the doors' and windows' parts (CNT-14) and the shell (LVL-4), as OBJ lists them. */
@@ -119,7 +121,7 @@ function partsOf(scene: Scene3D): Part[] {
   }
   for (const slab of scene.slabs) {
     const mesh = floorMesh(slab)
-    if (mesh) parts.push({ name: nameOf('floor', slab.roomId), mesh })
+    if (mesh) parts.push({ name: nameOf('floor', slab.roomId), mesh, ...(slab.outdoor === undefined ? {} : { outdoor: slab.outdoor }) })
   }
   for (const stair of scene.stairs) {
     const mesh = stairMesh(stair)
@@ -270,7 +272,8 @@ export function toGlb(scene: Scene3D, options: GlbOptions = {}): Uint8Array {
       name,
       primitives: [{ attributes: { POSITION: index * 2 }, indices: index * 2 + 1, material: parts[index]!.glass ? 1 : 0 }]
     })
-    nodes.push({ name, mesh: index })
+    const outdoor = parts[index]!.outdoor
+    nodes.push(outdoor === undefined ? { name, mesh: index } : { name, mesh: index, extras: { gridOutdoor: outdoor.kind, gridRoofed: outdoor.roofed } })
   }
 
   // HND-11: a model built near zero is held by one node, moved to where the plan's zero is.

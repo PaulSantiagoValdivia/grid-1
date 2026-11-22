@@ -1815,6 +1815,7 @@ export const en = {
   'describe.count.zone.many': '{count} zones',
   'describe.roomsAndZones': '{rooms} and {zones}',
   'describe.room.zoneOf': ' (a zone of {room})',
+  'describe.room.outdoor': ' (outdoor space: {kind}, in no total)',
 
   // ── After merging main at 8b599e9: LVL-8's opening patterns in rooms text ───────────────────
   'describe.rooms.patterns.one': "The plan's opening pattern is not rooms text: grid write keeps it as the file has it, and its openings are not written here.",
@@ -1944,6 +1945,7 @@ export const en = {
   'sheet.rooms': 'Rooms / {unit}',
   'sheet.notMeasured': 'not measured',
   'sheet.countedBelow': 'counted below',
+  'sheet.outdoor': '{area}, outdoor',
   'sheet.netArea': 'Net area',
   'sheet.notKnown': 'not known',
   'sheet.figure.clearHeight': 'clear height',
@@ -2332,7 +2334,26 @@ export const en = {
   'describe.column.square': '{label}{width} × {depth} m at {at}{room}',
   'describe.column.round': '{label}{width} m round at {at}{room}',
   'describe.column.label': '{label}, ',
-  'describe.column.in': ', in {room}'
+  'describe.column.in': ', in {room}',
+
+  // --- Outdoor space, roofed or open (CNT-7, C26)
+  'areas.measure.outdoor.measures': 'Outdoor area is the floor of each room the plan marks as outdoor space, roofed or open, measured to the faces of its walls and edges as a room is.',
+  'areas.measure.outdoor.notTakenOff': 'It is in no net, gross internal or gross external figure, and nor is a wall that bounds outdoor space and no room, such as a fence or a parapet.',
+  'areas.measure.outdoor.cannotSay': 'The plan cannot say how much of an outdoor space a local rule counts, such as part of a balcony: Grid counts none of it unless the caller states such a rule, with where it comes from.',
+  'areas.note.outdoor': '{area} m² of outdoor space is listed apart: it is in no net, gross internal or gross external figure.',
+  'outdoor.kind.garden': 'garden',
+  'outdoor.kind.courtyard': 'courtyard',
+  'outdoor.kind.terrace': 'terrace',
+  'outdoor.kind.balcony': 'balcony',
+  'outdoor.kind.light-well': 'light well',
+  'outdoor.kind.porch': 'porch',
+  'outdoor.kind.carport': 'carport',
+  'outdoor.kind.other': 'outdoor space',
+  'outdoor.roofed': 'roofed',
+  'outdoor.open': 'open',
+  'areas.room.outdoor': ', {kind}, {roofed}: outdoor space, listed apart',
+  'areas.outdoor': 'Outdoor space, listed apart: {area} ({kinds}), {roofed} roofed and {open} open. {rule}',
+  'areas.outdoor.kind': '{kind} {area}'
 } as const satisfies Record<string, string>
 
 export type MessageKey = keyof typeof en

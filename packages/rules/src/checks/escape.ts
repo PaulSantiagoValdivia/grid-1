@@ -10,6 +10,7 @@
 
 import { indexPlan, overFigure, partHeight, partWidth, roomZones, rounded, shownAgainst, statedKind, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
 import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
+import { outdoorIds } from '@ongrid/floorplan/geometry/outdoor'
 import { RULE_USES } from './catalogue'
 import type { FloorScope } from './coverage'
 import { ESCAPE_TOP_LEVEL } from './figures'
@@ -132,16 +133,22 @@ export function escapeCheck(
   // with a room on one side only and no enclosed floor on the other (MSG-13, `outsideTest`).
   const outside = new Map<string, Opening[]>()
   const facesOutside = outsideTest(storey, index)
+  const outdoor = outdoorIds(storey)
   for (const opening of storey.openings) {
     if (opening.type === 'opening') continue
     const wall = index.wallsById.get(opening.wall)
     if (wall === undefined) continue
     const [left, right] = openingSides(opening, index, outlines)
     const along = opening.offset + opening.width / 2
+    // CNT-7 (C26): an outdoor space beyond the opening is the open air.
     const rooms =
       wall.kind === 'exterior'
         ? [left, right]
-        : left !== null && right === null && facesOutside(wall, along, 'right')
+        : right !== null && outdoor.has(right)
+          ? [left]
+          : left !== null && outdoor.has(left)
+            ? [right]
+            : left !== null && right === null && facesOutside(wall, along, 'right')
           ? [left]
           : right !== null && left === null && facesOutside(wall, along, 'left')
             ? [right]

@@ -51,6 +51,7 @@ import {
 } from '../elevations'
 import type { MultiPolygon } from 'polygon-clipping'
 import { planEnvelope, roomCeiling, type FloorRoof } from '../envelope'
+import { isOutdoor, outdoorKind, outdoorRoofed } from '../outdoor'
 import { faceUnderTop, floorRoofShape, planeAt, volumeUnder, wallPeak, wallTopProfile, type RoofPlane } from '../roofs'
 import { multiArea, piecesAsRings, ringOf } from '../polygons'
 import { tolerance } from '../tolerances'
@@ -1517,7 +1518,8 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     ref(shape),
     str(room.name),
     en('ELEMENT'),
-    en('INTERNAL'),
+    // CNT-7 (C26): an outdoor space is an external space.
+    en(isOutdoor(room) ? 'EXTERNAL' : 'INTERNAL'),
     NULL
   )
   writeSpaceData(c, storey, room, space, footprint, { height, volume, cut: cuts.length > 0 }, numbered)
@@ -1559,11 +1561,15 @@ function writeSpaceData(
     // Left unsaid: the space still carries its footprint.
   }
   const gross = footprintArea(footprint)
-  const rule = MEASURES.net
+  // CNT-7: an outdoor space's floor is outdoor area, in no net figure.
+  const rule = isOutdoor(room) ? MEASURES.outdoor : MEASURES.net
 
+  // CNT-7 (C26): an outdoor space says so, its kind and whether a roof covers it (lab EL-18).
+  const kind = outdoorKind(room)
   propertySet(c, `space:${room.id}`, 'Pset_SpaceCommon', [
     ...(numbered === undefined ? [] : [property(c, 'Reference', identifier(shownRoomNumber(numbered)))]),
-    ...(room.use === undefined ? [] : [property(c, 'Category', label(room.use))])
+    ...(room.use === undefined ? [] : [property(c, 'Category', label(room.use))]),
+    ...(kind === null ? [] : [property(c, 'IsExternal', booleanValue(true))])
   ], space)
 
   propertySet(c, `grid-space:${room.id}`, 'Grid_Space', [
@@ -1573,6 +1579,7 @@ function writeSpaceData(
       ? []
       : [property(c, 'Number', numbered.stated === null ? `IFCINTEGER(${int(numbered.number)})` : label(numbered.stated))]),
     property(c, 'Use', label(room.use ?? USE_NOT_SAID)),
+    ...(kind === null ? [] : [property(c, 'Outdoor', label(kind)), property(c, 'Roofed', booleanValue(outdoorRoofed(room) === true))]),
     ...(net === null
       ? []
       : [

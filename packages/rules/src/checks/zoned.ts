@@ -15,6 +15,7 @@
 import type { Room, RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { RoomZones } from '@ongrid/floorplan/geometry'
+import { isOutdoor } from '@ongrid/floorplan/geometry/outdoor'
 
 /** A plan built by hand, unparsed, can still carry a value the schema would drop. */
 const stated = (use: unknown): RoomUse | null => ((ROOM_USES as readonly unknown[]).includes(use) ? (use as RoomUse) : null)
@@ -35,6 +36,8 @@ export function appliedUse(room: Room, rooms: readonly Room[], zones: RoomZones,
   const of = zones.zoneOf.get(room.id)
   if (of !== undefined) return { kind: 'zone', room: of }
   const own = stated(room.use)
+  // CNT-7 (C26): an outdoor space is no room of any use a check covers, whatever its use says.
+  if (isOutdoor(room)) return own !== null ? { kind: 'not_covered' } : { kind: 'no_use' }
   if (own !== null && covers.includes(own)) return { kind: 'checked', use: own, zone: null }
   const ids = zones.zones.get(room.id) ?? []
   const parts = ids.flatMap((id) => rooms.filter((r) => r.id === id).slice(0, 1))

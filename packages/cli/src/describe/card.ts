@@ -464,7 +464,7 @@ function personRoom(floor: FloorFacts, room: RoomFacts, names: PersonNames, w: W
   const size = shape.rectangle ? across : t(w, 'describe.room.odd', { size: across })
   const next = nextOnly(floor, room)
   // CNT-8: a zone is named as part of its room, and its floor is in its room's.
-  const of = room.zoneOf === undefined ? '' : t(w, 'describe.room.zoneOf', { room: names.room(room.zoneOf) })
+  const of = room.zoneOf === undefined ? (room.outdoor === undefined ? '' : t(w, 'describe.room.outdoor', { kind: t(w, `outdoor.kind.${room.outdoor}`) })) : t(w, 'describe.room.zoneOf', { room: names.room(room.zoneOf) })
   const lines = [`${t(w, 'describe.room', { room: `${name}${of}`, size, area: area(w, shape.area), at: point(w, shape.at.x, shape.at.y) })}${next.length > 0 ? t(w, 'describe.room.next', { rooms: listed(w, next.map((id) => names.room(id))) }) : ''}`]
   const { openings, open } = roomOpenings(floor, room.id)
   for (const side of open) lines.push(`  ${t(w, 'describe.room.open', { room: names.room(side.other) })}`)
@@ -485,7 +485,7 @@ function agentRoomHead(room: RoomFacts): string {
   const use = room.use ?? '-'
   if (room.shape === null) return `${room.id} ${JSON.stringify(room.name)} ${use} LEFT OUT (grid check says why)`
   const { shape } = room
-  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}${room.zoneOf === undefined ? '' : ` zone-of:${room.zoneOf}`}`
+  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}${room.zoneOf === undefined ? '' : ` zone-of:${room.zoneOf}`}${room.outdoor === undefined ? '' : ` outdoor:${room.outdoor}`}`
 }
 
 function agentRoom(floor: FloorFacts, room: RoomFacts): string {
