@@ -131,6 +131,32 @@ in 79 files. The two failures:
 lab plans place no wall by its face, keep no taped length and state no site origin, so no count
 moves and `scoreboard/current.json` is unchanged.
 
+### After merging `main` at c05d051 (BRF-5, LVL-6, VEW-3)
+
+Merge commit b2294be. Seven files conflicted; both sides were kept in each:
+
+- `packages/floorplan/src/types/floorplan.ts`: VEW-3's saved views took convention C11, so taped
+  lengths are C12; `views` then `taped` in the plan's fields. LVL-6 added its own `isPair`, so
+  HND-11's is `isEndPair`.
+- `packages/rules/src/result/__tests__/result.test.ts`: the plan's fields hold VEW-3's `views`
+  and HND-11's `taped`.
+- `packages/cli/src/edit/edits.ts`: VEW-3's imports with `wallWithEnds`.
+- `CHANGELOG.md`, `docs/result-contract.md`: every section, HND-11's first. `docs/tolerances.md`:
+  HND-11's `farFromOrigin` row with VEW-3's camera rows. `docs/plan-file.md`: the limits row names
+  saved views and taped lengths.
+
+One change past the conflicts: LVL-6 frames a floor's roof from the walls as its file writes them,
+before the reading, so a wall placed by its face now frames it on its centre line (`centreFromFace`
+in `withFloorHeights`), as every other reader sees it.
+
+After the merge: `npm run build`, `npm run typecheck`, `npm run lint` and `npm run
+check:licenses` (363 licences) exit 0. `npx vitest run packages/cli --maxWorkers=2
+--minWorkers=1`: 1,157 passed, 1 skipped, in 82 of 82 files (WRT-8's diff test passes with
+`main`'s fix). `npx vitest run packages/floorplan packages/rules packages/viewer
+scoreboard/__tests__ scripts --maxWorkers=2 --minWorkers=1`: 4,172 passed, 3 skipped, in 214 of
+214 files. Nothing was rerun alone. `npm run scoreboard`: "Same as the stored figures" (197, 278,
+18, 5, 16; guards 735 and 95; `main`'s LVL-6 stored 16 for the checks the plan can feed).
+
 ## For the owner
 
 The owner is away, so each choice took the reversible option; each is a small change.
