@@ -15,8 +15,8 @@ Notes for agents and people changing this repository.
   React, no Three.js, no DOM and no network. Every tolerance and limit a check uses lives in one
   table, `src/geometry/tolerances.ts` (MSG-15), and is read through `tolerance()` or `limit()`;
   `src/geometry/__tests__/tolerances.test.ts` fails on a tolerance literal anywhere else in the
-  geometry, validation or schema, and when the README's table no longer matches it. Its figures
-  are Grid's own drawing checks and cite no document.
+  geometry, validation or schema, and when the table in `docs/tolerances.md` no longer matches
+  it. Its figures are Grid's own drawing checks and cite no document.
 - `packages/floorplan/src/rooms/` (WRT-2): writing a plan rooms first and reading any plan back
   as rooms text. `compile.ts` works out the walls, their kinds, the room boundaries and the
   openings' places from rooms text (the language is in its header); `read.ts` reads a plan back
@@ -80,6 +80,11 @@ Notes for agents and people changing this repository.
   `npm run scoreboard`. It prints five counts and fails when one is worse than
   `scoreboard/current.json`. Its `README.md` defines the counts. A change that moves a count
   stores the new figures in the same commit.
+- `docs/`: the documentation, one page per topic: `rooms-first.md`, `commands.md`,
+  `tool-server.md`, `plan-file.md`, `tolerances.md` and `result-contract.md`. The root
+  `README.md` is the front page: what Grid is, installing and running it, and a table of these
+  pages. Agents are their first readers: each page opens with one line on when to read it, and
+  its headings stay stable, because the README, other pages and tests point at them.
 - A plan file is read one way (MSG-9): `src/fs/textEncoding.ts` turns its bytes into text
   (byte-order mark, UTF-16, strict UTF-8) and `src/command/planText.ts` limits and cleans its
   names, ids and lists before the schema. The tool server's arguments use the same character
@@ -114,6 +119,8 @@ Run the type check, the tests and the scoreboard before calling a change done.
 - No dependency may be under a GPL, LGPL, AGPL, MPL or EPL licence. `npm run check:licenses`
   checks `package-lock.json`, and CI runs it.
 - Never commit secrets, `.env` files, personal data or paths from your own machine.
+- A feature documents itself in the `docs/` page for its topic, or in a new page with a row in
+  the README's documentation table, and never by appending a section to `README.md`.
 
 ## Rules and standards
 
