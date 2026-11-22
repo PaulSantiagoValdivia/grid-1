@@ -295,6 +295,11 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
     { arg: 'plan', call: tool('grid_square_scan', { plan: '@', all: true }), given: asIs },
     { arg: 'out', call: tool('grid_square_scan', { plan: PLAN, all: true, out: '@.json' }), given: (p) => `${p}.json` },
   ],
+  // CNT-20: a library entry placed by name reads the plan (and the library folder beside it) and writes it, or another file.
+  grid_place_item: [
+    { arg: 'plan', call: tool('grid_place_item', { plan: '@', name: 'wc', x: 1, y: 1 }), given: asIs },
+    { arg: 'out', call: tool('grid_place_item', { plan: PLAN, name: 'wc', x: 1, y: 1, out: '@.json' }), given: (p) => `${p}.json` },
+  ],
   // VEW-3: a camera saved by name, written into the plan.
   grid_save_view: [
     { arg: 'plan', call: tool('grid_save_view', { plan: '@', name: 'Corner', camera: CAMERA }), given: asIs },

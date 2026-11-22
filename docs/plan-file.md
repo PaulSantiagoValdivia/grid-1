@@ -888,11 +888,14 @@ What a pattern cannot place is said, never dropped in silence. Each is left out,
 
 ## Fixtures
 
-A plan may list its fixed fixtures in `items`: a toilet, a basin, a shower, a bath or a kitchen
-run (base units with their worktop). Each has a `kind`, `at` (the middle of its footprint), a
+A plan may list its fixtures and furniture in `items`: a toilet, a basin, a shower, a bath or a
+kitchen run (base units with their worktop), and a bed, a table, a chair, a sofa or storage (a
+wardrobe, a cupboard, shelves). Each has a `kind`, `at` (the middle of its footprint), a
 `size` (its width along its back and its depth to its front), a `height`, and may have a `turn`
-(degrees, counter-clockwise; unturned, its back faces down the drawing), a `label` and a
-`floor`. Every figure is the author's: Grid gives a fixture no size of its own.
+(degrees, counter-clockwise; unturned, its back faces down the drawing), a `label`, a
+`floor` and a `clearance` (metres of clear floor kept in front of it). An item may instead name
+a library entry in `library`, which gives what it leaves out (CNT-20, C30: [library.md](library.md)).
+Every other figure is the author's.
 
 ```json
 { "id": "wc", "kind": "toilet", "at": [9.575, 5], "size": [0.4, 0.65], "height": 0.8, "turn": 90, "label": "WC" }
@@ -907,18 +910,22 @@ they stand on), and each zone, flat and floor and the plan theirs ([areas.md](ar
 `grid check` names a fixture that runs into a wall or is taller than its room. A fixture is an
 obstacle (CNT-13): a door whose leaf swings into it names it, and `grid_measure what=use` and
 `what=route` with a width measure the turning circle, the way through and the floor round each
-fixture clear of them ([use indicators](tool-server.md#use-indicators-will-it-fit-can-you-turn-is-the-window-blocked)). This version holds
-fixtures only: loose furniture, points (a hydrant, a camera) and seats come later, in the same
-shape. A kind it does not hold yet is left out with a note, and the rest of the plan is drawn.
+fixture clear of them ([use indicators](tool-server.md#use-indicators-will-it-fit-can-you-turn-is-the-window-blocked)). Furniture is drawn,
+exported, measured and checked as a fixture is, and takes no free floor: it can be moved. The DXF
+writes each item as a block ([library.md](library.md#the-dxf-each-door-and-fixture-a-block)).
+Points (a hydrant, a camera) and seats come later, in the same shape. A kind Grid does not hold
+is left out with a note, and the rest of the plan is drawn; a kind is added through the kinds
+registry ([library.md](library.md#adding-a-kind-of-thing)).
 
 | Code | What it says |
 |---|---|
-| `item/unknown-kind` | A kind the plan does not hold yet, such as a table. The item is left out |
+| `item/unknown-kind` | A kind Grid does not hold, such as a piano. The item is left out |
 | `item/too-large`, `item/no-size` | A number Grid does not accept, or no size. The item is left out |
 | `item/duplicate-id`, `item/unknown-floor` | An id another part has, or a floor the plan does not have. The item is left out |
 | `item/outside-rooms` | Its middle is in no room on its floor |
 | `item/into-wall` | It reaches more than 5 mm into a solid wall |
 | `item/too-tall` | It is higher than the room it stands in |
+| `item/unknown-library`, `item/overlap`, `item/clearance-blocked` | A library name no library holds, an item standing in another, and something in the clear floor an item keeps ([library.md](library.md#what-grid-checks)) |
 | `opening/door-hits-item` | A door's leaf swings into the fixture: the line names it by its label, kind and id, `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens` |
 | `item/blocks-doorway` | It stands within 0.3 m (`useApproachDepth`) in front of a doorway's hole: the line says how much of the hole it covers and the clear width left, as an indicator |
 | `item/blocks-window` | It is higher than a window's sill and stands within 0.3 m in front of it: the line says how much of the window it covers, as an indicator |

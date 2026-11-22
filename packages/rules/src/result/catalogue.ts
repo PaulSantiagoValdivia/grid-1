@@ -535,6 +535,10 @@ export const CODES = {
   'item/outside-rooms': {},
   'item/into-wall': {},
   'item/too-tall': {},
+  // CNT-20 (C30): the library and items standing in each other. The found is the check's own sentence.
+  'item/unknown-library': {},
+  'item/overlap': {},
+  'item/clearance-blocked': {},
   // CNT-13: use indicators the drawing's check gives. The found is the check's own sentence:
   // what was measured, with what depth, and that it is an indicator.
   'item/blocks-doorway': {

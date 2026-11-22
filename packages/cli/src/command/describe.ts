@@ -14,7 +14,7 @@
  * plan's display states one. Names from the plan stay as written. The agent's form is a format
  * of codes and ids that stays as it is; only its label is in the language.
  */
-import { ITEM_KINDS } from '@ongrid/floorplan/types/floorplan'
+import { isOwnItemKind, itemKinds, itemKindWord, type ItemGroup } from '@ongrid/floorplan/geometry'
 import { DEFAULT_LANGUAGE, say, type Language, type MessageKey } from '@ongrid/floorplan/messages'
 import { readRoomsText } from '@ongrid/floorplan/rooms'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength, type Words } from '../describe/card'
@@ -132,11 +132,27 @@ export function describeWalk(survey: Survey, walk: PlanWalk, audience: DescribeA
   return `${say(w.language, 'label')}\n${walkText(survey, walk, audience, pictures, w)}`
 }
 
-/** The fixtures counted, in the person's words: `1 toilet, 2 basins`. */
+/**
+ * The fixtures counted, in the person's words: `1 toilet, 2 basins`; CNT-20: then the furniture,
+ * `Furniture: 1 bed, 2 tables`, when there is any. A kind added through the registry is counted by
+ * its own word.
+ */
 function personFixtures(counts: Fixtures['counts'], w: Words): string {
-  const list = ITEM_KINDS.filter((kind) => counts[kind] > 0)
-    .map((kind) => say(w.language, `describe.fixture.${kind}.${counts[kind] === 1 ? 'one' : 'many'}` as MessageKey, { count: counts[kind] }, w.options))
-  return say(w.language, 'describe.fixtures', { list: list.join(say(w.language, 'join.comma')) }, w.options)
+  const listOf = (group: ItemGroup): string[] =>
+    itemKinds(group)
+      .filter((kind) => (counts[kind] ?? 0) > 0)
+      .map((kind) =>
+        isOwnItemKind(kind)
+          ? say(w.language, `describe.fixture.${kind}.${counts[kind] === 1 ? 'one' : 'many'}` as MessageKey, { count: counts[kind]! }, w.options)
+          : say(w.language, 'describe.fixture.other', { count: counts[kind]!, word: itemKindWord(kind) }, w.options)
+      )
+  const comma = say(w.language, 'join.comma')
+  const fixed = listOf('fixture')
+  const furniture = listOf('furniture')
+  return [
+    ...(fixed.length > 0 || furniture.length === 0 ? [say(w.language, 'describe.fixtures', { list: fixed.join(comma) }, w.options)] : []),
+    ...(furniture.length === 0 ? [] : [say(w.language, 'describe.furniture', { list: furniture.join(comma) }, w.options)]),
+  ].join(' ')
 }
 
 function describeBody(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience, w: Words): string {
@@ -155,5 +171,6 @@ function describeBody(loaded: LoadedPlan, length: DescribeLength, audience: Desc
   const fixtures = planFixtures(loaded.plan)
   if (fixtures.rows.length === 0) return text
   if (audience === 'person') return `${text}${personFixtures(fixtures.counts, w)}\n`
-  return `${text}Fixtures: ${fixtureCountText(fixtures.counts)}. grid_schedule lists each with its room and size.\n`
+  const named = fixtures.rows.some((row) => row.group === 'furniture') ? 'Fixtures and furniture' : 'Fixtures'
+  return `${text}${named}: ${fixtureCountText(fixtures.counts)}. grid_schedule lists each with its room and size.\n`
 }

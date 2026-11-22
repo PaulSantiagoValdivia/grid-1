@@ -32,6 +32,8 @@
  *   and the left-out note says so.
  * - Dimensions as dimension entities, with the core's chains outside the plan and its room
  *   dimensions inside (SHT-4: `buildDimensions`), each drawn in its own block as a dimension is.
+ * - Fixtures and furniture as blocks (CNT-20): one block per library entry, or per kind and size,
+ *   drawn in the item's own frame and inserted at its middle, turned as the plan turns it.
  * - A tag in each room: a block with its number, name and area as attributes.
  * - A paper layout: an A3 sheet in millimetres with one viewport showing the plan at the profile's
  *   scale, and every text sized for that scale.
@@ -567,6 +569,69 @@ function blockNames(blocks: readonly OpeningBlock[]): Map<string, string> {
   return names
 }
 
+// ── Fixtures and furniture as blocks (CNT-20) ───────────────────────────────────────────────
+
+/** One block an item inserts: its symbol in its own frame, by what it is and its size. */
+interface ItemBlock {
+  readonly key: string
+  readonly base: string
+  readonly width: number
+  readonly depth: number
+  readonly rings: readonly (readonly Vec2[])[]
+  readonly lines: readonly (readonly Vec2[])[]
+}
+
+/** Where one item's block goes. */
+interface ItemPlace {
+  readonly key: string
+  readonly at: Vec2
+  readonly rotation: number
+}
+
+/** A block name's part from a name of the plan's: letters and digits kept, the rest dashes. */
+function blockWord(text: string): string {
+  const word = text.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return word === '' ? 'ITEM' : word.slice(0, 40)
+}
+
+/**
+ * Each item as a block and where it goes (CNT-20): one block per library entry, or per kind,
+ * size and symbol for an item placed without one, drawn in the item's own frame (its middle at
+ * the insertion point, its back towards -Y) and inserted at its middle, turned as the plan turns
+ * it. So a CAD program counts the fixtures and furniture by their blocks and swaps one for all.
+ */
+function itemBlocks(drawing: PlanDrawing): { blocks: ItemBlock[]; places: ItemPlace[]; names: Map<string, string> } {
+  const blocks = new Map<string, ItemBlock>()
+  const places: ItemPlace[] = []
+  for (const item of drawing.items) {
+    const { rings, lines } = item.block
+    if (!writablePoints([item.at, ...rings.flat(), ...lines.flat()]) || !writable(item.turn, item.size[0], item.size[1])) continue
+    const shape = [...rings.map((ring) => `r${ring.map((p) => `${num(p.x)},${num(p.y)}`).join(';')}`), ...lines.map((line) => `l${line.map((p) => `${num(p.x)},${num(p.y)}`).join(';')}`)].join('|')
+    const base = blockWord(item.library ?? item.kind)
+    const key = `${base}|${num(item.size[0])}|${num(item.size[1])}|${shape}`
+    if (!blocks.has(key)) blocks.set(key, { key, base, width: item.size[0], depth: item.size[1], rings, lines })
+    places.push({ key, at: item.at, rotation: item.turn })
+  }
+  const sorted = [...blocks.values()].sort((a, b) => a.base.localeCompare(b.base) || a.width - b.width || a.depth - b.depth || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+  // `GRID-DOUBLE-BED-1400x2000`: the library entry's name, or the kind, then the width and depth in millimetres.
+  const names = new Map<string, string>()
+  const taken = new Set<string>()
+  for (const block of sorted) {
+    const name0 = `GRID-${block.base}-${mm(block.width)}x${mm(block.depth)}`
+    let name = name0
+    for (let n = 2; taken.has(name); n++) name = `${name0}-${n}`
+    taken.add(name)
+    names.set(block.key, name)
+  }
+  return { blocks: sorted, places, names }
+}
+
+/** What one item block draws: its symbol's rings closed and its lines open, on layer 0 so they take the insert's layer. */
+function drawItemBlock(space: Space, block: ItemBlock): void {
+  for (const ring of block.rings) space.polyline('0', ring, true)
+  for (const line of block.lines) space.polyline('0', line, false)
+}
+
 /**
  * CNT-14: a kind's symbol in its block. A door's leaves and swings go on the door-swing layer, as
  * one leaf's do; its fixed panel, and a window's faces and glass, on layer 0, so they take the
@@ -901,6 +966,9 @@ export function toDxf(drawing: PlanDrawing, options: DxfOptions = {}): string {
   const names = blockNames(openings.blocks)
   const dims = placedDimensions(drawing, size)
   const blocks: BlockDef[] = openings.blocks.map((block) => ({ name: names.get(block.key)!, record: handles.take(), flags: 0, draw: (space) => drawOpeningBlock(space, block) }))
+  // CNT-20: each fixture and piece of furniture, one block per entry and size.
+  const items = itemBlocks(drawing)
+  for (const block of items.blocks) blocks.push({ name: items.names.get(block.key)!, record: handles.take(), flags: 0, draw: (space) => drawItemBlock(space, block) })
   const tag = { number: { x: 0, y: size.name * 1.4 }, name: { x: 0, y: 0 }, area: { x: 0, y: -size.name * 1.4 } }
   if (drawing.rooms.length > 0) {
     blocks.push({
@@ -926,7 +994,7 @@ export function toDxf(drawing: PlanDrawing, options: DxfOptions = {}): string {
 
   const entities = new Out()
   const model = new Space(doc, entities, frame.modelRecord)
-  const extent = writeModel(model, drawing, { leftOut, approximations: options.approximations ?? NO_APPROXIMATIONS, facts, frame: planFrame, places: openings.places, names, dims, dimBlocks, tag, numbers: options.roomNumbers })
+  const extent = writeModel(model, drawing, { leftOut, approximations: options.approximations ?? NO_APPROXIMATIONS, facts, frame: planFrame, places: openings.places, names, items, dims, dimBlocks, tag, numbers: options.roomNumbers })
   const paper = new Space(doc, entities, frame.paperRecord, true)
   writePaper(paper, extent)
 
@@ -979,6 +1047,7 @@ interface ModelParts {
   readonly frame: Bounds
   readonly places: readonly OpeningPlace[]
   readonly names: ReadonlyMap<string, string>
+  readonly items: { readonly places: readonly ItemPlace[]; readonly names: ReadonlyMap<string, string> }
   readonly dims: readonly PlacedDimension[]
   readonly dimBlocks: readonly BlockDef[]
   readonly tag: Readonly<Record<'number' | 'name' | 'area', Vec2>>
@@ -999,11 +1068,10 @@ function writeModel(space: Space, drawing: PlanDrawing, parts: ModelParts): Boun
     for (const hole of room.holes) space.polyline(layer, hole, true)
   }
 
-  // CNT-12: each fixture's symbol as the 2D plan draws it, its rings closed and its lines open.
-  for (const item of drawing.items) {
-    const layer = space.layer('fixtures')
-    for (const ring of item.rings) space.polyline(layer, ring, true)
-    for (const line of item.lines) space.polyline(layer, line, false)
+  // CNT-12: each fixture's symbol as the 2D plan draws it. CNT-20: as its block, inserted at its
+  // middle and turned as the plan turns it.
+  for (const place of parts.items.places) {
+    space.insert(space.layer('fixtures'), parts.items.names.get(place.key)!, place.at, place.rotation)
   }
 
   // Each wall: its fill, then its outlines over the fill, one closed outline per solid run

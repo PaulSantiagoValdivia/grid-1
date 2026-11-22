@@ -56,14 +56,24 @@ Notes for agents and people changing this repository.
   copied from a real scan or Apple's samples.
 - `packages/floorplan/src/geometry/items.ts` (CNT-12): the plan's fixtures (`items`, C6 in
   `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
-  CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind
-  needs its symbol there and a decision first. A fixture is never a wall or a room.
+  CNT-11 decided fixtures first; CNT-20 added furniture (`FURNITURE_KINDS`), and every kind is one
+  entry of the kinds registry (`itemKinds.ts`). A fixture is never a wall or a room.
 - `packages/floorplan/src/geometry/partTypes.ts` (CNT-15): named wall, door and window types
   (`types`, C24 in `types/floorplan.ts`) and room finishes. `withTypes` fills each part from its
   type when the plan is read, records it in `typed` and `statedWall` and `statedOpening` leave it
   out of the file, so a reader reads the part and a change to the type reaches every part of it.
   The quantities by type and finish are the CLI's `quantities/finishes.ts`; the change is
   `edit/types.ts` (`grid_change_type`, `grid edit type`).
+- `packages/floorplan/src/geometry/itemKinds.ts` (CNT-20): the one registry of the kinds of
+  thing an item may be (`ITEM_KIND_DEFINITIONS`, `registerItemKind`): each kind's group (a fixture
+  takes free floor, furniture none), word, agent text, plain symbol and own checks. Every reader
+  of a kind (the drawing, the DXF and IFC, the counts and the check) goes through it, so a new kind
+  is one entry; `__tests__/itemKinds.test.ts` holds a dummy kind to reaching all of them.
+  `src/library/` (C30) is the library placed from by name: `builtIn.ts` Grid's own sizes and
+  typical rooms, `index.ts` the lookup (the plan's own `library`, an office's files, Grid's) and
+  placing; `withLibrary` in `types/floorplan.ts` fills an item from its entry, `statedItem` writes
+  it back. The CLI reads the office's `library/` folder beside the plan (`src/library/office.ts`)
+  and places with `grid_place_item` (`edit/place.ts`). See `docs/library.md`.
 - `packages/floorplan/src/geometry/columns.ts` (CNT-16): the plan's columns (`columns`, C25), a
   thing of their own, never a wall, a room or a fixture: their footprints, the room each stands in,
   the floor it takes off that room's area (`roomColumnArea`, read by `roomFloorArea`), the floors it
@@ -123,7 +133,7 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 32 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 33 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview and the preview
   page's own call (VEW-4, `previewTools.ts`), the

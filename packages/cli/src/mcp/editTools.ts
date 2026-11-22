@@ -15,7 +15,10 @@ import { renameRoom, type UseOrNone } from '../edit/rename'
 import { splitRoom } from '../edit/split'
 import { squarePlan } from '../edit/square'
 import { stretchPlan } from '../edit/stretch'
-import { DECIMAL_IN_ARG, floorArg, listSchema, NUMBER, objectSchema, PLAN_ARG, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
+import { limit } from '@ongrid/floorplan/geometry'
+import { placeItems } from '../edit/place'
+import { libraryFor } from '../library/office'
+import { DECIMAL_IN_ARG, floorArg, listSchema, NUMBER, objectSchema, PLAN_ARG, planFileOf, projectOf, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
 import { EDIT_OUTPUT, OUT_ARG, writeChange } from './writeTools'
 
 const NAME = (description: string, example: string, required = false): { type: 'string'; maxLength: number; description: string; examples: string[]; required: boolean } => ({ type: 'string', maxLength: NAME_MAX, description, examples: [example], required })
@@ -239,5 +242,51 @@ const squareTool: GridTool = {
   },
 }
 
+// CNT-20 (C30): a library item or a typical room placed by name.
+const placeTool: GridTool = {
+  name: 'grid_place_item',
+  title: 'Place a fixture, furniture or a typical room from the library',
+  hint: 'change-plan',
+  description:
+    'Use this when the person asks to put a fixture or a piece of furniture in the plan, or a whole typical room\'s worth: "put a double bed in the main bedroom", "a bath and a WC in the bathroom", "use our standard bathroom here", "will a double bed and two side tables fit". '
+    + 'It places a library entry by name (grid_measure what=library lists them: Grid\'s own sizes, the office\'s files in the library folder beside the plan, and the plan\'s own), so a double bed is the same bed every time, with its size, height and the clear floor it keeps in front, and answers with the room it landed in and whether it fits: a wall it runs into, an item it stands in, the clear floor kept in front of one that something blocks. '
+    + 'x and y are the middle of an item, or the inside back-left corner of a typical room, whose items are set out from there; unturned, an item\'s back faces -y (down the drawing), and turn turns it counter-clockwise. An entry from the office\'s folder is copied into the plan, so the plan reads the same without the folder. '
+    + 'Do not use to move or size an item already placed, or to add a room (grid_add_room). It replaces the plan file unless out is given. Lengths are metres, or text with their unit; angles are degrees.',
+  args: {
+    plan: PLAN_ARG,
+    name: { type: 'string', id: true, required: true, description: 'The library entry: an item (double-bed, wc, bath) or a typical room (bathroom, double-bedroom), or an office\'s own.', examples: ['double-bed', 'bathroom'] },
+    x: { type: 'number', length: true, required: true, description: 'Where on the drawing, in metres: an item\'s middle, or a typical room\'s inside back-left corner.', examples: [2.5], minimum: -limit('largest'), maximum: limit('largest') },
+    y: { type: 'number', length: true, required: true, description: 'Where on the drawing, in metres, with x.', examples: [1.2], minimum: -limit('largest'), maximum: limit('largest') },
+    turn: { type: 'number', description: 'Degrees counter-clockwise: 0 puts an item\'s back to -y, 90 to +x, 180 to +y, 270 to -x. 0 when left out.', examples: [0, 90, 180], minimum: -360, maximum: 360 },
+    floor: { type: 'string', id: true, description: 'A floor id from the plan\'s "floors". The ground floor when left out.', examples: ['first'] },
+    id: { type: 'string', id: true, description: 'For an item: its id. Unstated, its library name, made unique.', examples: ['bed-main'] },
+    out: OUT_ARG,
+  },
+  outputSchema: {
+    ...EDIT_OUTPUT,
+    properties: {
+      ...(EDIT_OUTPUT['properties'] as Record<string, unknown>),
+      placed: listSchema(STRING),
+      fits: { type: 'boolean' },
+      worthALook: listSchema(objectSchema({ code: STRING, id: STRING, message: STRING })),
+    },
+  },
+  run(args, context) {
+    const project = projectOf(context)
+    const file = planFileOf(project, args['plan'])
+    return writeChange(context, args, (survey) => {
+      const floor = floorArg(survey.plan, args['floor'])
+      const { library, problems } = libraryFor(project, file, survey.plan)
+      return placeItems(survey, library, {
+        name: args['name'] as string,
+        at: [args['x'] as number, args['y'] as number],
+        ...(args['turn'] !== undefined ? { turn: args['turn'] as number } : {}),
+        ...(floor !== undefined ? { floor } : {}),
+        ...(args['id'] !== undefined ? { id: args['id'] as string } : {}),
+      }, problems)
+    })
+  },
+}
+
 /** In the order `tools/list` gives them, after the other changes to the plan. */
-export const EDIT_TOOLS: readonly GridTool[] = [mergeTool, splitTool, addRoomTool, stretchTool, renameTool, squareTool]
+export const EDIT_TOOLS: readonly GridTool[] = [mergeTool, splitTool, addRoomTool, stretchTool, renameTool, squareTool, placeTool]

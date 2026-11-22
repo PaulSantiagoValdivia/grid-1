@@ -142,7 +142,7 @@ function partOf(path: readonly (string | number)[]): PartAt | null {
 }
 
 /** WRT-6, HND-11, CNT-15: fields the reading adds, which no file states: a file that writes one is told it is not read. */
-const READING_ONLY = new Set(['unstated', 'placedBy', 'typed'])
+const READING_ONLY = new Set(['unstated', 'placedBy', 'typed', 'fromLibrary'])
 
 /** Walks the file and its schema side by side, noting each key the schema does not have. */
 function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], notes: ReadingNote[]): void {

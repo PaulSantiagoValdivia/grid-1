@@ -48,13 +48,14 @@ describe('an item is never a room or a wall', () => {
     expect(drawing.items.map((i) => i.id)).toEqual(['run', 'bath', 'wc', 'basin', 'shower'])
   })
 
-  it('leaves a table out with one note, and still adds no area: the plan holds fixtures only for now', () => {
-    const table: Item = { id: 't1', kind: 'table', at: [2, 6], size: [1.6, 0.9], height: 0.75 }
+  it('leaves a kind Grid does not hold out with one note, and still adds no area', () => {
+    // CNT-20: a table is furniture now; a piano is still no kind Grid holds.
+    const table: Item = { id: 't1', kind: 'piano', at: [2, 6], size: [1.6, 0.9], height: 0.75 }
     const plan = withItems([table])
     expect(areas(plan)).toEqual(areas(flat()))
     const issues = validatePlan(plan).issues.filter((i) => i.entity === 'item')
     expect(issues.map((i) => [i.code, i.severity])).toEqual([['item/unknown-kind', 'error']])
-    expect(issues[0]!.message).toContain('furniture')
+    expect(issues[0]!.message).toContain('"bed"')
     expect(buildFloorPlan(plan).items).toEqual([])
     expect(checkPlanSanity(plan).findings).toEqual(checkPlanSanity(flat()).findings)
   })
@@ -138,7 +139,7 @@ describe('how an item is drawn', () => {
       const foot = itemFootprint(item)
       const xs = foot.map((p) => p.x)
       const ys = foot.map((p) => p.y)
-      const symbol = itemSymbol(item as Item & { kind: 'toilet' })
+      const symbol = itemSymbol(item)!
       const points = [...symbol.rings.flat(), ...symbol.lines.flat()]
       expect(points.length, item.kind).toBeGreaterThan(3)
       for (const p of points) {
@@ -178,7 +179,7 @@ describe('the IFC', () => {
   })
 
   it('leaves out a fixture of a kind the plan does not hold, and a plan without any is as it was', () => {
-    const table: Item = { id: 't1', kind: 'table', at: [2, 6], size: [1.6, 0.9], height: 0.75 }
+    const table: Item = { id: 't1', kind: 'piano', at: [2, 6], size: [1.6, 0.9], height: 0.75 }
     expect(count(toIfc(withItems([table])), 'IFCFURNISHINGELEMENT')).toBe(0)
     expect(toIfc(withItems([]))).toBe(toIfc(flat()))
   })

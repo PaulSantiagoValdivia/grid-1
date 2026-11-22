@@ -276,6 +276,20 @@
  *   outside. An outdoor space on the lowest level stands on the ground, with no slab, and only a
  *   roofed one has a roof. Its `use`, when stated, is kept, and no check reads it. Optional and
  *   never defaulted: a plan with none reads exactly as before (version 1).
+ *
+ * C30 · A library of fixtures, furniture and typical rooms, placed by name (CNT-20)
+ *   An item's kind is one the kinds registry holds (`geometry/itemKinds.ts`): Grid's fixtures
+ *   (`FIXTURE_KINDS`), its furniture (`FURNITURE_KINDS`, which takes no free floor: it can be
+ *   moved) or a kind another program registers. An item MAY name a library entry in `library`,
+ *   by name; the entry fills what the item leaves out, its `kind`, `size`, `height`, `clearance`
+ *   and `label`, and the reading records which in `fromLibrary`, which is never written back
+ *   (`statedItem`). The entry is the plan's own, in its top-level `library` (each `name`, `kind`,
+ *   `size`, `height`, and any of `clearance`, `label` and `source`), else Grid's built-in one
+ *   (`library/builtIn.ts`), whose sizes never change once released. An office's entry is copied
+ *   into the plan's `library` when an item is placed from it, so the plan reads the same without
+ *   the office's folder. An item MAY state `clearance`: metres of clear floor it keeps in front of
+ *   it, as wide as it is. A name no entry has fills nothing and is said, never refused. Optional
+ *   and never defaulted: a plan with none reads exactly as before (version 1).
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -288,6 +302,7 @@ import { LANGUAGES } from '../messages/languages'
 import { roomUseOfLabel } from '../messages/uses'
 import { english, said } from '../messages/say'
 import { ringProblem } from '../geometry/ring'
+import { builtInItem } from '../library/builtIn'
 
 export * from './planText'
 export * from './facts'
@@ -304,7 +319,7 @@ export type { ZodIssue as PlanSchemaIssue } from 'zod'
  * no lone half of a character pair, and no longer than its limit (`planText.ts`). A refusal
  * names the part and the limit, never the text.
  */
-const text = (kind: TextKind) =>
+export const text = (kind: TextKind) =>
   z.string().superRefine((value, ctx) => {
     const problem = textProblem(value, kind)
     if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
@@ -1391,13 +1406,63 @@ export const StairSchema = z.preprocess(withRunFromEnds, z.object({
 }))
 
 /**
- * CNT-12: the kinds an item may be in this version. CNT-11 decided fixtures now, because the
- * checks need them, and furniture later; points (a hydrant, a camera) and seats come with it.
- * `kitchen-run` is a run of base units with its worktop, the sink and hob in it.
+ * CNT-12: the fixtures an item may be. CNT-11 decided fixtures first, because the checks need
+ * them. `kitchen-run` is a run of base units with its worktop, the sink and hob in it.
  */
-export const ITEM_KINDS = ['toilet', 'basin', 'shower', 'bath', 'kitchen-run'] as const
+export const FIXTURE_KINDS = ['toilet', 'basin', 'shower', 'bath', 'kitchen-run'] as const
+
+/**
+ * CNT-20 (C30): the furniture an item may be, Grid's own plain symbols: a bed, a table (a side
+ * table is a small one), a chair, a sofa and a storage unit (a wardrobe, a cupboard, shelves).
+ * Furniture is drawn, exported and checked as a fixture is, and takes no free floor: it can be moved.
+ */
+export const FURNITURE_KINDS = ['bed', 'table', 'chair', 'sofa', 'storage'] as const
+
+/**
+ * The kinds Grid holds itself, fixtures first. Another kind is added through the kinds registry
+ * (`registerItemKind` in `geometry/itemKinds.ts`), never by adding to this list alone.
+ */
+export const ITEM_KINDS = [...FIXTURE_KINDS, ...FURNITURE_KINDS] as const
 
 export type ItemKind = (typeof ITEM_KINDS)[number]
+
+/**
+ * CNT-20 (C30): set by `withLibrary` on an item, the values it took from its library entry, so
+ * that its schema records them in `fromLibrary`. A symbol, so no file can write it.
+ */
+const FROM_LIBRARY = Symbol('values from its library entry')
+
+/** CNT-20: the values of an item that its library entry may fill, and `fromLibrary` may name. */
+export const LIBRARY_VALUES = ['kind', 'size', 'height', 'clearance', 'label'] as const
+export type LibraryValue = (typeof LIBRARY_VALUES)[number]
+
+/** CNT-20 (C30): an item's own `fromLibrary` from what `withLibrary` marked; a file's own is not read. */
+function withItemFromLibrary(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
+  const filled = (raw as Record<symbol, unknown>)[FROM_LIBRARY]
+  const record = raw as Record<string, unknown>
+  if (!Object.hasOwn(record, 'fromLibrary') && !(Array.isArray(filled) && filled.length > 0)) return raw
+  const item: Record<string, unknown> = { ...record }
+  delete item.fromLibrary
+  if (Array.isArray(filled) && filled.length > 0) item.fromLibrary = filled
+  return item
+}
+
+/**
+ * CNT-20 (C30): a named size in a library: a kind, its footprint (width along its back, depth to
+ * its front), its height and the clear floor it keeps in front of it, all in metres. `source`
+ * says where the size comes from: the document, its edition and clause, or the office's own
+ * words. Grid's built-in entries are its own sizes, not a code's (`library/builtIn.ts`).
+ */
+export const LibraryItemSchema = z.object({
+  name: text('id'),
+  kind: text('id'),
+  size: z.tuple([finite().positive(), finite().positive()]),
+  height: finite().positive(),
+  clearance: finite().nonnegative().optional(),
+  label: text('name').optional(),
+  source: text('name').optional(),
+})
 
 /**
  * CNT-12 (C6): a fixture placed on a floor. It is never a wall and never a room: it adds no
@@ -1410,19 +1475,30 @@ export type ItemKind = (typeof ITEM_KINDS)[number]
  * own. `kind` is read as written, so a kind this version does not hold (a table) is left out with
  * a note (`item/unknown-kind`) instead of refusing the whole plan.
  */
-export const ItemSchema = z.object({
-  id: text('id'),
-  kind: text('id'),
-  at: Vec2,
-  size: z.tuple([finite().positive(), finite().positive()]),
-  height: finite().positive(),
-  // Optional and never defaulted: unstated, the item is not turned.
-  turn: finite().optional(),
-  // What the drawing and an export call it: "WC", "Island". Unstated, its kind.
-  label: text('name').optional(),
-  // C5: unstated means the ground floor.
-  floor: text('id').pipe(z.string().min(1)).optional(),
-})
+export const ItemSchema = z.preprocess(
+  withItemFromLibrary,
+  z.object({
+    id: text('id'),
+    kind: text('id'),
+    at: Vec2,
+    size: z.tuple([finite().positive(), finite().positive()]),
+    height: finite().positive(),
+    // Optional and never defaulted: unstated, the item is not turned.
+    turn: finite().optional(),
+    // What the drawing and an export call it: "WC", "Island". Unstated, its kind.
+    label: text('name').optional(),
+    // C5: unstated means the ground floor.
+    floor: text('id').pipe(z.string().min(1)).optional(),
+    // CNT-20 (C30): the library entry it was placed from, by name: the plan's own `library`,
+    // else Grid's built-in one. The entry fills what the item leaves out (`withLibrary`).
+    library: text('id').optional(),
+    // CNT-20 (C30): metres of clear floor kept in front of it, as wide as it is. Optional and
+    // never defaulted: unstated, nothing is kept clear and nothing checks it.
+    clearance: finite().nonnegative().optional(),
+    // CNT-20: what its library entry filled in (`withLibrary`). Grid's reading only, never written back.
+    fromLibrary: z.array(z.enum(LIBRARY_VALUES)).optional(),
+  })
+)
 
 /**
  * SHT-7: what writing on the drawing can be. A `note` is text, a `tag` short text in a box, a
@@ -2195,6 +2271,10 @@ export const FloorPlanFieldsSchema = z.object({
   // CNT-12: the fixtures (C6). Optional and never defaulted, so a plan written before it reads
   // with no key added (version 1).
   items: parts(ItemSchema, 'items').optional(),
+  // CNT-20 (C30): the library entries the plan holds itself, copied in from an office's library
+  // folder when an item was placed from it, so the plan reads the same without the folder.
+  // Optional and never defaulted (version 1).
+  library: parts(LibraryItemSchema, 'library items').optional(),
   // SHT-7: writing on the drawing: the title over it, then notes, tags, symbols and a key, and a
   // sketch layer that is drawn only. Optional and never defaulted (version 1).
   title: text('name').optional(),
@@ -2266,7 +2346,58 @@ export const FloorPlanFieldsSchema = z.object({
 })
 
 // CNT-15: the types fill first, so a wall's type height is stated before its floor's is taken.
-export const FloorPlanSchema = z.preprocess((raw) => withFloorHeights(withTypes(raw)), FloorPlanFieldsSchema)
+/**
+ * CNT-20 (C30): each item that names a library entry (`library`) filled from it, done on the file
+ * as read, so every reader sees a placed bed's size wherever it came from. The plan's own
+ * `library` is looked in first, then Grid's built-in one (`BUILT_IN_ITEMS`). A value the item
+ * states is kept; what the entry filled is marked (`FROM_LIBRARY`) and the item's schema records
+ * it in `fromLibrary`, which is never written back (`statedItem`). A name no entry has fills
+ * nothing, and the drawing's check says so (`item/unknown-library`).
+ */
+export function withLibrary(raw: unknown): unknown {
+  if (!isRecord(raw) || !Array.isArray(raw['items'])) return raw
+  const items = raw['items']
+  if (!items.some((item) => isRecord(item) && typeof item['library'] === 'string')) return raw
+  const own = new Map<string, LibraryItem>()
+  if (Array.isArray(raw['library'])) {
+    for (const entry of raw['library']) {
+      const read = LibraryItemSchema.safeParse(entry)
+      if (read.success && !own.has(read.data.name)) own.set(read.data.name, read.data)
+    }
+  }
+  return {
+    ...raw,
+    items: items.map((item) => {
+      if (!isRecord(item) || typeof item['library'] !== 'string' || (item as Record<symbol, unknown>)[FROM_LIBRARY] !== undefined) return item
+      const entry = own.get(item['library']) ?? builtInItem(item['library'])
+      if (entry === undefined) return item
+      const filled: LibraryValue[] = []
+      const next: Record<string | symbol, unknown> = { ...item }
+      for (const key of LIBRARY_VALUES) {
+        if (entry[key] === undefined || item[key] !== undefined) continue
+        next[key] = key === 'size' ? [...entry.size] : entry[key]
+        filled.push(key)
+      }
+      next[FROM_LIBRARY] = filled
+      return next
+    }),
+  }
+}
+
+/**
+ * CNT-20 (C30): an item as its file states it: without the values its library entry filled in
+ * (`fromLibrary`), for whatever writes an item back. One that took nothing is returned as it is.
+ */
+export function statedItem<T extends { readonly fromLibrary?: readonly LibraryValue[] | undefined }>(item: T): Omit<T, 'fromLibrary'> {
+  if (item.fromLibrary === undefined) return item
+  const { fromLibrary, ...rest } = item
+  const out: Record<string, unknown> = { ...rest }
+  for (const key of fromLibrary) delete out[key]
+  return out as Omit<T, 'fromLibrary'>
+}
+
+// CNT-20: then the items from their library entries, which no type touches.
+export const FloorPlanSchema = z.preprocess((raw) => withFloorHeights(withLibrary(withTypes(raw))), FloorPlanFieldsSchema)
 
 export type Vec2 = z.infer<typeof Vec2>
 export type Floor = z.infer<typeof FloorSchema>
@@ -2292,6 +2423,7 @@ export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type OpeningPart = z.infer<typeof OpeningPartSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
+export type LibraryItem = z.infer<typeof LibraryItemSchema>
 export type Annotation = z.infer<typeof AnnotationSchema>
 export type SketchItem = z.infer<typeof SketchItemSchema>
 export type Front = z.infer<typeof FrontSchema>

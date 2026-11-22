@@ -47,8 +47,8 @@ describe('fixtures in the 2D picture', () => {
     expect(planToSvg(flat())).not.toContain('fixture')
   })
 
-  it('leaves out a table, which the plan does not hold yet', () => {
-    const svg = planToSvg({ ...flat(), items: [{ id: 't1', kind: 'table', at: [2, 6], size: [1.6, 0.9], height: 0.75 }] })
+  it('leaves out a piano, a kind Grid does not hold (CNT-20: a table is furniture now)', () => {
+    const svg = planToSvg({ ...flat(), items: [{ id: 't1', kind: 'piano', at: [2, 6], size: [1.6, 0.9], height: 0.75 }] })
     expect(parts(svg, 'fixture')).toEqual([])
   })
 })

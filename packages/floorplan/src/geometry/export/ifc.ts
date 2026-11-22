@@ -70,7 +70,8 @@ import { curveStations, wallCurve, type WallCurve } from '../arc'
 import type { Vec2 } from '../vec2'
 import { partPhases, phasedJoints } from '../phases'
 import type { Phase } from '../../types/floorplan'
-import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
+import { isItemKind, itemRoom, roomShapes } from '../items'
+import { itemKindWord } from '../itemKinds'
 import { columnArea, columnDepth, columnFloorIds, columnPart, soundColumns } from '../columns'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { roomFloorArea } from '../room'
@@ -2207,7 +2208,7 @@ function writeStoreyContents(building: Context, storey: Storey): void {
 }
 
 /**
- * CNT-12: every storey's fixtures, each an IfcFurnishingElement and never a wall: placed at its
+ * CNT-12: every storey's fixtures (CNT-20: and furniture, and any kind the registry holds), each an IfcFurnishingElement and never a wall: placed at its
  * middle, turned as the plan turns it, and its footprint extruded to its height from the floor of
  * the room it stands in. `ObjectType` is its kind and `Tag` its id. Written after everything else,
  * in a containment relation of their own per storey, so a plan with no fixtures writes the same
@@ -2228,7 +2229,7 @@ function writeItems(building: Context, storeys: readonly Storey[]): void {
         const along: Triple = [Math.cos(turn), Math.sin(turn), 0]
         const itemPlacement = placement(c.w, storey.placement, [item.at[0], item.at[1], room === null ? 0 : roomFloorOffset(room)], along)
         const body = bodyRepresentation(c, extrusion(c, rectangleProfile(c, item.size[0], item.size[1], 0), item.height))
-        const kind = isItemKind(item.kind) ? ITEM_KIND_WORDS[item.kind] : item.kind
+        const kind = itemKindWord(item.kind)
         written.push(
           c.w.add(
             'IFCFURNISHINGELEMENT',

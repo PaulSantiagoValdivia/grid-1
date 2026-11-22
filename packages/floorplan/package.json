@@ -19,6 +19,7 @@
     "./notes": "./src/notes/notes.ts",
     "./messages": "./src/messages/index.ts",
     "./rooms": "./src/rooms/index.ts",
+    "./library": "./src/library/index.ts",
     "./scan": "./src/scan/index.ts",
     "./test-support/plans": "./src/test-support/plans.ts",
     "./test-support/facts": "./src/test-support/facts.ts",

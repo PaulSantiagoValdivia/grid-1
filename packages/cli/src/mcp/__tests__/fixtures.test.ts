@@ -47,7 +47,8 @@ beforeAll(() => {
     'empty.json': plan(),
     'fitted.json': plan(FIXTURES),
     'clash.json': plan([{ ...FIXTURES[0], at: [3, 0.3] }, { ...FIXTURES[1], height: 3 }]),
-    'table.json': plan([{ id: 't1', kind: 'table', at: [3, 2], size: [1.6, 0.9], height: 0.75 }]),
+    // CNT-20: a table is furniture now; a piano is a kind Grid does not hold.
+    'table.json': plan([{ id: 't1', kind: 'piano', at: [3, 2], size: [1.6, 0.9], height: 0.75 }]),
   })
 })
 afterAll(() => b.close())
@@ -64,7 +65,8 @@ describe('count by kind (grid_schedule)', () => {
     expect(reply.text).toContain('Fixtures: 1 toilet, 1 basin, 2 kitchen runs.')
     expect(reply.text).toContain('Island "island" (kitchen-run), in "Kitchen"')
     expect(reply.text).not.toContain('In all:')
-    expect(reply.data!['fixtureCounts']).toEqual({ toilet: 1, basin: 1, shower: 0, bath: 0, 'kitchen-run': 2 })
+    // CNT-20: every kind the registry holds is counted, furniture too.
+    expect(reply.data!['fixtureCounts']).toEqual({ toilet: 1, basin: 1, shower: 0, bath: 0, 'kitchen-run': 2, bed: 0, table: 0, chair: 0, sofa: 0, storage: 0 })
     const rooms = (reply.data!['fixtures'] as { id: string; room: string }[]).map((f) => [f.id, f.room])
     expect(rooms).toEqual([['run', 'kitchen'], ['island', 'kitchen'], ['wc', 'bath'], ['basin', 'bath']])
   })
@@ -89,7 +91,7 @@ describe('free floor per room (grid_areas)', () => {
     expect(after.text).toContain('Free floor is a room')
   })
 
-  it('adds 0 m² and one note for a table, which the plan does not hold yet', async () => {
+  it('adds 0 m² and one note for a piano, a kind Grid does not hold', async () => {
     const before = await ok('grid_areas', { plan: 'empty.json' })
     const table = await ok('grid_areas', { plan: 'table.json' })
     expect(table.data!['net']).toBe(before.data!['net'])

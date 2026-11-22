@@ -12,7 +12,7 @@
  */
 import { planHasTypes, cameraRecord, compassBearing, doorKindOf, dot, drawingBearing, handingFromRooms, kindFits, kindWords, planOrientation, statedKind, storedView, sub, swingNeeds, tolerance, viewSetting, wallAxis, wallLength, wrapDegrees, type FloorPlan, type HandSide, type Opening, type OpeningAnchor, type Room, type StoredView, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { english, name, said as sentence } from '@ongrid/floorplan/messages'
-import { DOOR_KINDS, FloorPlanSchema, WINDOW_KINDS, statedOpening, statedWall, wallWithEnds, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
+import { DOOR_KINDS, FloorPlanSchema, WINDOW_KINDS, statedItem, statedOpening, statedWall, wallWithEnds, type OpeningKind } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { EditRefused } from './refused'
@@ -65,6 +65,10 @@ export interface Patch {
   readonly plan?: Readonly<Record<string, unknown>>
   /** CNT-12: fixtures moved or turned, by id. Left out by a change that moves none. */
   readonly items?: ReadonlyMap<string, { at: Pair; turn: number }>
+  /** CNT-20: items added at the end of the list, as their file will hold them (placed from the library by name). */
+  readonly addItems?: readonly RawRecord[]
+  /** CNT-20 (C30): library entries the plan takes in, at the end of its `library`. */
+  readonly addLibrary?: readonly RawRecord[]
   /**
    * WRT-4 with LVL-8: the opening patterns, by id, whose door swings the other way (a mirror), as
    * each plain door's does. A pattern is otherwise kept as the file has it: its wall keeps its id,
@@ -141,8 +145,15 @@ export function readingAfter(plan: FloorPlan, patch: Patch): FloorPlan {
   const applied = applyPatch(plan as unknown as RawRecord, reading) as unknown as FloorPlan
   // CNT-15 (C24): with named types, a part takes what its type gives as the file will be read, so
   // the plan is read again from what each part states: a changed type reaches every part of it.
-  if (!planHasTypes(plan) && !(isRecordLike(patch.plan) && patch.plan['types'] !== undefined)) return applied
-  const again = FloorPlanSchema.safeParse({ ...applied, walls: applied.walls.map(statedWall), openings: applied.openings.map(statedOpening) })
+  // CNT-20 (C30): an item placed by name takes its size from its library entry, as the file will be read.
+  const placed = (patch.addItems ?? []).length > 0
+  if (!placed && !planHasTypes(plan) && !(isRecordLike(patch.plan) && patch.plan['types'] !== undefined)) return applied
+  const again = FloorPlanSchema.safeParse({
+    ...applied,
+    walls: applied.walls.map(statedWall),
+    openings: applied.openings.map(statedOpening),
+    ...(applied.items === undefined ? {} : { items: applied.items.map(statedItem) }),
+  })
   return again.success ? again.data : applied
 }
 
@@ -198,7 +209,7 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
     })
   rooms.push(...(patch.addRooms ?? []))
   // A plan with no items keeps no key.
-  const items = patch.items === undefined || !Array.isArray(raw['items'])
+  const moved = patch.items === undefined || !Array.isArray(raw['items'])
     ? {}
     : {
         items: list('items').map((item) => {
@@ -206,6 +217,10 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
           return change ? { ...item, ...change } : item
         }),
       }
+  // CNT-20: items placed by name go at the end, and the library entries they need with them.
+  const added = patch.addItems ?? []
+  const items = added.length === 0 ? moved : { items: [...((moved as { items?: RawRecord[] }).items ?? list('items')), ...added] }
+  const library = (patch.addLibrary ?? []).length === 0 ? {} : { library: [...list('library'), ...patch.addLibrary!] }
   // LVL-8: a pattern's door swings the other way with every plain door's; a plan with no patterns keeps no key.
   const swing = patch.swingPatterns
   const patterns = swing === undefined || swing.size === 0 || !Array.isArray(raw['patterns'])
@@ -219,7 +234,7 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
         }),
       }
   const top = (patch.plan === undefined ? raw : merged(raw, patch.plan)) as T
-  return { ...top, walls, openings, rooms, ...items, ...patterns }
+  return { ...top, walls, openings, rooms, ...items, ...library, ...patterns }
 }
 
 /** The free stretches of a wall, measured from its start, between the other openings in it. */
