@@ -18,7 +18,7 @@ is published yet and there is no release to install.
 | `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
 | `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, `planToSvg` (a picture of a plan as an SVG file) and `planStill` (a still of the 3D model as pixels), with no browser |
-| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `check`, `describe`, `draw`, `export`, `tidy`, `serve` (the tool server an agent uses) and `mcp` (the same server). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
+| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `edit`, `check`, `describe`, `draw`, `export`, `tidy`, `serve` (the tool server an agent uses) and `mcp` (the same server). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
 
 ## Development
 
@@ -86,7 +86,7 @@ Each page answers one kind of question, so read only the one you need.
 | To… | Read |
 |---|---|
 | Write a plan: name the rooms, doors and windows, and let Grid work out the walls | [docs/rooms-first.md](docs/rooms-first.md) |
-| Run a command: `init`, `write`, `check`, `describe`, `draw`, `export`, `sheet`, `tidy`; options, exit codes, the project folder | [docs/commands.md](docs/commands.md) |
+| Run a command: `init`, `write`, `edit`, `check`, `describe`, `draw`, `export`, `sheet`, `tidy`; options, exit codes, the project folder | [docs/commands.md](docs/commands.md) |
 | Call Grid as an agent: the `grid_…` tools, measuring from faces, protocol versions | [docs/tool-server.md](docs/tool-server.md) |
 | Know what a plan file may hold and what each drawing check's code means: floors, steps, overlapping rooms, holes, fixtures, wall faults, inside and outside walls | [docs/plan-file.md](docs/plan-file.md) |
 | Know the figure behind a check, and when Grid asks whether a size is meant | [docs/tolerances.md](docs/tolerances.md) |
