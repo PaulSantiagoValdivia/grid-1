@@ -43,6 +43,7 @@ import {
 import { factsText, openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, shownNumber } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
+import { SUN_RULE, sunAnswer } from '../quantities/sun'
 import { figureOf, roomIndicators, USE_RULE, wideRoute, wideRouteLines } from '../quantities/use'
 import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantities/survey'
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
@@ -986,12 +987,12 @@ const measureTool: GridTool = {
   hint: 'read',
   description:
     'Use this when the person asks will something fit, how wide, long or high a room is, how long a wall is, how far a door is from a corner or one wall from another, can a wheelchair turn, is the way wide enough, which doors or rooms are narrower than their own figure, or how to get from one room to another. '
-    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door on it and the narrowest one, and with width (a body or a trolley, such as 0.7 for a wheelchair) whether that gets through, measuring each doorway\'s clear width and the way through each room clear of its fixtures, and another way when the shortest is too narrow; what=use gives a room\'s use indicators: the turning circle its free floor holds, each doorway\'s clear width, the way through between its doorways, the floor in front of and beside each fixture, and any window a fixture stands in front of, each set against the person\'s figure (width, diameter, clearance) or Grid\'s own indicator, and said to be one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so). '
+    + 'what=room gives a room\'s inside sizes, side by side, its height and the widest circle it holds; what=between gives the clear distance from one wall, door, window, opening, fixture or room (from) to another (to) or to a point (x, y), between their faces as a tape measures it, so a door\'s distance from the inside corner is between the door and the wall at the corner, and the gap between two fixtures is between their edges; what=wall gives a wall\'s length on its centre line and the length of its face in each room; what=fit says whether a box (width × depth) or a circle (diameter) fits and where; what=route gives the way from room to room (or to "outside") with every door on it and the narrowest one, and with width (a body or a trolley, such as 0.7 for a wheelchair) whether that gets through, measuring each doorway\'s clear width and the way through each room clear of its fixtures, and another way when the shortest is too narrow; what=use gives a room\'s use indicators: the turning circle its free floor holds, each doorway\'s clear width, the way through between its doorways, the floor in front of and beside each fixture, and any window a fixture stands in front of, each set against the person\'s figure (width, diameter, clearance) or Grid\'s own indicator, and said to be one; what=narrow lists the doors and openings narrower than under, and the rooms whose widest circle is less than under; what=facing says which way each room, outside wall and window faces by the north the plan states, so "which rooms face east" or "is the kitchen south-facing" (a plan that states no north is answered with north as the top of the drawing, and says so); what=sun gives "which rooms get the sun" as a table per room, of geometry and not a daylight result: each window wall\'s way and bearing, the window area against the floor area, and the room\'s depth from each window wall, square to it. '
     + 'It measures the room between wall faces: what=fit, what=use and what=route with width keep clear of the room\'s fixtures, the other measures take none off, the plan holds no furniture or door leaves, and the answer says so. It checks no rule: a figure the person gives is their own. Do not use for floor areas (grid_areas) or for what a building code asks (grid_check). Units are metres.',
   args: {
     plan: PLAN_ARG,
-    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing', 'use'], description: 'What to measure: room, between, wall, fit, route, narrow, facing or use.', examples: ['between', 'fit', 'route', 'use'] },
-    room: { type: 'string', id: true, description: 'For room, fit, use and route: the room id, where the route starts. For facing: one room only, every room when left out.', examples: ['kitchen', 'hall'] },
+    what: { type: 'string', required: true, enum: ['room', 'between', 'wall', 'fit', 'route', 'narrow', 'facing', 'sun', 'use'], description: 'What to measure: room, between, wall, fit, route, narrow, facing, sun or use.', examples: ['between', 'fit', 'route', 'use'] },
+    room: { type: 'string', id: true, description: 'For room, fit, use and route: the room id, where the route starts. For facing and sun: one room only, every room when left out.', examples: ['kitchen', 'hall'] },
     from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening, fixture or room to measure from.', examples: ['front-door', 'w-west'] },
     to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening, fixture or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
     x: { type: 'number', length: true, description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
@@ -1008,7 +1009,7 @@ const measureTool: GridTool = {
   outputSchema: objectSchema({ what: STRING, answer: { type: 'object' }, rule: STRING }),
   run(args, context) {
     const { survey } = load(context, args['plan'])
-    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing' | 'use'
+    const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow' | 'facing' | 'sun' | 'use'
     const units = displayFor(args['units'], args['decimal'], survey.plan)
     const L = (v: number): string => lengthText(v, units)
     const allowed: Record<string, readonly string[]> = {
@@ -1019,6 +1020,7 @@ const measureTool: GridTool = {
       route: ['room', 'to', 'width'],
       narrow: ['under'],
       facing: ['room'],
+      sun: ['room'],
       use: ['room', 'width', 'diameter', 'clearance'],
     }
     const stray = ['room', 'from', 'to', 'x', 'y', 'wall', 'width', 'depth', 'diameter', 'under', 'clearance'].filter((key) => args[key] !== undefined && !allowed[what]!.includes(key))
@@ -1063,6 +1065,13 @@ const measureTool: GridTool = {
       const id = args['room'] === undefined ? undefined : roomArg(survey.plan, args['room'])
       const facing = facingAnswer(survey.plan, id)
       return { text: [...facing.lines, FACING_RULE].join('\n'), data: { what, answer: facing.data, rule: FACING_RULE } }
+    }
+    if (what === 'sun') {
+      // BRF-5: which rooms get the sun, as a table of geometry: window walls, window area, depth.
+      const id = args['room'] === undefined ? undefined : roomArg(survey.plan, args['room'])
+      const sun = sunAnswer(survey.plan, units, id)
+      if (sun.missing) throw new ToolRefusal('That room has no outline Grid can measure; grid_check says why.')
+      return { text: [...sun.lines, SUN_RULE].join('\n'), data: { what, answer: sun.data, rule: SUN_RULE } }
     }
     if (what === 'between') {
       if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening, fixture or room.')

@@ -583,6 +583,19 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: which rooms get the sun, as a table (BRF-5)
+
+- `grid_measure` takes `what=sun`, with `room` for one room: `answer` holds `measures`
+  (`"geometry, not a daylight result"`), `north` and `yAxis` as `what=facing` gives them, and
+  `rooms`, each with `id`, `name`, `floor`, `floorArea` (net, m²), `windowArea` (m²),
+  `windowToFloor` (the ratio of the two, or null for a room with no floor area) and
+  `windowWalls`. Each window wall has `wall`, `from` and `to` (metres along the wall), `faces`
+  (one of the eight points), `bearing` (degrees clockwise from north), `windows` (`id`, `width`,
+  `height`, `area`), `windowArea` and `depth`: metres, square to the wall, from its inside face
+  to the farthest point of the room's floor. A room with no window in an outside wall has an
+  empty `windowWalls`. Every line of the table in the text starts "Geometry,"; a plan that
+  states no north says so on the line after the label. No new message code and no new tool.
+
 ### 2026-11-22: sloped ceilings and roofs (LVL-6)
 
 - A floor may state its `roof` (flat, mono-pitch, gable or hip, with `eaves` and a `pitch` or a

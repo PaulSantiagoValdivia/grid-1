@@ -733,7 +733,9 @@ North is drawn and written where the plan states it:
   A plan that states no north is answered with north taken as the top of the drawing, and the
   answer says first that this is not known to be north. `grid describe` adds the same in a few
   lines, with which real way each side of the drawing faces, for a plan that states its north
-  or its front.
+  or its front. `grid_measure` with `what=sun` lists each room's window walls, the way each faces,
+  the window area against the floor area and the depth from each wall, as a table of geometry
+  ([tool-server.md](tool-server.md#which-rooms-get-the-sun-a-table-of-geometry)).
 
 A rotation cannot undo a mirror: a plan drawn with its y running down the page is the
 building's mirror image, and no north makes it right. So the plan says which way its y runs.
