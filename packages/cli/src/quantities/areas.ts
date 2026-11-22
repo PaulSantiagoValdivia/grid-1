@@ -161,12 +161,15 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     const byUseState: Record<string, AreaState> = {}
     for (const use of [...new Set(inside.map((room) => room.use ?? NOT_SAID))]) byUseState[use] = sumState(inside.filter((room) => (room.use ?? NOT_SAID) === use))
     const circulating = inside.filter((room) => CIRCULATION.has(room.use ?? ''))
+    // A use whose rooms could none be measured is still listed, at 0 and not looked at (MSG-2).
+    const byUse: Record<string, number> = { ...f.byUse }
+    for (const use of Object.keys(byUseState)) byUse[use] ??= 0
     return {
       floor: f.floor,
       rooms,
       leftOut: f.leftOut,
       net: f.net,
-      byUse: f.byUse,
+      byUse,
       circulation: sum(circulating.map((room) => room.net ?? 0)),
       grossInternal: f.grossInternal,
       grossExternal: f.grossExternal,
@@ -211,7 +214,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     circulation,
     circulationShare: grossInternal ? circulation / grossInternal : null,
     netToGross: grossInternal ? net / grossInternal : null,
-    byUse: figures.byUse,
+    byUse: Object.fromEntries([...new Set(floors.flatMap((f) => Object.keys(f.byUse)))].map((use) => [use, sum(floors.map((f) => f.byUse[use] ?? 0))])),
     leftOut: figures.leftOut,
     reader: figures.reader,
     grossWhy,

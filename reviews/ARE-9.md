@@ -106,7 +106,7 @@ was checked by hand against a drawing; Madrid's net is ARE-2's hand-worked 80.66
 No message code was added, so MSG-1's catalogue and the result contract are unchanged: the
 areas answer is not part of the check's result record, and its notes carry no code.
 
-## Decisions for you to check
+## For the owner
 
 1. **The country list.** "Most of Europe" became the 27 EU countries plus GB, CH, NO and IS.
    It is the ARE-8 decision applied, not something read from any document. Some of those
@@ -148,6 +148,8 @@ areas answer is not part of the check's result record, and its notes carry no co
   every total has its `states` entry. Gross areas are `not-looked-at` only where the library has
   none. MSG-2's note naming the rooms a total leaves out is kept; the library's own note saying
   the same is not printed twice.
+- Areas by use: as MSG-2 has it, a use whose only rooms could not be measured stays listed, at
+  0 m² and not looked at, in the CLI's figures. The library's `byUse` lists only uses it measured.
 - `grid_areas` text: each figure keeps its rule and gets MSG-2's state after the number.
 - The README is main's. The "Measuring areas" section is now `docs/areas.md`, linked from the
   README's documentation list; the `grid_areas` row is updated in `docs/tool-server.md`.
@@ -155,21 +157,14 @@ areas answer is not part of the check's result record, and its notes carry no co
 
 ## Checks run
 
-Final runs, after merging `main` at fc78ff7 (CNT-12 and MSG-18). The merge conflicted in
-`packages/cli/src/quantities/areas.ts`, where CNT-12 had added each room's fixtures and free floor
-to the old `planAreas`; they are carried onto the new one, and `grid_areas` still prints the
-free-floor rule when a plan has fixtures. The geometry index exports both `areas` and `items`.
+Final runs, after merging `main` at e7cf925:
 
-- `npm run build`: bundled, no output beyond the command.
-- `npm run typecheck`: no errors in any of the four packages.
-- `npm run lint`: no findings.
-- `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
-- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,250 passed of 4,250,
-  in 201 files (1,229 s).
-- `npm run scoreboard`: rooms measured wrong 197, damage silent 386, turns answered 16, mistakes
-  named 2, checks fed 5, rooms not measured 727, sound plans with a warning 95. Same as stored.
+- `npm run build`: bundled. `npm run typecheck`: no errors. `npm run lint`: no findings.
+- `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,369 passed, 3 failed,
+  of 4,372 in 206 files (1,247 s). The 3 were real, not timing: MSG-2's `coverage.test.ts` on
+  three lab plans with a broken room wanted that room's use kept in `byUse`. Fixed (above);
+  that file with `quantities`, the replay and the sheet pages tests then passed, 153 of 153. The
+  full suite was not run a second time, to spare the shared machine.
+- `npm run scoreboard`: 197, 386, 16, 2, 5, 727, 95. Same as stored.
 
-An earlier full run, before that merge and with a load average of about 210, had 5 failures:
-three timing tests that passed when rerun alone, the scoreboard test (it ran before the new turns
-figure was stored; 19 passed alone after storing), and the PDF test that lays out an 8,000-word
-note (it timed out alone too then, and passes in the final run).
+Before this merge, the full run after merging fc78ff7 passed 4,250 of 4,250.
