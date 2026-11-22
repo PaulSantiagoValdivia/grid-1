@@ -232,6 +232,23 @@ describe('the tools on a two-bedroom flat', () => {
     }
   }, 60_000)
 
+  // COD-8: with a firm's standards file beside the plan, grid_check's data still fits its schema, with the firm's own.
+  it('answers grid_check with a firm\'s standards file beside the plan within its output schema', async () => {
+    const schema = (await listed()).find((tool) => tool.name === 'grid_check')!.outputSchema as Record<string, unknown>
+    const firm = bench({ 'plan.json': twoBedFlat(), 'firm-standards.json': { version: '1', standards: [{ measure: 'corridor_width', value: 1.5, unit: 'm' }, { measure: 'room_area', value: 30, unit: 'm²', name: 'Rooms' }] } })
+    try {
+      for (const full of [false, true]) {
+        const reply = await firm.call('grid_check', { plan: 'plan.json', full })
+        expect(reply.isError, reply.text).toBe(false)
+        expect((reply.data as { firm?: unknown }).firm).toBeDefined()
+        expect((reply.data as { lines: { code: string }[] }).lines.some((l) => l.code.startsWith('firm/'))).toBe(true)
+        expect(conforms(schema, reply.data)).toEqual([])
+      }
+    } finally {
+      firm.close()
+    }
+  })
+
   it('keeps answers short', async () => {
     for (const [name, args] of Object.entries(CALLS)) {
       if (name === 'grid_describe') continue

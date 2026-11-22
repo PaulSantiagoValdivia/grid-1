@@ -10,6 +10,7 @@
 import type { PlanFix, TapedRow } from '@ongrid/floorplan/geometry'
 import type { GENERAL_GUIDANCE_LABEL, LOOKUP_NOTICE, AppliedFigure, CheckCoverage, Rule } from '../checks/types'
 import type { PlaceUsed } from '../checks/place'
+import type { FirmFigure, FirmUsed } from './firm'
 
 /** Raised when a field changes meaning or is taken away; adding a field or a code keeps it. */
 export const RESULT_VERSION = 1 as const
@@ -114,6 +115,11 @@ export interface ResultLine {
    * notes held back because they rest on the parts the line names.
    */
   readonly held?: readonly HeldNote[]
+  /**
+   * COD-8: on a `firm/` line, the firm's own figure it was set against, from the firm's file
+   * beside the plan. Never a code's: such a line carries no `figures`.
+   */
+  readonly firm?: FirmFigure
 }
 
 export interface GridResult {
@@ -164,4 +170,10 @@ export interface GridResult {
    * in the plan's order (`tapedLengths`). One that differs, or cannot be measured, is a line too.
    */
   readonly taped?: readonly TapedRow[]
+  /**
+   * COD-8: only when the plan has a firm's standards file beside it: the file, whether it was
+   * read, and each standard with how many parts it was set against and how many notes it gave.
+   * The firm's figures are not tied to a place, and are not among `figures`.
+   */
+  readonly firm?: FirmUsed
 }

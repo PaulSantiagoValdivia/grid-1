@@ -19,13 +19,19 @@ import {
   requestedPlace,
   coverageOnFloor,
   figureUsedText,
+  FIRM_HEADING,
+  FIRM_MEASURES,
+  FIRM_NOTE,
   GENERAL_GUIDANCE_LABEL,
   inspectPlan,
+  isFirmLine,
   problemsIn,
   roomsLookedAt,
   type AppliedFigure,
   type Cause,
   type CheckCoverage,
+  type FirmInput,
+  type FirmUsed,
   type GridResult,
   type LineKind,
   type ResultLine,
@@ -59,6 +65,8 @@ export interface CheckRequest {
   readonly floor?: string
   readonly country?: string
   readonly json: boolean
+  /** COD-8: the firm's standards beside the plan, measured on it (`firmForCheck`). */
+  readonly firm?: FirmInput
 }
 
 export interface CheckResult {
@@ -257,7 +265,8 @@ export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'
   const full = checkLocalRules(plan, { ...options, leftOut: loaded.leftOut ?? [] })
   // The file's text (MSG-6), so the record names what the reader did and the words the schema
   // drops (MSG-4).
-  const result = inspectPlan(loaded.text ?? plan, options)
+  // COD-8: the firm's own standards beside the plan, when it has a file of them.
+  const result = inspectPlan(loaded.text ?? plan, request.firm === undefined ? options : { ...options, firm: request.firm })
   const whole: CheckResult = { label: GENERAL_GUIDANCE_LABEL, issues: loaded.issues, report: full, result, rooms: roomsLookedAt(plan, result.coverage), numbers: result.lines.map((_, index) => index + 1) }
   return floor === undefined ? whole : checkOnFloor(loaded, whole, floor)
 }
@@ -326,10 +335,37 @@ export const KIND_WORDS: Record<LineKind, string> = {
 
 /** How many lines of each kind, as "2 worth a look, 1 finding". */
 export function countsText(result: GridResult): string {
+  // COD-8: how many of the findings are the firm's own, so they are never read as a code's.
+  const firm = result.lines.filter((line) => line.kind === 'finding' && isFirmLine(line)).length
   return (Object.keys(KIND_WORDS) as LineKind[])
     .filter((kind) => result.counts[kind] > 0)
-    .map((kind) => `${result.counts[kind]} ${KIND_WORDS[kind]}${kind === 'finding' && result.counts[kind] !== 1 ? 's' : ''}`)
+    .map((kind) => `${result.counts[kind]} ${KIND_WORDS[kind]}${kind === 'finding' && result.counts[kind] !== 1 ? 's' : ''}${kind === 'finding' && firm > 0 ? (firm === result.counts[kind] ? " of the firm's own" : `, ${firm} of them the firm's own`) : ''}`)
     .join(', ')
+}
+
+/** COD-8: the firm's lines' heading: whose figures they are, from which file, and that no place limits them. */
+export function firmHeadingText(firm: FirmUsed, notes: number): string {
+  return `${FIRM_HEADING} (${notes}), from ${JSON.stringify(firm.file)}: ${FIRM_NOTE}.`
+}
+
+/** COD-8: what the firm's file gave when none of its standards gave a note, in one line; null when it gave notes, or there is no firm's file. */
+export function firmNoNoteText(result: GridResult): string | null {
+  const firm = result.firm
+  if (firm === undefined || !firm.read) return null
+  if (result.lines.some(isFirmLine)) return null
+  const looked = firm.standards.reduce((n, s) => n + s.lookedAt, 0)
+  return `${FIRM_HEADING}, from ${JSON.stringify(firm.file)}: ${firm.standards.length} ${firm.standards.length === 1 ? 'standard' : 'standards'} set against ${looked} ${looked === 1 ? 'part' : 'parts'}; no part is short of them. ${FIRM_NOTE.charAt(0).toUpperCase()}${FIRM_NOTE.slice(1)}.`
+}
+
+/** COD-8: each of the firm's standards, the figure used here, and what it looked at, for the whole report. */
+export function firmStandardsText(firm: FirmUsed): string[] {
+  return firm.standards.map((s) => {
+    const what = FIRM_MEASURES[s.measure].what
+    const named = s.name === null ? '' : ` (${JSON.stringify(s.name)})`
+    const scope = s.uses.length > 0 ? `, for rooms used as ${s.uses.join(', ')}` : s.kinds.length > 0 ? `, for each ${s.kinds.join(', ')}` : ''
+    const note = s.note === null ? '' : `; the firm's note: ${JSON.stringify(s.note)}`
+    return `${what}${named}: the firm's figure used here is at least ${s.value} ${s.unit}${scope}; set against ${s.lookedAt} ${s.lookedAt === 1 ? 'part' : 'parts'}, ${s.notes} short of it${note}`
+  })
 }
 
 /** The thing a line is about, as `opening "d1"` or `the plan`. */
@@ -434,9 +470,16 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
     // seen one is under Seen with the others (MSG-10), so the heading comes before the first open one.
     const confirmSeen = record.lines.filter((line, index) => line.kind === 'to-confirm' && states[index]?.state === 'seen').length
     let confirmHeading = false
+    // COD-8: the firm's own standards under their own heading, apart from the code figures.
+    const firmOpen = record.lines.filter((line, index) => isFirmLine(line) && states[index]?.state !== 'seen').length
+    let firmHeading = false
     record.lines.forEach((line, index) => {
       const state = states[index]
       if (state?.state === 'seen') return
+      if (isFirmLine(line) && !firmHeading && record.firm !== undefined) {
+        firmHeading = true
+        lines.push('', firmHeadingText(record.firm, firmOpen))
+      }
       if (line.kind === 'to-confirm' && !confirmHeading) {
         confirmHeading = true
         lines.push('', `To confirm (${record.counts['to-confirm']}${confirmSeen > 0 ? `; ${confirmSeen} of them seen, listed under Seen` : ''}): what the plan marks assumed, not given or measured. Ask the person.`)
@@ -444,7 +487,9 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
       lines.push(...lineText(result, index, floorCount, true))
       if (state?.state === 'back') lines.push(`${line.causedBy === undefined ? '' : '    '}      ${seenBeforeText(state)}.`)
     })
+    const codeFindings = record.lines.filter((line) => line.kind === 'finding' && !isFirmLine(line)).length
     if (record.counts.finding === 0) lines.push('', `No findings. ${NOTHING_FOUND}`)
+    else if (codeFindings === 0) lines.push('', `No findings outside the firm's own standards. ${NOTHING_FOUND}`)
     if (seen > 0) {
       lines.push('', `Seen (${seen}): ${SEEN_HEADING_NOTE}.`)
       record.lines.forEach((_, index) => {
@@ -455,6 +500,10 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
     }
   }
 
+  // COD-8: a firm's file whose standards gave no note still says it was read.
+  const firmNone = firmNoNoteText(record)
+  if (firmNone !== null) lines.push('', firmNone)
+
   // HND-11 (lab WR-14): each length taped on site against the drawing, after every run.
   const taped = tapedTable(record.taped ?? [])
   if (taped.length > 0) lines.push('', ...taped)
@@ -463,6 +512,8 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
     lines.push(...coverageText(result))
     // MSG-3: each as the figure used here, with its basis and its status.
     if (report.figures.length > 0) lines.push(...section('Figures used', report.figures.map(figureUsedText)))
+    // COD-8: the firm's own standards, apart from the code figures: the firm's, not a code's.
+    if (record.firm !== undefined && record.firm.read) lines.push(...section(`${FIRM_HEADING} in ${JSON.stringify(record.firm.file)}`, firmStandardsText(record.firm)))
     lines.push(...section('What these checks never look at', report.limits))
   } else {
     // MSG-10: only the figures a line used, each still with its document, edition, clause and status.
