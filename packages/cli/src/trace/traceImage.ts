@@ -52,9 +52,14 @@ function sized(kind: PictureKind, width: number, height: number): { kind: Pictur
   return width > 0 && height > 0 ? { kind, width, height } : null
 }
 
-/** A JPEG's size, from its first frame header: segment by segment after the start marker. */
+/**
+ * A JPEG's size as it is shown: from its first frame header, segment by segment after the start
+ * marker, turned a quarter when its EXIF orientation says so (5 to 8), as Skia and browsers turn it.
+ * A phone's photo is stored as the sensor saw it and shown turned; its pixels are counted shown.
+ */
 function jpegSize(bytes: Uint8Array): { kind: PictureKind; width: number; height: number } | null {
   let at = 2
+  let turned = false
   while (at + 4 <= bytes.length) {
     if (bytes[at] !== 0xff) return null
     const marker = bytes[at + 1]!
@@ -72,13 +77,36 @@ function jpegSize(bytes: Uint8Array): { kind: PictureKind; width: number; height
     const length = u16(bytes, at + 2)
     if (length < 2) return null
     // A frame header (SOF0 to SOF15, not DHT, JPG or DAC): precision, height, width.
+    if (marker === 0xe1) turned = turned || quarterTurned(bytes.subarray(at + 4, at + 2 + length))
     if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
       if (at + 9 > bytes.length) return null
-      return sized('jpeg', u16(bytes, at + 7), u16(bytes, at + 5))
+      const width = u16(bytes, at + 7)
+      const height = u16(bytes, at + 5)
+      return turned ? sized('jpeg', height, width) : sized('jpeg', width, height)
     }
     at += 2 + length
   }
   return null
+}
+
+/** Whether an APP1 segment's EXIF says the picture is shown a quarter turned: orientation 5 to 8. */
+function quarterTurned(segment: Uint8Array): boolean {
+  if (segment.length < 14 || String.fromCharCode(...segment.subarray(0, 6)) !== 'Exif\0\0') return false
+  const tiff = segment.subarray(6)
+  const little = tiff[0] === 0x49 && tiff[1] === 0x49
+  if (!little && !(tiff[0] === 0x4d && tiff[1] === 0x4d)) return false
+  const read16 = (at: number): number => (little ? tiff[at]! + (tiff[at + 1]! << 8) : u16(tiff, at))
+  const read32 = (at: number): number => (little ? read16(at) + read16(at + 2) * 0x10000 : u32(tiff, at))
+  const ifd = read32(4)
+  if (ifd + 2 > tiff.length) return false
+  const entries = read16(ifd)
+  for (let i = 0; i < entries; i++) {
+    const entry = ifd + 2 + i * 12
+    if (entry + 12 > tiff.length) return false
+    // Orientation, a SHORT whose value sits in the entry's first two value bytes.
+    if (read16(entry) === 0x0112) return read16(entry + 8) >= 5 && read16(entry + 8) <= 8
+  }
+  return false
 }
 
 /** The trace image read for the floor drawn: the picture to draw, if it can be drawn, and what to say about it. */

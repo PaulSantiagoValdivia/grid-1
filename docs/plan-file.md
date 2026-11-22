@@ -1445,7 +1445,8 @@ no measure, check, export or sheet.
 | `opacity` | How strongly it is drawn, 0 to 1. Unstated, 0.4 |
 
 The picture's pixel (u, v) lies on the plan at `at + turn(rotation)(u × scale, −v × scale)`: its
-pixels run down the page, the plan's y runs up. A trace image with neither `calibration` nor
+pixels run down the page, the plan's y runs up. Pixels are counted on the picture as it is shown:
+a phone's photo stored on its side with an EXIF turn is counted turned, as any image viewer shows it. A trace image with neither `calibration` nor
 `scale` has no scale: it is drawn at one centimetre a pixel (`traceUnscaled`,
 [tolerances.md](tolerances.md)) and every answer says it is not to scale. To scale a photo, pick
 two points on it whose distance on the building you know, in the same plane as what you trace

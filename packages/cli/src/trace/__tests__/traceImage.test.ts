@@ -59,6 +59,25 @@ describe('a picture\'s kind and size, from its header', () => {
     expect(pictureHeader(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]))).toBeNull()
   })
 
+  it('counts a phone photo\'s pixels as it is shown, turned by its EXIF orientation as Skia turns it', async () => {
+    const jpeg = await picture(40, 20, 'image/jpeg')
+    for (const [order, orientation, size] of [['MM', 6, [20, 40]], ['II', 8, [20, 40]], ['MM', 3, [40, 20]], ['II', 1, [40, 20]]] as const) {
+      const big = order === 'MM'
+      const short = (n: number): number[] => (big ? [n >> 8, n & 255] : [n & 255, n >> 8])
+      const long = (n: number): number[] => (big ? [0, 0, 0, n] : [n, 0, 0, 0])
+      // A TIFF header and one IFD entry: Orientation (0x0112), a SHORT.
+      const tiff = [...(big ? [0x4d, 0x4d, 0, 0x2a] : [0x49, 0x49, 0x2a, 0]), ...long(8), ...short(1), ...short(0x0112), ...short(3), ...long(1), ...short(orientation), 0, 0, ...long(0)]
+      const body = [...Buffer.from('Exif\0\0', 'latin1'), ...tiff]
+      const app1 = [0xff, 0xe1, (body.length + 2) >> 8, (body.length + 2) & 255, ...body]
+      const bytes = new Uint8Array([...jpeg.subarray(0, 2), ...app1, ...jpeg.subarray(2)])
+      expect(pictureHeader(bytes), `${order} ${orientation}`).toEqual({ kind: 'jpeg', width: size[0], height: size[1] })
+      // And Skia agrees.
+      const { loadImage } = await loadCanvas()
+      const shown = await loadImage(Buffer.from(bytes))
+      expect([shown.width, shown.height]).toEqual(size)
+    }
+  })
+
   it('knows a picture by its ending, in any capitals', () => {
     expect(['a.png', 'b.JPG', 'scans/c.jpeg'].every(hasPictureEnding)).toBe(true)
     expect(['a.svg', 'b.png.js', 'c.txt', 'd', 'e.pdf', 'f.heic'].some(hasPictureEnding)).toBe(false)
