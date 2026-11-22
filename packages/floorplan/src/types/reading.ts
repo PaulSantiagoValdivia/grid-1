@@ -139,6 +139,9 @@ function partOf(path: readonly (string | number)[]): PartAt | null {
   return typeof list === 'string' && LISTS.has(list) && typeof index === 'number' ? { list: list as PartAt['list'], index } : null
 }
 
+/** WRT-6: fields the reading adds, which no file states: a file that writes one is told it is not read. */
+const READING_ONLY = new Set(['unstated'])
+
 /** Walks the file and its schema side by side, noting each key the schema does not have. */
 function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], notes: ReadingNote[]): void {
   const shape = bare(schema)
@@ -150,9 +153,9 @@ function walk(schema: z.ZodTypeAny, given: unknown, path: (string | number)[], n
   }
   if (!(shape instanceof z.ZodObject) || !isObject(value)) return
   const fields = shape.shape as Record<string, z.ZodTypeAny>
-  const known = Object.keys(fields)
+  const known = Object.keys(fields).filter((key) => !READING_ONLY.has(key))
   for (const key of Object.keys(value)) {
-    if (Object.hasOwn(fields, key)) {
+    if (Object.hasOwn(fields, key) && !READING_ONLY.has(key)) {
       walk(fields[key]!, value[key], [...path, key], notes)
       continue
     }

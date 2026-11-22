@@ -34,6 +34,7 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `wallContact` | tolerance | 0.01 m | Slack past the walls' bodies when a room outline is traced: walls that touch, carry on in a row or reach a corner |
 | `strayCorner` | tolerance | 1 m | A room corner further than this from both its walls is not a corner, and the wall list is out of order |
 | `nearlyParallel` | tolerance | 0.2588 sine | Neighbouring walls closer to parallel than 15 degrees may be one straight side |
+| `squareWithin` | tolerance | 0.0523 sine | When a scan is squared, a wall within about 3 degrees of a main direction of the plan is turned onto it; one further off is left and named |
 | `sameFace` | tolerance | 0.000001 m | Two faces in a row this close are one face; further apart they are joined by a step |
 | `mitreReach` | tolerance | 4 ratio | How far a joined corner may reach along a wall, in half thicknesses of the thicker wall; sharper corners are left cut square, and are not tested against openings |
 | `swingContact` | tolerance | 0.01 m | How far a wall must reach into a door's swing, or two swings overlap, to be in the way |
@@ -61,12 +62,21 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `nameSize` | tolerance | 0.02 ratio | A size written in a room's name and the size drawn differ when they are further apart than this share of the size named (BRF-1) |
 | `wallAboveStorey` | tolerance | 0.001 m | How far a wall may rise past the height its floor states; past it, `wall/above-storey` names both heights |
 | `sameLevelOverlap` | tolerance | 0.5 ratio | Two floors at one level whose walls' boxes share more than this of the smaller one stand one over the other (`plan/same-level`) |
-| `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground floor is named and is not a way out |
+| `outsideDoorAboveGround` | limit | 2 m | A door to the outside on a floor higher than this above the ground (the level the site states, else the ground floor's) is named and is not a way out |
+| `openingBelowGround` | tolerance | 0.005 m | A door or window in an outside wall whose foot lies less than this under the site's stated ground level stands at the ground; further down, `opening/below-ground` names it |
 | `passableWidth` | limit | 0.4 m | Grid's own size, not a code figure: a door or doorless opening narrower than this is named (`opening/too-small-to-pass`) and is not a way through |
 | `passableHeight` | limit | 1.2 m | Grid's own size, not a code figure: one lower than this is named and is not a way through |
 | `passableSill` | limit | 0.3 m | Grid's own size, not a code figure: one whose sill stands higher than this above its floor is named and is not a way through |
 | `itemIntoWall` | tolerance | 0.005 m | How far a fixture may reach into a solid wall's body and still stand against its face; past it, `item/into-wall` names the wall |
 | `itemAboveRoom` | tolerance | 0.001 m | How far a fixture may rise past the height of its room; past it, `item/too-tall` names both heights |
+| `useOpenLeaf` | limit | 0.05 m | Grid's own size, not a code figure: what an open door leaf and its stop take of a doorway; the clear width a door leaves is its hole less this (CNT-13) |
+| `useApproachDepth` | limit | 0.3 m | Grid's own size, not a code figure: a fixture within this of a doorway's or a window's hole, across its width, stands in front of it (`item/blocks-doorway`, `item/blocks-window`) |
+| `useDoorwayClear` | limit | 0.8 m | Grid's own size, not a code figure: Grid's own indicator for the clear width a doorway leaves, when the person gives none |
+| `usePassageWidth` | limit | 0.9 m | Grid's own size, not a code figure: Grid's own indicator for the way through a room, clear of its fixtures, when the person gives no body or trolley width |
+| `useTurningCircle` | limit | 1.5 m | Grid's own size, not a code figure: Grid's own indicator for the turning circle tried in a room's free floor, when the person gives none |
+| `useClearSpace` | limit | 0.6 m | Grid's own size, not a code figure: Grid's own indicator for the clear floor in front of and beside a fixture, when the person gives none |
+| `useRaster` | tolerance | 0.02 m | The step of the grid the way through a room is measured on: the widest body is found to within about this |
+| `useRasterCells` | limit | 250000 count | The most points one room's way through is measured on; a bigger room is measured on a coarser grid, and the answer says the step |
 | `sameFloorLevel` | tolerance | 0.005 m | Rooms side by side whose floors stand closer than this in height share a level, and no step is drawn between them |
 | `floorOffsetLargest` | limit | 1.5 m | A room set further than this above or below its storey is asked about (`room/offset-question`) |
 | `stairRoomOverlap` | tolerance | 0.5 ratio | Rooms used as a stair (or a lift) on neighbouring floors that share at least this of the smaller one are one stair (or shaft); less, and they are named as out of line |

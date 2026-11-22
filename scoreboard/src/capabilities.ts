@@ -63,14 +63,24 @@ export const CAPABILITIES = {
   fixtures: { what: 'holds fixtures (WC, basin, kitchen units)', probe: schema('rooms.0.fixtures', [{ type: 'wc' }]) },
   furniture: { what: 'holds furniture', probe: schema('furniture', [{ type: 'table', at: [1, 1], size: [1.8, 0.9] }]) },
   'door-leaves': { what: 'holds doors with several leaves (bifold, double)', probe: schema('openings.0.leaves', 2) },
-  'clear-width': { what: 'holds the clear width of a door', probe: schema('openings.0.clearWidth', 0.8) },
+  // CNT-13: the clear width a doorway leaves, worked out from its hole, an open leaf and the fixtures in front of it.
+  'clear-width': {
+    what: 'gives the clear width a door leaves',
+    probe: lib((s) => {
+      const plan = parseFloorPlan(s)
+      const door = plan.openings.find((o) => o.type === 'door')!
+      const wall = plan.walls.find((w) => w.id === door.wall)!
+      return geometry.doorwayClearance(wall, door, []).clear < door.width
+    }),
+  },
   threshold: { what: 'holds a step or threshold at a door', probe: schema('openings.0.threshold', 0.02) },
   'fire-rating': { what: 'holds fire ratings of walls and doors', probe: schema('openings.0.fireRating', 'EI30') },
   occupancy: { what: 'holds how many people a room or home is for', probe: schema('rooms.0.occupancy', 2) },
   'existing-new': { what: 'holds which parts are existing, new or removed', probe: schema('walls.0.status', 'existing') },
   'outdoor-space': { what: 'holds outdoor spaces (garden, courtyard, balcony)', probe: schema('rooms.0.outdoor', true) },
   flats: { what: 'groups rooms into homes or flats', probe: schema('flats', [{ id: 'a', rooms: ['r1'] }]) },
-  'ceiling-height': { what: 'holds ceiling heights', probe: schema('rooms.0.ceilingHeight', 2.5) },
+  // LVL-4: a room's ceiling, at the room's height (ARE-10), with the zones lowered under it at theirs.
+  'ceiling-height': { what: 'holds ceiling heights', probe: schema('rooms.0.ceiling', { lowered: [{ points: [[0, 0], [1, 0], [1, 1]], height: 2.3 }] }) },
   'gross-area': {
     what: 'gives gross areas (to the outside of the walls)',
     // ARE-9: gross external, and gross internal, each with the rule it follows.
@@ -91,8 +101,16 @@ export const CAPABILITIES = {
   'route-length': { what: 'measures a walking route (to an exit, along a corridor)', probe: none },
   'take-offs': { what: 'measures lengths and surfaces of walls, skirting and plaster', probe: none },
   'opening-schedule': { what: 'lists doors and windows by size', probe: none },
-  'clearance': { what: 'measures the free space between things', probe: none },
-  'turning-space': { what: 'tests a turning circle in a room', probe: none },
+  // CNT-13: the floor round a fixture, and the way through a room clear of the fixtures.
+  'clearance': { what: 'measures the free space between things', probe: lib(() => has(geometry, 'fixtureSpace') && has(geometry, 'passageWidth')) },
+  // CNT-13: the widest circle a room's free floor holds, clear of its fixtures.
+  'turning-space': {
+    what: 'tests a turning circle in a room',
+    probe: lib((s) => {
+      const [first] = geometry.roomShapes(geometry.indexPlan(parseFloorPlan(s)))
+      return first !== undefined && geometry.turningSpace(first.shape.polygon, first.shape.holes, []).diameter > 0
+    }),
+  },
   'inside-view': { what: 'shows a view from inside a room', probe: none },
   'drawing-key': { what: 'explains the drawing (key, which side is which)', probe: none },
   'drawing-style': { what: 'chooses what a drawing shows and its colours', probe: none },

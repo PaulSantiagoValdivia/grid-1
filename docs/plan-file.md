@@ -11,14 +11,16 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Floor levels and heights](#floor-levels-and-heights): `plan/level-gap`, `plan/same-level`, `floor/empty-top`, `wall/above-storey`, `floor/size-question`, `wall/unknown-floor`, `room/unknown-floor`
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
 - [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
+- [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
-- [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`
+- [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
 - [North, front and where the building is](#north-front-and-where-the-building-is): `plan/front-not-said`, `plan/y-down`
+- [Where a value came from](#where-a-value-came-from): `plan/value-assumed`, `plan/mark-no-part`; a value left out stays not stated
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
@@ -31,11 +33,12 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
 | an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
 | walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
-| the points of one sketch line or shape | 2,000 | |
+| the points of one sketch line or shape, or of one lowered zone of a ceiling | 2,000 | |
+| the lowered zones of one ceiling | 50,000 | |
 | the walls a room lists | 2,000 | |
 
 A refusal names the part and the limit (`rooms[0].name holds a line break (U+000A); it must be
@@ -183,9 +186,11 @@ high it is may be stated apart from that order, in metres. All three are optiona
 | `slab` | The thickness of the slab the floor stands on (0.25 m when not stated) |
 
 A floor that states nothing stands where it always did: its height is its tallest wall, and it
-stands on the floor below it, one slab higher. The roof lies on the highest storey top, whichever
-floor that is on, so a loft stated inside a taller storey does not pull the roof down. The 3D
-view, the IFC export and the sheet all read the floors' heights from this one rule.
+stands on the floor below it, one slab higher. Each part of a floor with nothing above it is
+roofed on that floor's own walls ([Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground));
+the building's box, which the 3D view frames, still ends on the highest storey top, whichever floor
+that is on, so a loft stated inside a taller storey does not shrink it. The 3D view, the IFC export
+and the sheet all read the floors' heights from this one rule.
 
 The drawing's checks ask about levels that do not add up, as warnings: a missing level
 (`plan/level-gap`, a flat on level 3 drawn alone stands on the ground until it states its
@@ -263,6 +268,60 @@ is said not to be checked. A stair that cannot be laid out is said and left out
 `stair/too-few-risers`, `stair/duplicate-id`), and one whose end stands in no room joins nothing
 (`stair/end-in-no-room`, a warning).
 
+## Slabs, roofs, ceilings and the ground
+
+The plan states no slab and no roof: Grid works them out from each floor's outline, the floor its
+walls enclose, walls and all, the same shape as its gross external area (`planEnvelope`). An
+outline only exists where walls meet and close a floor; a floor whose walls close none has no slab
+and no roof, and a garden wall standing apart carries neither.
+
+- **One slab per floor**, the one it stands on: its top at the floor's level, as thick as the
+  floor's `slab` (0.25 m when it states none). It is open over each stair and lift shaft that rises
+  into it from the floor below: a stated stair opens it over its flights and landings; rooms used
+  as a stair that lie one over the other, with no stated stair between them, open it over the floor
+  they share, the whole stair room, because the plan does not say where the flights are; a lift
+  shaft is open over the floor its rooms share. A room set below its storey (LVL-7) is cut out of it
+  and has its own piece, lower down. The lowest level's slabs are base slabs. The floor inside a
+  hole in a room that no room fills, a courtyard, is open: no slab and no roof.
+- **A roof over every part with nothing above**: the floor's outline less the outlines of the
+  floors on the next level up, flat, on the floor's walls, 0.25 m thick, with no overhang. So a
+  single-storey wing is roofed where the floor above does not reach.
+- **A void**: a room marked `"void": true` is open to the floor below. It has no floor, so its
+  floor's slab is open over it, and it adds no floor area to the slab; it needs no door and has no
+  route to check.
+- **A parapet**: a floor's `parapet` is how far its outside walls rise above the roof over it. The
+  roof keeps its place on the walls, and the parapet stands on its edge.
+
+```json
+{ "floors": [{ "id": "ground", "name": "Ground floor", "level": 0, "parapet": 1.1 }],
+  "site": { "ground": -0.15 },
+  "rooms": [{ "id": "k", "name": "Kitchen", "boundary": ["s", "e", "n", "w"], "height": 2.6,
+              "ceiling": { "lowered": [{ "name": "Bulkhead", "points": [[0, 3], [6, 3], [6, 4], [0, 4]], "height": 2.3 }] } }] }
+```
+
+| Field | What it states |
+|---|---|
+| `site.ground` | The level of the ground outside, in metres from the ground floor's floor level, the datum of a floor's `elevation`: `-0.15` for a floor 15 cm above the ground. One level for the whole site. It sits in the plan's one `site`, beside where the building is ([north, front and where the building is](#north-front-and-where-the-building-is)), and needs no `origin`; it is not `site.elevation`, which is metres above sea level |
+| floor `parapet` | Metres the floor's outside walls rise above its roof. Unstated, no parapet |
+| room `void` | The room is open to the floor below: no floor of its own |
+| room `ceiling` | The room has a ceiling, at its `height` (else its storey's). `lowered` lists the zones lower than the rest, each with `points` (its outline, three or more) and `height` (from the room's floor), and an optional `name`. A zone is clipped to its room |
+
+The slabs, roofs and parapets are in the 3D view (the roofs when the whole building is shown), in
+the OBJ and glTF files of each floor (`slab_<floor>`, `roof_<floor>`, `parapet_<floor>`; each
+floor's slab lies under its floor level, so floors stacked at their levels meet with no gap), and
+in the IFC file: one `IfcSlab` per floor, voided by an `IfcOpeningElement` over each stair, lift
+and void, an `IfcRoof` (a flat roof) of an `IfcSlab` `ROOF` over each roofed floor, an `IfcWall`
+named `Parapet`, and an `IfcCovering` `CEILING` for each stated ceiling and each lowered zone.
+`grid_takeoff` gives each slab and roof's area, every line marked assumed, with what was assumed:
+the plan states none. A ceiling plan, lights and grilles are not in the plan yet.
+
+With `site.ground` stated, the ground floor is the floor whose floor level lies nearest the ground,
+and a floor stands above the ground by its height over that level: a door to the outside more than
+2 m up is named and is no way out. A door, window or doorless opening in an outside wall whose
+foot lies under the ground is named, wholly or in part (`opening/below-ground`). Unstated, the
+ground floor is the floor at level 0, as before, and nothing is named: every report says the
+check needs the ground level. A ground level for each side of a house on a slope comes later.
+
 ## Floor no room claims
 
 Besides the findings, `grid check` lists problems in the drawing. Some of them come from the
@@ -320,9 +379,9 @@ each hole, one list per hole, in the order they are met going round it:
 The room's floor is its outline less each hole, measured to the faces of the hole's walls that
 look into the room, so those walls are not floor either. That one area is what the room's area,
 the 2D drawing, the size check and the comparison of two plans give. Its label goes on its
-floor, never in a hole; the 3D floor, the OBJ and GLB floors, the IFC space and slabs (as a
-profile with voids) and the DXF (one more closed outline on the rooms layer) all leave each hole
-open. A door in a hole's wall leads from the room to whatever is in the hole: a room drawn
+floor, never in a hole; the 3D floor, the OBJ and GLB floors, the IFC space (as a profile with
+voids) and the DXF (one more closed outline on the rooms layer) all leave each hole open, and the
+floor's slab and roof are open over the floor inside a hole that no room fills. A door in a hole's wall leads from the room to whatever is in the hole: a room drawn
 there, or the outside. A plan with no `holes` reads and measures as before.
 
 | Code | What it says |
@@ -351,7 +410,10 @@ it stands in is the one that holds its middle. The 2D drawing, the sheet and the
 `IfcFurnishingElement` on its storey. `grid_schedule` counts the fixtures by kind with their
 rooms, `grid_areas` gives each room with fixtures its free floor (its net area less the floor
 they stand on), `grid_measure` measures between fixtures and fits a box clear of them, and
-`grid check` names a fixture that runs into a wall or is taller than its room. This version holds
+`grid check` names a fixture that runs into a wall or is taller than its room. A fixture is an
+obstacle (CNT-13): a door whose leaf swings into it names it, and `grid_measure what=use` and
+`what=route` with a width measure the turning circle, the way through and the floor round each
+fixture clear of them ([use indicators](tool-server.md#use-indicators-will-it-fit-can-you-turn-is-the-window-blocked)). This version holds
 fixtures only: loose furniture, points (a hydrant, a camera) and seats come later, in the same
 shape. A kind it does not hold yet is left out with a note, and the rest of the plan is drawn.
 
@@ -363,6 +425,9 @@ shape. A kind it does not hold yet is left out with a note, and the rest of the 
 | `item/outside-rooms` | Its middle is in no room on its floor |
 | `item/into-wall` | It reaches more than 5 mm into a solid wall |
 | `item/too-tall` | It is higher than the room it stands in |
+| `opening/door-hits-item` | A door's leaf swings into the fixture: the line names it by its label, kind and id, `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens` |
+| `item/blocks-doorway` | It stands within 0.3 m (`useApproachDepth`) in front of a doorway's hole: the line says how much of the hole it covers and the clear width left, as an indicator |
+| `item/blocks-window` | It is higher than a window's sill and stands within 0.3 m in front of it: the line says how much of the window it covers, as an indicator |
 
 ## Writing on the drawing, and the sketch layer
 
@@ -473,7 +538,7 @@ before, with no north and y up the page.
 | `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
 | `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
 | `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
-| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin` |
 
 North is drawn and written where the plan states it:
 
@@ -527,6 +592,66 @@ front stays the part it names, and `yAxis` is kept.
 |---|---|
 | `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
+
+## Where a value came from
+
+A plan may say where its values came from, and how sure each is (WRT-6). It says so in `marks`,
+one list beside the parts, so no number becomes an object and no part changes shape: a plan with
+no marks reads exactly as before.
+
+```json
+"marks": [
+  { "part": "wall", "id": "s", "source": "scanned", "tolerance": 0.02 },
+  { "part": "wall", "id": "w1", "value": "height", "source": "assumed" },
+  { "part": "room", "id": "bed2", "value": "use", "source": "given" }
+]
+```
+
+| Field | What it states |
+|---|---|
+| `part` | `wall`, `room`, `opening`, `floor` or `item` |
+| `id` | The part's id |
+| `value` | Optional: the one value the mark is about. A wall's `start`, `end`, `thickness`, `height` or `kind`; a room's `name`, `use`, `height` or `floorOffset`; an opening's `type`, `offset`, `width`, `height`, `sill`, `hinge` or `swing`; a floor's `name`, `level`, `elevation`, `height` or `slab`; a fixture's `kind`, `at`, `size`, `height` or `turn`. Left out, the mark is about the whole part |
+| `source` | `given` (by the person), `measured` (taped or lasered), `scanned` (from a capture of the building) or `assumed` (by whoever wrote the plan) |
+| `tolerance` | Optional: how sure, in metres, give or take, on each length the mark covers. Only on a whole part or a length, never on a word such as a kind or a use |
+
+A mark on a value wins over a mark on its part; of two marks on the same value, the first is read.
+A part no mark names says nothing about where it came from: it is not taken as given.
+These marks are part of the plan. A note of `grid check` the person sets aside as seen is kept
+apart, in `plan.seen.json` beside the plan ([a note set aside as seen](tool-server.md#a-note-set-aside-as-seen)).
+
+- **Assumed.** Whatever the plan marks assumed is drawn in its own style in every look (a dashed
+  line in the look's warning colour round the wall, room or fixture, or across the opening; the
+  key says "Assumed, to confirm with the person") and listed by `grid check` and `grid_check`
+  under "To confirm", one `plan/value-assumed` line each, of the kind `to-confirm`. When the
+  person confirms a value, mark it `given` or `measured`, or take the mark out.
+- **Scanned or measured, with a tolerance.** `grid_areas` gives each room whose walls are marked
+  its give or take: "from a scan, about ± 1.6% (± 0.20 m²)". It is each side of the room times
+  its wall's tolerance, added up, over the area: the most the area moves if every marked face
+  moves its full tolerance one way. A scanned wall with no tolerance gives "how sure is not
+  stated", never a figure. The floor and plan totals add up their rooms' the same way.
+- **Squaring a scan** is a step of its own: `grid_square_scan`, or `grid edit square`. It turns
+  each wall marked scanned (every wall with `all`) that is within about 3 degrees of the plan's
+  main directions (`squareWithin`, see [tolerances.md](tolerances.md)) onto them, about its
+  middle, puts each corner back where the new lines cross, and answers with how far each wall
+  turned and how far its ends moved. A wall further off is left as it is and named. The marks
+  stay.
+
+| Code | What it says |
+|---|---|
+| `plan/value-assumed` | A value, or a whole part, the plan marks assumed: for the person to confirm. Listed last, under "To confirm" |
+| `plan/mark-no-part` | A mark names a part the plan does not have, so it is not read: a part renamed or taken out since |
+
+### A value left out stays not stated
+
+A wall may leave out its thickness, height and kind. Grid draws and measures it with its floor's
+`height`, or 2.7 m high, 0.2 m thick and `interior`, but the reading keeps that the file stated
+none (lab AU3-6). `grid describe` says "wall height not stated (drawn 2.7 m high)", never "walls 2.7 m high";
+`grid describe --as rooms` writes no height for such walls; `grid write` writes a wall the rooms
+text gives no height with none, so its floor's height or the default reaches it when the plan is
+read; and Grid's edits never write a filled-in value into a file that stated none: a wall cut in
+two, or a new wall beside walls with no stated height, states none either. A wall that takes its
+floor's height states none of its own, so the height is said once, on the floor.
 
 ## People are kept out of the plan
 

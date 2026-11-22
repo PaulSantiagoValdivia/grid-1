@@ -284,6 +284,13 @@ function personHeights(facts: PlanFacts, names: PersonNames): string {
     ]
     parts.push(`walls ${m(heights.wall)} m high${odd.length > 0 ? `, except ${listed(capped(odd, 4))}` : ''}`)
   }
+  // WRT-6 (lab AU3-6): a height nothing states is said so, never as a figure the person gave.
+  const { notStated } = heights
+  if (notStated.count > 0) {
+    parts.push(heights.wall === null
+      ? `wall height not stated (drawn ${m(notStated.drawn)} m high)`
+      : `${plural(notStated.count, 'wall')} with no height stated (drawn ${m(notStated.drawn)} m high)`)
+  }
   if (heights.windowSill !== null) parts.push(`window sills ${m(heights.windowSill)} m${openings(heights.windowSills, 'window')}`)
   parts.push(`door sills at the floor${openings(heights.doorSills, 'door')}`)
   return `Heights: ${parts.join('; ')}.`
@@ -304,6 +311,7 @@ function agentHeights(facts: PlanFacts): string {
     const floors = heights.floorWalls.map((floor) => `, ${floor.floor} ${m(floor.value)}`).join('')
     parts.push(`walls ${m(heights.wall)}${floors}${except(heights.walls)}`)
   }
+  if (heights.notStated.count > 0) parts.push(`${heights.wall === null ? 'walls' : `${heights.notStated.count} walls`} not stated, drawn ${m(heights.notStated.drawn)}`)
   if (heights.windowSill !== null) parts.push(`window sills ${m(heights.windowSill)}${except(heights.windowSills)}`)
   parts.push(`door sills 0${except(heights.doorSills)}`)
   return `HEIGHTS ${parts.join('; ')}`
@@ -422,7 +430,7 @@ function agentWallOpening(opening: OpeningFacts): string {
 
 function agentWalls(floor: FloorFacts): string[] {
   return floor.walls.map((wall) => {
-    const height = wall.virtual || wall.height === floor.wallHeight ? '' : ` h${m(wall.height)}`
+    const height = wall.virtual || wall.height === floor.wallHeight ? '' : wall.heightNotStated ? ' h?' : ` h${m(wall.height)}`
     const head = ` ${wall.id} ${m(wall.start.x)},${m(wall.start.y)}>${m(wall.end.x)},${m(wall.end.y)} ${wall.virtual ? 'v' : `${m(wall.thickness)} ${KIND_LETTER[wall.kind]}`}${height}`
     const openings = floor.openings.filter((o) => o.wall === wall.id).map(agentWallOpening)
     const open = floor.openSides.find((side) => side.wall === wall.id)
@@ -440,7 +448,7 @@ function personWalls(floor: FloorFacts, names: PersonNames): string[] {
   return floor.walls.map((wall) => {
     const what = wall.virtual
       ? 'a line on the floor, no wall'
-      : `${wall.kind} wall, ${m(wall.thickness)} thick${wall.height === floor.wallHeight ? '' : `, ${m(wall.height)} high`}`
+      : `${wall.kind} wall, ${m(wall.thickness)} thick${wall.height === floor.wallHeight ? '' : wall.heightNotStated ? ', height not stated' : `, ${m(wall.height)} high`}`
     const open = floor.openSides.find((side) => side.wall === wall.id)
     const joins = open ? `; ${names.room(open.rooms[0])} on one side, ${names.room(open.rooms[1])} on the other` : ''
     const openings = floor.openings

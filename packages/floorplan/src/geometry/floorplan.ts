@@ -34,6 +34,8 @@ import { liftSymbol } from './liftSymbol'
 import { wholePlan } from './floors'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
+import { planMarks } from './marks'
+import type { MarkedPart } from '../types/floorplan'
 
 export interface PlanWall {
   readonly id: string
@@ -53,6 +55,8 @@ export interface PlanWall {
   readonly centerline: readonly [Vec2, Vec2]
   /** How thick it is, in metres: 0 for a virtual wall, which is a line (SHT-4: where its faces are). */
   readonly thickness: number
+  /** WRT-6: the plan marks the wall, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
 }
 
 export interface PlanRoom {
@@ -72,6 +76,8 @@ export interface PlanRoom {
   readonly area: number
   /** Where to place the name label. In a room with holes, a point on its floor, never in a hole. */
   readonly labelAt: Vec2
+  /** WRT-6: the plan marks the room, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
 }
 
 export interface PlanOpening {
@@ -89,6 +95,8 @@ export interface PlanOpening {
   readonly hinge?: Opening['hinge']
   /** The face a door opens toward, when the plan states it (`left` is the face `normal` points at). */
   readonly swing?: Opening['swing']
+  /** WRT-6: the plan marks the opening, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
 }
 
 /** A fixture, ready to draw (CNT-12): its footprint and its symbol inside it, to scale. */
@@ -104,6 +112,8 @@ export interface PlanItem {
   /** Rings to fill with the paper and outline, in order, then lines over them (`itemSymbol`). */
   readonly rings: readonly (readonly Vec2[])[]
   readonly lines: readonly (readonly Vec2[])[]
+  /** WRT-6: the plan marks the fixture, or a value of it, assumed. Left out when it does not. */
+  readonly assumed?: true
 }
 
 /**
@@ -272,6 +282,9 @@ export function planBounds(plan: FloorPlan): Bounds {
 export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const index = indexPlan(plan)
   const { issues, broken } = validatePlan(plan, index)
+  // WRT-6: what the plan marks assumed is drawn in its own style; only those parts get the key.
+  const marks = planMarks(plan)
+  const assumed = (part: MarkedPart, id: string): { assumed?: true } => (marks.assumed(part, id) ? { assumed: true } : {})
 
   const walls: PlanWall[] = []
   const openings: PlanOpening[] = []
@@ -292,7 +305,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       exposure: wallExposure(index, wall.id),
       slices,
       centerline: wallCenterline(wall),
-      thickness: wall.virtual ? 0 : wall.thickness
+      thickness: wall.virtual ? 0 : wall.thickness,
+      ...assumed('wall', wall.id)
     })
 
     for (const slice of slices) extent.push(...slice)
@@ -313,7 +327,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
         width: opening.width,
         // Only what the plan states: an undecided door has no key, so nothing downstream guesses.
         ...(opening.hinge !== undefined && { hinge: opening.hinge }),
-        ...(opening.swing !== undefined && { swing: opening.swing })
+        ...(opening.swing !== undefined && { swing: opening.swing }),
+        ...assumed('opening', opening.id)
       })
     }
   }
@@ -339,7 +354,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       area: roomFloorArea(room, index, polygon),
       // The middle of the corners of a ring lies in its hole: there, the point of its floor
       // farthest from every edge.
-      labelAt: holes.length === 0 ? centroid(polygon) : poleOfInaccessibility(polygon, undefined, holes).point
+      labelAt: holes.length === 0 ? centroid(polygon) : poleOfInaccessibility(polygon, undefined, holes).point,
+      ...assumed('room', room.id)
     })
     extent.push(...polygon)
   }
@@ -359,7 +375,8 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
         room: itemRoom(item, shapes)?.id ?? null,
         outline,
         rings: symbol.rings,
-        lines: symbol.lines
+        lines: symbol.lines,
+        ...assumed('item', item.id)
       })
       extent.push(...outline)
     }

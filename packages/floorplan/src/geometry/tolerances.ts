@@ -23,8 +23,8 @@
 
 export type ToleranceKind = 'tolerance' | 'limit' | 'arithmetic'
 
-/** What an entry is in. A `ratio` and a `sine` have no unit. */
-export type ToleranceUnit = 'm' | 'm²' | 'radian' | 'sine' | 'ratio'
+/** What an entry is in. A `ratio`, a `sine` and a `count` have no unit. */
+export type ToleranceUnit = 'm' | 'm²' | 'radian' | 'sine' | 'ratio' | 'count'
 
 /** The kinds of building a limit can depend on, as the plan says it (`buildingKind`). */
 export type BuildingKind = 'any' | 'home'
@@ -114,6 +114,17 @@ export const TOLERANCES = {
     decides:
       'Two neighbouring walls of a room whose directions differ by less than this (the sine of ' +
       '15 degrees) may be one straight side, when they touch end to end.',
+    basis: own
+  },
+  // WRT-6 (lab AE-4): squaring a scan.
+  squareWithin: {
+    kind: 'tolerance',
+    value: 0.0523,
+    unit: 'sine',
+    decides:
+      'When a scan is squared, a wall whose direction is closer than this (the sine of about 3 ' +
+      'degrees) to one of the plan\'s main directions is turned onto it; a wall further off is ' +
+      'left as it is and named.',
     basis: own
   },
   sameFace: {
@@ -364,8 +375,19 @@ export const TOLERANCES = {
     value: 2,
     unit: 'm',
     decides:
-      'A door to the outside on a floor standing higher than this above the ground floor opens in ' +
-      'mid-air: it is named, and it is not a way out. Lower, a few steps outside can reach the ground.',
+      'A door to the outside on a floor standing higher than this above the ground (the level the ' +
+      'site states, else the ground floor\'s) opens in mid-air: it is named, and it is not a way out. ' +
+      'Lower, a few steps outside can reach the ground.',
+    basis: own
+  },
+
+  openingBelowGround: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'A door or window in an outside wall whose foot lies less than this under the ground level the ' +
+      'site states stands at the ground; further down, it is named as lying below the ground.',
     basis: own
   },
 
@@ -416,6 +438,86 @@ export const TOLERANCES = {
     decides:
       'How far a fixture may rise past the height of the room it stands in and still fit under the ' +
       'ceiling. Past it, the fixture is named with both heights.',
+    basis: own
+  },
+
+  // ── Use indicators round the fixtures (CNT-13) ────────────────────────────────────────────
+  // Measured on the plan, never a rule: each answer says what it measured and the width it set
+  // it against, the person's own or one of these, named as Grid's own indicator.
+  useOpenLeaf: {
+    kind: 'limit',
+    value: 0.05,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. What an open door leaf and its stop are taken to stand ' +
+      'in its doorway: the clear width a door leaves is the hole in its wall less this. A doorless ' +
+      'opening leaves its whole hole.',
+    basis: own
+  },
+  useApproachDepth: {
+    kind: 'limit',
+    value: 0.3,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. How far in front of a doorway or a window a fixture ' +
+      'counts as standing in it: one within this of the hole, across its width, narrows the ' +
+      'doorway (`item/blocks-doorway`), or blocks the window when it stands higher than the sill ' +
+      '(`item/blocks-window`).',
+    basis: own
+  },
+  useDoorwayClear: {
+    kind: 'limit',
+    value: 0.8,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The clear width a doorway is set against, as Grid\'s ' +
+      'own indicator, when the person gives none.',
+    basis: own
+  },
+  usePassageWidth: {
+    kind: 'limit',
+    value: 0.9,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The width of the way through a room, between its ' +
+      'doorways and clear of its fixtures, is set against this, as Grid\'s own indicator, when the ' +
+      'person gives no body or trolley width.',
+    basis: own
+  },
+  useTurningCircle: {
+    kind: 'limit',
+    value: 1.5,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The turning circle tried in a room\'s free floor, as ' +
+      'Grid\'s own indicator, when the person gives none.',
+    basis: own
+  },
+  useClearSpace: {
+    kind: 'limit',
+    value: 0.6,
+    unit: 'm',
+    decides:
+      'Grid\'s own size, not a code figure. The clear floor in front of and beside a fixture is set ' +
+      'against this, as Grid\'s own indicator, when the person gives none.',
+    basis: own
+  },
+  useRaster: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'm',
+    decides:
+      'The step of the grid of points the way through a room is measured on: the widest body that ' +
+      'gets from one doorway to another is found to within about this much.',
+    basis: own
+  },
+  useRasterCells: {
+    kind: 'limit',
+    value: 250000,
+    unit: 'count',
+    decides:
+      'The most points the way through one room is measured on. A room that would take more is ' +
+      'measured on a coarser grid, and the answer gives the step it used.',
     basis: own
   },
 
@@ -720,6 +822,15 @@ export const TOLERANCES = {
     value: 1e-15,
     unit: 'ratio',
     decides: 'A slope below this is none when a segment is clipped.',
+    basis: own
+  },
+  shellGrid: {
+    kind: 'arithmetic',
+    value: 1e-6,
+    unit: 'm',
+    decides:
+      'The corners of a slab, a roof and a parapet are drawn and exported rounded to this grid: the ' +
+      'join of the walls leaves each corner of an outline a hair off square, and this puts it square.',
     basis: own
   },
   joinGrids: {

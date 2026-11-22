@@ -262,6 +262,15 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     // A disc of paper under the "?", so the dashed line never runs through it. Not a halo of
     // stroke under the text: Skia, which draws the PNG, does not honour `paint-order`.
     undecidedDisc: { fill: look.paper } as Attrs,
+    // WRT-6 (lab WR-15): what the plan marks assumed, for the person to confirm: a dashed line in
+    // the look's warning colour, with the undecided door's pen and dash, in every look.
+    assumed: {
+      fill: 'none',
+      stroke: look.warning,
+      'stroke-width': width('undecided'),
+      'stroke-dasharray': dashes('undecided'),
+      'stroke-linejoin': 'round'
+    } as Attrs,
     extension: { stroke: look.dimension, 'stroke-width': width('extension') } as Attrs,
     tick: { stroke: look.dimension, 'stroke-width': width('tick'), 'stroke-linecap': 'butt' } as Attrs,
     dimensionLine: (room: boolean): Attrs =>
@@ -597,12 +606,13 @@ function planSceneIn(input: SceneInput): SvgNode[] {
 
   // CNT-12: the fixtures, over the room fills and under the walls, so a wall covers a fixture
   // that runs into it. Each is its symbol to scale, in the wall's ink on the paper. Drawing, not
-  // a target: clicks reach the room underneath.
+  // a target: clicks reach the room underneath. Lit, like a wall, while the warning of a door
+  // that swings into it is hovered (CNT-13).
   for (const item of drawing.items) {
     out.push(
       el(
         'g',
-        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none' },
+        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none', ...live.hit(item.id) },
         [
           ...item.rings.map((ring, index) => el('path', { 'data-part': 'fixture-ring', d: `${pathOf(ring)}`, ...paint.fixture }, [], `r${index}`)),
           ...item.lines.map((line, index) => el('path', { 'data-part': 'fixture-line', d: virtualPath(line), ...paint.fixtureLine }, [], `l${index}`))
@@ -806,6 +816,20 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
     if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
   }
+
+  // WRT-6 (lab WR-15): what the plan marks assumed, drawn in its own style: a dashed line round
+  // each assumed room, wall and fixture and across each assumed opening, over the walls so it
+  // shows on every one. Drawing, not a target: clicks reach the parts underneath.
+  const assumed: SvgNode[] = []
+  for (const room of drawing.rooms) if (room.assumed) assumed.push(el('path', { d: roomPathOf(room), 'data-part': 'assumed-room', 'data-id': room.id, ...paint.assumed }, [], `room:${room.id}`))
+  for (const wall of drawing.walls) {
+    if (!wall.assumed) continue
+    if (wall.virtual) assumed.push(el('path', { d: virtualPath(wall.centerline), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}`))
+    else wall.slices.forEach((slice, index) => assumed.push(el('path', { d: pathOf(slice), 'data-part': 'assumed-wall', 'data-id': wall.id, ...paint.assumed }, [], `wall:${wall.id}:${index}`)))
+  }
+  for (const opening of drawing.openings) if (opening.assumed) assumed.push(lineEl('assumed-opening', across(opening, 0), { 'data-id': opening.id, ...paint.assumed }))
+  for (const item of drawing.items) if (item.assumed) assumed.push(el('path', { d: pathOf(item.outline), 'data-part': 'assumed-item', 'data-id': item.id, ...paint.assumed }, [], `item:${item.id}`))
+  if (assumed.length > 0) out.push(el('g', { 'data-part': 'assumed', 'pointer-events': 'none', role: 'img', 'aria-label': 'Assumed, to confirm' }, assumed, 'assumed'))
 
   // A stair the plan states (LVL-3), on both floors it joins, as the core lays out its symbol
   // (SHT-11): on the floor it rises from, solid up to the break line at the plan's cut and dashed

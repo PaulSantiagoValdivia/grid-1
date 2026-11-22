@@ -33,6 +33,8 @@ export interface Subject {
   readonly also: readonly string[]
   /** The names of the rooms a finding or notice names, as the plan writes them. */
   readonly names: readonly string[]
+  /** CNT-13: the fixtures a line names, each as `kitchen run "k1"` (`itemName`). */
+  readonly items?: readonly string[]
   /** How many floors the plan has. */
   readonly floors: number
   readonly finding?: RuleFinding
@@ -452,6 +454,12 @@ export const CODES = {
     needed: fixed('floor clear of walls where its leaf swings'),
     fix: fixed('Hang it from its other end, open it the other way, or move it clear of that wall.')
   },
+  'opening/door-hits-item': {
+    says: (s) => `${s.label} hits ${(s.items ?? []).join(', ') || 'a fixture'} when it opens`,
+    found: (s) => `its leaf sweeps the floor where ${(s.items ?? []).length === 1 ? 'that fixture stands' : 'those fixtures stand'}`,
+    needed: fixed('floor clear of fixtures where its leaf swings'),
+    fix: fixed('Hang it from its other end, open it the other way, or move the fixture out of its swing.')
+  },
   'opening/doors-collide': {
     says: (s) => `${s.label} hits another door when they open`,
     found: (s) => `its leaf and the leaf of door ${s.also.map(quoted).join(', ')} sweep the same floor`,
@@ -651,6 +659,18 @@ export const CODES = {
     needed: fixed('a fixture no higher than its room'),
     fix: fixed('Lower its height, or give the room or its floor the height it really has.')
   },
+  // CNT-13: use indicators the drawing's check gives. The found is the check's own sentence:
+  // what was measured, with what depth, and that it is an indicator.
+  'item/blocks-doorway': {
+    says: (s) => `${s.label} stands in front of the doorway of ${s.also[0] === undefined ? 'an opening' : quoted(s.also[0])}, an indicator`,
+    needed: fixed('the floor in front of a doorway clear of fixtures, within Grid\'s own approach depth'),
+    fix: fixed('Move the fixture clear of the doorway, or move the doorway along its wall.')
+  },
+  'item/blocks-window': {
+    says: (s) => `${s.label} stands in front of ${s.also[0] === undefined ? 'a window' : `window ${quoted(s.also[0])}`}, higher than its sill, an indicator`,
+    needed: fixed('a fixture in front of a window no higher than its sill, within Grid\'s own approach depth'),
+    fix: fixed('Move the fixture along the wall clear of the window, lower it, or raise the sill.')
+  },
 
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {
@@ -715,6 +735,18 @@ export const CODES = {
     found: (s) => `a door in an outside wall of a floor ${metresText(s.finding?.elevation ?? 0)} m above the ground`,
     needed: fixed('a way out at ground level, or a stair down to one'),
     fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
+  },
+  'opening/below-ground': {
+    says: (s) => s.finding?.message ?? `${s.label} lies below the ground`,
+    found: (s) => {
+      const b = s.finding?.belowGround
+      if (b === undefined) return 'a door or window in an outside wall below the ground level the site states'
+      return b.wholly
+        ? `a door or window in an outside wall whose top is ${metresText(b.top)} m under the ground level the site states`
+        : `a door or window in an outside wall whose foot is ${metresText(b.foot)} m under the ground level the site states, its top above it`
+    },
+    needed: fixed('a door or window above the ground outside, or a light well or an outside stair in front of it'),
+    fix: fixed('If the ground in front of it is dug away, as for a light well or an area, draw that space; if the ground level is not right, change site.ground.')
   },
   'room/stair-out-of-line': {
     says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
@@ -886,6 +918,19 @@ export const CODES = {
     found: (s) => `bedrooms above the third storey: ${s.names.map(quoted).join(', ')}`,
     needed: fixed('figures for escape from bedrooms above the third storey, which these checks do not carry'),
     fix: fixed('Nothing to change in the plan: look up how escape from these bedrooms is set out where it will be built.')
+  },
+  // WRT-6 (lab WR-15): what the plan marks assumed, listed for the person to confirm.
+  'plan/value-assumed': {
+    says: (s) => `${s.word ? `The ${s.word} of ${s.label}` : s.label} was assumed, not given or measured`,
+    found: (s) => `marked assumed in the plan's marks${s.said ? `, ${s.said}` : ''}`,
+    needed: fixed('the person\'s word on it: this value confirmed, or the right one'),
+    fix: fixed('Ask the person. When they confirm it, mark it given or measured; when they give another, change it and mark that given.')
+  },
+  'plan/mark-no-part': {
+    says: (s) => `A mark names ${s.label}, which the plan does not have, so the mark is not read`,
+    found: (s) => `a mark on ${s.label}${s.word ? ` (its ${s.word})` : ''}`,
+    needed: fixed('a mark on a part the plan has, by its id'),
+    fix: fixed('Name the part by the id the plan gives it now, or take the mark out.')
   },
   'plan/not-checked-no-rooms': {
     says: () => wordingText(figureWordings.noRooms()),
