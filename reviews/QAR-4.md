@@ -97,11 +97,26 @@ Nothing was removed.
      count on U+E000 and U+E001 drawing as the same missing-glyph box.
    - `packages/cli/src/distribution/__tests__/install.e2e.test.ts`: four `npx` runs through
      `cmd.exe` within 120 s; raise it if it is tight.
-4. **The bundle is over its size budget on `main`.** On `main` at 56ed9b5, `grid.e2e.test.ts`
-   "the built file … is one file" fails: `packages/cli/dist/grid.mjs` is 459,241 bytes, against
-   a limit of 450,000. This branch changes no source, so the first CI run will be red on both
-   systems until the budget is raised or the bundle shrinks. That choice is yours; I left it.
+4. **The bundle's size budget.** Before the last merge of `main`, `grid.e2e.test.ts` "the built
+   file … is one file" failed: the bundle was 459,241 bytes against 450,000. `main` has since
+   raised the budget to 500,000 (the bundle is 463,249 bytes now), and it passes. I changed
+   nothing there.
 5. **The actions are pinned at v4.4.0**, the newest 4.x of each. v7 of both exist. Moving
    major versions is a separate change, and the pins say which release each commit is.
 6. **Windows minutes.** Windows runners count double against private-repository minutes, and
    the full suite with the scoreboard takes several minutes per system.
+
+## Results
+
+On macOS, Node 22, at the tip after merging `main` (cae036c):
+
+- `npm run build`, `npm run typecheck` and `npm run lint` pass.
+- The affected tests all pass, 151 of them in 6 files: the workflow test, the four tests fixed
+  for Windows, CMD-13's report test, and the bundle size test.
+
+One step earlier, before that merge: `check:licenses`, `check:data` and the scoreboard passed,
+and the scoreboard was the same as the stored figures. The full suite passed 4,563 of 4,565
+tests, with two failures, both since cleared:
+
+- the bundle size, which `main` then raised;
+- CMD-13's `<path>` check, fixed on this branch and on `main` alike.
