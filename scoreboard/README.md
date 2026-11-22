@@ -82,8 +82,8 @@ When a step builds a capability with a `none` probe, it writes the probe in the 
 and that is when the count moves.
 
 Which capabilities each turn and each check needs is our reading of the lab's notes, stored in
-`data/turns.json` and `data/checks.json`. With today's Grid, every turn the lab marked
-"answered fully" counts, and no other turn does. The same holds for checks: every check the
+`data/turns.json` and `data/checks.json`. At the baseline, every turn the lab marked
+"answered fully" counted, and no other turn did; ARE-9 added one (below). The same holds for checks: every check the
 lab marked "yes" counts, and no other.
 
 ## The figures
@@ -228,6 +228,14 @@ towards) moved two counts:
 - Damage that passes in silence, 387 to 386, and one more plan caught vaguely (109 to 110): a
   damaged plan whose change now moves a door warning.
 - Rooms measured wrong stays 197: the room outlines are as they were (`reviews/SHT-2.md`).
+
+ARE-9 (net, gross internal and gross external area from the spaces, each with its rule) moved one
+count. Turns answered, 15 to 16: the library now gives gross areas (`gross-area`) and areas by
+floor and by use (`area-table`), each probed with `planAreaFigures`, so the architect's third turn
+(areas of each, by use, circulation share, gross) has everything it needs. It is the first turn
+counted that the lab did not mark "answered fully": the lab's harness had no gross area. The
+estate agent's and the developer's area turns still need feet and inches, and flats. Checks the
+plan can feed stays 5: the two checks that need gross areas also need the plot (`site`).
 
 The same run stores two figures of the detail that had moved earlier without a count moving:
 since MSG-9 limits the text of a plan, 25 lab plans are refused by the schema, not 20, and 16,435

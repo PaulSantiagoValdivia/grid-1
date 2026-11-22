@@ -14,6 +14,7 @@ import type { ServerTool, ToolAnswer } from './protocol'
 import { READ_TOOLS } from './readTools'
 import { labelled, readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
 import { WRITE_TOOLS } from './writeTools'
+import { EDIT_TOOLS } from './editTools'
 
 export { EXPORT_TOOL_NAME, PREVIEW_TOOL_NAME } from './writeTools'
 
@@ -23,6 +24,7 @@ export const GRID_TOOLS: readonly GridTool[] = [
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'read'),
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'write-file'),
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'change-plan'),
+  ...EDIT_TOOLS,
 ]
 
 async function answer(tool: GridTool, raw: unknown, context: ToolContext): Promise<ToolAnswer> {

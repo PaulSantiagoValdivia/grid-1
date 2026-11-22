@@ -105,8 +105,14 @@ export const LINE_PX = {
   /** The warning dot's ring. Drawn inside a group already scaled to pixels. */
   warningRing: 1.5,
   /** The halo behind a warning's text. Drawn inside a group already scaled to pixels. */
-  warningHalo: 4
+  warningHalo: 4,
+  /** The box round the walls of a room that could not be drawn (MSG-8). */
+  undrawn: 1.5,
+  undrawnDash: [6, 4]
 } as const
+
+/** How much of the warning colour tints the box of a room that could not be drawn. */
+export const UNDRAWN_TINT = 0.1
 
 /** Font sizes in screen pixels, from `plan.css`. */
 export const TEXT_PX = {
@@ -114,7 +120,9 @@ export const TEXT_PX = {
   roomArea: 11,
   dimension: 11,
   roomDimension: 10,
-  warning: 12
+  warning: 12,
+  /** The number on a fault mark (MSG-8). */
+  faultNumber: 10
 } as const
 
 /** A length for an attribute: short, and the same on every machine. */

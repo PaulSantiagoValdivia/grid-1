@@ -17,7 +17,7 @@ import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
 import { quoted } from '../fs/projectFiles'
-import { AREA_RULES, GROSS_NOT_KNOWN, planAreas, type FloorAreas } from '../quantities/areas'
+import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
 import { surveyPlan } from '../quantities/survey'
 
 export type SheetLayout = 'client' | 'check'
@@ -217,7 +217,7 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const cover: Body = {
     kind: 'cover', floor: null, topLine: title, title, subtitle: words?.headline ?? null,
     paragraphs: words?.intro ?? [], figures, table: null, picture: { kind: 'model' },
-    notes: areas.grossInternal === null ? [GROSS_NOT_KNOWN] : [],
+    notes: areas.grossInternal === null && areas.grossWhy !== null ? [areas.grossWhy] : [],
   }
   // Never an id here: floors that share a name are told apart by their place in the plan.
   const named = (name: string) => floors.filter((f) => f.name === name).length
@@ -271,7 +271,7 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     notes: [
       ...(whole.report.findings.length === 0 ? [`Findings: none. ${NOTHING_FOUND}`] : []),
       AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
-      ...(areas.grossInternal === null ? [GROSS_NOT_KNOWN] : []),
+      ...(areas.grossWhy === null ? [] : [areas.grossWhy]),
       // What belongs to no floor is said once, here; each floor page says the rest.
       ...whole.issues.filter((i) => i.entity === 'plan').map(issueLine),
       ...whole.report.notChecked.filter((n) => n.floor === '').map(noticeLine),

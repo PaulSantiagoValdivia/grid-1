@@ -17,7 +17,8 @@ export const RESULT_VERSION = 1 as const
  *
  * - `refused`: the plan could not be read, so nothing else was checked.
  * - `left-out`: a part that cannot be drawn. It is skipped by every view, measure and export.
- * - `worth-a-look`: a part that is drawn, and is very likely a mistake.
+ * - `worth-a-look`: a part that is drawn, and is very likely a mistake; and first, a word in the
+ *   file Grid does not read (MSG-4): an unknown field or room use, or an empty plan.
  * - `finding`: what a plan check found (a way out, a door, a room's size, an escape window).
  * - `not-checked`: something a check could not look at in this plan, and why.
  */

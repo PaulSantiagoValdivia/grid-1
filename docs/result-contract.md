@@ -70,9 +70,18 @@ record. It never throws: a check that fails inside Grid becomes a line
 
 1. `refused`: the plan could not be read. Nothing else was checked.
 2. `left-out`: a part that cannot be drawn. Every view, measure and export skips it.
-3. `worth-a-look`: a part that is drawn and is very likely a mistake, door sweeps among them.
+3. `worth-a-look`: a part that is drawn and is very likely a mistake, door sweeps among them;
+   and first, what the file says that Grid does not read (below).
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
+
+### A line's number
+
+A line's number is its place in `lines`, counting from 1. `grid check` prints it before the line,
+and keeps it when only one floor is shown (`--floor`), so a floor's lines can skip numbers.
+`grid draw` and `grid_view` mark each line with the same number on the part it is about, and
+list them under the drawing (MSG-8). The numbers follow the record the drawing was made from:
+`grid check --country` can add lines, and with them change the numbers after them.
 
 ### One wording per code
 
@@ -113,6 +122,16 @@ label.
 | `plan/unknown-word` | {thing} has a word the format does not know | {wanted} at {place} |
 | `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
+| `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
+| `plan/unknown-use` | Room "{name}" has a use Grid does not know, "{use}" | one of the uses Grid knows: bedroom, living, … |
+| `plan/empty` | The plan has nothing in it: no walls, rooms or openings | walls, and the rooms and openings they hold |
+| `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
+| `plan/part-left-out` | {thing} is left out: a value it needs cannot be read | {wanted} at {place} |
+| `plan/value-left-out` | {thing} has a value the format cannot read, and is read without it | {wanted} at {place} |
+| `plan/read-as-meant` | {thing} has a value written another way, and it is read as meant | {wanted} at {place} |
+| `plan/blank-id` | {thing} is left out: its id is blank | an id of its own on every part, with more than spaces in it |
+| `plan/id-clash` | {thing} is left out: another part has the same id | every id on one part only, across the whole plan |
+| `plan/similar-id` | {thing} is left out: its id differs from another part's only in capitals or spaces | ids that differ in more than capitals or spaces |
 | `plan/check-failed` | A check could not run on this plan: something went wrong inside Grid | the check to run to the end |
 | `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin (0, 0) |
 | `plan/duplicate-id` | Id {thing} names more than one wall, room or opening | every id on one wall, room or opening only |
@@ -201,6 +220,18 @@ label.
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 
+### Words Grid does not read
+
+A plan with a field Grid does not know, or a room use it does not know, is still read: without
+that field, and with that room's use not stated. Each is a line worth a look, about the part it
+is on, with the nearest word Grid knows when one was most likely meant: `thick` on a wall gives
+`plan/unknown-field`, whose `found` and `fix` name `thickness` ("Did you mean "thickness"?"). A
+use is read whatever its capitals, so `Bedroom` is `bedroom` and gives no line. A plan with no
+walls, rooms or openings, `{}` among them, gives `plan/empty`. A field name or a use that breaks
+the text rule (MSG-9) is never repeated: the line says it is not. The fields each part has are
+read from the format itself (`readingNotes` in `@ongrid/floorplan/types/reading`), so a field
+added to the format is never named as unknown.
+
 A code is never reused for another meaning. Until the drawing's checks give their figures as
 data, `found` for a problem in the drawing is the check's own sentence, and figures are in it.
 
@@ -262,7 +293,35 @@ A total that left a room out names it, in `leftOut`, in its text ("not proven: l
 
 ## Refusals
 
-A plan is refused when it is not JSON, not a JSON object, or does not fit the plan format.
+A plan is refused when it is not JSON, not a JSON object, holds an unfinished git merge, or
+does not fit the plan format at its top level (a version Grid does not read, a list of parts
+that is not a list).
+
+A fault inside a part refuses nothing (MSG-6). The plan is read part by part, with the
+format's own rules, and each wall, room, opening, floor and fixture that cannot be read as
+written gets a line by its id (or, with no id that can be read, its place) and its place in
+the file:
+
+- `plan/read-as-meant` (`worth-a-look`): a number written as text (`"2.5"`, `"0.9 m"`),
+  `"true"` for true, a word that differs from one the format knows only in its capitals or
+  spaces (`"Exterior"`), a whole number where an id goes. It is read as meant.
+- `plan/value-left-out` (`worth-a-look`): a value the format cannot read in a field the part can
+  do without. The field's default is used, or the field is read as not stated; the line says
+  which. A unit other than metres is read so: every length is read in metres.
+- `plan/part-left-out` (`left-out`): a value the part cannot do without that cannot be read. The
+  part is left out of every view, measure and export, and a room or opening that rests on a wall
+  left out is left out with it (`room/broken-wall`, `opening/broken-wall`, naming the wall).
+- `NaN`, `Infinity` and a number with a decimal comma inside an object (`"offset": 3,45`) are
+  not JSON. They are read as a value that is not there, at their place, and the line names
+  them for what they are. A comma inside a list is JSON, so `[4,6,3,3]` for a point is read as
+  four numbers, and the line says a decimal comma most likely split them.
+- Ids are unique across the whole plan. A blank id (`plan/blank-id`) and an id that differs
+  from an earlier one only in capitals or spaces (`plan/similar-id`) leave the part out; the
+  earlier keeps its id, in the order walls, rooms, openings. Of two parts with one id, only the
+  clash is left out (`plan/id-clash`): a wall keeps its id, since rooms and openings name walls,
+  and otherwise the first in the order walls, rooms, openings, fixtures does. Two walls with one id are both left out (`plan/duplicate-id`): a room that
+  names it could mean either. The lines name both parts, and `plan/id-clash` and
+  `plan/duplicate-id` an id to rename one to.
 
 - In the record: `read: false`, and one `refused` line for each place the format refuses,
   with the part it is in when its id can be read, the place (`walls[2].thickness`) and what
@@ -289,7 +348,7 @@ its text, which says the same.
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (parts that could not be drawn), `note`. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror` | `written`, `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, and `doors` (each door that now joins other rooms). |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
 
@@ -319,6 +378,54 @@ A change that would add a problem that leaves a part out is refused, and nothing
   the same in its text.
 - The tool server's instructions tell an agent how to retell a report: the label first, none of
   the forbidden words, and each figure with its basis and status.
+
+### 2026-11-22: version 1 (WRT-3)
+
+- Five changes to the plan are new tools and `grid edit` verbs: `grid_merge_rooms`,
+  `grid_split_room`, `grid_add_room`, `grid_stretch` and `grid_rename_room`.
+  `grid_change_opening` moves and places an opening (`room`, `side`, `from`, `distance`);
+  `grid_move_room_side` takes an inside size (`to`).
+- Every edit receipt adds `guessed` and `couldNotKeep`. No new message code: refusals of an
+  edit are one line, as before.
+- An opening may state `anchor` in the plan file: what Grid's edits keep its place from.
+
+### 2026-11-22: version 1 (MSG-4)
+
+- New codes, all worth a look: `plan/unknown-field`, `plan/unknown-use` and `plan/empty`. A
+  field or a use Grid does not read was dropped in silence before. `{}` gives `plan/empty`,
+  beside MSG-2's `plan/not-checked-no-rooms`.
+- A room use is read whatever its capitals: `Bedroom` is `bedroom`.
+- `grid check` and `grid_check` read the plan file as written, so they name these words. The
+  edit tools' `toLookAt` counts the file as written, before and after: a change keeps a field
+  Grid does not know, and it is counted on both sides.
+
+### 2026-11-22: a fault stays local (MSG-6)
+
+- A value Grid cannot read inside a wall, room, opening, floor or fixture no longer refuses the
+  plan. Each line's `found` says the place and the value as read (`-0.3 at openings[1].offset`,
+  `NaN, which JSON does not hold as a number at …`), and `needed` what the format takes there.
+  The plan is read part by part: new codes `plan/part-left-out` (`left-out`),
+  `plan/value-left-out` and `plan/read-as-meant` (`worth-a-look`). The record is `read: true`,
+  and every check runs on the rest. Of the scoreboard's 3,000 damaged plans, the 504 the format
+  refused are each read now, with the damaged value named by its part and place.
+- New refusal `plan/unfinished-merge`: a file with git's conflict markers is named as an
+  unfinished merge, with the line of the first conflict and what each side adds or changes, by
+  id. `plan/not-json` now says the line and column where the text stops being JSON.
+- New `plan/blank-id`, `plan/similar-id` and `plan/id-clash` (`left-out`). A room and a wall that
+  share an id now leave out only the room; the rooms on the wall are measured. Before, both were
+  left out with every room on the wall.
+- `plan/duplicate-id` (two walls with one id) names how many parts share the id and an id to
+  rename one to. `room/broken-wall` and `opening/broken-wall` name the wall when it was left out
+  when the plan was read.
+- The `plan/missing-field`, `plan/wrong-type`, `plan/unknown-word`, `plan/out-of-range` and
+  `plan/not-in-format` refusals are now only given for the plan's top level.
+
+### 2026-11-22: people kept out of hand-over files (HND-9)
+
+- The server's instructions and the descriptions of `grid_write_rooms`, `grid_export` and
+  `grid_sheet` say that room names and ids go into every export and sheet: never put a
+  person's name in one. Who sits where belongs in `plan.occupancy.json` beside the plan, which
+  no tool reads and no export carries. No answer changes.
 
 ### 2026-11-22: what is never looked at (COD-4)
 
@@ -363,6 +470,15 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `item/into-wall` and `item/too-tall` are worth a look. A kind the plan does not hold yet (a
   table, a chair) is `item/unknown-kind`: the fixture is left out and nothing else changes.
 - A refusal inside `items` names the item (`thing.kind` `item`) when its id can be read.
+
+### 2026-11-22: what went wrong, on the drawing (MSG-8)
+
+- No field changed. `grid check` and `grid_check` print each line's number, its place in
+  `lines` from 1, in place of a dash; `grid check --json` adds `numbers`, each line's number,
+  which on one floor is still its place in the whole record.
+- `grid draw` and `grid_view` (kind plan) mark every line of the floor drawn with its number on
+  its part, print its words beside the mark, and list the floor's lines under the drawing. A
+  room that cannot be drawn is the dashed box round its walls with its name and the reason.
 
 ### 2026-11-21: version 1 (MSG-1)
 

@@ -11,7 +11,7 @@ import { GENERAL_GUIDANCE_LABEL, planFloors, type FloorPlan } from '@ongrid/floo
 import { PATH_MAX, PathRefused, quoted, type Project } from '../fs/projectFiles'
 import { PROJECT_FILE, projectPlanFile } from '../command/init'
 import { UsageError } from '../command/options'
-import { loadPlan, PlanRefused, type LoadedPlan } from '../command/plan'
+import { loadPlan, PlanRefused, type LoadedPlan, type LoadOptions } from '../command/plan'
 import { ID_MAX as PLAN_ID_MAX, UNSAFE_TEXT } from '../command/planText'
 
 /** The longest id an argument may hold: a floor, room, opening or wall id, as long as a plan file may hold. */
@@ -268,12 +268,15 @@ export function planFileOf(project: Project, plan: unknown): string {
   return own
 }
 
-/** Reads the plan a call names, turning the command's refusals into a tool's. */
-export function readPlan(context: ToolContext, plan: unknown): { project: Project; file: string; loaded: LoadedPlan } {
+/**
+ * Reads the plan a call names, turning the command's refusals into a tool's. A tool that changes
+ * the plan reads it whole (MSG-6), so it never writes back a plan without a part the reader left out.
+ */
+export function readPlan(context: ToolContext, plan: unknown, options: LoadOptions = {}): { project: Project; file: string; loaded: LoadedPlan } {
   const project = projectOf(context)
   const file = planFileOf(project, plan)
   try {
-    return { project, file, loaded: loadPlan(project, file) }
+    return { project, file, loaded: loadPlan(project, file, options) }
   } catch (error) {
     throw asRefusal(error)
   }

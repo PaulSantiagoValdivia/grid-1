@@ -176,7 +176,11 @@ const TURNS: Turn[] = [
     run: async (b) => {
       const r = await ok(b, 'grid_areas', { plan: 'flipped.json', units: 'ft' })
       expect(r.text).toContain('Gross internal: 660 sq ft (61.32 m²)')
-      expect(r.text).toContain('Gross internal area is the floor inside the inner face')
+      expect(r.text).toContain('Gross internal area is the floor inside the inside face of the walls that face outside')
+      // ARE-9: asked for the UK, the inside face comes first and alone, its rule beside it.
+      const gb = await ok(b, 'grid_areas', { plan: 'flipped.json', units: 'ft', country: 'GB' })
+      expect(gb.text).toContain('Gross internal: 660 sq ft (61.32 m²)')
+      expect(gb.text).not.toContain('Gross external:')
     },
   },
   {

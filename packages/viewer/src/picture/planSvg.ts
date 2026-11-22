@@ -28,6 +28,8 @@ import { fitTo, viewBoxOf } from '../canvas2d/viewport'
 import type { Look, LookName, PlanLook } from './look'
 import { LOOKS, lengthText, toLook } from './look'
 import { planScene } from './scene'
+import type { FaultLine, PictureKey } from './faults'
+import { faultKey, faultsOnFloor } from './faults'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
 
@@ -62,6 +64,13 @@ export interface PictureOptions {
    * whole floor and its dimensions when left out. Labels and lines keep their size in pixels.
    */
   readonly frame?: Bounds
+  /**
+   * What went wrong (MSG-8): every line of the plan's result record (`inspectPlan` in
+   * `@ongrid/rules`), in its order. The lines on the floor drawn get a numbered mark on their
+   * part, with their words beside it, and are listed under the drawing by the same numbers.
+   * None by default.
+   */
+  readonly faults?: readonly FaultLine[]
 }
 
 /** A picture before it is written out. */
@@ -81,6 +90,16 @@ export interface Picture {
   readonly undecidedDoors: readonly string[]
   /** The plan's elements: exactly what the app's 2D view draws inside its `<svg>`. */
   readonly nodes: readonly SvgNode[]
+  /**
+   * The key under the drawing, when the picture was given faults: `height` more pixels below
+   * the plan's `height`. Null otherwise.
+   */
+  readonly key: PictureKey | null
+}
+
+/** The picture's whole height in pixels: the plan and the key under it. */
+export function fullHeight(picture: Pick<Picture, 'height' | 'key'>): number {
+  return picture.height + (picture.key?.height ?? 0)
 }
 
 export const DEFAULT_WIDTH = 1200
@@ -168,12 +187,13 @@ function sizeOf(framed: Bounds, options: PictureOptions): { width: number; heigh
 }
 
 function framePicture(plan: FloorPlan, options: PictureOptions) {
-  const slice = planForFloor(plan, resolveFloor(plan, options.floor))
+  const floor = resolveFloor(plan, options.floor)
+  const slice = planForFloor(plan, floor)
   const drawing = buildFloorPlan(slice)
   const dimensions = options.showDimensions === false ? [] : buildDimensions(drawing)
   const framed = options.frame ?? framingOf(drawing, dimensions)
   const { width, height } = sizeOf(framed, options)
-  return { slice, drawing, dimensions, width, height, view: fitTo(framed, width / height) }
+  return { floor, slice, drawing, dimensions, width, height, view: fitTo(framed, width / height) }
 }
 
 /**
@@ -187,8 +207,10 @@ export function pictureView(plan: FloorPlan, options: PictureOptions = {}): Pick
 
 /** Lays out one floor of a plan as a picture, framed the way the 2D view frames it. */
 export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Picture {
-  const { slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
+  const { floor, slice, drawing, dimensions, width, height, view } = framePicture(plan, options)
   const look = lookOf(options.look)
+  const all = options.faults ?? []
+  const faults = faultsOnFloor(all, floor, new Map(slice.openings.map((opening) => [opening.id, opening.wall])))
   const handings = handingsOf(slice)
   const nodes = planScene({
     drawing,
@@ -198,10 +220,12 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     metersPerPixel: view.width / width,
     look,
     ...(options.paperScale === undefined ? {} : { paperScale: paperScaleOption(options.paperScale) }),
-    labels: options.labels
+    labels: options.labels,
+    faults
   })
+  const key = options.faults === undefined ? null : faultKey(faults, all.length - faults.length, width, look.colors)
   const undecidedDoors = look.undecidedDoors ? undecidedIn(drawing, handings) : []
-  return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes }
+  return { width, height, view, look, rooms: drawing.rooms.length, undecidedDoors, nodes, key }
 }
 
 /** How a picture is written as a file. */
@@ -220,11 +244,9 @@ const LABEL_PX = 11
  * The label on a paper-coloured strip in the top-left corner, in pixels like every label, so it
  * reads the same at any zoom. Its width is estimated, never measured, as room labels are.
  */
-function labelNode(picture: Picture): SvgNode {
-  const { view, look } = picture
-  const mpp = view.width / picture.width
+function labelNode(look: Look, x: number, y: number, unitsPerPixel: number): SvgNode {
   const width = GENERAL_GUIDANCE_LABEL.length * LABEL_PX * 0.56 + 12
-  return el('g', { 'data-part': 'guidance-label', transform: `translate(${lengthText(view.x)} ${lengthText(view.y)}) scale(${lengthText(mpp)})` }, [
+  return el('g', { 'data-part': 'guidance-label', transform: `translate(${lengthText(x)} ${lengthText(y)}) scale(${lengthText(unitsPerPixel)})` }, [
     el('rect', { x: 0, y: 0, width: lengthText(width), height: LABEL_PX + 10, fill: look.colors.paper, opacity: 0.9 }),
     el('text', { x: 6, y: LABEL_PX + 3, fill: look.colors.labelSoft, 'font-family': look.colors.font, 'font-size': LABEL_PX }, [GENERAL_GUIDANCE_LABEL])
   ])
@@ -235,7 +257,37 @@ function labelNode(picture: Picture): SvgNode {
  * drawing is the same, only finer. It carries the label in its top-left corner (MSG-3).
  */
 export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOptions = {}): string {
-  const { view, look } = picture
+  const { view, look, key } = picture
+  const stamp = options.label !== false
+  const label = `Floor plan with ${picture.rooms} rooms`
+  if (key) {
+    // The plan in its own frame at the top, in plan metres; the key under it, in pixels.
+    const total = fullHeight(picture)
+    const plan = el(
+      'svg',
+      { x: 0, y: 0, width: picture.width, height: picture.height, viewBox: viewBoxOf(view), preserveAspectRatio: 'xMidYMid meet' },
+      picture.nodes
+    )
+    const root = el(
+      'svg',
+      {
+        xmlns: 'http://www.w3.org/2000/svg',
+        width: Math.round(picture.width * scale),
+        height: Math.round(total * scale),
+        viewBox: `0 0 ${picture.width} ${total}`,
+        role: 'img',
+        'aria-label': `${label}, and a key of what to look at`
+      },
+      [
+        el('rect', { 'data-part': 'paper', x: 0, y: 0, width: picture.width, height: total, fill: look.colors.paper }),
+        plan,
+        el('g', { 'data-part': 'key', transform: `translate(0 ${picture.height})` }, key.nodes),
+        // In this frame a unit is a pixel already.
+        ...(stamp ? [labelNode(look, 0, 0, 1)] : [])
+      ]
+    )
+    return `${toSvg(root)}\n`
+  }
   const paper = el('rect', {
     'data-part': 'paper',
     x: view.x,
@@ -253,9 +305,9 @@ export function pictureToSvg(picture: Picture, scale = 1, options: PictureFileOp
       viewBox: viewBoxOf(view),
       preserveAspectRatio: 'xMidYMid meet',
       role: 'img',
-      'aria-label': `Floor plan with ${picture.rooms} rooms`
+      'aria-label': label
     },
-    [paper, ...picture.nodes, ...(options.label === false ? [] : [labelNode(picture)])]
+    [paper, ...picture.nodes, ...(stamp ? [labelNode(look, view.x, view.y, view.width / picture.width)] : [])]
   )
   return `${toSvg(root)}\n`
 }

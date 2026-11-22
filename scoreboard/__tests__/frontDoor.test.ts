@@ -13,6 +13,8 @@ const wordingOf = (message: string): string =>
   message
     .replace(/"(?:[^"\\]|\\.)*"(?:, "(?:[^"\\]|\\.)*")*/g, 'NAME')
     .replace(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/g, 'N')
+    // MSG-6: a part whose id cannot be read is named by its place.
+    .replace(/\bThe (?:wall|room|door|window|opening|floor|item) at [a-z]+\[N\]/g, 'THING')
     .replace(/\b(?:Door|Window|Opening|Wall|Room|Floor) NAME|\bThe plan\b/g, 'THING')
 
 describe('the front door over the damage set', () => {
@@ -47,8 +49,9 @@ describe('the front door over the damage set', () => {
     expect(thrown).toBe(0)
     expect(failed).toEqual([])
     expect([...unknown]).toEqual([])
-    // The lab counted 506 plans the schema refuses whole (MS-20); since LVL-1 two of them read.
-    expect(refused).toBe(504)
+    // The lab counted 506 plans the schema refuses whole (MS-20); since LVL-1 two of them read,
+    // and since MSG-6 every one is read part by part, with the damaged value named.
+    expect(refused).toBe(0)
     for (const [code, set] of wordings) expect([...set], code).toHaveLength(1)
   }, 600_000)
 })

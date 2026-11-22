@@ -48,6 +48,15 @@ export const VERSIONS_SPOKEN = `Grid's tool server speaks MCP ${listOf(PER_REQUE
 
 /** What `server/discover` says about the tools, for an agent's host to show. */
 /**
+ * What the guide, the server's instructions and the tools that write a plan, an export or a
+ * sheet all say (HND-9). The DXF writes each room's name, the IFC its name and id, OBJ and GLB
+ * its id, the sheet its name; the plan file holds both.
+ */
+export const ROOM_NAMES_TRAVEL =
+  'Room names and ids go into every export (DXF, IFC, OBJ, GLB) and sheet, and travel with the plan file: never put a person\'s name in a room\'s name or id. '
+  + 'Who sits where belongs in the occupancy file beside the plan (plan.occupancy.json), which no export carries.'
+
+/**
  * What the server tells an agent's host before any tool (WRT-1, WRT-2): rooms-first is the main
  * way to write a plan, and the plan file, not the rooms text, is the source of truth.
  */
@@ -55,6 +64,7 @@ export const INSTRUCTIONS =
   'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. '
   + 'Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls. '
   + 'The plan file is the source of truth; rooms text is a way of writing and reading it. To change a plan, read it back with grid_describe as=rooms, change the text and write it with grid_write_rooms. Each room\'s boundary is derived: never edit it by hand. '
+  + `${ROOM_NAMES_TRAVEL} `
   + 'Every report carries the label General guidance, not your local rules. '
   + RETELLING_RULE
 

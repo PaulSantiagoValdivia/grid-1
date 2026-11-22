@@ -1,12 +1,18 @@
 /**
  * Reads a plan file for a command, or refuses it with one line that says why.
  *
- * A plan is refused when it can't be read, isn't JSON, or isn't a Grid plan by the schema.
- * A plan that passes the schema but has parts that can't be drawn is not refused: those parts
- * are left out, as the app leaves them out, and `grid check` says which and why.
+ * A plan is refused when it can't be read, isn't JSON, holds an unfinished git merge, or isn't
+ * a Grid plan at its top level. A part with a value Grid cannot read is not (MSG-6): the plan is
+ * read part by part, that part is left out or its value read as meant, and the rest is drawn
+ * and checked. A plan that passes the schema but has parts that can't be drawn is not refused
+ * either: those parts are left out, as the app leaves them out, and `grid check` says which and
+ * why. A command that writes the plan back reads it whole (`{ whole: true }`), so nothing the
+ * reader left out is lost.
  */
 import { planFloors, validatePlan, type Issue } from '@ongrid/floorplan/geometry'
-import { FloorPlanSchema, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
+import { FloorPlanSchema, quoted, type FloorPlan, type PlanSchemaIssue } from '@ongrid/floorplan/types/floorplan'
+import { readPlanText, type UnfinishedMerge } from '@ongrid/floorplan/types/jsonText'
+import { readPlanParts, type ReadFault } from '@ongrid/floorplan/types/readParts'
 import { PathRefused, type Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { PLAN_FILE_MAX_BYTES, planTextProblem } from './planText'
@@ -24,6 +30,21 @@ export interface LoadedPlan {
   readonly issues: readonly Issue[]
   /** Ids the views and exports leave out because they can't be drawn. */
   readonly broken: ReadonlySet<string>
+  /** What the reader did with each part or value it could not read as written (MSG-6). */
+  readonly faults?: readonly ReadFault[]
+  /**
+   * The file's text, which `grid check` reads again for the record, so the record names what
+   * the reader did (MSG-6). Absent for a plan made in memory.
+   */
+  readonly text?: string
+}
+
+export interface LoadOptions {
+  /**
+   * Refuse a plan with any part or value the reader could not read as written, as before MSG-6.
+   * For a command that writes the plan back: reading it part by part would drop what it left out.
+   */
+  readonly whole?: boolean
 }
 
 function oneLine(text: string): string {
@@ -89,6 +110,27 @@ function schemaProblem(issue: PlanSchemaIssue): string {
   }
 }
 
+/** An unfinished merge in one line: where, and what each side adds or changes, by id. */
+function mergeText(merge: UnfinishedMerge): string {
+  const side = (label: string | null, other: string): string => (label === null ? other : quoted(label))
+  const ids = (list: readonly string[]): string => (list.length > 6 ? `${list.slice(0, 6).map(quoted).join(', ')} and ${list.length - 6} more` : list.map(quoted).join(', '))
+  const ours = side(merge.ours.label, 'one side')
+  const theirs = side(merge.theirs.label, 'the other')
+  const said = [
+    merge.ours.adds.length > 0 ? `${ours} adds ${ids(merge.ours.adds)}` : null,
+    merge.theirs.adds.length > 0 ? `${theirs} adds ${ids(merge.theirs.adds)}` : null,
+    merge.changed.length > 0 ? `both change ${ids(merge.changed)}` : null,
+  ].filter((part) => part !== null)
+  const conflicts = merge.conflicts === 1 ? 'a conflict' : `${merge.conflicts} conflicts`
+  return `${conflicts} between ${ours} and ${theirs}, the first at line ${merge.line}${said.length > 0 ? `: ${said.join('; ')}` : ''}. Finish the merge and take out git's markers`
+}
+
+/** A reading fault in one line, for a command that refuses it. */
+function faultText(fault: ReadFault): string {
+  if (fault.kind === 'id-clash') return `${fault.part.list}[${fault.part.index}].id is the id of ${fault.kept.list}[${fault.kept.index}] too`
+  return `${pathText(fault.path)} is ${fault.found}, and the format takes ${fault.wants}`
+}
+
 /**
  * CMD-15 (T-5): the trace image a plan names is a path written by whoever wrote the plan, and
  * the plan may come from a stranger. It must lead to a file inside the project folder, by the
@@ -109,32 +151,55 @@ function traceImageCheck(project: Project, file: string, plan: FloorPlan): void 
 }
 
 /** Reads a plan file inside the project. Refused with `PlanRefused`, or `PathRefused` for the path. */
-export function loadPlan(project: Project, file: string): LoadedPlan {
+export function loadPlan(project: Project, file: string, options: LoadOptions = {}): LoadedPlan {
   const { text, real } = readText(project, file)
-  let raw: unknown
-  try {
-    // The reader has dropped a byte-order mark already; a second one is not JSON.
-    raw = JSON.parse(text)
-  } catch (error) {
+  // MSG-6: the text first, for a merge left unfinished, NaN and a decimal comma.
+  const read = readPlanText(text)
+  if (!read.ok && read.fault.kind === 'unfinished-merge') {
+    throw new PlanRefused(`${file} holds an unfinished git merge: ${mergeText(read.fault)}.`)
+  }
+  if (!read.ok) {
+    let error: unknown = null
+    try {
+      // The reader has dropped a byte-order mark already; a second one is not JSON.
+      JSON.parse(text)
+    } catch (thrown) {
+      error = thrown
+    }
     throw new PlanRefused(`${file} is not JSON: ${notJson(text, error)}.`)
   }
+  const raw = read.value
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     throw new PlanRefused(`${file} is not a Grid plan: it must be a JSON object with walls, rooms and openings.`)
   }
   // MSG-9: names and ids are limited and cleaned before the schema reads them.
   const textProblem = planTextProblem(raw as Record<string, unknown>)
   if (textProblem !== null) throw new PlanRefused(`${file} is not a Grid plan: ${textProblem}.`)
-  const parsed = FloorPlanSchema.safeParse(raw)
-  if (!parsed.success) {
+  const parts = readPlanParts(raw, read.marks)
+  const strict = (): void => {
+    // The schema's own words, as before MSG-6.
+    const parsed = FloorPlanSchema.safeParse(raw)
+    if (parsed.success) return
     const [first, ...rest] = parsed.error.issues
     const where = first && first.path.length > 0 ? `${pathText(first.path)}: ` : ''
     const more = rest.length > 0 ? ` (and ${rest.length} more problem${rest.length === 1 ? '' : 's'})` : ''
     throw new PlanRefused(`${file} is not a Grid plan: ${where}${first ? oneLine(schemaProblem(first)) : 'invalid'}${more}`)
   }
-  const plan = parsed.data
+  if (parts.plan === null) {
+    strict()
+    throw new PlanRefused(`${file} is not a Grid plan.`)
+  }
+  if (options.whole === true && parts.faults.length > 0) {
+    // A value the text could not hold is named for what it is; the rest in the schema's words.
+    if (read.marks.length === 0) strict()
+    const [first, ...rest] = parts.faults
+    const more = rest.length > 0 ? ` (and ${rest.length} more)` : ''
+    throw new PlanRefused(`${file} has a part Grid would leave out or read otherwise: ${faultText(first!)}${more}. grid check names each; correct them first.`)
+  }
+  const plan = parts.plan
   traceImageCheck(project, file, plan)
-  const { issues, broken } = validatePlan(plan)
-  return { file: real, plan, issues, broken }
+  const { issues, broken } = validatePlan(plan, undefined, { leftOutWalls: parts.leftOutWalls })
+  return { file: real, plan, issues, broken, faults: parts.faults, text }
 }
 
 /**

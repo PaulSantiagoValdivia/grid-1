@@ -124,7 +124,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   // The plan as a person sees its name: relative to the folder Grid runs in.
   const shownFile = project.shown(project.resolve(planFile))
   if (project.exists(planFile)) {
-    const loaded = loadPlan(project, planFile)
+    // Read whole: the plan is written over, and a part the reader left out would be lost unseen.
+    const loaded = loadPlan(project, planFile, { whole: true })
     before = loaded.plan
     raw = JSON.parse(project.readText(planFile, PLAN_FILE_MAX_BYTES).text) as Record<string, unknown>
     const now = planRevision(before)

@@ -15,12 +15,13 @@ import { inspectPlan } from '@ongrid/rules'
 import { checkExportRequest, ExportWriteFailed, exportIntoProject } from '../command/export'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
-import { changeOpening, DIRECTIONS, EditRefused, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type Mirror, type Patch } from '../edit/edits'
+import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type From, type Mirror, type Patch } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { RoomsRefused, writeRoomsIntoProject } from '../command/write'
 import type { SheetLayout } from '../sheet/pages'
 import { PATH_MAX, PathRefused, quoted } from '../fs/projectFiles'
+import { ROOM_NAMES_TRAVEL } from './protocol'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan, type Survey } from '../quantities/survey'
 import { openingBetween } from './readTools'
@@ -69,6 +70,7 @@ const exportTool: GridTool = {
   description:
     'Use this when the person wants the plan as a file to open in another program: dxf for AutoCAD and other 2D CAD programs (the nearest to DWG), ifc for BIM programs such as Revit, glb or obj for 3D. '
     + 'It writes the file into the exports folder beside the plan, replacing an earlier copy of the same export, and answers with the path it wrote. It never changes the plan. '
+    + `${ROOM_NAMES_TRAVEL} `
     + 'Do not use for a picture to look at (grid_view). For a PDF to read or print, use grid_sheet; JPG is not made. The plan must be a file inside the project folder: any other path is refused.',
   args: {
     plan: { type: 'string', maxLength: PATH_MAX, required: true, description: 'The plan file, as a path inside the project folder.', examples: ['floor-plan.json', 'plan.json'] },
@@ -164,7 +166,9 @@ const sheetTool: GridTool = {
   description:
     'Use this when the person wants the plan as a PDF to read, print or send: layout client for the person the house is for (a cover with the 3D model and key figures, then a page per floor with its drawing and room areas), or layout check for whoever checks the plan (every id, every room\'s use, and what grid check finds on each floor). '
     + 'The words of a client sheet (name, headline, intro, a few paragraphs per floor) are yours to write: pass them as sheet, or Grid reads sheet.json beside the plan. Grid draws only what the plan holds: no furniture or landscape. Every page carries "General guidance, not your local rules". '
-    + 'It writes the PDF into the exports folder beside the plan, replacing an earlier sheet of the same name and layout, and answers with the path and what is on each page. It never changes the plan. Do not use for a single picture (grid_view) or a file for another program (grid_export).',
+    + 'It writes the PDF into the exports folder beside the plan, replacing an earlier sheet of the same name and layout, and answers with the path and what is on each page. It never changes the plan. '
+    + `${ROOM_NAMES_TRAVEL} `
+    + 'Do not use for a single picture (grid_view) or a file for another program (grid_export).',
   args: {
     plan: { type: 'string', maxLength: PATH_MAX, required: true, description: 'The plan file, as a path inside the project folder.', examples: ['plan.json'] },
     layout: { type: 'string', required: true, enum: ['client', 'check'], description: 'client or check.', examples: ['client', 'check'] },
@@ -213,14 +217,14 @@ const sheetTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // The changes to the plan
 
-const OUT_ARG = {
+export const OUT_ARG = {
   type: 'string' as const,
   maxLength: PATH_MAX,
   description: 'Write the changed plan to this file, inside the project folder, ending in .json, and leave plan as it is. The plan itself is replaced when left out.',
   examples: ['option-b2.json', 'plan.json'],
 }
 
-const EDIT_OUTPUT = objectSchema({
+export const EDIT_OUTPUT = objectSchema({
   written: STRING,
   changed: listSchema(STRING),
   verdict: STRING,
@@ -229,6 +233,9 @@ const EDIT_OUTPUT = objectSchema({
   toLookAt: objectSchema({ before: { type: 'number' }, after: { type: 'number' } }),
   // MSG-14: each door or doorless opening that joins other rooms after the change, in words.
   doors: listSchema(STRING),
+  // WRT-3: what the request left open and Grid chose, and what the change could not keep.
+  guessed: listSchema(STRING),
+  couldNotKeep: listSchema(STRING),
 })
 
 function errorsOf(plan: FloorPlan): Array<{ id: string; message: string }> {
@@ -236,8 +243,8 @@ function errorsOf(plan: FloorPlan): Array<{ id: string; message: string }> {
 }
 
 /** Applies a patch to the plan file, or refuses it with nothing written. */
-function writeChange(context: ToolContext, args: Record<string, unknown>, make: (survey: Survey) => Patch): { text: string; data: Record<string, unknown> } {
-  const { project, file, loaded } = readPlan(context, args['plan'])
+export function writeChange(context: ToolContext, args: Record<string, unknown>, make: (survey: Survey) => Patch): { text: string; data: Record<string, unknown> } {
+  const { project, file, loaded } = readPlan(context, args['plan'], { whole: true })
   const out = (args['out'] as string | undefined) ?? file
   if (!out.toLowerCase().endsWith('.json')) throw new ToolRefusal('out must name a .json file.')
   const before = surveyPlan(loaded.plan)
@@ -265,25 +272,36 @@ function writeChange(context: ToolContext, args: Record<string, unknown>, make: 
     throw new ToolRefusal(`${file} could not be read again to write the change; nothing was written.`)
   }
   let written: string
+  let next: unknown
   try {
-    const next = keptDerived(loaded.plan.rooms, applyPatch(raw, patch))
+    next = keptDerived(loaded.plan.rooms, applyPatch(raw, patch))
     written = project.relative(project.writeFile(out, `${JSON.stringify(next, null, 2)}\n`))
   } catch (error) {
     if (error instanceof PathRefused) throw new ToolRefusal(error.message)
     throw new ToolRefusal(`Can't write ${quoted(out)}: ${String((error as Error).message).replace(/\s+/g, ' ')}`)
   }
   const verdict = comparePlans(before, surveyPlan(after), ['the plan before', 'the plan now']).verdict
-  const doors = doorsThatChangedRooms(loaded.plan, after).map((change) => `${change.message}.`)
+  // A door that joined a room now part of another (a merge) joins the same space: not a change.
+  const become = patch.roomsBecome ?? new Map<string, string>()
+  const key = (sides: readonly object[]): string => sides.map((side) => ('room' in side ? `r${become.get((side as { room: string }).room) ?? (side as { room: string }).room}` : JSON.stringify(side))).sort().join('|')
+  const doors = doorsThatChangedRooms(loaded.plan, after)
+    .filter((change) => become.size === 0 || key(change.before) !== key(change.after))
+    .map((change) => `${change.message}.`)
   const drawingProblems = { before: validatePlan(loaded.plan).issues.length, after: validatePlan(after).issues.length }
-  const toLookAt = { before: inspectPlan(loaded.plan).count, after: inspectPlan(after).count }
+  // The files as written, before and after (MSG-4): a field Grid does not read is kept by the change, and counted.
+  const toLookAt = { before: inspectPlan(raw).count, after: inspectPlan(next).count }
+  const guessed = [...(patch.guessed ?? [])]
+  const couldNotKeep = [...(patch.notKept ?? [])]
   const text = [
     ...patch.said,
+    ...guessed.map((line) => `Guessed: ${line}`),
+    ...couldNotKeep.map((line) => `Could not keep: ${line}`),
     verdict,
     ...doors,
     `To look at: ${toLookAt.before} → ${toLookAt.after}, of them problems in the drawing ${drawingProblems.before} → ${drawingProblems.after}. grid_check lists them.`,
     `Wrote ${quoted(written)}.`,
   ].join('\n')
-  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, toLookAt, doors } }
+  return { text, data: { written, changed: [...patch.said], verdict, drawingProblems, toLookAt, doors, guessed, couldNotKeep, ...(patch.extra ?? {}) } }
 }
 
 const changeOpeningTool: GridTool = {
@@ -293,6 +311,7 @@ const changeOpeningTool: GridTool = {
   description:
     'Use this when the person asks to make a door or window wider or narrower, change which room a door opens into, raise or lower a sill, turn a window into a door, or take a door or window out: "bathroom door to 90 cm, opening outwards", "block the kitchen door", "a 4 m opening to the garden". '
     + 'It changes one opening in place and answers with what changed and the area verdict. A width that does not fit is refused with the free stretches of the wall, and nothing is written. '
+    + 'To move it to another wall, pass room and side ("the bathroom door to its north wall"); to place it, from and distance, as rooms text does ("0.25 from west"): from a side of room, or without room from an end of its wall. Given from, it keeps that distance when walls move later (its anchor). '
     + 'Do not use to move a wall (grid_move_room_side). Grid has doors, windows and doorless openings only: no bifold, sliding or roof windows. It replaces the plan file unless out is given. Units are metres.',
   args: {
     plan: PLAN_ARG,
@@ -305,12 +324,17 @@ const changeOpeningTool: GridTool = {
     opens_into: { type: 'string', id: true, description: 'Doors: the room id it opens into, or "outside".', examples: ['hall', 'outside'] },
     hinge: { type: 'string', enum: ['start', 'end'], description: 'Doors: the end of the opening it hangs from, start being nearer the wall\'s start.', examples: ['start', 'end'] },
     remove: { type: 'boolean', description: 'true to take the opening out and leave the wall solid. Takes nothing else.', examples: [true] },
+    room: { type: 'string', id: true, description: 'A room: with side, the opening moves to that side of it; with from, it is measured from that room\'s side.', examples: ['bath', 'hall'] },
+    side: { type: 'string', enum: DIRECTIONS, description: 'With room: the side of that room whose wall it moves to.', examples: ['north'] },
+    from: { type: 'string', enum: FROMS, description: 'What its place is measured and kept from: with room, a side of that room (its inside face); without, an end of its wall: start, end, or the end toward north, east, south or west.', examples: ['west', 'start'] },
+    distance: { type: 'number', description: 'Metres from that side or end to the opening\'s nearer edge. Left out with from, the distance it has now is kept.', examples: [0.25, 0.1], minimum: 0, maximum: 100 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
   run(args, context) {
     return writeChange(context, args, (survey) => {
       const id = openingArg(survey.plan, args['opening'])
+      if (args['room'] !== undefined) roomArg(survey.plan, args['room'])
       if (args['opens_into'] !== undefined && args['opens_into'] !== 'outside') roomArg(survey.plan, args['opens_into'], 'opens_into room')
       const patch = changeOpening(survey, id, {
         ...(args['width'] !== undefined ? { width: args['width'] as number } : {}),
@@ -321,6 +345,10 @@ const changeOpeningTool: GridTool = {
         ...(args['opens_into'] !== undefined ? { opensInto: args['opens_into'] as string } : {}),
         ...(args['hinge'] !== undefined ? { hinge: args['hinge'] as 'start' | 'end' } : {}),
         ...(args['remove'] === true ? { remove: true } : {}),
+        ...(args['room'] !== undefined ? { room: args['room'] as string } : {}),
+        ...(args['side'] !== undefined ? { side: args['side'] as Direction } : {}),
+        ...(args['from'] !== undefined ? { from: args['from'] as From } : {}),
+        ...(args['distance'] !== undefined ? { distance: args['distance'] as number } : {}),
       })
       const between = openingBetween(survey, id)
       return between ? { ...patch, said: [...patch.said, `It is between ${between}.`] } : patch
@@ -334,23 +362,33 @@ const moveSideTool: GridTool = {
   hint: 'change-plan',
   description:
     'Use this when the person asks to make a room deeper or wider by moving one of its walls, or to build out: "go out 3 m at the back, full width", "make the kitchen 1 m longer", "bring the bedroom wall in 0.5 m". '
-    + 'It moves the wall on the named side of the room straight out (a positive distance) or in (negative); walls that end on it follow, and its doors and windows move with it. It answers with every room whose area changed. '
+    + 'It moves the wall on the named side of the room straight out (a positive distance) or in (negative), or to give the room an inside size (to: "the kitchen 4 m deep"); walls that end on it follow, and its doors and windows move with it. Doors and windows on the walls that grow keep their anchor or their place in the building, and a door that would end up between other rooms follows the wall where it can. It answers with every room whose area changed, what it guessed and what it could not keep. '
     + 'Only a side square to the drawing moves: north is the top of the drawing. Do not use to add a separate room or to split one. It replaces the plan file unless out is given. Units are metres.',
   args: {
     plan: PLAN_ARG,
     room: { type: 'string', id: true, required: true, description: 'The room whose side moves.', examples: ['kitchen', 'bed1'] },
     side: { type: 'string', enum: DIRECTIONS, required: true, description: 'Which side of the room: north (the top of the drawing), east, south or west.', examples: ['north', 'east'] },
-    by: { type: 'number', required: true, description: 'Metres to move it: positive makes the room bigger, negative smaller.', examples: [3, -0.5], minimum: -50, maximum: 50 },
+    by: { type: 'number', description: 'Metres to move it: positive makes the room bigger, negative smaller. Pass by or to.', examples: [3, -0.5], minimum: -50, maximum: 50 },
+    to: { type: 'number', description: 'The room\'s inside size across that side after the move, in metres: its depth for north or south, its width for east or west. Pass by or to.', examples: [4, 3.2], minimum: 0.3, maximum: 100 },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
   run(args, context) {
+    if (args['by'] === undefined && args['to'] === undefined) throw new ToolRefusal('Pass by (metres to move it) or to (the inside size it should have).')
+    if (args['by'] !== undefined && args['to'] !== undefined) throw new ToolRefusal('Pass by or to, not both.')
     if (args['by'] === 0) throw new ToolRefusal('by is 0: nothing would move.')
     return writeChange(context, args, (survey) => {
       const id = roomArg(survey.plan, args['room'])
       const room = survey.byId.get(id)
       if (!room || room.polygon.length < 3) throw new EditRefused('That room has no outline Grid can measure; grid_check says why.')
-      return moveRoomSide(survey, id, args['side'] as Direction, args['by'] as number)
+      const side = args['side'] as Direction
+      if (args['to'] === undefined) return moveRoomSide(survey, id, side, args['by'] as number)
+      const now = insideAcross(survey, id, side)
+      const by = (args['to'] as number) - now
+      const across = side === 'north' || side === 'south' ? 'depth (north-south)' : 'width (east-west)'
+      if (Math.abs(by) < 0.0005) throw new EditRefused(`${JSON.stringify(room.facts.name)} is ${now.toFixed(2)} m inside already, its ${across}.`)
+      const patch = moveRoomSide(survey, id, side, by)
+      return { ...patch, said: [`${JSON.stringify(room.facts.name)}: inside ${across} ${now.toFixed(2)} → ${(args['to'] as number).toFixed(2)} m.`, ...patch.said] }
     })
   },
 }
@@ -399,6 +437,7 @@ const writeRoomsTool: GridTool = {
     + 'Grid works out the walls, their kinds, each room\'s boundary and each opening\'s place, and writes them into the plan file, which stays the source of truth: its walls stay there and stay editable. '
     + 'To change a plan, read it back with grid_describe as=rooms, change that text and pass it here: rooms text read from an older plan, or written over a plan changed some other way, is refused with the difference, and nothing is written (replace=true writes over it). Overlapping rooms and gaps that are neither wall nor room are refused, naming both rooms. '
     + 'A size may say centre or outside (8 x 10 outside: to the outside faces); inside is the default. What rooms cannot say (a free-standing wall, a room with a hole) is written raw, as one line of Grid\'s own JSON: raw wall {...}. '
+    + `${ROOM_NAMES_TRAVEL} `
     + 'Do not use for one door or window (grid_change_opening) or one wall moved (grid_move_room_side). It replaces the plan file. Units are metres.',
   args: {
     plan: { ...PLAN_ARG, description: 'The plan file to write, inside the project folder, ending in .json. The project\'s own plan.json when left out.' },

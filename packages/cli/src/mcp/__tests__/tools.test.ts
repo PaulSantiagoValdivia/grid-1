@@ -24,10 +24,15 @@ const ORDER = [
   'grid_change_opening',
   'grid_move_room_side',
   'grid_mirror',
+  'grid_merge_rooms',
+  'grid_split_room',
+  'grid_add_room',
+  'grid_stretch',
+  'grid_rename_room',
 ]
 
 const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_preview'])
-const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror'])
+const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room'])
 
 interface Listed {
   name: string
@@ -65,7 +70,9 @@ describe('tools/list', () => {
 
   it('keeps about a dozen tools', async () => {
     // 15 since WRT-2: writing rooms first, the main way to write a plan, has its own tool.
-    expect((await listed()).length).toBeLessThanOrEqual(15)
+    // 20 since WRT-3: one sentence of request is one call (lab WR-2), so merge, split, add a
+    // room, stretch and rename each have one.
+    expect((await listed()).length).toBeLessThanOrEqual(20)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -102,7 +109,7 @@ describe('tools/list', () => {
 
   it('says the units are metres wherever a tool takes or gives a length', async () => {
     for (const tool of await listed()) {
-      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mirror'].includes(tool.name)) continue
+      if (['grid_describe', 'grid_check', 'grid_preview', 'grid_export', 'grid_sheet', 'grid_mirror', 'grid_rename_room'].includes(tool.name)) continue
       expect(tool.description, tool.name).toMatch(/metres/)
     }
   })
@@ -148,6 +155,11 @@ describe('the tools on a two-bedroom flat', () => {
     grid_change_opening: { opening: 'door-bath', width: 0.8, out: 'changed.json' },
     grid_move_room_side: { room: 'bed2', side: 'north', by: 0.5, out: 'moved.json' },
     grid_mirror: { how: 'left-right', out: 'mirrored.json' },
+    grid_merge_rooms: { room: 'living', with: 'kitchen', out: 'merged.json' },
+    grid_split_room: { room: 'bed2', side: 'east', size: 1.4, new_room: 'bath2', new_name: 'Bathroom 2', new_use: 'bathroom', out: 'split.json' },
+    grid_add_room: { room: 'extension', name: 'Garden room', use: 'living', against: 'living', side: 'south', width: 3, depth: 3, in_the_way: 'remove', opening_width: 2, out: 'extended.json' },
+    grid_stretch: { side: 'east', by: 0.3, out: 'wider.json' },
+    grid_rename_room: { room: 'bed2', name: 'Study', use: 'other', out: 'renamed.json' },
   }
 
   it('answers every tool with text and data that fit its output schema', async () => {
@@ -182,7 +194,7 @@ describe('the tools on a two-bedroom flat', () => {
     const withFloor = GRID_TOOLS.filter((tool) => 'floor' in tool.args).map((tool) => tool.name)
     expect(withFloor.length).toBeGreaterThanOrEqual(6)
     for (const name of withFloor) {
-      const args = name === 'grid_view' ? { kind: 'plan', floor: 'basement-99' } : name === 'grid_export' ? { plan: 'plan.json', format: 'dxf', floor: 'basement-99' } : name === 'grid_compare' ? { plans: ['plan.json', 'flat.json'], picture: true, floor: 'basement-99' } : { floor: 'basement-99' }
+      const args = name === 'grid_stretch' ? { side: 'east', by: 0.3, floor: 'basement-99' } : name === 'grid_view' ? { kind: 'plan', floor: 'basement-99' } : name === 'grid_export' ? { plan: 'plan.json', format: 'dxf', floor: 'basement-99' } : name === 'grid_compare' ? { plans: ['plan.json', 'flat.json'], picture: true, floor: 'basement-99' } : { floor: 'basement-99' }
       const reply = await b.call(name, args)
       expect(reply.isError, name).toBe(true)
       expect(reply.text, name).not.toContain('basement-99')

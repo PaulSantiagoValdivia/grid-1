@@ -26,6 +26,7 @@ import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { RETELLING_RULE } from '../mcp/retelling'
 import { dependencies } from '../../package.json'
 import type { GridTool } from '../mcp/toolkit'
+import { ROOM_NAMES_TRAVEL } from '../mcp/protocol'
 
 /** The npm package, and the command `npx` runs from it. */
 export const PACKAGE_NAME = 'ongrid'
@@ -134,8 +135,12 @@ function skill(): string {
     '5. Write a plan rooms first, the main way to write one: `grid_write_rooms` takes the rooms',
     '   with their sizes and neighbours and works out the walls. The plan file is the source of',
     '   truth: to change a plan, read it back with `grid_describe` as=rooms, change the text and',
-    '   write it again. For one door or wall, `grid_change_opening`, `grid_move_room_side` or',
-    '   `grid_mirror`; each says what it changed. Change the plan only when asked.',
+    '   write it again. For one sentence of request, one change: `grid_change_opening`,',
+    '   `grid_move_room_side`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`,',
+    '   `grid_stretch`, `grid_rename_room` or `grid_mirror`; each says what it changed, what it',
+    '   guessed and what it could not keep. Change the plan only when asked.',
+    '',
+    ROOM_NAMES_TRAVEL,
     '',
     `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}".`,
     RETELLING_RULE,

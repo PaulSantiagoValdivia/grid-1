@@ -5,8 +5,9 @@
  * and font written in. Its elements are the ones the app's 2D view draws. For PNG, see
  * `drawPlan` in the `ongrid` package.
  */
-export { planToSvg, planPicture, pictureView, pictureToSvg, lookOf, undecidedDoorsOf, DEFAULT_WIDTH } from './planSvg'
+export { planToSvg, planPicture, pictureView, pictureToSvg, lookOf, undecidedDoorsOf, fullHeight, DEFAULT_WIDTH } from './planSvg'
 export type { PictureOptions, Picture, PictureFileOptions } from './planSvg'
+export type { FaultLine, PictureKey } from './faults'
 export {
   LIGHT_LOOK,
   DARK_LOOK,
