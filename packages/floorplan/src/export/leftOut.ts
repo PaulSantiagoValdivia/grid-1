@@ -82,7 +82,6 @@ export function exportContents(plan: FloorPlan, floorIds: readonly string[], fau
   const held = new Set<object>()
   const curvedWalls: ApproximatedPart[] = []
   const curvedRooms: ApproximatedPart[] = []
-  const several = planFloors(plan).length > 1
 
   for (const floor of planFloors(plan)) {
     const slice = planForFloor(plan, floor.id)
@@ -97,7 +96,7 @@ export function exportContents(plan: FloorPlan, floorIds: readonly string[], fau
     for (const room of slice.rooms) add('room', room.id, true)
     for (const opening of slice.openings) add('opening', opening.id, false)
     for (const item of slice.items ?? []) add('item', item.id, true)
-    const floorName = several ? floor.id : null
+    const floorName = floor.id
     const curved = new Set(slice.walls.filter((wall) => wall.arc !== undefined && !broken.has(wall.id)).map((wall) => wall.id))
     for (const wall of slice.walls) if (curved.has(wall.id) && wall.virtual !== true) curvedWalls.push({ kind: 'wall', id: wall.id, floor: floorName })
     for (const room of slice.rooms) {

@@ -302,6 +302,17 @@ export const CODES = {
     needed: fixed('a start and an end at different points'),
     fix: fixed('Give the wall two different points, or remove it.')
   },
+  // CNT-18: a curved wall that cannot be built.
+  'wall/arc-ends-apart': {
+    says: (s) => `${s.label} does not end where its curve takes it`,
+    needed: fixed('an end on the circle where the sweep takes the start round the centre'),
+    fix: fixed('Move its end to where the curve reaches, or give the sweep that reaches its end.')
+  },
+  'wall/arc-too-tight': {
+    says: (s) => `${s.label} curves round too small a radius`,
+    needed: fixed('a radius, from the centre to the start, over half the wall\'s thickness'),
+    fix: fixed('Move its centre further from its ends, or make the wall thinner.')
+  },
   'wall/no-thickness': {
     says: (s) => `${s.label} has no thickness`,
     needed: fixed('a thickness above 0, or a virtual wall for a line with no substance'),

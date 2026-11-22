@@ -13,7 +13,7 @@
 import { indexPlan, sub, tolerance, wallAxis, wallEndInOpening, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
-import { applyPatch, type Direction, type Patch, type RoomChange } from './edits'
+import { applyPatch, refuseCurved, type Direction, type Patch, type RoomChange } from './edits'
 import { freshId, usedIds } from './merge'
 import { EditRefused } from './refused'
 import { r3 } from './seat'
@@ -69,6 +69,7 @@ export interface SplitRequest {
 export function splitRoom(survey: Survey, roomId: string, request: SplitRequest): Patch {
   const plan = survey.plan
   const room = plan.rooms.find((r) => r.id === roomId)!
+  refuseCurved(room.boundary.map((id) => plan.walls.find((w) => w.id === id)), 'splitting a room')
   const name = quoted(survey.byId.get(roomId)!.facts.name)
   const used = usedIds(survey)
   if (used.has(request.newRoom.id)) throw new EditRefused(`The id ${quoted(request.newRoom.id)} is already used in the plan; pick another for the new room.`)

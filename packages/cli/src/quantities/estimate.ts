@@ -150,7 +150,8 @@ export function planEstimate(survey: Survey, options: { floors?: readonly string
     if (!onFloor(floor.id)) continue
     for (const wall of floor.walls) {
       if (wall.virtual) continue
-      const length = Math.hypot(wall.end.x - wall.start.x, wall.end.y - wall.start.y)
+      // Along a curved wall's curve (CNT-18).
+      const length = wall.curve?.length ?? Math.hypot(wall.end.x - wall.start.x, wall.end.y - wall.start.y)
       if (length < tolerance('noLength')) continue
       const key = `wall:${wall.kind}:${size(wall.thickness)}`
       const run = byKind.get(key) ?? { kind: wall.kind, thickness: wall.thickness, area: 0 }

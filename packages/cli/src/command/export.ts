@@ -15,6 +15,7 @@ import {
   isExportFormat,
   kindsText,
   partNames,
+  type ApproximatedPart,
   type ExportFormat,
   type LeftOutPart,
   type PlanExport
@@ -172,6 +173,21 @@ export function leftOutText(leftOut: readonly LeftOutPart[]): string | null {
 }
 
 /**
+ * CNT-18: the line that says which curves an export writes as straight pieces, or null when it
+ * writes none so. The file names them too, beside what it leaves out.
+ */
+export function approximatedText(approximated: readonly ApproximatedPart[]): string | null {
+  if (approximated.length === 0) return null
+  const named = (kind: ApproximatedPart['kind'], one: string, many: string): string | null => {
+    const parts = approximated.filter((part) => part.kind === kind)
+    if (parts.length === 0) return null
+    return `${parts.length} ${parts.length === 1 ? one : many} (${someNames(parts.map((part) => ({ kind, id: part.id, place: null, floor: part.floor, code: null })))})`
+  }
+  const said = [named('wall', 'curved wall', 'curved walls'), named('room', 'room along a curved wall', 'rooms along curved walls')].filter((text) => text !== null)
+  return `Wrote the curves of ${said.join(' and ')} as straight pieces that follow the curve, and the file says how far off they are; grid check measures the true curve.`
+}
+
+/**
  * HND-6: an export that would hold nothing of the plan is refused, so an empty file that looks
  * whole is never written. Says which floor, when the plan has several, and what is left out.
  */
@@ -209,6 +225,8 @@ export interface ExportDone {
   readonly written: string
   /** HND-6: what the file leaves out of the plan, which the file names too. */
   readonly leftOut: readonly LeftOutPart[]
+  /** CNT-18: the curves the file writes as straight pieces, which it names too. */
+  readonly approximated: readonly ApproximatedPart[]
   readonly note?: string
 }
 
@@ -224,7 +242,7 @@ export function exportIntoProject(project: Project, planFile: string, format: Ex
   const loaded = loadPlan(project, planFile)
   const made = exportFile(loaded, planFile, format, request)
   const written = writeBesidePlan(project, planFile, made.name.fileName, made.data)
-  const done = { loaded, written, leftOut: made.leftOut }
+  const done = { loaded, written, leftOut: made.leftOut, approximated: made.approximated }
   return made.name.note === undefined ? done : { ...done, note: made.name.note }
 }
 

@@ -103,7 +103,7 @@ export function leftOutLines(parts: readonly LeftOutPart[]): string[] {
 export interface ApproximatedPart {
   readonly kind: 'wall' | 'room'
   readonly id: string
-  /** The floor it is on, when the file holds several. */
+  /** The floor it is on. */
   readonly floor: string | null
 }
 

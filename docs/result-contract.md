@@ -147,6 +147,8 @@ label.
 | `plan/same-level` | {thing} is at the same level as another floor | each floor at its own level, or an elevation in metres on each |
 | `wall/too-large` | {thing} has a number Grid does not accept | finite numbers within the size Grid accepts |
 | `wall/zero-length` | {thing} has no length | a start and an end at different points |
+| `wall/arc-ends-apart` | {thing} does not end where its curve takes it | an end on the circle where the sweep takes the start round the centre |
+| `wall/arc-too-tight` | {thing} curves round too small a radius | a radius, from the centre to the start, over half the wall's thickness |
 | `wall/no-thickness` | {thing} has no thickness | a thickness above 0, or a virtual wall for a line with no substance |
 | `wall/no-height` | {thing} has no height | a height above 0, or a virtual wall for a line with no substance |
 | `wall/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
@@ -452,6 +454,34 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: a curved wall (CNT-18)
+
+- A wall may state `arc`: `{ centre: [x, y], sweep }`, the angle in degrees it turns through
+  round `centre` from `start` to `end` (counter-clockwise positive; 360 is a whole circle, its
+  `start` and `end` one point). Offsets, widths and lengths along it are along the curve, and an
+  opening's hole is the straight chord between its edges. Every figure (areas, lengths, routes,
+  facing) follows the curve; a plan with no curved wall answers exactly as before.
+- New codes, errors about a wall (`thing.kind` `wall`), which leave the wall out of every view,
+  measure and export: `wall/arc-ends-apart`, its end is not on the circle where the sweep takes
+  its start (further than `arcEnds`, 5 mm), and `wall/arc-too-tight`, its radius is no more than
+  half its thickness. A curve the reader cannot read leaves the wall out (`plan/part-left-out`),
+  as a thickness does.
+- `grid_export` adds `approximated`: each curved wall, and each room along one, that the file
+  writes with its curve as straight pieces, as `{ kind: "wall" | "room", id, floor }`, and a
+  line in its text that says so. The DXF writes a curved wall's faces as true arcs and names only
+  the rooms; the IFC writes its axis as a true arc and names the walls and the rooms; the OBJ and
+  the GLB name both. The file says it too, beside what it leaves out: `Grid_Approximated` in an
+  IFC, the `GRID-LEFT-OUT` layer in a DXF, comment lines in an OBJ, `asset.extras.gridApproximated`
+  in a GLB. A plan with no curved wall gets none of it, and its files are as they were.
+- `grid_describe` gives a curved wall's centre and sweep (`arc(5,5 360°)` for an agent, "curving
+  360° anticlockwise round 5, 5 (radius 3, 18.85 along the curve)" for a person). Read back as
+  rooms text, a floor with a curved wall is given in Grid's own terms (`raw` lines), which keep
+  the curve.
+- The edits that move, cut or measure from a side of a room refuse a curved wall, naming it
+  (`isError: true`): rooms text and the room edits draw straight walls. `grid_change_opening`
+  changes an opening on a curved wall along the curve, measured from its start or its end;
+  `grid_mirror` mirrors a curved wall's centre and turns its sweep the other way.
 
 ### 2026-11-22: use indicators round the fixtures (CNT-13)
 

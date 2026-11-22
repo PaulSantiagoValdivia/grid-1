@@ -146,8 +146,11 @@ export function openingChord(wall: Wall, from: number, to: number): WallSegment 
  */
 export function straightPieces(wall: Wall): Wall[] {
   if (wall.arc === undefined) return [wall]
-  const { arc: _arc, ...rest } = wall
-  return wallSegments(wall).map((segment) => ({ ...rest, start: [segment.start.x, segment.start.y], end: [segment.end.x, segment.end.y] }))
+  return wallSegments(wall).map((segment) => {
+    const piece: Wall = { ...wall, start: [segment.start.x, segment.start.y], end: [segment.end.x, segment.end.y] }
+    delete piece.arc
+    return piece
+  })
 }
 
 /**

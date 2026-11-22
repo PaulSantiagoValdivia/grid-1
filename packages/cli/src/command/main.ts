@@ -33,7 +33,7 @@ import { readSeen, SeenRefused } from '../seen/marks'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
-import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
+import { approximatedText, checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
 import type { LeftOutPart } from '@ongrid/floorplan/export'
 import { INIT_OPTIONS, initFolder, initProject, InitRefused, initText, PROJECT_FILE, PROJECT_PLAN, projectPlanFile } from './init'
 import { helpText, onePlanFile, parseOptions, PROJECT_OPTION, textOf, UsageError, type OptionSpecs } from './options'
@@ -410,6 +410,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   if (request.out === undefined) {
     const done = exportIntoProject(project, planFile, format, request)
     warnLeftOut(io, done.loaded, done.leftOut)
+    const curves = approximatedText(done.approximated)
+    if (curves !== null) io.stderr(`${curves}\n`)
     if (done.note) io.stderr(`${done.note}\n`)
     io.stdout(`Wrote ${project.shown(done.written)}\n`)
     return EXIT_OK
@@ -417,6 +419,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
   const loaded = loadPlan(project, planFile)
   const made = exportFile(loaded, planFile, format, request)
   warnLeftOut(io, loaded, made.leftOut)
+  const curves = approximatedText(made.approximated)
+  if (curves !== null) io.stderr(`${curves}\n`)
   io.stdout(`Wrote ${project.shown(write(project, request.out, made.data))}\n`)
   return EXIT_OK
 }

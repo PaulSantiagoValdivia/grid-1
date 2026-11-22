@@ -13,7 +13,7 @@ import { keptDerived } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
 import { EXPORT_FORMATS, isExportFormat } from '@ongrid/floorplan/export'
 import { inspectPlan } from '@ongrid/rules'
-import { checkExportRequest, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
+import { approximatedText, checkExportRequest, ExportWriteFailed, exportIntoProject, leftOutText } from '../command/export'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
 import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, type Direction, type From, type Mirror, type Patch } from '../edit/edits'
@@ -86,6 +86,8 @@ const exportTool: GridTool = {
     leftOutParts: listSchema(
       objectSchema({ kind: STRING, id: NULLABLE_STRING, place: NULLABLE_STRING, floor: NULLABLE_STRING, code: NULLABLE_STRING }, ['kind', 'id', 'place', 'floor', 'code'])
     ),
+    // CNT-18: the curved walls and the rooms along them the file writes as straight pieces.
+    approximated: listSchema(objectSchema({ kind: STRING, id: STRING, floor: NULLABLE_STRING }, ['kind', 'id', 'floor'])),
     note: { type: ['string', 'null'] },
   }),
   run(args, context) {
@@ -105,7 +107,9 @@ const exportTool: GridTool = {
       // HND-6: what this file leaves out, which the file says too.
       const left = leftOutText(done.leftOut)
       if (left !== null) lines.push(left)
-      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, note: done.note ?? null } }
+      const curves = approximatedText(done.approximated)
+      if (curves !== null) lines.push(curves)
+      return { text: lines.join('\n'), data: { written, format, leftOut: done.leftOut.length, leftOutParts: done.leftOut, approximated: done.approximated, note: done.note ?? null } }
     } catch (error) {
       if (error instanceof PathRefused || error instanceof PlanRefused || error instanceof ExportWriteFailed) throw new ToolRefusal(error.message)
       if (error instanceof UsageError) throw new ToolRefusal(asArguments(error.message))

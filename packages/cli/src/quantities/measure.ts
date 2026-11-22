@@ -20,7 +20,9 @@ import {
   spotsInside,
   sub,
   tolerance,
+  curveFault,
   wallAxis,
+  wallLength,
   wallSlicePolygon,
   type FloorPlan,
   type Item,
@@ -272,7 +274,7 @@ export function wallLengths(survey: Survey, wall: Wall): WallLengths {
   return {
     id: wall.id,
     floor: floorOf(wall),
-    length: Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]),
+    length: lengthOf(wall),
     thickness: wall.virtual === true ? 0 : wall.thickness,
     height: wall.height,
     virtual: wall.virtual === true,
@@ -289,15 +291,25 @@ export interface Thing {
   readonly shape: readonly Vec2[]
 }
 
-/** A wall's footprint: its faces, or its line when it is a dividing line. */
+/** A wall's length along its axis: along its curve for a curved wall (CNT-18), 0 for one that cannot be built. */
+function lengthOf(wall: Wall): number {
+  if (wall.arc !== undefined) return curveFault(wall) === null ? wallLength(wall) : 0
+  return Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
+}
+
+/**
+ * A wall's footprint: its faces, or its line when it is a dividing line. A curved wall's is its
+ * faces along the curve (CNT-18); a curved dividing line's, the curve itself as a band of no width.
+ */
 function wallShape(wall: Wall, from: number, to: number): Vec2[] {
+  if (wall.arc !== undefined) return wallSlicePolygon(wall.virtual === true ? { ...wall, thickness: 0 } : wall, from, to)
   const axis = wallAxis(wall)
   if (wall.virtual === true) return [pointAlong(axis, from), pointAlong(axis, to)]
   return wallSlicePolygon(wall, from, to)
 }
 
 export function wallThing(wall: Wall): Thing {
-  const length = Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
+  const length = lengthOf(wall)
   const shape = length < tolerance('noLength') ? [fromTuple(wall.start)] : wallShape(wall, 0, length)
   return { kind: 'wall', id: wall.id, floor: floorOf(wall), shape }
 }

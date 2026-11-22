@@ -15,7 +15,7 @@
 import { tolerance, type Vec2 } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import type { Survey } from '../quantities/survey'
-import { listed, type Direction, type OpeningChange, type Patch } from './edits'
+import { listed, refuseCurved, type Direction, type OpeningChange, type Patch } from './edits'
 import { EditRefused } from './refused'
 import { COMPASS, r3, seatOpenings } from './seat'
 
@@ -64,6 +64,7 @@ export function stretchPlan(survey: Survey, request: StretchRequest): Patch {
     const s = beyond(w.start)
     const e = beyond(w.end)
     if (!s && !e) continue
+    refuseCurved([w], 'stretching the plan')
     const change = { ...(s ? { start: move(w.start) } : {}), ...(e ? { end: move(w.end) } : {}) }
     const ns = change.start ?? w.start
     const ne = change.end ?? w.end

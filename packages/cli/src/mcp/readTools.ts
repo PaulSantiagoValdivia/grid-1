@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { floorOf, itemFootprint, limit, tolerance, wallPointAt, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
 import { checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
@@ -986,8 +986,8 @@ const viewTool: GridTool = {
       const facts = survey.facts.openings.get(target)
       if (!facts) throw new ToolRefusal('That opening can\'t be drawn; grid_check says why.')
       const wall = plan.walls.find((w) => w.id === facts.wall)!
-      const t = (facts.offset + facts.width / 2) / Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
-      toward = { x: wall.start[0] + (wall.end[0] - wall.start[0]) * t, y: wall.start[1] + (wall.end[1] - wall.start[1]) * t }
+      // The opening's middle, along a curved wall's curve too (CNT-18).
+      toward = wallPointAt(wall, facts.offset + facts.width / 2)
       looking = `${facts.type} ${q(target)}`
     }
     const { eyeView } = await import('../draw/views')

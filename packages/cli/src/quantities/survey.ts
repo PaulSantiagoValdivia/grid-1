@@ -13,8 +13,9 @@ import {
   planForFloor,
   roomWallIds,
   sub,
+  curveFault,
   tolerance,
-  wallAxis,
+  wallSegments,
   type FloorPlan,
   type Vec2,
   type Wall,
@@ -60,18 +61,21 @@ function wallOfEdge(from: Vec2, to: Vec2, walls: readonly Wall[]): Wall | null {
   const length = Math.hypot(edge.x, edge.y)
   if (length < tolerance('noLength')) return null
   for (const wall of walls) {
-    const axis = wallAxis(wall)
-    if (axis.length < tolerance('noLength')) continue
-    if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
-    const half = wall.virtual === true ? 0 : wall.thickness / 2
-    const off = (p: Vec2): number => Math.abs(dot(sub(p, axis.start), axis.normal))
-    if (Math.abs(off(from) - half) > ON_FACE_M || Math.abs(off(to) - half) > ON_FACE_M) continue
-    // The side must lie along the wall, not only on its line.
-    const a = dot(sub(from, axis.start), axis.dir)
-    const b = dot(sub(to, axis.start), axis.dir)
-    const reach = wall.thickness / 2 + ON_FACE_M
-    if (Math.max(a, b) < -reach || Math.min(a, b) > axis.length + reach) continue
-    return wall
+    // A curved wall's sides are along its straight pieces (CNT-18).
+    if (wall.arc !== undefined && curveFault(wall) !== null) continue
+    for (const axis of wallSegments(wall)) {
+      if (axis.length < tolerance('noLength')) continue
+      if (Math.abs(cross(edge, axis.dir)) / length > ALONG_WALL_SINE) continue
+      const half = wall.virtual === true ? 0 : wall.thickness / 2
+      const off = (p: Vec2): number => Math.abs(dot(sub(p, axis.start), axis.normal))
+      if (Math.abs(off(from) - half) > ON_FACE_M || Math.abs(off(to) - half) > ON_FACE_M) continue
+      // The side must lie along the wall, not only on its line.
+      const a = dot(sub(from, axis.start), axis.dir)
+      const b = dot(sub(to, axis.start), axis.dir)
+      const reach = wall.thickness / 2 + ON_FACE_M
+      if (Math.max(a, b) < -reach || Math.min(a, b) > axis.length + reach) continue
+      return wall
+    }
   }
   return null
 }

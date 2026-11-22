@@ -420,10 +420,15 @@ function agentWallOpening(opening: OpeningFacts): string {
   return `${head} ${first.room}${gaps}${shown}`
 }
 
+/** Degrees as a description says them: whole, or to a tenth. */
+const degrees = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1))
+
 function agentWalls(floor: FloorFacts): string[] {
   return floor.walls.map((wall) => {
     const height = wall.virtual || wall.height === floor.wallHeight ? '' : ` h${m(wall.height)}`
-    const head = ` ${wall.id} ${m(wall.start.x)},${m(wall.start.y)}>${m(wall.end.x)},${m(wall.end.y)} ${wall.virtual ? 'v' : `${m(wall.thickness)} ${KIND_LETTER[wall.kind]}`}${height}`
+    // CNT-18: a curved wall says its centre and sweep after its ends.
+    const arc = wall.curve === undefined ? '' : ` arc(${m(wall.curve.centre.x)},${m(wall.curve.centre.y)} ${degrees(wall.curve.sweep)}°)`
+    const head = ` ${wall.id} ${m(wall.start.x)},${m(wall.start.y)}>${m(wall.end.x)},${m(wall.end.y)}${arc} ${wall.virtual ? 'v' : `${m(wall.thickness)} ${KIND_LETTER[wall.kind]}`}${height}`
     const openings = floor.openings.filter((o) => o.wall === wall.id).map(agentWallOpening)
     const open = floor.openSides.find((side) => side.wall === wall.id)
     const joins = open ? ` | ${open.rooms[0]}|${open.rooms[1]}` : ''
@@ -446,7 +451,10 @@ function personWalls(floor: FloorFacts, names: PersonNames): string[] {
     const openings = floor.openings
       .filter((o) => o.wall === wall.id)
       .map((opening) => `${opening.type} ${m(opening.width)} at ${m(opening.offset)} (${personSide(opening.sides[0], names)} | ${personSide(opening.sides[1], names)})`)
-    return `  From ${at(wall.start.x, wall.start.y)} to ${at(wall.end.x, wall.end.y)}: ${what}${joins}.${openings.length > 0 ? ` Along it from its start: ${openings.join('; ')}.` : ''}`
+    const curve = wall.curve === undefined
+      ? ''
+      : `, curving ${degrees(Math.abs(wall.curve.sweep))}° ${wall.curve.sweep > 0 ? 'anticlockwise' : 'clockwise'} round ${at(wall.curve.centre.x, wall.curve.centre.y)} (radius ${m(wall.curve.radius)}, ${m(wall.curve.length)} along the curve)`
+    return `  From ${at(wall.start.x, wall.start.y)} to ${at(wall.end.x, wall.end.y)}${curve}: ${what}${joins}.${openings.length > 0 ? ` Along it from its start: ${openings.join('; ')}.` : ''}`
   })
 }
 

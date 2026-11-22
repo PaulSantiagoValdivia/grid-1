@@ -65,7 +65,9 @@ plan, which no export, sheet or tool reads ([People are kept out of the plan](pl
 `leftOutParts`, each part with its `kind`, `id`, `place` (for a part left out when the plan was
 read), `floor` and `code` (the line of `grid_check` that leaves it out). The file carries the
 same note ([What an export leaves out](commands.md#what-an-export-leaves-out-hnd-6)). An export
-that would hold no wall, room or fixture is refused, and nothing is written.
+that would hold no wall, room or fixture is refused, and nothing is written. `approximated` lists
+the curved walls, and the rooms along them, that the file writes with their curve as straight
+pieces (CNT-18), each with its `kind`, `id` and `floor`; empty for a plan with no curved wall.
 
 `grid draw --ids` draws the same check view for a person: each room's id in brackets after its
 name, and each door's and window's id beside it, upright.

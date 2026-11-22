@@ -208,6 +208,15 @@ const roomUseOf = (value: unknown): string | null => {
   return typeof read === 'string' && (ROOM_USES as readonly string[]).includes(read) ? read : null
 }
 
+/** CNT-18: a curved wall's arc, numbers only, kept as the wall's geometry: its centre and sweep. */
+function arcOf(wall: Part): Record<string, Json> {
+  const arc = wall['arc']
+  if (!isObject(arc)) return {}
+  const centre = plainValue(arc['centre'])
+  const sweep = arc['sweep']
+  return Array.isArray(centre) && centre.length === 2 && finiteNumber(sweep) ? { arc: { centre, sweep } } : {}
+}
+
 /** Only plain JSON: numbers, booleans, and lists and objects of them. Text is never copied. */
 function plainValue(value: unknown): Json | undefined {
   if (typeof value === 'boolean' || finiteNumber(value)) return value
@@ -342,7 +351,7 @@ function clearedPlan(raw: Record<string, unknown>, cut: Cut, clearing: Clearing)
       return part('floors', floor, { name: `floor ${i + 1}` })
     })
   }
-  plan['walls'] = cut.walls.map((wall) => part('walls', wall))
+  plan['walls'] = cut.walls.map((wall) => part('walls', wall, arcOf(wall)))
   plan['rooms'] = cut.rooms.map((room) => {
     const extra: Record<string, Json> = { name: uses.get(room)!, boundary: ids(room['boundary']) }
     const use = roomUseOf(room['use'])

@@ -12,7 +12,7 @@
 import { cross, dot, signedArea, sub, tolerance, wallAxis, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { quoted } from '../fs/projectFiles'
 import type { Survey, SurveyRoom } from '../quantities/survey'
-import { type OpeningChange, type Patch, type RoomChange } from './edits'
+import { refuseCurved, type OpeningChange, type Patch, type RoomChange } from './edits'
 import { EditRefused } from './refused'
 import { r3 } from './seat'
 
@@ -118,6 +118,7 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
   if ((aRoom.floor ?? 'ground') !== (bRoom.floor ?? 'ground')) throw new EditRefused(`${an} and ${bn} are on different floors.`)
   if (A.polygon.length < 3 || B.polygon.length < 3) throw new EditRefused(`${A.polygon.length < 3 ? an : bn} has no outline Grid can measure; grid_check says why.`)
   if ((bRoom.holes?.length ?? 0) > 0 || (aRoom.holes?.length ?? 0) > 0) throw new EditRefused('A room with a hole is not merged by this tool; write the plan again with grid_write_rooms.')
+  refuseCurved([...aRoom.boundary, ...bRoom.boundary].map((id) => plan.walls.find((w) => w.id === id)), 'merging rooms')
 
   const shared: Array<{ wall: Wall; s0: number; s1: number }> = []
   for (const id of new Set(aRoom.boundary.filter((w) => bRoom.boundary.includes(w)))) {
