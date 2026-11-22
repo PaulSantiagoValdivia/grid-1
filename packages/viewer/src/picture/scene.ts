@@ -22,7 +22,7 @@
  *
  * Pure: no DOM, no React.
  */
-import type { Dimension, Ghosts, PlanDrawing, PlanOpening, PlanRoom, PlanWall, Vec2 } from '@ongrid/floorplan/geometry'
+import type { Dimension, Ghosts, PlanAbove, PlanDrawing, PlanOpening, PlanRoom, PlanWall, Vec2 } from '@ongrid/floorplan/geometry'
 import { boundsWithDimensions, poleOfInaccessibility, traceWall } from '@ongrid/floorplan/geometry'
 import type { DoorHanding } from '../canvas2d/doorHanding'
 import { doorSymbolOf } from '../canvas2d/doorSymbol'
@@ -163,6 +163,11 @@ export interface SceneInput {
   readonly faults?: readonly NumberedFault[]
   /** SHT-7: what the drawing shows. Everything on, and rooms in one fill, by default. */
   readonly show?: Partial<SceneShow>
+  /**
+   * SHT-11: the outline of the floor above (`floorAbove` of the floor's slice), drawn dashed over
+   * the room fills and under the walls. None by default.
+   */
+  readonly above?: PlanAbove
   /** SHT-7: each room's use by id, for `show.colourBy: 'use'`. */
   readonly uses?: ReadonlyMap<string, RoomUse>
   readonly live?: Partial<SceneLive>
@@ -176,12 +181,14 @@ export interface SceneShow {
   readonly swings: boolean
   /** The door warning dots and the numbered marks of what went wrong (MSG-8). */
   readonly warnings: boolean
+  /** SHT-11: the dashed outline of the floor above. */
+  readonly above: boolean
   /** `use` fills each room by its use; null gives every room the look's one fill. */
   readonly colourBy: 'use' | null
 }
 
 /** Everything shown, rooms in one fill. */
-export const SHOW_ALL: SceneShow = { notes: true, sketch: true, areas: true, swings: true, warnings: true, colourBy: null }
+export const SHOW_ALL: SceneShow = { notes: true, sketch: true, areas: true, swings: true, warnings: true, above: true, colourBy: null }
 
 /** The paint for each part, for one look, zoom and output scale. */
 function paints(named: Look, mpp: number, paperScale: number | undefined) {
@@ -230,7 +237,10 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     jamb: { stroke: ink, 'stroke-width': width('jamb') } as Attrs,
     step: { stroke: ink, 'stroke-width': width('step'), 'stroke-linecap': 'butt' } as Attrs,
     stair: { fill: 'none', stroke: ink, 'stroke-width': width('stair') } as Attrs,
+    // SHT-11: a stair past its break line, dashed as what lies above the cut.
+    stairAbove: { fill: 'none', stroke: ink, 'stroke-width': width('stair'), 'stroke-dasharray': dashes('above') } as Attrs,
     stairArrow: { fill: ink, stroke: 'none' } as Attrs,
+    above: { fill: 'none', stroke: ink, 'stroke-width': width('above'), 'stroke-dasharray': dashes('above') } as Attrs,
     fixture: { fill: look.paper, stroke: ink, 'stroke-width': width('fixture'), 'stroke-linejoin': 'round' } as Attrs,
     fixtureLine: { fill: 'none', stroke: ink, 'stroke-width': width('fixture'), 'stroke-linecap': 'butt' } as Attrs,
     doorLeaf: { stroke: ink, 'stroke-width': width('doorLeaf'), 'stroke-linecap': 'square' } as Attrs,
@@ -305,26 +315,8 @@ type Paints = ReturnType<typeof paints>
 
 const virtualPath = (points: readonly Vec2[]): string => `M${points.map((p) => `${p.x},${-p.y}`).join('L')}`
 
-/**
- * The head of a stair's arrow: a triangle `size` long at the upper end of its walking line,
- * pointing up the stair. Null when the last stretch has no length.
- */
-function stairArrow(line: readonly Vec2[], size: number): string | null {
-  const tip = line[line.length - 1]
-  const back = line[line.length - 2]
-  if (tip === undefined || back === undefined) return null
-  const dx = tip.x - back.x
-  const dy = tip.y - back.y
-  const length = Math.hypot(dx, dy)
-  if (!(length > 0)) return null
-  const ux = dx / length
-  const uy = dy / length
-  const base = { x: tip.x - ux * size, y: tip.y - uy * size }
-  const half = size / 2.5
-  const left = { x: base.x - uy * half, y: base.y + ux * half }
-  const right = { x: base.x + uy * half, y: base.y - ux * half }
-  return `M${tip.x},${-tip.y}L${left.x},${-left.y}L${right.x},${-right.y}Z`
-}
+/** SHT-11: the part each kind of a stair symbol's line is drawn as. */
+const STAIR_PARTS = { outline: 'stair-outline', riser: 'stair-riser', walk: 'stair-line' } as const
 
 /** A label group: placed in metres, then scaled so its contents are in pixels. */
 /** How far an opening's id sits off its wall's face, in screen pixels. */
@@ -614,17 +606,45 @@ function planSceneIn(input: SceneInput): SvgNode[] {
 
   // CNT-12: the fixtures, over the room fills and under the walls, so a wall covers a fixture
   // that runs into it. Each is its symbol to scale, in the wall's ink on the paper. Drawing, not
-  // a target: clicks reach the room underneath.
+  // a target: clicks reach the room underneath. Lit, like a wall, while the warning of a door
+  // that swings into it is hovered (CNT-13).
   for (const item of drawing.items) {
     out.push(
       el(
         'g',
-        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none' },
+        { 'data-part': 'fixture', 'data-id': item.id, 'data-kind': item.kind, 'data-room': item.room ?? undefined, 'pointer-events': 'none', ...live.hit(item.id) },
         [
           ...item.rings.map((ring, index) => el('path', { 'data-part': 'fixture-ring', d: `${pathOf(ring)}`, ...paint.fixture }, [], `r${index}`)),
           ...item.lines.map((line, index) => el('path', { 'data-part': 'fixture-line', d: virtualPath(line), ...paint.fixtureLine }, [], `l${index}`))
         ],
         `fixture:${item.id}`
+      )
+    )
+  }
+
+  // SHT-11: a lift shaft's cross, corner to corner, over its room's fill and under the walls that
+  // box it. Drawing, not a target.
+  for (const lift of drawing.lifts) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'lift', 'data-id': lift.id, 'pointer-events': 'none', 'aria-hidden': 'true' },
+        lift.lines.map(([a, b], index) => el('path', { 'data-part': 'lift-cross', d: virtualPath([a, b]), ...paint.stair }, [], String(index))),
+        `lift:${lift.id}`
+      )
+    )
+  }
+
+  // SHT-11: the outline of the floor above, dashed, over the floors and under the walls, so a
+  // stretch over an inner wall is hidden by it. Drawing, not a target.
+  const above = input.above
+  if (show.above && above !== undefined && above.lines.length > 0) {
+    out.push(
+      el(
+        'g',
+        { 'data-part': 'above', 'data-floors': above.floors.join(' '), 'pointer-events': 'none', 'aria-hidden': 'true' },
+        above.lines.map((line, index) => el('path', { 'data-part': 'above-line', d: virtualPath(line), ...paint.above }, [], String(index))),
+        'above'
       )
     )
   }
@@ -811,22 +831,24 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   for (const item of drawing.items) if (item.assumed) assumed.push(el('path', { d: pathOf(item.outline), 'data-part': 'assumed-item', 'data-id': item.id, ...paint.assumed }, [], `item:${item.id}`))
   if (assumed.length > 0) out.push(el('g', { 'data-part': 'assumed', 'pointer-events': 'none', role: 'img', 'aria-label': 'Assumed, to confirm' }, assumed, 'assumed'))
 
-  // A stair the plan states (LVL-3), on both floors it joins: its flights and landings in outline,
-  // a line across at every riser, and its walking line with an arrow pointing up. Drawing, not a
-  // target: clicks reach the room underneath.
+  // A stair the plan states (LVL-3), on both floors it joins, as the core lays out its symbol
+  // (SHT-11): on the floor it rises from, solid up to the break line at the plan's cut and dashed
+  // above it; on the floor it arrives on, whole. A line at every riser, the walking line and an
+  // arrow head pointing up. Drawing, not a target: clicks reach the room underneath.
   for (const stair of drawing.stairs) {
     const children: SvgNode[] = []
-    for (const outline of [...stair.flights.map((f) => f.outline), ...stair.landings]) {
-      children.push(el('path', { d: pathOf(outline), 'data-part': 'stair-outline', ...paint.stair }))
+    for (const line of stair.symbol.lines) {
+      children.push(
+        el('path', {
+          d: line.closed ? pathOf(line.points) : virtualPath(line.points),
+          'data-part': STAIR_PARTS[line.kind],
+          'data-above': line.above ? 'true' : undefined,
+          ...(line.above ? paint.stairAbove : paint.stair)
+        })
+      )
     }
-    for (const flight of stair.flights) {
-      for (const [a, b] of flight.riserLines) {
-        children.push(el('line', { 'data-part': 'stair-riser', x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, ...paint.stair }))
-      }
-    }
-    children.push(el('path', { d: virtualPath(stair.line), 'data-part': 'stair-line', ...paint.stair }))
-    const head = stairArrow(stair.line, LINE_PX.stairArrow * mpp)
-    if (head !== null) children.push(el('path', { d: head, 'data-part': 'stair-arrow', ...paint.stairArrow }))
+    if (stair.symbol.cut !== null) children.push(el('path', { d: virtualPath(stair.symbol.cut), 'data-part': 'stair-break', ...paint.stair }))
+    if (stair.symbol.arrow !== null) children.push(el('path', { d: pathOf(stair.symbol.arrow), 'data-part': 'stair-arrow', ...paint.stairArrow }))
     out.push(
       el(
         'g',

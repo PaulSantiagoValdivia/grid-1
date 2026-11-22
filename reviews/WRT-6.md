@@ -179,3 +179,18 @@ run here. The built file is 394,143 bytes.
 For the owner: the assumed line capitalises its part mid-sentence ("The height of Wall
 "ext-south" was assumed"), as `assumed.test.ts` pins. Worth a lowercase label with the next
 wording change.
+
+## After merging main at 25747b7
+
+CNT-5, SHT-11 and CNT-13 merged in, with both sides kept: CNT-5's `building` sits after `units`
+in the schema, the plan's field list and the sheet's coverage, and `marks` stays after `site`;
+rooms text reads and writes CNT-5's `building` lines, tenures and room types, and still writes no
+height a wall did not state (`rooms compile` keeps its `null` height rule beside CNT-5's
+`building`); the drawing keeps WRT-6's dashed assumed parts and draws SHT-11's stairs after them;
+`grid_areas`' text gives both the scan's sureness and SHT-11's "counted once with …". Main adds
+no tool, so the tools stay 23. CNT-13's new codes (`opening/door-hits-item`, `item/blocks-doorway`,
+`item/blocks-window`) and CNT-5's `not-checked` codes are ordinary lines: a seen mark keys them by
+code, thing and `also` as before, and the to-confirm lines are untouched.
+
+Build, typecheck and lint are clean, and the affected tests pass (157 files, 3,688 tests, 2
+skipped); the full suite and the scoreboard were not run here. The built file is 408,363 bytes.

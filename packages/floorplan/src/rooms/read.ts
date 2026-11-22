@@ -177,7 +177,7 @@ function floorsDiffer(original: FloorPlan, written: FloorPlan): boolean {
   if (a.length !== b.length) return true
   return a.some((f, i) => {
     const g = b[i]!
-    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab)
+    return f.id !== g.id || f.name !== g.name || f.level !== g.level || !sameNumber(f.elevation, g.elevation) || !sameNumber(f.height, g.height) || !sameNumber(f.slab, g.slab) || f.building !== g.building
   })
 }
 
@@ -270,7 +270,9 @@ function roomLine(room: Room, poly: P[], local: string): string {
   const where = rect ? `${metres(w)} x ${metres(d)} at ${metres(x0)},${metres(y0)}` : `polygon ${poly.map((p) => `${metres(p[0])},${metres(p[1])}`).join(' ')}`
   const height = room.height !== undefined ? ` height ${metres(room.height)}` : ''
   const step = room.floorOffset !== undefined ? ` floor ${metres(room.floorOffset)}` : ''
-  return `room ${local} ${quote(room.name)} ${use} ${where}${height}${step}`
+  const tenure = room.tenure !== undefined ? ` tenure ${room.tenure}` : ''
+  const type = room.roomType !== undefined ? ` type ${quote(room.roomType)}` : ''
+  return `room ${local} ${quote(room.name)} ${use} ${where}${height}${step}${tenure}${type}`
 }
 
 /** The rooms on the two sides of an opening's middle: [left, right] of its wall. */
@@ -466,6 +468,7 @@ function headerLines(plan: FloorPlan, rule: Rule, name: string | undefined): str
   const lines: string[] = []
   if (name !== undefined) lines.push(`plan ${quote(name)}`)
   lines.push(`based on ${planRevision(plan)}`)
+  if (plan.building !== undefined) lines.push(`building ${plan.building}`)
   lines.push(`walls outside ${metres(rule.outside)} inside ${metres(rule.inside)}${rule.kind !== 'interior' ? ` ${rule.kind}` : ''}${rule.height === null ? '' : ` height ${metres(rule.height)}`}`)
   for (const [t, k] of [...rule.types].sort((a, b) => a[0] - b[0])) lines.push(`walltype ${metres(t)} ${k}`)
   if (!sameNumber(rule.doorH, 2.1)) lines.push(`doors height ${metres(rule.doorH)}`)
@@ -481,6 +484,7 @@ function floorLine(plan: FloorPlan, floor: string): string | null {
     ...(f.height !== undefined ? [`height ${metres(f.height)}`] : []),
     ...(f.elevation !== undefined ? [`elevation ${metres(f.elevation)}`] : []),
     ...(f.slab !== undefined ? [`slab ${metres(f.slab)}`] : []),
+    ...(f.building !== undefined ? [`building ${f.building}`] : []),
   ]
   return `floor ${f.id} ${quote(f.name)} ${extra.join(' ')}`
 }

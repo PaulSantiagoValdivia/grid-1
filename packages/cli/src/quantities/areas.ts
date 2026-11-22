@@ -24,7 +24,7 @@ export const AREA_RULES = {
   net: MEASURES.net.measures,
   grossInternal: MEASURES.grossInternal.measures,
   grossExternal: MEASURES.grossExternal.measures,
-  circulation: 'Circulation is the rooms whose use is corridor or stair, as a share of the gross internal area.',
+  circulation: 'Circulation is the rooms whose use is corridor or stair, a stair counted once, as a share of the gross internal area.',
 } as const
 
 /**
@@ -54,6 +54,11 @@ export interface RoomArea {
   /** Inside sizes across and up the drawing, when the room is a rectangle square to it. */
   readonly size: readonly [number, number] | null
   readonly outside: boolean
+  /**
+   * SHT-11, lab DR-5: only on a stair room over a stair room below: the room its floor is counted
+   * with, on the floor the stair rises from. It keeps its own area, and is in no total.
+   */
+  readonly countedWith?: { readonly floor: string; readonly room: string }
   /** CNT-12, only on a room with fixtures: the floor they stand on, and the net area less it. */
   readonly fixtures?: number
   readonly free?: number
@@ -73,6 +78,8 @@ export interface FloorAreas {
   readonly grossInternal: number | null
   readonly grossExternal: number | null
   readonly outsideRooms: number
+  /** SHT-11: the stair rooms whose floor is counted with the stair room below. */
+  readonly overStairs: number
   /** Every solid wall; null with the gross figures. */
   readonly walls: number | null
   /** Enclosed floor that no room covers, on the whole floor. */
@@ -204,13 +211,15 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
         doubts: doubted,
         size: shape?.rectangle ? [shape.across, shape.up] : null,
         outside: outside.has(id),
+        ...(figure?.countedWith === undefined ? {} : { countedWith: figure.countedWith }),
         // Fixtures add no area and take none from the totals: only the room's free floor (CNT-12).
         // A room that could not be measured has no free floor either (MSG-2).
         ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
         ...(sureness === undefined ? {} : { sureness }),
       }
     })
-    const inside = rooms.filter((room) => !room.outside)
+    // A stair room counted with the one below is in no total (SHT-11).
+    const inside = rooms.filter((room) => !room.outside && room.countedWith === undefined)
     const byUseState: Record<string, AreaState> = {}
     for (const use of [...new Set(inside.map((room) => room.use ?? NOT_SAID))]) byUseState[use] = sumState(inside.filter((room) => (room.use ?? NOT_SAID) === use))
     const circulating = inside.filter((room) => CIRCULATION.has(room.use ?? ''))
@@ -228,6 +237,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       grossInternal: f.grossInternal,
       grossExternal: f.grossExternal,
       outsideRooms: f.outsideRooms,
+      overStairs: f.overStairs,
       walls: f.walls,
       unclaimed: f.unclaimed ?? 0,
       ...(floorSure === undefined ? {} : { sureness: floorSure }),

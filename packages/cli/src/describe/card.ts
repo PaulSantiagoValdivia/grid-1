@@ -21,6 +21,7 @@
  * your local rules" first, as every report of Grid's does (MSG-3). No line says a plan
  * complies.
  */
+import { BUILDING_TYPE_TEXT } from '@ongrid/floorplan/types/floorplan'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
 export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls'] as const
@@ -154,20 +155,37 @@ function personLine(facts: PlanFacts, names: PersonNames): string {
   const entered = into.length === 0
     ? 'no door leads in from outside'
     : `from outside, ${waysText(ways)} into ${listed(capped(into, 5))}`
-  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.`
+  return `A plan of ${floorText} with ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m2(totalArea(facts))} m² inside; ${entered}.${personBuilding(facts, names)}`
+}
+
+/** CNT-5: what kind of building the plan says it is, and each floor that says otherwise, as a sentence. */
+function personBuilding(facts: PlanFacts, names: PersonNames): string {
+  const { plan, floors } = facts.building
+  const own = floors.map((f) => `${names.floor(f.floor)} is ${BUILDING_TYPE_TEXT[f.building]}`)
+  if (plan === undefined) return own.length === 0 ? '' : ` The plan says ${listed(own)}.`
+  return ` The plan says it is ${BUILDING_TYPE_TEXT[plan]}${own.length === 0 ? '' : `, and ${listed(own)}`}.`
+}
+
+/** CNT-5: the same for an agent, as `BUILDING home; ground shop`. */
+function agentBuilding(facts: PlanFacts): string {
+  const { plan, floors } = facts.building
+  if (plan === undefined && floors.length === 0) return ''
+  return ` BUILDING ${[...(plan === undefined ? [] : [plan]), ...floors.map((f) => `${f.floor} ${f.building}`)].join('; ')}.`
 }
 
 function agentLine(facts: PlanFacts): string {
   const ways = waysIn(facts)
   const into = ways.length === 0 ? 'no way in from outside' : `from outside into ${capped([...new Set(ways.map((way) => way.room))], 8).join(', ')}`
-  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.`
+  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}`
 }
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */
 function unsaid(facts: PlanFacts, names: PersonNames): { person: string[]; agent: string[] } {
   // CNT-3: a plan that states its north says so in its own lines.
-  const person = [...(facts.northStated ? [] : ['where north is']), 'what kind of building it is']
-  const agent = [...(facts.northStated ? [] : ['north']), 'kind of building']
+  // CNT-5: a plan may say what kind of building it is; one that says it for every floor is not asked.
+  const said = facts.building.plan !== undefined || (facts.floors.length > 0 && facts.floors.every((f) => facts.building.floors.some((b) => b.floor === f.id)))
+  const person = [...(facts.northStated ? [] : ['where north is']), ...(said ? [] : ['what kind of building it is'])]
+  const agent = [...(facts.northStated ? [] : ['north']), ...(said ? [] : ['kind of building'])]
   if (facts.floors.length > 1) {
     // Floors no stair joins (LVL-3): a stair the plan states, or stair rooms one over the other.
     const { unjoined } = facts.connections

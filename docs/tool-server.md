@@ -26,7 +26,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_areas` | Each room's size and net area, totals by floor and by use, gross internal and gross external area (the one usual in `country` first, or as `gross` asks; see [areas.md](areas.md)), in metres or feet, as text or CSV, each figure with its rule stated |
 | `grid_takeoff` | Metres of wall by kind, and per room floor, ceiling, skirting and wall face less openings, with the rules stated; with `for=estimate` the bill of quantities for a first estimate, each line with its key, rule and assumed mark, priced only from the person's rates file or given as a rate card ([areas.md](areas.md#quantities-for-a-first-estimate)); text or CSV |
 | `grid_schedule` | Doors, windows and openings by type and size, with the rooms each joins; with `of=rooms` the room schedule (number, name, use, area, height, floor, and the totals), with `of=openings` each opening once ([areas.md](areas.md#schedules)); text or CSV |
-| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door passed; what is narrower than the person's own figure; and which way each room, outside wall and window faces by the plan's north |
+| `grid_measure` | A room's sizes, height and widest circle; the clear distance between two walls, doors, windows or rooms, or to a point, from their faces; a wall's length; whether a box or a circle fits; the way between rooms with every door on it, and whether a body or a trolley of a given width gets through, clear of the fixtures; a room's use indicators (turning circle, doorways' clear widths, the way through, the floor round each fixture, a window a fixture stands in front of); what is narrower than the person's own figure; and which way each room, outside wall and window faces by the plan's north |
 | `grid_view` | A floor plan (light, dark or black and white, with or without sizes, and with `ids` the check view: every room, door and window id on the picture and in the text, with areas, what each door joins, counts and the drawing's problems; with `crop` just one room, door, window or wall, by id or a room's name; with `hide`, `colour` and `key` what it shows, as `grid draw --hide`, `--colour` and `--key`; always with each part's box in image pixels), the model from a side, or an eye-level view in a room with the window sills against the eye |
 | `grid_describe` | The plan in room terms, as `grid describe`; with `as=rooms`, as rooms text to change and write again |
 | `grid_check` | The check, short and about this plan unless `full`, always labelled "General guidance, not your local rules"; the notes the person set aside are listed under Seen |
@@ -110,6 +110,34 @@ A room may state its height, floor to ceiling, in metres:
 
 A wall that states no height gets 2.7 m, which cannot be told from a stated 2.7 m. The plan
 comparison in `@ongrid/floorplan` (`diffPlans`) reports a room height stated, changed or taken out.
+
+## Use indicators: will it fit, can you turn, is the window blocked
+
+Read this when the person asks whether a wheelchair can turn in a room, whether a trolley gets
+along the hall, how much room there is beside a bath, or whether a fixture stands in front of a
+window. `grid_measure` answers with use indicators (CNT-13): each line starts "Indicator,", says
+what it measured, the width it set that against and whose width it is: the person's own, given
+as an argument, or one of Grid's own indicators from the
+[tolerance table](tolerances.md) (`useDoorwayClear` 0.8 m, `usePassageWidth` 0.9 m,
+`useTurningCircle` 1.5 m, `useClearSpace` 0.6 m). Grid's own figures are indicators, never a
+rule from any code, and the answer says so. Every measure keeps clear of the fixtures the plan
+holds (`items`); furniture, radiators and the swing of a leaf are not in the plan.
+
+| Ask | Call | Indicator (`code` in the data) |
+|---|---|---|
+| Can a wheelchair turn in the bathroom? | `what=use`, `room`, `diameter` (or Grid's own) | `use/turning-space`: the widest circle the free floor holds, and where |
+| What clear width does each doorway leave? | `what=use`, `room`, `width` | `use/doorway-clear-width`: the widest stretch of the hole no fixture stands in front of (within `useApproachDepth`, 0.3 m), less `useOpenLeaf` (0.05 m) for a door's open leaf and stop |
+| Is the way through the room wide enough? | `what=use`, `room`, `width` | `use/passage-width`: the widest body that gets from one doorway to another, or from its one doorway to its widest point, and what stands either side of its narrowest point |
+| Is there room beside the bath? | `what=use`, `room`, `clearance` | `use/space-by-fixture`: the clear floor straight out from the front and each side of every fixture to the nearest wall face, doorway or fixture |
+| Does anything block the window? | `what=use`, `room` | `use/window-blocked`: how much of a window's width a fixture higher than its sill stands in front of |
+| Does a 0.7 m wheelchair get from the bedroom to the front door? | `what=route`, `room`, `to`, `width` | `use/passage-width` along the way: each doorway's clear width and the way through each room; when the way with the fewest rooms is too narrow, what stops it and another way that is wide enough, if one is |
+
+The way through a room is measured on a grid of points `useRaster` (2 cm) apart, so a width is
+found to within a few centimetres; where the way starts or ends it may start anywhere in the
+room. A room bigger than `useRasterCells` points is measured on a coarser grid. `grid_check`
+names a door whose leaf swings into a fixture (`opening/door-hits-item`, with the fixture's
+label, kind and id), and a fixture standing in front of a doorway (`item/blocks-doorway`) or in
+front of a window and higher than its sill (`item/blocks-window`), each with what it measured.
 
 ## A note set aside as seen
 

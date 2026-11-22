@@ -15,6 +15,7 @@ Grid say that a plan complies with anything.
 ## Unreleased
 
 - A plan can say where its values came from, given, measured, scanned or assumed, and how sure each is, in its `marks`. What was assumed is drawn dashed and listed under "To confirm" in `grid check`; areas from scanned walls say "from a scan, about ± x%"; `grid edit square` (`grid_square_scan`) squares a scan and says how far each wall moved. A wall that states no height is now described as "height not stated", and Grid no longer writes 2.7 m into a file that left it out (WRT-6).
+- Fixtures are obstacles now (CNT-13). A door that swings into one names it ("Door "d1" hits "Table 2" (kitchen run "table-2") when it opens"), and `grid check` says when a fixture stands in front of a doorway or in front of a window above its sill. `grid_measure what=use` gives a room's use indicators: can a wheelchair turn, the clear width each doorway leaves, the way through, the floor in front of and beside each fixture and a blocked window; `what=route` with a `width` says whether a body or a trolley that wide gets through. Each says what it measured and against which width, yours or Grid's own indicator, never a rule.
 - `grid check` and `grid_check` are short by default and about your plan: what to look at, the figures those notes used, and what each check looked at. `--full` (or `full` for the tool) gives the whole report. A note you have looked at can be set aside as seen, with why and who (`grid check --seen 3 --reason … --by …`, or `grid_mark_seen`): it stays listed under Seen, in `plan.seen.json` beside the plan, and comes back as new when its part of the plan changes (MSG-10).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 
@@ -32,8 +33,14 @@ Grid has not been released yet. The first release will hold:
   from and how far a person has checked it.
 - `grid tidy` lists the walls that do not meet and makes the fixes you choose.
 - Every note and pass that used a figure says which kind of building the figure was read for:
-  today, homes. A plan cannot say yet what kind of building it is, so a café or a hotel is
-  measured with a home's figures, and the report now says so.
+  today, homes.
+- A plan can say what kind of building it is (a home, an office, a shop, a school…), and a floor
+  can say otherwise for itself, such as a shop under flats. The home figures then run only where
+  it is a home, or where the plan does not say, and the report says in plain words which checks
+  did not apply to an office or a shop. Rooms have 27 uses, from office and classroom to plant
+  and parking; a plain word such as "WC" or "staff room" is read as its use, and the person's
+  own word stays the room's name. A room can say who it is for (private, shared, common or
+  commercial) and carry the firm's own room type.
 - `grid describe`, `grid draw`, `grid export` and `grid sheet` describe a plan, draw it, export
   it and lay it out as an A3 sheet in PDF.
 - `grid init` makes a folder a Grid project, where the commands read its `plan.json`.
