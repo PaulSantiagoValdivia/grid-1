@@ -42,6 +42,11 @@ export const SHEET_COVERAGE = {
   north: { shown: 'drawn' },
   yAxis: { shown: 'not shown', why: 'It says how the file\'s coordinates run (CNT-3); every page draws them as the file holds them, with y up.' },
   front: { shown: 'not shown', why: 'The front is said by grid describe and the tool server; the drawing marks no front yet.' },
-  site: { shown: 'not shown', why: 'Where the building is on the earth goes into the IFC file; the sheet prints no location.' },
+  // CNT-3 and LVL-4: where the building is goes into the IFC file; the ground level (`site.ground`)
+  // feeds the checks, whose findings the sheet lists. No drawing shows the ground yet.
+  site: { shown: 'not shown', why: 'Where the building is on the earth goes into the IFC file, and its ground level is read by the checks, whose findings the sheet lists; the sheet prints no location and no drawing shows the ground yet.' },
+  // WRT-6: what is assumed is drawn in its own style by `drawPlan`, and listed to confirm by
+  // `grid check`; the sheet's checks page lists those lines with the others.
+  marks: { shown: 'drawn' },
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>

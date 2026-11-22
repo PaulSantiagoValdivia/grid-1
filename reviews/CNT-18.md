@@ -9,7 +9,7 @@ under "For the owner".
 
 ## What changed
 
-- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C8 in its header).
+- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C9 in its header).
   A wall may state `arc: { centre: [x, y], sweep }`: `sweep` is the angle in degrees the wall
   turns through round `centre` from `start` to `end`, counter-clockwise positive as `turn` and
   `north` are, never 0 and at most a whole turn either way (the schema refuses others). 360 is a
@@ -158,6 +158,24 @@ room is measured as before.
   `mirror`, `opening` along the curve, `move-side` refused on the curve and done on a straight
   side.
 
+- After merging main (bd2f6a7: HND-2's IFC with room data, areas, quantities and materials;
+  LVL-4's slabs, roofs and ceilings; WRT-6's marks and squaring a scan): twelve conflicted files,
+  each kept both sides (see the merge commit). Main's new code was taken to curves too: LVL-4's
+  slab outline (`outline.ts`) joins a curved wall by its straight pieces (a round building had
+  no outline at first: "Tried to create degenerate segment at [NaN, NaN]"), its parapet band
+  (`outerWallBand`, now in `areas.ts`) and gross internal area cut a curved wall's outer
+  stretches chord by chord, the below-ground check measures along the curve, HND-2's wall base
+  quantities take the length along the curve, and WRT-6's squaring leaves a curved wall as it is
+  and refuses to move an end on one. WRT-6 took convention C8 for marks, so the curved wall is
+  C9 now. Two tests added to each curved-wall file (the IFC quantities and a round building's
+  slab and roof; squaring round a curve), and the read-back test parses the written plan, which
+  `compileRoomsText` now returns unparsed. Results: `npm run build` clean; `npm run typecheck`
+  clean; `npm run lint` clean; `npm run scoreboard` "Same as the stored figures."; floorplan
+  geometry and types, `packages/rules/src/result`, the CLI's `mcp`, `quantities`, `edit`,
+  `describe`, `command/__tests__` and `sheet`, the viewer and `scoreboard/__tests__`, two workers:
+  217 of 217 files passed, 4,261 tests passed and 4 skipped, exit 0. The full suite was not run
+  again.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -169,7 +187,7 @@ room is measured as before.
    | Room outline (`room.ts`) | pieces | traced by its chords; a round room of 2.9 m inside radius is 0.016% under |
    | Areas (net, gross internal, gross external) | pieces | the same outline and chord strips |
    | Wall length, offsets, opening fit | exact | along the curve (`wallLength`) |
-   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C8) |
+   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C9) |
    | Door swings, sweep check | exact | from the straight hole; the swing is a true arc |
    | Routes (door graph, way-out checks) | exact | each opening's sides from the curve's normal at its middle; room floors by the outline |
    | Exposure, spaces, outside walls, facing, use indicators | pieces | by the chords |
@@ -215,3 +233,11 @@ room is measured as before.
    DXF polyline.
 10. **`grid check` says nothing new about a curved plan that is sound**, and the label "General
     guidance, not your local rules" leads every answer as before. No figure check cites a curve.
+11. **HND-2's IFC parts and a curved wall.** `Qto_WallBaseQuantities` gives `Length` along the
+    arc (2π m for the bay of radius 2), `GrossSideArea` that length times the height, and
+    `GrossFootprintArea` and the volumes from the body as written, by its straight pieces (within
+    0.02% of the true ring). The wall's type and material come from its kind and thickness as for
+    any wall. The spaces' areas with their rule, room numbers and the slab and roof quantities
+    (LVL-4) come from the outlines, which follow the curve by pieces; the file names those rooms
+    and walls in `Grid_Approximated`. No HND-2 quantity says it is approximated in its own
+    description: the property set says it once for the file.

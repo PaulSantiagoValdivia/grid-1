@@ -11,6 +11,7 @@
  * Pure: a survey in, a patch out.
  */
 import { add, dot, scale, signedArea, sub, tolerance, wallAxis, type Vec2 } from '@ongrid/floorplan/geometry'
+import { heightStated } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import type { Survey } from '../quantities/survey'
 import { refuseCurved, type Direction, type OpeningChange, type Patch, type RoomChange } from './edits'
@@ -119,7 +120,7 @@ export function addRoom(survey: Survey, request: AddRoomRequest): Patch {
     const side = facing({ from: a, to: b, length: len }) ?? 'side'
     const id = freshId(used, `${request.id}-${side}`)
     used.add(id)
-    newWalls.push({ id, start: pair(a), end: pair(b), thickness: t, height: wall.height, kind: 'exterior', ...(wall.floor !== undefined ? { floor: wall.floor } : {}) })
+    newWalls.push({ id, start: pair(a), end: pair(b), thickness: t, ...(heightStated(wall) ? { height: wall.height } : {}), kind: 'exterior', ...(wall.floor !== undefined ? { floor: wall.floor } : {}) })
     boundary.push(id)
   }
   boundary.push(covered.id)

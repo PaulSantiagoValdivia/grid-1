@@ -13,8 +13,9 @@ import { DIRECTIONS, type Direction } from '../edit/edits'
 import { mergeRooms } from '../edit/merge'
 import { renameRoom, type UseOrNone } from '../edit/rename'
 import { splitRoom } from '../edit/split'
+import { squarePlan } from '../edit/square'
 import { stretchPlan } from '../edit/stretch'
-import { DECIMAL_IN_ARG, floorArg, listSchema, objectSchema, PLAN_ARG, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
+import { DECIMAL_IN_ARG, floorArg, listSchema, NUMBER, objectSchema, PLAN_ARG, roomArg, STRING, ToolRefusal, type GridTool } from './toolkit'
 import { EDIT_OUTPUT, OUT_ARG, writeChange } from './writeTools'
 
 const NAME = (description: string, example: string, required = false): { type: 'string'; maxLength: number; description: string; examples: string[]; required: boolean } => ({ type: 'string', maxLength: NAME_MAX, description, examples: [example], required })
@@ -193,5 +194,37 @@ const renameTool: GridTool = {
   },
 }
 
+const squareTool: GridTool = {
+  name: 'grid_square_scan',
+  title: 'Square a scanned plan',
+  hint: 'change-plan',
+  description:
+    'Use this when a plan came from a scan or a capture and its walls are a degree or two off square, or the person asks to square it up or straighten the walls: "square the scan". '
+    + 'It turns each wall within about 3 degrees of the plan\'s main directions onto them, about its middle, puts the corners back where the new lines cross, and answers with how far each wall turned and moved; a wall further off is left as it is and named. '
+    + 'Only the walls the plan marks scanned (its marks, source scanned) are squared unless all is true. The marks stay, so areas from those walls still carry their give or take. '
+    + 'Do not use for a plan drawn by hand, or to move one wall (grid_move_room_side). It replaces the plan file unless out is given. Units are metres and degrees.',
+  args: {
+    plan: PLAN_ARG,
+    all: { type: 'boolean', description: 'true to square every wall, not only those marked scanned. false when left out.', examples: [true, false] },
+    floor: { type: 'string', id: true, description: 'A floor id from the plan\'s "floors": square that floor only. Every floor when left out.', examples: ['ground'] },
+    out: OUT_ARG,
+  },
+  outputSchema: {
+    ...EDIT_OUTPUT,
+    properties: {
+      ...(EDIT_OUTPUT['properties'] as Record<string, unknown>),
+      // WRT-6 (lab AE-4): each wall the squaring moved, and the walls it left as they were.
+      moves: listSchema(objectSchema({ wall: STRING, turned: NUMBER, moved: NUMBER })),
+      leftAsTheyAre: listSchema(STRING),
+    },
+  },
+  run(args, context) {
+    return writeChange(context, args, (survey) => {
+      const floor = floorArg(survey.plan, args['floor'])
+      return squarePlan(survey, { ...(args['all'] === true ? { all: true } : {}), ...(floor !== undefined ? { floor } : {}) })
+    })
+  },
+}
+
 /** In the order `tools/list` gives them, after the other changes to the plan. */
-export const EDIT_TOOLS: readonly GridTool[] = [mergeTool, splitTool, addRoomTool, stretchTool, renameTool]
+export const EDIT_TOOLS: readonly GridTool[] = [mergeTool, splitTool, addRoomTool, stretchTool, renameTool, squareTool]

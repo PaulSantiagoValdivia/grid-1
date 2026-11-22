@@ -15,7 +15,7 @@
  */
 
 import type { Vec2 } from '../vec2'
-import type { SceneSlab, SceneStair, SceneWall, Vec3, WallBasis, WallElevation } from '../scene3d'
+import type { SceneSlab, SceneSolid, SceneStair, SceneWall, Vec3, WallBasis, WallElevation } from '../scene3d'
 import { alongFace } from '../scene3d'
 import { triangulate } from '../triangulate'
 
@@ -183,6 +183,38 @@ export function stairMesh(stair: SceneStair): Mesh | null {
       const j = (i + 1) % n
       const [p0, p1, q0, q1] = [side + 2 * i, side + 2 * i + 1, side + 2 * j, side + 2 * j + 1]
       faces.push([p0, q0, q1], [p0, q1, p1])
+    }
+  }
+  return faces.length === 0 ? null : storable({ points, faces })
+}
+
+/**
+ * Flat solids of the shell (LVL-4: a slab, a roof, a parapet) as one mesh: every piece a closed
+ * prism from its bottom to its top, open through its holes, its top facing up, its bottom down, and
+ * a band of faces round every ring of its edge, out of the solid.
+ */
+export function shellMesh(solids: readonly SceneSolid[]): Mesh | null {
+  const points: Vec3[] = []
+  const faces: Face[] = []
+  for (const solid of solids) {
+    if (!(solid.top > solid.bottom)) continue
+    for (const piece of solid.pieces) {
+      const { vertices, triangles, rings } = triangulate(piece.outline, piece.holes)
+      if (triangles.length === 0) continue
+      const top = points.length
+      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.top })
+      const bottom = points.length
+      for (const v of vertices) points.push({ x: v.x, y: v.y, z: solid.bottom })
+      for (const [a, b, c] of triangles) faces.push([top + a, top + b, top + c], [bottom + a, bottom + c, bottom + b])
+      // Outer rings wind counter-clockwise and holes clockwise: the solid lies on the left of every
+      // edge, so its outside is on the right.
+      for (const ring of rings) {
+        for (let i = 0; i < ring.length; i++) {
+          const p = ring[i]!
+          const q = ring[(i + 1) % ring.length]!
+          faces.push([bottom + p, bottom + q, top + q], [bottom + p, top + q, top + p])
+        }
+      }
     }
   }
   return faces.length === 0 ? null : storable({ points, faces })

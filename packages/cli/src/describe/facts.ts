@@ -29,7 +29,7 @@ import {
   type Vec2,
   type Wall,
 } from '@ongrid/floorplan/geometry'
-import { DEFAULT_FLOOR_ID, type BuildingType, type RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { DEFAULT_FLOOR_ID, heightByDefault, WALL_DEFAULTS, type BuildingType, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { openingSides, roomOutlines, sidesAt, type RoomOutline } from '@ongrid/floorplan/geometry/rules/graph'
 
@@ -108,6 +108,8 @@ export interface WallFacts {
   readonly end: Vec2
   readonly thickness: number
   readonly height: number
+  /** WRT-6: the height is stated by neither the wall nor its floor: Grid's default, drawn only. */
+  readonly heightNotStated: boolean
   readonly kind: Wall['kind']
   readonly virtual: boolean
   /** CNT-18: a curved wall's centre, radius, sweep in degrees and length along the curve. */
@@ -133,7 +135,10 @@ export interface FloorFacts {
   readonly openSides: readonly OpenSide[]
   readonly repeats: Repeat | null
   readonly area: number
-  /** The usual height of a solid wall on this floor; null when it has none. */
+  /**
+   * The usual height of a solid wall on this floor, of those that state one (or whose floor
+   * does); of all of them when none does (WRT-6). Null when it has no solid wall.
+   */
   readonly wallHeight: number | null
   /** Rooms and openings the drawing's checks leave out on this floor, by id. */
   readonly leftOut: readonly string[]
@@ -147,8 +152,13 @@ export interface HeightException {
 }
 
 export interface Heights {
-  /** The usual height of a solid wall; null when there are none. */
+  /** The usual height of a solid wall that states one, or whose floor does; null when none does. */
   readonly wall: number | null
+  /**
+   * WRT-6 (lab AU3-6): the solid walls whose height nothing states, so they are drawn at Grid's
+   * default, and that default. Their height is not stated, never "2.70 m".
+   */
+  readonly notStated: { readonly count: number; readonly drawn: number }
   /** Floors whose walls are usually another height. */
   readonly floorWalls: ReadonlyArray<{ readonly floor: string; readonly value: number }>
   /** Walls of another height than most on their floor. */
@@ -476,6 +486,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     end: { x: wall.end[0], y: wall.end[1] },
     thickness: wall.thickness,
     height: wall.height,
+    heightNotStated: heightByDefault(plan, wall),
     kind: wall.kind,
     virtual: wall.virtual === true,
     ...curveFacts(wall),
@@ -491,7 +502,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     openSides,
     repeats: null,
     area: rooms.reduce((sum, room) => sum + (room.shape?.area ?? 0), 0),
-    wallHeight: usual(storey.walls.filter((wall) => wall.virtual !== true).map((wall) => wall.height)),
+    wallHeight: usualHeight(plan, storey.walls),
     leftOut: [...leftOut.rooms, ...leftOut.openings].sort(byText),
   }
 }
@@ -500,11 +511,20 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
  * The usual heights and the exceptions. A floor laid out like an earlier one adds no
  * exceptions of its own: they are the earlier floor's.
  */
+/** WRT-6: the usual height of the solid walls that state one, else of them all. */
+function usualHeight(plan: FloorPlan, walls: readonly Wall[]): number | null {
+  const solid = walls.filter((wall) => wall.virtual !== true)
+  const stated = solid.filter((wall) => !heightByDefault(plan, wall))
+  return usual((stated.length > 0 ? stated : solid).map((wall) => wall.height))
+}
+
 function heightsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Heights {
   const own = new Set(floors.filter((floor) => floor.repeats === null).map((floor) => floor.id))
   const usualOn = new Map(floors.map((floor) => [floor.id, floor.wallHeight]))
-  const solid = plan.walls.filter((wall) => wall.virtual !== true)
+  const all = plan.walls.filter((wall) => wall.virtual !== true)
+  const solid = all.filter((wall) => !heightByDefault(plan, wall))
   const wall = usual(solid.map((w) => w.height))
+  const statedOn = new Set(solid.map((w) => floorOf(w)))
   const floorOfWall = new Map(plan.walls.map((w) => [w.id, floorOf(w)]))
   const onOwn = (o: Opening): boolean => own.has(floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID)
   const windows = plan.openings.filter((o) => o.type === 'window')
@@ -512,8 +532,9 @@ function heightsOf(plan: FloorPlan, floors: readonly FloorFacts[]): Heights {
   const at = (o: Opening): HeightException => ({ id: o.id, floor: floorOfWall.get(o.wall) ?? DEFAULT_FLOOR_ID, value: o.sill })
   return {
     wall,
+    notStated: { count: all.length - solid.length, drawn: WALL_DEFAULTS.solid.height },
     floorWalls: floors.flatMap((floor) =>
-      floor.repeats === null && floor.wallHeight !== null && floor.wallHeight !== wall ? [{ floor: floor.id, value: floor.wallHeight }] : []),
+      floor.repeats === null && floor.wallHeight !== null && floor.wallHeight !== wall && statedOn.has(floor.id) ? [{ floor: floor.id, value: floor.wallHeight }] : []),
     walls: solid
       .filter((w) => own.has(floorOf(w)) && w.height !== usualOn.get(floorOf(w)))
       .map((w) => ({ id: w.id, floor: floorOf(w), value: w.height })),

@@ -12,9 +12,10 @@
  * net or the gross internal area. Rooms Grid could not draw are listed with no area, named, and
  * are in no figure.
  */
-import { MEASURES, type GrossMeasure, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
+import { MEASURES, planMarks, wallSureness, type GrossMeasure, type MeasureRule, type ReaderMeasure, type RoomLeftOut } from '@ongrid/floorplan/geometry'
 import { planAreaFigures } from '@ongrid/floorplan/geometry/areas'
-import type { Survey } from './survey'
+import type { MarkSource } from '@ongrid/floorplan/types/floorplan'
+import type { Survey, SurveyRoom } from './survey'
 import { FIXTURE_RULES, planFixtures } from './fixtures'
 import { joinStates, lessRooms, NOT_LOOKED_AT, roomDoubts, roomState, sumState, type AreaState, type NumberState } from './state'
 
@@ -25,6 +26,19 @@ export const AREA_RULES = {
   grossExternal: MEASURES.grossExternal.measures,
   circulation: 'Circulation is the rooms whose use is corridor or stair, a stair counted once, as a share of the gross internal area.',
 } as const
+
+/**
+ * WRT-6 (lab AE-4, AE-13): how sure an area is, from the marks on the walls round it. `source`
+ * is where those walls came from (scanned first, when any was). `plusMinus` is the most the area
+ * moves when each marked wall's face moves by its tolerance, each side of the room times that
+ * tolerance, added up; null when a scanned wall states no tolerance, so how sure is not stated.
+ * `percent` is that over the area. A room none of whose walls is marked has none.
+ */
+export interface AreaSureness {
+  readonly source: MarkSource
+  readonly plusMinus: number | null
+  readonly percent: number | null
+}
 
 export interface RoomArea {
   readonly id: string
@@ -48,6 +62,8 @@ export interface RoomArea {
   /** CNT-12, only on a room with fixtures: the floor they stand on, and the net area less it. */
   readonly fixtures?: number
   readonly free?: number
+  /** WRT-6: only on a room whose walls the plan marks: where they came from and how sure the area is. */
+  readonly sureness?: AreaSureness
 }
 
 export interface FloorAreas {
@@ -68,6 +84,8 @@ export interface FloorAreas {
   readonly walls: number | null
   /** Enclosed floor that no room covers, on the whole floor. */
   readonly unclaimed: number
+  /** WRT-6: the net area's sureness, from its rooms'; only when one of them has one. */
+  readonly sureness?: AreaSureness
   readonly why: string | null
   /** MSG-2: the state of each figure, and the rooms it left out or holds in doubt. */
   readonly states: {
@@ -99,6 +117,8 @@ export interface PlanAreas {
   readonly measures: readonly MeasureRule[]
   readonly rules: readonly string[]
   readonly notes: readonly string[]
+  /** WRT-6: the net total's sureness, from its rooms'; only when one of them has one. */
+  readonly sureness?: AreaSureness
   /** MSG-2: the state of each total, and the rooms it left out or holds in doubt. */
   readonly states: {
     readonly net: AreaState
@@ -122,6 +142,35 @@ const CIRCULATION = new Set(['corridor', 'stair'])
 const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b, 0)
 
 const NOT_SAID = 'not said'
+
+/** The rule for a band on an area, said where one is given (WRT-6). */
+export const SURENESS_RULE = 'Give or take: each side of a room times the tolerance its wall is marked with, added up, over the area: the most the area moves if every marked face moves its full tolerance one way. Grid\'s own rule, not a survey standard.'
+
+/** WRT-6: how sure a room's area is, from the marks on the walls its sides lie on. */
+function roomSureness(room: SurveyRoom | undefined, marks: ReturnType<typeof planMarks>, net: number | null): AreaSureness | undefined {
+  if (room === undefined || marks.all.length === 0) return undefined
+  let source: MarkSource | null = null
+  let plusMinus: number | null = 0
+  for (const edge of room.edges) {
+    if (edge.wall === null) continue
+    const sure = wallSureness(marks, edge.wall.id)
+    if (sure.source === null) continue
+    if (source === null || sure.source === 'scanned') source = sure.source
+    if (sure.tolerance !== null) plusMinus = plusMinus === null ? null : plusMinus + edge.length * sure.tolerance
+    else if (sure.source === 'scanned') plusMinus = null
+  }
+  if (source === null) return undefined
+  return { source, plusMinus, percent: plusMinus === null || net === null || net <= 0 ? null : (100 * plusMinus) / net }
+}
+
+/** WRT-6: the sureness of a sum of rooms: their bands added up, over the sum. */
+function sumSureness(rooms: readonly RoomArea[], total: number): AreaSureness | undefined {
+  const sure = rooms.filter((room) => room.sureness !== undefined)
+  if (sure.length === 0) return undefined
+  const plusMinus = sure.some((room) => room.sureness!.plusMinus === null) ? null : sure.reduce((a, room) => a + room.sureness!.plusMinus!, 0)
+  const source = sure.some((room) => room.sureness!.source === 'scanned') ? 'scanned' : sure[0]!.sureness!.source
+  return { source, plusMinus, percent: plusMinus === null || total <= 0 ? null : (100 * plusMinus) / total }
+}
 const key = (floor: string, id: string): string => `${floor}\u0000${id}`
 
 export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas {
@@ -136,6 +185,8 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   const doubts = roomDoubts(survey.plan, figures.floors.map((f) => f.floor))
   // Lab plans repeat room ids from floor to floor, so a room is found by its floor too.
   const shapes = new Map(survey.rooms.map((room) => [key(room.facts.floor, room.facts.id), room.facts.shape] as const))
+  const surveyed = new Map(survey.rooms.map((room) => [key(room.facts.floor, room.facts.id), room] as const))
+  const marks = planMarks(survey.plan)
 
   const floors: FloorAreas[] = figures.floors.map((f) => {
     const counted = new Map(f.rooms.map((room) => [room.id, room] as const))
@@ -149,6 +200,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       const doubted = doubts.get(f.floor)?.get(id) ?? []
       const shape = shapes.get(key(f.floor, id))
       const fixtures = taken.get(id)
+      const sureness = roomSureness(surveyed.get(key(f.floor, id)), marks, net)
       return {
         id,
         name: figure?.name ?? unmeasured.get(id)!.name,
@@ -163,6 +215,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
         // Fixtures add no area and take none from the totals: only the room's free floor (CNT-12).
         // A room that could not be measured has no free floor either (MSG-2).
         ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
+        ...(sureness === undefined ? {} : { sureness }),
       }
     })
     // A stair room counted with the one below is in no total (SHT-11).
@@ -173,6 +226,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     // A use whose rooms could none be measured is still listed, at 0 and not looked at (MSG-2).
     const byUse: Record<string, number> = { ...f.byUse }
     for (const use of Object.keys(byUseState)) byUse[use] ??= 0
+    const floorSure = sumSureness(inside, f.net)
     return {
       floor: f.floor,
       rooms,
@@ -186,6 +240,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
       overStairs: f.overStairs,
       walls: f.walls,
       unclaimed: f.unclaimed ?? 0,
+      ...(floorSure === undefined ? {} : { sureness: floorSure }),
       why: f.why,
       states: {
         net: sumState(inside),
@@ -221,6 +276,7 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
   for (const stair of survey.facts.connections.stairs) {
     notes.push(`Stair ${JSON.stringify(stair.id)} covers ${stair.footprint.toFixed(2)} m² in the rooms it stands in; it adds no floor of its own.`)
   }
+  const sureness = sumSureness(floors.flatMap((f) => f.rooms.filter((room) => !room.outside)), net)
   return {
     floors,
     net,
@@ -234,8 +290,9 @@ export function planAreas(survey: Survey, request: AreasRequest = {}): PlanAreas
     reader: figures.reader,
     grossWhy,
     measures: [MEASURES.net, MEASURES.grossInternal, MEASURES.grossExternal],
-    rules: taken.size === 0 ? Object.values(AREA_RULES) : [...Object.values(AREA_RULES), FIXTURE_RULES.free],
+    rules: [...Object.values(AREA_RULES), ...(taken.size === 0 ? [] : [FIXTURE_RULES.free]), ...(sureness === undefined ? [] : [SURENESS_RULE])],
     notes,
+    ...(sureness === undefined ? {} : { sureness }),
     states: {
       net: netState,
       circulation: circulationState,

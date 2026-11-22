@@ -16,7 +16,7 @@
  */
 
 import type { Scene3D } from '../scene3d'
-import { floorMesh, makeNamer, stairMesh, wallMesh } from './mesh'
+import { floorMesh, makeNamer, shellMesh, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { approximationLines, leftOutLines, leftOutSummary, type Approximations, type LeftOutPart } from './leftOut'
@@ -43,7 +43,8 @@ function objComment(text: string): string {
 }
 
 /**
- * The scene as an OBJ document, one object per wall and per room.
+ * The scene as an OBJ document, one object per wall and per room, then the stairs, and the
+ * floor's slab, roof and parapet (LVL-4).
  *
  * Pure and total: it never throws and never reads the filesystem. Whatever the
  * scene could not build is already absent from it, so a broken plan exports the
@@ -73,6 +74,13 @@ export function toObj(scene: Scene3D, options: ObjOptions = {}): string {
   for (const wall of scene.walls) write('wall', wall.id, wallMesh(wall))
   for (const slab of scene.slabs) write('floor', slab.roomId, floorMesh(slab))
   for (const stair of scene.stairs) write('stair', stair.id, stairMesh(stair))
+  // LVL-4: the slab the floor stands on, its roof and its parapet.
+  const shell = scene.shell
+  if (shell !== null) {
+    write('slab', shell.floor, shellMesh(shell.slab))
+    if (shell.roof) write('roof', shell.floor, shellMesh([shell.roof]))
+    if (shell.parapet) write('parapet', shell.floor, shellMesh([shell.parapet]))
+  }
 
   return `${lines.join('\n')}\n`
 }

@@ -29,6 +29,7 @@ import { parseGlb } from '../export/__tests__/glb-reader'
 import { readRoomsText } from '../../rooms/read'
 import { compileRoomsText } from '../../rooms/compile'
 import { readPlanParts } from '../../types/readParts'
+import { planEnvelope } from '../envelope'
 
 type Tuple = [number, number]
 
@@ -69,7 +70,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C8)', () => {
+describe('a curved wall in the plan file (C9)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })
@@ -365,6 +366,25 @@ describe('rooms text and a curved wall', () => {
     const written = compileRoomsText(reading.text)
     expect(written.plan).not.toBeNull()
     expect(written.plan!.walls.find((w) => w.id === 'bay')!.arc).toEqual({ centre: [2, 3], sweep: 180 })
-    expect(roomArea(written.plan!.rooms.find((r) => r.id === 'living')!, indexPlan(written.plan!))).toBeCloseTo(roomArea(plan.rooms[0]!, indexPlan(plan)), 9)
+    const again = parseFloorPlan(written.plan)
+    expect(roomArea(again.rooms.find((r) => r.id === 'living')!, indexPlan(again))).toBeCloseTo(roomArea(plan.rooms[0]!, indexPlan(plan)), 9)
+  })
+})
+
+describe('a curved wall in the parts merged from main (HND-2, LVL-4)', () => {
+  it('gives a curved wall\'s IFC base quantities along its curve', () => {
+    const ifc = exportPlan(bayRoom(), 'ifc', { projectId: 'p', projectName: 'Bay', now: new Date(0) }).data as string
+    // The bay: 2π m along its curve, and its body 2π × 0.2 m² from above, give or take the pieces.
+    expect(ifc).toContain("IFCQUANTITYLENGTH('Length','Along its axis, from start to end.',$,6.2831853072);")
+    const footprint = /IFCQUANTITYAREA\('GrossFootprintArea','[^']*',\$,([0-9.]+)\);/g
+    const areas = [...ifc.matchAll(footprint)].map((m) => Number(m[1]))
+    expect(areas.some((a) => Math.abs(a - 2 * Math.PI * 0.2) / (2 * Math.PI * 0.2) < 0.001)).toBe(true)
+  })
+
+  it('lays a slab and a roof over a round building, the shape of its curve', () => {
+    const envelope = planEnvelope(roundRoom())
+    const disc = Math.PI * 3.1 * 3.1
+    expect(Math.abs(envelope.slabArea! - disc) / disc).toBeLessThan(0.002)
+    expect(Math.abs(envelope.roofArea! - disc) / disc).toBeLessThan(0.002)
   })
 })

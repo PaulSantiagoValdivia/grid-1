@@ -17,7 +17,7 @@
  */
 
 import type { Scene3D } from '../scene3d'
-import { floorMesh, makeNamer, stairMesh, wallMesh } from './mesh'
+import { floorMesh, makeNamer, shellMesh, stairMesh, wallMesh } from './mesh'
 import type { Mesh } from './mesh'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { approximationLines, leftOutLines, leftOutSummary, NO_APPROXIMATIONS, type Approximations, type LeftOutPart } from './leftOut'
@@ -95,7 +95,7 @@ interface Part {
   readonly mesh: Mesh
 }
 
-/** Everything the scene could build, walls first, then slabs, then stairs, as OBJ lists them. */
+/** Everything the scene could build, walls first, then room floors, stairs and the shell (LVL-4), as OBJ lists them. */
 function partsOf(scene: Scene3D): Part[] {
   const nameOf = makeNamer()
   const parts: Part[] = []
@@ -110,6 +110,16 @@ function partsOf(scene: Scene3D): Part[] {
   for (const stair of scene.stairs) {
     const mesh = stairMesh(stair)
     if (mesh) parts.push({ name: nameOf('stair', stair.id), mesh })
+  }
+  // LVL-4: the slab the floor stands on, its roof and its parapet.
+  const shell = scene.shell
+  if (shell !== null) {
+    const add = (prefix: string, mesh: Mesh | null): void => {
+      if (mesh) parts.push({ name: nameOf(prefix, shell.floor), mesh })
+    }
+    add('slab', shellMesh(shell.slab))
+    if (shell.roof) add('roof', shellMesh([shell.roof]))
+    if (shell.parapet) add('parapet', shellMesh([shell.parapet]))
   }
   return parts
 }

@@ -22,7 +22,7 @@ Notes for agents and people changing this repository.
   carries its rule from `MEASURES`, in Grid's own words; the table in `docs/areas.md` must match
   it, and no measuring standard is named anywhere but in a figure record (a test checks both).
   The CLI's `quantities/areas.ts` adds room sizes, free floor, circulation and each figure's state.
-- `packages/floorplan/src/geometry/arc.ts` (CNT-18): a curved wall (C8, `arc` in the schema):
+- `packages/floorplan/src/geometry/arc.ts` (CNT-18): a curved wall (C9, `arc` in the schema):
   its curve worked out from its centre and sweep, its faults, and the stations straight pieces
   follow it by. Read a wall that may be curved through `wall.ts`: `wallLength`, `wallFrameAt`,
   `wallSegments` (its chords) and `wallSliceShape` (its faces as true arcs); `wallAxis` throws
@@ -66,7 +66,7 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 22 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 23 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
   export, the sheet, the seen mark (MSG-10, `seenTool.ts`), and the tools that change the plan).

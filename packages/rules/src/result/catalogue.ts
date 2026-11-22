@@ -747,6 +747,18 @@ export const CODES = {
     needed: fixed('a way out at ground level, or a stair down to one'),
     fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
   },
+  'opening/below-ground': {
+    says: (s) => s.finding?.message ?? `${s.label} lies below the ground`,
+    found: (s) => {
+      const b = s.finding?.belowGround
+      if (b === undefined) return 'a door or window in an outside wall below the ground level the site states'
+      return b.wholly
+        ? `a door or window in an outside wall whose top is ${metresText(b.top)} m under the ground level the site states`
+        : `a door or window in an outside wall whose foot is ${metresText(b.foot)} m under the ground level the site states, its top above it`
+    },
+    needed: fixed('a door or window above the ground outside, or a light well or an outside stair in front of it'),
+    fix: fixed('If the ground in front of it is dug away, as for a light well or an area, draw that space; if the ground level is not right, change site.ground.')
+  },
   'room/stair-out-of-line': {
     says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
     found: fixed('no room used as a stair on the floor below lies under half of it'),
@@ -917,6 +929,19 @@ export const CODES = {
     found: (s) => `bedrooms above the third storey: ${s.names.map(quoted).join(', ')}`,
     needed: fixed('figures for escape from bedrooms above the third storey, which these checks do not carry'),
     fix: fixed('Nothing to change in the plan: look up how escape from these bedrooms is set out where it will be built.')
+  },
+  // WRT-6 (lab WR-15): what the plan marks assumed, listed for the person to confirm.
+  'plan/value-assumed': {
+    says: (s) => `${s.word ? `The ${s.word} of ${s.label}` : s.label} was assumed, not given or measured`,
+    found: (s) => `marked assumed in the plan's marks${s.said ? `, ${s.said}` : ''}`,
+    needed: fixed('the person\'s word on it: this value confirmed, or the right one'),
+    fix: fixed('Ask the person. When they confirm it, mark it given or measured; when they give another, change it and mark that given.')
+  },
+  'plan/mark-no-part': {
+    says: (s) => `A mark names ${s.label}, which the plan does not have, so the mark is not read`,
+    found: (s) => `a mark on ${s.label}${s.word ? ` (its ${s.word})` : ''}`,
+    needed: fixed('a mark on a part the plan has, by its id'),
+    fix: fixed('Name the part by the id the plan gives it now, or take the mark out.')
   },
   'plan/not-checked-no-rooms': {
     says: () => wordingText(figureWordings.noRooms()),

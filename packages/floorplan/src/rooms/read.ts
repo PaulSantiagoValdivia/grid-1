@@ -13,7 +13,7 @@
  *
  * Pure: a plan in, text out.
  */
-import type { FloorPlan, Opening, Room, Wall } from '../types/floorplan'
+import { heightByDefault, safeParseFloorPlan, statedWall, type FloorPlan, type Opening, type Room, type Wall } from '../types/floorplan'
 import { indexPlan } from '../geometry/plan'
 import { planFloors } from '../geometry/floors'
 import { tryRoomPolygon } from '../geometry/room'
@@ -52,7 +52,13 @@ function mostCommon<T>(values: readonly T[], fallback: T): T {
   return best
 }
 
-const rawLine = (kind: 'wall' | 'room' | 'opening', part: unknown): string => `raw ${kind} ${JSON.stringify(part)}`
+// A wall is written as its file states it: a value the reading filled in is left out (WRT-6).
+const rawLine = (kind: 'wall' | 'room' | 'opening', part: unknown): string => `raw ${kind} ${JSON.stringify(kind === 'wall' ? statedWall(part as Wall) : part)}`
+
+/** The read-back as rooms text writes it again, read as Grid reads a plan file (WRT-6). */
+type ReadBack = Omit<RoomsResult, 'plan'> & { readonly plan: FloorPlan | null }
+
+
 
 /** What the read-back found, beside its text. */
 export interface RoomsReading {
@@ -84,14 +90,15 @@ function samePoint(a: readonly [number, number], b: readonly [number, number]): 
   return sameNumber(a[0], b[0]) && sameNumber(a[1], b[1])
 }
 
-function wallDiffers(a: Wall, b: Wall): string | null {
+function wallDiffers(a: Wall, b: Wall, statesNone: (wall: Wall) => boolean): string | null {
   if (!samePoint(a.start, b.start) || !samePoint(a.end, b.end)) return 'stands elsewhere'
   if (!sameNumber(a.thickness, b.thickness)) return 'has another thickness'
   if (!sameNumber(a.height, b.height)) return 'has another height'
+  if (statesNone(a) !== statesNone(b)) return 'states no height in one only'
   if (a.kind !== b.kind) return 'is of another kind'
   if ((a.virtual === true) !== (b.virtual === true)) return 'is solid in one and a dividing line in the other'
   if (floorOf(a) !== floorOf(b)) return 'is on another floor'
-  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor'])
+  return otherKeys(a, b, ['id', 'start', 'end', 'thickness', 'height', 'kind', 'virtual', 'floor', 'unstated'])
 }
 
 function roomDiffers(a: Room, b: Room): string | null {
@@ -158,7 +165,7 @@ function floorDifferences(original: FloorPlan, written: FloorPlan, floor: string
   const writtenWallFloor = new Map(written.walls.map((w) => [w.id, floorOf(w)]))
   const openingsOn = (plan: FloorPlan, walls: Map<string, string>): Opening[] => plan.openings.filter((o) => (walls.get(o.wall) ?? 'ground') === floor)
   return [
-    ...differences('wall', on(original.walls), on(written.walls), wallDiffers),
+    ...differences('wall', on(original.walls), on(written.walls), (a, b) => wallDiffers(a, b, (w) => heightByDefault(w === a ? original : written, w))),
     ...differences('room', on(original.rooms), on(written.rooms), roomDiffers),
     ...differences('opening', openingsOn(original, wallFloor), openingsOn(written, writtenWallFloor), openingDiffers),
   ]
@@ -180,7 +187,8 @@ function floorsDiffer(original: FloorPlan, written: FloorPlan): boolean {
 interface Rule {
   outside: number
   inside: number
-  height: number
+  /** Null when no wall states a height, nor its floor (WRT-6). */
+  height: number | null
   kind: Wall['kind']
   types: Map<number, Wall['kind']>
   doorH: number
@@ -190,6 +198,7 @@ interface Rule {
 
 function ruleOf(plan: FloorPlan): Rule {
   const solid = plan.walls.filter((w) => w.virtual !== true)
+  const stated = solid.filter((w) => !heightByDefault(plan, w))
   const outsideWalls = solid.filter((w) => w.kind === 'exterior')
   const insideWalls = solid.filter((w) => w.kind !== 'exterior')
   const inside = mostCommon(insideWalls.map((w) => w.thickness), 0.1)
@@ -204,7 +213,8 @@ function ruleOf(plan: FloorPlan): Rule {
   return {
     outside: mostCommon(outsideWalls.map((w) => w.thickness), 0.3),
     inside,
-    height: mostCommon(solid.map((w) => w.height), 2.7),
+    // WRT-6: only the heights something states. With none, the text states none either.
+    height: stated.length === 0 ? null : mostCommon(stated.map((w) => w.height), stated[0]!.height),
     kind: kind === 'exterior' ? 'interior' : kind,
     types,
     doorH: mostCommon(doors.map((o) => o.height), 2.1),
@@ -459,7 +469,7 @@ function headerLines(plan: FloorPlan, rule: Rule, name: string | undefined): str
   if (name !== undefined) lines.push(`plan ${quote(name)}`)
   lines.push(`based on ${planRevision(plan)}`)
   if (plan.building !== undefined) lines.push(`building ${plan.building}`)
-  lines.push(`walls outside ${metres(rule.outside)} inside ${metres(rule.inside)}${rule.kind !== 'interior' ? ` ${rule.kind}` : ''} height ${metres(rule.height)}`)
+  lines.push(`walls outside ${metres(rule.outside)} inside ${metres(rule.inside)}${rule.kind !== 'interior' ? ` ${rule.kind}` : ''}${rule.height === null ? '' : ` height ${metres(rule.height)}`}`)
   for (const [t, k] of [...rule.types].sort((a, b) => a[0] - b[0])) lines.push(`walltype ${metres(t)} ${k}`)
   if (!sameNumber(rule.doorH, 2.1)) lines.push(`doors height ${metres(rule.doorH)}`)
   if (!sameNumber(rule.winSill, 0.9) || !sameNumber(rule.winH, 1.2)) lines.push(`windows sill ${metres(rule.winSill)} height ${metres(rule.winH)}`)
@@ -505,7 +515,7 @@ function textOf(plan: FloorPlan, rule: Rule, name: string | undefined, floors: r
 }
 
 /** Says what the writing should say about each wall it worked out, to give back the plan's own. */
-function reconcileWalls(original: FloorPlan, written: RoomsResult, drafts: FloorDraft[]): boolean {
+function reconcileWalls(original: FloorPlan, written: ReadBack, drafts: FloorDraft[]): boolean {
   const plan = written.plan
   if (plan === null) return false
   let said = false
@@ -527,7 +537,8 @@ function reconcileWalls(original: FloorPlan, written: RoomsResult, drafts: Floor
         const words = draft.walls.get(handle) ?? []
         const before = words.join(' ')
         if (same.id !== w.id) sayWords(handle, words, 'id', same.id)
-        if (!sameNumber(same.height, w.height)) sayWords(handle, words, 'height', metres(same.height))
+        // A height the plan leaves to Grid's default is not said: rooms text would state it (WRT-6).
+        if ((!sameNumber(same.height, w.height) || heightByDefault(plan, w)) && !heightByDefault(original, same)) sayWords(handle, words, 'height', metres(same.height))
         if (same.kind !== w.kind && w.virtual !== true) sayWords(handle, words, same.kind)
         if (samePoint(same.start, w.end) && !samePoint(same.start, w.start) && !words.includes('reversed')) words.push('reversed')
         if (words.join(' ') !== before) {
@@ -544,7 +555,7 @@ function reconcileWalls(original: FloorPlan, written: RoomsResult, drafts: Floor
       const words = draft.walls.get(handle) ?? []
       if (words.includes('id')) continue
       sayWords(handle, words, 'id', covering[0]!.id)
-      if (!sameNumber(covering[0]!.height, w.height)) sayWords(handle, words, 'height', metres(covering[0]!.height))
+      if ((!sameNumber(covering[0]!.height, w.height) || heightByDefault(plan, w)) && !heightByDefault(original, covering[0]!)) sayWords(handle, words, 'height', metres(covering[0]!.height))
       if (covering[0]!.kind !== w.kind) sayWords(handle, words, covering[0]!.kind)
       draft.walls.set(handle, words)
       said = true
@@ -571,7 +582,7 @@ function onWall(whole: Wall, start: P, end: P, thickness: number): boolean {
 }
 
 /** Each room's boundary started at the wall the plan starts it at. */
-function reconcileRooms(original: FloorPlan, written: RoomsResult, drafts: FloorDraft[], local: Map<string, string>): boolean {
+function reconcileRooms(original: FloorPlan, written: ReadBack, drafts: FloorDraft[], local: Map<string, string>): boolean {
   const plan = written.plan
   if (plan === null) return false
   let said = false
@@ -625,7 +636,9 @@ export function readRoomsText(plan: FloorPlan, options: ReadOptions = {}): Rooms
   }
   for (let round = 0; round < SETTLE_ROUNDS; round++) {
     const text = textOf(plan, rule, options.name, drafts, raw)
-    const written = compileRoomsText(text)
+    const compiled = compileRoomsText(text)
+    // Read as a plan file is read, so a wall it gives no height reads as the plan's do (WRT-6).
+    const written: ReadBack = { ...compiled, plan: compiled.plan === null ? null : safeParseFloorPlan(compiled.plan) }
     if (written.plan === null) {
       // A floor the writing refuses is given in Grid's own terms.
       const at = written.problems[0]?.line ?? null

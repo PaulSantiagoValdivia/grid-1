@@ -98,6 +98,21 @@ describe('a curved wall through the tool server (CNT-18)', () => {
     expect(kitchen.isError, kitchen.text).toBe(false)
   })
 
+  it('squares a scan round a curved wall, and refuses to move an end on it', async () => {
+    const marked = { ...plan, marks: [{ part: 'wall', id: 'ks', source: 'scanned' }, { part: 'wall', id: 'round', source: 'scanned' }] }
+    const b2 = bench({ 'scan.json': marked, 'tilted.json': { ...marked, walls: marked.walls.map((w) => (w['id'] === 'e' ? { ...w, end: [4.05, 3] } : w)), marks: ['s', 'e', 'w', 'ks', 'ke', 'kw'].map((id) => ({ part: 'wall', id, source: 'scanned' })) } })
+    try {
+      const square = await b2.call('grid_square_scan', { plan: 'scan.json', out: 'squared.json' })
+      expect(square.isError, square.text).toBe(false)
+      expect(square.text).toContain('Curved wall "round" is left as it is: squaring turns straight walls only.')
+      const tilted = await b2.call('grid_square_scan', { plan: 'tilted.json', out: 'tilted-out.json' })
+      expect(tilted.isError).toBe(true)
+      expect(tilted.text).toContain('Wall "bay" is curved, and squaring the scan changes straight walls only.')
+    } finally {
+      b2.close()
+    }
+  })
+
   it('changes an opening along a curved wall, and mirrors the curve', async () => {
     const wider = await b.call('grid_change_opening', { plan: 'plan.json', opening: 'win', width: 1.5, out: 'wider.json' })
     expect(wider.isError, wider.text).toBe(false)

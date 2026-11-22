@@ -136,7 +136,7 @@ interface WallFrame {
 
 /**
  * The line a hole is measured along. On a straight wall it is the wall's axis; on a curved wall
- * (CNT-18) it is the opening's own chord, its hole being straight between its edges (C8), with
+ * (CNT-18) it is the opening's own chord, its hole being straight between its edges (C9), with
  * its edges where the opening's offset and far edge are along the curve.
  */
 function frameOf(wall: Wall, opening?: Opening): WallFrame | null {

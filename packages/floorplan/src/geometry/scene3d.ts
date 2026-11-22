@@ -34,7 +34,10 @@ import { brokenOnFloor, validatePlan } from './validate'
 import type { StairLayout } from './stairs'
 import { planStairs } from './stairs'
 import { floorElevations } from './elevations'
-import { wholePlan } from './floors'
+import { planFloors, wholePlan } from './floors'
+import { floorEnvelope } from './envelope'
+import { piecesAsRings } from './polygons'
+import type { MultiPolygon } from 'polygon-clipping'
 
 /** A point in model space: XY is the plan, Z is height. */
 export interface Vec3 {
@@ -205,12 +208,78 @@ export function stairBlocks(stair: StairLayout, floorLevel: number): SceneStair 
   return { id: stair.id, name: stair.name, blocks }
 }
 
+/** A piece of a flat solid on the plan: its outline counter-clockwise, its holes clockwise. */
+export interface ScenePiece {
+  readonly outline: readonly Vec2[]
+  readonly holes: readonly (readonly Vec2[])[]
+}
+
+/**
+ * A flat solid of the building's shell (LVL-4): pieces on the plan, solid between two heights,
+ * in metres above the storey's floor level.
+ */
+export interface SceneSolid {
+  readonly pieces: readonly ScenePiece[]
+  readonly bottom: number
+  readonly top: number
+}
+
+/**
+ * What closes a storey (LVL-4): the slab it stands on, from its outline, open over its stairs,
+ * lifts and voids (`envelope.ts`), and the roof over every part of it with nothing above, with its
+ * parapet. Heights are the storey's own, so the slab lies under z = 0 and fills the space between
+ * this storey and the one below it when the two are stacked.
+ */
+export interface SceneShell {
+  readonly floor: string
+  /** The slab, then a piece lower down under each room whose floor is set below the storey's. */
+  readonly slab: readonly SceneSolid[]
+  readonly roof: SceneSolid | null
+  readonly parapet: SceneSolid | null
+}
+
+const scenePieces = (pieces: MultiPolygon): ScenePiece[] => piecesAsRings(pieces)
+
+/**
+ * The shell of the storey `plan` is, or of the only floor of a plan that is no slice (LVL-4). Null
+ * for a plan of several floors that is no slice: its floors would all stand at z = 0 (C5), and a
+ * slab or a roof can only be placed on one.
+ */
+export function sceneShell(plan: FloorPlan): SceneShell | null {
+  const { whole, floor } = wholePlan(plan)
+  const floors = planFloors(whole)
+  const id = floor ?? (floors.length === 1 ? floors[0]!.id : null)
+  if (id === null) return null
+  const elevations = floorElevations(whole)
+  const envelope = floorEnvelope(whole, id, elevations)
+  if (envelope === null) return null
+  const base = elevations.floors.get(id)?.floorLevel ?? 0
+  const slab: SceneSolid[] = []
+  if (envelope.slab !== null) {
+    const { thickness } = envelope.slab
+    if (envelope.slab.pieces.length > 0 && thickness > 0) slab.push({ pieces: scenePieces(envelope.slab.pieces), bottom: -thickness, top: 0 })
+    for (const sunk of envelope.slab.sunken) {
+      if (thickness > 0) slab.push({ pieces: scenePieces(sunk.pieces), bottom: sunk.offset - thickness, top: sunk.offset })
+    }
+  }
+  const roof = envelope.roof
+  const roofSolid: SceneSolid | null =
+    roof === null ? null : { pieces: scenePieces(roof.pieces), bottom: roof.bottom - base, top: roof.bottom - base + roof.thickness }
+  const parapet: SceneSolid | null =
+    roof?.parapet == null || roofSolid === null
+      ? null
+      : { pieces: scenePieces(roof.parapet.pieces), bottom: roofSolid.top, top: roofSolid.top + roof.parapet.height }
+  return { floor: id, slab, roof: roofSolid, parapet }
+}
+
 export interface Scene3D {
   readonly walls: readonly SceneWall[]
   readonly slabs: readonly SceneSlab[]
   readonly dividers: readonly SceneDivider[]
   /** The stairs that rise from this floor (LVL-3); empty when the plan states none. */
   readonly stairs: readonly SceneStair[]
+  /** The slab under this floor and the roof over its parts with nothing above (LVL-4), or null. */
+  readonly shell: SceneShell | null
   /** Plan envelope, for framing the camera. */
   readonly bounds: Bounds
   /** Height of the tallest wall. */
@@ -392,7 +461,12 @@ export function elevationArea(elevation: WallElevation): number {
  * Mirrors `buildFloorPlan()`: it leans on the same validation and skips what
  * cannot be built instead of failing.
  */
-export function buildScene(plan: FloorPlan): Scene3D {
+export interface SceneOptions {
+  /** The shell, when the caller has worked it out already (`sceneShell`). */
+  readonly shell?: SceneShell | null
+}
+
+export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D {
   const index = indexPlan(plan)
   const { issues, broken } = validatePlan(plan, index)
 
@@ -453,5 +527,9 @@ export function buildScene(plan: FloorPlan): Scene3D {
     }
   }
 
-  return { walls, slabs, dividers, stairs, bounds: computeBounds(extent), height, issues }
+  // The bounds stay the walls' axes and the rooms, as before: the shell reaches out to the walls'
+  // faces, which the bounds do not frame either.
+  const shell = options.shell !== undefined ? options.shell : sceneShell(plan)
+
+  return { walls, slabs, dividers, stairs, shell, bounds: computeBounds(extent), height, issues }
 }
