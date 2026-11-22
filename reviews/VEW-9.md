@@ -100,11 +100,19 @@ Added to existing test files:
    step so the picture is not taken from inside the door's hole. Not a setting yet.
 6. **A thing on a slanted wall** is put on the nearest of ahead, left, right or behind by the
    wall's direction (ties at 45° go ahead or behind).
-7. **Bundle**: 548,065 bytes after this change (529,751 before), under the 600 kB cap in
-   `grid.e2e.test.ts` and under the 550 kB the brief named. The pictures load the 3D chunk only
-   when asked.
+7. **Bundle**: VEW-9 adds about 18 kB (529,751 to 548,061 bytes on its own). After merging main
+   at 90a933b1 (HND-11, COD-8) it is 560,742 bytes: under the 600 kB cap `grid.e2e.test.ts`
+   holds, over the 550 kB the brief named. The pictures load the 3D chunk only when asked.
 
 ## Checks run
 
-See the end of the session's report for the figures on the merged tip: the full suite, the type
-check, lint and the scoreboard.
+- Before merging main: the full suite (`--maxWorkers=2`) did not finish inside 1500 s on this
+  machine with other sessions running, twice; run in two halves with the same flags, everything
+  but `packages/cli` (227 files, 4,292 passed, 3 skipped) and `packages/cli` (90 files, 1,254
+  passed, 1 skipped), all green. The one failure of the first whole run was `grid check` under
+  500 ms, a timing test, which passes on its own. Scoreboard: the same as the stored figures.
+- After merging main at 90a933b1 (conflicts only in the docs' tables and changelogs and in
+  `readTools.ts`'s imports, both sides kept): type check and lint clean; the affected tests
+  (`describe`, `quantities`, `mcp`, the zones edit, and the `describe`, `everyPath` and `grid`
+  end-to-end tests: 42 files, 545 passed, 1 skipped) green; scoreboard the same as the stored
+  figures.
