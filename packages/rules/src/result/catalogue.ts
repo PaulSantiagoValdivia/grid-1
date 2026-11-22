@@ -403,6 +403,48 @@ export const CODES = {
     fix: fixed('If it is meant, leave it. If the room is a level of its own, give it its own floor with its elevation.')
   },
 
+  // --- Fixtures (CNT-12) ----------------------------------------------------------------------
+  'item/too-large': {
+    says: (s) => `${s.label} has a number Grid does not accept`,
+    needed: fixed('finite numbers within the size Grid accepts'),
+    fix: fixed('Give its place, size and height in metres, and its turn in degrees.')
+  },
+  'item/no-size': {
+    says: (s) => `${s.label} has no size`,
+    needed: fixed('a width, a depth and a height above 0'),
+    fix: fixed('State its width and depth ("size") and its height, in metres.')
+  },
+  'item/unknown-kind': {
+    says: (s) => `${s.label} is a kind the plan does not hold yet`,
+    needed: fixed('a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run"'),
+    fix: fixed('Give a fixture one of those kinds. Loose furniture, points and seats are not held yet: leave them out of the items for now.')
+  },
+  'item/duplicate-id': {
+    says: (s) => `${s.label} has an id another part of the plan has too`,
+    needed: fixed('an id of its own on every item'),
+    fix: fixed('Give the item an id no wall, room, opening or other item has.')
+  },
+  'item/unknown-floor': {
+    says: (s) => `${s.label} is on a floor the plan does not have`,
+    needed: fixed('a floor of the plan'),
+    fix: fixed('Name one of the plan\'s floors, or leave the floor out for the ground floor.')
+  },
+  'item/outside-rooms': {
+    says: (s) => `${s.label} stands in no room`,
+    needed: fixed('its middle inside a room on its floor'),
+    fix: fixed('Move it into the room it belongs to: its "at" is the middle of its footprint.')
+  },
+  'item/into-wall': {
+    says: (s) => `${s.label} runs into a wall`,
+    needed: fixed('its footprint clear of the walls, against their faces at most'),
+    fix: fixed('Move it off the wall, turn it, or make it smaller: its "at" is the middle of its footprint.')
+  },
+  'item/too-tall': {
+    says: (s) => `${s.label} is taller than the room it stands in`,
+    needed: fixed('a fixture no higher than its room'),
+    fix: fixed('Lower its height, or give the room or its floor the height it really has.')
+  },
+
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {
     says: (s) => `${s.label} has enclosed floor that no room claims`,

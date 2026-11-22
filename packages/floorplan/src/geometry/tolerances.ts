@@ -324,6 +324,26 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── Fixtures (CNT-12) ─────────────────────────────────────────────────────────────────────
+  itemIntoWall: {
+    kind: 'tolerance',
+    value: 0.005,
+    unit: 'm',
+    decides:
+      'How far a fixture may reach into the body of a solid wall and still stand against its face. ' +
+      'Past it, the fixture is named with the wall it runs into.',
+    basis: own
+  },
+  itemAboveRoom: {
+    kind: 'tolerance',
+    value: 0.001,
+    unit: 'm',
+    decides:
+      'How far a fixture may rise past the height of the room it stands in and still fit under the ' +
+      'ceiling. Past it, the fixture is named with both heights.',
+    basis: own
+  },
+
   // ── A step inside a floor (LVL-7) ─────────────────────────────────────────────────────────
   sameFloorLevel: {
     kind: 'tolerance',
