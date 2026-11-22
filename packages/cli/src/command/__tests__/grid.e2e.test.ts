@@ -225,6 +225,26 @@ describe('grid draw --out: writing a picture', () => {
     expect(filesIn(dir)).toEqual(['model-2.png', 'model.png', 'two-bed-flat.json'])
   })
 
+  it('writes a section along a line with --section, and says on standard error what it took (LVL-9)', () => {
+    const run = grid('draw', 'two-bed-flat.json', '--section', '2,-1:2,9', '--toward', 'right', '--out', 'section.svg')
+    expect(run.status).toBe(0)
+    expect(run.out).toBe('Wrote section.svg\n')
+    expect(run.err).toMatch(/^The section hatched \d+ parts? and listed \d+ things? that the plan does not state: each is listed under the drawing\.\n$/)
+    const svg = readFileSync(join(dir, 'section.svg'), 'utf8')
+    expect(svg).toContain('aria-label="Section A–A through')
+    expect(svg).toContain('data-part="section-cut"')
+    expect(svg).toContain('data-part="section-ground"')
+    expect(svg).toContain('Cut from (2.00, -1.00) to (2.00, 9.00), looking to the right of the line.')
+  })
+
+  it('marks a floor plan with --marks', () => {
+    const run = grid('draw', 'two-bed-flat.json', '--marks', 'levels,elevations,section', '--section', '2,-1:2,9', '--out', 'marked.svg')
+    expect([run.status, run.err]).toEqual([0, ''])
+    const svg = readFileSync(join(dir, 'marked.svg'), 'utf8')
+    expect(svg).toContain('aria-label="Floor plan with')
+    for (const part of ['section-mark', 'elevation-mark', 'level-mark']) expect(svg).toContain(`data-part="${part}"`)
+  })
+
   it('refuses a folder that does not exist, and writes nothing', () => {
     expectRefusal(grid('draw', 'two-bed-flat.json', '--out', join('missing', 'plan.svg')), 1, 'does not exist')
     expect(filesIn(dir)).toEqual(['two-bed-flat.json'])
@@ -387,6 +407,18 @@ describe('options: each command refuses what it does not take, by name', () => {
     [['draw', 'two-bed-flat.json', '--3d', '--scale', '5'], '--scale takes a number above 0 and up to 4 with --3d'],
     [['draw', 'two-bed-flat.json', '--3d', '--floor', 'upstairs'], '--floor "upstairs" is not a floor of this plan'],
     [['export', 'two-bed-flat.json', '--format', 'ifc', '--floor', 'ground'], '--floor does not apply to IFC'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2'], '--section takes the line to cut along as x1,y1:x2,y2'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:1,2'], '--section needs two different points'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--toward', 'north'], '--toward takes left or right'],
+    [['draw', 'two-bed-flat.json', '--toward', 'left'], '--toward says which way a section looks: add --section'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--floor', 'ground'], '--floor is for a floor plan; a section cuts every floor'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--hide', 'title'], '--hide is for a floor plan'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--units', 'cm'], '--units is for a floor plan'],
+    [['draw', 'two-bed-flat.json', '--section', '1,2:9,2', '--marks', 'levels'], 'add section to --marks'],
+    [['draw', 'two-bed-flat.json', '--3d', '--section', '1,2:9,2'], '--section is for a drawing, not the 3D model'],
+    [['draw', 'two-bed-flat.json', '--marks', 'section'], '--marks section draws the line of a section on the plan: add --section'],
+    [['draw', 'two-bed-flat.json', '--marks', 'levels,levels'], '--marks names levels twice'],
+    [['draw', 'two-bed-flat.json', '--marks', 'grid'], '--marks "grid" is not a mark Grid draws on a plan'],
     [['export', 'two-bed-flat.json', '--format', 'dxf', '--out', 'plan.obj'], 'does not end in .dxf'],
     [['export', 'two-bed-flat.json'], 'export needs --format'],
     [['export', 'two-bed-flat.json', '--format', 'pdf'], '--format "pdf" is not one Grid writes'],
