@@ -77,10 +77,10 @@ describe('CNT-4 flats in the tool server', () => {
       [3, 'B1', true, 2, 1],
       [4, 'B2', true, 2, 1],
     ])
-    expect(reply.text).toContain('Mix by type:\n  "One bedroom": 4 flats (2 mirrored), 100.0% of the flats, 128.00 m², 32.00 m² each on average')
+    expect(reply.text).toContain('Mix by type:\n  "One bedroom": 4 flats (2 mirrored), 1 bedroom each, 100.0% of the flats, 128.00 m², 32.00 m² each on average')
     const csv = (await b.call('grid_schedule', { plan: 'row.json', of: 'flats', format: 'csv' })).text.split('\n')
     expect(csv[1]).toBe('row,number,id,name,type,mirrored,floors,rooms,bedrooms,flats,mirrored flats,area m2,area sq ft,state')
-    expect(csv.find((line) => line.startsWith('mix,'))).toMatch(/^mix,,one,One bedroom,One bedroom,,,,,4,2,128,/)
+    expect(csv.find((line) => line.startsWith('mix,'))).toMatch(/^mix,,one,One bedroom,One bedroom,,,,1,4,2,128,/)
   })
 
   it('gives the mix of the four-flat floor by its two types, and each room\'s flat in the room schedule', async () => {

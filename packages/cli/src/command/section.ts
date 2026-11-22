@@ -13,7 +13,7 @@ import { limit, tolerance } from '@ongrid/floorplan/geometry/tolerances'
 import { UsageError } from './options'
 
 /** What `--marks` and `marks` may name. */
-export const MARK_WORDS = ['levels', 'elevations', 'section'] as const
+export const MARK_WORDS = ['levels', 'elevations', 'section', 'schedule'] as const
 export type MarkWord = (typeof MARK_WORDS)[number]
 
 export const TOWARD_WORDS: readonly SectionToward[] = ['left', 'right']
@@ -59,7 +59,10 @@ export function readMarks(words: readonly string[], name = '--marks'): Set<MarkW
   return found
 }
 
-/** The marks a plan picture draws, from the words and the section line. */
+/**
+ * The marks a plan picture draws, from the words and the section line. ARE-15's `schedule` needs
+ * the plan read, so the caller adds it (`withScheduleMarks`, `quantities/schedule.ts`).
+ */
 export function marksAsked(words: ReadonlySet<MarkWord>, line: SectionLine | null): DrawingMarksAsked {
   return { section: words.has('section') ? line : null, elevations: words.has('elevations'), levels: words.has('levels') }
 }

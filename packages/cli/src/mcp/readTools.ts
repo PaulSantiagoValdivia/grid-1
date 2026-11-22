@@ -50,7 +50,7 @@ import {
   type Thing,
 } from '../quantities/measure'
 import { WALKED_RULE } from '../quantities/walked'
-import { factsText, flatSchedule, flatScheduleCsv, openingSchedule, openingScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, shownNumber } from '../quantities/schedule'
+import { factsText, flatSchedule, flatScheduleCsv, openingSchedule, openingScheduleCsv, openingTypeSchedule, openingTypeScheduleCsv, planSchedule, roomSchedule, roomScheduleCsv, scheduleMarkLabels, shownNumber } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
 import { SUN_RULE, sunAnswer } from '../quantities/sun'
@@ -690,10 +690,30 @@ const takeoffTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_schedule
 
+/** What grid_schedule's `of` names. */
+type ScheduleOf = 'rooms' | 'openings' | 'flats' | 'doors' | 'windows'
+
 /** ARE-12: the room schedule or the opening schedule, from one set of rows, as text or CSV. */
-function listSchedule(survey: Survey, of: 'rooms' | 'openings' | 'flats', floor: string | undefined, units: Display, asCsv: boolean): Answer {
+function listSchedule(survey: Survey, of: ScheduleOf, floor: string | undefined, units: Display, asCsv: boolean): Answer {
   const floors = floor === undefined ? undefined : [floor]
   const several = survey.facts.floors.length > 1
+  if (of === 'doors' || of === 'windows') {
+    // ARE-15: the door or window schedule by type (kind and size), each type with its openings' marks.
+    const type = of === 'doors' ? 'door' : 'window'
+    const s = openingTypeSchedule(survey, type, floors === undefined ? {} : { floors })
+    const data = { rows: s.rows, count: s.count, rule: s.rule }
+    if (asCsv) return { text: openingTypeScheduleCsv(s), data }
+    const size = (w: number, h: number): string => `${lengthText(w, units)} wide × ${lengthText(h, units)} high`
+    const lines = [`${type === 'door' ? 'Door' : 'Window'} schedule by type, ${s.count} ${type}${s.count === 1 ? '' : 's'} of ${s.rows.length} type${s.rows.length === 1 ? '' : 's'}:`]
+    for (const r of s.rows) {
+      const sills = type === 'window' ? `, sill ${r.sills.map((sill) => lengthText(sill, units, 'height')).join(' or ')}` : ''
+      const part = r.opens === null ? '' : `, opens ${lengthText(r.opens.width, units)} × ${lengthText(r.opens.height, units)}`
+      lines.push(`${r.number}. ${r.count} × ${kindWords(type, r.kind)} ${size(r.width, r.height)}${part}${sills} (type ${r.key}): ${r.marks.join(', ')}`)
+    }
+    if (s.rows.length === 0) lines.push(`The plan has no ${of}${floor === undefined ? '' : ' on that floor'}.`)
+    lines.push(s.rule)
+    return { text: lines.join('\n'), data }
+  }
   if (of === 'flats') {
     // CNT-4: the plan's flats list, each flat once, then the mix by type (lab EL-1, AR-7).
     const s = flatSchedule(survey, floors === undefined ? {} : { floors })
@@ -707,7 +727,7 @@ function listSchedule(survey: Survey, of: 'rooms' | 'openings' | 'flats', floor:
     if (s.rows.length === 0) lines.push('No flat has a room on the floors given.')
     lines.push(`All flats: ${count(s.total.flats, 'flat')}, ${areaText(s.total.area, units)}${stateText(s.total.state, several)}. In no flat: ${areaText(s.notInFlats, units)}.`)
     lines.push('Mix by type:')
-    for (const m of s.mix) lines.push(`  ${q(m.name)}: ${count(m.flats, 'flat')}${m.mirrored === 0 ? '' : ` (${m.mirrored} mirrored)`}, ${percent(m.share)} of the flats, ${areaText(m.area, units)}${m.each === null ? '' : `, ${areaText(m.each, units)} each on average`}`)
+    for (const m of s.mix) lines.push(`  ${q(m.name)}: ${count(m.flats, 'flat')}${m.mirrored === 0 ? '' : ` (${m.mirrored} mirrored)`}${m.bedrooms === null ? '' : `, ${count(m.bedrooms, 'bedroom')} each`}, ${percent(m.share)} of the flats, ${areaText(m.area, units)}${m.each === null ? '' : `, ${areaText(m.each, units)} each on average`}`)
     lines.push(...s.rules)
     return { text: lines.join('\n'), data }
   }
@@ -732,7 +752,8 @@ function listSchedule(survey: Survey, of: 'rooms' | 'openings' | 'flats', floor:
   const kindOf = (r: (typeof s.rows)[number]): string => (r.type === 'opening' ? r.type : kindWords(r.type, r.kind))
   const partOf = (r: (typeof s.rows)[number]): string =>
     `${r.opens === null ? '' : `, opens ${lengthText(r.opens.width, units)} × ${lengthText(r.opens.height, units)}`}${r.handing === null ? '' : `, ${r.handing}`}`
-  const lines = s.rows.map((r) => `${r.number}. ${kindOf(r)} ${q(r.id)}, ${q(r.floorName)}: ${lengthText(r.width, units)} wide × ${lengthText(r.height, units)} high${r.type === 'window' ? `, sill ${lengthText(r.sill, units, 'height')}` : ''}${partOf(r)}, ${r.between[0]} ↔ ${r.between[1]}${Object.keys(r.properties).length === 0 ? '' : `; ${factsText(r.properties)}`}`)
+  // ARE-15: each opening's mark, as the drawing shows it (grid_view marks schedule).
+  const lines = s.rows.map((r) => `${r.number}. ${r.mark} ${kindOf(r)} ${q(r.id)}, ${q(r.floorName)}: ${lengthText(r.width, units)} wide × ${lengthText(r.height, units)} high${r.type === 'window' ? `, sill ${lengthText(r.sill, units, 'height')}` : ''}${partOf(r)}, ${r.between[0]} ↔ ${r.between[1]}${Object.keys(r.properties).length === 0 ? '' : `; ${factsText(r.properties)}`}`)
   if (lines.length === 0) lines.push('The plan has no openings.')
   lines.push(`In all, each counted once: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
   return { text: lines.join('\n'), data }
@@ -745,12 +766,12 @@ const scheduleTool: GridTool = {
   description:
     'Use this when the person asks for the doors and windows by size, how many of each, a door schedule or window schedule, which doors are narrower than a width, how many toilets, basins, showers, baths or kitchen runs there are and where, or for the flats, the area of each flat or the unit mix. '
     + 'It groups every door, window and doorless opening by type, kind (sliding, double, fixed… when the plan states one) and size, each listed once with the two rooms it joins. Sizes are the hole in the wall: the plan holds no frame, so a clear width is not known. '
-    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height, floor and, on a plan that lists flats, its flat, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size, its kind, the part that opens and its handing where the plan states them, and the rooms on its two sides; with of=flats, every flat the plan lists with its type, rooms, bedrooms and net area, and the mix by type (how many of each, how many mirrored). All as text or CSV. '
+    + 'With of=rooms it gives the room schedule instead: every room numbered in one order whatever the file\'s order, with its name, use, net area, height, floor and, on a plan that lists flats, its flat, and the totals for each floor and for all floors; with of=openings, every door, window and doorless opening once, numbered, with its size, its kind, the part that opens and its handing where the plan states them, and the rooms on its two sides; with of=flats, every flat the plan lists with its type, rooms, bedrooms and net area, and the unit mix by type (how many of each, how many mirrored, their bedrooms and area); with of=doors or of=windows, the door or window schedule a supplier needs: the doors, or the windows, grouped into types by kind and size (and the part that opens), each type with its count and the marks of its openings. Every room and opening has a mark (the room\'s number; D1, W1, O1 for openings) that grid_view kind=plan with marks schedule draws on the plan, one mark for each row. All as text or CSV. '
     + 'Do not use for wall or plaster quantities (grid_takeoff). Figures are in the units argument, else the plan\'s display (how its person reads lengths), else metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
-    of: { type: 'string', enum: ['rooms', 'openings', 'flats'], description: 'rooms for the room schedule, openings for one row per door, window and opening, flats for the flats and the mix by type. Grouped by type and size when left out.', examples: ['rooms', 'openings', 'flats'] },
+    of: { type: 'string', enum: ['rooms', 'openings', 'flats', 'doors', 'windows'], description: 'rooms for the room schedule, openings for one row per door, window and opening, flats for the flats and the unit mix by type, doors or windows for the door or window schedule by type with each type\'s marks. Grouped by type and size when left out.', examples: ['rooms', 'openings', 'flats', 'doors'] },
     types: { type: 'array', description: 'Only these kinds: door, window, opening, or fixture for the toilets, basins, showers, baths and kitchen runs. All of them when left out.', examples: [['door'], ['door', 'opening'], ['fixture']], items: { enum: ['door', 'window', 'opening', 'fixture'] }, minItems: 1, maxItems: 4 },
     narrower_than: { type: 'number', length: true, description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
     units: UNITS_ARG,
@@ -768,13 +789,15 @@ const scheduleTool: GridTool = {
     total: { type: 'object' },
     rules: listSchema(STRING),
     // CNT-4, with of=flats: the mix by type, and the net area of the rooms in no flat.
-    mix: listSchema(objectSchema({ type: { type: ['string', 'null'] }, name: STRING, flats: NUMBER, mirrored: NUMBER, share: NUMBER, area: NUMBER, each: NULLABLE_NUMBER })),
+    mix: listSchema(objectSchema({ type: { type: ['string', 'null'] }, name: STRING, flats: NUMBER, mirrored: NUMBER, bedrooms: NULLABLE_NUMBER, share: NUMBER, area: NUMBER, each: NULLABLE_NUMBER })),
     notInFlats: NUMBER,
+    // ARE-15, with of=doors or of=windows: how many of them, each counted once.
+    count: NUMBER,
   }, ['rows']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const units = displayFor(args['units'], args['decimal'], survey.plan)
-    const of = args['of'] as 'rooms' | 'openings' | 'flats' | undefined
+    const of = args['of'] as ScheduleOf | undefined
     if (of !== undefined) {
       const stray = ['types', 'narrower_than'].filter((name) => args[name] !== undefined)
       if (stray.length > 0) throw new ToolRefusal(`of=${of} takes no ${stray.join(' or ')}.`)
@@ -1585,6 +1608,7 @@ function marksText(marks: DrawingMarksAsked): string {
   if (marks.section != null) said.push(`the section's cut line from (${m(marks.section.from.x)}, ${m(marks.section.from.y)}) to (${m(marks.section.to.x)}, ${m(marks.section.to.y)}) as a chain line named A, its arrows looking to the ${marks.section.toward}`)
   if (marks.elevations === true) said.push('an elevation mark outside each main side of the building, its arrow at the side it shows, named by the way that side faces; kind=facade draws each, with side the side of the drawing it is seen from (north at the top)')
   if (marks.levels === true) said.push('each room\'s floor level under its name, in metres from the ground floor\'s floor level')
+  if (marks.schedule != null) said.push('each room\'s and opening\'s mark in the schedules, in a box: a room\'s number over its name, as grid_schedule of=rooms numbers it, and each door\'s, window\'s and doorless opening\'s D1, W1 or O1 beside it, as of=openings, of=doors and of=windows list it')
   return `Marked on the plan: ${said.join('; ')}.`
 }
 
@@ -1677,7 +1701,7 @@ const viewTool: GridTool = {
       schema: objectSchema({ from: { type: 'array', items: NUMBER, minItems: 2, maxItems: 2 }, to: { type: 'array', items: NUMBER, minItems: 2, maxItems: 2 } }),
       read: (value) => cutArg(value),
     },
-    marks: { type: 'array', description: 'For plan: marks for the plan\'s other drawings: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of cut and the way toward looks). None when left out.', examples: [['levels', 'elevations'], ['section']], items: { enum: MARK_WORDS }, minItems: 1, maxItems: 3 },
+    marks: { type: 'array', description: 'For plan: marks for the plan\'s other drawings: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of cut and the way toward looks), schedule (each room\'s and opening\'s mark in the schedules, tied to its row in grid_schedule). None when left out.', examples: [['levels', 'elevations'], ['section'], ['schedule']], items: { enum: MARK_WORDS }, minItems: 1, maxItems: 4 },
   },
   outputSchema: objectSchema({ kind: STRING, floor: { type: ['string', 'null'] }, camera: { ...CAMERA_SCHEMA, type: ['object', 'null'] }, view: NULLABLE_STRING, pxPerMetre: NULLABLE_NUMBER, sills: { type: 'array' }, ids: listSchema(STRING), boxes: { type: 'array' }, painted: { type: 'array' }, facade: { type: 'object' }, section: { type: 'object' } }, ['kind', 'floor', 'camera', 'view', 'pxPerMetre', 'sills', 'ids', 'boxes']),
   async run(args, context) {
@@ -1713,9 +1737,11 @@ const viewTool: GridTool = {
       if (!markWords?.has('section') && (args['cut'] !== undefined || args['toward'] !== undefined)) throw new ToolRefusal('kind=plan takes cut and toward only with marks section, to draw a section\'s line on the plan; kind=section draws the section itself.')
       if (markWords?.has('section') && args['cut'] === undefined) throw new ToolRefusal('marks section draws the line of a section on the plan: pass cut with the line.')
     }
-    const marksOnPlan = markWords === null
+    const marksAsk = markWords === null
       ? undefined
       : marksAsked(markWords, args['cut'] === undefined ? null : asToolArg(() => sectionLineOf((args['cut'] as CutArg).from, (args['cut'] as CutArg).to, towardOf(args['toward'] as string | undefined, 'toward'), 'cut')))
+    // ARE-15: the schedules' marks, by id, from the same rows as grid_schedule.
+    const marksOnPlan = marksAsk !== undefined && markWords?.has('schedule') === true ? { ...marksAsk, schedule: scheduleMarkLabels(survey) } : marksAsk
     if (kind === 'plan') {
       const asked = (args['look'] as LookName | undefined) ?? 'working'
       const look = asked === namedLook(asked) ? asked : `${namedLook(asked)} (asked as ${asked})`

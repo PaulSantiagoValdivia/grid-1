@@ -1,13 +1,15 @@
 /**
  * LVL-9: the marks a plan carries for its other drawings, as the core places them
  * (`drawingMarks`): a section's cut line with the way it looks, an elevation mark outside each
- * main side of the building, and the level of each room's floor. Each symbol is drawn in pixels
+ * main side of the building, and the level of each room's floor; and ARE-15's schedule marks, each
+ * room's and opening's mark in the schedules, in SHT-7's tag. Each symbol is drawn in pixels
  * round the point the core gives, so it reads the same at any zoom.
  *
  * Pure: no DOM, no React.
  */
-import type { CompassPoint, DrawingMarks, Vec2 } from '@ongrid/floorplan/geometry'
+import type { CompassPoint, DrawingMarks, ScheduleMark, Vec2 } from '@ongrid/floorplan/geometry'
 import { levelText } from '@ongrid/floorplan/geometry'
+import { estimateTextWidth } from '../canvas2d/labelPlacement'
 import type { Look } from './look'
 import { TEXT_PX, lengthText, lineMetres } from './look'
 import type { Attrs, SvgNode } from './svgNode'
@@ -25,6 +27,13 @@ const NAME_PX = 28
 const DISC_PX = 12
 /** How far under a room's label point its level stands, in pixels: below the name and the area. */
 const LEVEL_DY_PX = 32
+/** ARE-15: how far over a room's label point its mark's middle stands, in pixels: above its name. */
+const ROOM_MARK_DY_PX = 24
+/** ARE-15: how far out from its wall's face an opening's mark's middle stands, in pixels. */
+const OPENING_MARK_PX = 14
+/** SHT-7's tag: its height, and the room either side of its words, in pixels. */
+const TAG_HEIGHT_PX = 17
+const TAG_PAD_PX = 10
 
 /** MSG-11: the letters of the way a side faces, in the drawing's language (`drawing.mark.faces.*`). */
 const short = (faces: CompassPoint, words: DrawingWords): string => drawingText(words, `drawing.mark.faces.${faces}`)
@@ -89,5 +98,26 @@ export function drawingMarkNodes(marks: DrawingMarks, look: Look, mpp: number, p
       ])
     )
   }
+
+  // ARE-15's schedule marks are drawn by the scene, over the room labels where it placed them
+  // (`scheduleMarkNodes`).
   return nodes
+}
+
+/**
+ * ARE-15: each schedule mark in SHT-7's tag, its words over a box of paper, tied to its row by the
+ * part's id: a room's over its name where the label was placed (`labelAt`), else over the room's
+ * label point; an opening's just out from its wall's face.
+ */
+export function scheduleMarkNodes(marks: readonly ScheduleMark[], labelAt: ReadonlyMap<string, Vec2>, look: Look, mpp: number): SvgNode[] {
+  const tag: Attrs = { 'text-anchor': 'middle', fill: look.colors.label, 'font-family': look.colors.font, 'font-size': TEXT_PX.note }
+  return marks.map((mark) => {
+    const middle = mark.out === null ? { x: 0, y: -ROOM_MARK_DY_PX } : { x: mark.out.x * OPENING_MARK_PX, y: -mark.out.y * OPENING_MARK_PX }
+    const at = mark.of === 'room' ? labelAt.get(mark.id) ?? mark.at : mark.at
+    const width = estimateTextWidth(mark.mark, TEXT_PX.note) + TAG_PAD_PX
+    return el('g', { 'data-part': 'schedule-mark', 'data-of': mark.of, 'data-id': mark.id, 'data-mark': mark.mark, 'pointer-events': 'none', transform: pixelGroup(at, mpp) }, [
+      el('rect', { x: n(middle.x - width / 2), y: n(middle.y - TAG_HEIGHT_PX / 2), width: n(width), height: TAG_HEIGHT_PX, rx: '3', fill: look.colors.paper, stroke: look.colors.label, 'stroke-width': 1 }),
+      el('text', { x: n(middle.x), y: n(middle.y + 4.5), ...tag }, [mark.mark])
+    ], `schedule-mark:${mark.of}:${mark.id}`)
+  })
 }
