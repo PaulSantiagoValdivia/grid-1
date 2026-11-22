@@ -144,7 +144,7 @@ so there is no entry in the agents' changelog; `CHANGELOG.md` has a line under "
    kind (`Exterior wall`, `Interior wall`, `Partition`), one layer, and the type's description
    says the plan holds no build-up. `IsExternal` stays the worked-out exposure (MSG-13), so a wall
    stated `interior` that faces outside is an `Interior wall` type with `IsExternal` true.
-8. **Slabs stay per room**, under each room's footprint, as the views draw them; I did not
+8. **Slabs stay per room** (superseded by the LVL-4 merge: item 14), under each room's footprint, as the views draw them; I did not
    switch them to `planShell`'s floor outline, which would put slab under the walls and make the
    IFC differ from the 3D view. So the IFC's slab areas add up to the rooms' footprints, while
    the estimate's slab line (`planShell`, gross external) includes the walls. Both say assumed.
@@ -162,6 +162,15 @@ so there is no entry in the agents' changelog; `CHANGELOG.md` has a line under "
     The IFC, written near the origin, gives 4.8. Not fixed here.
 13. The structural test lives in `packages/floorplan` and reads `packages/cli/fixtures` by path,
     so the CLI's plans are checked by the exporter's own test. No dependency was added.
+14. **Slabs after LVL-4**: the file now has LVL-4's slabs only (one per floor over its outline,
+    pieces for rooms set above or below their storey, the roof's slab), each with HND-2's
+    `Qto_SlabBaseQuantities` from LVL-4's geometry. The plan still states no slab or roof
+    outline, so I kept `Grid_Slab.Assumed` true on every one, as the take-off marks every slab
+    and roof line assumed, and added `ThicknessStated` (true where the floor states `slab`, and
+    for a raised room's fill, whose thickness is its stated offset). If a stated thickness should
+    clear `Assumed`, that is a one-line change. The `IfcRoof` carries no quantities (IFC2x3 has
+    no roof set; its slab does), and a ceiling's set has its area only, since its 0.02 m depth is
+    drawn, not the plan's.
 
 ## What's left
 
@@ -199,3 +208,19 @@ affected tests (the floorplan geometry, export, types and rooms tests, the CLI's
 sheet, draw, `everyPath`, `exportName`, `grid.e2e` and `coverage`, the rules' result tests and
 the scoreboard's) passed, 3,515 with 4 skipped, of 3,519 in 145 files. `npm run scoreboard`:
 197, 278, 16, 5, 14, 735, 95, the same as stored.
+
+After merging `main` at b58930a (LVL-4): conflicts in `ifc.ts` (`writeSlab`) and the four IFC
+goldens. LVL-4's slabs, roof, parapet, slab openings and ceilings are kept as main writes them, and
+HND-2's per-room slabs are gone, so no floor has two slabs. HND-2's slab quantities are taken from
+LVL-4's slab bodies (net area and volume where a stair, lift or void opens the slab), landings
+keep theirs, and `Grid_Slab` says each slab is assumed, whether its thickness is stated, and what
+Grid took (item 14). Slab openings, ceilings and parapets gained base quantities. Everything goes
+through `nearOrigin`, since `writeSlabs` reads the moved plan. `ifc.structure.test.ts` now
+admits and checks the roof, its slab, the parapet, ceilings with the spaces they cover and slab
+voids, one floor slab per storey, and a new plan with a parapet, ceilings, a void and a sunken
+room. Regenerated goldens against `main`, entity numbers and GlobalIds stripped and lines
+compared as multisets: only HND-2's additions (space names, materials, quantity sets, types and
+styles, `Grid_Space`, `Grid_Slab`) and one material relation's GlobalId (HND-2's); no slab, roof
+or geometry line differs. Build, typecheck and lint clean; the export tests, `schedules`, the
+envelope tests and `roomNumbers` passed, 422 of 422 in 13 files. The full suite and the
+scoreboard were not run.
