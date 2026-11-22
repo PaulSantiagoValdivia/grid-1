@@ -192,3 +192,5 @@ the tool server's `flats`, `tools`, `schedules`, `writeRooms` and `contract`, `s
 `src/taped`, `src/firm`, `grid.e2e`, `everyPath.e2e`, `cli/src/__tests__`, and the viewer's
 `flats` and `faults`): 60 files, 1,121 passed.
 The scoreboard on the merged tree: "Same as the stored figures" (197, 278, 21, 5, 20, 735, 95).
+
+After merging `main` at fbe5160 (WRT-7, CNT-10, VEW-9, VEW-4): CNT-10 took C16 (phases), so flats are **C17**; `grid_schedule` keeps WRT-7's units beside `of=flats`, facts keep `flatsListed` and `work`, MSG-4's list reads `… referenceImage, base, … taped, flatTypes, flats, display, written`; build (580,054 bytes, under the 600,000 cap), typecheck and lint clean; the affected tests (`cli/src/mcp` with the replay, `quantities`, `sheet`, `describe`, `edit`, `preview`, `command/__tests__`, `cli/src/__tests__`, floorplan `types`, `geometry/__tests__`, both export folders, `rooms`, `rules/src`, `viewer`): 290 files, 5,234 passed, 2 skipped; the scoreboard "Same as the stored figures".
