@@ -46,7 +46,21 @@ export const wordings = {
     words(`, escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: ${count}`)
   ],
   /** MSG-2 (lab CH-1): a plan with walls and no rooms. */
-  noRooms: (): WordingPart[] => [words('No check that looks at rooms ran: the plan has no rooms')]
+  noRooms: (): WordingPart[] => [words('No check that looks at rooms ran: the plan has no rooms')],
+  /**
+   * CNT-5 (lab EL-2): the plan says it is a kind of building the check's figures were not read
+   * for. `readFor` and `building` as a sentence names them: "homes (houses and flats people live
+   * in)", "an office".
+   */
+  notForBuilding: (what: FigureSubject, readFor: string, building: string): WordingPart[] => [
+    words(`${what} were not checked: the figures here were read for ${readFor}, and the plan says this is ${building}`)
+  ],
+  /** CNT-5: the same, for one floor the plan says is that kind. */
+  floorNotForBuilding: (floor: string, what: FigureSubject, readFor: string, building: string): WordingPart[] => [
+    words('On '),
+    name(floor),
+    words(`, ${what.toLowerCase()} were not checked: the figures here were read for ${readFor}, and the plan says this floor is ${building}`)
+  ]
 }
 
 /** The same wordings as report lines. */
@@ -58,5 +72,8 @@ export const messages = {
   noUse: (floor: string, count: number): string => wordingText(wordings.noUse(floor, count)),
   noFiguresForPlace: (what: FigureSubject, country: string): string => wordingText(wordings.noFiguresForPlace(what, country)),
   aboveEscapeStoreys: (floor: string, count: number): string => wordingText(wordings.aboveEscapeStoreys(floor, count)),
-  noRooms: (): string => wordingText(wordings.noRooms())
+  noRooms: (): string => wordingText(wordings.noRooms()),
+  notForBuilding: (what: FigureSubject, readFor: string, building: string): string => wordingText(wordings.notForBuilding(what, readFor, building)),
+  floorNotForBuilding: (floor: string, what: FigureSubject, readFor: string, building: string): string =>
+    wordingText(wordings.floorNotForBuilding(floor, what, readFor, building))
 }

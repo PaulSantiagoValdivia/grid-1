@@ -47,11 +47,12 @@ contract; `src/result/catalogue.ts` holds the one wording of every code.
   Every report lists what the checks never look at, and no message says a plan complies or
   is approved.
 - **Read for homes only.** Every figure here was read for homes (houses and flats), and records
-  it as `readFor` beside its document, edition, clause and status. A plan cannot say yet what
-  kind of building it is, so the figures are applied to any plan, a café's seating or a hotel's
-  rooms as well; every note and every pass that used a figure says which kind of building it
-  was read for (COD-2). Running a figure only in its kind of building waits on the plan stating
-  its building type.
+  it as `readFor` beside its document, edition, clause and status. A plan may say what kind of
+  building it is, and a floor may say otherwise (CNT-5). A figure check runs only where the
+  plan, or that floor, is a home (`READ_FOR_BUILDINGS`, `RULE_BUILDINGS`), or where the plan
+  does not say; elsewhere it skips the rooms and says why. Where the plan does not say, the
+  figures are applied to any plan, a café's seating or a hotel's rooms as well, and every note
+  and every pass that used a figure says which kind of building it was read for (COD-2).
 - **Not checked by a person yet.** Each figure carries a status. Today every figure is
   `ai-found`: read by an AI, with no person having opened the source. Reports and notes
   show the status next to the figure.
@@ -119,8 +120,9 @@ holds text from the source.
    number. Describe the rule in your own words. Never paste a sentence, a table, a
    definition or an image from a code or a standard, and never collect rules in bulk from
    one publisher's site.
-3. **Say who it applies to.** Building type, thresholds and exceptions go in `appliesTo`.
-   A rule that only holds for some buildings or places must only run there, and say so.
+3. **Say who it applies to.** Building type, thresholds and exceptions go in `appliesTo`, and
+   the kind of building it was read for in `readFor`, which decides where it runs. A rule that
+   only holds for some buildings or places must only run there, and say so.
 4. **Add the figure** to `figures.ts` with all its provenance fields, and name it in
    `RULE_FIGURES` under the rule that uses it. A new edition is a new entry: keep the
    edition with the clause number, because numbers move between editions.

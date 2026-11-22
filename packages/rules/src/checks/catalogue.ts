@@ -7,8 +7,8 @@
  */
 
 import { RULES as PLAN_RULES } from '@ongrid/floorplan/geometry'
-import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
-import { ESCAPE_TOP_LEVEL, FIGURES, US_MODEL_CODES, type FigureKey, type SourceCitation } from './figures'
+import type { BuildingType, RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { ESCAPE_TOP_LEVEL, FIGURES, READ_FOR_BUILDINGS, US_MODEL_CODES, readForCovers, type BuildingKind, type FigureKey, type SourceCitation } from './figures'
 import type { Rule, RuleCitation } from './types'
 
 const SOURCE_LABEL = `${US_MODEL_CODES}: IBC 2024 and IRC 2024` as const
@@ -75,10 +75,39 @@ export const RULE_USES: Readonly<Record<FigureRuleId, readonly RoomUse[]>> = {
   'escape-opening': ['bedroom']
 }
 
-/** The figure rules that look at a room of this use; none for a room with no use stated. */
-export function rulesForUse(use: RoomUse | undefined): readonly (Rule & { readonly id: FigureRuleId })[] {
+/**
+ * CNT-5: the kinds of building each figure rule's figures were read for, from the figures
+ * themselves (and the escape rule's top storey), so a figure read for another kind changes it.
+ */
+export const RULE_READ_FOR: Readonly<Record<FigureRuleId, readonly BuildingKind[]>> = {
+  'habitable-room-area': [...new Set(RULE_FIGURES['habitable-room-area'].map((key) => FIGURES[key].provenance.readFor))],
+  'escape-opening': [
+    ...new Set([ESCAPE_TOP_LEVEL.provenance.readFor, ...RULE_FIGURES['escape-opening'].map((key) => FIGURES[key].provenance.readFor)])
+  ]
+}
+
+/**
+ * CNT-5: the kinds of building a plan may state that each figure rule reads. On a floor the plan
+ * says is another kind, the rule looks at no room, and the report says why. Where the plan does
+ * not say, every rule runs, as before.
+ */
+export const RULE_BUILDINGS: Readonly<Record<FigureRuleId, readonly BuildingType[]>> = {
+  'habitable-room-area': [...new Set(RULE_READ_FOR['habitable-room-area'].flatMap((kind) => READ_FOR_BUILDINGS[kind]))],
+  'escape-opening': [...new Set(RULE_READ_FOR['escape-opening'].flatMap((kind) => READ_FOR_BUILDINGS[kind]))]
+}
+
+/** Whether a figure rule runs in a building, or a floor, of this kind: always when it is not stated. */
+export function ruleReadsBuilding(ruleId: FigureRuleId, building: BuildingType | undefined): boolean {
+  return readForCovers(RULE_READ_FOR[ruleId], building)
+}
+
+/**
+ * The figure rules that look at a room of this use, in a building of this kind (CNT-5: every kind
+ * when it is not stated); none for a room with no use stated.
+ */
+export function rulesForUse(use: RoomUse | undefined, building?: BuildingType): readonly (Rule & { readonly id: FigureRuleId })[] {
   if (use === undefined) return []
-  return FIGURE_RULES.filter((rule) => RULE_USES[rule.id].includes(use))
+  return FIGURE_RULES.filter((rule) => RULE_USES[rule.id].includes(use) && ruleReadsBuilding(rule.id, building))
 }
 
 /** What the figure checks never look at. Shown with every report, after the core's own. */

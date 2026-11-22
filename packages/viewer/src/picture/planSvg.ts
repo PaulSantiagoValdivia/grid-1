@@ -16,6 +16,7 @@ import {
   boundsWithDimensions,
   buildDimensions,
   buildFloorPlan,
+  floorAbove,
   planForFloor,
   resolveFloor,
   validateFloorDoorSweeps
@@ -31,7 +32,7 @@ import { LOOKS, lengthText, toLook } from './look'
 import { planScene } from './scene'
 import type { FaultLine, PictureKey } from './faults'
 import { faultKey, faultsOnFloor } from './faults'
-import { keyEntries, stackBands, writingBand } from './writing'
+import { keyEntries, northArrowNode, stackBands, writingBand } from './writing'
 import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
 import type { SvgNode } from './svgNode'
 import { el, toSvg } from './svgNode'
@@ -77,7 +78,8 @@ export interface PictureOptions {
   /**
    * SHT-7: what the picture shows. Each is on by default: `title` and `key` (the plan's own, in
    * the band under the drawing; `key: true` adds a key the plan does not ask for), `notes`,
-   * `sketch`, `areas`, `swings` and `warnings` (door warnings and MSG-8's marks and list).
+   * `sketch`, `areas`, `swings`, `warnings` (door warnings and MSG-8's marks and list) and
+   * `above` (SHT-11: the dashed outline of the floor above).
    * `colourBy: 'use'` fills each room by its use, and puts the uses in the key.
    */
   readonly show?: PictureShow
@@ -92,6 +94,7 @@ export interface PictureShow {
   readonly areas?: boolean
   readonly swings?: boolean
   readonly warnings?: boolean
+  readonly above?: boolean
   readonly colourBy?: 'use' | null
 }
 
@@ -110,7 +113,10 @@ export interface Picture {
    * plan does not state, in a look that marks them (`technical`). Empty in any other look.
    */
   readonly undecidedDoors: readonly string[]
-  /** The plan's elements: exactly what the app's 2D view draws inside its `<svg>`. */
+  /**
+   * The plan's elements: exactly what the app's 2D view draws inside its `<svg>`, and, when the
+   * plan states its north, the north arrow in the corner of the view (CNT-3).
+   */
   readonly nodes: readonly SvgNode[]
   /**
    * The key under the drawing, when the picture was given faults: `height` more pixels below
@@ -243,7 +249,9 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
   const show = options.show ?? {}
   const on = (part: Exclude<keyof PictureShow, 'colourBy' | 'key'>): boolean => show[part] !== false
   const uses = new Map(slice.rooms.flatMap((room) => (room.use === undefined ? [] : [[room.id, room.use] as const])))
-  const nodes = planScene({
+  // SHT-11: the floor above, worked out only when it is shown.
+  const above = on('above') ? floorAbove(slice) : undefined
+  const scene = planScene({
     drawing,
     handings,
     doorWarnings: warningMessages(doorWarningsOf(slice, drawing)),
@@ -255,21 +263,25 @@ export function planPicture(plan: FloorPlan, options: PictureOptions = {}): Pict
     labels: options.labels?.display !== undefined || plan.display === undefined ? options.labels : { ...options.labels, display: displayOf(plan.display.length, plan.display.decimal ?? 'point', plan.display.area, plan.display.precision) },
     faults,
     uses,
+    ...(above === undefined ? {} : { above }),
     show: {
       notes: on('notes'),
       sketch: on('sketch'),
       areas: on('areas'),
       swings: on('swings'),
       warnings: on('warnings'),
+      above: on('above'),
       colourBy: show.colourBy ?? null
     }
   })
+  // CNT-3: a plan that states its north gets a north arrow in the corner of the view.
+  const nodes = drawing.north === null ? scene : [...scene, northArrowNode(drawing.north, view, view.width / width, look.colors)]
   // SHT-7: the title and the key in a band under the drawing, then what went wrong (MSG-8).
   const title = on('title') ? (plan.title ?? null) : null
   const keyed = show.key === true || (show.key !== false && drawing.notes.some((note) => note.kind === 'key'))
   const shownUses = show.colourBy === 'use' ? ROOM_USES.filter((use) => drawing.rooms.some((room) => uses.get(room.id) === use)) : []
   const marked = on('warnings') && faults.length > 0
-  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked }) : []
+  const entries = keyed ? keyEntries(drawing, look.colors, { swings: on('swings'), sketch: on('sketch'), uses: shownUses, marks: marked, above: (above?.lines.length ?? 0) > 0 }) : []
   const writing = writingBand(title, entries, width, look.colors)
   const listed = options.faults === undefined || !on('warnings') ? null : faultKey(faults, all.length - faults.length, width, look.colors)
   const key = stackBands(writing, listed)
