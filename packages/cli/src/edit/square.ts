@@ -9,7 +9,7 @@
  * square to the drawing). A wall further off than `squareWithin` is left as it is and named:
  * it may be a bay, a splay or a mistake, which is for the person to say.
  *
- * By default only the walls the plan marks scanned are squared (`marks`, C7); `all` squares
+ * By default only the walls the plan marks scanned are squared (`marks`, C8); `all` squares
  * every wall. The marks are kept: a squared wall was still scanned, and its tolerance still says
  * how sure its place is. Openings keep their anchor or their place in the building (`seat.ts`).
  *

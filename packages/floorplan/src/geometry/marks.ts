@@ -1,5 +1,5 @@
 /**
- * WRT-6 (lab WR-15, AE-4): where the plan's values came from, read from its `marks` (C7).
+ * WRT-6 (lab WR-15, AE-4): where the plan's values came from, read from its `marks` (C8).
  *
  * A mark names a part (a wall, room, opening, floor or fixture) by id and, when it is about one
  * value of it, that value: `{ part: 'wall', id: 'w1', value: 'height', source: 'assumed' }`. A

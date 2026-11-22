@@ -32,7 +32,8 @@ record. It never throws: a check that fails inside Grid becomes a line
 (`scoreboard/__tests__/frontDoor.test.ts`).
 
 `grid check` prints the record (`--json` gives it as `result`), and `grid_check` returns its
-`count` and `lines` beside the older lists, which it keeps for now.
+`count` and `lines` beside the older lists, which it keeps for now. Both print a short report by
+default, and the whole one on request (MSG-10, see "The short report, and seen notes").
 
 ## The record
 
@@ -127,6 +128,8 @@ label.
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
 | `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
 | `plan/note-no-place` | Note "{id}" names a room the plan does not have, so it is not drawn | a room id from the plan, or a point (at) |
+| `plan/front-not-said` | The front names wall "{id}", which the plan does not have, so no front is said | a wall that faces outside, or an opening in one, such as the front door |
+| `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round | a plan whose y runs up the page, as Grid draws it |
 | `plan/unknown-use` | Room "{name}" has a use Grid does not know, "{use}" | one of the uses Grid knows: bedroom, living, … |
 | `plan/empty` | The plan has nothing in it: no walls, rooms or openings | walls, and the rooms and openings they hold |
 | `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
@@ -313,6 +316,68 @@ each total (`net`, `circulation`, `grossInternal`, `grossExternal`, `circulation
 A total that left a room out names it, in `leftOut`, in its text ("not proven: leaves out
 "Kitchen", which could not be measured") and in a note. The CSV has a `state` column.
 
+## The short report, and seen notes
+
+`grid check` and `grid_check` print a short report by default, sized to the plan (MSG-10): the
+label first; the lines, each with what was found and needed and the fix; the figures those
+lines used, each as the figure used here with its document, edition, clause and status; what
+each check looked at, in counts (the rooms looked at by at least one check, each check's count,
+and the parts it could not look at, with the reason); and one line on what the whole report
+adds. A check that looked at nothing still says "Nothing was checked for …". `grid check --full`
+and `grid_check` with `full: true` add the checks run, every figure the checks applied, each
+check's parts one by one, and what these checks never look at (`limits`). The data is the same
+either way: `grid check --json` gives the whole check, and `grid_check`'s data keeps `coverage`
+and `limits`. For the lab's 62.65 m² flat the short text is 988 bytes from `grid check` and 973
+from `grid_check` (`packages/cli/src/command/__tests__/shortReport.test.ts`).
+
+A person can set a note aside as seen, with a reason and the name or role they give, through
+`grid check --seen <n> --reason <text> --by <name>` or `grid_mark_seen`. A seen note is never left
+out and never called dealt with: it is listed under "Seen", with its reason, who marked it and
+the day, and the count of lines says how many are seen. The mark is keyed to the note (its
+`code`, `thing` and `also`) and to the content of the parts it is about: the thing and the
+`also` ids, a room with the walls of its outline, an opening with its wall, a floor with
+everything on it, and the whole plan for a line about the plan that names no part. When one of
+them changes, the mark no longer holds and the line is listed with the others again, saying it
+was seen before and which part changed since.
+
+A part's content holds the plan's own `marks` that name it ([where a value came
+from](plan-file.md#where-a-value-came-from), WRT-6), so a change to one brings its note back.
+A seen mark is not one of those marks: they are in the plan, and seen marks only beside it. A
+part can have several notes of one code, one for each value the plan marks assumed
+(`plan/value-assumed`); a seen mark made while its note shared its `code`, `thing` and `also`
+with another keeps the note's `message` as well, and holds only for that note. A mark without
+one holds no more once another note joins its own, and the notes are listed as new.
+
+The marks are kept beside the plan, in `<plan>.seen.json` (`plan.seen.json` beside
+`plan.json`), read and written only through the project's resolver. No export, sheet or drawing
+reads them. A file that is there and cannot be read is said in the report, every note is then
+listed as new, and no mark is written over it.
+
+```json
+{
+  "version": "1",
+  "marks": [
+    {
+      "code": "room/too-small",
+      "thing": { "kind": "room", "id": "bed2" },
+      "also": [],
+      "parts": [{ "kind": "room", "id": "bed2", "hash": "…" }, { "kind": "wall", "id": "w3", "hash": "…" }],
+      "reason": "A box room, kept small on purpose",
+      "by": "Owner",
+      "at": "2026-11-22T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+In `grid_check`'s data, a line with a mark carries `seen`: `{ state, reason, by, at }`, `state`
+`seen` while the mark holds, and `back`, with `changed` (each part as `{ kind, id }`), when one
+of its parts changed since. `seenCount` is how many lines are seen, `marksFile` the marks file
+in the project, and `marksProblem` why it could not be read, or null. `grid check --json` gives
+the same as `seen` (`file`, `problem`, and `states`, one per line of `result.lines`) once a line
+has a mark or the marks file cannot be read, and `marked` after `--seen` or `--unseen`; a plan
+no one has marked gives the same JSON as before.
+
 ## Refusals
 
 A plan is refused when it is not JSON, not a JSON object, holds an unfinished git merge, or
@@ -370,6 +435,7 @@ its text, which says the same.
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`. An export that would hold no wall, room or fixture is refused. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
+| `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose) and `couldNotKeep` (what the change could not keep as it was). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). |
 
 A change that would add a problem that leaves a part out is refused, and nothing is written.
@@ -398,9 +464,62 @@ A change that would add a problem that leaves a part out is refused, and nothing
   the plan marks, on each floor and on the plan (null on the plan when no wall is marked), and its text says "from a scan, about ± 1.6%".
   `plusMinus` and `percent` are null when a scanned wall states no tolerance.
 - A new tool, `grid_square_scan`, after `grid_rename_room`: it squares the walls marked scanned,
-  and its receipt adds `moves` and `leftAsTheyAre`.
+  and its receipt adds `moves` and `leftAsTheyAre`. With `grid_mark_seen` (MSG-10), the tools are 23.
+- A `to-confirm` line can be set aside as seen like any other (MSG-10): it is then listed under
+  "Seen", not "To confirm". Each assumed value of a part is its own note, so marking one leaves
+  the others listed, and a change to the part's marks brings a seen one back.
 - A wall that states no height is described as "wall height not stated (drawn 2.7 m high)" by
   `grid_describe`, and its rooms text (`as=rooms`) states no height for it.
+
+### 2026-11-22: a short report, and notes set aside as seen (MSG-10)
+
+- `grid_check`'s text is short by default: the label, the lines, what each check looked at in
+  counts, and one line on what `full: true` adds. `full: true` adds the checks run, every figure
+  (as "The figure used here for …", with its basis and status), each check's skipped parts and
+  what these checks never look at. Before, the text always ended with the never-looked-at lines;
+  they are still in `limits` in the data, which is unchanged but for the fields below.
+- `grid_check` takes `full`, and its data gains `seenCount`, `marksFile`, `marksProblem`, and
+  `seen` on each line the person marked: `{ state: "seen" | "back", reason, by, at, changed? }`.
+- A new tool, `grid_mark_seen`, sets a note aside as seen with the person's reason and the name
+  or role they give, or takes the mark off (`unmark`). It takes the note's number and code as
+  `grid_check` gave them, and refuses a number that now names another code. It writes only
+  `<plan>.seen.json` beside the plan. The tools are 22.
+- A seen note is listed under "Seen" in the text, and still counted. When one of its parts
+  changes, it is listed with the others again, saying so.
+
+### 2026-11-22: north, front and where the building is (CNT-3)
+
+- The plan may hold `north`, `yAxis`, `front` and `site` ([plan-file.md](plan-file.md#north-front-and-where-the-building-is)).
+  A plan that states none gets every answer as before.
+- `grid_measure` takes `what=facing`, with `room` for one room: `answer` holds `north` (`stated`,
+  and `degrees` counter-clockwise from the top of the drawing, or the `assumed` north), `yAxis`,
+  `front`, and `rooms`, `walls` and `openings`, each with the compass point it `faces`
+  (`north`, `north-east`, … `north-west`) and, for walls and openings, its `bearing` in degrees
+  clockwise from north. A plan that states no north is answered with north as the top of the
+  drawing, and the text's first line says so.
+- New codes, worth a look: `plan/front-not-said`, a front that names a part the plan does not
+  have or a wall that does not face outside, naming it in `also`; `plan/y-down`, a plan whose y
+  runs down the page.
+- `grid_view`'s text for a plan that states its north says where the north arrow points, in
+  place of "the plan holds no real north". `grid_describe` adds a few lines on north and the
+  ways the rooms face for a plan that states its north or its front, and leaves "north" out of
+  what is not in the plan. `grid_mirror` mirrors the stated north and the site's origin, and
+  says so in `changed`.
+- The IFC export writes the stated north as `TrueNorth`, and none for a plan that states none
+  (it wrote +y before), and the site's origin, latitude, longitude and elevation when stated.
+
+### 2026-11-22: sizes along the walls, in chains (SHT-4)
+
+- No line, code or wording of the record changes.
+- The floor plan picture (`grid draw`, `grid_view` kind plan, the sheet) dimensions each room
+  along its walls' faces: width and depth for a room with four square corners, one size per
+  side for any other, each line inside its room. Outside the plan, each side has a chain of
+  openings, a chain of walls and the overall size, along the plan's own main directions, and
+  each chain adds up to the overall size. In the technical look the lines end in 45-degree
+  ticks with the numbers along them.
+- In an SVG, each dimension's group carries `data-measured-to`, what its two ends measure to
+  (`face`, `centre-line` or `finish`), and `data-kind` is `overall`, `wall`, `opening` or
+  `room`.
 
 ### 2026-11-22: quantities for a first estimate (ARE-13)
 

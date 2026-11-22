@@ -23,6 +23,7 @@ import { brokenOnFloor, validatePlan } from './validate'
 import type { PlanStep } from './steps'
 import type { PlanNote, PlanSketch } from './writing'
 import { planNotes, planSketch, sketchExtent } from './writing'
+import { planOrientation } from './orientation'
 import { planSteps } from './steps'
 import type { RiserLine, StairLayout } from './stairs'
 import { planStairs } from './stairs'
@@ -48,6 +49,8 @@ export interface PlanWall {
   readonly slices: readonly Vec2[][]
   /** The axis, for drawing virtual walls as a line. */
   readonly centerline: readonly [Vec2, Vec2]
+  /** How thick it is, in metres: 0 for a virtual wall, which is a line (SHT-4: where its faces are). */
+  readonly thickness: number
   /** WRT-6: the plan marks the wall, or a value of it, assumed. Left out when it does not. */
   readonly assumed?: true
 }
@@ -188,6 +191,12 @@ export interface PlanDrawing {
   readonly sketch: readonly PlanSketch[]
   /** SHT-7: the notes, tags, symbols and key written on the drawing. */
   readonly notes: readonly PlanNote[]
+  /**
+   * CNT-3: the plan's stated north, for the drawing's north arrow: the way north points, in
+   * radians counter-clockwise from +Y. Null when the plan states no north, or places a north
+   * symbol of its own on this floor (which then points to it).
+   */
+  readonly north: { readonly turn: number } | null
   /** SHT-7: the box round the sketch layer, so a view frames it too; null with none. */
   readonly sketchBounds: Bounds | null
   /** Envelope of the whole drawing, for computing the viewBox. */
@@ -275,6 +284,7 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
       exposure: wallExposure(index, wall.id),
       slices,
       centerline: wallCenterline(wall),
+      thickness: wall.virtual ? 0 : wall.thickness,
       ...assumed('wall', wall.id)
     })
 
@@ -357,7 +367,9 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const sketch = planSketch(plan)
   const notes = planNotes(plan, (id) => rooms.find((room) => room.id === id)?.labelAt)
   const sketchBounds = sketch.length === 0 ? null : computeBounds(sketchExtent(sketch))
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, sketch, notes, sketchBounds, bounds: computeBounds(extent), issues }
+  const stated = planOrientation(plan).north
+  const north = stated === null || notes.some((note) => note.kind === 'symbol' && note.symbol === 'north') ? null : { turn: (stated * Math.PI) / 180 }
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, sketch, notes, north, sketchBounds, bounds: computeBounds(extent), issues }
 }
 
 /**

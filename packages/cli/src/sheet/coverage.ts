@@ -35,6 +35,11 @@ export const SHEET_COVERAGE = {
   title: { shown: 'not shown', why: 'Each page has its own title, from the sheet words.' },
   annotations: { shown: 'drawn' },
   sketch: { shown: 'drawn' },
+  // CNT-3: the north arrow is drawn on each floor's plan by `drawPlan`, in the corner of its view.
+  north: { shown: 'drawn' },
+  yAxis: { shown: 'not shown', why: 'It says how the file\'s coordinates run (CNT-3); every page draws them as the file holds them, with y up.' },
+  front: { shown: 'not shown', why: 'The front is said by grid describe and the tool server; the drawing marks no front yet.' },
+  site: { shown: 'not shown', why: 'Where the building is on the earth goes into the IFC file; the sheet prints no location.' },
   // WRT-6: what is assumed is drawn in its own style by `drawPlan`, and listed to confirm by
   // `grid check`; the sheet's checks page lists those lines with the others.
   marks: { shown: 'drawn' },

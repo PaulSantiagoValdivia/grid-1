@@ -1,6 +1,6 @@
 /**
  * WRT-6 (lab WR-15, AE-4, AU3-6): where a value came from, and a value left out that stays not
- * stated. The marks are one list beside the parts (C7), and a wall's filled-in values are the
+ * stated. The marks are one list beside the parts (C8), and a wall's filled-in values are the
  * reading's, never the file's.
  */
 import { describe, expect, it } from 'vitest'
@@ -79,7 +79,7 @@ describe('a value a wall leaves out (AU3-6)', () => {
   })
 })
 
-describe('marks (C7)', () => {
+describe('marks (C8)', () => {
   const marked = (marks: unknown[]): ReturnType<typeof parseFloorPlan> => parseFloorPlan({ ...flat(), marks })
 
   it('leaves a plan with none exactly as it was', () => {

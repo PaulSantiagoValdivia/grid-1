@@ -262,6 +262,7 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
       'stroke-linejoin': 'round'
     } as Attrs,
     extension: { stroke: look.dimension, 'stroke-width': width('extension') } as Attrs,
+    tick: { stroke: look.dimension, 'stroke-width': width('tick'), 'stroke-linecap': 'butt' } as Attrs,
     dimensionLine: (room: boolean): Attrs =>
       room
         ? {
@@ -331,6 +332,22 @@ const OPENING_ID_PX = 12
 
 const labelTransform = (at: Vec2, mpp: number): string => `translate(${at.x} ${-at.y}) scale(${mpp})`
 
+/** How long the 45-degree tick across each end of a drafted dimension is, in screen pixels (SHT-4). */
+export const DIMENSION_TICK_PX = 7
+
+/**
+ * The angle a number along a dimension line is turned by, in degrees as SVG turns (clockwise
+ * on the page), so it reads from the bottom or from the right, never upside down.
+ */
+function readingAngle(a: Vec2, b: Vec2): number {
+  // To a thousandth of a degree first, so an upright line a hair off reads like any other.
+  let degrees = Number(((Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI).toFixed(3))
+  if (degrees > 90) degrees -= 180
+  if (degrees <= -90) degrees += 180
+  // Plan y grows up and SVG y down, so a turn counter-clockwise on the plan is a negative one.
+  return degrees === 0 ? 0 : -degrees
+}
+
 /**
  * A ghost of the earlier version's room, wall or opening. Ghosts carry no paint: they belong
  * to the review, which only the app shows, and its stylesheets alone decide their look.
@@ -382,7 +399,8 @@ function dimensionMark(
   mpp: number,
   labelAt: Vec2 | null,
   opacity: number | undefined,
-  paint: Paints
+  paint: Paints,
+  drafted: boolean
 ): SvgNode {
   const room = dim.kind === 'room'
   const shift = { x: dim.normal.x * dim.offset, y: dim.normal.y * dim.offset }
@@ -402,16 +420,34 @@ function dimensionMark(
     )
   }
   children.push(el('line', { 'data-part': 'dimension-line', x1: a.x, y1: -a.y, x2: b.x, y2: -b.y, ...paint.dimensionLine(room) }))
+  const span = Math.hypot(b.x - a.x, b.y - a.y)
+  if (drafted && span > 0) {
+    // A tick across each end, turned 45 degrees from the line, as a drawing marks it.
+    const half = (DIMENSION_TICK_PX / 2) * mpp
+    const along = { x: (b.x - a.x) / span, y: (b.y - a.y) / span }
+    const tick = { x: ((along.x - along.y) * half) / Math.SQRT2, y: ((along.y + along.x) * half) / Math.SQRT2 }
+    for (const end of [a, b]) {
+      children.push(el('line', { 'data-part': 'dimension-tick', x1: end.x - tick.x, y1: -(end.y - tick.y), x2: end.x + tick.x, y2: -(end.y + tick.y), ...paint.tick }))
+    }
+  }
   if (labelAt) {
+    // The number stands where every look puts it; a drafted look turns it along the line.
+    const angle = drafted ? readingAngle(a, b) : 0
     children.push(
       el('g', { transform: labelTransform(labelAt, mpp) }, [
-        el('text', { 'data-part': 'dimension-text', dy: String(DIMENSION_DY), ...paint.dimensionText(room) }, [
+        el('text', { 'data-part': 'dimension-text', dy: String(DIMENSION_DY), ...(angle !== 0 && { transform: `rotate(${angle})` }), ...paint.dimensionText(room) }, [
           dimensionText(dim.value)
         ])
       ])
     )
   }
-  return el('g', { 'data-part': 'dimension', 'data-kind': dim.kind, 'data-id': dim.id, opacity }, children, dim.id)
+  // What each end measures to (SHT-4): `face`, `centre-line` or `finish`, from's then to's.
+  return el(
+    'g',
+    { 'data-part': 'dimension', 'data-kind': dim.kind, 'data-id': dim.id, 'data-measured-to': dim.measuredTo.join(' '), opacity },
+    children,
+    dim.id
+  )
 }
 
 /** The label boxes a dimension's number could meet anywhere along its line. */
@@ -908,11 +944,18 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     look: look.colors
   }
 
+  // A number outside the plan keeps off the room labels and the numbers already placed on its
+  // chain and the next: one that has no room between its ticks waits for the user to zoom in.
+  const placedNumbers: Box[] = []
   for (const dim of dimensions) {
     const shown = live.dimensionShown(dim)
     if (shown <= 0) continue
-    const labelAt = dim.kind === 'room' ? placeDimensionLabel(dim, blocksNear(dim, labelBlocks, mpp), mpp) : dim.labelAt
-    out.push(dimensionMark(dim, mpp, labelAt, shown < 1 ? shown : undefined, paint))
+    const labelAt =
+      dim.kind === 'room'
+        ? placeDimensionLabel(dim, blocksNear(dim, labelBlocks, mpp), mpp)
+        : placeDimensionLabel(dim, [...blocksNear(dim, labelBlocks, mpp), ...blocksNear(dim, placedNumbers, mpp)], mpp)
+    if (labelAt && dim.kind !== 'room') placedNumbers.push(dimensionTextBox(labelAt, dim, mpp))
+    out.push(dimensionMark(dim, mpp, labelAt, shown < 1 ? shown : undefined, paint, look.draftedDimensions))
   }
 
   drawing.rooms.forEach((room, index) => {

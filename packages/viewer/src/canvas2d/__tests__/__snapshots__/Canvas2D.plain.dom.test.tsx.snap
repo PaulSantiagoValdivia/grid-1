@@ -10,7 +10,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
   preserveAspectRatio="xMidYMid meet"
   role="img"
   tabindex="0"
-  viewBox="-1.5639999999999998 -5.898 12.527999999999999 9.395999999999999"
+  viewBox="-2.1919999999999993 -6.893999999999999 14.383999999999997 10.787999999999998"
 >
   <path
     d="M3.9000,-0.1000L3.9000,-2.9000L0.1000,-2.9000L0.1000,-0.1000Z"
@@ -144,33 +144,414 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
     data-type="window"
   />
   <g
-    data-id="overall-width"
-    data-kind="overall"
+    data-id="opening-bottom-0"
+    data-kind="opening"
+    data-measured-to="face face"
     data-part="dimension"
   >
     <line
       data-part="extension"
       x1="-0.1"
       x2="-0.1"
-      y1="0.10000000000000009"
-      y2="0.78"
+      y1="0.1"
+      y2="0.7799999999999999"
+    />
+    <line
+      data-part="extension"
+      x1="1.5"
+      x2="1.5"
+      y1="0.1"
+      y2="0.7799999999999999"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-0.1"
+      x2="1.5"
+      y1="0.7"
+      y2="0.7"
+    />
+    <g
+      transform="translate(0.7 0.7) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        1.60
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="opening-bottom-1"
+    data-kind="opening"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="1.5"
+      x2="1.5"
+      y1="0.1"
+      y2="0.7799999999999999"
+    />
+    <line
+      data-part="extension"
+      x1="2.4"
+      x2="2.4"
+      y1="0.1"
+      y2="0.7799999999999999"
+    />
+    <line
+      data-part="dimension-line"
+      x1="1.5"
+      x2="2.4"
+      y1="0.7"
+      y2="0.7"
+    />
+    <g
+      transform="translate(1.95 0.7) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.90
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="opening-bottom-2"
+    data-kind="opening"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="2.4"
+      x2="2.4"
+      y1="0.1"
+      y2="0.7799999999999999"
     />
     <line
       data-part="extension"
       x1="10.1"
       x2="10.1"
-      y1="0.10000000000000009"
-      y2="0.78"
+      y1="0.1"
+      y2="0.7799999999999999"
+    />
+    <line
+      data-part="dimension-line"
+      x1="2.4"
+      x2="10.1"
+      y1="0.7"
+      y2="0.7"
+    />
+    <g
+      transform="translate(6.25 0.7) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        7.70
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-bottom-0"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="0.1"
+      x2="0.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-0.1"
+      x2="0.1"
+      y1="1.2000000000000002"
+      y2="1.2000000000000002"
+    />
+    <g
+      transform="translate(0 1.2000000000000002) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-bottom-1"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="0.1"
+      x2="0.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="3.9"
+      x2="3.9"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="0.1"
+      x2="3.9"
+      y1="1.2000000000000002"
+      y2="1.2000000000000002"
+    />
+    <g
+      transform="translate(2 1.2000000000000002) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        3.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-bottom-2"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="3.9"
+      x2="3.9"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="4.1"
+      x2="4.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="3.9"
+      x2="4.1"
+      y1="1.2000000000000002"
+      y2="1.2000000000000002"
+    />
+    <g
+      transform="translate(4 1.2000000000000002) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-bottom-3"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="4.1"
+      x2="4.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="5.9"
+      x2="5.9"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="4.1"
+      x2="5.9"
+      y1="1.2000000000000002"
+      y2="1.2000000000000002"
+    />
+    <g
+      transform="translate(5 1.2000000000000002) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        1.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-bottom-4"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="5.9"
+      x2="5.9"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="6.1"
+      x2="6.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="5.9"
+      x2="6.1"
+      y1="1.2000000000000002"
+      y2="1.2000000000000002"
+    />
+    <g
+      transform="translate(6 1.2000000000000002) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-bottom-5"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="6.1"
+      x2="6.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="9.9"
+      x2="9.9"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="6.1"
+      x2="9.9"
+      y1="1.2000000000000002"
+      y2="1.2000000000000002"
+    />
+    <g
+      transform="translate(8 1.2000000000000002) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        3.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-bottom-6"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="9.9"
+      x2="9.9"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.1"
+      y1="0.1"
+      y2="1.2800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="9.9"
+      x2="10.1"
+      y1="1.2000000000000002"
+      y2="1.2000000000000002"
+    />
+    <g
+      transform="translate(10 1.2000000000000002) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="overall-width"
+    data-kind="overall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.1"
+      y1="0.1"
+      y2="1.7800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.1"
+      y1="0.1"
+      y2="1.7800000000000002"
     />
     <line
       data-part="dimension-line"
       x1="-0.1"
       x2="10.1"
-      y1="0.7000000000000001"
-      y2="0.7000000000000001"
+      y1="1.7000000000000002"
+      y2="1.7000000000000002"
     />
     <g
-      transform="translate(5 0.7000000000000001) scale(0.015659999999999997)"
+      transform="translate(5 1.7000000000000002) scale(0.017979999999999996)"
     >
       <text
         data-part="dimension-text"
@@ -181,16 +562,93 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
     </g>
   </g>
   <g
-    data-id="overall-height"
-    data-kind="overall"
+    data-id="wall-left-0"
+    data-kind="wall"
+    data-measured-to="face face"
     data-part="dimension"
   >
     <line
       data-part="extension"
       x1="-0.1"
       x2="-0.7799999999999999"
-      y1="0.10000000000000009"
-      y2="0.10000000000000009"
+      y1="0.1"
+      y2="0.1"
+    />
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.7799999999999999"
+      y1="-0.1"
+      y2="-0.1"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-0.7"
+      x2="-0.7"
+      y1="0.1"
+      y2="-0.1"
+    />
+    <g
+      transform="translate(-0.7 0) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-left-1"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.7799999999999999"
+      y1="-0.1"
+      y2="-0.1"
+    />
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.7799999999999999"
+      y1="-2.9"
+      y2="-2.9"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-0.7"
+      x2="-0.7"
+      y1="-0.1"
+      y2="-2.9"
+    />
+    <g
+      transform="translate(-0.7 -1.5) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        2.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-left-2"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.7799999999999999"
+      y1="-2.9"
+      y2="-2.9"
     />
     <line
       data-part="extension"
@@ -203,11 +661,619 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       data-part="dimension-line"
       x1="-0.7"
       x2="-0.7"
-      y1="0.10000000000000009"
+      y1="-2.9"
       y2="-3.1"
     />
     <g
-      transform="translate(-0.7 -1.5) scale(0.015659999999999997)"
+      transform="translate(-0.7 -3) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="overall-height"
+    data-kind="overall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-1.2800000000000002"
+      y1="0.1"
+      y2="0.1"
+    />
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-1.2800000000000002"
+      y1="-3.1"
+      y2="-3.1"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-1.2000000000000002"
+      x2="-1.2000000000000002"
+      y1="0.1"
+      y2="-3.1"
+    />
+    <g
+      transform="translate(-1.2000000000000002 -1.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        3.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="opening-top-0"
+    data-kind="opening"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.1"
+      y1="-3.1"
+      y2="-3.7800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="1.7999999999999998"
+      x2="1.7999999999999998"
+      y1="-3.1"
+      y2="-3.7800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-0.1"
+      x2="1.7999999999999998"
+      y1="-3.7"
+      y2="-3.7"
+    />
+    <g
+      transform="translate(0.8499999999999999 -3.7) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        1.90
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="opening-top-1"
+    data-kind="opening"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="1.7999999999999998"
+      x2="1.7999999999999998"
+      y1="-3.1"
+      y2="-3.7800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="3"
+      x2="3"
+      y1="-3.1"
+      y2="-3.7800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="1.7999999999999998"
+      x2="3"
+      y1="-3.7"
+      y2="-3.7"
+    />
+    <g
+      transform="translate(2.4 -3.7) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        1.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="opening-top-2"
+    data-kind="opening"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="3"
+      x2="3"
+      y1="-3.1"
+      y2="-3.7800000000000002"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.1"
+      y1="-3.1"
+      y2="-3.7800000000000002"
+    />
+    <line
+      data-part="dimension-line"
+      x1="3"
+      x2="10.1"
+      y1="-3.7"
+      y2="-3.7"
+    />
+    <g
+      transform="translate(6.55 -3.7) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        7.10
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-top-0"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="extension"
+      x1="0.1"
+      x2="0.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-0.1"
+      x2="0.1"
+      y1="-4.2"
+      y2="-4.2"
+    />
+    <g
+      transform="translate(0 -4.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-top-1"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="0.1"
+      x2="0.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="extension"
+      x1="3.9"
+      x2="3.9"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="dimension-line"
+      x1="0.1"
+      x2="3.9"
+      y1="-4.2"
+      y2="-4.2"
+    />
+    <g
+      transform="translate(2 -4.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        3.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-top-2"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="3.9"
+      x2="3.9"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="extension"
+      x1="4.1"
+      x2="4.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="dimension-line"
+      x1="3.9"
+      x2="4.1"
+      y1="-4.2"
+      y2="-4.2"
+    />
+    <g
+      transform="translate(4 -4.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-top-3"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="4.1"
+      x2="4.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="extension"
+      x1="5.9"
+      x2="5.9"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="dimension-line"
+      x1="4.1"
+      x2="5.9"
+      y1="-4.2"
+      y2="-4.2"
+    />
+    <g
+      transform="translate(5 -4.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        1.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-top-4"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="5.9"
+      x2="5.9"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="extension"
+      x1="6.1"
+      x2="6.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="dimension-line"
+      x1="5.9"
+      x2="6.1"
+      y1="-4.2"
+      y2="-4.2"
+    />
+    <g
+      transform="translate(6 -4.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-top-5"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="6.1"
+      x2="6.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="extension"
+      x1="9.9"
+      x2="9.9"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="dimension-line"
+      x1="6.1"
+      x2="9.9"
+      y1="-4.2"
+      y2="-4.2"
+    />
+    <g
+      transform="translate(8 -4.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        3.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-top-6"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="9.9"
+      x2="9.9"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.1"
+      y1="-3.1"
+      y2="-4.28"
+    />
+    <line
+      data-part="dimension-line"
+      x1="9.9"
+      x2="10.1"
+      y1="-4.2"
+      y2="-4.2"
+    />
+    <g
+      transform="translate(10 -4.2) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="overall-width-top"
+    data-kind="overall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="-0.1"
+      x2="-0.1"
+      y1="-3.1"
+      y2="-4.78"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.1"
+      y1="-3.1"
+      y2="-4.78"
+    />
+    <line
+      data-part="dimension-line"
+      x1="-0.1"
+      x2="10.1"
+      y1="-4.7"
+      y2="-4.7"
+    />
+    <g
+      transform="translate(5 -4.7) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        10.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-right-0"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.78"
+      y1="0.1"
+      y2="0.1"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.78"
+      y1="-0.1"
+      y2="-0.1"
+    />
+    <line
+      data-part="dimension-line"
+      x1="10.7"
+      x2="10.7"
+      y1="0.1"
+      y2="-0.1"
+    />
+    <g
+      transform="translate(10.7 0) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-right-1"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.78"
+      y1="-0.1"
+      y2="-0.1"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.78"
+      y1="-2.9"
+      y2="-2.9"
+    />
+    <line
+      data-part="dimension-line"
+      x1="10.7"
+      x2="10.7"
+      y1="-0.1"
+      y2="-2.9"
+    />
+    <g
+      transform="translate(10.7 -1.5) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        2.80
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="wall-right-2"
+    data-kind="wall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.78"
+      y1="-2.9"
+      y2="-2.9"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="10.78"
+      y1="-3.1"
+      y2="-3.1"
+    />
+    <line
+      data-part="dimension-line"
+      x1="10.7"
+      x2="10.7"
+      y1="-2.9"
+      y2="-3.1"
+    />
+    <g
+      transform="translate(10.7 -3) scale(0.017979999999999996)"
+    >
+      <text
+        data-part="dimension-text"
+        dy="-5"
+      >
+        0.20
+      </text>
+    </g>
+  </g>
+  <g
+    data-id="overall-height-right"
+    data-kind="overall"
+    data-measured-to="face face"
+    data-part="dimension"
+  >
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="11.28"
+      y1="0.1"
+      y2="0.1"
+    />
+    <line
+      data-part="extension"
+      x1="10.1"
+      x2="11.28"
+      y1="-3.1"
+      y2="-3.1"
+    />
+    <line
+      data-part="dimension-line"
+      x1="11.2"
+      x2="11.2"
+      y1="0.1"
+      y2="-3.1"
+    />
+    <g
+      transform="translate(11.2 -1.2) scale(0.017979999999999996)"
     >
       <text
         data-part="dimension-text"
@@ -220,17 +1286,18 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
   <g
     data-id="r1-width"
     data-kind="room"
+    data-measured-to="face face"
     data-part="dimension"
   >
     <line
       data-part="dimension-line"
-      x1="0.1"
+      x1="0.10000000000000002"
       x2="3.9"
       y1="-0.7999999999999999"
-      y2="-0.7999999999999999"
+      y2="-0.7999999999999998"
     />
     <g
-      transform="translate(2 -0.7999999999999999) scale(0.015659999999999997)"
+      transform="translate(2 -0.7999999999999998) scale(0.017979999999999996)"
     >
       <text
         data-part="dimension-text"
@@ -243,17 +1310,18 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
   <g
     data-id="r1-depth"
     data-kind="room"
+    data-measured-to="face face"
     data-part="dimension"
   >
     <line
       data-part="dimension-line"
       x1="1.05"
       x2="1.05"
-      y1="-0.1"
+      y1="-0.10000000000000006"
       y2="-2.9"
     />
     <g
-      transform="translate(1.05 -1.7625) scale(0.015659999999999997)"
+      transform="translate(1.05 -1.7916666666666665) scale(0.017979999999999996)"
     >
       <text
         data-part="dimension-text"
@@ -266,6 +1334,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
   <g
     data-id="r2-width"
     data-kind="room"
+    data-measured-to="face face"
     data-part="dimension"
   >
     <line
@@ -273,10 +1342,10 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
       x1="6.1"
       x2="9.9"
       y1="-0.7999999999999999"
-      y2="-0.7999999999999999"
+      y2="-0.7999999999999998"
     />
     <g
-      transform="translate(8 -0.7999999999999999) scale(0.015659999999999997)"
+      transform="translate(8 -0.7999999999999998) scale(0.017979999999999996)"
     >
       <text
         data-part="dimension-text"
@@ -289,17 +1358,18 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
   <g
     data-id="r2-depth"
     data-kind="room"
+    data-measured-to="face face"
     data-part="dimension"
   >
     <line
       data-part="dimension-line"
       x1="7.05"
       x2="7.05"
-      y1="-0.1"
+      y1="-0.10000000000000009"
       y2="-2.9"
     />
     <g
-      transform="translate(7.05 -1.5) scale(0.015659999999999997)"
+      transform="translate(7.05 -1.5) scale(0.017979999999999996)"
     >
       <text
         data-part="dimension-text"
@@ -310,7 +1380,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
     </g>
   </g>
   <g
-    transform="translate(2 -1.57047) scale(0.015659999999999997)"
+    transform="translate(2 -1.58091) scale(0.017979999999999996)"
   >
     <text
       data-part="label"
@@ -326,7 +1396,7 @@ exports[`the plain canvas > draws the same DOM as before the diff layer existed 
     </text>
   </g>
   <g
-    transform="translate(8 -1.57047) scale(0.015659999999999997)"
+    transform="translate(8 -1.58091) scale(0.017979999999999996)"
   >
     <text
       data-part="label"

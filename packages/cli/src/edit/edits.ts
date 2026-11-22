@@ -10,7 +10,7 @@
  * Pure: no file is read or written here. A change that can't be made is refused with
  * `EditRefused`, saying why and what would fit; nothing is half done.
  */
-import { dot, sub, tolerance, wallAxis, type FloorPlan, type Opening, type OpeningAnchor, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
+import { dot, sub, tolerance, wallAxis, wrapDegrees, type FloorPlan, type Opening, type OpeningAnchor, type Vec2, type Wall } from '@ongrid/floorplan/geometry'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import { quoted } from '../fs/projectFiles'
 import { surveyPlan, type Survey } from '../quantities/survey'
@@ -34,6 +34,8 @@ export interface Patch {
   readonly openings: ReadonlyMap<string, OpeningChange>
   readonly removeOpenings: ReadonlySet<string>
   readonly rooms: ReadonlyMap<string, RoomChange>
+  /** CNT-3: the plan's own fields set (`north`, `site`). `null` takes a key out. Left out by a change that sets none. */
+  readonly plan?: Readonly<Record<string, unknown>>
   /** CNT-12: fixtures moved or turned, by id. Left out by a change that moves none. */
   readonly items?: ReadonlyMap<string, { at: Pair; turn: number }>
   /** One line per thing changed, in Grid's words. */
@@ -138,7 +140,8 @@ export function applyPatch<T extends RawRecord>(raw: T, patch: Patch): T {
           return change ? { ...item, ...change } : item
         }),
       }
-  return { ...raw, walls, openings, rooms, ...items }
+  const top = (patch.plan === undefined ? raw : merged(raw, patch.plan)) as T
+  return { ...top, walls, openings, rooms, ...items }
 }
 
 /** The free stretches of a wall, measured from its start, between the other openings in it. */
@@ -461,6 +464,12 @@ const MIRRORED: Record<string, string> = { north: 'south', south: 'north', east:
  * west. Every door keeps opening into the same room, every room keeps its size, and each
  * room's walls are listed the other way round, so they still run counter-clockwise (C3). An
  * anchor kept from a side of the drawing turns with it.
+ *
+ * CNT-3: the north the plan states is mirrored too, to minus itself, so the swap is the real
+ * one: left to right, what faced east faces west, and top to bottom, what faced north faces
+ * south, whichever way the drawing is turned. The site's origin is mirrored with the walls. The
+ * y direction is kept: the result is a new design, still drawn as the plan says its y runs, and
+ * the front stays the part it names, which is mirrored with the rest.
  */
 export function mirrorPlan(survey: Survey, how: Mirror): Patch {
   const plan = survey.plan
@@ -487,12 +496,17 @@ export function mirrorPlan(survey: Survey, how: Mirror): Patch {
     const mirrored = how === 'left-right' ? -turn : 180 - turn
     return [item.id, { at: flip(item.at), turn: r3(((mirrored % 360) + 360) % 360) }]
   }))
+  const top: Record<string, unknown> = {}
+  if (plan.north !== undefined) top['north'] = wrapDegrees(r3(-plan.north))
+  if (plan.site?.origin !== undefined && plan.walls.length > 0) top['site'] = { ...plan.site, origin: flip(plan.site.origin) }
+  const north = plan.north === undefined ? '' : ` The plan's north is mirrored with it: ${wrapDegrees(r3(plan.north))}° → ${top['north'] as number}° counter-clockwise from the top of the drawing.`
   return {
     walls,
     openings,
     removeOpenings: new Set(),
     rooms,
     ...(items.size === 0 ? {} : { items }),
-    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.`],
+    ...(Object.keys(top).length === 0 ? {} : { plan: top }),
+    said: [`Mirrored the plan ${how === 'left-right' ? 'left to right (east and west swap)' : 'top to bottom (north and south swap)'}: ${plan.walls.length} walls, ${plan.openings.length} openings and ${plan.rooms.length} rooms${items.size === 0 ? '' : `, and ${items.size} fixture${items.size === 1 ? '' : 's'}`}.${north}`],
   }
 }

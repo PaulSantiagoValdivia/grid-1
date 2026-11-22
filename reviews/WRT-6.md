@@ -8,7 +8,7 @@ choices taken while you were away.
 An audit called this the heaviest format change in the theme. The design keeps every existing
 reader and every existing plan file unchanged.
 
-- **Marks are one optional top-level list, `marks`** (C7 in `types/floorplan.ts`, `MarkSchema`):
+- **Marks are one optional top-level list, `marks`** (C8 in `types/floorplan.ts`, `MarkSchema`; C7 until CNT-3 took it):
   `{ part, id, value?, source, tolerance? }`. `part` is `wall`, `room`, `opening`, `floor` or
   `item`; `value` names one value of it (a wall's `start`, `end`, `thickness`, `height` or
   `kind`, and so on, `MARKED_VALUES`), or is left out for the whole part; `source` is `given`,
@@ -149,3 +149,33 @@ new wall does not end inside an opening and WRT-6's `readingAfter`; the agents' 
 every section, WRT-6 first. Build, typecheck and lint are clean. The full suite passes: 248 files,
 4,782 tests, 4 skipped. The scoreboard is the same as the stored figures. The built file is
 368,978 bytes.
+
+## After merging main at fa2f948
+
+SHT-4, CNT-3 and MSG-10 merged in, with both sides kept: `marks` beside CNT-3's `north`, `yAxis`,
+`front` and `site` in the schema, the plan's field list and the sheet's coverage; a drawn wall
+keeps SHT-4's `thickness` and WRT-6's `assumed`; `grid check` runs CNT-3's orientation stage, then
+the marks. CNT-3 took convention C7 in `types/floorplan.ts`, so where a value came from is C8.
+The tools are 23: `grid_mark_seen` after `grid_sheet`, `grid_square_scan` last.
+
+MSG-10's short report lists every line not seen, so the to-confirm lines stay: `grid check`
+still prints them under "To confirm" (the count says how many of them are seen), and
+`grid_check` names the open ones even past its first 12 lines. Two things made the seen marks
+work with WRT-6's lines (`seen/marks.ts`):
+
+- A part's content in a seen mark holds the plan's `marks` that name it, so a change to where a
+  value came from brings its note back. A part no mark names keeps the hash it had.
+- One wall can have two `plan/value-assumed` notes (its height and its thickness) with the same
+  code, thing and `also`, which was all a seen mark was keyed by: marking one hid both. A mark
+  made while its note shared that key keeps the note's `message` as well (an optional field in
+  `plan.seen.json`) and holds only for that note; a mark without one holds no more once another
+  note joins it. MSG-10's `plan/unknown-field` had the same gap for two unknown fields on one
+  part, and is covered the same way.
+
+Build, typecheck and lint are clean, and the affected tests pass (`shortReport.test.ts` has three
+new ones under "what the plan marks assumed (WRT-6)"); the full suite and the scoreboard were not
+run here. The built file is 394,143 bytes.
+
+For the owner: the assumed line capitalises its part mid-sentence ("The height of Wall
+"ext-south" was assumed"), as `assumed.test.ts` pins. Worth a lowercase label with the next
+wording change.

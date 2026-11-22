@@ -16,6 +16,7 @@ import {
   floorOf,
   itemNoun,
   marksWithNoPart,
+  planFacing,
   planFloors,
   validateDoorSweeps,
   validatePlan,
@@ -546,6 +547,15 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       if (note.room === undefined || rooms.has(note.room)) continue
       lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(quoted(note.id)), also: [note.id, note.room], floors: names.floors, said: `room ${note.room}` }))
     }
+  })
+  // CNT-3: a front that names no outside part, and a plan whose y runs down the page.
+  stage('orientation', () => {
+    if (plan.yAxis === 'down') lines.push(line('plan/y-down', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank('The plan'), floors: names.floors }))
+    const front = plan.front === undefined ? null : planFacing(plan).front
+    if (front === null || !('missing' in front)) return
+    const label = `${front.part === 'wall' ? 'wall' : 'opening'} ${quoted(front.id)}`
+    const said = front.missing === 'no-such-part' ? 'the plan does not have' : front.part === 'wall' ? 'does not face outside' : 'is not in a wall that faces outside'
+    lines.push(line('plan/front-not-said', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(label), also: [front.id], floors: names.floors, said }))
   })
   // WRT-6 (lab WR-15): what the plan marks assumed, for the person to confirm, and a mark that
   // names a part the plan no longer has.

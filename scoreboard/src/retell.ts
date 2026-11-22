@@ -93,7 +93,8 @@ export function retellPrompt(one: RetellCase): RetellPrompt {
   const plan = planOf(one.plan)
   const { issues, broken } = validatePlan(plan)
   const result = checkPlan({ file: one.plan, plan, issues, broken }, one.country === undefined ? {} : { country: one.country })
-  const report = checkText(result, 1)
+  // MSG-10: the whole report, with every figure, so each case holds a model to sourcing them.
+  const report = checkText(result, 1, { full: true })
   const user = [
     one.ask,
     '',

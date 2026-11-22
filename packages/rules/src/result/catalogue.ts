@@ -808,6 +808,18 @@ export const CODES = {
     needed: fixed('a room id from the plan, or a point (at)'),
     fix: fixed('Name one of the plan\'s rooms by its id, or place the note at a point.')
   },
+  // CNT-3: the front, and which way the plan's y runs.
+  'plan/front-not-said': {
+    says: (s) => `The front names ${s.label}, which ${s.said}, so no front is said`,
+    needed: fixed('a wall that faces outside, or an opening in one, such as the front door'),
+    fix: fixed('Name in front a wall of the plan that faces outside (wall), or the front door (opening).')
+  },
+  'plan/y-down': {
+    says: () => 'The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round',
+    found: fixed('yAxis is down: the coordinates are the building\'s mirror image, and Grid draws and exports them with y up'),
+    needed: fixed('a plan whose y runs up the page, as Grid draws it'),
+    fix: fixed('To have the drawings and exports the right way round, write the plan with y up: every y negated, north as 180 less what it was, and yAxis up.')
+  },
   'floor/not-checked-no-use': {
     says: (s) => wordingText(figureWordings.noUse(s.floorName, s.names.length)),
     found: fixed('rooms with no use stated'),

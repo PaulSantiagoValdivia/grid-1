@@ -66,7 +66,7 @@ export function noteNodes(notes: readonly PlanNote[], labelAt: ReadonlyMap<strin
     if (note.kind === 'symbol') {
       const shape =
         note.symbol === 'north'
-          ? [el('path', { d: 'M0,-14L6,6L0,2L-6,6Z', ...ink }), el('text', { y: '-17', ...words }, ['N'])]
+          ? northShape(look)
           : [el('path', { d: 'M0,-8L8,6L-8,6Z', ...ink })]
       const label = note.text ? [el('text', { y: '20', ...words }, [note.text])] : []
       return [el('g', { ...attrs, transform: pixelGroup(at, mpp, note.turn) }, [...shape, ...label], key)]
@@ -83,6 +83,27 @@ export function noteNodes(notes: readonly PlanNote[], labelAt: ReadonlyMap<strin
     }
     return [el('g', { ...attrs, transform: pixelGroup(at, mpp) }, [el('text', { y: n(dy), ...words }, [text])], key)]
   })
+}
+
+/** SHT-7's north symbol, in pixels round its middle, pointing up: an arrowhead and an N over it. */
+function northShape(look: PlanLook): SvgNode[] {
+  const words: Attrs = { fill: look.label, 'font-family': look.font, 'font-size': TEXT_PX.note, 'text-anchor': 'middle' }
+  const ink: Attrs = { fill: look.label, stroke: look.paper, 'stroke-width': 1 }
+  return [el('path', { d: 'M0,-14L6,6L0,2L-6,6Z', ...ink }), el('text', { y: '-17', ...words }, ['N'])]
+}
+
+/** How far the north arrow's middle stands in from the corner of the view, in pixels. */
+const NORTH_INSET_PX = 30
+
+/**
+ * CNT-3: the north arrow of a plan that states its north: SHT-7's north symbol on a disc of
+ * paper, in the top-right corner of the view, turned to the north the plan states
+ * (`PlanDrawing.north`). `view` is the part of the plan shown, in plan metres with y down.
+ */
+export function northArrowNode(north: { readonly turn: number }, view: { readonly x: number; readonly y: number; readonly width: number }, mpp: number, look: PlanLook): SvgNode {
+  const at = { x: view.x + view.width - NORTH_INSET_PX * mpp, y: -(view.y + NORTH_INSET_PX * mpp) }
+  const disc = el('circle', { r: '23', fill: look.paper, stroke: look.labelSoft, 'stroke-width': 1 })
+  return el('g', { 'data-part': 'north-arrow', 'pointer-events': 'none', transform: pixelGroup(at, mpp, north.turn) }, [disc, ...northShape(look)], 'north-arrow')
 }
 
 /** One entry of the drawing's key: a swatch and what it stands for. */

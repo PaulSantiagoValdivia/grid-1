@@ -16,7 +16,8 @@
  * - each room's name is replaced by its use (`bedroom`, `bedroom 2`), or `room` when it states none;
  * - every id is replaced by its kind and a number (`room-1`, `wall-3`, `door-2`);
  * - a floor's name becomes `floor 1`, a fixture's label goes, and so do the trace image, the
- *   project id, the record of how the plan was written and every field Grid does not know;
+ *   project id, the record of how the plan was written, the site and the front (CNT-3) and
+ *   every field Grid does not know; the north and the y direction are kept;
  * - in every text of the draft (the message, the answer, the call's arguments, what was
  *   expected) the plan's names and ids get the same replacements, and paths, file names, web
  *   addresses and email addresses are replaced by `<path>`, `<file>`, `<address>` and `<email>`.
@@ -24,7 +25,7 @@
  * What is left is held to the plan's text rule before it is shown.
  */
 import { tolerance } from '@ongrid/floorplan/geometry/tolerances'
-import { ITEM_KINDS, ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import { ITEM_KINDS, ROOM_USES, Y_AXES } from '@ongrid/floorplan/types/floorplan'
 import { GENERAL_GUIDANCE_LABEL, RESULT_VERSION, type GridResult, type ResultLine } from '@ongrid/rules'
 import { planTextProblem } from '../command/planText'
 
@@ -344,6 +345,10 @@ function clearedPlan(raw: Record<string, unknown>, cut: Cut, clearing: Clearing)
       return { id: id!, kind, ...rest }
     })
   }
+  // CNT-3: which way the plan faces is a number and a word of Grid's; where it sits, a place on
+  // the earth, and its front, an id, are left out.
+  if (typeof raw['north'] === 'number' && Number.isFinite(raw['north'])) plan['north'] = raw['north']
+  if (typeof raw['yAxis'] === 'string' && (Y_AXES as readonly string[]).includes(raw['yAxis'])) plan['yAxis'] = raw['yAxis']
   return plan
 }
 

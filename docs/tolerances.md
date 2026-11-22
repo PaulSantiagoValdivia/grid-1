@@ -46,6 +46,8 @@ in it is used as a `bedroom` or a `living` room) the home figures apply.
 | `touchLength` | tolerance | 0.02 m | How long that contact must be |
 | `slit` | tolerance | 0.003 m | Half the width of a slit that does not join two spaces |
 | `lineInside` | tolerance | 0.05 m | The shortest stretch of a dividing line, or of a wall, inside a room that a message names |
+| `squareCorner` | tolerance | 0.0175 sine | Directions this close to a right angle are square: a room with four square corners is dimensioned by its width and depth, any other side by side, and a wall this close to one of the plan's main directions is dimensioned in the chains outside it (SHT-4) |
+| `chainPoint` | tolerance | 0.001 m | Two points of a chain of dimensions outside the plan closer than this are one point (SHT-4) |
 | `roomsWallWidest` | tolerance | 0.6 m | The widest gap between two rooms written rooms first that is still one wall between them; a wider gap that is not a room is refused |
 | `roomsTouch` | tolerance | 0.02 m | Rooms written rooms first closer than this touch with no wall between them, refused unless they are open to each other |
 | `roomsFaceStep` | tolerance | 0.002 m | Faces of rooms written rooms first further out of line than this are named as sizes that do not add up |
