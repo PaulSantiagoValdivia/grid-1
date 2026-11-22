@@ -127,8 +127,8 @@ GATES_PLACEHOLDER
   `packages/cli/src/command/__tests__/scan.test.ts` (5).
 - `everyPath.e2e.test.ts`: two slots, `grid write --scan` and `grid_write_rooms scan`, and `scan`
   joins the path arguments.
-- `grid.e2e.test.ts`: the bundle cap goes from 550 kB to 600 kB, with the reason and bytes in
-  its comment.
+- `grid.e2e.test.ts`: the bundle cap's comment says what this step adds (the cap, 600 kB, is the
+  one CNT-17 set on main; this step had raised it the same way before the merge).
 - `tolerances.test.ts`: the literal check covers `src/scan/` too.
 - No golden, snapshot or lab fixture changed. `compileRoomsText` writes exactly as before unless
   asked for more places.
@@ -171,8 +171,9 @@ GATES_PLACEHOLDER
   about 0.006%. The cost: these files hold longer numbers.
 - **A scan has no north**, so the plan is turned by the least turn that sets its longest wall
   across the drawing. Which way is up is then one of four; `grid_mirror turn` turns it.
-- **The bundle cap is 600 kB** (was 550 kB): the built file is BUNDLE_PLACEHOLDER bytes, about
-  34,000 of them this step's (the reader 4.4 kB, the face pairing 19.5 kB, the evidence 1.3 kB, the
+- **The bundle cap is 600 kB.** Before merging main this step raised it from 550 kB (574,019
+  bytes); CNT-17 on main raised it to the same 600 kB, so the cap is main's. Merged, the built file
+  is 564,215 bytes, about 34,000 of them this step's (the reader 4.4 kB, the face pairing 19.5 kB, the evidence 1.3 kB, the
   command 5.8 kB), with no new dependency.
 - **Refusal codes** (`scan/not-read`, `scan/no-walls`, `scan/same-id`, `scan/not-closed`,
   `scan/outline`, `scan/plan-changed`, `scan/same-file`, and rooms-writing codes as `scan/gap`)

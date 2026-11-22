@@ -314,6 +314,7 @@ label.
 | `floor/not-checked-sizes-for-building` | On "{floor}", room sizes were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-escapes-for-building` | On "{floor}", escape openings were not checked: the figures here were read for homes (houses and flats people live in), and the plan says this floor is {a shop} | figures read for {a shop}; the ones here were read for homes (…) |
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
+| `plan/not-checked-access` | What the plan marks as needing to be accessible ({count} rooms and {count} routes) was not checked: Grid holds no figure for it that a named person has confirmed | figures for the widths of doors and corridors, turning space and steps that a named person has confirmed against their source, or the person's own figures in the brief beside the plan |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 | `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
 | `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
@@ -615,6 +616,50 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `scan/no-walls`, `scan/same-id`, `scan/not-closed`, `scan/outline`, `scan/plan-changed`,
   `scan/same-file`, or a rooms-writing code such as `scan/gap`), and names the part and the
   limit, never the scan's text.
+
+### 2026-11-22: accessibility measurements, as numbers (CNT-17)
+
+- The plan format takes `accessible` (C14): `rooms` by id and `routes` (`to` a room, `from` a
+  room or, left out, the entrance). It is optional and never defaulted; `plan/unknown-field`'s
+  list of the plan's fields now names it after `views`.
+- `grid_measure` takes `what=access`, with no argument but `plan`, `units` and `decimal`. Its
+  `answer` holds `marked`, `rooms`, `routes`, `unknown` (ids the mark names that are no room),
+  `entrance` (`floor`, `doors`, `front`), `doors`, `corridors`, `turning`, `ways`, `figures`
+  (`yours`, each with `label: "your figure"`, and `code`, the confirmed code figures used, empty
+  today), `notLookedAt` and `brief` (the brief file read, or null). Each measure carries
+  `against`: `{ figure, short }`, where `figure.from` is `yours` (with `label: "your figure"`) or
+  `code` (only a figure a named person confirmed, `confirmedFigure`). Every step on a way has
+  `kind` (`sill`, `level`, `ground`, `stair`), `at`, `height` (null where Grid cannot tell),
+  `count`, `up`. The text starts with the label, then "Accessibility measurements:", and ends
+  with "Not looked at:" and the rule.
+- A new not-checked line, `plan/not-checked-access`, on a plan that marks any room or route:
+  what is marked was not checked, as Grid holds no figure for it that a named person has
+  confirmed. Its `also` lists the rooms the mark names. A plan that marks nothing gets no new
+  line. `resultVersion` stays 1.
+- `@ongrid/rules` exports `confirmedFigure`, `isConfirmed` and `CONFIRMED_STATUSES`: a figure is
+  confirmed only with status `checked-once` or `checked-twice` and every check by a named person.
+
+### 2026-11-22: sections, and the marks on a plan (LVL-9)
+
+- `grid_view` takes `kind` `section`: a cut along `cut` (`{ "from": [x, y], "to": [x, y] }`, in
+  metres) through every floor, looking to the `toward` side of it (`left`, the default, or
+  `right`, walking from `from` to `to`), in `look`. The answer's `data` gains `section`: the
+  line, `levels` (each floor's `level` and `source`, `stated`, `datum` or `worked-out`), `roofs`,
+  `ground` (`level`, `stated`), `rooms` (`floorLevel`, `height`, `heightStated`), `cut` (each part
+  cut: `kind`, `id`, `floor`), `shapes` (how many connected shapes they join into) and `assumed`
+  (`kind`, `ids`, `words`, `hatched`). The text says the same, and lists every line of `assumed`.
+- `grid_view` with `kind` `plan` takes `marks` (`levels`, `elevations`, `section`); `section`
+  needs `cut`, and `cut` and `toward` are refused on a plan without it. A plan with no `marks`
+  is drawn as before.
+- `grid draw` takes `--section`, `--toward` and `--marks` the same way.
+- `kind=section` refuses VEW-3's camera arguments (`bearing`, `tilt`, `distance`, `eye_height`,
+  `lens`, `room`, `camera`, `view`, `turn`, `tilt_by`) by name, and `kind=3d` refuses `cut`,
+  `toward` and `marks`; `grid draw` refuses `--section` and `--marks` with `--view`. A section's
+  `data` has `view` null.
+- After LVL-8: `kind=facade` refuses `cut`, `toward` and `marks`, and `kind=section` refuses
+  `side`; `grid draw` refuses `--section` and `--marks` with `--facade`.
+- No new code in the result record: a section and its marks are pictures. `resultVersion`
+  stays 1.
 
 ### 2026-11-22: repeat, mirror and turn, and a mirrored plan recognised (WRT-4)
 
