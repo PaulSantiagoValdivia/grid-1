@@ -70,7 +70,7 @@ function bayRoom(): FloorPlan {
 
 const HAND_ROUND = Math.PI * 2.9 * 2.9
 
-describe('a curved wall in the plan file (C10)', () => {
+describe('a curved wall in the plan file (C11)', () => {
   it('reads an arc and keeps it', () => {
     const plan = parseFloorPlan(roundRoom())
     expect(plan.walls[0]!.arc).toEqual({ centre: [5, 5], sweep: 360 })

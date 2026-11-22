@@ -7,9 +7,16 @@
  * plan complies, passes or is approved: no findings only means these checks found nothing.
  */
 import { floorOf, type FloorPlan, type Issue } from '@ongrid/floorplan/geometry'
+import { BUILDING_TYPE_TEXT } from '@ongrid/floorplan/types/floorplan'
 import {
   buildingKindsText,
   checkLocalRules,
+  FIGURE_CHECK_SUBJECTS,
+  FIGURE_RULES,
+  RULE_READ_FOR,
+  noPlaceText,
+  PlaceRefused,
+  requestedPlace,
   coverageOnFloor,
   figureUsedText,
   GENERAL_GUIDANCE_LABEL,
@@ -34,7 +41,7 @@ export const CHECK_OPTIONS: OptionSpecs = {
   '--floor': { takesValue: true, help: 'Only show what was found on this floor (a floor id from the plan).' },
   '--country': {
     takesValue: true,
-    help: 'Where the plan will be built, as a two-letter code such as US or ES.',
+    help: 'Where the plan will be built, for this check, in place of the plan\'s site.country: a country\'s name or its two- or three-letter code, such as US, USA, United States or Spain.',
   },
   '--json': { takesValue: false, help: 'Print the report as JSON.' },
   // MSG-10: the report is short by default; this gives every section.
@@ -159,8 +166,6 @@ export function markNote(project: Project, planFile: string, loaded: LoadedPlan,
 /** What the Seen part says of itself: never that a note is dealt with. */
 export const SEEN_HEADING_NOTE = 'each stays listed here, and is new again when one of its parts changes'
 
-const COUNTRY = /^[A-Za-z]{2}$/
-
 /** What no findings means, said wherever a check reports none. */
 export const NOTHING_FOUND = 'That only means these checks found nothing, not that the plan meets any rule.'
 /** MSG-3: what a report says when no check looked at anything. */
@@ -185,14 +190,68 @@ function floorsById(plan: FloorPlan): Map<string, string> {
   return floors
 }
 
-export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'>): CheckResult {
-  const { plan } = loaded
-  const country = request.country
-  if (country !== undefined && !COUNTRY.test(country)) {
-    throw new UsageError(`--country takes a two-letter country code, such as US or ES: got ${JSON.stringify(country)}.`)
+/**
+ * COD-3: the place a caller named, as its two-letter code, or undefined when none was named. A
+ * place not on Grid's list is refused, naming `argument` and never the text given (T-2, MSG-9).
+ */
+export function countryOption(country: string | undefined, argument = '--country'): string | undefined {
+  try {
+    return requestedPlace(country, argument)?.country
+  } catch (error) {
+    if (error instanceof PlaceRefused) throw new UsageError(`${error.message}.`)
+    throw error
   }
+}
+
+/** What a request to check is told about where the place came from, for the report's first line. */
+export interface PlaceWords {
+  /** How the caller's place is named: `--country` for the command, `the country argument` for the tool. */
+  readonly request: string
+  /** How to name a place for one check: `give --country`, `give country` (never "pass": MSG-3). */
+  readonly give: string
+}
+
+const COMMAND_PLACE: PlaceWords = { request: '--country', give: 'give --country' }
+
+/**
+ * COD-3: the report's first line after the label: the place the figure checks were for, from
+ * Grid's list, where it came from and which figures were applied; or, with no place, that no
+ * figure was applied and how many lines the US figures would have given.
+ */
+export function placeText(report: Pick<RulesReport, 'place' | 'withoutPlace' | 'figures' | 'notChecked'>, words: PlaceWords = COMMAND_PLACE): string {
+  const { place } = report
+  if (place === null) {
+    return `${noPlaceText(report.withoutPlace?.usLines ?? 0)}. State it in the plan as site.country, or ${words.give}.`
+  }
+  const from = place.from === 'request' ? `from ${words.request}` : place.from === 'plan' ? 'from the plan' : 'assumed, as none is stated'
+  const where = [...new Set(report.figures.flatMap((figure) => (figure.origin === 'baseline' ? [figure.jurisdiction] : [])))]
+  const lookedUp = report.figures.some((figure) => figure.origin === 'lookup')
+  const applied = [...where.map((w) => `from ${w}`), ...(lookedUp ? ['looked up for it'] : [])]
+  // COD-2: the kind of building the figures were read for, by its word alone: the notes that used one give it in full.
+  const kinds = [...new Set(report.figures.map((figure) => figure.readFor))]
+  // CNT-5: the place has figures, and the kind of building the plan states is not one they were read for.
+  const notFor = report.notChecked.filter((n) => n.reason === 'not_for_building' && n.building !== undefined)
+  const readFor = [...new Set(FIGURE_RULES.flatMap((rule) => RULE_READ_FOR[rule.id]))].join(' and ')
+  const building = notFor.length === 0
+    ? null
+    : notFor.some((n) => n.floor === '')
+      ? `the plan says this is ${BUILDING_TYPE_TEXT[notFor.find((n) => n.floor === '')!.building!]}`
+      : 'the plan says each of its floors is a kind of building they were not read for'
+  const figures = applied.length > 0
+    ? `figures ${applied.join(' and ')}, read for ${kinds.join(' and ')}`
+    : place.country !== 'US'
+      ? 'Grid carries no figures for it, so none was applied'
+      : building !== null
+        ? `no figure was applied: its figures were read for ${readFor}, and ${building}`
+        : 'no figure was applied: the checks that use figures had nothing to look at'
+  return `Place: ${place.name}, ${from}; ${figures}.`
+}
+
+export function checkPlan(loaded: LoadedPlan, request: Omit<CheckRequest, 'json'>, argument = '--country'): CheckResult {
+  const { plan } = loaded
+  const country = countryOption(request.country, argument)
   const floor = floorOption(plan, request.floor)
-  const options = country === undefined ? {} : { country: country.toUpperCase() }
+  const options = country === undefined ? {} : { country }
   // MSG-5: with what the reader left out, so the report holds back what the record holds back.
   const full = checkLocalRules(plan, { ...options, leftOut: loaded.leftOut ?? [] })
   // The file's text (MSG-6), so the record names what the reader did and the words the schema
@@ -338,7 +397,8 @@ export function checksRunText(report: RulesReport): string {
 export function checkText(result: CheckResult, floorCount: number, options: TextOptions = {}): string {
   const full = options.full === true
   const { report } = result
-  const lines: string[] = [result.label]
+  // COD-3: right after the label, the place and the figures applied, or that none was.
+  const lines: string[] = [result.label, placeText(report)]
   if (report.lookupNotice) lines.push(report.lookupNotice)
   if (result.floor !== undefined) lines.push(`Floor ${result.floor} only.`)
 
@@ -467,7 +527,16 @@ export function coverageSummary(result: CheckResult): string[] {
   const kinds = [...new Set(withFigures.map((check) => buildingKindsText(check.readFor!)))]
   const once = kinds.length === 1
   const lines = ['', `Looked at by at least one check: ${roomsSummary(result)}.`, `What each check looked at (${coverage.length}):`]
+  // COD-3: the checks that did not run because no place is stated, in one line.
+  const unplaced = coverage.filter((check) => check.lookedAtCount === 0 && check.skipped.length > 0 && check.skipped.every((skip) => skip.reason === 'no_place'))
   for (const check of coverage) {
+    if (unplaced.includes(check)) {
+      if (check === unplaced[0]) {
+        const names = unplaced.map((c, i) => (i === 0 ? subjectOf(c) : subjectOf(c).toLowerCase()))
+        lines.push(`  - ${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]}: not run: ${check.skipped[0]!.why}.`)
+      }
+      continue
+    }
     const gaps = check.skipped.filter((skip) => skip.reason !== 'use_not_covered')
     const gap = gaps.length === 0 ? '' : `; not looked at ${gaps.reduce((n, skip) => n + skip.ids.length, 0)}: ${[...new Set(gaps.map((skip) => skip.why))].join('; ')}`
     const findings = check.findings === 0 ? '' : `; ${check.findings} finding${check.findings === 1 ? '' : 's'}`
@@ -475,11 +544,14 @@ export function coverageSummary(result: CheckResult): string[] {
       ? `  - ${nothingCheckedText(check.title, check.looksAt)}${gap}.`
       : `  - ${check.title}: ${partsText(check.lookedAtCount, check.looksAt)}${gap}${findings}${once ? '' : readForText(check)}.`)
   }
-  if (once) {
-    const who = withFigures.length === 1 ? 'The check that uses figures' : withFigures.length === 2 ? 'Both checks that use figures' : `The ${withFigures.length} checks that use figures`
-    lines.push(`${who} read them for ${kinds[0]}.`)
-  }
+  // COD-3: when every check that used figures read them for the same kind of building, the
+  // report's first line says it (`placeText`), so it is not said again here.
   return lines
+}
+
+/** What a figure check is called in one word or two: `Room sizes`; any other check by its title. */
+function subjectOf(check: CheckCoverage): string {
+  return Object.hasOwn(FIGURE_CHECK_SUBJECTS, check.ruleId) ? FIGURE_CHECK_SUBJECTS[check.ruleId as keyof typeof FIGURE_CHECK_SUBJECTS] : check.title
 }
 
 /** "6 of 6 rooms", with the rooms no check looked at. */

@@ -58,10 +58,12 @@ export const ROOM_NAMES_TRAVEL =
 
 /**
  * What the server tells an agent's host before any tool (WRT-1, WRT-2): rooms-first is the main
- * way to write a plan, and the plan file, not the rooms text, is the source of truth.
+ * way to write a plan, and the plan file, not the rooms text, is the source of truth. BRF-1: the
+ * brief comes first, from the person's words.
  */
 export const INSTRUCTIONS =
   'Grid\'s tools read, measure, check, draw and change floor plans kept in plan files inside the project folder. Pass plan: the plan file, as a path inside that folder. '
+  + 'Before the first room, keep what the person asked for with grid_write_brief, from their own words, each wish given or assumed; every change then says which lines are met and which missed. '
   + 'Write a plan rooms first, the main way to write one: name the rooms with their inside sizes and neighbours, and the doors and windows by the rooms they join, and grid_write_rooms works out the walls. '
   + 'The plan file is the source of truth; rooms text is a way of writing and reading it. To change a plan, read it back with grid_describe as=rooms, change the text and write it with grid_write_rooms. Each room\'s boundary is derived: never edit it by hand. '
   + `${ROOM_NAMES_TRAVEL} `

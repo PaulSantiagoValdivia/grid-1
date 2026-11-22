@@ -12,6 +12,7 @@ import type { FloorPlan, Opening, PlanIndex, Wall } from '../plan'
 import { indexPlan } from '../plan'
 import { floorOf } from '../floors'
 import { roomNesting, tryRoomShape } from '../room'
+import { roomZones } from '../zones'
 import type { FloorSpaces } from '../spaces'
 import { floorSpaces, spacesKnown } from '../spaces'
 import { planWallSides } from '../exposure'
@@ -80,6 +81,9 @@ const floorArea = (outline: RoomOutline): number =>
  * marked `inside` lists only its own walls, so on their far side, where none of
  * the rooms that name the wall is, lies the room it sits in (`roomNesting`, found
  * from the outlines): a door in a wardrobe pod opens into the bedroom.
+ *
+ * A zone (CNT-8) is never on a side: a door in the walls of an open-plan room opens into the
+ * room, whichever of its zones it is in.
  */
 export function sidesAt(
   wall: Wall,
@@ -91,7 +95,10 @@ export function sidesAt(
   const axis = wallFrameAt(wall, along)
   const centre = axis.point
   const step = wall.thickness / 2 + tolerance('stepPastFace')
+  // A zone is no place of its own (CNT-8): what is in it is in its room.
+  const zones = roomZones(index)
   const candidates = (index.roomsByWall.get(wall.id) ?? [])
+    .filter((room) => !zones.zoneOf.has(room.id))
     .map((room) => outlines.get(room.id))
     .filter((outline): outline is RoomOutline => outline !== undefined)
   const nesting = roomNesting(index)
@@ -225,6 +232,7 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
   const index = indexPlan(plan)
   const outlines = roomOutlines(plan, index, leftOut)
   const nesting = roomNesting(index)
+  const zones = roomZones(index)
   const links: RouteLink[] = []
   const exits: OneSided[] = []
   const undrawn: OneSided[] = []
@@ -285,7 +293,8 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
   // A line with several stretches can join the same two rooms, or lead out of one room, more than once.
   const once = <T>(list: T[], key: (t: T) => string): T[] => [...new Map(list.map((t) => [key(t), t] as const)).values()]
   return {
-    rooms: [...outlines.keys()].sort(byText),
+    // Zones (CNT-8) are reached as their room is: they are not places of their own.
+    rooms: [...outlines.keys()].filter((id) => !zones.zoneOf.has(id)).sort(byText),
     links: once(links, (l) => `${l.rooms.join('|')}|${l.via}`).sort(
       (a, b) => byText(a.rooms[0], b.rooms[0]) || byText(a.rooms[1], b.rooms[1]) || byText(a.via, b.via)
     ),

@@ -16,6 +16,7 @@ import {
   planFloors,
   planForFloor,
   roomArea,
+  roomZones,
   sub,
   tolerance,
   wallCurve,
@@ -61,8 +62,10 @@ export interface RoomFacts {
   readonly floor: string
   /** Null when the drawing's checks leave the room out: it has no outline to measure. */
   readonly shape: RoomShape | null
-  /** Rooms across one of its walls, whether or not anything joins them, by id. */
+  /** Rooms across one of its walls, whether or not anything joins them, by id. None for a zone. */
   readonly neighbours: readonly string[]
+  /** CNT-8, only on a zone: the room it is part of. A zone is measured, and counted in no total. */
+  readonly zoneOf?: string
 }
 
 /** How far an opening's edge is from the inside corner at one end of the room's side. */
@@ -379,8 +382,10 @@ function neighboursOn(storey: FloorPlan, index: PlanIndex, outlines: ReadonlyMap
     next.get(a)!.add(b)
     next.get(b)!.add(a)
   }
+  // A zone is inside its room (CNT-8): the room meets its neighbours, the zone none.
+  const zoneOf = roomZones(index).zoneOf
   for (const wall of storey.walls) {
-    const named = (index.roomsByWall.get(wall.id) ?? []).filter((room) => outlines.has(room.id))
+    const named = (index.roomsByWall.get(wall.id) ?? []).filter((room) => outlines.has(room.id) && !zoneOf.has(room.id))
     if (named.length < 2) continue
     const on = (toward: 1 | -1): Array<{ room: string; lo: number; hi: number }> =>
       named.flatMap((room) => faceStretches(wall, outlines.get(room.id)!.polygon, toward).map(([lo, hi]) => ({ room: room.id, lo, hi })))
@@ -438,9 +443,11 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
   const index = indexPlan(storey)
   const outlines = roomOutlines(storey, index, leftOut.rooms)
   const next = neighboursOn(storey, index, outlines)
+  const zoneOf = roomZones(index).zoneOf
 
   const rooms: RoomFacts[] = storey.rooms.map((room) => {
     const outline = outlines.get(room.id)
+    const of = zoneOf.get(room.id)
     return {
       id: room.id,
       name: room.name,
@@ -448,6 +455,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
       floor: floor.id,
       shape: outline === undefined ? null : shapeOf(outline.polygon, roomArea(room, index)),
       neighbours: [...(next.get(room.id) ?? [])].sort(byText),
+      ...(of === undefined ? {} : { zoneOf: of }),
     }
   })
 
@@ -501,7 +509,8 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     openings,
     openSides,
     repeats: null,
-    area: rooms.reduce((sum, room) => sum + (room.shape?.area ?? 0), 0),
+    // A zone's floor is its room's (CNT-8): counted once.
+    area: rooms.reduce((sum, room) => sum + (room.zoneOf === undefined ? (room.shape?.area ?? 0) : 0), 0),
     wallHeight: usualHeight(plan, storey.walls),
     leftOut: [...leftOut.rooms, ...leftOut.openings].sort(byText),
   }

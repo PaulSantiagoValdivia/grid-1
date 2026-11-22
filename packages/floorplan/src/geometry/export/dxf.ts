@@ -25,6 +25,8 @@ import { approximationLines, kindLabel, leftOutByKind, leftOutSummary, NO_APPROX
 import type { PlanCurve } from '../floorplan'
 import type { FloorPlan } from '../../types/floorplan'
 import { factOf, factText, ROOM_NUMBER_FACT } from '../../types/facts'
+import { indexPlan } from '../plan'
+import { roomZones } from '../zones'
 
 /**
  * Layer names are the only organisation a DXF carries, so they are part of the
@@ -596,10 +598,16 @@ export interface DxfFacts {
   readonly floor: FactsOf | null
 }
 
-/** CNT-9: the facts of a floor of the plan as the DXF writes them: its walls', openings' and rooms', and its own. */
+/**
+ * CNT-9: the facts of a floor of the plan as the DXF writes them: its walls', openings' and
+ * rooms', and its own. A zone (CNT-8) is numbered by its room, so a number it states is not
+ * written: it keeps its facts only.
+ */
 export function dxfFactsOf(plan: FloorPlan, floor: { readonly id: string; readonly properties?: FactsOf['properties'] } | null): DxfFacts {
   const carries = (part: FactsOf): boolean => part.number !== undefined || Object.keys(part.properties ?? {}).length > 0
-  const parts = [...plan.walls, ...plan.openings, ...plan.rooms].filter(carries)
+  const zoneOf = plan.rooms.some((room) => room.partOf !== undefined) ? roomZones(indexPlan(plan)).zoneOf : null
+  const rooms = plan.rooms.map((room): FactsOf => (zoneOf?.has(room.id) === true && room.number !== undefined ? { id: room.id, properties: room.properties } : room))
+  const parts = [...plan.walls, ...plan.openings, ...rooms].filter(carries)
   return { parts, floor: floor !== null && carries(floor) ? floor : null }
 }
 

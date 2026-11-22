@@ -9,7 +9,7 @@ under "For the owner".
 
 ## What changed
 
-- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C10 in its header).
+- **The plan file** (`packages/floorplan/src/types/floorplan.ts`, convention C11 in its header).
   A wall may state `arc: { centre: [x, y], sweep }`: `sweep` is the angle in degrees the wall
   turns through round `centre` from `start` to `end`, counter-clockwise positive as `turn` and
   `north` are, never 0 and at most a whole turn either way (the schema refuses others). 360 is a
@@ -188,6 +188,16 @@ room is measured as before.
   stored figures."; the same folders as before, two workers: 224 of 224 files passed, 4,327 tests
   passed and 4 skipped, exit 0. The full suite was not run again.
 
+- After merging `main` at d058d4d (COD-3, WRT-8, BRF-1, CNT-8): four conflicts, both sides kept
+  (`CHANGELOG.md`, `docs/result-contract.md`, `cli/src/edit/merge.ts` with CNT-8's zone refusals
+  before the curved-wall refusal, and `types/floorplan.ts`). COD-3 took convention C10, so the
+  curved wall is C11 now, in the code, `AGENTS.md` and this review. Build, typecheck and lint
+  clean; the scoreboard "Same as the stored figures"; the affected tests (all of
+  `packages/floorplan/src`, the result record, the tool server, quantities, edit, describe, the
+  commands' tests, sheet, the viewer and `scoreboard/__tests__`): 242 of 243 files passed, 4,515
+  tests, 4 skipped. The one failure was the bundle's size budget: 501,415 bytes against 500,000.
+  The budget is now 550,000 (see "For the owner").
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
@@ -199,7 +209,7 @@ room is measured as before.
    | Room outline (`room.ts`) | pieces | traced by its chords; a round room of 2.9 m inside radius is 0.016% under |
    | Areas (net, gross internal, gross external) | pieces | the same outline and chord strips |
    | Wall length, offsets, opening fit | exact | along the curve (`wallLength`) |
-   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C10) |
+   | Openings | exact | edges on the curve; the hole is the straight chord between them, by design (C11) |
    | Door swings, sweep check | exact | from the straight hole; the swing is a true arc |
    | Routes (door graph, way-out checks) | exact | each opening's sides from the curve's normal at its middle; room floors by the outline |
    | Exposure, spaces, outside walls, facing, use indicators | pieces | by the chords |
@@ -253,3 +263,6 @@ room is measured as before.
     (LVL-4) come from the outlines, which follow the curve by pieces; the file names those rooms
     and walls in `Grid_Approximated`. No HND-2 quantity says it is approximated in its own
     description: the property set says it once for the file.
+- **The bundle's size budget** was raised from 500 kB to 550 kB: with curved walls and `main`
+  at d058d4d the built file is 501,415 bytes, with no new dependency. If you'd rather hold 500 kB,
+  something has to come out of the bundle; nothing here does that.

@@ -54,7 +54,7 @@ function finding(code: RuleFinding['code'], rooms: string[], extra: Partial<Rule
 }
 
 function report(findings: RuleFinding[], notChecked: RulesReport['notChecked'] = []): RulesReport {
-  return { schemaVersion: 1, basis: 'general-baseline', label: GENERAL_GUIDANCE_LABEL, rules: RULES, findings, notChecked, limits: [], figures: [], coverage: [] }
+  return { schemaVersion: 1, basis: 'general-baseline', label: GENERAL_GUIDANCE_LABEL, rules: RULES, findings, notChecked, limits: [], figures: [], coverage: [], place: { country: 'US', name: 'United States', from: 'request' } }
 }
 
 const one = (p: FloorPlan, f: RuleFinding) => planNotes(p, report([f])).notes[0]!

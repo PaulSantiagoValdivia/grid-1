@@ -7,12 +7,13 @@
  */
 import type { Display } from '@ongrid/floorplan/types/units'
 import { floorElevations, poleOfInaccessibility, type Bounds, type FloorPlan, type Vec2 } from '@ongrid/floorplan/geometry'
-import { LOOKS as PICTURE_LOOKS, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
+import { LOOKS as PICTURE_LOOKS, comparisonPicture, fullHeight, pictureToSvg, planPicture, PICTURE_FONT, type FaultLine, type PictureShow } from '@ongrid/viewer/src/picture'
+import { resolveFloor, type BuildingComparison } from '@ongrid/floorplan/geometry'
 import { el, toSvg } from '@ongrid/viewer/src/picture/svgNode'
 import { GROUND_GRID } from '@ongrid/viewer/src/canvas3d/BuildingScene'
 import { LIGHT_COLORS_3D, rasterise, stillScene } from '@ongrid/viewer/src/still'
 import { loadCanvas } from './canvas'
-import { drawPlan } from './drawPlan'
+import { drawPlan, pictureToPng } from './drawPlan'
 import { partBounds, pixelBoxes, type PartBox } from './partBoxes'
 import { forSkia } from './skiaText'
 import { stampLabel } from './stamp'
@@ -51,6 +52,18 @@ export async function planView(
   const png = await drawPlan(plan, { format: 'png', floor: options.floor, look: lookOf(options.look), showDimensions: options.dimensions, ...extra })
   const boxes = pixelBoxes(partBounds(plan, options.floor), picture)
   return { png, width: picture.width, height: fullHeight(picture), pxPerMetre: picture.width / picture.view.width, boxes, undecidedDoors: picture.undecidedDoors }
+}
+
+/**
+ * WRT-8: a comparison as one picture of a floor: the later plan pale, what was removed and added
+ * in their colours, and the changed rooms labelled with their old and new area. The core says
+ * what changed (`marks`); the viewer draws it (`comparisonPicture`).
+ */
+export async function comparisonView(comparison: Pick<BuildingComparison, 'aligned' | 'marks'>, later: FloorPlan, floor: string | undefined): Promise<PlanView & { readonly floor: string }> {
+  const shown = resolveFloor(later, floor)
+  const picture = comparisonPicture(comparison.aligned, later, comparison.marks, { floor: shown })
+  const png = await pictureToPng(picture)
+  return { png, width: picture.width, height: fullHeight(picture), pxPerMetre: picture.width / picture.view.width, floor: shown }
 }
 
 const SHEET_WIDTH = 2400

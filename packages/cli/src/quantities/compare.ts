@@ -31,10 +31,12 @@ export function optionRow(label: string, survey: Survey): OptionRow {
   const areas: PlanAreas = planAreas(survey)
   const byUse: Record<string, number> = {}
   for (const floor of areas.floors) for (const [use, value] of Object.entries(floor.byUse)) byUse[use] = (byUse[use] ?? 0) + value
+  // CNT-8: a zone is part of a room, not a room of its own.
+  const rooms = survey.rooms.filter((room) => room.facts.zoneOf === undefined)
   return {
     label,
-    rooms: survey.rooms.length,
-    bedrooms: survey.rooms.filter((room) => room.facts.use === 'bedroom').length,
+    rooms: rooms.length,
+    bedrooms: rooms.filter((room) => room.facts.use === 'bedroom').length,
     net: areas.net,
     grossInternal: areas.grossInternal,
     grossExternal: areas.grossExternal,
@@ -324,6 +326,9 @@ function roomDeltas(a: Survey, b: Survey): RoomDelta[] {
 
 const sum = (values: readonly number[]): number => values.reduce((x, y) => x + y, 0)
 
+/** The uses a plan's rooms and zones state, each once, in plan order. */
+const usesOf = (s: Survey): string[] => [...new Set(s.rooms.flatMap((r) => (r.facts.use === undefined ? [] : [r.facts.use])))]
+
 function areaWord(value: number): string {
   return `${value.toFixed(2)} m²`
 }
@@ -362,8 +367,10 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
   }
 
   const rooms = roomDeltas(a, b)
-  const netBefore = sum(a.rooms.map((r) => r.facts.shape?.area ?? 0))
-  const netAfter = sum(b.rooms.map((r) => r.facts.shape?.area ?? 0))
+  // A zone's floor is its room's (CNT-8): counted once.
+  const netOf = (s: Survey): number => sum(s.rooms.filter((r) => r.facts.zoneOf === undefined).map((r) => r.facts.shape?.area ?? 0))
+  const netBefore = netOf(a)
+  const netAfter = netOf(b)
   const inverse = (wall: Wall): boolean => !a.plan.walls.some((other) => sameWall(other, wall, map))
   const missing = likeness ? [] : wallsMissing(a.plan, b.plan, map)
   const added = likeness ? [] : b.plan.walls.filter(inverse)
@@ -425,6 +432,9 @@ export function comparePlans(a: Survey, b: Survey, labels: readonly [string, str
     if (openingsOut.length + openingsNew.length + openingsChanged.length > 0) parts.push(`openings: ${openingsOut.length} out, ${openingsNew.length} new, ${openingsChanged.length} changed`)
     verdict = `${before} → ${after}: ${parts.join('; ')}.`
   }
+  // CNT-8 (lab AB-9): a use no room or zone has any more is named, never lost in silence.
+  const lost = usesOf(a).filter((use) => !usesOf(b).includes(use))
+  if (lost.length > 0) verdict += ` ${after.charAt(0).toUpperCase()}${after.slice(1)} has no room or zone used as ${lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} or ${lost[lost.length - 1]}`}, which ${before} had.`
   verdict = verdict.charAt(0).toUpperCase() + verdict.slice(1)
   return { likeness, shift, rooms, netBefore, netAfter, wallsOut, wallsNew, wallsChanged, wallsResized: resized, openingsOut, openingsNew, openingsChanged, verdict }
 }

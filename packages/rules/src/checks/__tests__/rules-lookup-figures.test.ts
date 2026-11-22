@@ -13,6 +13,9 @@ import {
 import { basisOf } from '../check'
 import { edit, flat, madeVirtual, twoFloorHouse, longWallStrip, withoutOpening } from '@ongrid/floorplan/test-support/plans'
 
+/** COD-3: the place the figures here are for. With none stated, no figure applies. */
+const US = { country: 'US' } as const
+
 /**
  * The plan checks that look at something in these plans: none has a stair room, so the stairs check
  * (LVL-3) is not listed, and none states the ground, so neither is the check of openings below it (LVL-4).
@@ -37,7 +40,7 @@ const fixtures: [string, FloorPlan][] = [
 ]
 
 const sizeFindings = (plan: FloorPlan, options?: Parameters<typeof checkLocalRules>[1]) =>
-  checkLocalRules(plan, options).findings.filter((f) => f.code === 'room_too_small')
+  checkLocalRules(plan, { ...US, ...options }).findings.filter((f) => f.code === 'room_too_small')
 
 /** Every room a bedroom, so both figure checks look at a room and apply their figures (MSG-2). */
 const allBedrooms = (plan: FloorPlan): FloorPlan =>
@@ -48,13 +51,13 @@ const allBedrooms = (plan: FloorPlan): FloorPlan =>
 describe('a report with no figures given', () => {
   it('lists no figure of a check that looked at no room (MSG-2)', () => {
     // The flat says no room's use: neither figure check looks at a room, so neither applied a figure.
-    const report = checkLocalRules(flat())
+    const report = checkLocalRules(flat(), US)
     expect(report.figures).toEqual([])
     expect(report.rules.map((r) => r.id)).toEqual(PLAN_RULES.map((r) => r.id))
   })
 
   it.each(fixtures)('for %s is labelled as general guidance, every figure a baseline with its sources and status', (_name, plan) => {
-    const report = checkLocalRules(allBedrooms(plan))
+    const report = checkLocalRules(allBedrooms(plan), US)
     expect(report.basis).toBe('general-baseline')
     expect(report.label).toBe(GENERAL_GUIDANCE_LABEL)
     expect(report.lookupNotice).toBeUndefined()
@@ -72,14 +75,16 @@ describe('a report with no figures given', () => {
     }
   })
 
-  it.each(fixtures)('for %s is the same with an empty figure list, and with the US stated', (_name, plan) => {
-    expect(JSON.stringify(checkLocalRules(plan, { figures: {} }))).toBe(JSON.stringify(checkLocalRules(plan)))
-    expect(JSON.stringify(checkLocalRules(plan, {}))).toBe(JSON.stringify(checkLocalRules(plan)))
-    expect(JSON.stringify(checkLocalRules(plan, { country: 'us' }))).toBe(JSON.stringify(checkLocalRules(plan)))
+  // COD-3: with no place stated, no figure applies, so the US is stated here; any way the list
+  // lets it be written gives the same report.
+  it.each(fixtures)('for %s is the same with an empty figure list, and with the US however it is written', (_name, plan) => {
+    expect(JSON.stringify(checkLocalRules(plan, { ...US, figures: {} }))).toBe(JSON.stringify(checkLocalRules(plan, US)))
+    for (const country of ['us', 'USA', 'United States']) expect(JSON.stringify(checkLocalRules(plan, { country }))).toBe(JSON.stringify(checkLocalRules(plan, US)))
+    expect(JSON.stringify(checkLocalRules({ ...plan, site: { country: 'usa' } }))).toBe(JSON.stringify(checkLocalRules({ ...plan, site: { country: 'US' } })))
   })
 
   it('stays plain data', () => {
-    const report = checkLocalRules(withBedroom())
+    const report = checkLocalRules(withBedroom(), US)
     expect(JSON.parse(JSON.stringify(report))).toEqual(report)
     expect(report.schemaVersion).toBe(1)
   })
@@ -130,7 +135,7 @@ describe('a report with a looked-up figure', () => {
   })
 
   it('keeps the general-guidance label, and adds a line saying figures were found online', () => {
-    const report = checkLocalRules(withBedroom(), { figures })
+    const report = checkLocalRules(withBedroom(), { ...US, figures })
     expect(report.basis).toBe('local-lookup')
     expect(report.label).toBe(GENERAL_GUIDANCE_LABEL)
     expect(report.lookupNotice).toBe(LOOKUP_NOTICE)
@@ -145,14 +150,14 @@ describe('a report with a looked-up figure', () => {
   })
 
   it('stays general guidance when the only looked-up figure is implausible', () => {
-    const report = checkLocalRules(withBedroom(), { figures: { habitableRoomMinArea: { value: 900, source } } })
+    const report = checkLocalRules(withBedroom(), { ...US, figures: { habitableRoomMinArea: { value: 900, source } } })
     expect(report.basis).toBe('general-baseline')
     expect(report.lookupNotice).toBeUndefined()
     expect(sizeFindings(withBedroom(), { figures: { habitableRoomMinArea: { value: 900, source } } })).toEqual([])
   })
 
   it('stays general guidance when the looked-up figure is one no check reads', () => {
-    const report = checkLocalRules(flat(), { figures: { exitDoorClearWidth: { value: 0.8, source } } })
+    const report = checkLocalRules(flat(), { ...US, figures: { exitDoorClearWidth: { value: 0.8, source } } })
     expect(report.basis).toBe('general-baseline')
     expect(report.figures.map((f) => f.key)).not.toContain('exitDoorClearWidth')
   })
@@ -176,7 +181,7 @@ describe('a plan for a country the carried figures do not cover', () => {
         floor: '',
         rooms: [],
         openings: [],
-        message: 'Room sizes were not checked: the figures here are from US model codes, and this plan is for ES'
+        message: 'Room sizes were not checked: the figures here are from US model codes, and this plan is for Spain'
       },
       {
         reason: 'no_figures_for_place',
@@ -184,7 +189,7 @@ describe('a plan for a country the carried figures do not cover', () => {
         floor: '',
         rooms: [],
         openings: [],
-        message: 'Escape openings were not checked: the figures here are from US model codes, and this plan is for ES'
+        message: 'Escape openings were not checked: the figures here are from US model codes, and this plan is for Spain'
       }
     ])
   })
@@ -193,8 +198,8 @@ describe('a plan for a country the carried figures do not cover', () => {
     const trapped = withoutOpening(withBedroom(), 'd_hb')
     const plan = (options?: Parameters<typeof checkLocalRules>[1]) =>
       checkLocalRules(trapped, options).findings.filter((f) => f.figures === undefined && f.ruleId !== 'escape-opening')
-    expect(plan({ country: 'ES' })).toEqual(plan())
-    expect(plan().length).toBeGreaterThan(0)
+    expect(plan({ country: 'ES' })).toEqual(plan(US))
+    expect(plan(US).length).toBeGreaterThan(0)
   })
 
   it('runs a check on the figures that were looked up for the place, and only those', () => {
@@ -203,7 +208,7 @@ describe('a plan for a country the carried figures do not cover', () => {
     expect(report.rules.map((r) => r.id)).toEqual([...PLAN_RULES.map((r) => r.id), 'habitable-room-area'])
     expect(report.findings.filter((f) => f.code === 'room_too_small')).toHaveLength(1)
     expect(report.notChecked.filter((n) => n.reason === 'no_figures_for_place').map((n) => n.message)).toEqual([
-      'Escape openings were not checked: the figures here are from US model codes, and this plan is for IT'
+      'Escape openings were not checked: the figures here are from US model codes, and this plan is for Italy'
     ])
     // Not listed: the escape check, the stairs check (LVL-3), which finds no stair room here, and
     // the check of openings below the ground (LVL-4), as the plan states no ground.

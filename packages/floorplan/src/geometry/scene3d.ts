@@ -24,6 +24,7 @@ import { cross, dot, fromTuple, normalize, sub } from './vec2'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
 import { tryRoomShape } from './room'
+import { roomZones } from './zones'
 import { roomFloorOffset } from './steps'
 import { wallExposure } from './exposure'
 import { wallRevision } from './revision'
@@ -505,8 +506,10 @@ export function buildScene(plan: FloorPlan, options: SceneOptions = {}): Scene3D
   }
 
   const slabs: SceneSlab[] = []
+  // A zone's floor is its room's (CNT-8): one slab, the room's.
+  const zones = roomZones(index)
   for (const room of plan.rooms) {
-    if (broken.has(room.id)) continue
+    if (broken.has(room.id) || zones.zoneOf.has(room.id)) continue
     const slab = roomSlab(room, index)
     if (!slab) continue
     slabs.push(slab)

@@ -14,6 +14,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
 - [Floor no room claims](#floor-no-room-claims): `floor/unclaimed`, `room/space-mismatch`, `room/not-enclosed`, `floor/spaces-unknown`
 - [Rooms that overlap, and rooms inside rooms](#rooms-that-overlap-and-rooms-inside-rooms): `room/overlap`, `room/inside-no-host`, `room/overlap-unknown`, `floor/overlaps-unknown`
+- [Zones inside one room](#zones-inside-one-room): `room/zone-not-in-room`
 - [Rooms with holes](#rooms-with-holes): `room/hole-outside`, `room/holes-overlap`, `room/unclosed`, `room/out-of-order`, `room/inside-out`
 - [A curved wall](#a-curved-wall): `wall/arc-ends-apart`, `wall/arc-too-tight`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
@@ -36,8 +37,9 @@ file never reaches the exports with its letters turned into question marks. A fi
 | Text | At most | Also refused |
 |---|---|---|
 | a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins | 64 characters | the same |
+| an id: of a wall, room, opening, floor or stair, a wall a room or an opening names, a part's floor, the floors a stair joins, the room a zone is part of | 64 characters | the same |
 | the trace image's path | 1,024 characters | the same |
+| the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
 | the facts one wall, opening, room or floor carries | 100 | |
 | walls, rooms, openings, floors, items, stairs, annotations or sketch items | 50,000 of each | |
@@ -370,6 +372,56 @@ outline of the room around it stays whole; only its area changes.
 | `room/overlap-unknown` | Two rooms that could not be compared, with the reason |
 | `floor/overlaps-unknown` | A floor whose rooms were not all compared: the plan has more than 200,000 pairs of rooms lying over each other (thousands of copies piled in one place), and Grid stopped there |
 
+## Zones inside one room
+
+An open-plan room holds several uses: a studio where you sleep, cook and sit. Draw the room once,
+round its own walls, and each zone as a room of its own that names the room in `partOf`:
+
+```json
+"rooms": [
+  { "id": "studio", "name": "Studio", "boundary": ["ext-s", "ext-e", "bath-s", "bath-w", "ext-n", "ext-w"] },
+  { "id": "sleep", "name": "Sleeping corner", "use": "bedroom", "boundary": ["ext-s", "sleep-e", "kit-s", "ext-w"], "partOf": "studio" }
+]
+```
+
+A zone's outline lies inside its room's, along the room's walls and dividing lines (virtual
+walls) of the zone's own. The two overlap on purpose:
+
+- The room is the place. It is measured, counted, reached and checked as a whole. A door or a
+  fixture in it is in the room, whichever zone it is in, and the 3D view, the IFC and the floor
+  slabs have the room's floor only. A zone's `ceiling`, `void` or floor offset is not read: the
+  ceiling, the slab and any opening in it are the room's ([Slabs, roofs, ceilings and the
+  ground](#slabs-roofs-ceilings-and-the-ground)), and a zone used as a stair or a lift opens no
+  slab of its own.
+- A zone is named and measured, and is in no total: `grid_areas` lists it with its room
+  (`zoneOf`) and gives its floor to its own use in the area by use, the room schedule lists it
+  under its room, and the takeoff, the estimate and the comparison of two plans count its floor
+  once, in its room.
+- The size and escape checks look at the room as a whole, at its whole area, with the room's own
+  use or, when the check does not cover that, its zones' uses: a studio with a sleeping corner is
+  checked as a room someone sleeps in, and a finding names the zone it read the use from. The
+  studio drawn with zones and drawn as one bedroom get the same result. In the record's
+  coverage, the zones are skipped as `part_of_room` and the room is listed in `wholeRooms` with
+  the use applied.
+- The overlap check leaves a zone and its room alone, and a dividing line that only zones list
+  divides no room and makes no space of its own. Two zones of one room that share floor are
+  still named (`room/overlap`).
+
+A room is a zone only when the room it names is on its floor, is not a zone itself, and holds all
+of it. Otherwise it is counted as a room of its own and named:
+
+| Code | What it says |
+|---|---|
+| `room/zone-not-in-room` | A room marked as a zone of another that is not on its floor, is a zone itself, or does not hold it, with how much of it lies outside |
+
+Merging two rooms of different uses (`grid_merge_rooms`, `grid edit merge`) asks for the merged
+room's use, or keeps both as zones with `zones`: the stretch of wall between them becomes a
+dividing line, each keeps its id, name and use, and a new room holds them.
+
+`partOf` is optional and never defaulted, so a plan written before it reads with no key added
+(version 1). Rooms text has no word for it yet: a floor with zones is read back in Grid's own
+terms, so nothing is lost.
+
 ## Rooms with holes
 
 A ring gallery round a courtyard, or a car park round a core, is one room with a hole in it. Its
@@ -638,7 +690,7 @@ before, with no north and y up the page.
 | `north` | Where north lies on the drawing, in degrees counter-clockwise from its top (+y), as a north symbol's `turn` is: 0 is up the drawing, 90 to the left (-x), -90 or 270 to the right (+x) |
 | `yAxis` | Which way +y runs on the page with +x to the right: `up`, as Grid draws every plan, or `down`, as a screen or an image's pixels run. Unstated, it is `up` |
 | `front` | The part whose outside face is the front of the building: `wall`, a wall's id, or `opening`, an opening's id such as the front door, by the wall it is in. One of the two |
-| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin` |
+| `site` | Where the building sits: `origin`, a point of the plan in metres, and, if known, where that point is on the earth: `latitude` and `longitude` in degrees (north and east positive, given together) and `elevation`, metres above sea level. Each is optional, but nothing is placed on the earth without `origin`; a field Grid does not hold yet, such as a plot boundary, is named and read without. `site` also holds `ground`, the level of the ground outside ([slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground)), which needs no `origin`. `country` is [the place](#the-place) the figure checks are for |
 
 North is drawn and written where the plan states it:
 
@@ -692,6 +744,37 @@ front stays the part it names, and `yAxis` is kept.
 |---|---|
 | `plan/front-not-said` | The front names a part the plan does not have, or a wall that does not face outside: no front is said |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored |
+
+## The place
+
+The figure checks apply figures from building codes, and a figure holds only where its code
+does. So the plan says where it will be built, in `site.country` (COD-3):
+
+```json
+{ "site": { "country": "United States" } }
+```
+
+The place is a country's name or its two- or three-letter code (ISO 3166-1), as Grid's own list
+has it (`packages/floorplan/src/types/places.ts`): every country and territory with a code, its
+short English name, and a few other names people use, such as `USA`, `United States of America`,
+`UK`, `Great Britain`, `Holland` or `Ivory Coast`. Capitals, accents, dots and the spaces round
+it do not matter: `US`, `usa`, ` United States ` and `U.S.A.` are one place. A name that could
+mean two places (`Congo`, `Korea`) and a part of a country (`England`) are not on the list:
+write the code. It is kept as written, and every report names it by Grid's name for it, never
+by the text in the file. Anything else is not a place: the plan is read without it, the rest of
+the `site` kept, and `grid check` says so with a `plan/value-left-out` line at `site.country`
+that names the field and never repeats the text.
+
+- **The US.** The figure checks run on the figures carried here, from US model codes.
+- **Another place.** No US figure is applied; `grid check` says which checks did not run for
+  want of figures for the place.
+- **No place stated.** No figure is applied, and the report says so on its first line after the
+  label, with how many lines the US figures would have given.
+
+`grid check --country` and `grid_check`'s `country` name another place for one check, in place
+of the plan's; the report says which was used ("from the plan", "from --country"). `grid write`
+keeps `site` as the file has it, so rooms text, which holds the walls, rooms and openings, loses
+nothing of the place. The sheet does not print it.
 
 ## Where a value came from
 

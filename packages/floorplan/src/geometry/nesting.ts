@@ -152,7 +152,8 @@ function nest(traced: readonly Traced[], marked: readonly Traced[], wallsById: R
     let host: Traced | null = null
     let nearest: { room: Traced; shared: number } | null = null
     for (const c of rooms) {
-      if (c.order === r.order || c.floor !== r.floor || !overlaps(c.box, r.box)) continue
+      // A zone (CNT-8) is part of its room, never a room something sits in.
+      if (c.order === r.order || c.floor !== r.floor || c.room.partOf !== undefined || !overlaps(c.box, r.box)) continue
       cuts++
       const shared = intersectionArea(r.polygon, c.polygon)
       if (shared <= 0) continue
@@ -208,7 +209,8 @@ export function nestRooms(rooms: readonly TracedRoom[], wallsById: ReadonlyMap<s
 
 /** The rooms marked `inside`, each with the room it sits in, and what each of those keeps. */
 function nestMarked(traced: readonly Traced[], wallsById: ReadonlyMap<string, Wall>): RoomNesting {
-  const marked = traced.filter((t) => t.room.inside === true)
+  // A zone (CNT-8) lies in its room on purpose and takes no floor off it.
+  const marked = traced.filter((t) => t.room.inside === true && t.room.partOf === undefined)
   if (marked.length === 0) return NO_NESTING
 
   let failure: unknown = null

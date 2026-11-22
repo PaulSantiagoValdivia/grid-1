@@ -35,6 +35,7 @@ import { planWallSides, type WallSides } from './exposure'
 import { validatePlan } from './validate'
 import { floorJoins } from './floorJoins'
 import { cornerFills, inPolygon, polygonArea, strip, union } from './polygons'
+import { roomZones } from './zones'
 import { TOLERANCES, tolerance } from './tolerances'
 import type { Vec2 } from './vec2'
 import { wallLength, wallSegments } from './wall'
@@ -116,6 +117,11 @@ export interface RoomAreaFigure {
   /** Named as outside by the caller: listed apart, in no net or gross internal figure. */
   readonly outside: boolean
   /**
+   * CNT-8: the room this one is a zone of, or null. A zone is listed and measured, and is in no
+   * figure: its floor is its room's. Its area goes to `byUse` under its own use, out of its room's.
+   */
+  readonly zoneOf: string | null
+  /**
    * SHT-11, lab DR-5: on a room used as a stair that lies over a stair room on the floor below
    * (LVL-3's join), the stair room its floor is counted with: the lowest of the rooms the stair
    * rises through. The room keeps its area, and is in no net figure. Absent on every other room.
@@ -136,7 +142,7 @@ export interface FloorAreaFigures {
   readonly rooms: readonly RoomAreaFigure[]
   /** Rooms on this floor that could not be drawn: in no figure here. */
   readonly leftOut: readonly RoomLeftOut[]
-  /** The rooms not named outside, less the stair rooms counted with the one below (`overStairs`). */
+  /** The rooms not named outside, less the stair rooms counted with the one below (`overStairs`), and no zone (CNT-8). */
   readonly net: number
   /** `net` by room use; a room with none is under `not said`. Adds up to `net`. */
   readonly byUse: Readonly<Record<string, number>>
@@ -357,6 +363,7 @@ function floorFigures(
 ): FloorAreaFigures {
   const rooms: RoomAreaFigure[] = []
   const leftOut: RoomLeftOut[] = []
+  const zones = roomZones(index)
   for (const room of plan.rooms) {
     if (floorOf(room) !== floor) continue
     // The rooms `floorSpaces` sets against the spaces, so that the figures add up.
@@ -365,6 +372,7 @@ function floorFigures(
       leftOut.push({ id: room.id, name: nameOf(room), floor })
       continue
     }
+    const zoneOf = zones.zoneOf.get(room.id) ?? null
     const below = outside.has(room.id) ? undefined : countedWith.get(`${floor}|${room.id}`)
     rooms.push({
       id: room.id,
@@ -373,13 +381,33 @@ function floorFigures(
       floor,
       area: roomFloorArea(room, index, outline),
       outside: outside.has(room.id),
+      zoneOf,
       ...(below === undefined ? {} : { countedWith: below }),
     })
   }
-  const counted = rooms.filter((room) => !room.outside && room.countedWith === undefined)
+  // A zone is in no figure (CNT-8): its floor is its room's, counted once. A zone is in no stair
+  // stack either (`stairStacks`), so it never has `countedWith`.
+  const counted = rooms.filter((room) => !room.outside && room.zoneOf === null && room.countedWith === undefined)
   const overStairs = sum(rooms.filter((room) => room.countedWith !== undefined).map((room) => room.area))
   const byUse: Record<string, number> = {}
-  for (const room of counted) byUse[room.use ?? NOT_SAID] = (byUse[room.use ?? NOT_SAID] ?? 0) + room.area
+  const add = (use: string | null, value: number): void => {
+    byUse[use ?? NOT_SAID] = (byUse[use ?? NOT_SAID] ?? 0) + value
+  }
+  for (const room of counted) {
+    // A room with zones gives each zone's floor to the zone's use, and keeps the rest for its own.
+    // Zones that hold more than the room (two that overlap) leave it to the room's own use.
+    const own = rooms.filter((zone) => zone.zoneOf === room.id)
+    const zoned = sum(own.map((zone) => zone.area))
+    if (own.length === 0 || zoned > room.area + tolerance('areaReported')) {
+      add(room.use, room.area)
+      continue
+    }
+    // What is left is the room's own; a sliver left by rounding goes with the first zone, so the
+    // uses still add up to the net area to the last digit.
+    const rest = room.area - zoned
+    own.forEach((zone, i) => add(zone.use ?? room.use, zone.area + (i === 0 && rest < tolerance('areaReported') ? rest : 0)))
+    if (rest >= tolerance('areaReported')) add(room.use, rest)
+  }
   const net = sum(counted.map((room) => room.area))
   const outsideRooms = sum(rooms.filter((room) => room.outside).map((room) => room.area))
   const base = { floor, rooms, leftOut, net, byUse, outsideRooms, overStairs }
@@ -411,8 +439,10 @@ function floorFigures(
  */
 function stairStacks(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>): Map<string, { floor: string; room: string }> {
   const outlines = new Map<string, Map<string, Vec2[]>>()
+  // CNT-8: a zone is part of its room, not a room of its own, so it is in no stack.
+  const zones = roomZones(index)
   for (const room of plan.rooms) {
-    if (room.use !== 'stair' || broken.has(room.id)) continue
+    if (room.use !== 'stair' || broken.has(room.id) || zones.zoneOf.has(room.id)) continue
     const outline = tryRoomPolygon(room, index)
     if (outline === null || outline.length < 3) continue
     const floor = floorOf(room)
