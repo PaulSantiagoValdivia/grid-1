@@ -19,6 +19,8 @@ import { approvalWords, GENERAL_GUIDANCE_LABEL, planNotes, type NoteText } from 
 import { planToSvg } from '@ongrid/viewer/src/picture'
 import { checkPlan, checkText } from '../../packages/cli/src/command/check'
 import { describePlan } from '../../packages/cli/src/command/describe'
+import { firmMeasures } from '../../packages/cli/src/firm/measure'
+import { parseFirmStandards } from '../../packages/cli/src/firm/standards'
 import type { LoadedPlan } from '../../packages/cli/src/command/plan'
 import * as data from '../src/data'
 
@@ -89,6 +91,40 @@ describe('no line Grid writes reads as a pass (MSG-3)', () => {
       say('not checked', notes.notChecked.join(' '))
       for (const audience of ['person', 'agent'] as const) say(`describe ${audience}`, describePlan(one, 'walls', audience))
     }
+    expect(found).toEqual([])
+  }, 300_000)
+
+  // COD-8: a sample firm's file, every measure set high enough that most parts are short of it.
+  it('over the fixtures and every 50th lab plan with a firm\'s standards file: the report and every firm line', () => {
+    const standards = parseFirmStandards({
+      version: '1',
+      standards: [
+        { measure: 'corridor_width', value: 1.8, unit: 'm', name: 'Corridors' },
+        { measure: 'door_clear_width', value: 1000, unit: 'mm', name: 'Doors' },
+        { measure: 'turning_circle', value: 2, unit: 'm' },
+        { measure: 'fixture_clearance', value: 1.5, unit: 'm' },
+        { measure: 'room_area', value: 15, unit: 'm²' },
+        { measure: 'room_width', value: 3, unit: 'm' },
+      ],
+    })
+    const found: string[] = []
+    let firmLines = 0
+    for (const { name, plan } of [...fixturePlans, ...every(50)]) {
+      const users = userText(plan)
+      const say = (where: string, text: string): void => {
+        const words = approvalWords(text, users)
+        if (words.length > 0) found.push(`${name} ${where}: ${words.join(', ')}`)
+      }
+      const firm = { file: 'firm-standards.json', problem: null, standards, measured: firmMeasures(plan, standards) }
+      const result = checkPlan(loaded(name, plan), { firm })
+      say('grid check', checkText(result, 1))
+      say('grid check --full', checkText(result, 1, { full: true }))
+      for (const line of result.result.lines.filter((l) => l.code.startsWith('firm/'))) {
+        firmLines++
+        say(line.code, [line.message, line.found, line.needed, line.fix].join(' | '))
+      }
+    }
+    expect(firmLines).toBeGreaterThan(100)
     expect(found).toEqual([])
   }, 300_000)
 

@@ -74,6 +74,11 @@ answer lists them under it. Grid knows five, all in metres:
 | `step` | the sill of every door and doorless opening above its floor; 0 for none | higher |
 | `ceiling_height` | each room's height, as `grid_measure` gives it | lower |
 
+`grid_measure what=access` sets its accessibility measurements against `door_width` (by a door's
+clear width past its leaf), `corridor_width` (by a corridor's narrowest point), `turning_circle`
+and `step`, and says each as "your figure" (CNT-17,
+[the tool server](tool-server.md#accessibility-measurements-as-numbers)).
+
 A figure Grid does not know is refused with the five it knows. Each door, room or opening short
 of a figure is one line; a figure nothing is short of is one line met.
 

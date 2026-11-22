@@ -5,7 +5,9 @@
  * (SHT-7); `--hide`, `--colour` and `--key` choose what it shows.
  * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`; with `--view`, a
  * view saved with the plan (VEW-3), through its camera record. With `--facade` (LVL-8), one side of
- * the building in elevation, every floor at its level, through `drawFacade`.
+ * the building in elevation, every floor at its level, through `drawFacade`. With `--section`, a
+ * section along a line through every floor, through `drawSection` (LVL-9); `--marks` adds the
+ * marks for the plan's other drawings to a floor plan.
  * Written to `--out`, or to standard output when no file is named.
  */
 import { DISPLAY_UNITS, displayFor } from '../quantities/units'
@@ -17,6 +19,9 @@ import { planPicture } from '@ongrid/viewer/src/picture'
 import { drawShowOf } from './drawShow'
 import { floorOption, type LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
+import type { SectionLine } from '@ongrid/floorplan/geometry/section'
+import type { DrawingMarksAsked } from '@ongrid/floorplan/geometry/drawingMarks'
+import { marksAsked, readMarks, readSectionOption, towardOf } from './section'
 
 export const DRAW_OPTIONS: OptionSpecs = {
   '--png': { takesValue: false, help: 'Draw a PNG instead of an SVG.' },
@@ -33,6 +38,9 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8 (up to 4 with --3d). 1 when left out.' },
   '--units': { takesValue: true, help: 'How areas and dimensions are written: m, cm, mm or ft-in. The plan\'s own display, or m, when left out. Not with --3d.' },
   '--decimal': { takesValue: true, help: 'The decimal mark: point or comma. The plan\'s own display, or point, when left out.' },
+  '--section': { takesValue: true, help: 'Draw a section instead of a floor plan: the line to cut along, x1,y1:x2,y2 in metres, through every floor, with its levels and room heights, and what it takes that the plan does not state hatched and listed. Not with --3d, --view or --facade.' },
+  '--toward': { takesValue: true, help: 'With --section: the side of the line the section looks toward, walking from its first point to its second: left (the default) or right.' },
+  '--marks': { takesValue: true, help: 'Marks to add to a floor plan, joined by commas: levels (each room\'s floor level), elevations (where each side of the building is seen from), section (the line of --section and the way it looks, on the plan, instead of drawing the section). Not with --3d, --view or --facade.' },
   ...PROJECT_OPTION,
 }
 
@@ -64,16 +72,55 @@ export interface DrawRequest {
   readonly colour?: string
   /** SHT-7: add a key the plan does not ask for. */
   readonly key?: boolean
+  /** LVL-9: the line to cut a section along, as given (`x1,y1:x2,y2`). */
+  readonly section?: string
+  /** LVL-9: the side the section looks toward, as given. */
+  readonly toward?: string
+  /** LVL-9: the marks to add to a floor plan, as given: words joined by commas. */
+  readonly marks?: string
+}
+
+/** LVL-9: what `--section`, `--toward` and `--marks` ask for, read. */
+export interface SectionAsked {
+  /** The section to draw, when the picture is a section. */
+  readonly section: SectionLine | null
+  /** The marks on a floor plan, when any are asked for. */
+  readonly marks: DrawingMarksAsked | null
 }
 
 /** What a drawn file is: a picture file's text or bytes, and the doors drawn as undecided. */
 export interface DrawnFile {
   readonly file: string | Uint8Array
   readonly undecidedDoors: readonly string[]
+  /** LVL-9: what a section took that the plan does not state, for standard error, when the file is one. */
+  readonly sectionNote?: string | null
 }
 
 /** The look `grid draw` uses when none is named: a file to hand on. */
 export const DRAW_LOOK: LookName = 'technical'
+
+/**
+ * LVL-9: reads `--section`, `--toward` and `--marks`, and refuses, by name, an option that means
+ * nothing with them: a section cuts every floor and has no plan labels, keys or ids.
+ */
+export function sectionAsked(request: DrawRequest): SectionAsked {
+  if (request.toward !== undefined && request.section === undefined) throw new UsageError('--toward says which way a section looks: add --section, or leave --toward out.')
+  const words = request.marks === undefined ? null : readMarks(request.marks.split(',').map((w) => w.trim()).filter((w) => w.length > 0))
+  for (const [given, flag] of [[request.section, '--section'], [request.marks, '--marks']] as const) {
+    if (request.view !== undefined && given !== undefined) throw new UsageError(`${flag} is for a drawing, not a saved view of the 3D model: leave ${flag} or --view out.`)
+    if (request.threeD && given !== undefined) throw new UsageError(`${flag} is for a drawing, not the 3D model: leave ${flag} or --3d out.`)
+  }
+  if (words?.has('section') && request.section === undefined) throw new UsageError('--marks section draws the line of a section on the plan: add --section with the line, or leave section out of --marks.')
+  const line = request.section === undefined ? null : readSectionOption(request.section, towardOf(request.toward))
+  if (line !== null && !words?.has('section')) {
+    if (words !== null) throw new UsageError('--marks marks a floor plan, and --section draws a section: add section to --marks to draw the plan with the section\'s line on it, or leave --marks out.')
+    for (const [given, flag] of [[request.floor, '--floor'], [request.hide, '--hide'], [request.colour, '--colour'], [request.key || undefined, '--key'], [request.ids || undefined, '--ids'], [request.units, '--units'], [request.decimal, '--decimal']] as const) {
+      if (given !== undefined) throw new UsageError(`${flag} is for a floor plan; a section cuts every floor and writes its levels in metres: leave ${flag} or --section out.`)
+    }
+    return { section: line, marks: null }
+  }
+  return { section: null, marks: words === null ? null : marksAsked(words, line) }
+}
 
 /** Checks the options against each other, before the plan is read. */
 export function checkDrawRequest(request: DrawRequest): { scale: number; look: LookName } {
@@ -90,6 +137,7 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
     if (request.threeD && given !== undefined) throw new UsageError(`${flag} is for a floor plan, not the 3D model: leave ${flag} or --3d out.`)
   }
   drawShowOf(request)
+  sectionAsked(request)
   const look = (request.look ?? DRAW_LOOK) as LookName
   if (!(LOOK_NAMES as readonly string[]).includes(look)) {
     throw new UsageError(`--look ${JSON.stringify(request.look)} is not a look Grid draws: use one of ${LOOK_NAMES.join(', ')}.`)
@@ -122,8 +170,9 @@ function checkFacadeRequest(request: DrawRequest): void {
   }
   if (request.view !== undefined) throw new UsageError('--facade draws one side of the building and --view a saved view of the model: give one of them.')
   if (request.threeD) throw new UsageError('--facade draws one side of the building and --3d the model: give one of them.')
+  if (request.section !== undefined) throw new UsageError('--facade draws one side of the building and --section a cut through it: give one of them.')
   if (request.floor !== undefined) throw new UsageError('--floor picks a floor plan; a facade shows every floor at its level: leave --floor or --facade out.')
-  const planOnly: [unknown, string][] = [[request.ids || undefined, '--ids'], [request.hide, '--hide'], [request.colour, '--colour'], [request.key || undefined, '--key'], [request.units, '--units'], [request.decimal, '--decimal']]
+  const planOnly: [unknown, string][] = [[request.ids || undefined, '--ids'], [request.hide, '--hide'], [request.colour, '--colour'], [request.key || undefined, '--key'], [request.units, '--units'], [request.decimal, '--decimal'], [request.marks, '--marks']]
   for (const [given, flag] of planOnly) {
     if (given !== undefined) throw new UsageError(`${flag} is for a floor plan, not a facade: leave ${flag} or --facade out.`)
   }
@@ -134,6 +183,13 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     const side = request.facade as FacadeSide
     const file = request.png ? await drawFacade(loaded.plan, { format: 'png', side, look, scale }) : await drawFacade(loaded.plan, { format: 'svg', side, look })
     return { file, undecidedDoors: [] }
+  }
+  const asked = sectionAsked(request)
+  if (asked.section !== null) {
+    // Loaded only for a section.
+    const { drawSection } = await import('../draw/drawSection')
+    const drawn = await drawSection(loaded.plan, asked.section, request.png ? { format: 'png', look, scale } : { format: 'svg', look })
+    return { file: drawn.file, undecidedDoors: [], sectionNote: drawn.note }
   }
   const floor = floorOption(loaded.plan, request.floor)
   if (request.view !== undefined) {
@@ -151,7 +207,7 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale }), undecidedDoors: [] }
   }
   const display = request.units === undefined && request.decimal === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan)
-  const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request) }
+  const labels = { ...(request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}), ...drawShowOf(request), ...(asked.marks === null ? {} : { marks: asked.marks }) }
   // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
   const faults = inspectPlan(loaded.plan).lines
   const undecidedDoors = planPicture(loaded.plan, { floor, look, ...labels }).undecidedDoors
@@ -167,3 +223,4 @@ export function undecidedNote(ids: readonly string[]): string | null {
   const list = ids.map((id) => JSON.stringify(id)).join(', ')
   return `Drew ${ids.length === 1 ? 'a door' : `${ids.length} doors`} with no stated swing as undecided, a dashed line and "?": ${list}. Set each one's hinge and swing in the plan.\n`
 }
+

@@ -30,6 +30,7 @@ import { startToolServer } from '../mcp/serve'
 import { projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
 import { readSeen, SeenRefused } from '../seen/marks'
+import { firmForCheck } from '../firm/measure'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
 import { DIFF_OPTIONS, MARK_OPTIONS, runDiff, runMark } from './diff'
@@ -103,8 +104,8 @@ const COMMANDS = {
     options: DESCRIBE_OPTIONS,
   },
   draw: {
-    usage: 'grid draw [<plan.json>] [--png | --3d | --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
-    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --3d, draws the 3D model as the app opens it, as a PNG. With --facade north (east, south or west), draws that side of the building in elevation, every floor at its level.',
+    usage: 'grid draw [<plan.json>] [--png | --3d | --view <name>] [--facade <side>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--ids] [--marks <marks>] [--section <x1,y1:x2,y2> [--toward left|right]] [--out <file>] [--floor <id>] [--scale <n>] [--project <folder>]',
+    summary: 'Draws one floor of a plan as an SVG picture, or a PNG with --png, in the technical look unless --look names another, with what grid check finds marked on it by its numbers and listed under it. With --section, draws a section along a line through every floor instead. With --3d, draws the 3D model as the app opens it, as a PNG. With --facade north (east, south or west), draws that side of the building in elevation, every floor at its level.',
     options: DRAW_OPTIONS,
   },
   export: {
@@ -331,9 +332,11 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
     const country = textOf(parsed, '--country')
+    // COD-8: the firm's own standards beside the plan, when it has a file of them.
+    const firm = firmForCheck(project, planFile, loaded.plan)
     // MSG-10: a number is the note's in the whole plan's report, whatever --floor shows.
-    const done: MarkDone | null = ask === null ? null : markNote(project, planFile, loaded, checkPlan(loaded, { country }), ask, ask.mark === 'seen' ? '--seen' : '--unseen')
-    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country }), loaded, readSeen(project, planFile))
+    const done: MarkDone | null = ask === null ? null : markNote(project, planFile, loaded, checkPlan(loaded, { country, firm }), ask, ask.mark === 'seen' ? '--seen' : '--unseen')
+    const result = withSeen(checkPlan(loaded, { floor: textOf(parsed, '--floor'), country, firm }), loaded, readSeen(project, planFile))
     if (json) io.stdout(checkJson(result, done ?? undefined))
     else {
       const text = checkText(result, planFloors(loaded.plan).length, { full: parsed.values.has('--full') })
@@ -379,6 +382,9 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       hide: textOf(parsed, '--hide'),
       colour: textOf(parsed, '--colour'),
       key: parsed.values.has('--key'),
+      section: textOf(parsed, '--section'),
+      toward: textOf(parsed, '--toward'),
+      marks: textOf(parsed, '--marks'),
     }
     const { scale, look } = checkDrawRequest(request)
     if ((request.png || request.threeD) && request.out === undefined && io.stdoutIsTerminal) {
@@ -386,10 +392,11 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     }
     const project = openProject(projectOption, io.cwd)
     const loaded = loadPlan(project, planFile)
-    const { file: picture, undecidedDoors } = await drawFile(loaded, request, scale, look)
+    const { file: picture, undecidedDoors, sectionNote } = await drawFile(loaded, request, scale, look)
     warnLeftOut(io, loaded)
     const undecided = undecidedNote(undecidedDoors)
     if (undecided) io.stderr(undecided)
+    if (sectionNote) io.stderr(sectionNote)
     if (request.out === undefined) {
       io.stdout(picture)
     } else {

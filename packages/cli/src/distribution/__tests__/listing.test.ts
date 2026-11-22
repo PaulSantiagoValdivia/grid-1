@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join, resolve } from 'path'
 import { describe, expect, it } from 'vitest'
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { approvalWords, GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
 import { GRID_TOOLS } from '../../mcp/serveTools'
 import {
   cursorLink,
@@ -107,8 +107,18 @@ describe('the registry entry (server.json)', () => {
 describe('the plugin folder, for Claude Code and Codex', () => {
   const files = pluginFiles(VERSION)
 
-  it('holds a manifest for each, the server for each, and one skill', () => {
-    expect(Object.keys(files).sort()).toEqual(['.claude-plugin/plugin.json', '.mcp.json', 'mcp.json', 'plugin.json', 'skills/grid/SKILL.md'])
+  it('holds a manifest for each, the server for each, Grid\'s skill and the four a firm can own (COD-8)', () => {
+    expect(Object.keys(files).sort()).toEqual([
+      '.claude-plugin/plugin.json',
+      '.mcp.json',
+      'mcp.json',
+      'plugin.json',
+      'skills/dimensioning/SKILL.md',
+      'skills/firm-standards/SKILL.md',
+      'skills/grid/SKILL.md',
+      'skills/option-table/SKILL.md',
+      'skills/room-programme/SKILL.md',
+    ])
   })
 
   it('names the plugin grid in both manifests, with the version and licence', () => {
@@ -134,6 +144,37 @@ describe('the plugin folder, for Claude Code and Codex', () => {
     expect(skill).toContain('Write a plan rooms first, the main way to write one')
     expect(skill.replace(/\s+/g, ' ')).toContain('The plan file is the source of truth')
     expect(skill).not.toMatch(/\bcompl(y|ies|iant)\b|\bapproved\b/i)
+  })
+
+  // COD-8: the skills beside Grid's own, plain text a firm can copy into its repository and own.
+  const OWNED: Record<string, readonly string[]> = {
+    'firm-standards': ['grid_check', 'firm-standards.json', 'corridor_width', 'door_clear_width', 'turning_circle', 'fixture_clearance', 'room_area', 'room_width'],
+    'room-programme': ['grid_write_brief', 'grid_write_rooms', 'grid_areas', 'grid_check'],
+    'option-table': ['grid_compare', 'grid_check'],
+    dimensioning: ['grid_measure', 'grid_view', 'grid_sheet'],
+  }
+  for (const [name, tools] of Object.entries(OWNED)) {
+    it(`has the ${name} skill, with the frontmatter, Grid's tools by name, the label and no word of approval`, () => {
+      const skill = files[`skills/${name}/SKILL.md`] as string
+      const front = /^---\nname: (.+)\ndescription: (.+)\n---\n/.exec(skill)
+      expect(front?.[1]).toBe(name)
+      expect(front?.[2]).toMatch(/^Use when /)
+      // A description says when not to use it, as every tool's does.
+      expect(front?.[2]).toMatch(/\bNot for\b/)
+      expect(skill).toContain(GENERAL_GUIDANCE_LABEL)
+      for (const tool of tools) expect(skill).toContain(tool)
+      expect(skill).toContain('A firm can copy it into its own repository')
+      expect(skill).not.toMatch(/\bcompl(y|ies|iant)\b|\bapproved\b/i)
+      expect(approvalWords(skill)).toEqual([])
+      for (const tool of skill.match(/\bgrid_[a-z_]+/g) ?? []) expect(GRID_TOOLS.map((t) => t.name)).toContain(tool)
+    })
+  }
+
+  it('says the firm\'s standards are the firm\'s own, apart from the code figures, and tied to no place', () => {
+    const skill = (files['skills/firm-standards/SKILL.md'] as string).replace(/\s+/g, ' ')
+    expect(skill).toContain("not from any code or standard, and not tied to a place")
+    expect(skill).toContain("The firm's own standards")
+    expect(skill).toContain('apart from the code figures')
   })
 })
 
