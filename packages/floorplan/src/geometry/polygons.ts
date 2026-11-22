@@ -238,10 +238,10 @@ function snapGeom(geom: Geom, steps: number): Geom {
 }
 
 /**
- * A ring without its repeated points and without the points that lie on the line through their
- * neighbours (`samePoint`, `onLine`): where two wall strips meet in line, the join leaves a corner
- * that is none, and rounding decides whether the library keeps it, so a plan turned off the axes
- * would triangulate differently.
+ * A ring without its repeated points and without the points that lie within `shellGrid` of the
+ * line through their neighbours: where two wall strips meet in line, the join leaves a corner that
+ * is none, and rounding decides whether the library keeps it, so a plan turned off the axes would
+ * triangulate differently.
  */
 function cleanRing(points: Vec2[]): Vec2[] {
   let ring = points
@@ -252,7 +252,10 @@ function cleanRing(points: Vec2[]): Vec2[] {
       const p = ring[i]!
       const b = ring[(i + 1) % ring.length]!
       const same = Math.hypot(p.x - a.x, p.y - a.y) <= TOLERANCES.samePoint.value
-      const inLine = Math.abs((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x)) <= TOLERANCES.onLine.value
+      // Within the grid the points are rounded to of the line through its neighbours: no corner.
+      const span = Math.hypot(b.x - a.x, b.y - a.y)
+      const off = Math.abs((p.x - a.x) * (b.y - a.y) - (p.y - a.y) * (b.x - a.x))
+      const inLine = span === 0 ? true : off / span <= TOLERANCES.shellGrid.value
       if (same || inLine) {
         ring = [...ring.slice(0, i), ...ring.slice(i + 1)]
         changed = true
