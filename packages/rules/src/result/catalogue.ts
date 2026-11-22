@@ -349,6 +349,21 @@ export const CODES = {
     needed: fixed('inner wall faces that do not cross'),
     fix: fixed('Move the walls apart or make them thinner.')
   },
+  'room/hole-outside': {
+    says: (s) => `${s.label} has a hole that does not lie inside it`,
+    needed: fixed('a hole inside the room, with floor all round it'),
+    fix: fixed('Check the walls the hole lists, or draw the space as a room of its own.')
+  },
+  'room/holes-overlap': {
+    says: (s) => `${s.label} has two holes that overlap or touch`,
+    needed: fixed('floor between any two holes'),
+    fix: fixed('Move the holes apart. If they are one hole, list its walls once.')
+  },
+  'room/derived-edited': {
+    says: (s) => `${s.label}'s boundary was changed by hand in a plan written rooms first`,
+    needed: fixed('walls worked out from the rooms text'),
+    fix: fixed('Change the rooms text and write it again (grid write), or take "written" out of the plan to keep it as a hand-written one.')
+  },
   'room/not-enclosed': {
     says: (s) => `${s.label} is not enclosed by its walls`,
     needed: fixed('walls that reach each other round the room'),
