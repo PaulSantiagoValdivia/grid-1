@@ -22,8 +22,10 @@ export const RESULT_VERSION = 1 as const
  *   file Grid does not read (MSG-4): an unknown field or room use, or an empty plan.
  * - `finding`: what a plan check found (a way out, a door, a room's size, an escape window).
  * - `not-checked`: something a check could not look at in this plan, and why.
+ * - `to-confirm` (WRT-6): a value the plan marks assumed, for the person to confirm. Last, so the
+ *   numbers of the other lines do not move when an agent marks what it assumed.
  */
-export const LINE_KINDS = ['refused', 'left-out', 'worth-a-look', 'finding', 'not-checked'] as const
+export const LINE_KINDS = ['refused', 'left-out', 'worth-a-look', 'finding', 'not-checked', 'to-confirm'] as const
 export type LineKind = (typeof LINE_KINDS)[number]
 
 /**

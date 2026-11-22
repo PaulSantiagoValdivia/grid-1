@@ -19,7 +19,7 @@ import type { LoadedPlan } from '../command/plan'
 import { cropFrame, partBounds, type PartBounds } from '../draw/partBoxes'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS } from '../describe/card'
 import { LOOKS, SIDES, namedLook, type LookName, type Side } from '../draw/viewNames'
-import { AREA_RULES, planAreas } from '../quantities/areas'
+import { AREA_RULES, planAreas, type AreaSureness } from '../quantities/areas'
 import { stateText } from '../quantities/state'
 import { comparePlans, optionRow, type Comparison, type OptionRow } from '../quantities/compare'
 import {
@@ -104,6 +104,15 @@ const FORMAT_ARG: ArgSpec = {
 function load(context: ToolContext, plan: unknown, floor?: unknown): { survey: Survey; floor: string | undefined; file: string } {
   const { loaded, file } = readPlan(context, plan)
   return { survey: surveyPlan(loaded.plan), floor: floorArg(loaded.plan, floor), file }
+}
+
+/** WRT-6 (lab AE-4, AE-13): where an area's walls came from and how sure it is, after the figure. */
+const SOURCE_WORDS = { scanned: 'from a scan', measured: 'measured', given: 'as given', assumed: 'assumed' } as const
+function surenessText(sure: AreaSureness | undefined, units: Display): string {
+  if (sure === undefined) return ''
+  const word = SOURCE_WORDS[sure.source]
+  if (sure.plusMinus === null || sure.percent === null) return `, ${word}: how sure is not stated (a wall states no tolerance)`
+  return `, ${word}, about ± ${sure.percent.toFixed(1)}% (± ${areaText(sure.plusMinus, units)})`
 }
 
 function percent(share: number | null): string {
@@ -253,6 +262,8 @@ const areasTool: GridTool = {
     notes: listSchema(STRING),
     // MSG-2: each total's state (proven, not-proven, not-looked-at) and the rooms it left out.
     states: { type: 'object' },
+    // WRT-6: where the marked walls came from and the net total's give or take; null with no wall marks.
+    sureness: { type: ['object', 'null'], properties: { source: STRING, plusMinus: NULLABLE_NUMBER, percent: NULLABLE_NUMBER } },
   }),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
@@ -283,6 +294,7 @@ const areasTool: GridTool = {
       rules: areas.rules,
       notes: areas.notes,
       states: areas.states,
+      sureness: areas.sureness ?? null,
     }
     if (args['format'] === 'csv') {
       const rows = areas.floors.flatMap((f) => f.rooms.map((r) => [f.floor, r.id, r.name, r.use, r.size?.[0] ?? null, r.size?.[1] ?? null, r.net, r.net === null ? null : sqFt(r.net), r.outside ? 'outside' : r.countedWith ? 'with the stair below' : 'inside', r.state]))
@@ -302,19 +314,19 @@ const areasTool: GridTool = {
         const measured = r.net === null ? 'not measured: it could not be drawn' : `${size}${areaText(r.net, units)}${free}${r.state === 'not-proven' ? `, not proven: the drawing questions its outline (${r.doubts.join(', ')})` : ''}`
         // SHT-11: a stair room over the stair below is counted once, with it.
         const below = r.countedWith ? `, counted once with ${q(r.countedWith.room)} on floor ${q(r.countedWith.floor)}, the stair it rises from` : ''
-        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.outside ? ', outside: not counted' : ''}${below}`)
+        lines.push(`  ${q(r.name)}${r.use ? ` (${r.use})` : ''}: ${measured}${r.net === null ? '' : surenessText(r.sureness, units)}${r.outside ? ', outside: not counted' : ''}${below}`)
       }
     }
     if (several) {
       for (const f of areas.floors) {
         const gross = areas.reader.gross.map((m) => `${m === 'grossInternal' ? 'gross internal' : 'gross external'} ${f[m] === null ? 'not known' : areaText(f[m]!, units)}`)
-        lines.push(`Floor ${q(f.floor)}: net ${areaText(f.net, units)}, ${gross.join(', ')}.`)
+        lines.push(`Floor ${q(f.floor)}: net ${areaText(f.net, units)}${surenessText(f.sureness, units)}, ${gross.join(', ')}.`)
       }
     }
     const uses = Object.entries(areas.byUse)
     if (uses.length > 1) lines.push(`Net by use: ${uses.map(([use, area]) => `${use} ${areaText(area, units)}`).join(', ')}.`)
     // Each figure with the rule it follows, in Grid's words: never a bare number (AR-16).
-    lines.push(`Net: ${areaText(areas.net, units)}${stateText(areas.states.net, several)}. ${AREA_RULES.net}`)
+    lines.push(`Net: ${areaText(areas.net, units)}${surenessText(areas.sureness, units)}${stateText(areas.states.net, several)}. ${AREA_RULES.net}`)
     for (const m of areas.reader.gross) {
       const value = m === 'grossInternal' ? areas.grossInternal : areas.grossExternal
       const state = value === null ? '' : stateText(areas.states[m], several)
@@ -1210,6 +1222,10 @@ const checkTool: GridTool = {
       if (state?.state === 'back') lines.push(`${record.lines[index]!.causedBy ? '  ' : ''}      ${seenBeforeText(state)}.`)
     }
     if (open.length > 12) lines.push(`  … ${open.length - 12} more in the data, each with what was found and needed.`)
+    // WRT-6 (lab WR-15): what was assumed, for the person to confirm, named even past the first 12.
+    // A seen one is under Seen with the others (MSG-10).
+    const toConfirm = open.map((index) => record.lines[index]!).filter((line) => line.kind === 'to-confirm')
+    if (toConfirm.length > 0) lines.push(`To confirm with the person (${toConfirm.length}), assumed and not given: ${toConfirm.slice(0, 8).map((line) => line.message).join('; ')}${toConfirm.length > 8 ? `; and ${toConfirm.length - 8} more in the data` : ''}.`)
     if (seen > 0) {
       lines.push(`Seen (${seen}): ${SEEN_HEADING_NOTE}.`)
       record.lines.forEach((line, index) => {

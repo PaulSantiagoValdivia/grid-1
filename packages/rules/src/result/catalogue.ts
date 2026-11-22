@@ -967,6 +967,19 @@ export const CODES = {
     needed: fixed('figures for escape from bedrooms above the third storey, which these checks do not carry'),
     fix: fixed('Nothing to change in the plan: look up how escape from these bedrooms is set out where it will be built.')
   },
+  // WRT-6 (lab WR-15): what the plan marks assumed, listed for the person to confirm.
+  'plan/value-assumed': {
+    says: (s) => `${s.word ? `The ${s.word} of ${s.label}` : s.label} was assumed, not given or measured`,
+    found: (s) => `marked assumed in the plan's marks${s.said ? `, ${s.said}` : ''}`,
+    needed: fixed('the person\'s word on it: this value confirmed, or the right one'),
+    fix: fixed('Ask the person. When they confirm it, mark it given or measured; when they give another, change it and mark that given.')
+  },
+  'plan/mark-no-part': {
+    says: (s) => `A mark names ${s.label}, which the plan does not have, so the mark is not read`,
+    found: (s) => `a mark on ${s.label}${s.word ? ` (its ${s.word})` : ''}`,
+    needed: fixed('a mark on a part the plan has, by its id'),
+    fix: fixed('Name the part by the id the plan gives it now, or take the mark out.')
+  },
   'plan/not-checked-no-rooms': {
     says: () => wordingText(figureWordings.noRooms()),
     found: fixed('walls, and no rooms'),

@@ -29,6 +29,11 @@
  * note comes back as new, saying which part changed. A mark is never taken as the note being
  * dealt with: a seen note is always listed, under Seen.
  *
+ * WRT-6: a part's content holds the plan's own `marks` that name it (where its values came
+ * from), so changing one brings its note back. A part may have several notes of one code, one
+ * for each value the plan marks assumed (`plan/value-assumed`): a mark made while its note shared
+ * its code, thing and `also` with another keeps the note's message too, and holds only that one.
+ *
  * Reading a check never writes: a mark whose parts changed stays in the file, and holds no
  * more. Marking the same note again replaces it; unmarking takes it out.
  *
@@ -55,6 +60,8 @@ export const MARKS_MAX = 50_000
 export const REASON_MAX = 200
 /** The longest name a mark may give for who marked it: a name's limit in a plan (MSG-9). */
 export const BY_MAX = 120
+/** The longest message a mark keeps (WRT-6): a note's one line. */
+export const MESSAGE_MAX = 2000
 
 /** Why a marks file or a mark was refused. One line, and it never repeats a reason or a name. */
 export class SeenRefused extends Error {
@@ -74,6 +81,11 @@ export interface SeenMark {
   readonly also: readonly string[]
   readonly parts: readonly MarkedPart[]
   readonly reason: string
+  /**
+   * WRT-6: the note's message, kept only when another note of the same report had the same code,
+   * thing and `also` (each value a part has marked assumed is a note of its own).
+   */
+  readonly message?: string
   /** Who marked it: the name or role the person gave, never one Grid works out. */
   readonly by: string
   /** When, as an ISO date and time. */
@@ -198,7 +210,10 @@ export function partsOf(source: SeenSource, line: Pick<ResultLine, 'thing' | 'al
     taken.add(key)
     // The part as read, and as written in the file: the whole file for the plan.
     const written = file === null ? null : kind === 'plan' ? file : fileEntries(file, kind, id)
-    parts.push({ kind, id, hash: hashOf({ read: content ?? null, written }) })
+    // WRT-6: the plan's marks on the part, where its values came from. Left out when there are
+    // none, so a part no mark names keeps the hash it had before.
+    const marked = (plan.marks ?? []).filter((mark) => mark.part === kind && mark.id === id)
+    parts.push({ kind, id, hash: hashOf({ read: content ?? null, written, ...(marked.length > 0 ? { marks: marked } : {}) }) })
   }
   const addPart = (kind: Exclude<ThingKind, 'plan'>, id: string): void => {
     if (kind === 'floor') {
@@ -226,12 +241,31 @@ export function partsOf(source: SeenSource, line: Pick<ResultLine, 'thing' | 'al
   return parts
 }
 
-/** The same note: its code, its thing and the parts it names. */
-export function sameNote(mark: Pick<SeenMark, 'code' | 'thing' | 'also'>, line: Pick<ResultLine, 'code' | 'thing' | 'also'>): boolean {
-  if (mark.code !== line.code || mark.thing.kind !== line.thing.kind || mark.thing.id !== line.thing.id) return false
-  const a = [...mark.also].sort()
-  const b = [...line.also].sort()
-  return a.length === b.length && a.every((id, i) => id === b[i])
+/** The same code, thing and parts named. */
+function sameKey(a: Pick<ResultLine, 'code' | 'thing' | 'also'>, b: Pick<ResultLine, 'code' | 'thing' | 'also'>): boolean {
+  if (a.code !== b.code || a.thing.kind !== b.thing.kind || a.thing.id !== b.thing.id) return false
+  const x = [...a.also].sort()
+  const y = [...b.also].sort()
+  return x.length === y.length && x.every((id, i) => id === y[i])
+}
+
+/** The same note: its code, its thing and the parts it names, and its message when the mark keeps one (WRT-6). */
+export function sameNote(mark: Pick<SeenMark, 'code' | 'thing' | 'also' | 'message'>, line: Pick<ResultLine, 'code' | 'thing' | 'also' | 'message'>): boolean {
+  return sameKey(mark, line) && (mark.message === undefined || mark.message === line.message)
+}
+
+/** Whether another of the lines has the same code, thing and parts as this one. */
+function shared(line: ResultLine, lines: readonly ResultLine[]): boolean {
+  return lines.some((other) => other !== line && sameKey(other, line))
+}
+
+/**
+ * The mark that holds for a line. A note that shares its code, thing and parts with another is
+ * held only by a mark that kept its message: a mark without one can't say which of them it was.
+ */
+function markOf(line: ResultLine, lines: readonly ResultLine[], marks: readonly SeenMark[]): SeenMark | undefined {
+  const several = shared(line, lines)
+  return marks.find((m) => sameNote(m, line) && (m.message !== undefined || !several))
 }
 
 /**
@@ -248,7 +282,8 @@ export function earlierNote(mark: Pick<SeenMark, 'code' | 'thing' | 'also'>, lin
 /** How each line stands against the marks, in the order of the lines. */
 export function seenStates(source: SeenSource, lines: readonly ResultLine[], marks: readonly SeenMark[]): SeenState[] {
   return lines.map((line): SeenState => {
-    const exact = marks.find((m) => sameNote(m, line))
+    // WRT-6's exact mark (one with a message when several lines share a key), else MSG-5's earlier note.
+    const exact = markOf(line, lines, marks)
     const mark = exact ?? marks.find((m) => earlierNote(m, line))
     if (mark === undefined) return { state: 'new' }
     const now = partsOf(source, line)
@@ -318,7 +353,7 @@ export function parseSeen(raw: unknown): SeenFile {
     marks: marks.map((mark: unknown, i): SeenMark => {
       const where = `marks[${i}]`
       if (!isObject(mark)) throw new SeenRefused(`${where} must be an object`)
-      onlyKeys(mark, ['code', 'thing', 'also', 'parts', 'reason', 'by', 'at'], where)
+      onlyKeys(mark, ['code', 'thing', 'also', 'parts', 'reason', 'message', 'by', 'at'], where)
       const code = text(mark['code'], `${where}.code`, 64, 'id')
       const thing = mark['thing']
       if (!isObject(thing) || !THING_KINDS.includes(thing['kind'] as ThingKind) || typeof thing['id'] !== 'string') throw new SeenRefused(`${where}.thing must be an object with a kind and an id`)
@@ -340,6 +375,7 @@ export function parseSeen(raw: unknown): SeenFile {
         also: also as string[],
         parts: read,
         reason: text(mark['reason'], `${where}.reason`, REASON_MAX),
+        ...(mark['message'] === undefined ? {} : { message: text(mark['message'], `${where}.message`, MESSAGE_MAX) }),
         by: text(mark['by'], `${where}.by`, BY_MAX),
         at,
       }
@@ -408,9 +444,11 @@ export interface MarkRequest {
 
 /**
  * Marks a line as seen, replacing a mark of the same note, and writes the marks file. A file
- * that is there and can't be read is refused, not replaced: it may hold marks.
+ * that is there and can't be read is refused, not replaced: it may hold marks. `lines` is the
+ * report the line is from: a line that shares its code, thing and parts with another keeps its
+ * message in the mark (WRT-6).
  */
-export function markSeen(project: Project, planFile: string, source: SeenSource, line: ResultLine, request: MarkRequest): { readonly file: string; readonly mark: SeenMark } {
+export function markSeen(project: Project, planFile: string, source: SeenSource, line: ResultLine, request: MarkRequest, lines: readonly ResultLine[] = [line]): { readonly file: string; readonly mark: SeenMark } {
   const reason = reasonProblem(request.reason, REASON_MAX)
   if (reason !== null) throw new SeenRefused(`The reason ${reason}.`)
   const by = reasonProblem(request.by, BY_MAX)
@@ -423,6 +461,7 @@ export function markSeen(project: Project, planFile: string, source: SeenSource,
     also: [...line.also],
     parts: partsOf(source, line),
     reason: request.reason,
+    ...(shared(line, lines) ? { message: line.message } : {}),
     by: request.by,
     at: request.at ?? new Date().toISOString(),
   }
@@ -432,11 +471,11 @@ export function markSeen(project: Project, planFile: string, source: SeenSource,
 }
 
 /** Takes a line's mark out of the marks file. False when it had none, and nothing is written. */
-export function unmarkSeen(project: Project, planFile: string, line: ResultLine): { readonly file: string; readonly removed: SeenMark | null } {
+export function unmarkSeen(project: Project, planFile: string, line: ResultLine, lines: readonly ResultLine[] = [line]): { readonly file: string; readonly removed: SeenMark | null } {
   const read = readSeen(project, planFile)
   if (read.problem !== null) throw new SeenRefused(`Nothing was changed: ${read.problem}. Correct the file, or take it out to start again.`)
-  const removed = read.marks.find((m) => sameNote(m, line)) ?? read.marks.find((m) => earlierNote(m, line)) ?? null
-  if (removed !== null) writeSeen(project, planFile, read.marks.filter((m) => !sameNote(m, line) && !earlierNote(m, line)))
+  const removed = markOf(line, lines, read.marks) ?? read.marks.find((m) => sameNote(m, line)) ?? read.marks.find((m) => earlierNote(m, line)) ?? null
+  if (removed !== null) writeSeen(project, planFile, read.marks.filter((m) => m !== removed && !earlierNote(m, line)))
   return { file: read.file, removed }
 }
 

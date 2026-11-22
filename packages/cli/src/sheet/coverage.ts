@@ -45,5 +45,8 @@ export const SHEET_COVERAGE = {
   // CNT-3 and LVL-4: where the building is goes into the IFC file; the ground level (`site.ground`)
   // feeds the checks, whose findings the sheet lists. No drawing shows the ground yet.
   site: { shown: 'not shown', why: 'Where the building is on the earth goes into the IFC file, and its ground level is read by the checks, whose findings the sheet lists; the sheet prints no location and no drawing shows the ground yet.' },
+  // WRT-6: what is assumed is drawn in its own style by `drawPlan`, and listed to confirm by
+  // `grid check`; the sheet's checks page lists those lines with the others.
+  marks: { shown: 'drawn' },
   written: { shown: 'not shown', why: 'It records how the plan was written (WRT-2), not the building.' },
 } as const satisfies Record<keyof FloorPlan, Coverage>

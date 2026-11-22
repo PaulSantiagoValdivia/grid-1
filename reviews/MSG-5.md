@@ -285,3 +285,20 @@ of the ground floor by the stated ground level merged on its own), and the contr
 (MSG-5's entry above LVL-4's). No expectation changed. `npm run build`, `npm run typecheck` and
 `npm run lint` pass; the tests of `packages/floorplan`, `packages/rules`, `packages/cli/src/command`,
 `packages/cli/src/mcp` and `scoreboard/__tests__`: 3,966 passed, 4 skipped, none failed.
+
+### Again after merging `main` bd2f6a7 (WRT-6, HND-2)
+
+Four conflicts, both sides kept:
+
+- `cli/src/seen/marks.ts`: a line's mark is WRT-6's `markOf` (the exact mark, one with a message
+  when several lines share a key), else MSG-5's `earlierNote`, which finds the line but never
+  holds. Unmarking takes out that mark and any earlier note on the grouped line.
+- `cli/src/command/check.ts`: WRT-6's "To confirm" heading and MSG-5's lines set under their
+  cause, in the one loop.
+- `rules/src/result/inspect.ts`: WRT-6's marks stage (`plan/mark-no-part`, `plan/value-assumed`)
+  first, then MSG-5's units chain, so the chain sees every line.
+- `docs/result-contract.md`: MSG-5's changelog entry above WRT-6's.
+
+No expectation changed. `npm run build`, `npm run typecheck` and `npm run lint` pass; the tests
+of `packages/floorplan`, `packages/rules`, `packages/cli/src/command`, `packages/cli/src/mcp`,
+`packages/cli/src/seen` and `scoreboard/__tests__`: 4,033 passed, 4 skipped, none failed.

@@ -144,11 +144,11 @@ export function markNote(project: Project, planFile: string, loaded: LoadedPlan,
   const line = lineOfNumber(whole, ask.number, argument)
   const note = `${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. [${line.code}]`
   if (ask.mark === 'unseen') {
-    const { file, removed } = unmarkSeen(project, planFile, line)
+    const { file, removed } = unmarkSeen(project, planFile, line, whole.result.lines)
     const text = removed === null ? `Note ${ask.number} had no seen mark, so nothing was changed: ${note}` : `Took the seen mark off note ${ask.number}, in ${file}; it is listed as new: ${note}`
     return { text, number: ask.number, code: line.code, file, mark: removed, unmarked: removed !== null }
   }
-  const { file, mark } = markSeen(project, planFile, loaded, line, { reason: ask.reason, by: ask.by, ...(ask.at ? { at: ask.at } : {}) })
+  const { file, mark } = markSeen(project, planFile, loaded, line, { reason: ask.reason, by: ask.by, ...(ask.at ? { at: ask.at } : {}) }, whole.result.lines)
   const parts = mark.parts.slice(0, 4).map(partText).join(', ')
   const more = mark.parts.length > 4 ? ` or ${mark.parts.length - 4} more` : ''
   const when = mark.parts.length === 1 ? parts : `one of ${parts}${more}`
@@ -252,6 +252,7 @@ export const KIND_WORDS: Record<LineKind, string> = {
   'worth-a-look': 'worth a look',
   finding: 'finding',
   'not-checked': 'not checked',
+  'to-confirm': 'to confirm',
 }
 
 /** How many lines of each kind, as "2 worth a look, 1 finding". */
@@ -359,9 +360,17 @@ export function checkText(result: CheckResult, floorCount: number, options: Text
     lines.push('', `To look at (${record.count}): ${countsText(record)}${seen > 0 ? `; ${seen} of them seen, listed under Seen` : ''}.${problemsText(record)}`)
     // Numbered by place in the whole plan's record: `grid draw` marks each with its number (MSG-8).
     // MSG-5: a line that follows from another is set under it, and says which (`lineText`).
+    // WRT-6 (lab WR-15): what was assumed comes last, under its own heading, for the person. A
+    // seen one is under Seen with the others (MSG-10), so the heading comes before the first open one.
+    const confirmSeen = record.lines.filter((line, index) => line.kind === 'to-confirm' && states[index]?.state === 'seen').length
+    let confirmHeading = false
     record.lines.forEach((line, index) => {
       const state = states[index]
       if (state?.state === 'seen') return
+      if (line.kind === 'to-confirm' && !confirmHeading) {
+        confirmHeading = true
+        lines.push('', `To confirm (${record.counts['to-confirm']}${confirmSeen > 0 ? `; ${confirmSeen} of them seen, listed under Seen` : ''}): what the plan marks assumed, not given or measured. Ask the person.`)
+      }
       lines.push(...lineText(result, index, floorCount, true))
       if (state?.state === 'back') lines.push(`${line.causedBy === undefined ? '' : '    '}      ${seenBeforeText(state)}.`)
     })
