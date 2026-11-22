@@ -30,7 +30,7 @@ import { DEFAULT_FLOOR_ID, type RoomUse } from '@ongrid/floorplan/types/floorpla
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { openingSides, roomOutlines, sidesAt, type RoomOutline } from '@ongrid/floorplan/geometry/rules/graph'
 
-/** A direction on the drawing: north is up (+y). The plan itself holds no north. */
+/** A direction on the drawing: north is up (+y), whatever north the plan states (CNT-3). */
 export type Compass = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW'
 
 const COMPASS: readonly Compass[] = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE']
@@ -169,6 +169,8 @@ export interface PlanFacts {
    * stair rooms and lift shafts that lie one over the other, and stair rooms or shafts out of line.
    */
   readonly connections: Connections
+  /** Whether the plan states its north (CNT-3). The descriptions' sides stay the drawing's either way. */
+  readonly northStated: boolean
 }
 
 export interface StairFacts {
@@ -510,5 +512,6 @@ export function planFacts(plan: FloorPlan): PlanFacts {
     openingCount: plan.openings.length,
     stairRooms: plan.rooms.filter((room) => room.use === 'stair').length,
     connections: connectionsOf(plan, floors),
+    northStated: typeof plan.north === 'number',
   }
 }

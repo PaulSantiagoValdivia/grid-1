@@ -125,6 +125,8 @@ label.
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
 | `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
 | `plan/note-no-place` | Note "{id}" names a room the plan does not have, so it is not drawn | a room id from the plan, or a point (at) |
+| `plan/front-not-said` | The front names wall "{id}", which the plan does not have, so no front is said | a wall that faces outside, or an opening in one, such as the front door |
+| `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round | a plan whose y runs up the page, as Grid draws it |
 | `plan/unknown-use` | Room "{name}" has a use Grid does not know, "{use}" | one of the uses Grid knows: bedroom, living, … |
 | `plan/empty` | The plan has nothing in it: no walls, rooms or openings | walls, and the rooms and openings they hold |
 | `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
@@ -382,6 +384,27 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: north, front and where the building is (CNT-3)
+
+- The plan may hold `north`, `yAxis`, `front` and `site` ([plan-file.md](plan-file.md#north-front-and-where-the-building-is)).
+  A plan that states none gets every answer as before.
+- `grid_measure` takes `what=facing`, with `room` for one room: `answer` holds `north` (`stated`,
+  and `degrees` counter-clockwise from the top of the drawing, or the `assumed` north), `yAxis`,
+  `front`, and `rooms`, `walls` and `openings`, each with the compass point it `faces`
+  (`north`, `north-east`, … `north-west`) and, for walls and openings, its `bearing` in degrees
+  clockwise from north. A plan that states no north is answered with north as the top of the
+  drawing, and the text's first line says so.
+- New codes, worth a look: `plan/front-not-said`, a front that names a part the plan does not
+  have or a wall that does not face outside, naming it in `also`; `plan/y-down`, a plan whose y
+  runs down the page.
+- `grid_view`'s text for a plan that states its north says where the north arrow points, in
+  place of "the plan holds no real north". `grid_describe` adds a few lines on north and the
+  ways the rooms face for a plan that states its north or its front, and leaves "north" out of
+  what is not in the plan. `grid_mirror` mirrors the stated north and the site's origin, and
+  says so in `changed`.
+- The IFC export writes the stated north as `TrueNorth`, and none for a plan that states none
+  (it wrote +y before), and the site's origin, latitude, longitude and elevation when stated.
 
 ### 2026-11-22: sizes along the walls, in chains (SHT-4)
 

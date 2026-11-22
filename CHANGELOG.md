@@ -54,6 +54,9 @@ Grid has not been released yet. The first release will hold:
   wrong unit are listed, never filled.
 - Plans can hold several floors at their levels, steps inside a floor, rooms inside rooms and
   rooms with holes, such as a courtyard.
+- A plan can say where north is, which way its y runs, which side is its front and where it
+  sits. The drawing then shows a north arrow, the IFC file states that north (and no north for
+  a plan that states none), and an agent can ask which rooms face east.
 - The door-swing check stays quick on a floor of thousands of rooms, and the 2D view checks
   only the floor it shows.
 - `grid check` says where an opening does not fit: a door or window that runs into a wall meeting
