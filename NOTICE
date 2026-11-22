@@ -19,6 +19,14 @@ Grid uses it to join wall footprints into the spaces they enclose
 
 Their full licence texts are in their packages.
 
+The ongrid package draws its PNG pictures with @napi-rs/canvas 1.1.0
+(https://github.com/Brooooooklyn/canvas), under the MIT License, Copyright (c) 2020 its author,
+as its LICENSE file states. It is a dependency, not copied code: the npm package lists it as
+optional and grid.mjs leaves it out (packages/cli/build.mjs), and the bundle for Claude's
+desktop app (.mcpb) carries it unchanged, with its LICENSE, under server/node_modules/. Its
+ready-built binary holds Skia and other libraries, each under its own licence, which the
+binary's package lists in its sbom.cdx.json.
+
 This product includes a port of the ACES filmic tone mapping function of three.js
 (packages/viewer/src/still/toneMap.ts), under the MIT License:
 
