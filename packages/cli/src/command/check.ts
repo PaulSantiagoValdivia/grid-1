@@ -69,6 +69,8 @@ function floorsById(plan: FloorPlan): Map<string, string> {
     const wall = plan.walls.find((w) => w.id === opening.wall)
     if (wall) floors.set(opening.id, floorOf(wall))
   }
+  // Set last: an item's own id never takes another part's floor (`item/duplicate-id` says so).
+  for (const item of plan.items ?? []) if (!floors.has(item.id)) floors.set(item.id, floorOf(item))
   return floors
 }
 

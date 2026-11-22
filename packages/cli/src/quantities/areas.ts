@@ -13,6 +13,7 @@
 import { planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { floorSpaces, spacesKnown } from '@ongrid/floorplan/geometry/spaces'
 import type { Survey } from './survey'
+import { FIXTURE_RULES, planFixtures } from './fixtures'
 import { joinStates, lessRooms, NOT_LOOKED_AT, roomDoubts, roomState, sumState, type AreaState, type NumberState } from './state'
 
 export const AREA_RULES = {
@@ -39,6 +40,9 @@ export interface RoomArea {
   /** Inside sizes across and up the drawing, when the room is a rectangle square to it. */
   readonly size: readonly [number, number] | null
   readonly outside: boolean
+  /** CNT-12, only on a room with fixtures: the floor they stand on, and the net area less it. */
+  readonly fixtures?: number
+  readonly free?: number
 }
 
 export interface FloorAreas {
@@ -107,12 +111,14 @@ const sum = (values: readonly number[]): number => values.reduce((a, b) => a + b
 export function planAreas(survey: Survey, outside: ReadonlySet<string> = new Set(), floors?: readonly string[]): PlanAreas {
   const result: FloorAreas[] = []
   const notes: string[] = []
+  const { taken } = planFixtures(survey.plan, floors)
   const shown = survey.facts.floors.filter((floor) => floors === undefined || floors.includes(floor.id))
   const doubts = roomDoubts(survey.plan, shown.map((floor) => floor.id))
   for (const floor of shown) {
     const rooms: RoomArea[] = floor.rooms.map((room) => {
       const net = room.shape?.area ?? null
       const doubted = doubts.get(floor.id)?.get(room.id) ?? []
+      const fixtures = taken.get(room.id)
       return {
         id: room.id,
         name: room.name,
@@ -123,6 +129,9 @@ export function planAreas(survey: Survey, outside: ReadonlySet<string> = new Set
         doubts: doubted,
         size: room.shape?.rectangle ? [room.shape.across, room.shape.up] : null,
         outside: outside.has(room.id),
+        // Fixtures add no area and take none from the totals: only the room's free floor (CNT-12).
+        // A room that could not be measured has no free floor either (MSG-2).
+        ...(fixtures === undefined ? {} : { fixtures, ...(net === null ? {} : { free: Math.max(0, net - fixtures) }) }),
       }
     })
     const area = (list: readonly RoomArea[]): number => sum(list.map((room) => room.net ?? 0))
@@ -186,7 +195,7 @@ export function planAreas(survey: Survey, outside: ReadonlySet<string> = new Set
     circulation,
     circulationShare: grossInternal ? circulation / grossInternal : null,
     netToGross: grossInternal ? net / grossInternal : null,
-    rules: Object.values(AREA_RULES),
+    rules: taken.size === 0 ? Object.values(AREA_RULES) : [...Object.values(AREA_RULES), FIXTURE_RULES.free],
     notes,
     states: {
       net: netState,

@@ -11,7 +11,7 @@
  * Plain English, never anything that reads as "this plan complies".
  */
 
-import { figureText, metresText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
+import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText } from '@ongrid/floorplan/geometry'
 import { quoted } from '@ongrid/floorplan/types/floorplan'
 import { wordings as figureWordings } from '../checks/messages'
 import type { AppliedFigure, NotChecked, RuleFinding } from '../checks/types'
@@ -55,6 +55,9 @@ const fixed = (text: string) => (): string => text
 const FAR = tolerance('farFromOrigin')
 const TIDY = 'grid tidy lists this fault and can make the fix it names. Otherwise correct the walls by hand.'
 const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every size is in metres.'
+
+/** "The door is 0.30 m wide" as "the door is 0.30 m wide". */
+const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1)
 
 /** A figure a finding applied, by key, as "6.5 m²". */
 function figure(finding: RuleFinding | undefined, key: AppliedFigure['key']): string | null {
@@ -403,6 +406,48 @@ export const CODES = {
     fix: fixed('If it is meant, leave it. If the room is a level of its own, give it its own floor with its elevation.')
   },
 
+  // --- Fixtures (CNT-12) ----------------------------------------------------------------------
+  'item/too-large': {
+    says: (s) => `${s.label} has a number Grid does not accept`,
+    needed: fixed('finite numbers within the size Grid accepts'),
+    fix: fixed('Give its place, size and height in metres, and its turn in degrees.')
+  },
+  'item/no-size': {
+    says: (s) => `${s.label} has no size`,
+    needed: fixed('a width, a depth and a height above 0'),
+    fix: fixed('State its width and depth ("size") and its height, in metres.')
+  },
+  'item/unknown-kind': {
+    says: (s) => `${s.label} is a kind the plan does not hold yet`,
+    needed: fixed('a fixture kind: "toilet", "basin", "shower", "bath" or "kitchen-run"'),
+    fix: fixed('Give a fixture one of those kinds. Loose furniture, points and seats are not held yet: leave them out of the items for now.')
+  },
+  'item/duplicate-id': {
+    says: (s) => `${s.label} has an id another part of the plan has too`,
+    needed: fixed('an id of its own on every item'),
+    fix: fixed('Give the item an id no wall, room, opening or other item has.')
+  },
+  'item/unknown-floor': {
+    says: (s) => `${s.label} is on a floor the plan does not have`,
+    needed: fixed('a floor of the plan'),
+    fix: fixed('Name one of the plan\'s floors, or leave the floor out for the ground floor.')
+  },
+  'item/outside-rooms': {
+    says: (s) => `${s.label} stands in no room`,
+    needed: fixed('its middle inside a room on its floor'),
+    fix: fixed('Move it into the room it belongs to: its "at" is the middle of its footprint.')
+  },
+  'item/into-wall': {
+    says: (s) => `${s.label} runs into a wall`,
+    needed: fixed('its footprint clear of the walls, against their faces at most'),
+    fix: fixed('Move it off the wall, turn it, or make it smaller: its "at" is the middle of its footprint.')
+  },
+  'item/too-tall': {
+    says: (s) => `${s.label} is taller than the room it stands in`,
+    needed: fixed('a fixture no higher than its room'),
+    fix: fixed('Lower its height, or give the room or its floor the height it really has.')
+  },
+
   // --- Floors ---------------------------------------------------------------------------------
   'floor/unclaimed': {
     says: (s) => `${s.label} has enclosed floor that no room claims`,
@@ -466,6 +511,17 @@ export const CODES = {
     found: (s) => `a door in an outside wall of a floor ${metresText(s.finding?.elevation ?? 0)} m above the ground`,
     needed: fixed('a way out at ground level, or stairs the plan cannot hold yet'),
     fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
+  },
+  'opening/too-small-to-pass': {
+    says: (s) => wordingText(planCheckWordings.openingTooSmall(s.name)),
+    found: (s) => (s.finding?.passage === undefined ? s.said : lowerFirst(passageText(s.finding.passage))),
+    needed: (s) => {
+      const p = s.finding?.passage
+      const size = metresText(p?.passable ?? 0)
+      const what = p?.short === 'sill' ? `a sill no more than ${size} m above the floor` : `at least ${size} m ${p?.short === 'height' ? 'high' : 'wide'}`
+      return `${what}: Grid's own size for a person to pass, not a code figure`
+    },
+    fix: fixed('If people pass through it, draw it at its real size. If it is a vent, a hatch or a pass-through, it is not a way through: give the room a door.')
   },
   'room/too-small': {
     says: (s) => wordingText(figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),

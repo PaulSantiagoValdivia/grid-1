@@ -9,6 +9,7 @@
 import { readRoomsText } from '@ongrid/floorplan/rooms'
 import { DESCRIBE_AUDIENCES, DESCRIBE_LENGTHS, describeText, type DescribeAudience, type DescribeLength } from '../describe/card'
 import { planFacts } from '../describe/facts'
+import { fixtureCountText, planFixtures } from '../quantities/fixtures'
 import type { LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
@@ -60,5 +61,11 @@ export function describeRooms(loaded: LoadedPlan): string {
 }
 
 export function describePlan(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience): string {
-  return describeText(planFacts(loaded.plan), length, audience)
+  const text = describeText(planFacts(loaded.plan), length, audience)
+  // CNT-12: the fixtures, counted, on the longer descriptions of a plan that has some.
+  if (length === 'line' || (loaded.plan.items ?? []).length === 0) return text
+  const fixtures = planFixtures(loaded.plan)
+  if (fixtures.rows.length === 0) return text
+  const where = audience === 'agent' ? ' grid_schedule lists each with its room and size.' : ''
+  return `${text}Fixtures: ${fixtureCountText(fixtures.counts)}.${where}\n`
 }

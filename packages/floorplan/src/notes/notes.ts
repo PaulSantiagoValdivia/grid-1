@@ -5,7 +5,7 @@
  * words as the report's `message`, with the names as their own segments so the list can set
  * them apart without parsing text. The detail says more, from the finding's code and ids. Pure.
  */
-import { metresText, planCheckWordings as wordings, planFloors, type RuleFinding, type RulesReport, type WordingPart } from '../geometry'
+import { limit, metresText, passageText, planCheckWordings as wordings, planFloors, type RuleFinding, type RulesReport, type WordingPart } from '../geometry'
 import type { FloorPlan } from '../types/floorplan'
 
 /** A run of text; `name` marks a room or floor name as the plan writes it. */
@@ -108,6 +108,21 @@ export function planNotes(plan: FloorPlan, report: RulesReport): PlanNotesView {
           title: wordings.doorOutAboveGround(roomName(room!), metresText(finding.elevation ?? 0)),
           detail: [words('It is not counted as a way out. If it opens onto a balcony, a terrace or an outside stair, draw that as a room.')]
         }
+      case 'opening_too_small_to_pass': {
+        const p = finding.passage
+        return {
+          ...base,
+          title: wordings.openingTooSmall(roomName(room!)),
+          detail: [
+            words(p === undefined ? '' : `${passageText(p)}. `),
+            words(
+              `Grid counts a door or an opening as a way through when it is at least ${metresText(limit('passableWidth'))} m wide and ` +
+                `${metresText(limit('passableHeight'))} m high, with its sill no more than ${metresText(limit('passableSill'))} m above the floor. ` +
+                "That is Grid's own size, not a code figure."
+            )
+          ]
+        }
+      }
     }
   }
 
