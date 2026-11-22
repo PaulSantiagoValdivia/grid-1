@@ -174,6 +174,19 @@
  *   out from the list (`geometry/flats.ts`), never from the rooms' names. Ids a flat names that
  *   are no room or no type are named and left out of its figures, never refused. Both optional
  *   and never defaulted (version 1).
+ * C19 · Walls through floors, and floors that line up (LVL-5, lab VE-9, WR-9)
+ *   C5 put every wall on one floor. Reopened: a wall MAY state `through`, the highest floor it rises
+ *   through. It stands on its own `floor` and on every floor above it up to that one, in order of
+ *   `level`: one wall, shared by those floors, so one edit moves it on all of them, and a room on
+ *   any of them may list it. Its `height` is how high it stands above the `through` floor's level,
+ *   as a wall of that floor; below that it runs up through each floor and slab between. An opening
+ *   in it states its sill and height from the wall's own floor, as always (C2), and may reach as
+ *   high as the wall does: a stair window through two storeys is one window. Each floor's slice
+ *   holds the part of the wall and of its openings on that floor (`planForFloor`); the 3D view,
+ *   the exports and the sections draw it once, whole.
+ *   A floor whose outline does not lie over the floor below it, and a stair or lift room that does
+ *   not lie over the one below, are said, unless the floor or room states `overhang: "meant"`.
+ *   All optional and never defaulted (version 1): a plan that states none reads as before.
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -365,6 +378,12 @@ export const RoofSchema = z
     if (roof.highSide !== undefined && roof.shape !== 'mono-pitch') add('highSide', 'belongs to a mono-pitch roof: only it has one high side')
   })
 
+/**
+ * LVL-5 (C19): the one word `overhang` takes, on a floor or on a room used as a stair or a lift:
+ * it does not line up with the floor below on purpose.
+ */
+export const OVERHANG_MEANT = ['meant'] as const
+
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
   name: text('name').pipe(z.string().min(1)),
@@ -391,6 +410,9 @@ export const FloorSchema = z.object({
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
   building: BuildingTypeSchema.optional(),
+  // LVL-5 (C19): the floor's outline overhangs or sits back from the floor below it on purpose, so
+  // Grid does not say it does not line up. Optional and never defaulted (version 1).
+  overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
   // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
@@ -610,10 +632,11 @@ export function heightStated(wall: { readonly unstated?: readonly UnstatedWallVa
  */
 export function heightByDefault(
   plan: { readonly floors?: readonly { readonly id: string; readonly height?: number | undefined }[] | undefined },
-  wall: { readonly virtual?: boolean | undefined; readonly floor?: string | undefined; readonly unstated?: readonly UnstatedWallValue[] | undefined },
+  wall: { readonly virtual?: boolean | undefined; readonly floor?: string | undefined; readonly through?: string | undefined; readonly unstated?: readonly UnstatedWallValue[] | undefined },
 ): boolean {
   if (wall.virtual === true || heightStated(wall)) return false
-  const floor = wall.floor ?? DEFAULT_FLOOR_ID
+  // LVL-5: a wall through floors takes its height from the floor it rises through.
+  const floor = wall.through ?? wall.floor ?? DEFAULT_FLOOR_ID
   return (plan.floors ?? []).find((f) => f.id === floor)?.height === undefined
 }
 
@@ -635,6 +658,10 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
+      // LVL-5 (C19): the highest floor the wall rises through, from its own floor: it is one wall
+      // on each floor between, and its height is measured from this floor's level. Optional and
+      // never defaulted: unstated, the wall stands on its own floor only (version 1).
+      through: text('id').pipe(z.string().min(1)).optional(),
       // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
       properties: PropertiesSchema.optional(),
       // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
@@ -859,8 +886,9 @@ export const RoomSchema = z.object({
   // room, so the hole's walls are not floor either. Optional and never defaulted, so a plan
   // written before ARE-6 reads with no key added (version 1).
   holes: parts(wallList(), 'holes in one room').optional(),
-  // C5: unstated means the ground floor. Every wall in `boundary` must be on this
-  // same floor — a cross-floor boundary is a validation error.
+  // C5: unstated means the ground floor. Every wall in `boundary` must stand on this
+  // same floor — a cross-floor boundary is a validation error. LVL-5 (C19): a wall that rises
+  // through floors stands on each of them.
   floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
   // unknown value is read as unstated instead of rejecting the whole plan: `use`
@@ -898,6 +926,9 @@ export const RoomSchema = z.object({
   ceiling: CeilingSchema.optional(),
   // CNT-5: who the room is for (`ROOM_TENURES`). Optional and never defaulted (version 1).
   tenure: RoomTenureSchema.optional(),
+  // LVL-5 (C19): a room used as a stair or a lift that does not lie over the one below on
+  // purpose, so Grid does not say it is shifted. Optional and never defaulted (version 1).
+  overhang: z.enum(OVERHANG_MEANT).optional(),
   // CNT-5: the firm's own type for the room, as its room data sheets name it ("B2 double
   // bedroom", "Consult A"), beside the fixed `use`. Grid keeps it and reads nothing from it.
   // Optional and never defaulted (version 1).
@@ -1545,6 +1576,8 @@ function withFloorHeights(raw: unknown): unknown {
   }
   if (heights.size === 0 && roofs.size === 0) return raw
   const floorOfRaw = (w: Record<string, unknown>): string => (typeof w.floor === 'string' ? w.floor : DEFAULT_FLOOR_ID)
+  // LVL-5: a wall through floors stands as a wall of the floor it rises through.
+  const heightFloorOfRaw = (w: Record<string, unknown>): string => (typeof w.through === 'string' && seen.has(w.through) ? w.through : floorOfRaw(w))
   const tops = new Map<string, number>()
   for (const [id, roof] of roofs) {
     const lines = (plan.walls as unknown[]).flatMap((wall) => {
@@ -1563,7 +1596,7 @@ function withFloorHeights(raw: unknown): unknown {
     if (typeof wall !== 'object' || wall === null || Array.isArray(wall)) return wall
     const w = wall as Record<string, unknown>
     if (w.height !== undefined || w.virtual === true) return wall
-    const floor = floorOfRaw(w)
+    const floor = heightFloorOfRaw(w)
     const height = tops.get(floor) ?? heights.get(floor)
     return height === undefined ? wall : { ...w, height, [HEIGHT_FROM_FLOOR]: true }
   })

@@ -6,7 +6,7 @@
  * stands at the same height in both.
  */
 
-import { DEFAULT_FLOOR, planFloors, planForFloor } from './floors'
+import { DEFAULT_FLOOR, planFloors, storeySlice } from './floors'
 import type { Floor, FloorPlan, Wall } from './plan'
 import { indexPlan } from './plan'
 import { validatePlan } from './validate'
@@ -159,7 +159,8 @@ export interface BuildingElevations {
 /** The tallest wall a floor draws, as its roof cuts it (LVL-6), or 0 when it draws none or cannot be analysed. */
 function tallestDrawnWall(plan: FloorPlan, floor: Floor): number {
   try {
-    const slice = planForFloor(plan, floor.id)
+    // LVL-5: a wall through floors counts toward the floor it rises through, with its own height.
+    const slice = storeySlice(plan, floor.id)
     const broken = new Set(validatePlan(slice, indexPlan(slice), { spaces: false }).broken)
     let tallest = 0
     for (const wall of slice.walls) {

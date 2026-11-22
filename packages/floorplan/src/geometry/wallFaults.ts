@@ -34,7 +34,7 @@
 
 import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, openingsOf, roomWallIds } from './plan'
-import { floorOf } from './floors'
+import { floorOf, wallStandsOn } from './floors'
 import type { RoomOutline } from './room'
 import { roomNesting, roomOutline } from './room'
 import { sitsWithin } from './nesting'
@@ -960,7 +960,8 @@ export function wallFaults(plan: FloorPlan, options: WallFaultOptions = {}): Wal
     const counts = new Map<string, number>()
     for (const w of plan.walls) counts.set(w.id, (counts.get(w.id) ?? 0) + 1)
     for (const w of plan.walls) {
-      if (floorOf(w) !== floor || broken.has(w.id) || counts.get(w.id) !== 1) continue
+      // LVL-5: a wall through floors is one of each floor's it stands on.
+      if (!wallStandsOn(plan, w, floor) || broken.has(w.id) || counts.get(w.id) !== 1) continue
       const s = segOf(w)
       if (s) segs.set(w.id, s)
     }

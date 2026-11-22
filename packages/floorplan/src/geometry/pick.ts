@@ -13,6 +13,7 @@ import { floorOf } from './floors'
 import { pointInPolygon } from './innerPoint'
 import { roomShapes } from './items'
 import { indexPlan, type FloorPlan } from './plan'
+import { wallRise } from './through'
 import { tolerance } from './tolerances'
 import { wallAxis } from './wall'
 
@@ -73,7 +74,9 @@ export function pickInModel(plan: FloorPlan, camera: CameraRecord, x: number, y:
   for (const wall of plan.walls) {
     const floor = floorOf(wall)
     const level = levels.get(floor)
-    if (wall.virtual === true || level === undefined || !shown.has(floor) || wall.thickness <= 0 || wall.height <= 0) continue
+    // LVL-5: a wall through floors stands in the model once, whole, from its own floor's level.
+    const height = wallRise(plan, wall)
+    if (wall.virtual === true || level === undefined || !shown.has(floor) || wall.thickness <= 0 || !(height > 0)) continue
     if (Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) < tolerance('noLength')) continue
     const axis = wallAxis(wall)
     const ox = origin[0] - axis.start.x
@@ -83,7 +86,7 @@ export function pickInModel(plan: FloorPlan, camera: CameraRecord, x: number, y:
     const v0 = ox * axis.normal.x + oy * axis.normal.y
     const dv = direction[0] * axis.normal.x + direction[1] * axis.normal.y
     const span: [number, number] = [0, Infinity]
-    if (!slab(u0, du, 0, axis.length, span) || !slab(v0, dv, -wall.thickness / 2, wall.thickness / 2, span) || !slab(origin[2], direction[2], level.base, level.base + wall.height, span)) continue
+    if (!slab(u0, du, 0, axis.length, span) || !slab(v0, dv, -wall.thickness / 2, wall.thickness / 2, span) || !slab(origin[2], direction[2], level.base, level.base + height, span)) continue
     const s = span[0]
     const along = u0 + du * s
     const up = origin[2] + direction[2] * s - level.base

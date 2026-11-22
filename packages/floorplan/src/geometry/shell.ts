@@ -22,7 +22,7 @@ import polygonClipping from 'polygon-clipping'
 import type { MultiPolygon, Pair, Polygon } from 'polygon-clipping'
 import type { FloorPlan, PlanIndex, Wall } from './plan'
 import { indexPlan } from './plan'
-import { floorOf, planFloors } from './floors'
+import { planFloors, wallsOnFloor } from './floors'
 import { floorSpaces, spacesKnown } from './spaces'
 import { multiArea } from './polygons'
 import { validatePlan } from './validate'
@@ -193,8 +193,9 @@ export function planShell(stated: FloorPlan, given: ShellOptions = {}): ShellFlo
   const drawn = floors.map((floor) => {
     const spaces = floorSpaces(plan, floor.id, { index, broken })
     if (!spacesKnown(spaces)) return { floor: floor.id, level: floor.level, reason: spaces.reason }
-    const runs: Run[] = plan.walls
-      .filter((wall) => floorOf(wall) === floor.id && !broken.has(wall.id) && wall.virtual !== true && wall.thickness > 0)
+    // LVL-5: a wall through floors runs along each floor's outline, as its stretch on that floor.
+    const runs: Run[] = wallsOnFloor(plan, floor.id)
+      .filter((wall) => !broken.has(wall.id) && wall.virtual !== true && wall.thickness > 0)
       .filter((wall) => Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) >= tolerance('noLength'))
       .map((wall) => {
         const axis = wallAxis(wall)

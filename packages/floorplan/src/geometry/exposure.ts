@@ -29,7 +29,7 @@
 
 import type { FloorPlan, PlanIndex, Room, Wall, WallKind } from './plan'
 import { roomWallIds } from './plan'
-import { floorOf } from './floors'
+import { floorOf, wallsOnFloor } from './floors'
 import { roomOutline } from './room'
 import { floorSpaces, spacesKnown } from './spaces'
 import { tolerance, tolerancesAsStated } from './tolerances'
@@ -347,7 +347,7 @@ export function planWallSides(index: PlanIndex): ReadonlyMap<string, WallSides> 
       const floor = floorOf(wall)
       if (!bodies.has(floor)) {
         const buckets = new Buckets<Body>()
-        for (const b of bodiesOf(index.plan.walls.filter((w) => floorOf(w) === floor))) {
+        for (const b of bodiesOf(wallsOnFloor(index.plan, floor))) {
           const ends = [b.start, { x: b.start.x + b.dir.x * b.length, y: b.start.y + b.dir.y * b.length }]
           buckets.add(b, {
             x0: Math.min(ends[0]!.x, ends[1]!.x) - b.half,

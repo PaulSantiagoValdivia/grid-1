@@ -10,6 +10,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [What kind of building it is, and what each room is for](#what-kind-of-building-it-is-and-what-each-room-is-for): `plan/not-checked-sizes-for-building`, `plan/not-checked-escapes-for-building`, `floor/not-checked-sizes-for-building`, `floor/not-checked-escapes-for-building`, `plan/unknown-use`
 - [Floor levels and heights](#floor-levels-and-heights): `plan/level-gap`, `plan/same-level`, `floor/empty-top`, `wall/above-storey`, `floor/size-question`, `wall/unknown-floor`, `room/unknown-floor`
 - [A step inside a floor](#a-step-inside-a-floor): `room/offset-question`
+- [Walls through floors, and floors that line up](#walls-through-floors-and-floors-that-line-up): `wall/through-floor`, `room/cross-floor`, `floor/out-of-line`, `room/stair-shifted`, `room/lift-shifted`
 - [Stairs that join two floors](#stairs-that-join-two-floors): `stair/unknown-floor`, `stair/same-floor`, `stair/no-rise`, `stair/run-too-short`, `stair/too-few-risers`, `stair/duplicate-id`, `stair/end-in-no-room`, `room/stair-out-of-line`, `room/lift-out-of-line`
 - [Slabs, roofs, ceilings and the ground](#slabs-roofs-ceilings-and-the-ground): `opening/below-ground`
 - [Sloped roofs and ceilings](#sloped-roofs-and-ceilings): `opening/above-roof`, `floor/rooflight-misplaced`, `floor/dormers-not-drawn`, `opening/missing-wall`
@@ -34,6 +35,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Saved views, and the camera record](#saved-views-and-the-camera-record): a camera saved by name, as Grid sets it and as BCF writes it
 - [What needs to be accessible](#what-needs-to-be-accessible): `plan/not-checked-access`
 - [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
+- [How the format changes](#how-the-format-changes): what a new field may and may not do
 
 ## What a plan file may hold
 
@@ -247,6 +249,58 @@ dividing line between them. A window gets none. In 3D, in the OBJ and glTF files
 file, the room's floor and space stand at its own level, and a raised room is solid down to the
 storey's floor. A room set more than 1.5 m off its storey, or raised to the height its floor
 states, is asked about (`room/offset-question`): so far off, it is more likely a floor of its own.
+
+## Walls through floors, and floors that line up
+
+A wall stands on one floor. It may also rise through the floors above it: `through` names the
+highest floor it rises through, and it stands on its own floor and on every floor between, in the
+order of `level`. It is one wall, shared by those floors: a room on any of them may list it, and
+one edit moves it on all of them. Its `height` is how high it stands above the `through` floor's
+level, as a wall of that floor would (left out, it takes that floor's `height`); below that it runs
+up through every floor and slab between. A stair hall's wall, a double-height shopfront and a wall
+rising past a mezzanine are written this way.
+
+```json
+{ "id": "g-n", "start": [8, 6], "end": [0, 6], "thickness": 0.3, "kind": "exterior", "height": 2.7, "floor": "ground", "through": "first" }
+```
+
+An opening in such a wall states its sill and height from the wall's own floor, as every opening
+does, and may reach as high as the wall rises. The lab's stair window from 0.9 to 5.4 m is one
+window: `"sill": 0.9, "height": 4.5` in the wall above, which rises 5.65 m (the ground floor's
+2.70 m, its 0.25 m slab and the first floor's 2.70 m). A window that lies on the first floor only
+states its sill from the ground floor too (3.85 m for a sill 0.90 m above the first floor). Two
+openings one over the other in such a wall are not an overlap.
+
+Each floor's plan draws the stretch of the wall that stands on it and the part of each opening that
+lies there, as a wall of that floor: the stair window is drawn as a window on both floors. The 3D
+view, the OBJ and glTF files and the IFC file raise the wall once, from its own floor to its top,
+with each opening whole, so the IFC holds one wall and one window on the ground floor's storey. A
+section cuts it once, whole, and the slab between the floors stops at its openings. The storeys
+stand where they would with a wall of each floor: the wall counts toward the height of the floor it
+rises through. A `through` that names a floor the plan does not have, or one not above the wall's
+own, is said (`wall/through-floor`, a warning), and the wall stands on its own floor only. A room
+that lists a wall of another floor that does not rise through its own is still an error and is left
+out (`room/cross-floor`).
+
+Floors are drawn one over the other, each with its own walls, so widening one floor leaves the one
+above where it was (lab E-9). The drawing's checks set each floor's outline, as its walls draw it,
+against the floors one level below: where it reaches past them, or sits back from them, by more
+than 0.05 m (`stackShift`) and half the thickest wall that stretch runs along (walls of different
+thickness on one axis have their faces that far apart), it says so, with the side, by how much and the box
+of each stretch (`floor/out-of-line`, a warning). A room used as a stair, or a lift shaft, that
+lies over the one below enough to join it but is moved from it by more than 0.05 m is said too,
+with which way, how far and where both stand (`room/stair-shifted`, `room/lift-shifted`). A lift
+shaft is the same on every floor, so one whose sides stand off the one below's is said even when it
+is not moved as a whole. An overhang, a set-back or a moved stair is often meant: a floor or a
+room that states `"overhang": "meant"` is not asked about.
+
+```json
+{ "id": "first", "name": "First floor", "level": 1, "overhang": "meant" }
+```
+
+`through` and `overhang` are optional and never defaulted (version 1). Rooms text writes rooms
+that rise through floors (`through <floor>` on a room line) as a room and its walls on each floor,
+stacked, not as walls through floors.
 
 ## Stairs that join two floors
 
@@ -1389,3 +1443,21 @@ name 120, each one line. A file that is wrong is refused naming the place (`seat
 and never the text, which is a person's name. `grid occupancy` lists who sits where by room name
 and names any seat whose room the plan no longer has ([commands.md](commands.md#who-sits-where-grid-occupancy)).
 Keep the file out of what you hand over: an export or a sheet never needs it.
+
+## How the format changes
+
+The plan format is version 1, and a change to it keeps every plan written before it reading and
+drawing as it did:
+
+- A new field is optional and never defaulted. A plan that leaves it out reads exactly as before,
+  and a plan written back gains no key it did not state.
+- A new field is named in the reading's list of the fields each part may hold, so a field it
+  does not know is still named (`plan/unknown-field`), and its text is held to the limits in
+  [What a plan file may hold](#what-a-plan-file-may-hold).
+- A rule a new field relaxes is relaxed only for a plan that states the field. LVL-5's `through`
+  lets a room list a wall of the floor below, which was always `room/cross-floor`; a plan with no
+  wall through floors is checked as before.
+- A new top-level part has its place in every drawing and export, and on the sheet
+  (`packages/cli/src/sheet/coverage.ts`).
+- A change that would read an existing plan differently needs a new version.
+

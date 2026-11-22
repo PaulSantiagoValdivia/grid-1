@@ -268,6 +268,17 @@ there) and "a schedule of accommodation" are answered. The developer's "how many
 the plan can feed stays 20: the size of a whole home also needs its occupancy. No other count
 moved. The stored figures were set by hand from the run's printout, as the run reads them.
 
+LVL-5 (walls through floors, and floors, stair rooms and lift shafts that line up) moved one
+count. Damage that passes in silence, 278 to 277: one damaged plan now gets a line from the new
+checks, a floor's outline off the floor below or a stair room or shaft moved from the one below,
+which names another part than the one changed, so it is counted as caught vaguely (139 to 140).
+The runner does not keep plan-by-plan outcomes, so which plan it is was not traced. Sound plans with a warning stays 95:
+the generator gives each floor's outside walls their own thickness, from 0.20 to 0.50 m, on the
+same axes, so a floor's outline is measured against the one below allowing half the thickest wall
+along each stretch (`stackShift` and the wall). Before that allowance the guard rose to 218, which
+is how the allowance was found. The stair and shaft findings are plan-check findings, which the
+guard does not count.
+
 The runner's calls of `validatePlan` that only read which rooms are broken pass
 `{ spaces: false }`, which leaves the spaces out (`BROKEN_ONLY` in `src/grid.ts`). The
 reference commit ignores the argument.

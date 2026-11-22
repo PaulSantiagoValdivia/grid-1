@@ -72,6 +72,8 @@ const FINDING_CODES: Record<FindingCode, string> = {
   escape_window_too_high: 'room/escape-window-too-high',
   stair_out_of_line: 'room/stair-out-of-line',
   lift_out_of_line: 'room/lift-out-of-line',
+  stair_shifted: 'room/stair-shifted',
+  lift_shifted: 'room/lift-shifted',
   setback_short: 'plan/setback-short',
   over_boundary: 'plan/over-boundary'
 }

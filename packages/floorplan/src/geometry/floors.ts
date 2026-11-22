@@ -11,7 +11,8 @@
  * construction rather than by discipline.
  */
 import { DEFAULT_FLOOR_ID, type BuildingType, type Floor } from '../types/floorplan'
-import type { FloorPlan } from './plan'
+import type { FloorPlan, Opening, Wall } from './plan'
+import { hasWallsThrough, storeyWalls, throughFloorParts, wallStandsOn } from './through'
 
 /** The floor every entity belongs to until it says otherwise. */
 export const DEFAULT_FLOOR: Floor = { id: DEFAULT_FLOOR_ID, name: 'Ground floor', level: 0 }
@@ -144,7 +145,42 @@ function collidingWallIds(plan: FloorPlan): ReadonlySet<string> {
  * the collision as `plan/duplicate-id` so it is not silent.
  */
 export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
+  // LVL-5 (C19): a wall through floors stands on each floor it rises through, as its stretch
+  // there, with the part of each of its openings that lies in it (`throughFloorParts`).
+  if (hasWallsThrough(plan)) {
+    const parts = throughFloorParts(plan, floorId)
+    return cutFloor(plan, floorId, parts.walls, parts.openings)
+  }
   const walls = plan.walls.filter((wall) => floorOf(wall) === floorId)
+  return cutFloor(plan, floorId, walls, plan.openings)
+}
+
+/**
+ * LVL-5: one floor's slice as the storeys are stacked from it (`floorElevations`): a wall through
+ * floors stands only on the floor it rises through, as a wall of that floor, without its openings
+ * (`storeyWalls`). A plan with no such wall slices as `planForFloor` does.
+ */
+export function storeySlice(plan: FloorPlan, floorId: string): FloorPlan {
+  if (!hasWallsThrough(plan)) return planForFloor(plan, floorId)
+  const walls = storeyWalls(plan, floorId)
+  const plain = new Set(walls.filter((wall) => wall.through === undefined).map((wall) => wall.id))
+  const sharedIds = new Set(plan.walls.filter((wall) => wall.through !== undefined).map((wall) => wall.id))
+  return cutFloor(plan, floorId, walls, plan.openings.filter((o) => plain.has(o.wall) && !sharedIds.has(o.wall)))
+}
+
+/**
+ * The walls standing on a floor, as its slice holds them: `planForFloor(plan, floor).walls`, read
+ * without cutting the rest when no wall rises through floors.
+ */
+export function wallsOnFloor(plan: FloorPlan, floorId: string): Wall[] {
+  if (!hasWallsThrough(plan)) return plan.walls.filter((wall) => floorOf(wall) === floorId)
+  return throughFloorParts(plan, floorId).walls
+}
+
+/** Whether a wall stands on a floor: its own, or (LVL-5) one it rises through. */
+export { wallStandsOn }
+
+function cutFloor(plan: FloorPlan, floorId: string, walls: readonly Wall[], candidates: readonly Opening[]): FloorPlan {
   const wallIds = new Set(walls.map((wall) => wall.id))
   const collided = collidingWallIds(plan)
 
@@ -154,9 +190,9 @@ export function planForFloor(plan: FloorPlan, floorId: string): FloorPlan {
   void _patterns
   const slice: FloorPlan = {
     ...whole,
-    walls,
+    walls: [...walls],
     rooms: plan.rooms.filter((room) => floorOf(room) === floorId),
-    openings: plan.openings.filter(
+    openings: candidates.filter(
       (opening) => wallIds.has(opening.wall) && !collided.has(opening.wall)
     ),
     // CNT-12: an item by its own floor. A plan with no items keeps no key.
@@ -201,7 +237,7 @@ export function isFloorSlice(plan: FloorPlan): boolean {
 /** Whether the floor has anything to draw. Cheaper than slicing. */
 export function floorHasGeometry(plan: FloorPlan, floorId: string): boolean {
   return (
-    plan.walls.some((wall) => floorOf(wall) === floorId) ||
+    plan.walls.some((wall) => wallStandsOn(plan, wall, floorId)) ||
     plan.rooms.some((room) => floorOf(room) === floorId) ||
     // BRF-4 (C17): a floor's stated outline is something drawn on it, before any wall.
     (plan.floors?.some((floor) => floor.id === floorId && floor.outline !== undefined) ?? false)
