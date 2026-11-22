@@ -24,7 +24,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)) |
-| `grid check [<plan>] [--floor <id>] [--country <code>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--seen` sets a note aside as seen (see below) |
+| `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below) |
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d] [--look <name>] [--hide <parts>] [--colour use] [--key] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
@@ -158,6 +158,19 @@ figure used here, with its document, edition, clause and status), what each chec
 counts, with the parts it could not look at and why, and one line on what `--full` adds.
 `--full` prints the whole report: the checks run, every figure, each part each check looked at
 or skipped, and what these checks never look at. `--json` always gives the whole check.
+
+The line after the label says the place the figures were for and where it came from (COD-3).
+The plan states its place in `site.country` ([the place](plan-file.md#the-place)); `--country`
+names another for this check: a country's name or its two- or three-letter code, such as `US`,
+`USA`, `United States` or `Spain`, in any case. A place not on Grid's list is refused with exit
+code 2, naming `--country` and never the text. With no place stated, no figure is applied, and
+the line says how many lines the US figures would have given: `--country US` checks against
+them for one run.
+
+```text
+General guidance, not your local rules
+No place is stated, so no figure was applied: the US figures would have given no lines. State it in the plan as site.country, or give --country.
+```
 
 A note you have looked at can be set aside as seen, with why and who:
 

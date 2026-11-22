@@ -12,7 +12,7 @@ import { findingReadFor, GENERAL_GUIDANCE_LABEL, readForSentence } from '@ongrid
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
 import { pictureView, undecidedDoorsOf, type PictureOptions } from '@ongrid/viewer/src/picture'
 import { TEXT_PX } from '@ongrid/viewer/src/picture/look'
-import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND } from '../command/check'
+import { checkOnFloor, checkPlan, floorIssues, NOTHING_FOUND, placeText } from '../command/check'
 import type { LoadedPlan } from '../command/plan'
 import { describeText } from '../describe/card'
 import { planFacts } from '../describe/facts'
@@ -278,6 +278,8 @@ function checkBodies(loaded: LoadedPlan, name: string): Body[] {
     paragraphs: [describeText(planFacts(loaded.plan), 'line', 'person').trim()],
     figures, table: null, picture: null,
     notes: [
+      // COD-3: the place the figures were for, or that none was stated and no figure applied.
+      placeText(whole.report, { request: '--country', give: 'give --country to grid check' }),
       ...(whole.report.findings.length === 0 ? [`Findings: none. ${NOTHING_FOUND}`] : []),
       AREA_RULES.net, AREA_RULES.grossInternal, AREA_RULES.grossExternal,
       ...(areas.grossWhy === null ? [] : [areas.grossWhy]),

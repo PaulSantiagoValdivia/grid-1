@@ -36,7 +36,7 @@ export interface Subject {
   readonly floors: number
   readonly finding?: RuleFinding
   readonly notice?: NotChecked
-  /** The country the check was asked about, as stated. Empty when none was. */
+  /** Grid's name for the place the check was for, as a sentence writes it (`the United States`; COD-3), from its list, never as stated. Empty when there is none. */
   readonly country: string
   /** On a refusal: the place in the file, as `walls[2].thickness`. */
   readonly place?: string

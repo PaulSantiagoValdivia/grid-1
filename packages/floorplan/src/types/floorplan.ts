@@ -65,9 +65,16 @@
  *   `origin`. All four are optional and
  *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
  *   north, and its y runs up (C4).
+ *
+ * C8 · The place (COD-3)
+ *   `site.country` names the country the building will be built in, by a name or a code on
+ *   Grid's list (`places.ts`); any other text is refused, naming the field and never the text.
+ *   It picks the figures the checks apply (`@ongrid/rules`); a plan that states no place gets
+ *   no figure applied, and its report says so. Optional and never defaulted (version 1).
  */
 import { z } from 'zod'
 import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
+import { placeProblem } from './places'
 
 export * from './planText'
 
@@ -86,6 +93,13 @@ export type { ZodIssue as PlanSchemaIssue } from 'zod'
 const text = (kind: TextKind) =>
   z.string().superRefine((value, ctx) => {
     const problem = textProblem(value, kind)
+    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
+  })
+
+/** COD-3: a place, by a name or a code on Grid's list. A refusal names the field and the rule, never the text. */
+const placeText = () =>
+  z.string().superRefine((value, ctx) => {
+    const problem = textProblem(value, 'name') ?? placeProblem(value)
     if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
   })
 
@@ -528,6 +542,11 @@ export const SiteSchema = z
     latitude: finite().min(-90).max(90).optional(),
     longitude: finite().min(-180).max(180).optional(),
     elevation: finite().optional(),
+    // COD-3: the country the building will be built in, by its name or its two- or three-letter
+    // code (ISO 3166-1), as Grid's list (`places.ts`) has it. It picks the figures the checks
+    // apply; with none stated, no figure is applied. Kept as written; a report names the place
+    // from the list, never from this text.
+    country: placeText().optional(),
   })
   .superRefine((site, ctx) => {
     if ((site.latitude === undefined) !== (site.longitude === undefined)) {

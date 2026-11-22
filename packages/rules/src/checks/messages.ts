@@ -35,9 +35,13 @@ export const wordings = {
     name(floor),
     words(`, room sizes were not checked in rooms with no use stated: ${count}`)
   ],
-  /** `country` as the caller stated it. */
+  /** `country`: Grid's name for the place, from its list (COD-3), never the text it was given. */
   noFiguresForPlace: (what: FigureSubject, country: string): WordingPart[] => [
     words(`${what} were not checked: the figures here are from US model codes, and this plan is for ${country}`)
+  ],
+  /** COD-3 (lab W-12): no place is stated; `usLines` is how many lines the US figures give on the plan. */
+  noPlace: (usLines: number): WordingPart[] => [
+    words(`No place is stated, so no figure was applied: the US figures would have given ${usLines === 0 ? 'no lines' : usLines === 1 ? '1 line' : `${usLines} lines`}`)
   ],
   /** MSG-2 (lab CH-4): `count` bedrooms on a floor above the third storey. */
   aboveEscapeStoreys: (floor: string, count: number): WordingPart[] => [
@@ -57,6 +61,7 @@ export const messages = {
   escapeWindowTooHigh: (room: string): string => wordingText(wordings.escapeWindowTooHigh(room)),
   noUse: (floor: string, count: number): string => wordingText(wordings.noUse(floor, count)),
   noFiguresForPlace: (what: FigureSubject, country: string): string => wordingText(wordings.noFiguresForPlace(what, country)),
+  noPlace: (usLines: number): string => wordingText(wordings.noPlace(usLines)),
   aboveEscapeStoreys: (floor: string, count: number): string => wordingText(wordings.aboveEscapeStoreys(floor, count)),
   noRooms: (): string => wordingText(wordings.noRooms())
 }

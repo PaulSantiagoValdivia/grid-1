@@ -48,10 +48,10 @@ settle them:
   (`types/readParts.ts`): a plan read from a file has the clash left out before `validatePlan`
   sees it, so only the room is left out and the rooms on the wall are measured. The pinned test
   still holds for a plan built in code, and is as it was.
-- **CH-3.** The probe `CH-3 "USA" is read as the same place as "US", or refused`
-  (rules-escape.test.ts) and `is false for any other country` agree today, because the pinned
-  test lists ES, GB, DE, IT and Spain and never USA. A fix that reads more spellings of the US
-  must keep those five false.
+- **CH-3.** COD-3 fixed the probe `CH-3 "USA" is read as the same place as "US", or refused`
+  (rules-escape.test.ts): every place is read through Grid's list, so USA and United States are
+  the US, and `the moon` is refused. The pinned `is false for any other country` lists ES, GB,
+  DE, IT and Spain and never USA, and stays as it was: all five are still false.
 - **EX-4.** The probes `EX-4 floors named "Level 1" and "level-1" get different file names` and
   `EX-4 a project named in a non-Latin script keeps a name of its own` (planExport.test.ts)
   need a different way of turning names into file names. `uses the project name, and the floor
@@ -70,7 +70,6 @@ test fails, and `it.fails` becomes `it`.
 | --- | --- |
 | MS-1 | `types/__tests__/floorplan.test.ts` |
 | EX-4 (two cases) | `export/__tests__/planExport.test.ts` |
-| CH-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts` |
 
 Paths without a package are under `packages/floorplan/src/`.
 
@@ -91,6 +90,7 @@ Paths without a package are under `packages/floorplan/src/`.
 | MS-10 | LVL-1 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by LVL-1"; the other LVL-1 cases in `geometry/__tests__/levels.test.ts` |
 | CH-6 (the size half) | MSG-18 | `packages/rules/src/checks/__tests__/rules-check.test.ts`, "lab failures fixed by MSG-18"; the lab's three cases in `geometry/__tests__/passable.test.ts` |
 | MS-8 | MSG-16 | `geometry/__tests__/validation.test.ts`, "lab failures fixed by MSG-16"; the corner, junction and dividing-line cases in `geometry/__tests__/openingPlaces.test.ts`, the lab's own MS-8 and CP4-11 plans in `scoreboard/__tests__/openingPlaces.test.ts` |
+| CH-3 | COD-3 | `packages/rules/src/checks/__tests__/rules-escape.test.ts`, "the place, read through Grid's list" |
 
 ## Probes that never failed
 

@@ -14,6 +14,7 @@ Grid say that a plan complies with anything.
 
 ## Unreleased
 
+- The plan says where it will be built, in `site.country` (`US`, `USA`, `United States`, `Spain`…), and `grid check` reads it on its own; `--country` (or `country` for `grid_check`) names another place for one check and takes the same names. With no place stated, room sizes and escape openings are no longer checked against the US figures: the report says so on its first line, with how many lines the US figures would have given. A place Grid does not know is refused, and the report names a place only by Grid's own name for it (COD-3).
 - `grid check` and `grid_check` are short by default and about your plan: what to look at, the figures those notes used, and what each check looked at. `--full` (or `full` for the tool) gives the whole report. A note you have looked at can be set aside as seen, with why and who (`grid check --seen 3 --reason … --by …`, or `grid_mark_seen`): it stays listed under Seen, in `plan.seen.json` beside the plan, and comes back as new when its part of the plan changes (MSG-10).
 - Lengths may be typed in feet and inches, millimetres or centimetres, or with a decimal comma, and are stored in metres. A plan's `display` (or `--units` and `--decimal`) shows areas, dimensions and schedules in the person's units: `12'-6"`, a sill of `48"`, `2860` (WRT-7).
 

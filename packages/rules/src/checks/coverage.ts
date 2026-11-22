@@ -25,6 +25,7 @@ export interface FloorScope {
 
 /** The order skips are listed in: what could not be looked at first, then what the check is not about. */
 const SKIP_ORDER: readonly SkipReason[] = [
+  'no_place',
   'no_figures_for_place',
   'no_rooms',
   'cannot_be_drawn',
@@ -50,6 +51,8 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
 /** Why a part was skipped, in plain words: one wording per reason, and per check where it differs. */
 export function skipWhy(reason: SkipReason, ruleId: string): string {
   switch (reason) {
+    case 'no_place':
+      return 'no place is stated, so no figure was applied'
     case 'no_figures_for_place':
       return 'no figures for the place the plan is for: the ones here are from US model codes'
     case 'no_rooms':
