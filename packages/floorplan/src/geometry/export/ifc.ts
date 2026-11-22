@@ -59,10 +59,11 @@ import { ITEM_KIND_WORDS, isItemKind, itemRoom, roomShapes } from '../items'
 import { GENERAL_GUIDANCE_LABEL } from '../rules/types'
 import { roomFloorArea } from '../room'
 import { MEASURES } from '../areas'
-import { roomNumbers } from '../roomNumbers'
+import { roomNumbers, shownRoomNumber, type RoomNumber } from '../roomNumbers'
 import { limit } from '../tolerances'
 import { area } from '../vec2'
 import { leftOutByKind, leftOutSummary, partNames, type LeftOutKind, type LeftOutPart } from './leftOut'
+import { factOf, factText, ROOM_NUMBER_FACT, type Facts } from '../../types/facts'
 import { directionOfTurn, planOrientation } from '../orientation'
 
 export interface IfcOptions {
@@ -327,10 +328,32 @@ interface Context {
   /** Doors and windows by type (`openingStyleKey`), in the order they were first written. */
   readonly openingStyles: Map<string, OpeningStyleEntry>
   /** Every room's number (ARE-12), by `floor`, NUL, `id`. */
-  readonly roomNumbers: ReadonlyMap<string, number>
+  readonly roomNumbers: ReadonlyMap<string, RoomNumber>
   /** The GlobalId of an element of this context's floor, or of the building's. */
   guid(kind: string, id: string): string
   readonly issuer: GuidIssuer
+  /**
+   * CNT-9: the elements whose part carries facts of the person's own, in the order they were
+   * written, for one property set each at the end (`writeFacts`).
+   */
+  readonly facts: FactsOn[]
+}
+
+/** CNT-9: an element and the facts its part carries. */
+interface FactsOn {
+  readonly element: number
+  /** What the part is and its id, for the set's GlobalId: `wall`, `door`, `space`, `storey`. */
+  readonly kind: string
+  readonly id: string
+  /** The GlobalIds of the context it was written in: its floor's, or the building's. */
+  readonly guid: Context['guid']
+  readonly facts: Facts
+}
+
+/** CNT-9: notes an element whose part carries facts, for `writeFacts`. */
+function noteFacts(c: Context, element: number, kind: string, part: { readonly id: string; readonly properties?: Facts | undefined }): void {
+  if (part.properties === undefined || Object.keys(part.properties).length === 0) return
+  c.facts.push({ element, kind, id: part.id, guid: c.guid, facts: part.properties })
 }
 
 /** A floor and an id as one key: ids repeat from floor to floor. */
@@ -575,6 +598,7 @@ function writeStorey(
     en('ELEMENT'),
     real(level.floorLevel)
   )
+  noteFacts(c, id, 'storey', model.floor)
   return {
     id,
     placement: placementId,
@@ -768,6 +792,7 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
 
   writeWallProperties(c, wall, id, wallExposure(storey.model.index, wall.id) === 'exterior')
   typeWall(c, wall, id)
+  noteFacts(c, id, 'wall', wall)
   const footprint = outline === null ? axis.length * wall.thickness : area(outline)
   return { id, placement: wallPlacement, wall, length: axis.length, footprint }
 }
@@ -1069,8 +1094,10 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   )
   relate(c, 'IFCRELVOIDSELEMENT', opening.id, ref(element.id), ref(hole))
 
-  // A plain opening only cuts the wall, and carries its own quantities.
+  // A plain opening only cuts the wall, and carries its own quantities; its facts go on the void
+  // (CNT-9).
   if (opening.type === 'opening') {
+    noteFacts(c, hole, 'opening', opening)
     quantitySet(c, `opening:${opening.id}`, 'Qto_OpeningElementBaseQuantities', [
       ['LENGTH', 'Width', opening.width],
       ['LENGTH', 'Height', opening.height],
@@ -1112,6 +1139,7 @@ function writeOpening(c: Context, element: WallElement, opening: Opening): numbe
   ]
   quantitySet(c, `${opening.type}:${opening.id}`, opening.type === 'door' ? 'Qto_DoorBaseQuantities' : 'Qto_WindowBaseQuantities', size, filler)
   typeOpening(c, opening, operation, filler)
+  noteFacts(c, filler, opening.type, opening)
   return filler
 }
 
@@ -1140,13 +1168,15 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
   ])
 
   // HND-2: Name is the room's number and LongName its name, the way a BIM tool reads a room's
-  // number and name; ObjectType is its use, when the plan states one.
-  const number = c.roomNumbers.get(onFloorKey(storey.model.floor.id, room.id))
+  // number and name; ObjectType is its use, when the plan states one. CNT-9: the number is the
+  // one the room states, else Grid's count (`shownRoomNumber`).
+  const numbered = c.roomNumbers.get(onFloorKey(storey.model.floor.id, room.id))
+  const number = numbered === undefined ? undefined : shownRoomNumber(numbered)
   const space = w.add(
     'IFCSPACE',
     str(c.guid('space', room.id)),
     ref(c.owner),
-    str(number === undefined ? room.name : String(number)),
+    str(number ?? room.name),
     NULL,
     room.use === undefined ? NULL : str(room.use),
     ref(spacePlacement),
@@ -1156,7 +1186,10 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     en('INTERNAL'),
     NULL
   )
-  writeSpaceData(c, storey, room, space, footprint, height, number)
+  writeSpaceData(c, storey, room, space, footprint, height, numbered)
+  // The stated number is a fact of the room's set too, first, as the DXF writes it.
+  const facts = room.number === undefined || factOf(room, ROOM_NUMBER_FACT) !== undefined ? room.properties : { [ROOM_NUMBER_FACT]: room.number, ...room.properties }
+  noteFacts(c, space, 'space', { id: room.id, properties: facts })
   return space
 }
 
@@ -1168,7 +1201,8 @@ const FOOTPRINT_RULE =
 
 /**
  * HND-2: what a room is, in the fields IFC has for it. `Pset_SpaceCommon` holds its number
- * (`Reference`) and its use (`Category`, when stated); `Grid_Space`, Grid's own set, holds its
+ * (`Reference`: the one it states, else Grid's count, CNT-9) and its use (`Category`, when
+ * stated); `Grid_Space`, Grid's own set, holds its
  * id, number, use and net area with the measure and the rule it follows (ARE-9's net, in Grid's
  * words); `Qto_SpaceBaseQuantities` its height, perimeter, footprint, net area and volume.
  */
@@ -1179,7 +1213,7 @@ function writeSpaceData(
   space: number,
   footprint: Footprint,
   height: number,
-  number: number | undefined
+  numbered: RoomNumber | undefined
 ): void {
   let net: number | null = null
   try {
@@ -1193,13 +1227,16 @@ function writeSpaceData(
   const rule = MEASURES.net
 
   propertySet(c, `space:${room.id}`, 'Pset_SpaceCommon', [
-    ...(number === undefined ? [] : [property(c, 'Reference', identifier(String(number)))]),
+    ...(numbered === undefined ? [] : [property(c, 'Reference', identifier(shownRoomNumber(numbered)))]),
     ...(room.use === undefined ? [] : [property(c, 'Category', label(room.use))])
   ], space)
 
   propertySet(c, `grid-space:${room.id}`, 'Grid_Space', [
     property(c, 'Id', identifier(room.id)),
-    ...(number === undefined ? [] : [property(c, 'Number', `IFCINTEGER(${int(number)})`)]),
+    // CNT-9: a number the room states is text, as the plan gives it; Grid's count an integer.
+    ...(numbered === undefined
+      ? []
+      : [property(c, 'Number', numbered.stated === null ? `IFCINTEGER(${int(numbered.number)})` : label(numbered.stated))]),
     property(c, 'Use', label(room.use ?? USE_NOT_SAID)),
     ...(net === null
       ? []
@@ -1735,6 +1772,32 @@ function writeItems(building: Context, storeys: readonly Storey[]): void {
   }
 }
 
+/** CNT-9: the name of the property set that holds a part's facts of the person's own. */
+export const IFC_FACTS_SET = 'Grid_Properties'
+
+/** CNT-9: one fact as an IFC value: an integer, a real, a boolean, or a label. */
+function factValue(value: Facts[string]): string {
+  if (typeof value === 'boolean') return `IFCBOOLEAN(${en(value ? 'T' : 'F')})`
+  if (typeof value === 'number') return Number.isSafeInteger(value) ? `IFCINTEGER(${int(value)})` : `IFCREAL(${real(value)})`
+  return `IFCLABEL(${str(factText(value))})`
+}
+
+/**
+ * CNT-9: each part's facts of the person's own as one property set, `Grid_Properties`, of one
+ * IfcPropertySingleValue per fact, in the order the plan gives them, related to its element by an
+ * IfcRelDefinesByProperties. The set's name is Grid's own: `Pset_` names are the standard's. The
+ * elements come in the order they were written, which is id order (QAR-5), so the file does not
+ * hang on the plan's order; a plan with no facts writes the same file as before.
+ */
+function writeFacts(c: Context): void {
+  for (const { element, kind, id, guid, facts } of c.facts) {
+    const on: Context = { ...c, guid }
+    const values = Object.entries(facts).map(([name, value]) => c.w.add('IFCPROPERTYSINGLEVALUE', str(name), NULL, factValue(value), NULL))
+    const set = c.w.add('IFCPROPERTYSET', str(on.guid('facts', `${kind}:${id}`)), ref(c.owner), str(IFC_FACTS_SET), NULL, refs(values))
+    relate(on, 'IFCRELDEFINESBYPROPERTIES', `facts:${kind}:${id}`, refs([element]), ref(set))
+  }
+}
+
 /** The property names of `Grid_LeftOut`, by kind: a count and the names. */
 const LEFT_OUT_PROPERTIES: Readonly<Record<LeftOutKind, readonly [string, string]>> = {
   wall: ['Walls', 'WallIds'],
@@ -1870,9 +1933,10 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
     shared,
     materials: { byKind: new Map(), byType: new Map() },
     openingStyles: new Map(),
-    roomNumbers: new Map(roomNumbers(plan).map((n) => [onFloorKey(n.floor, n.id), n.number] as const)),
+    roomNumbers: new Map(roomNumbers(plan).map((n) => [onFloorKey(n.floor, n.id), n] as const)),
     guid: (kind, id) => issuer.issue(kind, id),
-    issuer
+    issuer,
+    facts: []
   }
 
   // The fixed entities (project, site, building) use their own kind as the id.
@@ -1961,6 +2025,7 @@ function buildDocument(given: FloorPlan, options: IfcOptions): string {
   writeSlabs(c, plan, storeys)
   writeItems(c, storeys)
   writeStairs(c, plan, storeys)
+  writeFacts(c)
   writeLeftOut(c, building, options.leftOut ?? [])
 
   return w.toString([

@@ -33,6 +33,10 @@ Notes for agents and people changing this repository.
   `types/floorplan.ts`): their footprints, symbols, rooms, the floor they take and their checks.
   CNT-11 decided fixtures now and furniture later, so `ITEM_KINDS` holds fixtures only; a new kind
   needs its symbol there and a decision first. A fixture is never a wall or a room.
+- `packages/floorplan/src/types/facts.ts` (CNT-9): facts of the person's own, in `properties` on
+  walls, openings, rooms and floors (C9 in `types/floorplan.ts`), and a room's stated `number`. Grid
+  checks nothing against a fact. A field that carries one is listed in `FACT_FIELDS`, and the
+  sheet places it in `FACT_COVERAGE` (`packages/cli/src/sheet/coverage.ts`).
 - `packages/rules`: the checks that apply a figure from a building code, and the figures,
   each with where it was read and how far it has been checked. See its `README.md` before
   adding or changing a rule. It also holds the front door, `inspectPlan` (MSG-1,
@@ -61,13 +65,14 @@ Notes for agents and people changing this repository.
   `bin/grid.mjs`, a committed launcher that runs it, because npm links bins at install time. Its end-to-end tests run that file as a
   child process; `npm test` builds it first. Every option is strict: an unknown, repeated or
   meaningless one is refused by name.
-- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 24 tools named
+- `grid serve` (CMD-5, `packages/cli/src/mcp/`) is the tool server an agent uses: 27 tools named
   `grid_…`, in a fixed order (reading tools by the requests they answer, the problem report
   last of them (CMD-13, `src/report/`, which sends nothing), then the preview, the
   export, the sheet, the seen mark (MSG-10, `seenTool.ts`), and the tools that change the plan,
   the saved views last (VEW-3, `viewTool.ts`)).
   Each is written once in `readTools.ts`, `writeTools.ts`, `reportTool.ts`, `seenTool.ts` or `viewTool.ts`; `toolkit.ts` turns its argument list into both the input schema and the
-  check. The measuring is in `src/quantities/`, the changes in `src/edit/`, the views in
+  check. The measuring is in `src/quantities/` (CNT-9's asking across parts by their fields and
+  facts, for `grid_fields`, `grid_find` and `grid_count`, in `query.ts`), the changes in `src/edit/`, the views in
   `src/draw/views.ts`. A 3D picture is taken from one camera record (VEW-3,
   `packages/floorplan/src/geometry/camera.ts`): `src/draw/cameraAsk.ts` turns a call into it,
   and the app's 3D view and the stills open at it (`recordCamera` in `packages/viewer`). `src/mcp/__tests__/tools.test.ts` fails when a tool loses its prefix,

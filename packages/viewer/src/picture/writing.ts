@@ -117,7 +117,7 @@ export interface KeyEntry {
 export function keyEntries(
   drawing: PlanDrawing,
   look: PlanLook,
-  shown: { readonly swings: boolean; readonly sketch: boolean; readonly uses: readonly RoomUse[]; readonly marks: boolean; readonly above?: boolean }
+  shown: { readonly swings: boolean; readonly sketch: boolean; readonly uses: readonly RoomUse[]; readonly marks: boolean; readonly above?: boolean; readonly painted?: readonly { readonly colour: string; readonly words: string }[] }
 ): KeyEntry[] {
   const entries: KeyEntry[] = []
   const solid = drawing.walls.filter((wall) => !wall.virtual)
@@ -131,6 +131,8 @@ export function keyEntries(
   // SHT-11: the floor above's outline, and a stair past its cut, drawn dashed.
   if (shown.above === true) entries.push({ swatch: 'dash', color: look.wall, words: 'Above: the floor over this one' })
   for (const use of shown.uses) entries.push({ swatch: 'fill', color: USE_FILLS[use], words: `Room: ${use}` })
+  // CNT-9: the parts picked out, by what each colour stands for.
+  for (const entry of shown.painted ?? []) entries.push({ swatch: 'fill', color: entry.colour, words: entry.words })
   if (shown.sketch) {
     for (const category of new Set(drawing.sketch.map((item) => item.category))) {
       entries.push({ swatch: 'line', color: look.labelSoft, words: `Sketch: ${category}, drawn only` })

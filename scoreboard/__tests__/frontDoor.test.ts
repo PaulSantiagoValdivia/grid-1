@@ -4,13 +4,16 @@
  * catalogue words, and each code is worded one way only.
  */
 import { describe, expect, it } from 'vitest'
-import { CODES, inspectPlan, type ResultLine } from '@ongrid/rules'
+import { CODES, inspectPlan, PLURALS, type ResultLine } from '@ongrid/rules'
 import * as data from '../src/data'
 import { basePlans, damageSet, soundPlans } from '../src/damage'
 
-/** A message with the plan's names, its figures and the kind of part taken out. */
+/**
+ * A message with the plan's names, its figures and the kind of part taken out. MSG-5: a line for
+ * several rooms is read back to its one room's words (`PLURALS`).
+ */
 const wordingOf = (message: string): string =>
-  message
+  PLURALS.reduce((text, [one, many]) => text.replace(many, one), message)
     .replace(/"(?:[^"\\]|\\.)*"(?:, "(?:[^"\\]|\\.)*")*/g, 'NAME')
     .replace(/-?\d+(?:\.\d+)?(?:e[-+]?\d+)?/g, 'N')
     // MSG-6: a part whose id cannot be read is named by its place.

@@ -41,9 +41,9 @@ takes the picture from it. `kind=eye` is built on the same record (`eyeCamera`),
 view's answer carries it too. The text gives the camera in two lines, where it stands, how to
 move it in one call, and the plan's saved views.
 
-**Saved views** (C9 in `types/floorplan.ts`: `views`, `ViewSchema`). Each holds its name, the
+**Saved views** (C10 in `types/floorplan.ts`: `views`, `ViewSchema`). Each holds its name, the
 setting, `floors` and the BCF camera. A new tool, `grid_save_view` (`packages/cli/src/mcp/viewTool.ts`,
-the 24th, last), saves a record by name through `writeChange`, with `replace` and `remove`.
+the 27th, last), saves a record by name through `writeChange`, with `replace` and `remove`.
 `grid_view view=<name>`, `grid draw --view <name>` and the app (handed the record) call it up.
 `grid_mirror` mirrors the saved views with the plan. `coverage.ts`: the sheet does not show them.
 `planText.ts` holds a view's name to a name's limit and its cut to an id's.
@@ -55,7 +55,7 @@ table, `degree` and `mm`.
 **Docs**: `docs/plan-file.md` "Saved views, and the camera record"; `docs/tool-server.md` "A
 camera you can set, and saved views" and the two tool rows; `docs/commands.md` `--view` and the
 tool count; `docs/tolerances.md`; `CHANGELOG.md` (Unreleased); the agents' changelog in
-`docs/result-contract.md`; `AGENTS.md` (24 tools, `viewTool.ts`, where the camera lives).
+`docs/result-contract.md`; `AGENTS.md` (27 tools, `viewTool.ts`, where the camera lives).
 
 ## The done-when items
 
@@ -92,8 +92,8 @@ for number, looking along the record's direction with its up.
 ## Expectations changed
 
 - `packages/cli/src/mcp/__tests__/tools.test.ts`: `grid_save_view` added last to `ORDER` and to
-  `CHANGES_PLAN`; the tool limit 23 → 24, with its reason; a call for it in `CALLS`.
-- `packages/cli/src/mcp/__tests__/server.test.ts`: 23 → 24 tools.
+  `CHANGES_PLAN`; the tool limit 26 → 27 (24 before merging CNT-9), with its reason; a call for it in `CALLS`.
+- `packages/cli/src/mcp/__tests__/server.test.ts`: 26 → 27 tools.
 - `packages/cli/src/mcp/__tests__/checkView.test.ts`: the refusal of `ids` with `kind=3d` now
   lists the 3d arguments (`floor, from, bearing, tilt, distance, eye_height, lens, room, camera,
   view, turn, tilt_by`).
@@ -111,7 +111,7 @@ for number, looking along the record's direction with its up.
 
 1. **A new tool for saving, not an argument of `grid_view`.** Saving writes the plan file;
    `grid_view` is read-only, and hosts approve read-only tools without asking. Folding saving in
-   would have made every picture call a write. So `grid_save_view` is the 24th tool, last, marked
+   would have made every picture call a write. So `grid_save_view` is the 27th tool, last, marked
    as changing the plan. Reversible: it can move into `grid_view` (losing its read-only hint) or
    into `grid_preview` later.
 2. **`from` stays a side of the drawing; `bearing` is a compass bearing.** Every Grid argument
@@ -153,3 +153,13 @@ On `main` at bd2f6a7 plus this branch:
   below this is none"), and the rules' MSG-4 test lists the plan's fields, now with `views`
   (expectation changed, above). Both files rerun alone with `cameraView.test.ts`: 37 of 37.
 - `npm run scoreboard`: 197, 278, 16, 5, 15, 735, 95. Same as the stored figures.
+
+After merging `main` at ca2db98 (MSG-5, CNT-9): conflicts in `AGENTS.md`, `CHANGELOG.md`,
+`docs/commands.md`, `docs/plan-file.md`, `docs/result-contract.md`, `docs/tool-server.md`,
+`readTools.ts`, `floorplan.ts`, `tools.test.ts` and `server.test.ts`, all kept both sides. CNT-9
+took C9 in the plan format, so saved views are C10. The tools are 27, `grid_save_view` still last;
+`grid_view` keeps CNT-9's `highlight`, `colour` and `painted` beside the camera. Build, typecheck
+and lint clean; the affected tests (the CLI's MCP, `src/__tests__`, `grid.e2e`, `everyPath`, the
+coverage tests and edits, the floorplan camera, tolerance and types tests, the viewer's still and
+3D tests, the rules' result tests) passed, 867 with 1 skipped, of 868 in 67 files.
+`npm run scoreboard`: same as the stored figures.

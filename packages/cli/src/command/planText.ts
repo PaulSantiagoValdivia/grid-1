@@ -18,6 +18,8 @@ export const IMAGE_PATH_MAX = 1024
 export const PARTS_MAX = 50_000
 /** The most walls a room's boundary may list. */
 export const BOUNDARY_MAX = 2_000
+/** CNT-9: the most facts of the person's own one wall, opening, room or floor may carry. */
+export const PROPERTIES_MAX = 100
 /** The largest plan file Grid reads, in bytes. */
 export const PLAN_FILE_MAX_BYTES = 64 * 1024 * 1024
 
@@ -54,7 +56,8 @@ type Kind = 'name' | 'id' | 'path'
 /** The strings of each part the schema keeps, and what each is. */
 const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   walls: { id: 'id', floor: 'id' },
-  rooms: { id: 'id', name: 'name', floor: 'id' },
+  // CNT-9: a room's number is held to an id's limit.
+  rooms: { id: 'id', name: 'name', floor: 'id', number: 'id' },
   openings: { id: 'id', wall: 'id' },
   floors: { id: 'id', name: 'name' },
   // LVL-3: a stair names the two floors it joins.
@@ -91,6 +94,19 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
         if (typeof value !== 'string') continue
         const problem = textProblem(value, kind)
         if (problem) return `${list}[${i}].${field} ${problem}`
+      }
+      // CNT-9: the facts of the person's own: each name and each text value to a name's limit.
+      const facts = part['properties']
+      if ((list === 'walls' || list === 'rooms' || list === 'openings' || list === 'floors') && isObject(facts)) {
+        const names = Object.keys(facts)
+        if (names.length > PROPERTIES_MAX) return `${list}[${i}].properties has ${names.length.toLocaleString('en-US')} facts; one part may carry at most ${PROPERTIES_MAX}`
+        for (const [n, name] of names.entries()) {
+          const named = textProblem(name, 'name')
+          if (named) return `${list}[${i}].properties, fact ${n + 1}, has a name that ${named}`
+          const value = facts[name]
+          const problem = typeof value === 'string' ? textProblem(value, 'name') : null
+          if (problem) return `${list}[${i}].properties, fact ${n + 1}, has a value that ${problem}`
+        }
       }
       if (list === 'rooms') {
         // The room's own walls, then each of its holes' (ARE-6).

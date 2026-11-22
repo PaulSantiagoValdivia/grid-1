@@ -1,6 +1,6 @@
 /**
  * `grid_save_view` (VEW-3, lab SE-7): a camera record `grid_view` returned, saved by name with the
- * plan (`views`, C9), or a saved view taken out. Called up again with `grid_view view=…` (or
+ * plan (`views`, C10), or a saved view taken out. Called up again with `grid_view view=…` (or
  * `grid draw --view`, or the app's 3D view), it gives the same record, digit for digit.
  *
  * It goes through `writeChange` as every change does: worked out on Grid's reading of the plan,
