@@ -74,6 +74,14 @@ record. It never throws: a check that fails inside Grid becomes a line
 4. `finding`: what a plan check found: a way out, a door, a room's size, an escape window.
 5. `not-checked`: what a check could not look at in this plan, and why.
 
+### A line's number
+
+A line's number is its place in `lines`, counting from 1. `grid check` prints it before the line,
+and keeps it when only one floor is shown (`--floor`), so a floor's lines can skip numbers.
+`grid draw` and `grid_view` mark each line with the same number on the part it is about, and
+list them under the drawing (MSG-8). The numbers follow the record the drawing was made from:
+`grid check --country` can add lines, and with them change the numbers after them.
+
 ### One wording per code
 
 A line's `message` is made by its code's wording in `catalogue.ts`, and nowhere else. A
@@ -394,6 +402,15 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `item/into-wall` and `item/too-tall` are worth a look. A kind the plan does not hold yet (a
   table, a chair) is `item/unknown-kind`: the fixture is left out and nothing else changes.
 - A refusal inside `items` names the item (`thing.kind` `item`) when its id can be read.
+
+### 2026-11-22: what went wrong, on the drawing (MSG-8)
+
+- No field changed. `grid check` and `grid_check` print each line's number, its place in
+  `lines` from 1, in place of a dash; `grid check --json` adds `numbers`, each line's number,
+  which on one floor is still its place in the whole record.
+- `grid draw` and `grid_view` (kind plan) mark every line of the floor drawn with its number on
+  its part, print its words beside the mark, and list the floor's lines under the drawing. A
+  room that cannot be drawn is the dashed box round its walls with its name and the reason.
 
 ### 2026-11-21: version 1 (MSG-1)
 

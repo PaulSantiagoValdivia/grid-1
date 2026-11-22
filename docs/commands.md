@@ -11,6 +11,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [The project folder](#the-project-folder)
 - [Describing a plan: `grid describe`](#describing-a-plan-grid-describe)
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
+- [What went wrong, on the drawing: `grid draw`](#what-went-wrong-on-the-drawing-grid-draw)
 - [The 3D model as a picture: `grid draw --3d`](#the-3d-model-as-a-picture-grid-draw---3d)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
@@ -142,6 +143,15 @@ only after it was tried and left every room it touches with an outline. `grid ti
 again before each fix, and one an earlier fix took care of is skipped and said so. The plan file
 is changed as read, keys Grid does not know included; `--out <file.json>` writes the tidied plan
 there instead. `--json` prints the list or what was applied as JSON.
+
+## What went wrong, on the drawing: `grid draw`
+
+`grid draw` and `grid_view` show what went wrong on the drawing. Every line `grid check` prints
+for the floor drawn has its number from that list in a small mark on the room, door, window,
+wall or fixture it is about, with its words beside it; a line about the whole floor has its mark
+in the top-left corner. The same lines are listed by number under the drawing. A room that
+cannot be drawn is not left blank: it is the dashed box round its walls, with its name and the
+reason. `docs/result-contract.md` says how the numbers are given.
 
 ## The 3D model as a picture: `grid draw --3d`
 
