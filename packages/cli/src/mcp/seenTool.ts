@@ -7,6 +7,7 @@
 import { checkPlan, markNote, type MarkAsk } from '../command/check'
 import { UsageError } from '../command/options'
 import { BY_MAX, REASON_MAX, SeenRefused } from '../seen/marks'
+import { firmForCheck } from '../firm/measure'
 import { COUNTRY_ARG } from './readTools'
 import { asRefusal, BOOLEAN, listSchema, NUMBER, objectSchema, PLAN_ARG, readPlan, STRING, ToolRefusal, type GridTool } from './toolkit'
 
@@ -51,7 +52,9 @@ export const markSeenTool: GridTool = {
     if (!unmark && reason === undefined) throw new ToolRefusal('Pass reason: why the person sets the note aside, in their words.')
     if (!unmark && by === undefined) throw new ToolRefusal('Pass by: the name or role the person gives for who marks it. Never guess one.')
     try {
-      const whole = checkPlan(loaded, args['country'] ? { country: args['country'] as string } : {}, 'country')
+      // COD-8: with the firm's standards beside the plan, so a number means what grid_check gave.
+      const firm = firmForCheck(project, file, loaded.plan)
+      const whole = checkPlan(loaded, { ...(args['country'] ? { country: args['country'] as string } : {}), ...(firm ? { firm } : {}) }, 'country')
       const line = whole.result.lines[number - 1]
       // The number and the code must name the same note, so a plan changed since is not marked by mistake.
       if (line !== undefined && line.code !== args['code']) {

@@ -57,12 +57,14 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `limits` | What these checks never look at, whatever the plan. The same lines every time. |
 | `place` | The place the figure checks were for (COD-3): `country`, its two-letter code; `name`, Grid's name for it; `from`, `request` (the caller's `country`), `plan` (`site.country`) or `assumed` (`withoutPlace: "us-figures"`). `null` when no place is stated, and then no figure was applied; `null` too when the plan was refused. |
 | `withoutPlace` | Only on a plan that was read and states no place: `{ usLines }`, how many lines the figure checks would have given with the US figures. |
+| `taped` | Only on a plan that keeps taped lengths (HND-11): each one, in the plan's order, taped against drawn. See "Taped against drawn". |
+| `firm` | Only when the plan has a firm's standards file beside it (COD-8): `{ heading, file, read, standards }`, each standard with its `measure`, `value`, `unit`, `name`, `note`, `uses`, `kinds`, `lookedAt` (the parts it was set against) and `notes` (those short of it). See "The firm's own standards". |
 
 ### A line
 
 | Field | What it holds |
 |---|---|
-| `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes. One of the codes below. |
+| `code` | Stable: `<thing>/<what>`, lowercase words joined by dashes, or `firm/<what>` for the firm's own standards (COD-8). One of the codes below. |
 | `kind` | `refused`, `left-out`, `worth-a-look`, `finding`, `not-checked` or `to-confirm`. |
 | `thing` | `{ kind, id }`: the plan (id `""`), a floor, a wall, a room, an opening, a fixture (`item`, CNT-12), a stair (LVL-3) or an opening pattern (`pattern`, LVL-8). |
 | `floor` | The id of the floor the thing is on. `null` for the plan as a whole, and for an opening on a wall the plan does not have. |
@@ -75,6 +77,7 @@ default, and the whole one on request (MSG-10, see "The short report, and seen n
 | `causedBy` | Only on a line that follows from another (MSG-5): that line, as `{ code, id }`, the id of the part it is about (`""` for the plan; for `plan/duplicate-id`, the id it names). The line is listed under it and goes away when it is fixed. |
 | `each` | Only on a line that stands for the same note on several parts (MSG-5): each of them, `{ kind, id }`, `thing` first. Its message lists their names. |
 | `held` | Only on `floor/not-checked-rooms-not-drawn` and `floor/not-checked-doors-not-drawn` (MSG-5): the notes held back because they rest on what the line names, each `{ code, thing, floor, also, waitsFor }`. `waitsFor` holds the ids of the rooms and openings that could not be drawn. |
+| `firm` | Only on a `firm/` line (COD-8): the firm's own figure it was set against, `{ standard, measure, value, unit, name, file }`, `standard` its place in the file's list from 0. Never a code's: such a line has no `figures`. |
 | `fixes` | Only where a change to one part would clear the line (MSG-7): each such change as data, `{ part: "opening", id, width \| offset \| height \| sill \| wall }`. Several when more than one would do. `width` keeps the opening's start; `wall` is the id most likely meant. In `grid_check`, each line with fixes also carries `calls`: the same changes as calls to `grid_change_opening`, with the plan argument, ready to send. A `wall` fix has no call: no tool sets an opening's wall. |
 
 ### The kinds, in list order
@@ -194,7 +197,7 @@ label.
 | `plan/similar-id` | {thing} is left out: its id differs from another part's only in capitals or spaces | ids that differ in more than capitals or spaces |
 | `plan/check-failed` | A check could not run on this plan: something went wrong inside Grid | the check to run to the end |
 | `plan/no-walls` | The plan has no walls, but its rooms and openings name walls | the walls the rooms and openings name |
-| `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin (0, 0) |
+| `plan/far-from-origin` | The plan reaches more than 500 m from the origin | every point within 500 m of the origin: the site's origin where the plan states one, else (0, 0) |
 | `plan/duplicate-id` | Id {thing} names more than one wall, room or opening | every id on one wall, room or opening only |
 | `plan/similar-floor-id` | {thing} has an id that differs from another floor's only in capitals or spaces | floor ids that differ in more than capitals or spaces |
 | `plan/duplicate-floor` | {thing} is listed more than once | each floor listed once |
@@ -279,6 +282,13 @@ label.
 | `item/too-tall` | {thing} is taller than the room it stands in | a fixture no higher than its room |
 | `item/blocks-doorway` | {thing} stands in front of the doorway of {opening}, an indicator | the floor in front of a doorway clear of fixtures, within Grid's own approach depth |
 | `item/blocks-window` | {thing} stands in front of window {window}, higher than its sill, an indicator | a fixture in front of a window no higher than its sill, within Grid's own approach depth |
+| `firm/corridor-width` | {thing}: the way through is {width} m wide at its narrowest, under the firm's own figure of {figure} m for corridor width ("{name}") | at least {figure} m: the firm's figure used here ("{name}"), from "{file}", the firm's own and not from any code or standard |
+| `firm/door-clear-width` | {thing}: it leaves {width} m clear, under the firm's own figure of {figure} m for clear width of a doorway | at least {figure} m: the firm's figure used here, from "{file}", … |
+| `firm/turning-circle` | {thing}: the widest circle its free floor holds is {width} m across, under the firm's own figure of {figure} m for turning circle | at least {figure} m: the firm's figure used here, from "{file}", … |
+| `firm/fixture-clearance` | {thing}: the clear floor in front of it is {width} m, under the firm's own figure of {figure} m for clear floor in front of a fixture | at least {figure} m: the firm's figure used here, from "{file}", … |
+| `firm/room-area` | {thing}: its net area is {area} m², under the firm's own figure of {figure} m² for room area | at least {figure} m²: the firm's figure used here, from "{file}", … |
+| `firm/room-width` | {thing}: the widest circle it holds is {width} m across, under the firm's own figure of {figure} m for room width | at least {figure} m: the firm's figure used here, from "{file}", … |
+| `firm/not-read` | The firm's standards in "{file}" were not read, so none of them was set against the plan | a firm's standards file Grid reads: version "1" and a list of standards, as docs/firm-standards.md sets out |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
 | `floor/out-of-line` | {thing} does not line up with the floor below it | a floor's outline over the floor below it, or marked overhang "meant" where it overhangs or sits back on purpose |
@@ -322,6 +332,8 @@ label.
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
 | `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
 | `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
+| `room/taped-differs` | {The side along wall "w1"} taped in {thing} is not the length drawn | the drawing within {0.010 m} of the length taped |
+| `plan/taped-not-measured` | A length taped in {thing} cannot be set against the drawing: {why} | a taped length that names a room the plan has, and one of its walls or two of its corners, each corner by the two walls that meet there |
 
 ### Words Grid does not read
 
@@ -447,6 +459,60 @@ The first line of every report after the label says the place and the figures ap
 the plan; Grid carries no figures for it, so none was applied.", or with no place "No place is
 stated, so no figure was applied: the US figures would have given 2 lines. State it in the plan
 as site.country, or give --country."
+
+## Taped against drawn
+
+A plan may keep the lengths taped on site in `taped` (HND-11, lab WR-14;
+[plan-file.md](plan-file.md#lengths-taped-on-site)). Every run sets each one against the drawing:
+`grid check` and `grid_check` print the table after the notes, and the answer of every change to
+the plan (the edit tools, `grid edit`, `grid_write_rooms`, `grid write`) prints it too, at most 12
+rows, the ones that differ first. A row in `taped` (the record's, and `taped` in `grid_check`'s
+and every change's receipt, empty there for a plan that keeps none) holds:
+
+| Field | What it holds |
+|---|---|
+| `index` | Its place in the plan's `taped` list, from 0 |
+| `id` | The plan's id for it, or null |
+| `room`, `roomName`, `floor` | The room it was taped in, its name and its floor |
+| `what` | `side` (along one wall) or `corners` (corner to corner) |
+| `walls` | The side's wall, or the four walls that name its two corners |
+| `taped` | The length taped, in metres |
+| `drawn` | The same length on the drawing's inside faces, or null when it cannot be measured |
+| `off` | Drawn less taped, positive when the drawing is longer; null with no drawn length |
+| `within` | How far apart they may be and agree: the taped length's own `tolerance`, else `tapedAgree` (0.01 m) |
+| `state` | `agrees`, `differs` or `not-measured` |
+| `missing`, `missingWalls` | Only when not measured: `no-room`, `no-wall`, `not-the-rooms`, `no-corner` or `not-drawn`, and the walls it is about |
+
+A row that differs is also a line, `room/taped-differs`, and one that cannot be measured is
+`plan/taped-not-measured`; both are worth a look. A row that agrees is no line.
+
+## The firm's own standards
+
+A firm keeps its own figures, such as corridors at least 1.5 m, in `firm-standards.json` beside
+the plan ([firm-standards.md](firm-standards.md)). `grid check` and `grid_check` read it, measure
+the plan for each standard by the same measures as the use indicators (CNT-13) and the net area
+(ARE-9), and give a line for each part short of the firm's figure (COD-8):
+
+- **A finding with a `firm/` code**, after the code figures' findings and before what was not
+  checked. It counts in `count`, `counts.finding` and `problems`, as every finding does. Its
+  `needed` is "the firm's figure used here", from the file, "the firm's own and not from any code
+  or standard"; its `firm` holds that figure. It never has `figures`, and the firm's figures are
+  never in the record's `figures`, `checks` or `basis`.
+- **Under its own heading.** Every report sets the firm's lines under "The firm's own standards
+  (N), from "firm-standards.json": the firm's own figures, from its file beside the plan: not
+  from any code or standard, and not tied to a place, so they are set against the plan wherever
+  that file is." The count says how many findings are the firm's ("2 findings of the firm's
+  own"; "3 findings, 2 of them the firm's own"). With no other finding, "No findings outside the
+  firm's own standards." A file whose standards gave no note is one line that says it was read.
+  The full report lists each standard: "the firm's figure used here is at least 1.5 m", the
+  parts it was set against and how many are short of it.
+- **Not tied to a place.** The firm's figures are set against the plan whatever place it states,
+  or none (COD-3): with no place, the code figures are not applied and the firm's still are.
+- **A file Grid cannot read** is one `firm/not-read` line, `not-checked`, about the plan, whose
+  `found` says where the file is wrong and never repeats its text; the record's `firm.read` is
+  `false`. The plan is checked as without the file. A file that is a link out of the project is
+  refused as the seen marks beside the plan are.
+- **No file, no change**: a plan with no firm's file gives the record and the reports as before.
 
 ## The short report, and seen notes
 
@@ -577,7 +643,7 @@ its text, which says the same.
 | `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
-| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was) and `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
+| `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
 
 A line of the brief (BRF-1, [brief.md](brief.md)) has a `state` (`met`, `missed`, `open`, or
 `differs` for a size in a room's name), `wish` (`room`, `rooms`, `footprint`, `touch`, a figure's
@@ -603,7 +669,7 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ### 2026-11-22: walls through floors, and floors that line up (LVL-5)
 
-- The plan format takes a wall's `through` (C15): the highest floor it rises through. A room on
+- The plan format takes a wall's `through` (C16): the highest floor it rises through. A room on
   any floor it stands on may list it, so `room/cross-floor` is no longer given for such a wall.
   An opening in it may reach as high as the wall rises, measured from the wall's own floor, so
   `opening/too-tall` compares with that height; openings one over the other in it are not
@@ -626,6 +692,38 @@ A change that would add a problem that leaves a part out is refused, and nothing
   longer calls a window "doors or windows" (lab A-16). `room/cross-floor`'s `needed` and `fix`
   mention a wall that rises through floors.
 - `resultVersion` stays 1.
+
+### 2026-11-22: a survey drawn from its own numbers (HND-11)
+
+- A wall may be placed by a face (`face`, `left` or `right` walking from start to end), with its
+  thickness stated or left out; Grid reads it on its centre line and writes it back by its face.
+  Nothing in the record changes for a plan with no `face`.
+- A plan may keep lengths taped on site in `taped`. The record gains `taped`, only on a plan
+  that keeps some: each one taped against drawn ("Taped against drawn"). Two new codes, both
+  worth a look: `room/taped-differs` and `plan/taped-not-measured`. `grid_check`'s receipt, every
+  change's and `grid_write_rooms`' gain `taped`, empty for a plan that keeps none; their text adds
+  the table.
+- `plan/far-from-origin` measures from `site.origin` where the plan states one, else from (0, 0)
+  as before; its message then names the site's origin, and its `needed` and `fix` say to keep
+  survey coordinates with a stated origin rather than move them.
+- The exports of a plan far from (0, 0) write it from `site.origin` where one is stated: the IFC
+  puts its building on the site's point, and the GLB holds the model in one node, `origin`,
+  moved by that offset, with `asset.extras.gridOrigin`. A plan near (0, 0) exports as before.
+  `resultVersion` stays 1.
+
+### 2026-11-22: a firm's own standards as checks (COD-8)
+
+- A firm's standards file beside the plan, `firm-standards.json`, is read by `grid check`,
+  `grid_check` and `grid_mark_seen`. Each part short of one of the firm's figures is a new
+  `finding` line with a `firm/` code: `firm/corridor-width`, `firm/door-clear-width`,
+  `firm/turning-circle`, `firm/fixture-clearance`, `firm/room-area` and `firm/room-width`; a
+  file that cannot be read is `firm/not-read`, `not-checked`. The codes are the first outside
+  `<thing>/<what>`: `firm/` is the family, the part is in `thing`.
+- A line gains an optional `firm` (the firm's figure it was set against), and the record an
+  optional `firm` (the file, whether it was read, each standard with `lookedAt` and `notes`).
+  `grid_check`'s data carries both. The text sets the firm's lines under the heading "The firm's
+  own standards", apart from the code figures, and says they are not tied to a place.
+- With no firm's file, nothing changes. `resultVersion` stays 1: no field changed meaning.
 
 ### 2026-11-22: accessibility measurements, as numbers (CNT-17)
 

@@ -362,7 +362,7 @@ export function planSection(plan: FloorPlan, line: SectionLine): PlanSection {
 
     for (const part of usable) {
       if (part.virtual) continue
-      // LVL-5 (C15): a wall through floors is cut once, whole, from its own floor; its openings
+      // LVL-5 (C16): a wall through floors is cut once, whole, from its own floor; its openings
       // are open through every slab between, as the window through two storeys is.
       const whole = wholeWall(part, openingsOf(index, part.id).filter((o) => !broken.has(o.id)))
       if (whole === null) continue

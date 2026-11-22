@@ -129,24 +129,32 @@ const followOn = (found: Issue, cause: string | null): Issue => (cause === null 
  * lives on XY and z=0 is floor level. A plan that shows up hundreds of meters
  * away (`farFromOrigin`) is still drawable, but it almost always means the agent
  * lost the scale.
+ *
+ * HND-11 (lab MS-12): a plan kept at survey or map coordinates states a point near the building
+ * as `site.origin`, and is measured from that point: its exports write the geometry from it.
  */
 function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
+  const stated = plan.site?.origin
+  const origin = stated !== undefined && stated.every((v) => Number.isFinite(v) && Math.abs(v) <= tolerance('largest')) ? stated : null
+  const [ox, oy] = origin ?? [0, 0]
   let farthest = 0
   for (const wall of plan.walls) {
     for (const [x, y] of [wall.start, wall.end]) {
-      const distance = Math.hypot(x, y)
       // A number past `largest` is refused on its own wall (`validateWall`).
-      if (distance > farthest && distance <= tolerance('largest')) farthest = distance
+      if (Math.hypot(x, y) > tolerance('largest')) continue
+      const distance = Math.hypot(x - ox, y - oy)
+      if (distance > farthest) farthest = distance
     }
   }
 
   if (farthest > tolerance('farFromOrigin')) {
+    const from = origin === null ? 'the origin' : `its site's origin (${fixedText(ox, 2)}, ${fixedText(oy, 2)})`
     issues.push(
       issue(
         'plan',
         'plan',
         'plan/far-from-origin',
-        `The plan reaches ${fixedText(farthest, 0)} m from the origin. The origin is where the ` +
+        `The plan reaches ${fixedText(farthest, 0)} m from ${from}. The origin is where the ` +
           `3D rises from; at this distance there is most likely a scale or unit error.`,
         'warning'
       )
@@ -381,7 +389,7 @@ function validateOpening(
   // A dividing line stands no height (0 unless it says otherwise), so a gap in it cannot be
   // too tall for it.
   const head = opening.sill + opening.height
-  // LVL-5 (C15): in a wall through floors an opening may reach as high as the wall rises, from its
+  // LVL-5 (C16): in a wall through floors an opening may reach as high as the wall rises, from its
   // own floor's level. The roof over its top floor is checked on that floor's slice.
   const through = wall.through !== undefined && wall.through !== floorOf(wall)
   const rise = through ? wallRise(index.plan, wall) : wall.height
@@ -455,7 +463,7 @@ function validateOverlaps(index: PlanIndex, broken: Set<string>, issues: Issue[]
     const spans = openingsOf(index, wall.id)
       .filter((opening) => !broken.has(opening.id))
       .map(openingSpan)
-    // LVL-5 (C15): a wall through floors holds a window on each floor, one over the other: two
+    // LVL-5 (C16): a wall through floors holds a window on each floor, one over the other: two
     // openings overlap there only where they share a stretch of the wall at the same height.
     if (wall.through !== undefined && wall.through !== floorOf(wall)) {
       const kept: typeof spans = []
@@ -678,7 +686,7 @@ function validateFloors(
       // the real fault and has marked the id broken.
       if (duplicated.has(wallId)) return false
       const wall = index.wallsById.get(wallId)
-      // LVL-5 (C15): a wall through floors stands on each floor it rises through.
+      // LVL-5 (C16): a wall through floors stands on each floor it rises through.
       return wall !== undefined && !wallStandsOn(plan, wall, floor)
     })
     if (strays.length === 0) continue
