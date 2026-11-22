@@ -216,3 +216,16 @@ golden file changed. After this merge every check passed, the two timing tests i
 - `scoreboard/current.json`: main's figures (turns answered 16, rooms not measured 735, from the
   features merged there) with LVL-3's checks fed, 5 → 11, for the reason given above. Stored with
   `npm run scoreboard -- --write-current`; no other count moved.
+
+## Merging main again (MSG-8, MSG-4, WRT-3), at c4f773f
+
+- `floorplan.ts` keeps MSG-8's undrawn room boxes and the stairs; `plan.ts` and the schema export
+  both `OpeningAnchor` (WRT-3) and `Stair`. The contract keeps both changelog sections.
+- MSG-8's fault marks gain the thing kind `stair`: a stair's line is marked at the foot of its
+  walking line on the floors it is drawn on.
+- MSG-4's reading of unknown fields now reads a straight stair's `start` and `end` as its walking
+  line (the one preprocessing it applies), so they are not named as unknown; `type` still is.
+  Stairs are among its parts. `result.test.ts` lists `stairs` among the plan's fields.
+- After the merge one test fails, `wordsNotRead.test.ts` "names thick on a wall…": it expects a
+  line to start with "- ", and MSG-8 numbers the lines. The test and `check.ts` are as c4f773f
+  has them, so it fails there too; main's later commits change that test.

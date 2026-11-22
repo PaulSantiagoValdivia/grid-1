@@ -40,6 +40,14 @@ export interface Subject {
   readonly place?: string
   /** On a refusal: what the format wants there, in words. */
   readonly wants?: string
+  /** On a word Grid does not read (MSG-4): the word, quoted, or what it is when it is not repeated. */
+  readonly word?: string
+  /** On a word Grid does not read: the word Grid knows that was most likely meant. */
+  readonly nearest?: string | null
+  /** On a field Grid does not read: whether the part already has the field most likely meant. */
+  readonly nearestWritten?: boolean
+  /** On a word Grid does not read: what that place may hold, as `the fields of a wall: id, start, …`. */
+  readonly known?: string
   /** MSG-6, on a value read as meant: what it was read as. */
   readonly read?: string
   /** MSG-6, on a value left out: the default used, or null when it is read as not stated. */
@@ -129,6 +137,31 @@ export const CODES = {
     fix: (s) => `Correct ${s.place}.`
   },
 
+  // --- Reading: words Grid does not read (MSG-4). The plan is read without them --------------
+  'plan/unknown-field': {
+    says: (s) => `${s.label} has a field Grid does not know, ${s.word}`,
+    found: (s) => `${s.word} at ${s.place}, which Grid does not read${s.nearest ? `; the nearest field it knows is ${quoted(s.nearest)}` : ''}`,
+    needed: (s) => `one of ${s.known}`,
+    fix: (s) =>
+      s.nearest && s.nearestWritten
+        ? `Did you mean ${quoted(s.nearest)}? It is there too, and is what Grid reads: take ${s.word} out, or move its value to ${quoted(s.nearest)}.`
+        : s.nearest
+        ? `Did you mean ${quoted(s.nearest)}? Rename ${s.word} to ${quoted(s.nearest)}. Until then Grid reads the plan without it.`
+        : 'Grid has no field for this. Take it out, or say it with the fields listed. Until then Grid reads the plan without it.'
+  },
+  'plan/unknown-use': {
+    says: (s) => `${s.label} has a use Grid does not know, ${s.word}`,
+    found: (s) => `the use ${s.word} at ${s.place}, read as no use stated${s.nearest ? `; the nearest use Grid knows is ${quoted(s.nearest)}` : ''}`,
+    needed: (s) => `one of ${s.known}`,
+    fix: (s) =>
+      `${s.nearest ? `Did you mean ${quoted(s.nearest)}? Write it if that is what the room is; if none of the uses fits, "other".` : 'If none of the uses Grid knows fits, write "other".'} Until then the room has no use, and the checks that need one skip it.`
+  },
+  'plan/empty': {
+    says: fixed('The plan has nothing in it: no walls, rooms or openings'),
+    found: fixed('no walls, no rooms and no openings'),
+    needed: fixed('walls, and the rooms and openings they hold'),
+    fix: fixed('Add the walls, rooms and openings, or write the plan from rooms text with grid write. If the file was meant to hold a plan, check it is the right file.')
+  },
   'plan/unfinished-merge': {
     says: fixed('The plan holds an unfinished git merge'),
     found: (s) => s.said,

@@ -8,7 +8,7 @@
  * output schema. Names and ids that come from the plan file are quoted.
  */
 import { floorOf, itemFootprint, limit, tolerance, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import { GENERAL_GUIDANCE_LABEL, inspectPlan } from '@ongrid/rules'
 import { checkPlan, countsText, KIND_WORDS, partsText, thingText } from '../command/check'
 import { describePlan, describeRooms } from '../command/describe'
 import type { LoadedPlan } from '../command/plan'
@@ -710,7 +710,9 @@ const viewTool: GridTool = {
       const withIds = args['ids'] === true
       const shown = floor ?? survey.facts.floors[0]?.id ?? 'ground'
       const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
-      const view = await planView(plan, { floor: shown, look: asked, dimensions: args['dimensions'] !== false, ids: withIds, ...(crop ? { frame: cropFrame(crop) } : {}) })
+      // What went wrong, numbered as grid_check numbers it, marked on the drawing (MSG-8).
+      const faults = inspectPlan(plan).lines
+      const view = await planView(plan, { floor: shown, look: asked, dimensions: args['dimensions'] !== false, ids: withIds, faults, ...(crop ? { frame: cropFrame(crop) } : {}) })
       const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
       const undecided = view.undecidedDoors ?? []
@@ -718,6 +720,8 @@ const viewTool: GridTool = {
         lines.push(`Drawn with a dashed line and "?" as undecided, ${undecided.length === 1 ? 'a door' : `${undecided.length} doors`} with no stated swing: ${undecided.map(q).join(', ')}. Ask the person which side each is hinged on and which way it opens, then set its hinge and swing.`)
       }
       lines.push('Each part\'s box on the picture, in pixels from its top-left corner, is in boxes: id, kind and x, y, width, height.')
+      const marked = faults.filter((line) => line.floor === null || line.floor === shown).length
+      if (marked > 0) lines.push(`${marked} of grid_check's lines are about this floor: each has its grid_check number on the part it is about, and all are listed under the drawing. A room that cannot be drawn is the dashed box round its walls.`)
       if (withIds) lines.push(...checkViewText(loaded, shown))
       return {
         text: lines.join('\n'),
@@ -877,7 +881,7 @@ const checkTool: GridTool = {
     const record = result.result
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]
     lines.push(`To look at: ${record.count === 0 ? 'nothing' : `${record.count} (${countsText(record)})`}. Checks run: ${result.report.rules.length}.`)
-    for (const line of record.lines.slice(0, 12)) lines.push(`  ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Fix: ${line.fix} [${line.code}]`)
+    record.lines.slice(0, 12).forEach((line, index) => lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Fix: ${line.fix} [${line.code}]`))
     if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
     if (record.counts.finding === 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
     // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.

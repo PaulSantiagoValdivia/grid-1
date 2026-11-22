@@ -9,7 +9,9 @@
 import type { FloorPlan, Opening } from './plan'
 import { indexPlan, openingsOf } from './plan'
 import type { Vec2 } from './vec2'
-import { add, centroid, fromTuple, scale } from './vec2'
+import { add, centroid, dot, fromTuple, intersectLines, scale, sub } from './vec2'
+import { tolerance } from './tolerances'
+import type { WallAxis } from './wall'
 import { openingSpan, pointAlong, wallAxis, wallCenterline, wallPlanSlices } from './wall'
 import { wallJoints } from './joints'
 import type { WallExposure } from './exposure'
@@ -137,6 +139,16 @@ export interface Bounds {
   readonly height: number
 }
 
+/**
+ * A room the drawing could not draw (MSG-8): it has no outline of its own, so it stands as the
+ * box round the walls it lists, to their faces, so a reader sees where it should be.
+ */
+export interface UndrawnRoom {
+  readonly id: string
+  readonly name: string
+  readonly box: Bounds
+}
+
 /** The plan's geometry, resolved. Not the model — what gets drawn. */
 export interface PlanDrawing {
   readonly walls: readonly PlanWall[]
@@ -153,6 +165,11 @@ export interface PlanDrawing {
    * when the plan states none.
    */
   readonly stairs: readonly PlanStair[]
+  /**
+   * The rooms that could not be drawn, each as the box round the walls it lists that the plan
+   * holds (MSG-8). A room none of whose walls can be found has no box and is not here.
+   */
+  readonly undrawn: readonly UndrawnRoom[]
   /** The fixtures (CNT-12), drawn over the room fills and under the walls. Empty when the plan has none. */
   readonly items: readonly PlanItem[]
   /** Envelope of the whole drawing, for computing the viewBox. */
@@ -263,10 +280,14 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   }
 
   const rooms: PlanRoom[] = []
+  const undrawn: UndrawnRoom[] = []
   for (const room of plan.rooms) {
-    if (broken.has(room.id)) continue
-    const shape = tryRoomShape(room, index)
-    if (!shape) continue
+    const shape = broken.has(room.id) ? null : tryRoomShape(room, index)
+    if (!shape) {
+      const box = boxRoundWalls(room, index)
+      if (box) undrawn.push({ id: room.id, name: room.name, box })
+      continue
+    }
     const { polygon, holes } = shape
     rooms.push({
       id: room.id,
@@ -308,7 +329,45 @@ export function buildFloorPlan(plan: FloorPlan): PlanDrawing {
   const stairs = (plan.stairs ?? []).length === 0 ? [] : planStairs(plan, floor === null ? () => broken : brokenOnFloor).stairs.map((stair) => planStair(stair, floor))
   for (const stair of stairs) for (const flight of stair.flights) extent.push(...flight.outline)
 
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, stairs, bounds: computeBounds(extent), issues }
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, bounds: computeBounds(extent), issues }
+}
+
+/**
+ * The box round the walls a room lists, round it and its holes (MSG-8), to their faces.
+ *
+ * Where two of the walls meet, their axes cross within both walls (give or take half the other
+ * wall's thickness and `wallContact`): those corners bound the room, so a long outside wall the
+ * room shares with others does not stretch its box. With fewer corners than make a box, it is
+ * the box round the whole walls. Null when the room lists no wall the plan holds.
+ */
+function boxRoundWalls(room: FloorPlan['rooms'][number], index: ReturnType<typeof indexPlan>): Bounds | null {
+  const walls: { axis: WallAxis; half: number }[] = []
+  for (const id of new Set([...room.boundary, ...(room.holes ?? []).flat()])) {
+    const wall = index.wallsById.get(id)
+    if (!wall || ![...wall.start, ...wall.end].every(Number.isFinite)) continue
+    if (wall.start[0] === wall.end[0] && wall.start[1] === wall.end[1]) continue
+    walls.push({ axis: wallAxis(wall), half: Number.isFinite(wall.thickness) && wall.thickness > 0 ? wall.thickness / 2 : 0 })
+  }
+  if (walls.length === 0) return null
+  const half = Math.max(...walls.map((wall) => wall.half))
+  const widen = (points: readonly Vec2[]): Bounds =>
+    computeBounds(points.flatMap((p) => [{ x: p.x - half, y: p.y - half }, { x: p.x + half, y: p.y + half }]))
+
+  const contact = tolerance('wallContact')
+  const within = (p: Vec2, axis: WallAxis, slack: number): boolean => {
+    const along = dot(sub(p, axis.start), axis.dir)
+    return along >= -slack && along <= axis.length + slack
+  }
+  const corners: Vec2[] = []
+  walls.forEach((a, i) => {
+    for (const b of walls.slice(i + 1)) {
+      const p = intersectLines({ point: a.axis.start, dir: a.axis.dir }, { point: b.axis.start, dir: b.axis.dir })
+      if (p && within(p, a.axis, b.half + contact) && within(p, b.axis, a.half + contact)) corners.push(p)
+    }
+  })
+  const box = computeBounds(corners)
+  if (corners.length >= 3 && box.width > 0 && box.height > 0) return widen(corners)
+  return widen(walls.flatMap((wall) => [wall.axis.start, wall.axis.end]))
 }
 
 /** Envelope with a margin, in meters, so the drawing is not flush to the edge. */

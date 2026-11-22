@@ -42,9 +42,11 @@ import {
 } from '../canvas2d/labelPlacement'
 import { FRAME_MARGIN, pathOf, roomPathOf } from '../canvas2d/viewport'
 import type { Look, PlanLook } from './look'
-import { LINE_PX, TEXT_PX, lengthText, lineMetres, toLook } from './look'
+import { LINE_PX, TEXT_PX, UNDRAWN_TINT, lengthText, lineMetres, toLook } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
+import type { NumberedFault } from './faults'
+import { faultMarks, undrawnRoomText } from './faults'
 
 /** The door-sweep warning mark's size on screen, whatever the zoom. */
 export const WARNING_RADIUS_PX = 5
@@ -58,6 +60,7 @@ export const UNDECIDED_TEXT_PX = 10
 /** The presentation attributes this module writes. Nothing else in the markup uses them. */
 export const PAINT_ATTRIBUTES = [
   'fill',
+  'fill-opacity',
   'stroke',
   'stroke-width',
   'stroke-dasharray',
@@ -148,6 +151,11 @@ export interface SceneInput {
   readonly paperScale?: number
   /** How the room tags read: capitals, numbers, how the area is rounded. */
   readonly labels?: LabelStyle
+  /**
+   * The result record's lines on this floor, numbered in the whole record (MSG-8): each gets a
+   * numbered mark on its part, with its words beside it. None by default.
+   */
+  readonly faults?: readonly NumberedFault[]
   readonly live?: Partial<SceneLive>
 }
 
@@ -247,7 +255,15 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
       'stroke-width': LINE_PX.warningHalo,
       'stroke-linejoin': 'round'
     } as Attrs,
-    pulse: { fill: look.wallExterior } as Attrs
+    pulse: { fill: look.wallExterior } as Attrs,
+    undrawn: {
+      fill: look.warning,
+      'fill-opacity': UNDRAWN_TINT,
+      stroke: look.warning,
+      // A mark of what went wrong, not a line of the drawing: in screen pixels in every look.
+      'stroke-width': lengthText(LINE_PX.undrawn * mpp),
+      'stroke-dasharray': LINE_PX.undrawnDash.map((value) => lengthText(value * mpp)).join(' ')
+    } as Attrs
   }
 }
 
@@ -752,6 +768,26 @@ export function planScene(input: SceneInput): SvgNode[] {
     )
   }
 
+  // A room that could not be drawn (MSG-8): the box round its walls, tinted and dashed, over the
+  // walls so its edge shows. Drawing, not a target.
+  drawing.undrawn.forEach((room, index) => {
+    const { min, max } = room.box
+    out.push(
+      el(
+        'path',
+        {
+          'data-part': 'undrawn-room',
+          'data-room': room.id,
+          'pointer-events': 'none',
+          d: `M${min.x},${-min.y}L${max.x},${-min.y}L${max.x},${-max.y}L${min.x},${-max.y}Z`,
+          ...paint.undrawn
+        },
+        [],
+        `undrawn:${room.id}:${index}`
+      )
+    )
+  })
+
   // Each label goes to a spot in its room clear of door swings, walls and the other labels,
   // or out of the room with a leader. Measured from the text actually drawn, so a wider
   // "before → after" area still gets the room it needs.
@@ -784,6 +820,10 @@ export function planScene(input: SceneInput): SvgNode[] {
     dimensionBlocks.push(lineBox({ x: dim.from.x + shift.x, y: dim.from.y + shift.y }, { x: dim.to.x + shift.x, y: dim.to.y + shift.y }, mpp))
     if (dim.kind !== 'room') dimensionBlocks.push(dimensionTextBox(dim.labelAt, dim, mpp))
   }
+  // A label moved out of its room keeps off the box of a room that could not be drawn, when it can.
+  for (const room of drawing.undrawn) {
+    dimensionBlocks.push({ minX: room.box.min.x, maxX: room.box.max.x, minY: room.box.min.y, maxY: room.box.max.y })
+  }
   // A label moved out of its room stays where a framed view of the plan, or a picture of it,
   // always shows: the drawing and its dimensions, and the margin `fitTo` leaves round them.
   const framed = boundsWithDimensions(drawing, dimensions)
@@ -797,6 +837,15 @@ export function planScene(input: SceneInput): SvgNode[] {
     { minX: framed.min.x - padX, maxX: framed.max.x + padX, minY: framed.min.y - padY, maxY: framed.max.y + padY }
   )
   const labelBlocks = labels.flatMap((label) => (label ? [label.box] : []))
+  const faults = input.faults ?? []
+  const faultLayout = {
+    drawing,
+    labelBoxes: new Map(labels.flatMap((label) => (label ? [[label.id, label.box] as const] : []))),
+    blocks: labelBlocks,
+    within: { minX: framed.min.x - padX, maxX: framed.max.x + padX, minY: framed.min.y - padY, maxY: framed.max.y + padY },
+    metersPerPixel: mpp,
+    look: look.colors
+  }
 
   for (const dim of dimensions) {
     const shown = live.dimensionShown(dim)
@@ -834,6 +883,9 @@ export function planScene(input: SceneInput): SvgNode[] {
     )
   })
 
+  // The name of each room that could not be drawn, and why, in the middle of its box.
+  out.push(...undrawnRoomText(faultLayout, faults))
+
   // After the current labels, so the plan's own fills never cover it. A ghost, so no paint.
   for (const room of live.removedRooms) {
     out.push(
@@ -866,9 +918,11 @@ export function planScene(input: SceneInput): SvgNode[] {
     }
   }
 
+  // Laid out before the warning dots, which a numbered mark on the same door replaces.
+  const marks = faults.length === 0 ? null : faultMarks(faultLayout, faults)
   for (const opening of drawing.openings) {
     const message = doorWarnings.get(opening.id)
-    if (message === undefined) continue
+    if (message === undefined || marks?.openings.has(opening.id)) continue
     const at = { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }
     // Sized in screen pixels like the labels.
     const children: SvgNode[] = [el('circle', { 'data-part': 'door-warning-dot', r: WARNING_RADIUS_PX, ...paint.warningDot })]
@@ -892,6 +946,9 @@ export function planScene(input: SceneInput): SvgNode[] {
       )
     )
   }
+
+  // Over everything else on the plan: what went wrong, numbered as in the result record.
+  if (marks) out.push(...marks.nodes)
 
   if (live.pulse) {
     // Presentation only: not part of the plan, its bounds or selection.

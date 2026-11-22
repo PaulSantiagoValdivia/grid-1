@@ -12,6 +12,10 @@
  *   measured along the wall axis.
  *   Invariant: offset >= 0 && offset + width <= wall_length.
  *
+ *   Reopened by WRT-3 (lab WR-4): an opening MAY state an `anchor`, what Grid's edits keep its
+ *   place from when its wall changes: an end of the wall, or a named room's inside face.
+ *   `offset` is still where it is drawn from. Optional, never defaulted (version 1).
+ *
  * C3 · Room boundary
  *   Area is measured from INNER FACES (usable area — what the user walks on).
  *   Wall IDs in `boundary` must be ordered counter-clockwise (top view).
@@ -187,6 +191,16 @@ export const ROOM_USES = [
 
 export const RoomUseSchema = z.enum(ROOM_USES)
 
+/**
+ * A use as Grid reads it (MSG-4): whatever its capitals, so `Bedroom` is `bedroom`. Anything
+ * else is left as it is, for the schema to read as unstated and `readingNotes` to name.
+ */
+export function readUse(value: unknown): unknown {
+  if (typeof value !== 'string') return value
+  const lower = value.toLowerCase()
+  return (ROOM_USES as readonly string[]).includes(lower) ? lower : value
+}
+
 /** A list of wall ids round a room or one of its holes, at most `BOUNDARY_MAX` long (MSG-9). */
 const wallList = () =>
   z.array(text('id')).superRefine((list, ctx) => {
@@ -213,8 +227,9 @@ export const RoomSchema = z.object({
   floor: text('id').pipe(z.string().min(1)).optional(),
   // Unstated means "not said", never a default, so an old plan gains no key. An
   // unknown value is read as unstated instead of rejecting the whole plan: `use`
-  // only feeds advisory checks, and a parse error means no preview at all.
-  use: RoomUseSchema.optional().catch(undefined),
+  // only feeds advisory checks, and a parse error means no preview at all. MSG-4: a use is
+  // read whatever its capitals, and one Grid does not know is named (`readingNotes`).
+  use: z.preprocess(readUse, RoomUseSchema).optional().catch(undefined),
   // ARE-5: the room sits inside another room on its floor, as a wardrobe pod, a lift shaft or
   // an en-suite drawn inside a bedroom. The room it sits in is found from the outlines, never
   // named here: the smallest room on the same floor that holds it. Its floor, with its own
@@ -235,6 +250,32 @@ export const RoomSchema = z.object({
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
 
+/** The four sides of the drawing: north is +Y (C4). */
+export const COMPASS_SIDES = ['north', 'east', 'south', 'west'] as const
+
+/** What an opening's anchor measures from: an end of its wall, or a side of the drawing. */
+export const ANCHOR_FROM = ['start', 'end', ...COMPASS_SIDES] as const
+
+/**
+ * WRT-3 (C2, reopened; lab WR-4): what an opening's place is kept from when Grid's edits change
+ * its wall. `offset` stays the one place the opening is drawn from (C2); the anchor only tells
+ * an edit what to keep. `from` is an end of the wall (`start`, `end`, or the end toward a side
+ * of the drawing, so the wall's direction need not be known) or, with `room`, that room's
+ * inside face on that side: the opening keeps the distance from it to its own nearer edge, as
+ * rooms text writes `0.4 from west of hall`. Unstated, an edit keeps the opening where it is in
+ * the building. Optional and never defaulted (version 1).
+ */
+export const OpeningAnchorSchema = z
+  .object({
+    from: z.enum(ANCHOR_FROM),
+    room: text('id').pipe(z.string().min(1)).optional(),
+  })
+  .superRefine((anchor, ctx) => {
+    if (anchor.room !== undefined && (anchor.from === 'start' || anchor.from === 'end')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['from'], message: 'measures from a side of the room it names: north, east, south or west, not an end of the wall' })
+    }
+  })
+
 export const OpeningSchema = z.object({
   id: text('id'),
   wall: text('id'),
@@ -253,6 +294,8 @@ export const OpeningSchema = z.object({
   // geometry/wall.ts `wallFaces`.
   hinge: z.enum(['start', 'end']).optional(),
   swing: z.enum(['left', 'right']).optional(),
+  // WRT-3: what its place is kept from when an edit changes its wall (OpeningAnchorSchema).
+  anchor: OpeningAnchorSchema.optional(),
 })
 
 export const ReferenceImageSchema = z.object({
@@ -281,7 +324,7 @@ export const STAIR_RUN_MAX = 64
  * A straight stair said by its two ends, `start` and `end`, as the lab's agents first wrote one
  * (lab H-1, h01a), is read as the walking line `[start, end]`. Only when it states no `run`.
  */
-function withRunFromEnds(raw: unknown): unknown {
+export function withRunFromEnds(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
   const stair = raw as Record<string, unknown>
   if (stair.run !== undefined || stair.start === undefined || stair.end === undefined) return raw
@@ -427,6 +470,7 @@ export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
 export type Stair = z.infer<typeof StairSchema>
+export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
 export type FloorPlan = z.infer<typeof FloorPlanSchema>

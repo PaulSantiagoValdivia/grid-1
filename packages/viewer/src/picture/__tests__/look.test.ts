@@ -2,7 +2,7 @@ import { readFileSync } from 'fs'
 import { resolve } from 'path'
 import { describe, expect, it } from 'vitest'
 import type { PlanLook } from '../look'
-import { DARK_LOOK, LIGHT_LOOK, LINE_PX, TEXT_PX } from '../look'
+import { DARK_LOOK, LIGHT_LOOK, LINE_PX, TEXT_PX, UNDRAWN_TINT } from '../look'
 
 /**
  * The picture's look and the app's stylesheets say the same thing twice: once as final
@@ -78,6 +78,10 @@ describe('the picture look', () => {
     expect(at('dimension-line', "[data-kind='room'] ").get('stroke-dasharray')).toBe(LINE_PX.roomDimensionDash.join(' '))
     expect(number(at('door-warning-dot').get('stroke-width'))).toBe(LINE_PX.warningRing)
     expect(number(at('door-warning-text').get('stroke-width'))).toBe(LINE_PX.warningHalo)
+    expect(number(at('undrawn-room').get('stroke-width'))).toBe(LINE_PX.undrawn)
+    expect(at('undrawn-room').get('stroke-dasharray')).toBe(LINE_PX.undrawnDash.join(' '))
+    expect(number(at('undrawn-room').get('fill-opacity'))).toBe(UNDRAWN_TINT)
+    expect(number(at('fault-mark-dot').get('stroke-width'))).toBe(LINE_PX.warningRing)
   })
 
   it('has the font sizes of plan.css', () => {
@@ -87,10 +91,14 @@ describe('the picture look', () => {
     expect(size('dimension-text')).toBe(TEXT_PX.dimension)
     expect(size('dimension-text', "[data-kind='room'] ")).toBe(TEXT_PX.roomDimension)
     expect(size('door-warning-text')).toBe(TEXT_PX.warning)
+    expect(size('undrawn-name')).toBe(TEXT_PX.roomName)
+    expect(size('undrawn-reason')).toBe(TEXT_PX.warning)
+    expect(size('fault-mark-number')).toBe(TEXT_PX.faultNumber)
+    expect(size('fault-mark-text')).toBe(TEXT_PX.warning)
   })
 
   it('draws every line in plan.css at a fixed screen width, which the picture turns into metres', () => {
-    for (const part of ['virtual', 'opening', 'jamb', 'door-leaf', 'door-arc', 'dimension-line', 'extension', 'label-leader']) {
+    for (const part of ['virtual', 'opening', 'jamb', 'door-leaf', 'door-arc', 'dimension-line', 'extension', 'label-leader', 'undrawn-room']) {
       expect(rule(`.canvas [data-part='${part}']`).get('vector-effect'), part).toBe('non-scaling-stroke')
     }
   })

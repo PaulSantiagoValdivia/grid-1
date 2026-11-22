@@ -290,3 +290,13 @@ describe('the stair drawn', () => {
     expect(toIfc(twoFloorHouse())).not.toContain('IFCSTAIR')
   })
 })
+
+describe('the stair as the plan file says it (MSG-4)', () => {
+  it('reads a straight stair\'s start and end as known fields, and only its type as unknown', async () => {
+    const { readingNotes } = await import('../../types/reading')
+    const plan = { ...stairHouse(), stairs: [{ id: 's1', from: 'ground', to: 'first', type: 'straight', start: [0.6, 0.6], end: [0.6, 3.4], width: 0.9 }] }
+    expect(readingNotes(plan).filter((n) => n.kind === 'unknown-field').map((n) => [n.kind === 'unknown-field' ? n.field : null, n.kind === 'unknown-field' ? n.part : null])).toEqual([
+      ['type', { list: 'stairs', index: 0 }]
+    ])
+  })
+})
