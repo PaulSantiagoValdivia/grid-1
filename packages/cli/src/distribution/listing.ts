@@ -135,6 +135,8 @@ function skill(): string {
     '3. Show the plan with `grid_view` when the person wants to see it.',
     '4. Run `grid_check` after any change, and tell the person what it finds. When they set a note',
     '   aside, `grid_mark_seen` marks it seen with their reason and the name they give; it stays listed.',
+    '   With `firm-standards.json` beside the plan, the firm\'s own standards are set against it too,',
+    '   under their own heading, apart from the code figures (the firm-standards skill).',
     '5. Before the first room, write the brief from the person\'s own words with `grid_write_brief`:',
     '   each wish with its level and whether they gave it or you assumed it. Every change then',
     '   says which lines are met and which missed; a line met never means a plan is allowed.',
@@ -160,9 +162,94 @@ function skill(): string {
   ].join('\n')
 }
 
+/** COD-8: said in each of the skills a firm can own: they are plain text, theirs to copy and change. */
+const OWN_IT = 'This skill is plain text. A firm can copy it into its own repository, keep it in git and change it to its own ways of working.'
+
+/** COD-8: a skill as the plugin carries it: its frontmatter, then its lines, then the label rule. */
+function ownSkill(name: string, description: string, title: string, body: readonly string[]): string {
+  return ['---', `name: ${name}`, `description: ${description}`, '---', '', `# ${title}`, '', ...body, '', OWN_IT, '', `Keep the label every report carries, "${GENERAL_GUIDANCE_LABEL}".`, RETELLING_RULE, ''].join('\n')
+}
+
+/**
+ * COD-8: the skills beside Grid's own, each for one piece of a firm's work, in Grid's words and
+ * with Grid's tools by name. None says what a plan is allowed to be.
+ */
+function firmSkills(): Record<string, string> {
+  return {
+    'skills/firm-standards/SKILL.md': ownSkill(
+      'firm-standards',
+      "Use when a firm or a person wants their own standards, such as corridors at least 1.5 m or offices at least 9 m², set against a Grid plan, or asks what the firm's standards file holds. Not for what a building code asks: grid_check's code figures are apart from these.",
+      "A firm's own standards",
+      [
+        "A firm's own standards live in `firm-standards.json`, in the plan's folder, beside the plan. Every",
+        "plan in that folder is set against them. They are the firm's own figures, not from any code or",
+        'standard, and not tied to a place: they hold wherever the file is.',
+        '',
+        '1. Write the file with the firm, from their words: `version` "1" and a list of `standards`, each',
+        '   with a `measure`, a least `value` and its `unit`, and the firm\'s own `name` and `note` if',
+        '   they give them. The measures are `corridor_width`, `door_clear_width`, `turning_circle`,',
+        '   `fixture_clearance` (with `kinds`), `room_area` (m²) and `room_width`; a room measure can take',
+        '   `uses`. A standard cites no document and has no status: it is the firm\'s.',
+        '2. Run `grid_check`. Each part short of a figure is a note with a `firm/` code, listed under the',
+        "   heading \"The firm's own standards\", apart from the code figures. `full=true` lists every",
+        '   standard, the figure used here and how many parts it looked at.',
+        '3. A file Grid cannot read is one note that says where it is wrong. Correct it and check again.',
+        '4. Tell the person what the firm\'s notes found, as the firm\'s own figures. A part with no',
+        '   note only means it is not short of the firm\'s figure, nothing about any rule.',
+      ]
+    ),
+    'skills/room-programme/SKILL.md': ownSkill(
+      'room-programme',
+      'Use when the person gives a room programme, a list of rooms with their sizes, counts and neighbours, and wants a Grid plan drawn from it or held to it. Not for changing one room of a plan already drawn.',
+      'From a room programme to a plan',
+      [
+        '1. Write the programme as the brief with `grid_write_brief`, before the first room: each room',
+        '   with its area or inside size, the counts by use, the rooms that must or must not touch, each',
+        '   with its level and the person\'s own words, or marked assumed when you assumed it.',
+        '2. Write the plan rooms first with `grid_write_rooms`: the rooms with their sizes and',
+        '   neighbours. Every change then says which lines of the brief are met and which missed.',
+        '3. Read the sizes back with `grid_areas` and `grid_schedule` of=rooms, and run `grid_check`.',
+        '4. Show the person the plan with `grid_view`, the lines missed first, and ask before changing',
+        '   a size they gave. A line met says the drawing holds what they asked, nothing about any rule.',
+      ]
+    ),
+    'skills/option-table/SKILL.md': ownSkill(
+      'option-table',
+      'Use when the person wants two or more layouts of a Grid plan compared side by side, as a table of areas, rooms and notes. Not for one plan on its own.',
+      'An option table',
+      [
+        '1. Keep each option in its own plan file in the same folder, so the same brief and the same',
+        '   firm\'s standards are set against each.',
+        '2. Run `grid_compare` on the options for their net, gross internal and gross external areas,',
+        '   their circulation and area by use, and what differs by room, wall and opening.',
+        '3. Run `grid_check` on each option, and count its notes, the firm\'s own apart from the rest.',
+        '4. Lay the table out with one row per option and the same columns for each: the areas, the',
+        '   rooms, the lines of the brief missed and the notes. Say which figures came from which tool.',
+        '5. The table compares the options; it never says one is allowed. The choice is the person\'s.',
+      ]
+    ),
+    'skills/dimensioning/SKILL.md': ownSkill(
+      'dimensioning',
+      'Use when the person wants a Grid plan dimensioned: the sizes along its walls, the rooms\' inside sizes and the clear widths, on a drawing or a sheet. Not for changing a size: that is an edit.',
+      'Dimensioning a plan',
+      [
+        '1. Measure before you draw: `grid_measure` gives a room\'s sizes and widest circle and the',
+        '   clear distance between walls, doors and windows, from their faces; `grid_areas` gives each',
+        '   room\'s inside size and net area.',
+        '2. Show the sizes with `grid_view`, one floor at a time: the plan is drawn with its sizes',
+        '   unless `dimensions` is false.',
+        '3. For a drawing to hand over, `grid_sheet` writes an A3 PDF of the plan into `exports/`.',
+        '4. Give every size in metres, as Grid measures it, and say what it is measured to: a wall\'s',
+        '   face, its middle, or the hole in the wall. A size is a size, never a verdict on the plan.',
+      ]
+    ),
+  }
+}
+
 /**
  * The plugin folder, path by path: a manifest each for Claude Code (`.claude-plugin/`) and for
- * Codex (the portable `plugin.json`), the server for each (`.mcp.json`, `mcp.json`), and the skill.
+ * Codex (the portable `plugin.json`), the server for each (`.mcp.json`, `mcp.json`), Grid's skill,
+ * and the skills a firm can copy and own (COD-8).
  */
 export function pluginFiles(version: string): Record<string, string> {
   const about = { name: SERVER_KEY, version, description: DESCRIPTION, author: AUTHOR, homepage: REPOSITORY, repository: REPOSITORY, license: LICENSE, keywords: KEYWORDS }
@@ -175,6 +262,8 @@ export function pluginFiles(version: string): Record<string, string> {
       mcpServers: { [SERVER_KEY]: { type: 'stdio', command: SERVER_COMMAND.command, args: [...SERVER_COMMAND.args] } },
     }),
     'skills/grid/SKILL.md': skill(),
+    // COD-8: the skills a firm can own, beside Grid's own.
+    ...firmSkills(),
   }
 }
 
