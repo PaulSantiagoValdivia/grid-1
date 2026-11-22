@@ -187,4 +187,19 @@ Each of these is the reversible choice I took overnight.
 
 ## Checks run
 
-(Filled in below after the merge of main.)
+`git merge --no-edit main`: already up to date (main is still at 6fce2ae, the branch point).
+Then, on the branch at 4a34ea2:
+
+- `npm run build`: passes.
+- `npm run typecheck`: passes.
+- `npm run lint`: passes.
+- `npm run scoreboard`: "Same as the stored figures" (288 s). No count moved.
+- The full suite, `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2
+  --minWorkers=1`: 243 files, 4,747 tests passed, 3 skipped, in 1,094 s.
+
+Before that, a run of `packages/cli`, `packages/rules`, `docs` and the two scoreboard scans
+failed two tests: everyPath's "no other free text argument is described as a file" (the `by`
+argument said "marks file"; reworded in 4a34ea2) and `grid.e2e`'s speed test (618 ms against
+500, with the machine's load average at about 230). The speed test also failed once run alone
+under that load; `grid check` on the flat took 0.39 to 0.52 s by hand, and the test passed in
+the full suite above. MSG-10 adds one small file read to a check.
