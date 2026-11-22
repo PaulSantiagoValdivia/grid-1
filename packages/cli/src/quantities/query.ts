@@ -83,6 +83,8 @@ export interface Part {
   readonly id: string
   readonly floor: string
   readonly facts: Readonly<Record<string, FactValue>>
+  /** CNT-8, only on a zone: the room it is part of. It has no number of its own and is counted in no total. */
+  readonly zoneOf?: string
 }
 
 /** Why a question was refused, in Grid's words, never repeating what was sent. */
@@ -112,7 +114,11 @@ export function askPlan(survey: Survey): Asked {
   const parts: Part[] = []
   const byId = <T extends { id: string }>(list: readonly T[]): T[] => [...list].sort((a, b) => compareIds(a.id, b.id))
   for (const floor of planFloors(plan)) parts.push({ kind: 'floor', id: floor.id, floor: floor.id, facts: floor.properties ?? {} })
-  for (const room of byId(plan.rooms)) parts.push({ kind: 'room', id: room.id, floor: floorOf(room), facts: room.properties ?? {} })
+  const zoneOf = new Map(survey.rooms.flatMap((room) => (room.facts.zoneOf === undefined ? [] : [[room.facts.id, room.facts.zoneOf] as const])))
+  for (const room of byId(plan.rooms)) {
+    const of = zoneOf.get(room.id)
+    parts.push({ kind: 'room', id: room.id, floor: floorOf(room), facts: room.properties ?? {}, ...(of === undefined ? {} : { zoneOf: of }) })
+  }
   for (const wall of byId(plan.walls)) parts.push({ kind: 'wall', id: wall.id, floor: floorOf(wall), facts: wall.properties ?? {} })
   for (const opening of byId(plan.openings)) parts.push({ kind: openingKind(opening.type), id: opening.id, floor: wallFloor.get(opening.wall) ?? 'ground', facts: opening.properties ?? {} })
 
@@ -169,7 +175,8 @@ export function askPlan(survey: Survey): Asked {
     if (part.kind === 'room') {
       const room = rooms.get(part.id)!
       if (name === 'name') return room.name
-      if (name === 'number') return room.number ?? null
+      // CNT-8: a zone is numbered by its room; a number it states is kept, not read.
+      if (name === 'number') return part.zoneOf === undefined ? room.number ?? null : null
       if (name === 'use') return room.use ?? null
       if (name === 'area') return areaOf(part)
       if (name === 'height') return roomHeight(storey(part.floor), part.id).value

@@ -46,6 +46,7 @@ import { planEnvelope, roomCeiling } from '../envelope'
 import { multiArea, piecesAsRings, ringOf } from '../polygons'
 import { tolerance } from '../tolerances'
 import { tryRoomShape } from '../room'
+import { roomZones } from '../zones'
 import { roomFloorOffset } from '../steps'
 import { wallExposure } from '../exposure'
 import { brokenOnFloor, validatePlan } from '../validate'
@@ -1457,7 +1458,8 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
 
     // LVL-7: a room set above its storey stands on a slab from the storey's floor up to its own.
     for (const room of index.plan.rooms) {
-      if (broken.has(room.id)) continue
+      // A zone's floor is its room's slab (CNT-8).
+      if (broken.has(room.id) || roomZones(index).zoneOf.has(room.id)) continue
       const offset = roomFloorOffset(room)
       if (!(offset > tolerance('sameFloorLevel'))) continue
       try {
@@ -1526,7 +1528,7 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
       // A roof that cannot be built is left out.
     }
 
-    // The rooms' ceilings, each covering its space.
+    // The rooms' ceilings, each covering its space. A zone has none of its own (CNT-8, `roomCeiling`).
     for (const room of index.plan.rooms) {
       if (broken.has(room.id) || room.ceiling === undefined) continue
       try {
@@ -1711,7 +1713,8 @@ function writeStoreyContents(building: Context, storey: Storey): void {
 
   const spaces: number[] = []
   for (const room of index.plan.rooms) {
-    if (broken.has(room.id)) continue
+    // A zone (CNT-8) is no space of its own: its floor is in its room's space, counted once.
+    if (broken.has(room.id) || roomZones(index).zoneOf.has(room.id)) continue
     try {
       const space = writeSpace(c, storey, room)
       if (space !== null) {

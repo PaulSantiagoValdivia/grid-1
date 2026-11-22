@@ -91,6 +91,21 @@ export interface RoomScheduleRow {
   readonly height: number | null
   /** CNT-9: the room's facts of the person's own, by name, as the plan gives them. */
   readonly properties: Facts
+  /**
+   * CNT-8, only on a room with zones: each zone, measured, by id. A zone is no row of
+   * its own: its floor is in its room's area, so a column of areas adds up to the total.
+   */
+  readonly zones?: readonly RoomScheduleZone[]
+}
+
+/** A zone of a room in the room schedule (CNT-8). */
+export interface RoomScheduleZone {
+  readonly id: string
+  readonly name: string
+  readonly use: string | null
+  readonly area: number | null
+  /** CNT-9: the zone's own facts, as the plan gives them. It has no number: its room has. */
+  readonly properties: Facts
 }
 
 /** A total of the room schedule: one floor's, or all floors'. */
@@ -175,11 +190,17 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
     const figures = areas.floors.find((f) => f.floor === floor.id)
     if (figures === undefined) continue
     const storey = planForFloor(survey.plan, floor.id)
-    const byId = new Map(figures.rooms.map((room) => [room.id, room] as const))
+    const places = figures.rooms.filter((room) => room.zoneOf === undefined)
+    const byId = new Map(places.map((room) => [room.id, room] as const))
     const own = new Map(storey.rooms.map((r) => [r.id, r] as const))
+    // HND-2: the library's numbers, which number no zone (CNT-8), so the IFC gives the same.
     for (const { number, stated, id } of numbered.filter((n) => n.floor === floor.id)) {
       const room = byId.get(id)
       if (room === undefined) continue
+      const zones = figures.rooms
+        .filter((zone) => zone.zoneOf === room.id)
+        .sort((a, z) => compareIds(a.id, z.id))
+        .map((zone) => ({ id: zone.id, name: zone.name, use: zone.use, area: zone.net, properties: own.get(zone.id)?.properties ?? {} }))
       rows.push({
         number,
         roomNumber: stated,
@@ -192,9 +213,10 @@ export function roomSchedule(survey: Survey, options: { floors?: readonly string
         state: room.state,
         height: roomHeight(storey, room.id).value,
         properties: own.get(id)?.properties ?? {},
+        ...(zones.length === 0 ? {} : { zones }),
       })
     }
-    floors.push({ floor: floor.id, floorName: floor.name, rooms: figures.rooms.length, area: figures.net, state: figures.states.net })
+    floors.push({ floor: floor.id, floorName: floor.name, rooms: places.length, area: figures.net, state: figures.states.net })
   }
   return {
     rows,

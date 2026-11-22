@@ -18,7 +18,8 @@
  *     apart into the spaces.
  *  4. Each room's outline is set against them. Enclosed floor that no room covers is unclaimed.
  *     A room that covers wall, or ground outside the walls, or parts of two spaces, does not
- *     match the space its walls enclose.
+ *     match the space its walls enclose. A zone (CNT-8, `zones.ts`) is part of its room: it is
+ *     set against no space, and a dividing line only zones list is left out of step 2.
  *
  * The joining is done by `polygon-clipping` (MIT). Everything else here is Grid's own. After the
  * one join, every comparison is local: a room is cut only against the spaces and walls whose
@@ -33,6 +34,7 @@ import type { FloorPlan, PlanIndex, Room, Wall } from './plan'
 import { indexPlan, roomWallIds } from './plan'
 import { quoted } from '../types/planText'
 import { roomNesting, tryRoomPolygon } from './room'
+import { roomZones } from './zones'
 import type { Vec2 } from './vec2'
 import { signedArea } from './vec2'
 import { TOLERANCES, tolerance } from './tolerances'
@@ -507,14 +509,16 @@ export function floorOutline(plan: FloorPlan, floor: string, options: SpacesOpti
 export function floorSpaces(plan: FloorPlan, floor: string, options: SpacesOptions = {}): FloorSpaces | FloorSpacesUnknown {
   const index = options.index ?? indexPlan(plan)
   const broken = options.broken ?? new Set<string>()
-  const walls = floorWalls(plan, floor, broken)
+  // CNT-8: a zone is set against no space, and a line that only zones list divides none.
+  const zones = roomZones(index)
+  const walls = floorWalls(plan, floor, broken).filter((wall) => !zones.lines.has(wall.id))
   const far = farReason(walls)
   if (far) return { floor, reason: far }
 
   const nesting = roomNesting(index)
   const rooms: DrawnRoom[] = []
   for (const room of plan.rooms) {
-    if (floorOf(room) !== floor || broken.has(room.id)) continue
+    if (floorOf(room) !== floor || broken.has(room.id) || zones.zoneOf.has(room.id)) continue
     const outline = tryRoomPolygon(room, index)
     if (!outline || outline.length < 3) continue
     if (outline.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y) || Math.abs(p.x) > FAR() || Math.abs(p.y) > FAR())) {

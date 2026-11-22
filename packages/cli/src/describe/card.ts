@@ -45,6 +45,13 @@ function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`
 }
 
+/** "3 rooms", or "2 rooms and 3 zones" on a floor with zones (CNT-8). */
+function roomCount(floor: FloorFacts): string {
+  const zones = floor.rooms.filter((room) => room.zoneOf !== undefined).length
+  const rooms = plural(floor.rooms.length - zones, 'room')
+  return zones === 0 ? rooms : `${rooms} and ${plural(zones, 'zone')}`
+}
+
 /** `a, b and c`. */
 function listed(items: readonly string[]): string {
   if (items.length <= 1) return items.join('')
@@ -368,7 +375,9 @@ function personRoom(floor: FloorFacts, room: RoomFacts, names: PersonNames): str
   const { shape } = room
   const size = shape.rectangle ? `${m(shape.across)} × ${m(shape.up)}` : `not a rectangle, ${m(shape.across)} × ${m(shape.up)} at its widest`
   const next = nextOnly(floor, room)
-  const lines = [`${name}: ${size}, ${m2(shape.area)} m², at ${m(shape.at.x)}, ${m(shape.at.y)}.${next.length > 0 ? ` Next to ${listed(next.map((id) => names.room(id)))}.` : ''}`]
+  // CNT-8: a zone is named as part of its room, and its floor is in its room's.
+  const of = room.zoneOf === undefined ? '' : ` (a zone of ${names.room(room.zoneOf)})`
+  const lines = [`${name}${of}: ${size}, ${m2(shape.area)} m², at ${m(shape.at.x)}, ${m(shape.at.y)}.${next.length > 0 ? ` Next to ${listed(next.map((id) => names.room(id)))}.` : ''}`]
   const { openings, open } = roomOpenings(floor, room.id)
   for (const side of open) lines.push(`  Open to ${names.room(side.other)}, with no wall between.`)
   for (const { opening, here, there } of openings) {
@@ -385,7 +394,7 @@ function agentRoomHead(room: RoomFacts): string {
   const use = room.use ?? '-'
   if (room.shape === null) return `${room.id} ${JSON.stringify(room.name)} ${use} LEFT OUT (grid check says why)`
   const { shape } = room
-  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}`
+  return `${room.id} ${JSON.stringify(room.name)} ${use} ${shape.rectangle ? '' : '~'}${m(shape.across)}x${m(shape.up)} @${m(shape.at.x)},${m(shape.at.y)} ${m(shape.area)}${room.zoneOf === undefined ? '' : ` zone-of:${room.zoneOf}`}`
 }
 
 function agentRoom(floor: FloorFacts, room: RoomFacts): string {
@@ -468,12 +477,12 @@ const AGENT_CLOSE = 'CHECKS none here: grid check.'
 
 function personFloorHead(floor: FloorFacts, names: PersonNames): string {
   const left = floor.leftOut.length > 0 ? ` ${plural(floor.leftOut.length, 'part')} can't be drawn and ${floor.leftOut.length === 1 ? 'is' : 'are'} left out.` : ''
-  return `${names.floor(floor.id)}: ${plural(floor.rooms.length, 'room')}, ${m2(floor.area)} m².${left}`
+  return `${names.floor(floor.id)}: ${roomCount(floor)}, ${m2(floor.area)} m².${left}`
 }
 
 function agentFloorHead(floor: FloorFacts): string {
   const left = floor.leftOut.length > 0 ? `; left out ${floor.leftOut.join(' ')}` : ''
-  return `FLOOR ${floor.id} ${floor.name === null ? '(no name)' : JSON.stringify(floor.name)} level ${floor.level}: ${plural(floor.rooms.length, 'room')}, ${m(floor.area)} m2${left}`
+  return `FLOOR ${floor.id} ${floor.name === null ? '(no name)' : JSON.stringify(floor.name)} level ${floor.level}: ${roomCount(floor)}, ${m(floor.area)} m2${left}`
 }
 
 function personCard(facts: PlanFacts, withWalls: boolean): string[] {

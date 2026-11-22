@@ -204,7 +204,7 @@ describe('the tools on a two-bedroom flat', () => {
     grid_change_opening: { opening: 'door-bath', width: 0.8, out: 'changed.json' },
     grid_move_room_side: { room: 'bed2', side: 'north', by: 0.5, out: 'moved.json' },
     grid_mirror: { how: 'left-right', out: 'mirrored.json' },
-    grid_merge_rooms: { room: 'living', with: 'kitchen', out: 'merged.json' },
+    grid_merge_rooms: { room: 'living', with: 'kitchen', zones: true, out: 'merged.json' },
     grid_split_room: { room: 'bed2', side: 'east', size: 1.4, new_room: 'bath2', new_name: 'Bathroom 2', new_use: 'bathroom', out: 'split.json' },
     grid_add_room: { room: 'extension', name: 'Garden room', use: 'living', against: 'living', side: 'south', width: 3, depth: 3, in_the_way: 'remove', opening_width: 2, out: 'extended.json' },
     grid_stretch: { side: 'east', by: 0.3, out: 'wider.json' },

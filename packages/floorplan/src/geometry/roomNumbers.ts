@@ -5,14 +5,17 @@
  * number, then the others by id (`compareIds`, QAR-5), counted 1, 2, 3… across the floors. A
  * room is shown by the number it states, else by Grid's count (`shownRoomNumber`). The room
  * schedule (`grid_schedule`) and the IFC file (HND-2) both read them here, so they give the same
- * numbers.
+ * numbers. A zone of a room (CNT-8) has no number, counted or stated: it is no row of the
+ * schedule and no space of the IFC, so a room with zones numbers the rooms as the room without.
+ * A number a zone states stays in the plan, unread, and is its again if it stops being a zone.
  *
  * Pure: a plan in, numbers out.
  */
 
-import type { FloorPlan } from './plan'
-import { floorOf, planFloors } from './floors'
+import { indexPlan, type FloorPlan } from './plan'
+import { floorOf, planFloors, planForFloor } from './floors'
 import { compareIds } from './order'
+import { roomZones } from './zones'
 
 export interface RoomNumber {
   /** 1, 2, 3… across the floors given. Grid's count. */
@@ -39,9 +42,11 @@ export function roomNumbers(plan: FloorPlan, floors?: readonly string[]): RoomNu
     .sort((a, b) => a.level - b.level || compareIds(a.id, b.id))
   const out: RoomNumber[] = []
   for (const floor of order) {
+    // Zones are worked out on the floor's own plan, as the areas and the IFC find them.
+    const zoneOf = plan.rooms.some((room) => room.partOf !== undefined) ? roomZones(indexPlan(planForFloor(plan, floor.id))).zoneOf : null
     const stated = new Map<string, string | null>()
     for (const room of plan.rooms) {
-      if (floorOf(room) !== floor.id || stated.has(room.id)) continue
+      if (floorOf(room) !== floor.id || stated.has(room.id) || zoneOf?.has(room.id) === true) continue
       stated.set(room.id, room.number ?? null)
     }
     const ids = [...stated.keys()].sort((a, b) => {

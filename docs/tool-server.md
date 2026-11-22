@@ -46,7 +46,7 @@ the same facts as data; a view also returns its picture. Figures are in metres; 
 | `grid_change_opening` | Changes a door or window (width, height, sill, type, which room it opens into), moves it to a side of a room, places it from a room's side or an end of its wall and keeps it there (its anchor), or removes it |
 | `grid_move_room_side` | Moves one side of a room out or in, or to an inside size; walls ending on it follow, and openings keep their anchor or their place in the building |
 | `grid_mirror` | Mirrors the plan left to right or top to bottom |
-| `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share |
+| `grid_merge_rooms` | Knocks two rooms into one, taking out the stretch of wall they share. Two rooms of different uses need `use`, or `zones` to keep both as zones of one open-plan room ([Zones inside one room](plan-file.md#zones-inside-one-room)); left out, the call is refused and asks. The verdict names any use the plan no longer has |
 | `grid_split_room` | Splits a room with a new wall, the new room taking one side, with a door in it |
 | `grid_add_room` | Builds a room against the outside of a side of a room, saying what happens to openings in the wall it covers |
 | `grid_stretch` | Makes the whole building wider or longer, at its outside wall or through a room |
@@ -99,6 +99,8 @@ is one call for one request.
   the fields of numbers in `sum`: each group's `value`, `count`, `sums`, `missing` (how many had
   no value to add) and `ids`, largest first and the parts that state none last, then the
   `total`. "Area per department" is `{ "kind": ["room"], "by": "department", "sum": ["area"] }`.
+  A zone of a room (CNT-8) is counted in no group: its floor is its room's. The text names the
+  zones left out; `grid_find` lists them, and gives a zone no `number`, since its room has one.
 
 Both take `kind`, `floor` and `room` (the room, the walls beside it and the openings into it) to
 narrow what is looked at. A condition is one line, a field or fact and a test: `is missing`,
@@ -203,6 +205,10 @@ room. A room bigger than `useRasterCells` points is measured on a coarser grid. 
 names a door whose leaf swings into a fixture (`opening/door-hits-item`, with the fixture's
 label, kind and id), and a fixture standing in front of a doorway (`item/blocks-doorway`) or in
 front of a window and higher than its sill (`item/blocks-window`), each with what it measured.
+
+A zone (CNT-8) is part of its room, and the room is the place: `what=use` on a zone, and
+`what=route` from or to one, measures its room as a whole, says so on its first line, and names
+the zone asked for in the data (`zone`, `fromZone`, `toZone`).
 
 ## A note set aside as seen
 
