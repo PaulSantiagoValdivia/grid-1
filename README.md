@@ -86,9 +86,9 @@ Each page answers one kind of question, so read only the one you need.
 | To… | Read |
 |---|---|
 | Write a plan: name the rooms, doors and windows, and let Grid work out the walls | [docs/rooms-first.md](docs/rooms-first.md) |
-| Run a command: `init`, `write`, `check`, `describe`, `draw`, `export`, `sheet`, `tidy`; options, exit codes, the project folder | [docs/commands.md](docs/commands.md) |
+| Run a command: `init`, `write`, `check`, `describe`, `draw`, `export`, `sheet`, `tidy`, `occupancy`; options, exit codes, the project folder | [docs/commands.md](docs/commands.md) |
 | Call Grid as an agent: the `grid_…` tools, measuring from faces, protocol versions | [docs/tool-server.md](docs/tool-server.md) |
-| Know what a plan file may hold and what each drawing check's code means: floors, steps, overlapping rooms, holes, fixtures, wall faults, inside and outside walls | [docs/plan-file.md](docs/plan-file.md) |
+| Know what a plan file may hold and what each drawing check's code means: floors, steps, overlapping rooms, holes, fixtures, wall faults, inside and outside walls, and where people's names go instead | [docs/plan-file.md](docs/plan-file.md) |
 | Know the figure behind a check, and when Grid asks whether a size is meant | [docs/tolerances.md](docs/tolerances.md) |
 | Read what `grid check` and `grid_check` return: the record and every message code | [docs/result-contract.md](docs/result-contract.md) |
 | Change Grid itself | [AGENTS.md](AGENTS.md) |

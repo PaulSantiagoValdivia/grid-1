@@ -15,6 +15,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`
 - [Wall faults, each with its fix](#wall-faults-each-with-its-fix): `wall/short`, `wall/gap`, `wall/overrun`, `wall/duplicate`, `wall/line-on-wall`, `room/wall-listed-twice`, `wall/crosses-room`, `wall/stands-in-room`
 - [Inside and outside walls](#inside-and-outside-walls): `wall/kind-differs`
+- [People are kept out of the plan](#people-are-kept-out-of-the-plan): who sits where, in a file of its own
 
 ## What a plan file may hold
 
@@ -239,3 +240,37 @@ states no kind reads as. Where they disagree, one warning says so:
 
 In the library, `wallSides(index, wallId)` gives the stretches with the rooms on each face, the
 worked-out exposure and the one used; `wallExposure(index, wallId)` gives the one used.
+
+## People are kept out of the plan
+
+A plan travels. Room names and ids go into every export and sheet: the DXF writes each room's
+name, the IFC its name and id, OBJ and GLB its id, and the sheet its name (its `check` layout its
+id too). Whoever is handed the plan file reads both. So a room is named for what it is
+(`Office 2`, `bed1`), never for a person, in its name or its id. The same holds for a floor's
+name and a fixture's label.
+
+Who sits where is kept in a file of its own beside the plan, named after it:
+`plan.occupancy.json` beside `plan.json`. The plan knows nothing of it, and no export, sheet or
+tool of the tool server reads it.
+
+```json
+{
+  "version": "1",
+  "seats": [
+    { "room": "bedroom", "occupants": ["A. Person"] },
+    { "room": "office", "desk": "Desk 2", "occupants": ["B. Person", "C. Person"] }
+  ]
+}
+```
+
+| Field | What it states |
+|---|---|
+| `room` | The id of a room of the plan. The seat is linked to it |
+| `desk` | Optional: a desk in that room, by a label of this file's own. The plan has no desks: Grid keeps fixtures now and furniture later |
+| `occupants` | The people at that seat, at most 100 |
+
+Ids, desk labels and names follow the plan's text rule: an id at most 64 characters, a label or
+name 120, each one line. A file that is wrong is refused naming the place (`seats[2].occupants[0]`)
+and never the text, which is a person's name. `grid occupancy` lists who sits where by room name
+and names any seat whose room the plan no longer has ([commands.md](commands.md#who-sits-where-grid-occupancy)).
+Keep the file out of what you hand over: an export or a sheet never needs it.

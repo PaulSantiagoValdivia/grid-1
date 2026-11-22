@@ -33,6 +33,9 @@ window w-living in living south, centred, 1.8 wide, sill 0.6, height 1.5
 - What rooms cannot say is written raw, one line of the plan file's own JSON:
   `raw wall {...}`, `raw room {...}`, `raw opening {...}`. Free-standing walls, curved or
   out-of-the-way walls and rooms with holes are written that way.
+- A room's name and its id go into every export and sheet, and travel with the plan file: name
+  a room for what it is, never for a person. Who sits where is kept in a file of its own
+  ([People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan)).
 - The full language is in the header of `packages/floorplan/src/rooms/compile.ts`.
 
 **The plan file is the source of truth.** Its walls stay in it, and they can still be changed
