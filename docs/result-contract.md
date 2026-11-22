@@ -475,6 +475,13 @@ A change that would add a problem that leaves a part out is refused, and nothing
   zone used as kitchen, which the plan before had."
 - `grid_areas` adds `zoneOf` on a zone, and its CSV says `zone` in the `counted` column; the room
   schedule adds `zones` on a room with zones, and a zone is no row of its own.
+- With CNT-5, CNT-13 and SHT-11 (merged from `main`): a zone may have any of the 27 room uses. The
+  size and escape checks read a room with zones by the uses in their `coverage.uses`, in that
+  order; on a floor the plan says is a kind of building a check does not run in, its zones are
+  skipped as `not_for_building` with every other room. A zone is in no stair stack, so it never
+  has `countedWith`. `grid_measure` with `what=use` on a zone, or `what=route` from or to one,
+  measures its room as a whole and says so; the answer names the zone (`zone`, `fromZone`,
+  `toZone`).
 
 ### 2026-11-22: use indicators round the fixtures (CNT-13)
 

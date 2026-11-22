@@ -11,6 +11,7 @@ import { planAreas } from '../../quantities/areas'
 import { roomSchedule } from '../../quantities/schedule'
 import { surveyPlan } from '../../quantities/survey'
 import { describeText } from '../../describe/card'
+import { sheetPages } from '../../sheet/pages'
 import { planFacts } from '../../describe/facts'
 
 /**
@@ -101,6 +102,39 @@ describe('merging two rooms of different uses (CNT-8, lab AB-9)', () => {
     expect(size.lookedAt.flatMap((g) => g.ids)).toContain('kitchen-living')
     expect(size.wholeRooms).toEqual([{ floor: 'ground', room: 'kitchen-living', use: 'living', zone: 'living' }])
     expect(result.lines.filter((l) => l.code === 'room/overlap' || l.code === 'room/zone-not-in-room')).toEqual([])
+  })
+
+  it('measures a zone\'s use indicators and its ways through as its room\'s, whole (with CNT-13)', async () => {
+    const zone = await b.call('grid_measure', { plan: 'zones.json', what: 'use', room: 'kitchen' })
+    const room = await b.call('grid_measure', { plan: 'zones.json', what: 'use', room: 'kitchen-living' })
+    expect(zone.isError, zone.text).toBe(false)
+    const said = '"Kitchen" is a zone of "Kitchen and living": measured as part of it, the room as a whole.'
+    // The label comes first, as on every answer; then the line that says it is the room's.
+    const withSaid = (text: string): string => text.replace(/^(.*?)\n/, `$1\n${said}\n`)
+    expect(zone.text).toBe(withSaid(room.text))
+    const answer = (reply: { data: unknown }) => (reply.data as { answer: Record<string, unknown> }).answer
+    expect(answer(zone)).toEqual({ ...answer(room), zone: 'kitchen' })
+    // A way from a zone starts in its room: a zone is no place of its own.
+    for (const width of [undefined, 0.7]) {
+      const from = await b.call('grid_measure', { plan: 'zones.json', what: 'route', room: 'kitchen', to: 'outside', ...(width === undefined ? {} : { width }) })
+      const whole = await b.call('grid_measure', { plan: 'zones.json', what: 'route', room: 'kitchen-living', to: 'outside', ...(width === undefined ? {} : { width }) })
+      expect(answer(from)).toEqual({ ...answer(whole), fromZone: 'kitchen' })
+      expect(answer(from)['found']).toBe(true)
+      expect(from.text).toBe(withSaid(whole.text))
+    }
+  })
+
+  it('prints one row per room on the sheet, so the rows add up to the net', () => {
+    const plan = written('zones.json')
+    const sheet = sheetPages({ file: 'zones.json', plan, ...validatePlan(plan) }, null, 'client', { name: 'zones', date: new Date(0) })
+    const table = sheet.pages.map((page) => page.table).find((t) => t !== null && t !== undefined)!
+    const names = table.rows.map((row) => row.name)
+    expect(names).toContain('Kitchen and living')
+    expect(names).not.toContain('Kitchen')
+    expect(names).not.toContain('Living room')
+    const added = table.rows.reduce((sum, row) => sum + Number(row.area), 0)
+    expect(added.toFixed(table.total!.area.split('.')[1]!.length)).toBe(table.total!.area)
+    expect(Number(table.total!.area)).toBeCloseTo(planAreas(surveyPlan(plan)).net, 1)
   })
 
   it('describes each zone as part of its room, and counts the floor once', () => {

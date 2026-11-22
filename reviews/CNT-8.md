@@ -169,3 +169,75 @@ it. It now leaves zones alone: a zone is never a host, and its `inside` is not r
   estimate count the room once, by its own use.
 - **The lost-use sentence** is on every verdict, `grid_compare`'s too, and only when a use is
   gone. It counts zones' uses, so a merge with zones loses none.
+
+## After merging main (25747b7)
+
+Main had gained, among others, CNT-5 (kinds of building, 27 room uses), SHT-11 (stairs counted
+once, lifts and the floor above drawn) and CNT-13 (use indicators round the fixtures). Merge
+commit af95f50 resolves seven conflicted files, keeping both sides in each; the changes beyond
+them are in the follow-up commit:
+
+- `docs/result-contract.md`: the coverage table has CNT-5's `uses`, `buildings` and CNT-8's
+  `wholeRooms`; the changelog has CNT-8's section on top, then CNT-13's, SHT-11's and CNT-5's.
+  CNT-8's section gains a paragraph on how zones meet the three.
+- `packages/rules/src/checks/types.ts`: both skip reasons (`part_of_room`, `not_for_building`),
+  both coverage fields, and `BuildingType` beside `RoomUse`.
+- `packages/rules/src/checks/check.ts`: a figure check's coverage carries `uses` and `buildings`
+  (CNT-5) and, when it looked at a room with zones, `wholeRooms`.
+- `packages/floorplan/src/geometry/areas.ts`: each room figure has `zoneOf` and, over a stair
+  room below, `countedWith`; the counted rooms leave out both.
+- `packages/floorplan/src/geometry/spaces.ts`: SHT-11's shared `floorWalls`, less the lines only
+  zones list.
+- `packages/cli/src/quantities/areas.ts`: no zone and no stair room over another in a total; a
+  zone's floor counts by its use only when its room is counted.
+- `packages/cli/src/mcp/readTools.ts`: `grid_areas`' CSV says `zone`, `outside`, `with the stair
+  below` or `inside`; its text adds both notes.
+
+How zones meet the new uses and indicators:
+
+- **CNT-5's uses.** A zone may have any of the 27 uses. `zoned.ts` already read uses from
+  `ROOM_USES`, so it takes them. The size and escape checks now hand it `RULE_USES` (catalogue),
+  the same list their `coverage.uses` gives, in place of their own copies (`HABITABLE_USES` and
+  a local `['bedroom']`), so the use a check applies to a room with zones comes from the list
+  its coverage names. A studio whose own use is `office` with a `study` zone and a `bedroom` zone
+  is checked as a bedroom from its zone; one whose zones are only `study`, `office` and `toilet`
+  is skipped as `use_not_covered`, its zones as `part_of_room`, and is not said to have no use.
+- **CNT-5's kinds of building.** On a floor the plan says is a kind a check does not run in, its
+  zones are skipped as `not_for_building` with every other room, and no `wholeRooms` is given.
+- **SHT-11's stair stack.** A zone is in no stack (`stairStacks` skips it), so it never has
+  `countedWith` and its floor is counted once, in its room, under its own use. Without that, a
+  stair zone over a stair room below was counted with it and also in `overStairs`, and the
+  gross external sum no longer held.
+- **CNT-13's indicators.** Fixtures stand in the room, not a zone (CNT-8's `items.ts`), and the
+  measures work on the room's outline, so a room with zones is measured whole and its zones'
+  dividing lines stand in no way. `grid_measure` with `what=use` on a zone, and `what=route` from
+  or to one (with or without `width`), now measure its room as a whole and say so first:
+  `"Kitchen" is a zone of "Kitchen and living": measured as part of it, the room as a whole.`
+  The data names the zone (`zone`, `fromZone`, `toZone`). Before, `what=use` measured the
+  zone's own outline as if its dividing lines were walls and said it held no fixtures, and a
+  route from a zone found no way, since a zone is no place in the route graph.
+
+Changed beyond the marked conflicts:
+
+- `packages/rules/src/checks/size.ts`, `escape.ts`: read `RULE_USES`, as above.
+- `packages/floorplan/src/geometry/areas.ts`: `stairStacks` skips zones; the `net` comment says so.
+- `packages/cli/src/mcp/readTools.ts`: the zone handling in `what=use` and `what=route`.
+- `packages/cli/src/sheet/pages.ts`: the sheet's area table lists rooms only, as this review
+  said it did. It listed zones too, and their areas went into the sum, so the printed net was
+  the room's floor counted twice; SHT-11 had changed the same function for stacked stairs.
+- `docs/tool-server.md`: a paragraph on zones under the use indicators.
+- New tests: "stacks no zone (CNT-8)" in `geometry/__tests__/areas.test.ts` (fails without the
+  `stairStacks` change); three in `rules/src/checks/__tests__/zones.test.ts` ("zones with CNT-5's
+  uses and kinds of building"); two in `cli/src/edit/__tests__/zones.test.ts` (a zone's use
+  indicators and routes, and the sheet's rows).
+
+Not changed, for the owner: `grid_rename_room` on a zone says which checks look at it by the
+zone's own use (WRT-3 and CNT-5's `rulesForUse`), though they look at its room; `what=fit` on a
+zone fits inside the zone's outline and counts no fixture, which stand in the room. Both were so
+before this merge.
+
+Checks after the merge and the follow-up: `npm run build`, `npm run typecheck` and `npm run lint`
+exit 0. `vitest run packages/floorplan/src packages/rules packages/cli --maxWorkers=2
+--minWorkers=1`: Test Files 186 passed (186), Tests 4286 passed | 2 skipped (4288); none failed,
+on timing or otherwise. `npm run scoreboard`: "Same as the stored figures" (turns 16, mistakes 5,
+checks fed 14; guards 735 and 95), so `current.json` is unchanged: no lab plan states `partOf`.

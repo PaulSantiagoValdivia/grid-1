@@ -131,3 +131,45 @@ describe('size checks on a room with zones (CNT-8, lab EL-13)', () => {
     expect(door.skipped).toContainEqual(expect.objectContaining({ reason: 'part_of_room', ids: ['kitchen', 'living', 'sleep'] }))
   })
 })
+
+describe('zones with CNT-5\'s uses and kinds of building (after merging main)', () => {
+  /** The zoned studio with its zones' uses set: sleep, living, kitchen, in that order. */
+  const withUses = (uses: readonly Room['use'][], own: Partial<Room> = {}): FloorPlan => {
+    const plan = zoned(1, own)
+    return { ...plan, rooms: plan.rooms.map((r) => (r.partOf === undefined ? r : { ...r, use: uses[ZONES.indexOf(r.id)] })) }
+  }
+
+  it('reads the uses a check lists in its coverage, in that order, whatever use the room and its other zones have', () => {
+    // The room's own use (office) and a zone's (study) are CNT-5's: neither is one the size check covers.
+    const report = checkLocalRules(withUses(['bedroom', 'study', 'kitchen'], { use: 'office' }))
+    const sizes = coverage(report, 'habitable-room-area')
+    expect(sizes.uses).toEqual(['bedroom', 'living', 'dining'])
+    expect(sizes.buildings).toEqual(['home'])
+    expect(sizes.wholeRooms).toEqual([{ floor: 'ground', room: 'studio', use: 'bedroom', zone: 'sleep' }])
+    expect(coverage(report, 'escape-opening').uses).toEqual(['bedroom'])
+    expect(coverage(report, 'escape-opening').wholeRooms).toEqual([{ floor: 'ground', room: 'studio', use: 'bedroom', zone: 'sleep' }])
+  })
+
+  it('skips a room whose zones have only uses no figure check covers, and its zones as part of it', () => {
+    const report = checkLocalRules(withUses(['study', 'office', 'toilet']))
+    const sizes = coverage(report, 'habitable-room-area')
+    expect(sizes.lookedAt).toEqual([])
+    expect(sizes.skipped.find((s) => s.reason === 'use_not_covered')!.ids).toContain('studio')
+    expect(sizes.skipped).toContainEqual(expect.objectContaining({ reason: 'part_of_room', ids: ['kitchen', 'living', 'sleep'] }))
+    expect(sizes.wholeRooms).toBeUndefined()
+    // The room has uses, its zones', so no line says it has none.
+    expect(report.notChecked.filter((n) => n.reason === 'no_use')).toEqual([])
+  })
+
+  it('in a building the figures were not read for, skips the room and its zones with every other room', () => {
+    const report = checkLocalRules({ ...withUses(['bedroom', 'living', 'kitchen']), building: 'office' })
+    for (const rule of ['habitable-room-area', 'escape-opening']) {
+      const check = coverage(report, rule)
+      expect(check.lookedAt).toEqual([])
+      expect(check.skipped.map((s) => s.reason)).toEqual(['not_for_building'])
+      expect(check.skipped[0]!.ids).toEqual(expect.arrayContaining(['studio', ...ZONES]))
+      expect(check.wholeRooms).toBeUndefined()
+    }
+    expect(report.notChecked.filter((n) => n.reason === 'not_for_building').map((n) => n.floor)).toEqual(['', ''])
+  })
+})

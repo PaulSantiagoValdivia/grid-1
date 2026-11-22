@@ -140,7 +140,7 @@ export interface FloorAreaFigures {
   readonly rooms: readonly RoomAreaFigure[]
   /** Rooms on this floor that could not be drawn: in no figure here. */
   readonly leftOut: readonly RoomLeftOut[]
-  /** The rooms not named outside, less the stair rooms counted with the one below (`overStairs`). */
+  /** The rooms not named outside, less the stair rooms counted with the one below (`overStairs`), and no zone (CNT-8). */
   readonly net: number
   /** `net` by room use; a room with none is under `not said`. Adds up to `net`. */
   readonly byUse: Readonly<Record<string, number>>
@@ -340,7 +340,8 @@ function floorFigures(
       ...(below === undefined ? {} : { countedWith: below }),
     })
   }
-  // A zone is in no figure (CNT-8): its floor is its room's, counted once.
+  // A zone is in no figure (CNT-8): its floor is its room's, counted once. A zone is in no stair
+  // stack either (`stairStacks`), so it never has `countedWith`.
   const counted = rooms.filter((room) => !room.outside && room.zoneOf === null && room.countedWith === undefined)
   const overStairs = sum(rooms.filter((room) => room.countedWith !== undefined).map((room) => room.area))
   const byUse: Record<string, number> = {}
@@ -393,8 +394,10 @@ function floorFigures(
  */
 function stairStacks(plan: FloorPlan, index: PlanIndex, broken: ReadonlySet<string>): Map<string, { floor: string; room: string }> {
   const outlines = new Map<string, Map<string, Vec2[]>>()
+  // CNT-8: a zone is part of its room, not a room of its own, so it is in no stack.
+  const zones = roomZones(index)
   for (const room of plan.rooms) {
-    if (room.use !== 'stair' || broken.has(room.id)) continue
+    if (room.use !== 'stair' || broken.has(room.id) || zones.zoneOf.has(room.id)) continue
     const outline = tryRoomPolygon(room, index)
     if (outline === null || outline.length < 3) continue
     const floor = floorOf(room)

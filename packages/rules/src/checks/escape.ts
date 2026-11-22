@@ -9,15 +9,18 @@
 
 import { indexPlan, overFigure, roomZones, rounded, shownAgainst, underFigure, type FloorPlan, type Opening } from '@ongrid/floorplan/geometry'
 import { openingSides, outsideTest, roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
-import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
+import { RULE_USES } from './catalogue'
 import type { FloorScope } from './coverage'
 import { ESCAPE_TOP_LEVEL } from './figures'
 import { messages } from './messages'
 import type { AppliedFigure, RuleFinding, WholeRoom } from './types'
 import { appliedUse, type AppliedUse } from './zoned'
 
-/** The uses this check covers. CNT-8: a room with a sleeping zone is one someone sleeps in. */
-const BEDROOM: readonly RoomUse[] = ['bedroom']
+/**
+ * The uses this check covers, as its coverage lists them (CNT-5's `uses`). CNT-8: a room with a
+ * sleeping zone is one someone sleeps in.
+ */
+const COVERS = RULE_USES['escape-opening']
 
 /** The figures of the check. One that is `null` is not tested. */
 export interface EscapeFigures {
@@ -88,7 +91,7 @@ export function escapeCheck(
   const applied = new Map<string, AppliedUse>()
   const wholeRooms: WholeRoom[] = []
   for (const room of storey.rooms) {
-    const use = appliedUse(room, storey.rooms, zones, BEDROOM)
+    const use = appliedUse(room, storey.rooms, zones, COVERS)
     applied.set(room.id, use)
     const reason = !outlines.has(room.id)
       ? 'cannot_be_drawn'

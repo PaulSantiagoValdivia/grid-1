@@ -12,7 +12,7 @@
 
 import { indexPlan, roomFloorArea, roomZones, shownAgainst, underFigure, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
-import { HABITABLE_USES } from './catalogue'
+import { RULE_USES } from './catalogue'
 import { messages } from './messages'
 import type { AppliedFigure, NotChecked, RuleFinding, WholeRoom } from './types'
 import type { FloorScope } from './coverage'
@@ -46,7 +46,8 @@ export function sizeCheck(
       scope.skipped.cannot_be_drawn!.push(room.id)
       continue
     }
-    const applied = appliedUse(room, storey.rooms, zones, HABITABLE_USES)
+    // The uses its coverage lists (CNT-5's `uses`), in that order.
+    const applied = appliedUse(room, storey.rooms, zones, RULE_USES['habitable-room-area'])
     if (applied.kind === 'zone') {
       ;(scope.skipped.part_of_room ??= []).push(room.id)
       continue

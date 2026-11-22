@@ -175,14 +175,17 @@ function undecidedNote(loaded: LoadedPlan, floor: string): string[] {
 }
 
 function areaTable(floor: FloorAreas, withUse: boolean): SheetTable {
+  // CNT-8: a zone's floor is its room's, so the table has one row per room, and the column adds
+  // up to the net. The plan draws each zone with its name and area.
+  const places = floor.rooms.filter((r) => r.zoneOf === undefined)
   // SHT-11: a stair room over the stair below is counted there, so it is in no part of the sum.
-  const counted = floor.rooms.filter((r) => r.countedWith === undefined)
+  const counted = places.filter((r) => r.countedWith === undefined)
   const shown = sumText(counted.map((r) => r.net ?? 0), floor.net, 1)
   const parts = new Map(counted.map((room, i) => [room, shown.parts[i]!] as const))
   return {
     heading: 'Rooms / m²',
     // MSG-2: a room that could not be measured has no area, never 0.
-    rows: floor.rooms.map((room) => ({
+    rows: places.map((room) => ({
       name: room.name,
       detail: withUse ? room.use : null,
       area: room.net === null ? 'not measured' : parts.get(room) ?? 'counted below',

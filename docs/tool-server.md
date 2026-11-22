@@ -138,6 +138,10 @@ names a door whose leaf swings into a fixture (`opening/door-hits-item`, with th
 label, kind and id), and a fixture standing in front of a doorway (`item/blocks-doorway`) or in
 front of a window and higher than its sill (`item/blocks-window`), each with what it measured.
 
+A zone (CNT-8) is part of its room, and the room is the place: `what=use` on a zone, and
+`what=route` from or to one, measures its room as a whole, says so on its first line, and names
+the zone asked for in the data (`zone`, `fromZone`, `toZone`).
+
 ## A note set aside as seen
 
 `grid_check` answers short by default (MSG-10): the notes, the figures they used, what each
