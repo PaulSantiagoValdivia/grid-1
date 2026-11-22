@@ -78,7 +78,8 @@ export function cutWall(wall: Wall, pieces: readonly Piece[]): { change?: { star
   const axis = wallAxis(wall)
   const at = (s: number): [number, number] => [r3(axis.start.x + axis.dir.x * s), r3(axis.start.y + axis.dir.y * s)]
   if (pieces.length === 1 && pieces[0]!.id === wall.id) return { change: { start: at(pieces[0]!.lo), end: at(pieces[0]!.hi) }, add: [], remove: false }
-  const { id: _id, start: _s, end: _e, ...rest } = wall
+  const rest: Record<string, unknown> = { ...wall }
+  for (const key of ['id', 'start', 'end']) delete rest[key]
   return { add: pieces.map((p) => ({ id: p.id, start: at(p.lo), end: at(p.hi), ...rest })), remove: true }
 }
 
@@ -136,9 +137,6 @@ export function mergeRooms(survey: Survey, aId: string, bId: string, request: Me
   }
   if (shared.length > 1) throw new EditRefused(`${an} and ${bn} share ${shared.length} walls (${shared.map((s) => quoted(s.wall.id)).join(', ')}); this tool takes out one. Take the others out with grid_write_rooms.`)
   const { wall, s0, s1 } = shared[0]!
-  if (wall.virtual === true) {
-    // Two rooms open to each other already: they only lose the line between them.
-  }
   const axis = wallAxis(wall)
   const c0 = cutAt(plan, wall, s0)
   const c1 = cutAt(plan, wall, s1)
