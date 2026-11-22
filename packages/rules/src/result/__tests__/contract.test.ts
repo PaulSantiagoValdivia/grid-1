@@ -1,13 +1,20 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { CODES, LINE_KINDS, RESULT_VERSION } from '../..'
 
 const CONTRACT = readFileSync(fileURLToPath(new URL('../../../../../docs/result-contract.md', import.meta.url)), 'utf8')
+// A feature's new codes wait in its fragment, `changes/<ID>.md`, under "## Codes", until the
+// release step puts them in the contract's code table (scripts/release/fragments.mjs).
+const CHANGES = fileURLToPath(new URL('../../../../../changes/', import.meta.url))
+const FRAGMENTS = existsSync(CHANGES)
+  ? readdirSync(CHANGES).filter((name) => name.endsWith('.md') && name !== 'README.md').map((name) => readFileSync(`${CHANGES}${name}`, 'utf8'))
+  : []
+const CODE_ROW = /^\| `((?:plan|floor|wall|room|opening|item|stair|pattern|firm|flat)\/[a-z0-9-]+)` \|/gm
 
 describe('docs/result-contract.md', () => {
-  it('lists every code the catalogue words, and no other', () => {
-    const listed = [...CONTRACT.matchAll(/^\| `((?:plan|floor|wall|room|opening|item|stair|pattern|firm|flat)\/[a-z0-9-]+)` \|/gm)].map((m) => m[1])
+  it('lists every code the catalogue words, and no other, with the codes waiting in changes/', () => {
+    const listed = [CONTRACT, ...FRAGMENTS].flatMap((text) => [...text.matchAll(CODE_ROW)].map((m) => m[1]))
     expect([...listed].sort()).toEqual(Object.keys(CODES).sort())
     expect(new Set(listed).size).toBe(listed.length)
   })

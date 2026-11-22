@@ -5,9 +5,10 @@ the result contract in [docs/result-contract.md](docs/result-contract.md), which
 tool's answer holds and what may change in it. [RELEASING.md](RELEASING.md) says how a version
 is cut.
 
-A change people will notice adds a line under "Unreleased", in plain words: what you can do now,
-or what works differently. The release step turns "Unreleased" into the release's section and
-records which versions of the result record and the plan format it carries.
+A change people will notice writes its line, in plain words (what you can do now, or what works
+differently), in its own file in [changes/](changes/README.md). The release step adds those
+lines to "Unreleased", turns "Unreleased" into the release's section and records which versions
+of the result record and the plan format it carries.
 
 Every report Grid gives is labelled "General guidance, not your local rules". No release makes
 Grid say that a plan complies with anything.

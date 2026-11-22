@@ -41,14 +41,23 @@ not raise the breaking number, and names the one to use.
 
 ## The two changelogs
 
-- [CHANGELOG.md](CHANGELOG.md) is for people. A change people will notice adds a line under
-  "Unreleased" in the same commit. The release step refuses to cut a version while
-  "Unreleased" is empty.
-- The changelog for agents is the last section of [docs/result-contract.md](docs/result-contract.md).
-  A change to what a tool answers, a code, a field or a wording adds an entry at its top, under
-  a heading with the day and the feature, such as `### 2026-11-22: MSG-18`.
+- [CHANGELOG.md](CHANGELOG.md) is for people. The release step refuses to cut a version while
+  "Unreleased" is empty, after the fragments are in it.
+- The changelog for agents is the last section of [docs/result-contract.md](docs/result-contract.md),
+  each entry under a heading with the day, what changed and the feature, such as
+  `### 2026-11-22: a first layout from the brief (BRF-6)`.
 
-The release step updates both in the same run: "Unreleased" becomes `## <version> (<day>)`,
+Neither is edited by a change. Each change writes its own fragment, `changes/<ID>.md`
+([changes/README.md](changes/README.md) has the form): its line for people, its entry for
+agents and the code table's row for any new code. Features built at the same time then never
+edit the same lines. The release step combines the fragments first: each line for people goes
+at the top of "Unreleased", each entry for agents at the top of their changelog under the
+fragment's heading, newest first, and each code row into the contract's code table after the
+last code of its kind. Then it deletes the fragments. A fragment it cannot read stops the
+release before anything is written, naming the file and the fault; `npm test` reads every
+fragment the same way, so that is found before a release.
+
+Then it updates both in the same run: "Unreleased" becomes `## <version> (<day>)`,
 which says the result and plan format versions it carries, and the changelog for agents gets
 `### Release <version> (<day>): result version <n>` above the entries written since the last
 release (or a line saying there were none).
@@ -76,7 +85,9 @@ npm run release -- 0.1.0 --dry-run
 `scripts/release.mjs <version>` does, in order:
 
 1. checks the version against the rule above, and that every package carries the same one;
-2. writes the version into every `package.json` and the lock file, and updates both changelogs;
+2. combines the fragments in `changes/` into both changelogs and deletes them, updates both
+   changelogs for the release, and writes the version into every `package.json` and the lock
+   file;
 3. runs the gates in `scripts/release/gates.mjs`, in order: build, type check, lint, the label
    test (`packages/cli/src/__tests__/label.test.ts`), the licence check, the data check, the full
    tests and the scoreboard gate. The first that fails stops the release by name, and every
@@ -87,8 +98,9 @@ npm run release -- 0.1.0 --dry-run
 5. writes `dist/release/<version>/release.json`, and stops. Nothing is published, pushed or
    tagged.
 
-With `--dry-run` it also puts back every file it wrote and leaves copies of both changelogs
-beside the tarball to read. Without it, the working tree must be clean, and the changes stay
+With `--dry-run` it also puts back every file it wrote, the fragments it deleted among them, and
+leaves copies of both changelogs beside the tarball to read, so you can check how the fragments
+were combined. Without it, the working tree must be clean, and the changes stay
 for you to commit. `--date YYYY-MM-DD` sets the release's day (default today, UTC);
 `--out <folder>` packs elsewhere; `--max-workers <n>` runs the tests on fewer cores.
 
@@ -138,13 +150,14 @@ Each release, in order. Tick each line in the release's issue or pull request.
 
 1. [ ] The owner's yes for this release is recorded below: the day, the version and the steps
    it covers.
-2. [ ] "Unreleased" in CHANGELOG.md says what changed for people, and the changelog for agents
-   has an entry for each change to what a tool answers.
+2. [ ] The fragments in `changes/`, with "Unreleased" in CHANGELOG.md, say what changed for
+   people, and there is an entry for agents for each change to what a tool answers. The dry
+   run's copies of both changelogs show them combined.
 3. [ ] `npm run release -- <version> --dry-run` passes on a clean checkout of `main`: every gate,
    the scoreboard gate, the label test and the licence check among them.
 4. [ ] The release workflow's dry run passes on `main` for the same version.
-5. [ ] `npm run release -- <version>` on a clean checkout of `main`; read the diff; commit it as
-   `chore(release): <version>`.
+5. [ ] `npm run release -- <version>` on a clean checkout of `main`; read the diff, the deleted
+   fragments among it; commit it as `chore(release): <version>`.
 6. [ ] Tag the commit `v<version>`. Pushing the commit and the tag is an outward step: only with
    the owner's yes for it.
 7. [ ] Publish from the release workflow only, once the publish job exists (below): an outward

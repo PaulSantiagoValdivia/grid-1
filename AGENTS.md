@@ -71,8 +71,8 @@ Notes for agents and people changing this repository.
   `src/result/`): one call that never throws and returns one record, one list with one count,
   for `grid check` and `grid_check`. `docs/result-contract.md` is the record's contract, and a
   test fails when it and `src/result/catalogue.ts` list different codes. A new message code
-  gets its one wording, what is needed and the fix in that catalogue, and a line in the
-  contract's code table and changelog.
+  gets its one wording, what is needed and the fix in that catalogue, and its row of the code
+  table and its entry for agents in the change's fragment, `changes/<ID>.md` (see Rules).
 - A firm's own standards (COD-8): `firm-standards.json` beside the plan, read and checked in
   `packages/cli/src/firm/` (`standards.ts` the file, `measure.ts` the plan measured by CNT-13's
   indicators and ARE-9's net area) and worded in `packages/rules/src/result/firm.ts` as `firm/`
@@ -168,8 +168,10 @@ Notes for agents and people changing this repository.
   install section must match `installText()`: a test checks it. Publishing waits on CMD-8.
 - `scoreboard/`: the lab's plans, damage sets and expected figures, and the runner behind
   `npm run scoreboard`. It prints five counts and fails when one is worse than
-  `scoreboard/current.json`. Its `README.md` defines the counts. A change that moves a count
-  stores the new figures in the same commit.
+  `scoreboard/current.json`. Its `README.md` defines the counts. A feature branch does not
+  edit `current.json`: it says which counts it moves, from what to what, in its review note.
+  The person who merges it runs the scoreboard on `main` after the merge and stores the counts
+  (`npm run scoreboard -- --write-current`) in their own commit.
 - `docs/`: the documentation, one page per topic: `rooms-first.md`, `commands.md`,
   `tool-server.md`, `plan-file.md`, `tolerances.md` and `result-contract.md`. The root
   `README.md` is the front page: what Grid is, installing and running it, and a table of these
@@ -207,11 +209,18 @@ Run the type check, the tests and the scoreboard before calling a change done.
 - Node 22, npm, TypeScript in strict mode.
 - English in code, comments and docs.
 - Conventional commits.
-- A change people will notice adds a line under "Unreleased" in `CHANGELOG.md`; a change to
-  what a tool answers adds an entry at the top of the changelog for agents in
-  `docs/result-contract.md`. Versions are cut only by the release step in `RELEASING.md`
-  (QAR-10, `scripts/release.mjs`), which writes both changelogs and every version, runs the
-  gates and stops before publishing.
+- A change people will notice, or a change to what a tool answers, writes its own changelog
+  fragment, `changes/<ID>.md`: its line for people, its entry for the changelog for agents and
+  any new code's row of the contract's code table (`changes/README.md` has the form). It does
+  not edit `CHANGELOG.md` or the changelog for agents in `docs/result-contract.md`, so changes
+  built at the same time do not conflict there. Versions are cut only by the release step in
+  `RELEASING.md` (QAR-10, `scripts/release.mjs`), which writes the fragments into both
+  changelogs and deletes them, writes every version, runs the gates and stops before publishing.
+- A new convention in the header of `packages/floorplan/src/types/floorplan.ts` (C1, C2 and on)
+  takes the number the change's brief gives it. Features built at the same time get theirs from
+  whoever coordinates them, never by taking the next free one. A change made alone, whose brief
+  names none, takes the next free number. `types/__tests__/conventions.test.ts` fails when two
+  conventions share a number.
 - Grid is licensed under Apache-2.0. See `LICENSE` and `NOTICE`.
 - Every `package.json` has `"license": "Apache-2.0"` and keeps `"private": true` until
   publishing is approved. A test checks both.
