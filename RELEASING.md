@@ -46,7 +46,7 @@ not raise the breaking number, and names the one to use.
   "Unreleased" is empty.
 - The changelog for agents is the last section of [docs/result-contract.md](docs/result-contract.md).
   A change to what a tool answers, a code, a field or a wording adds an entry at its top, under
-  a heading with the day, the result version and the feature, as MSG-1's.
+  a heading with the day and the feature, such as `### 2026-11-22: MSG-18`.
 
 The release step updates both in the same run: "Unreleased" becomes `## <version> (<day>)`,
 which says the result and plan format versions it carries, and the changelog for agents gets

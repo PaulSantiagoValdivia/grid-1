@@ -108,7 +108,7 @@ describe('the changelog for agents, in the result contract', () => {
     const cut = releaseAgentChangelog(contract, CUT)
     const at = cut.indexOf('### Release 0.1.0 (2026-11-22): result version 1')
     expect(at).toBeGreaterThan(cut.indexOf('## Changelog for agents'))
-    expect(cut.slice(at)).toMatch(/^### Release 0\.1\.0 \(2026-11-22\): result version 1\n\nongrid 0\.1\.0 ships the entries below, down to the next release heading\.\n\n### \d{4}-\d{2}-\d{2}: version 1\b/)
+    expect(cut.slice(at)).toMatch(/^### Release 0\.1\.0 \(2026-11-22\): result version 1\n\nongrid 0\.1\.0 ships the entries below, down to the next release heading\.\n\n### \d{4}-\d{2}-\d{2}: /)
     // The contract test reads the dated entry for the version; it is still there.
     expect(cut).toMatch(/^### \d{4}-\d{2}-\d{2}: version 1\b/m)
     expect(cut.replace(/### Release 0\.1\.0 [^\n]*\n\n[^\n]*\n\n/, '')).toBe(contract)
@@ -277,7 +277,7 @@ describe('the gates', () => {
     const steps = gateSteps(root, GATES, 2)
     expect(steps.map((s) => s.name)).toEqual(GATES.map((g) => g.name))
     const label = steps.find((s) => s.name === 'label')!
-    expect(label.args.slice(-3)).toEqual(['run', 'packages/cli/src/__tests__/label.test.ts', '--maxWorkers=2'])
+    expect(label.args.slice(-4)).toEqual(['run', 'packages/cli/src/__tests__/label.test.ts', '--maxWorkers=2', '--minWorkers=1'])
     expect(steps.find((s) => s.name === 'scoreboard')!.args.slice(-2)).toEqual(['run', 'scoreboard'])
   })
 })

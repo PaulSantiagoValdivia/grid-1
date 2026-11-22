@@ -77,7 +77,8 @@ export function gateSteps(root, gates, maxWorkers) {
       const { command, args } = npm()
       return { name: gate.name, command, args: [...args, 'run', gate.npm] }
     }
-    const workers = maxWorkers === undefined ? [] : [`--maxWorkers=${maxWorkers}`]
+    // vitest refuses a maximum below its default minimum, so the minimum goes with it.
+    const workers = maxWorkers === undefined ? [] : [`--maxWorkers=${maxWorkers}`, '--minWorkers=1']
     return { name: gate.name, command: process.execPath, args: [join(root, 'node_modules', 'vitest', 'vitest.mjs'), 'run', ...(gate.vitest ?? []), ...workers] }
   })
 }
