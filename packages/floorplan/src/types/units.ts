@@ -49,7 +49,7 @@ function numberOf(text: string, decimal: DecimalMark): number | null {
     if (/^[-+]?\d+\.\d+$/.test(t)) return Number(t)
     return null
   }
-  if (/^[-+]?\d+,\d+$/.test(t)) throw new LengthRefused('has a decimal comma: write 3.81, or choose the decimal comma (decimal comma) to type 3,81')
+  if (/^[-+]?\d+,\d+$/.test(t)) throw new LengthRefused('has a decimal comma: write 3.81, or choose the decimal comma to type 3,81')
   if (/^[-+]?(\d+\.?\d*|\.\d+)$/.test(t)) return Number(t)
   return null
 }

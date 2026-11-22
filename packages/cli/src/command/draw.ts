@@ -5,6 +5,7 @@
  * With `--3d`, the 3D model as the app opens it, as a PNG, through `drawStill`.
  * Written to `--out`, or to standard output when no file is named.
  */
+import { DISPLAY_UNITS, displayFor } from '../quantities/units'
 import { LOOK_NAMES, type LookName } from '@ongrid/viewer/src/picture/look'
 import { inspectPlan } from '@ongrid/rules'
 import { drawPlan } from '../draw/drawPlan'
@@ -20,6 +21,8 @@ export const DRAW_OPTIONS: OptionSpecs = {
   '--look': { takesValue: true, help: 'How the plan is drawn: technical (the default: black on white, lines in millimetres on paper), working (as on screen) or dark. Not with --3d.' },
   '--ids': { takesValue: false, help: 'The check view: draw the id of every room, door and window, as the plan file holds them. Not with --3d.' },
   '--scale': { takesValue: true, help: 'PNG only: pixels per picture pixel, above 0 and up to 8 (up to 4 with --3d). 1 when left out.' },
+  '--units': { takesValue: true, help: 'How areas and dimensions are written: m, cm, mm or ft-in. The plan\'s own display, or m, when left out. Not with --3d.' },
+  '--decimal': { takesValue: true, help: 'The decimal mark: point or comma. The plan\'s own display, or point, when left out.' },
   ...PROJECT_OPTION,
 }
 
@@ -38,6 +41,9 @@ export interface DrawRequest {
   readonly ids?: boolean
   /** The look's name, as given. */
   readonly look?: string
+  /** WRT-7: the display's unit and decimal mark, as given. */
+  readonly units?: string
+  readonly decimal?: string
 }
 
 /** What a drawn file is: a picture file's text or bytes, and the doors drawn as undecided. */
@@ -55,6 +61,9 @@ export function checkDrawRequest(request: DrawRequest): { scale: number; look: L
   if (request.threeD && request.png) throw new UsageError('--png does nothing with --3d, which always draws a PNG: leave --png out.')
   if (request.threeD && request.ids) throw new UsageError('--ids draws the ids on a floor plan, not on the 3D model: leave --ids or --3d out.')
   if (request.threeD && request.look !== undefined) throw new UsageError('--look is for a floor plan, not the 3D model: leave --look or --3d out.')
+  if (request.threeD && (request.units !== undefined || request.decimal !== undefined)) throw new UsageError('--units and --decimal write the labels of a floor plan, not the 3D model: leave them or --3d out.')
+  if (request.units !== undefined && !(DISPLAY_UNITS as readonly string[]).includes(request.units)) throw new UsageError(`--units takes one of ${DISPLAY_UNITS.join(', ')}.`)
+  if (request.decimal !== undefined && request.decimal !== 'point' && request.decimal !== 'comma') throw new UsageError('--decimal takes point or comma.')
   const look = (request.look ?? DRAW_LOOK) as LookName
   if (!(LOOK_NAMES as readonly string[]).includes(look)) {
     throw new UsageError(`--look ${JSON.stringify(request.look)} is not a look Grid draws: use one of ${LOOK_NAMES.join(', ')}.`)
@@ -82,7 +91,8 @@ export async function drawFile(loaded: LoadedPlan, request: DrawRequest, scale: 
     const { drawStill } = await import('../draw/drawStill')
     return { file: await drawStill(loaded.plan, { focus: floor ?? null, scale }), undecidedDoors: [] }
   }
-  const labels = request.ids ? { labels: { ids: true } } : {}
+  const display = request.units === undefined && request.decimal === undefined ? undefined : displayFor(request.units, request.decimal, loaded.plan)
+  const labels = request.ids || display ? { labels: { ...(request.ids ? { ids: true } : {}), ...(display ? { display } : {}) } } : {}
   // What went wrong, numbered as `grid check` numbers it, marked on the drawing (MSG-8).
   const faults = inspectPlan(loaded.plan).lines
   const undecidedDoors = planPicture(loaded.plan, { floor, look, ...labels }).undecidedDoors

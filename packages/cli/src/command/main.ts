@@ -281,6 +281,8 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       floor: textOf(parsed, '--floor'),
       scale: textOf(parsed, '--scale'),
       ids: parsed.values.has('--ids'),
+      units: textOf(parsed, '--units'),
+      decimal: textOf(parsed, '--decimal'),
       look: textOf(parsed, '--look'),
     }
     const { scale, look } = checkDrawRequest(request)

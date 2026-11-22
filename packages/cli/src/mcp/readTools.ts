@@ -389,7 +389,7 @@ const scheduleTool: GridTool = {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
     types: { type: 'array', description: 'Only these kinds: door, window, opening, or fixture for the toilets, basins, showers, baths and kitchen runs. All of them when left out.', examples: [['door'], ['door', 'opening'], ['fixture']], items: { enum: ['door', 'window', 'opening', 'fixture'] }, minItems: 1, maxItems: 4 },
-    narrower_than: { type: 'number', description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
+    narrower_than: { type: 'number', length: true, description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
@@ -488,13 +488,13 @@ const measureTool: GridTool = {
     room: { type: 'string', id: true, description: 'For room, fit and route: the room id, where the route starts.', examples: ['kitchen', 'hall'] },
     from: { type: 'string', id: true, description: 'For between: the id of a wall, door, window, opening, fixture or room to measure from.', examples: ['front-door', 'w-west'] },
     to: { type: 'string', id: true, description: 'For between: the id of the wall, door, window, opening, fixture or room to measure to. For route: the room id where it ends, or "outside" for the nearest way out.', examples: ['w-west', 'bed1', 'outside'] },
-    x: { type: 'number', description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
-    y: { type: 'number', description: 'For between, with x: the point\'s y on the drawing in metres.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
+    x: { type: 'number', length: true, description: 'For between, instead of to: a point\'s x on the drawing in metres, such as an inside corner. The plan names no points.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
+    y: { type: 'number', length: true, description: 'For between, with x: the point\'s y on the drawing in metres.', examples: [0.15], minimum: -limit('largest'), maximum: limit('largest') },
     wall: { type: 'string', id: true, description: 'For wall: the wall id.', examples: ['w-south'] },
-    width: { type: 'number', description: 'For fit: the box\'s width in metres; a table of 1.8 × 0.9 m with 0.75 m round it for chairs is 3.3.', examples: [3.3, 1.2], minimum: 0.05, maximum: 100 },
-    depth: { type: 'number', description: 'For fit: the box\'s depth in metres. It is tried both ways round.', examples: [2.4, 0.6], minimum: 0.05, maximum: 100 },
-    diameter: { type: 'number', description: 'For fit: a circle instead of a box, such as 1.5 for a wheelchair turning circle.', examples: [1.5], minimum: 0.05, maximum: 100 },
-    under: { type: 'number', description: 'For narrow: the person\'s figure in metres, such as 0.8 for a door or 1.5 for a turning circle.', examples: [0.8, 1.5], minimum: 0.05, maximum: 100 },
+    width: { type: 'number', length: true, description: 'For fit: the box\'s width in metres; a table of 1.8 × 0.9 m with 0.75 m round it for chairs is 3.3.', examples: [3.3, 1.2], minimum: 0.05, maximum: 100 },
+    depth: { type: 'number', length: true, description: 'For fit: the box\'s depth in metres. It is tried both ways round.', examples: [2.4, 0.6], minimum: 0.05, maximum: 100 },
+    diameter: { type: 'number', length: true, description: 'For fit: a circle instead of a box, such as 1.5 for a wheelchair turning circle.', examples: [1.5], minimum: 0.05, maximum: 100 },
+    under: { type: 'number', length: true, description: 'For narrow: the person\'s figure in metres, such as 0.8 for a door or 1.5 for a turning circle.', examples: [0.8, 1.5], minimum: 0.05, maximum: 100 },
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
   },
@@ -693,13 +693,15 @@ const viewTool: GridTool = {
     + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model from a side of the drawing (north is the top of the drawing: the plan holds no real north); kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
     + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export) or to move the person\'s live preview (grid_preview). The model has no roof, furniture, glass or door leaves. Units are metres.',
   args: {
+    units: UNITS_ARG,
+    decimal: DECIMAL_ARG,
     plan: PLAN_ARG,
     kind: { type: 'string', required: true, enum: ['plan', '3d', 'eye'], description: 'plan, 3d or eye.', examples: ['plan', 'eye'] },
     floor: { ...FLOOR_ARG, description: 'For plan: the floor to draw, the lowest when left out. For 3d: that floor cut away, the whole building when left out.' },
     from: { type: 'string', enum: SIDES, description: 'For 3d: the side of the drawing the camera stands on, or above. south-east when left out.', examples: ['south', 'above'] },
     room: { type: 'string', id: true, description: 'For eye: the room to stand in.', examples: ['kitchen', 'living'] },
     toward: { type: 'string', maxLength: 64, description: 'For eye: an opening id to look at, or a direction (north, north-east, east, south-east, south, south-west, west, north-west). The room\'s first window when left out.', examples: ['back-door', 'north'] },
-    eye_height: { type: 'number', description: 'For eye: metres above the floor. 1.6 standing when left out; about 1.2 seated.', examples: [1.6, 1.2], minimum: 0.3, maximum: 3 },
+    eye_height: { type: 'number', length: true, description: 'For eye: metres above the floor. 1.6 standing when left out; about 1.2 seated.', examples: [1.6, 1.2], minimum: 0.3, maximum: 3 },
     look: { type: 'string', enum: LOOKS, description: 'For plan: working (the default: clear labels and strong contrast), technical for black on white as on a sheet, with lines in millimetres at the scale and doors with no stated swing marked "?", or dark. light and mono are older names for working and technical.', examples: ['working', 'technical'] },
     dimensions: { type: 'boolean', description: 'For plan: false to leave the sizes off, for a clean drawing. true when left out.', examples: [true, false] },
     crop: { type: 'string', maxLength: 120, description: 'For plan: frame just this part: a room, door, window or wall id, or a room\'s name. The whole floor when left out.', examples: ['kitchen', 'front-door'] },
@@ -724,7 +726,8 @@ const viewTool: GridTool = {
       const crop = args['crop'] === undefined ? null : cropPart(plan, shown, args['crop'] as string)
       // What went wrong, numbered as grid_check numbers it, marked on the drawing (MSG-8).
       const faults = inspectPlan(plan).lines
-      const view = await planView(plan, { floor: shown, look: asked, dimensions: args['dimensions'] !== false, ids: withIds, faults, ...(crop ? { frame: cropFrame(crop) } : {}) })
+      const display = args['units'] === undefined && args['decimal'] === undefined ? undefined : displayFor(args['units'], args['decimal'], plan)
+      const view = await planView(plan, { floor: shown, look: asked, dimensions: args['dimensions'] !== false, ids: withIds, faults, ...(display ? { display } : {}), ...(crop ? { frame: cropFrame(crop) } : {}) })
       const lines = [`Plan of floor ${q(shown)}${crop ? `, cropped to ${crop.kind} ${q(crop.id)}` : ''}, ${look}${args['dimensions'] === false ? ', without sizes' : ', with inside sizes'}: ${view.width} × ${view.height} px, 1 m = ${view.pxPerMetre.toFixed(1)} px. North is the top of the drawing; the plan holds no real north. Look at the picture before you describe it.`]
       const ids = withIds ? idsOnFloor(plan, shown) : []
       const undecided = view.undecidedDoors ?? []
