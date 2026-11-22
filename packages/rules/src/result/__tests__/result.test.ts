@@ -110,7 +110,7 @@ describe('the front door', () => {
   })
 
   it('never throws, whatever it is given', () => {
-    const odd: unknown[] = [undefined, null, 0, 'not json', '[]', [], { walls: 'none' }, { walls: [{ id: 3 }] }, Symbol('x'), () => 1, new Proxy({}, { get: () => { throw new Error('trap') } })]
+    const odd: unknown[] = [undefined, null, 0, 'not json', '[]', [], { walls: 'none' }, { version: '2' }, Symbol('x'), () => 1, new Proxy({}, { get: () => { throw new Error('trap') } })]
     for (const raw of odd) {
       const result = inspectPlan(raw)
       expect(result.read).toBe(false)
@@ -127,17 +127,27 @@ describe('the front door', () => {
     expect(inspectPlan(JSON.stringify(flat()))).toEqual(inspectPlan(flat()))
   })
 
-  it('refuses a plan the format refuses by place and thing, never repeating the text found', () => {
-    const raw = { ...flat(), walls: flat().walls.map((w, i) => (i === 1 ? { ...w, thickness: 'thick', kind: 'Exterior' } : w)) }
-    const result = inspectPlan(raw)
+  it('refuses a plan the format refuses at its top level by place, never repeating the text found', () => {
+    const result = inspectPlan({ ...flat(), version: 'v2 "approved"', walls: 'all of them' })
     expect(result.read).toBe(false)
     expect(result.checks).toEqual([])
-    const id = flat().walls[1]!.id
     expect(result.lines.map((l) => [l.code, l.thing, l.floor])).toEqual([
-      ['plan/wrong-type', { kind: 'wall', id }, 'ground'],
-      ['plan/unknown-word', { kind: 'wall', id }, 'ground']
+      ['plan/unknown-word', { kind: 'plan', id: '' }, null],
+      ['plan/wrong-type', { kind: 'plan', id: '' }, null]
     ])
-    for (const l of result.lines) expect(JSON.stringify(l)).not.toMatch(/thick"|Exterior/)
+    for (const l of result.lines) expect(JSON.stringify(l)).not.toMatch(/approved|all of them/)
+  })
+
+  it('reads a wall with a value it cannot read part by part, and checks the rest (MSG-6)', () => {
+    const raw = { ...flat(), walls: flat().walls.map((w, i) => (i === 1 ? { ...w, thickness: null, kind: 'Exterior' } : w)) }
+    const result = inspectPlan(raw)
+    expect(result.read).toBe(true)
+    expect(result.checks.length).toBeGreaterThan(0)
+    const id = flat().walls[1]!.id
+    expect(result.lines.filter((l) => l.code.startsWith('plan/')).map((l) => [l.code, l.kind, l.thing, l.floor, l.found])).toEqual([
+      ['plan/value-left-out', 'worth-a-look', { kind: 'wall', id }, 'ground', 'null at walls[1].thickness, so the default, 0.2, is used'],
+      ['plan/read-as-meant', 'worth-a-look', { kind: 'wall', id }, 'ground', 'the text "Exterior" at walls[1].kind, read as "exterior"']
+    ])
   })
 
   it('names the checks it ran, the figures and the limits, under the label', () => {
@@ -208,7 +218,8 @@ describe('words Grid does not read (MSG-4)', () => {
   })
 
   it('gives nothing new for a plan the format refuses: its refusals are the lines', () => {
-    const refused = { ...wordsNotRead(), units: 'ft' }
+    // A version Grid does not read still refuses the plan whole (MSG-6 reads `units: "ft"` now).
+    const refused = { ...wordsNotRead(), version: '2' }
     expect(inspectPlan(refused).lines.map((l) => l.code)).toEqual(['plan/unknown-word'])
   })
 })

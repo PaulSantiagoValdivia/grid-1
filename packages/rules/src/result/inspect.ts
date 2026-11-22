@@ -23,6 +23,8 @@ import {
   type Issue
 } from '@ongrid/floorplan/geometry'
 import { DEFAULT_FLOOR_ID, FloorPlanSchema, ROOM_USES, quoted, textProblem } from '@ongrid/floorplan/types/floorplan'
+import { readPlanText, type TextMark, type TextRead } from '@ongrid/floorplan/types/jsonText'
+import { readPlanParts, type PartRef, type ReadFault } from '@ongrid/floorplan/types/readParts'
 import { readingNotes, type ReadingNote } from '@ongrid/floorplan/types/reading'
 import { FIGURE_LIMITS } from '../checks/catalogue'
 import { checkLocalRules, type CheckOptions } from '../checks/check'
@@ -191,23 +193,113 @@ function readingLines(raw: Record<string, unknown>, notes: readonly ReadingNote[
   })
 }
 
-type Read = { plan: FloorPlan; raw: Record<string, unknown> } | { plan: null; lines: ResultLine[] }
+
+/** A part a reading fault is about, as a line names it: `Door "d1"`, or `The wall at walls[3]` when its id cannot be read. */
+function faultPart(raw: Record<string, unknown>, ref: PartRef): { thing: Thing; floor: string | null; label: string; place: string } {
+  const place = `${ref.list}[${ref.index}]`
+  const kind = PART_KINDS[ref.list]
+  const items = raw[ref.list]
+  const fields = Array.isArray(items) && typeof items[ref.index] === 'object' && items[ref.index] !== null ? (items[ref.index] as Record<string, unknown>) : {}
+  const type = fields['type']
+  const noun = kind === 'opening' && (type === 'door' || type === 'window' || type === 'opening') ? OPENING_NOUN[type] : NOUN[kind]
+  let floor: string | null
+  if (kind === 'floor') floor = ref.id
+  else if (kind === 'opening') {
+    const walls = Array.isArray(raw['walls']) ? (raw['walls'] as unknown[]) : []
+    const wall = walls.find((w) => typeof w === 'object' && w !== null && (w as Record<string, unknown>)['id'] === fields['wall'])
+    floor = wall === undefined ? null : safeId((wall as Record<string, unknown>)['floor']) ?? DEFAULT_FLOOR_ID
+  } else floor = safeId(fields['floor']) ?? DEFAULT_FLOOR_ID
+  // A part whose id cannot be read is named by its place, and the line is about the plan.
+  if (ref.id === null) return { thing: { kind: 'plan', id: '' }, floor: null, label: `The ${noun.toLowerCase()} at ${place}`, place }
+  return { thing: { kind, id: ref.id }, floor, label: `${noun} ${quoted(ref.id)}`, place }
+}
+
+const PART_KINDS: Record<PartRef['list'], ThingKind> = { walls: 'wall', rooms: 'room', openings: 'opening', floors: 'floor', items: 'item' }
+
+/** An id no part of the file has: `kitchen-2`. */
+function freeId(raw: Record<string, unknown>, id: string): string {
+  const taken = new Set<string>()
+  for (const list of Object.keys(PART_KINDS)) {
+    const items = raw[list]
+    if (!Array.isArray(items)) continue
+    for (const item of items) if (typeof item === 'object' && item !== null && typeof (item as Record<string, unknown>)['id'] === 'string') taken.add((item as Record<string, unknown>)['id'] as string)
+  }
+  const base = id.trim().replace(/\s+/g, '-') || 'part'
+  let n = 2
+  while (taken.has(`${base}-${n}`)) n++
+  return quoted(`${base}-${n}`)
+}
+
+/**
+ * What the reader did with each part or value it could not read as written (MSG-6), one line
+ * each: a part left out (or one whose id another part keeps) is `left-out`, a value left out or
+ * read as meant is `worth-a-look`.
+ */
+function faultLines(raw: Record<string, unknown>, faults: readonly ReadFault[]): ResultLine[] {
+  return faults.map((fault) => {
+    if (fault.kind === 'id-clash') {
+      const at = faultPart(raw, fault.part)
+      const kept = faultPart(raw, fault.kept)
+      const subject: Subject = { ...blank(at.label), place: `${at.place}.id`, rename: freeId(raw, fault.part.id), kept: `${kept.label} (${kept.place})`, also: [fault.kept.id] }
+      return line('plan/id-clash', 'left-out', at.thing, at.floor, subject)
+    }
+    const at = fault.part === null ? { thing: { kind: 'plan' as const, id: '' }, floor: null, label: NOUN.plan } : faultPart(raw, fault.part)
+    const subject: Subject = { ...blank(at.label), said: fault.found, place: placeText(fault.path), wants: fault.wants }
+    if (fault.kind === 'read-as-meant') return line('plan/read-as-meant', 'worth-a-look', at.thing, at.floor, { ...subject, read: fault.read })
+    if (fault.kind === 'value-left-out') return line('plan/value-left-out', 'worth-a-look', at.thing, at.floor, { ...subject, used: fault.used })
+    return line('plan/part-left-out', 'left-out', at.thing, at.floor, subject)
+  })
+}
+
+/** A file that cannot be read as JSON, in the words of what it is (MSG-6). */
+function textFaultLine(fault: Extract<TextRead, { ok: false }>['fault']): ResultLine {
+  const plan = { kind: 'plan' as const, id: '' }
+  if (fault.kind === 'not-json') {
+    const where = fault.ends ? 'text that ends before the JSON does' : fault.line === null ? "text that can't be read as JSON" : `text that stops being JSON at line ${fault.line}, column ${fault.column}`
+    return line('plan/not-json', 'refused', plan, null, { ...blank(NOUN.plan), said: where })
+  }
+  const side = (s: { label: string | null }, other: string): string => (s.label === null ? other : quoted(s.label))
+  const ours = side(fault.ours, 'the first side')
+  const theirs = side(fault.theirs, 'the second side')
+  const list = (ids: readonly string[]): string => (ids.length > 6 ? `${ids.slice(0, 6).map(quoted).join(', ')} and ${ids.length - 6} more` : ids.map(quoted).join(', '))
+  const parts = [
+    fault.ours.adds.length > 0 ? `${ours} adds ${list(fault.ours.adds)}` : null,
+    fault.theirs.adds.length > 0 ? `${theirs} adds ${list(fault.theirs.adds)}` : null,
+    fault.changed.length > 0 ? `both sides change ${list(fault.changed)}` : null
+  ].filter((part): part is string => part !== null)
+  const sides = parts.join('; ')
+  const conflicts = fault.conflicts === 1 ? 'one conflict' : `${fault.conflicts} conflicts`
+  return line('plan/unfinished-merge', 'refused', plan, null, {
+    ...blank(NOUN.plan),
+    said: `${conflicts} between ${ours} and ${theirs}, the first at line ${fault.line}${sides ? `: ${sides}` : ''}`,
+    sides
+  })
+}
+
+type Read =
+  | { plan: FloorPlan; raw: Record<string, unknown>; lines: ResultLine[]; leftOutWalls: ReadonlySet<string> }
+  | { plan: null; lines: ResultLine[] }
 
 function readPlan(raw: unknown): Read {
   let value = raw
+  let marks: readonly TextMark[] = []
   if (typeof raw === 'string') {
-    try {
-      value = JSON.parse(raw)
-    } catch {
-      return { plan: null, lines: [line('plan/not-json', 'refused', { kind: 'plan', id: '' }, null, { ...blank(NOUN.plan), said: "text that can't be read as JSON" })] }
-    }
+    // MSG-6: the text is read before the JSON reader, for a merge left unfinished, NaN and a decimal comma.
+    const text = readPlanText(raw)
+    if (!text.ok) return { plan: null, lines: [textFaultLine(text.fault)] }
+    value = text.value
+    marks = text.marks
   }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return { plan: null, lines: [line('plan/not-an-object', 'refused', { kind: 'plan', id: '' }, null, blank(NOUN.plan))] }
   }
-  const parsed = FloorPlanSchema.safeParse(value)
-  if (parsed.success) return { plan: parsed.data, raw: value as Record<string, unknown> }
-  return { plan: null, lines: refusalLines(value as Record<string, unknown>, parsed.error.issues) }
+  // MSG-6: part by part, so a fault stays where it is and the rest is still checked.
+  const read = readPlanParts(value, marks)
+  if (read.plan === null) {
+    if (read.refusal.kind === 'not-an-object') return { plan: null, lines: [line('plan/not-an-object', 'refused', { kind: 'plan', id: '' }, null, blank(NOUN.plan))] }
+    return { plan: null, lines: refusalLines(value as Record<string, unknown>, read.refusal.issues) }
+  }
+  return { plan: read.plan, raw: value as Record<string, unknown>, lines: faultLines(value as Record<string, unknown>, read.faults), leftOutWalls: read.leftOutWalls }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -384,7 +476,7 @@ function record(lines: readonly ResultLine[], read: boolean, report: RulesReport
 /** Every line about a plan that was read. */
 function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOptions): GridResult {
   const { plan } = read
-  const lines: ResultLine[] = []
+  const lines: ResultLine[] = [...read.lines]
   const names = namesOf(plan)
   const stage = (name: string, body: () => void): void => {
     try {
@@ -398,7 +490,7 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     lines.push(...readingLines(read.raw, readingNotes(read.raw), names))
   })
   stage('drawing check', () => {
-    lines.push(...validatePlan(plan).issues.map((issue) => issueLine(issue, names)))
+    lines.push(...validatePlan(plan, undefined, { leftOutWalls: read.leftOutWalls }).issues.map((issue) => issueLine(issue, names)))
   })
   stage('door check', () => {
     const seen = new Set<string>()

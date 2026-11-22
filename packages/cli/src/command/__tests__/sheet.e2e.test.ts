@@ -152,7 +152,8 @@ describe('grid sheet (VEW-7)', () => {
     plan.rooms.find((r) => r.id === 'study')!.boundary = ['nope-a', 'nope-b', 'nope-c']
     writeFileSync(join(dir, 'broken.json'), JSON.stringify(plan))
     const line = 'Left out 1 part that can\'t be drawn: study. grid check says why.\n'
-    expect(grid(['draw', 'broken.json', '--floor', 'first']).err).toBe(line)
+    // grid draw then names the doors it drew as undecided (SHT-1); the sheet says that on the page.
+    expect(grid(['draw', 'broken.json', '--floor', 'first']).err).toBe(`${line}Drew 2 doors with no stated swing as undecided, a dashed line and "?": "balcony", "d_up". Set each one's hinge and swing in the plan.\n`)
     const run = grid(['sheet', 'broken.json', '--layout', 'client', ...out])
     expect(run.status).toBe(0)
     expect(run.err).toBe(line)

@@ -1,9 +1,12 @@
 // The one file of the scoreboard that calls Grid. Everything here is Grid's own library, used the
-// way the lab's harnesses used it, so the figures can be set against the lab's. It only uses
-// functions that exist both today and at the reference commit (76caeb8), so the same runner
-// measures both.
+// way the lab's harnesses used it, so the figures can be set against the lab's. It uses functions
+// that exist both today and at the reference commit (76caeb8), so the same runner measures both,
+// with one exception: since MSG-6 a plan is read part by part (`readPlanParts`), as Grid's own
+// commands and front door read it. At the reference commit, read it with `parseFloorPlan`.
 import { createHash } from 'node:crypto'
-import { parseFloorPlan, type FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { type FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import { readPlanText } from '@ongrid/floorplan/types/jsonText'
+import { readPlanParts, type ReadFault } from '@ongrid/floorplan/types/readParts'
 import {
   floorElevations,
   indexPlan,
@@ -33,7 +36,7 @@ export interface Line {
   readonly message: string
 }
 
-/** Everything Grid says and produces for one plan file. Never throws. */
+/** Everything Grid says and produces for one plan file (as JSON, or its text). Never throws. */
 export interface GridRun {
   readonly parseOk: boolean
   /** Where the schema refused the file, as dotted paths ("walls.3.thickness"). */
@@ -64,6 +67,31 @@ interface Mutable {
 const lines = (list: readonly { code: string; id: string; message: string }[]): Line[] =>
   list.map((i) => ({ code: i.code, id: i.id, message: i.message }))
 
+/** What the reader did with a part or value it could not read as written (MSG-6), as a line. */
+function faultLine(fault: ReadFault): Line {
+  const at = `${fault.part === null ? '' : `${fault.part.list}[${fault.part.index}]`}`
+  if (fault.kind === 'id-clash') return { code: 'plan/id-clash', id: fault.part.id, message: `${at}.id is the id of ${fault.kept.list}[${fault.kept.index}] ${fault.kept.id} too` }
+  return { code: `plan/${fault.kind}`, id: fault.part?.id ?? '', message: `${fault.path.join('.')} is ${fault.found}; the format takes ${fault.wants}` }
+}
+
+/**
+ * A plan read part by part, or why it was refused, as dotted paths ("walls.3.thickness"). A plan
+ * given as text is read as Grid reads a file: NaN and a decimal comma named, a merge refused.
+ */
+function read(raw: unknown): { plan: FloorPlan; faults: readonly ReadFault[]; leftOutWalls: ReadonlySet<string> } | { problems: string[] } {
+  let value = raw
+  let marks: Parameters<typeof readPlanParts>[1] = []
+  if (typeof raw === 'string') {
+    const text = readPlanText(raw)
+    if (!text.ok) return { problems: [''] }
+    value = text.value
+    marks = text.marks
+  }
+  const result = readPlanParts(value, marks)
+  if (result.plan !== null) return result
+  return { problems: result.refusal.kind === 'schema' ? result.refusal.issues.map((i) => i.path.join('.')) : [''] }
+}
+
 /**
  * Runs one plan through every stage an agent can reach: reading, the drawing's checks, the door
  * swings, room areas floor by floor, storey heights, the rules report with and without a
@@ -79,20 +107,24 @@ export function runGrid(raw: unknown, options: { exports?: boolean } = {}): Grid
       return undefined
     }
   }
-  let plan: FloorPlan
+  let found: ReturnType<typeof read>
   try {
-    plan = parseFloorPlan(raw)
+    found = read(raw)
   } catch (error) {
-    const issues = (error as { issues?: { path?: unknown[] }[] }).issues
-    if (Array.isArray(issues)) run.parseProblems = issues.map((i) => (i.path ?? []).join('.'))
-    else run.thrown.push(`parse: ${message(error)}`)
+    run.thrown.push(`parse: ${message(error)}`)
     run.signature = { parse: `false${message(error)}` }
     return run
   }
+  if (!('plan' in found)) {
+    run.parseProblems = found.problems
+    run.signature = { parse: `false${found.problems.join(',')}` }
+    return run
+  }
+  const { plan, faults, leftOutWalls } = found
   run.parseOk = true
   const floors = stage('floors', () => planFloors(plan)) ?? []
   stage('validate', () => {
-    run.issues = lines(validatePlan(plan).issues)
+    run.issues = [...faults.map(faultLine), ...lines(validatePlan(plan, undefined, { leftOutWalls }).issues)]
   })
   stage('sweeps', () => {
     run.sweeps = lines(validateDoorSweeps(plan, (o) => ({ hinge: o.hinge, swing: o.swing })))
@@ -102,7 +134,7 @@ export function runGrid(raw: unknown, options: { exports?: boolean } = {}): Grid
     for (const floor of floors) {
       const slice = planForFloor(plan, floor.id)
       const index = indexPlan(slice)
-      const broken = validatePlan(slice, index, BROKEN_ONLY).broken
+      const broken = validatePlan(slice, index, { ...BROKEN_ONLY, leftOutWalls }).broken
       for (const room of slice.rooms) {
         if (broken.has(room.id)) {
           areas.push(`${room.id}:null`)
@@ -170,18 +202,20 @@ export type RoomAreas = ReadonlyMap<string, number | null>
  * drawing's checks mark as broken, or whose outline cannot be closed, has no area.
  */
 export function roomAreas(raw: unknown): RoomAreas | null {
-  let plan: FloorPlan
+  let found: ReturnType<typeof read>
   try {
-    plan = parseFloorPlan(raw)
+    found = read(raw)
   } catch {
     return null
   }
+  if (!('plan' in found)) return null
+  const { plan, leftOutWalls } = found
   const out = new Map<string, number | null>()
   let index: ReturnType<typeof indexPlan>
   let broken: ReadonlySet<string>
   try {
     index = indexPlan(plan)
-    broken = validatePlan(plan, index, BROKEN_ONLY).broken
+    broken = validatePlan(plan, index, { ...BROKEN_ONLY, leftOutWalls }).broken
   } catch {
     for (const room of plan.rooms) out.set(`${room.floor ?? 'ground'}|${room.id}`, null)
     return out

@@ -146,6 +146,8 @@ const COMMAND_SLOTS: Readonly<Record<string, readonly CommandSlot[]>> = {
     { label: 'the plan', args: (p) => ['tidy', p], given: asIs },
     { label: '--out', args: (p) => ['tidy', PLAN, '--apply', 'all', '--out', `${p}.json`], given: (p) => `${p}.json` },
   ],
+  // HND-9: its occupancy file is the plan's name beside the plan, never a path of its own.
+  occupancy: [{ label: 'the plan', args: (p) => ['occupancy', p], given: asIs }],
   // The tool server: its tools' paths are below. --project is the project folder itself.
   serve: [],
   mcp: [],
@@ -160,6 +162,7 @@ const PLAN_READERS: ReadonlyArray<readonly [label: string, args: (plan: string) 
   ['export', (p) => ['export', p, '--format', 'ifc']],
   ['sheet', (p) => ['sheet', p, '--layout', 'check']],
   ['tidy', (p) => ['tidy', p]],
+  ['occupancy', (p) => ['occupancy', p]],
   ['write --replace', (p) => ['write', ROOMS, '--plan', p, '--replace']],
 ]
 

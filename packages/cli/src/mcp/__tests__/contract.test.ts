@@ -14,7 +14,8 @@ import { GRID_TOOLS, projectTools } from '../serveTools'
 
 const dir = mkdtempSync(join(tmpdir(), 'grid-contract-'))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
-writeFileSync(join(dir, 'refused.json'), JSON.stringify({ walls: [{ id: 'w1', start: [0, 0], end: [4, 0], thickness: -1 }] }))
+// A version Grid does not read: since MSG-6 a fault inside a part no longer refuses the plan.
+writeFileSync(join(dir, 'refused.json'), JSON.stringify({ version: '2', walls: [{ id: 'w1', start: [0, 0], end: [4, 0], thickness: -1 }] }))
 const tools = projectTools(openProject(dir, dir))
 
 async function send(message: unknown): Promise<Record<string, unknown>> {
