@@ -45,6 +45,7 @@ import { openingPlaceIssues } from './openingPlaces'
 import { expandPatterns } from './patterns'
 import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
 import { roomZones } from './zones'
+import { plotBoundary, ringFault } from './plot'
 
 /**
  * `floor` issues are about a floor as a whole; their id is the floor's id. `item` is a fixture
@@ -158,6 +159,25 @@ function validateOrigin(plan: FloorPlan, issues: Issue[]): void {
       )
     )
   }
+}
+
+/**
+ * BRF-3: a plot boundary that crosses itself, or encloses no ground, measures nothing: no distance
+ * to it and no plot coverage. Drawn as it is written, and worth a look.
+ */
+function validateBoundary(plan: FloorPlan, issues: Issue[]): void {
+  if (isFloorSlice(plan)) return
+  const boundary = plotBoundary(plan)
+  if (boundary === null || boundary.problem === null) return
+  issues.push(
+    issue(
+      'plan',
+      'plan',
+      'plan/boundary-crosses',
+      said('issue.plan/boundary-crosses', { problem: ringFault(boundary.points) ?? boundary.problem }),
+      'warning'
+    )
+  )
 }
 
 /**
@@ -1137,6 +1157,7 @@ export function validatePlan(
   const noWalls = plan.walls.length === 0 && leftOut.size === 0 && plan.rooms.length + plan.openings.length > 0
 
   validateOrigin(plan, issues)
+  validateBoundary(plan, issues)
   if (noWalls) {
     issues.push(
       issue(

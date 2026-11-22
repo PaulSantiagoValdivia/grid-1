@@ -193,6 +193,9 @@ display chooses a point. Names from the plan are never translated.
 | `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
 | `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
+| `plan/site-things-drawn-only` | The site's things are drawn only: {1 fence, 3 trees and 1 pool}, not measured or checked, and never taken as a wall, a room or a storey's height | nothing: the site's things are for the drawing |
+| `plan/not-checked-boundary` | No distance to the plot's boundary was measured: {why the building has no outline} | walls that close the building's outline, on a floor at or above the ground floor |
+| `plan/boundary-crosses` | The site's boundary is not one closed shape, so no distance to it and no plot coverage is measured | the plot's corners in order round it, each edge meeting only the next |
 | `plan/note-no-place` | Note "{id}" names a room the plan does not have, so it is not drawn | a room id from the plan, or a point (at) |
 | `plan/front-not-said` | The front names wall "{id}", which the plan does not have, so no front is said | a wall that faces outside, or an opening in one, such as the front door |
 | `plan/y-down` | The plan says its y runs down the page, so every drawing and export shows the building mirrored; which way its walls face is read the right way round | a plan whose y runs up the page, as Grid draws it |
@@ -305,6 +308,8 @@ display chooses a point. Names from the plan are never translated.
 | `opening/to-undrawn-space` | A door from "{name}" leads to a space that is not drawn as a room | a room, or the outside, on the far side |
 | `opening/door-out-above-ground` | A door from "{name}" leads outside {height} m above the ground, so it is not a way out | a way out at ground level, or a stair down to one |
 | `opening/below-ground` | The {window} in "{name}" lies wholly below the ground: its top is {depth} m under the ground level the site states (partly: its sill, threshold or foot) | a door or window above the ground outside, or a light well or an outside stair in front of it |
+| `plan/setback-short` | The building is {distance} m from the {east} boundary; you asked for {set-back} m ({set-back} m is assumed for you, to confirm, for one the site marks assumed) | {set-back} m from it, the set-back the person asked for from that edge, the street edges or every edge: their own figure, not a code's |
+| `plan/over-boundary` | The building reaches {distance} m over the {east} boundary, out of the plot | the building inside the plot's boundary |
 | `room/stair-out-of-line` | The stair "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so it does not join the two floors | the stair room over the one on the floor below |
 | `room/lift-out-of-line` | The lift shaft "{name}" on "{floor}" does not lie over "{room}" on "{floor}", so the shaft is out of line | the shaft over the one on the floor below |
 | `opening/too-small-to-pass` | An opening from "{name}" is too small for a person to get through, so it is not a way through | at least {width} m wide or {height} m high, or a sill no more than {sill} m above the floor: Grid's own size for a person to get through, not a code figure |
@@ -355,7 +360,7 @@ checks first, then the figure checks, whether it ran or not:
 | Field | What it holds |
 |---|---|
 | `ruleId`, `title` | The check, as in `checks`. |
-| `looksAt` | What it looks at: `floor`, `room` or `door` (doors and openings). |
+| `looksAt` | What it looks at: `floor`, `room`, `door` (doors and openings) or `edge`, the edges of the plot's boundary, by number as text (`"1"`, BRF-3), on `floor` `""`. |
 | `lookedAt` | The parts it looked at, by floor: `{ floor, ids }`, the ids sorted. |
 | `lookedAtCount` | How many parts that is. |
 | `skipped` | The parts it did not look at, by floor and reason: `{ floor, ids, reason, why }`. `floor` is `""` for the whole plan. |
@@ -382,6 +387,8 @@ found in them. A `reason` is one of:
 | `alone_off_ground` | the only room on a floor off the ground, reached by a stair the plan does not draw |
 | `above_escape_storeys` | above the third storey, where the figures here stop |
 | `no_ground_level` | the plan states no ground level for the site (LVL-4: the check of doors and windows below the ground) |
+| `no_building_outline` | the building has no outline to measure from (BRF-3: the distances to the plot's boundary) |
+| `boundary_not_closed` | the boundary is not one closed shape (BRF-3) |
 | `no_use` | no use stated |
 | `use_not_covered` | the check is not about rooms of its use: only bedrooms are checked for escape, and only bedrooms, living and dining rooms for size |
 | `part_of_room` | a zone (CNT-8), looked at as part of its room, with its use: the size and escape checks and the route checks look at the room as a whole |
@@ -626,7 +633,61 @@ A change that would add a problem that leaves a part out is refused, and nothing
   `opening/above-roof`, `room/zone-not-in-room`, `floor/rooflight-misplaced`,
   `floor/dormers-not-drawn`, and the six `pattern/…` codes) are said in every language too, and so
   is a facade's caption. A line for several rooms (MSG-5) has its own wording for many in each language
-  (`check.<wording>.many`), the same English as before.
+  (`check.<wording>.many`), the same English as before. So are BRF-3's: the plot check's title,
+  limit and skip reasons, `plan/setback-short`, `plan/over-boundary`, `plan/boundary-crosses`,
+  `plan/not-checked-boundary` and `plan/site-things-drawn-only`, the boundary's edges by name
+  (`the east boundary` is `la linde este`), and `grid describe`'s lines on the plot. Their lines'
+  `values` hold `edge`, `distance`, `past` and `asked`.
+
+### 2026-11-22: repeat, mirror and turn, and a mirrored plan recognised (WRT-4)
+
+- `grid_diff` data gains `turn`: null, or `id` (`mirror-left-right`, `mirror-top-bottom`,
+  `turn-90`, `turn-180`, `turn-270`, `mirror-diagonal`, `mirror-other-diagonal`), `mirrored`,
+  `degrees` (counter-clockwise, after any mirror) and `text`, the line the text answer gives
+  right after "Compared with". The verdict then starts with that line. A mirrored or turned plan
+  has `sameBuilding` false, and gets no picture when nothing else changed. The core's
+  `compareBuildings` gives the same `turn` and `turnLine`.
+- `grid_mirror` takes `turn` (90, 180, 270 or -90) in place of `how`, which is no longer
+  required: one of the two, never both. Its title is "Mirror or turn the plan". The answer's
+  fields are as for every change.
+- `grid_write_rooms`: rooms text's `repeat` may say where its first placement goes and take
+  `first` and `last` settings; a `floor` line may end with `copy <floor> [with openings]`; a room
+  line may say `through <floor>`. A room that rises through a floor not written after its own is
+  refused with `rooms/unknown-floor`. No new message code and no new tool.
+- With LVL-8's opening patterns: `grid_mirror` swings a pattern's door the other way with every
+  plain door's, and its text, mirror or turn, adds `Its opening pattern stays a pattern, and the
+  openings it places follow its wall.` when the plan has patterns. `grid_write_rooms` adds one
+  line when the plan file has patterns, `Kept the plan's opening pattern as the file has it: …`,
+  ending with the first thing the walls just written keep a pattern from placing, if any; its
+  `drawingProblems.after` counts the plan with its kept patterns, as `before` does. A `pattern`
+  line in rooms text is refused (`rooms/syntax`), saying where a pattern goes.
+
+### 2026-11-22: the plot, its set-backs and the distances to it (BRF-3)
+
+- The plan's `site` may hold `boundary`, `streets`, `setbacks` and `things`
+  ([plan-file.md](plan-file.md#the-plot-its-boundary-set-backs-and-what-is-on-it)). A street,
+  a set-back or a thing the format cannot read is left out alone (`plan/value-left-out`), the
+  rest of the site kept.
+- A new plan check, `site-boundary`, looks at the edges of the boundary (`looksAt: "edge"`, ids
+  the edges' numbers as text, on `floor` `""`), with two new skip reasons, `no_building_outline`
+  and `boundary_not_closed`. Its findings are about the plan (`thing` `{ kind: "plan" }`), on the
+  floor whose outline comes nearest the edge, and carry `boundary` (`edge`, `faces`, `street`,
+  `name`, `distance`, `past`, `asked` with `distance`, `from` and `source`, and `northStated`):
+  `plan/setback-short`, the building nearer an edge than the set-back the person asked for, and
+  `plan/over-boundary`, the building past an edge. Every record lists one more check in
+  `coverage` and one more line in `limits`.
+- New codes: `plan/boundary-crosses` (worth a look: the boundary crosses itself or encloses no
+  ground), `plan/not-checked-boundary` (not checked: the building has no outline to measure
+  from), and `plan/site-things-drawn-only` (not checked: the site's things are drawn only).
+- `floor/sketch-drawn-only`'s fix now offers the site's things (`site.things`) for a fence, a
+  path, a tree or a pool drawn as a sketch.
+- `grid_measure` takes `what=site`, with no other argument: `answer` holds `measures`, `north`
+  and `yAxis` as `what=facing` gives them, `boundary` (each edge with its distance, set-back and
+  shortfall), `setbacksAre`, `footprint`, `why`, `coverage` (`ratio`, `percent`, `covered`,
+  `plot`), `faces` and `things`. `grid describe` adds the plot's area, its coverage and the edge
+  the building comes nearest. `grid_mirror` mirrors the boundary and the things with the walls.
+- The plan's drawing holds `site` and `siteBounds` (`PlanDrawing`), on the ground floor's plan.
+
 ### 2026-11-22: a DXF a drafter can keep working in (HND-1)
 
 - `grid_export` adds `dxfProfile`: for a DXF, the profile file in the project folder its layers

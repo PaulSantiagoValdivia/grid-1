@@ -87,6 +87,18 @@ export interface CodeEntry {
 }
 
 /**
+ * BRF-3: an edge of the plot's boundary, as a line's found names it: the way it faces, whether north
+ * is stated, and whether it is on a street (`line.part.edgeFaces`).
+ */
+const edgeValues = (b: NonNullable<RuleFinding['boundary']>): Values => ({
+  edge: b.edge,
+  faces: said('line.part.edgeFaces', {
+    way: said(`describe.way.${b.faces}` as MessageKey),
+    north: b.northStated ? '' : said('line.part.edgeFaces.noNorth'),
+    street: b.street ? said('line.part.edgeFaces.street') : ''
+  })
+})
+/**
  * CNT-8: on a finding about a room with zones, the use the whole room was checked as, and the
  * zone it was read from when it is not the room's own (`line.room/too-small.found.whole`).
  */
@@ -415,6 +427,36 @@ export const CODES = {
     },
     variant: { found: (s) => (s.finding?.belowGround === undefined ? '' : s.finding.belowGround.wholly ? 'wholly' : 'partly') }
   },
+  // BRF-3 (lab EL-16): the building against its plot. The set-backs are the person's own figures:
+  // a line says how far short of one the building stands, and never that a distance is enough.
+  'plan/setback-short': {
+    values: (s): Values => {
+      const b = s.finding?.boundary
+      const asked = b?.asked ?? null
+      return {
+        wording: s.finding?.said ?? s.finding?.message ?? said('line.plan/setback-short.says.none'),
+        ...(b === undefined ? {} : { ...edgeValues(b), distance: num(metresText(b.distance, 2, b.asked?.distance)) }),
+        ...(asked === null
+          ? {}
+          : {
+              asked: num(metresText(asked.distance)),
+              who: said(asked.source === 'assumed' ? 'line.part.setbackWho.assumed' : 'line.part.setbackWho'),
+              from: said(`line.part.setbackFrom.${asked.from}`)
+            })
+      }
+    },
+    variant: { found: (s) => (s.finding?.boundary === undefined ? '' : 'edge'), needed: (s) => (s.finding?.boundary?.asked == null ? '' : 'asked') }
+  },
+  'plan/over-boundary': {
+    values: (s): Values => {
+      const b = s.finding?.boundary
+      return {
+        wording: s.finding?.said ?? s.finding?.message ?? said('line.plan/over-boundary.says.none'),
+        ...(b === undefined ? {} : { ...edgeValues(b), past: num(metresText(b.past)) })
+      }
+    },
+    variant: { found: (s) => (s.finding?.boundary === undefined ? '' : 'edge') }
+  },
   'room/stair-out-of-line': {
     values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
   },
@@ -482,6 +524,12 @@ export const CODES = {
   'floor/sketch-drawn-only': {
     values: (s): Values => ({ categories: s.names.join(', ') })
   },
+  // BRF-3: the site's things are drawn only, never measured or checked.
+  'plan/site-things-drawn-only': {},
+  'plan/not-checked-boundary': {
+    values: (s): Values => ({ wording: s.notice?.said ?? said('line.plan/not-checked-boundary.says.none') })
+  },
+  'plan/boundary-crosses': {},
   'plan/note-no-place': {},
   // CNT-3: the front, and which way the plan's y runs.
   'plan/front-not-said': {},

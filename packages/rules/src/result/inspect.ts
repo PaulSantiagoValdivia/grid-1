@@ -19,6 +19,7 @@ import {
   marksWithNoPart,
   planFacing,
   planFloors,
+  siteThingsSaid,
   validateDoorSweeps,
   validatePlan,
   withPatterns,
@@ -62,7 +63,9 @@ const FINDING_CODES: Record<FindingCode, string> = {
   escape_window_too_small: 'room/escape-window-too-small',
   escape_window_too_high: 'room/escape-window-too-high',
   stair_out_of_line: 'room/stair-out-of-line',
-  lift_out_of_line: 'room/lift-out-of-line'
+  lift_out_of_line: 'room/lift-out-of-line',
+  setback_short: 'plan/setback-short',
+  over_boundary: 'plan/over-boundary'
 }
 
 function oneLine(text: string): string {
@@ -461,6 +464,8 @@ function findingThing(finding: RuleFinding, wayOutNotDrawn: ReadonlySet<string>)
   const thing: Thing =
     finding.code === 'no_exit'
       ? { kind: 'floor', id: finding.floor }
+      : finding.code === 'setback_short' || finding.code === 'over_boundary'
+      ? { kind: 'plan', id: '' }
       : (finding.code === 'door_to_undrawn_space' ||
           finding.code === 'door_to_outside_above_ground' ||
           finding.code === 'opening_below_ground' ||
@@ -555,6 +560,8 @@ function noticeCode(notice: NotChecked): string {
       return 'floor/not-checked-above-escape-storeys'
     case 'no_rooms':
       return 'plan/not-checked-no-rooms'
+    case 'boundary_not_measured':
+      return 'plan/not-checked-boundary'
     case 'not_for_building': {
       const what = notice.ruleId === 'habitable-room-area' ? 'sizes' : 'escapes'
       return notice.floor === '' ? `plan/not-checked-${what}-for-building` : `floor/not-checked-${what}-for-building`
@@ -621,7 +628,7 @@ function noticeLine(notice: NotChecked, names: Names, country: string, wayOutNot
 }
 
 /** The stages of a check, by their words (`line.part.stage.*`). */
-type Stage = 'reading' | 'drawing' | 'door' | 'plan' | 'writing' | 'orientation' | 'marks'
+type Stage = 'reading' | 'drawing' | 'door' | 'plan' | 'writing' | 'site' | 'orientation' | 'marks'
 
 function checkFailed(stage: Stage, error: unknown): ResultLine {
   return line('plan/check-failed', 'not-checked', { kind: 'plan', id: '' }, null, {
@@ -809,6 +816,19 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       if (note.room === undefined || rooms.has(note.room)) continue
       lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(name(note.id)), also: [note.id, note.room], floors: names.floors, said: said('line.part.noteRoom', { room: note.room }) }))
     }
+  })
+  // BRF-3: the site's things are drawn only, and the record says so once.
+  stage('site', () => {
+    const things = plan.site?.things ?? []
+    if (things.length === 0) return
+    lines.push(
+      line('plan/site-things-drawn-only', 'not-checked', { kind: 'plan', id: '' }, null, {
+        ...blank(THE_PLAN),
+        said: siteThingsSaid(things),
+        also: things.map((thing) => thing.id),
+        floors: names.floors
+      })
+    )
   })
   // CNT-3: a front that names no outside part, and a plan whose y runs down the page.
   stage('orientation', () => {

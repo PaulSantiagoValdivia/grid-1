@@ -1,10 +1,11 @@
 /**
  * The rules, as data.
  *
- * All six are checks on the drawing itself: a building has a way out, every room
+ * All seven are checks on the drawing itself: a building has a way out, every room
  * has a door, every room reaches the way out, every door leads somewhere, a stair
- * or a lift drawn on each floor lines up (LVL-3), and no door or window in an outside wall
- * lies below the ground the site states (LVL-4). None
+ * or a lift drawn on each floor lines up (LVL-3), no door or window in an outside wall
+ * lies below the ground the site states (LVL-4), and the building stands inside its plot and as
+ * far from each edge as the person asked (BRF-3: their figures, not a code's). None
  * applies a figure and none is taken from a building code, so none cites one.
  * Building codes ask for more than this; `LIMITS` says what these checks leave out.
  */
@@ -47,6 +48,12 @@ export const RULES: readonly Rule[] = [
     id: 'openings-above-ground',
     title: english(said('check.title.openings-above-ground')),
     source: PLAN_SANITY
+  },
+  {
+    // BRF-3: the set-backs are the person's own figures; the check applies none of its own.
+    id: 'site-boundary',
+    title: english(said('check.title.site-boundary')),
+    source: PLAN_SANITY
   }
 ]
 
@@ -57,7 +64,9 @@ export const PLAN_LIMIT_KEYS = [
   'check.limit.plan.2',
   'check.limit.plan.3',
   'check.limit.plan.4',
-  'check.limit.plan.5'
+  // BRF-3: the distance to the plot is measured from the walls' outside face, against the person's own set-backs.
+  'check.limit.plan.5',
+  'check.limit.plan.6'
 ] as const satisfies readonly MessageKey[]
 
 /** What the plan checks never look at. Shown with every report. */

@@ -11,7 +11,7 @@
  */
 
 import { quoted } from '../../types/planText'
-import { english, joined, name, num, said, sayParts, type MessageKey, type Said } from '../../messages/say'
+import { english, joined, name, num, said, sayParts, type MessageKey, type Said, type Value } from '../../messages/say'
 import { metresText } from '../rounding'
 import type { RuleFinding } from './types'
 
@@ -74,7 +74,17 @@ export const saids = {
     })
   },
   /** MSG-18: a door or doorless opening no person fits through. Its size is the finding's `passage`. */
-  openingTooSmall: (room: string): Said => said('check.openingTooSmall', { room: name(room) })
+  openingTooSmall: (room: string): Said => said('check.openingTooSmall', { room: name(room) }),
+  /**
+   * BRF-3 (lab EL-16): the set-back the person asked for, in their words: "you asked for 3.00 m", or
+   * for one assumed for them, that it is assumed. Their figure, never a code's. `asked` in metres.
+   */
+  asked: (asked: string, source: 'given' | 'assumed' | null): Said => said(source === 'assumed' ? 'check.asked.assumed' : 'check.asked', { asked: num(asked) }),
+  /** BRF-3: the building stands nearer an edge of its plot than the set-back asked for. `boundary` names the edge (`boundaryEdgeSaid`). */
+  setbackShort: (distance: string, boundary: Value, asked: string, source: 'given' | 'assumed' | null): Said =>
+    said('check.setbackShort', { distance: num(distance), boundary, asked: saids.asked(asked, source) }),
+  /** BRF-3: the building reaches past an edge of its plot. */
+  overBoundary: (past: string, boundary: Value): Said => said('check.overBoundary', { past: num(past), boundary })
 }
 
 export const wordings = {
@@ -104,6 +114,24 @@ export function passageSaid(passage: NonNullable<RuleFinding['passage']>): Said 
 
 export function passageText(passage: NonNullable<RuleFinding['passage']>): string {
   return english(passageSaid(passage))
+}
+
+/**
+ * BRF-3 (lab EL-16): the set-back the person asked for, in their words: "you asked for 3.00 m", or
+ * for one assumed for them, that it is assumed. Their figure, never a code's.
+ */
+export function askedText(asked: string, source: 'given' | 'assumed' | null): string {
+  return english(saids.asked(asked, source))
+}
+
+/** BRF-3: the building stands nearer an edge of its plot than the set-back asked for. */
+export function setbackShortText(distance: string, boundary: string, asked: string, source: 'given' | 'assumed' | null): string {
+  return english(saids.setbackShort(distance, boundary, asked, source))
+}
+
+/** BRF-3: the building reaches past an edge of its plot. */
+export function overBoundaryText(past: string, boundary: string): string {
+  return english(saids.overBoundary(past, boundary))
 }
 
 /** The same wordings as report lines. */

@@ -20,8 +20,10 @@ import type { FloorGraph } from './graph'
 import { floorJoins } from '../floorJoins'
 import { indexPlan } from '../plan'
 import type { Vec2 } from '../vec2'
-import { english, withSentence } from '../../messages/say'
+import { english, said, withSentence, type MessageKey } from '../../messages/say'
 import { messages, saids } from './messages'
+import { siteMeasures } from '../site'
+import { boundaryEdgeSaid } from '../plot'
 import type { FindingCode, HeldFinding, NotChecked, RuleFinding, RulesReport } from './types'
 import type { Opening } from '../plan'
 import { roomWallIds } from '../plan'
@@ -38,7 +40,9 @@ const RULE_OF: Record<FindingCode, string> = {
   stair_out_of_line: 'stairs-line-up',
   lift_out_of_line: 'stairs-line-up',
   opening_too_small_to_pass: 'room-has-door',
-  opening_below_ground: 'openings-above-ground'
+  opening_below_ground: 'openings-above-ground',
+  setback_short: 'site-boundary',
+  over_boundary: 'site-boundary'
 }
 
 const byText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0)
@@ -430,6 +434,41 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
         sentence
       )
     )
+  }
+
+  // The building against its plot (BRF-3, lab EL-16): over an edge of the boundary, or nearer an
+  // edge than the set-back the person asked for. Their figures, never a code's: a distance that
+  // keeps to one is not said to be enough, it is only not named.
+  if (plan.site?.boundary !== undefined) {
+    const site = siteMeasures(plan)
+    // A boundary that crosses itself is the drawing check's to name (`plan/boundary-crosses`).
+    if (site.boundary !== null && site.boundary.problem === null && site.footprint === null) {
+      // MSG-11: one wording per reason, the reason's own sentence after the colon.
+      const why = site.whySaid ?? null
+      const sentence = why === null ? said('check.boundaryNotMeasured.none') : said(why.key.replace('check.siteWhy.', 'check.boundaryNotMeasured.') as MessageKey, why.values)
+      notChecked.push(withSentence({ reason: 'boundary_not_measured', floor: '', rooms: [], openings: [], message: english(sentence) } as const, sentence))
+    }
+    for (const at of site.edges) {
+      if (at.past === 0 && at.short === null) continue
+      const { edge } = at
+      const asked = edge.setback
+      const boundary = {
+        edge: edge.edge,
+        faces: edge.faces,
+        street: edge.street,
+        name: edge.name,
+        distance: Number(metresText(at.distance, 3)),
+        past: Number(metresText(at.past, 3)),
+        asked: asked === null ? null : { distance: asked.distance, from: asked.from, source: asked.source },
+        northStated: site.boundary!.northStated
+      }
+      const named = boundaryEdgeSaid(site.boundary!.edges, edge)
+      const sentence =
+        at.past > 0
+          ? saids.overBoundary(metresText(at.past), named)
+          : saids.setbackShort(metresText(at.distance, 2, asked!.distance), named, metresText(asked!.distance), asked!.source)
+      findings.push(withSentence({ ...finding(at.past > 0 ? 'over_boundary' : 'setback_short', at.floor, [], english(sentence)), boundary }, sentence))
+    }
   }
 
   // Stair rooms, or lift shafts, that do not line up from one floor to the next (LVL-3, AU2).

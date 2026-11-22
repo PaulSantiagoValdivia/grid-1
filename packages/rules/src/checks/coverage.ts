@@ -12,7 +12,7 @@
  * Pure: a plan in, plain data out.
  */
 
-import { indexPlan, planFloors, planForFloor, roomZones, statedGround, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
+import { indexPlan, planFloors, planForFloor, plotBoundary, roomZones, statedGround, type FloorPlan, type RulesReport as PlanRulesReport } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { roomOutlines } from '@ongrid/floorplan/geometry/rules/graph'
 import { english, said, withSentence, type Said } from '@ongrid/floorplan/messages'
@@ -41,6 +41,8 @@ const SKIP_ORDER: readonly SkipReason[] = [
   'alone_off_ground',
   'above_escape_storeys',
   'no_ground_level',
+  'no_building_outline',
+  'boundary_not_closed',
   'no_use',
   'use_not_covered',
   'part_of_room'
@@ -54,6 +56,8 @@ export const LOOKS_AT: Readonly<Record<string, CheckCoverage['looksAt']>> = {
   'door-leads-somewhere': 'door',
   'stairs-line-up': 'room',
   'openings-above-ground': 'door',
+  // BRF-3: the edges of the plot's boundary, by number.
+  'site-boundary': 'edge',
   'habitable-room-area': 'room',
   'escape-opening': 'room'
 }
@@ -130,6 +134,13 @@ export function planCheckScopes(
   const add = (rule: string, floor: string, scope: FloorScope): void => {
     scopes.get(rule)?.push([floor, scope])
   }
+  // BRF-3: every edge of the plot's boundary, by number, for the whole plan, when the site states one.
+  const plot = plotBoundary(plan)
+  if (plot !== null) {
+    const edges = plot.edges.map((edge) => String(edge.edge))
+    const outline = base.notChecked.some((n) => n.reason === 'boundary_not_measured')
+    add('site-boundary', '', plot.problem !== null ? { lookedAt: [], skipped: { boundary_not_closed: edges } } : outline ? { lookedAt: [], skipped: { no_building_outline: edges } } : { lookedAt: edges, skipped: {} })
+  }
   for (const floor of planFloors(plan)) {
     const slice = planForFloor(plan, floor.id)
     const { storey, leftOut } = read.get(floor.id) ?? drawable(slice)
@@ -204,7 +215,7 @@ export function heldCoverage(coverage: readonly CheckCoverage[], held: readonly 
     const mine = held.filter((finding) => finding.ruleId === check.ruleId)
     if (mine.length === 0) return check
     const part = (finding: RuleFinding): string | undefined =>
-      check.looksAt === 'floor' ? finding.floor : check.looksAt === 'door' ? finding.openings[0] : finding.rooms[0]
+      check.looksAt === 'floor' ? finding.floor : check.looksAt === 'door' ? finding.openings[0] : check.looksAt === 'edge' ? String(finding.boundary?.edge ?? '') : finding.rooms[0]
     const moved = new Map<string, Set<string>>()
     for (const finding of mine) {
       const id = part(finding)

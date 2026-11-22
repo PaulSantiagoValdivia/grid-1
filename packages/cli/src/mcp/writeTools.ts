@@ -17,7 +17,7 @@ import { checkExportRequest, dxfProfileLine, ExportWriteFailed, exportIntoProjec
 import { DXF_PROFILE_FILE, DxfProfileRefused } from '../export/dxfProfile'
 import { UsageError } from '../command/options'
 import { PlanRefused } from '../command/plan'
-import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, readingAfter, type Direction, type From, type Mirror, type Patch } from '../edit/edits'
+import { changeOpening, DIRECTIONS, EditRefused, FROMS, insideAcross, KEEPS, MIRRORS, mirrorPlan, moveRoomSide, applyPatch, readingAfter, TURNS, turnPlanBy, type Direction, type From, type Mirror, type Patch, type Turn } from '../edit/edits'
 import { parseSheetWords, SheetWordsRefused, sheetWordsJsonSchema, sheetWordsProblem } from '@ongrid/floorplan/types/sheet'
 import { checkSheetRequest, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { askedLanguage } from '../command/language'
@@ -423,20 +423,29 @@ const moveSideTool: GridTool = {
 
 const mirrorTool: GridTool = {
   name: 'grid_mirror',
-  title: 'Mirror the plan',
+  title: 'Mirror or turn the plan',
   hint: 'change-plan',
   description:
-    'Use this when the person asks to flip the plan, mirror it, or have it the other way round: "the lounge is on the right as you come in, flip it". '
-    + 'left-right swaps east and west, top-bottom swaps north and south. Every room keeps its size and every door keeps opening into the same room. A north the plan states is mirrored too, so the swap is the real one. '
+    'Use this when the person asks to flip the plan, mirror it, have it the other way round, or turn it a quarter or half round: "the lounge is on the right as you come in, flip it", "rotate it 90 degrees". '
+    + 'how left-right swaps east and west, top-bottom swaps north and south; turn instead turns the whole plan by 90, 180 or 270 degrees (-90 is 270), counter-clockwise as Grid draws it, y up. Every room keeps its size and every door keeps opening into the same room. '
+    + 'A mirror mirrors a north the plan states, so the swap is the real one; a turn keeps the north, so the building faces new ways. '
     + 'Do not use to turn the drawing for a picture (grid_view). It replaces the plan file unless out is given.',
   args: {
     plan: PLAN_ARG,
-    how: { type: 'string', enum: MIRRORS, required: true, description: 'left-right or top-bottom.', examples: ['left-right'] },
+    how: { type: 'string', enum: MIRRORS, description: 'To mirror: left-right or top-bottom. Give how or turn, not both.', examples: ['left-right'] },
+    turn: { type: 'number', minimum: -270, maximum: 270, description: 'To turn instead: 90, 180, 270 or -90 degrees, counter-clockwise as Grid draws the plan (y up). Quarter turns only.', examples: [90] },
     out: OUT_ARG,
   },
   outputSchema: EDIT_OUTPUT,
   run(args, context) {
-    return writeChange(context, args, (survey) => mirrorPlan(survey, args['how'] as Mirror))
+    const how = args['how'] as Mirror | undefined
+    const turn = args['turn'] as number | undefined
+    if (how !== undefined && turn !== undefined) throw new ToolRefusal('Pass how to mirror or turn to turn, not both: make two calls for a mirror and a turn.')
+    if (how === undefined && turn === undefined) throw new ToolRefusal('Pass how (left-right or top-bottom) to mirror the plan, or turn (90, 180, 270 or -90 degrees) to turn it.')
+    if (turn === undefined) return writeChange(context, args, (survey) => mirrorPlan(survey, how!))
+    const degrees = ((turn % 360) + 360) % 360
+    if (!(TURNS as readonly number[]).includes(degrees)) throw new ToolRefusal(`turn is ${turn}: Grid turns a plan by quarter turns only, 90, 180, 270 or -90 degrees.`)
+    return writeChange(context, args, (survey) => turnPlanBy(survey, degrees as Turn))
   },
 }
 

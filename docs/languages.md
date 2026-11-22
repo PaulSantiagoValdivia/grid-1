@@ -120,6 +120,13 @@ Draft, not reviewed.
 | not checked | no comprobado |
 | to confirm | por confirmar |
 | net area | superficie útil |
+| site | emplazamiento |
+| plot | parcela |
+| boundary (of the plot) | linde |
+| edge (of the boundary) | tramo |
+| set-back | retranqueo |
+| plot coverage | ocupación de la parcela |
+| fence, gate, path, paved area, pool | valla, cancela, camino, zona pavimentada, piscina |
 
 ## Later steps
 
