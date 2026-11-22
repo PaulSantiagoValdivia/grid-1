@@ -8,8 +8,9 @@
  * output schema. Names and ids that come from the plan file are quoted.
  */
 import { floorOf, itemFootprint, limit, tolerance, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
-import { GENERAL_GUIDANCE_LABEL, buildingKindsText, inspectPlan, type ResultLine } from '@ongrid/rules'
-import { checkPlan, countsText, KIND_WORDS, nothingCheckedText, partsText, thingText, usedFigures } from '../command/check'
+import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
+import { checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
+import { readSeen, type SeenState } from '../seen/marks'
 import { describePlan, describeRooms } from '../command/describe'
 import { drawShowOf } from '../command/drawShow'
 import { UsageError } from '../command/options'
@@ -877,6 +878,24 @@ const describeTool: GridTool = {
 // ---------------------------------------------------------------------------------------------
 // grid_check
 
+/** The country argument of grid_check and grid_mark_seen: the numbers follow the record it makes. */
+export const COUNTRY_ARG: ArgSpec = { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code. Figures are applied only where they hold.', examples: ['US', 'GB'] }
+
+/** MSG-10: a line's seen state as data: the mark, and with `back` the parts that changed since. */
+function seenData(state: SeenState | undefined): Record<string, unknown> | undefined {
+  if (state === undefined || state.state === 'new') return undefined
+  const { reason, by, at } = state.mark
+  return state.state === 'seen'
+    ? { state: 'seen', reason, by, at }
+    : { state: 'back', reason, by, at, changed: state.changed.map((p) => ({ kind: p.kind, id: p.id })) }
+}
+
+/** One line of grid_check's list. COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for. */
+function toolLine(result: CheckResult, index: number): string {
+  const line = result.result.lines[index]!
+  return `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''} Fix: ${line.fix} [${line.code}]`
+}
+
 const checkTool: GridTool = {
   name: 'grid_check',
   title: 'Check the plan',
@@ -884,11 +903,13 @@ const checkTool: GridTool = {
   description:
     'Use this when you have changed the plan, or when the person asks whether the plan is drawn right or what Grid\'s checks find: problems in the drawing itself, and notes from the general checks it runs (room sizes, ways out, door swings). '
     + 'Every answer carries the label "General guidance, not your local rules". It never says a plan complies or is allowed: "is it allowed" is for the person\'s local authority, and the answer says what was not checked. '
+    + 'The answer is short and about this plan: the notes, the figures they used, what each check looked at, and the notes the person set aside as seen (grid_mark_seen), each still listed under Seen; full=true adds the checks run, every figure and what these checks never look at. '
     + 'Do not use to measure (grid_measure) or for areas (grid_areas).',
   args: {
     plan: PLAN_ARG,
     floor: { ...FLOOR_ARG, description: 'Only what was found on this floor. Every floor when left out.' },
-    country: { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code. Figures are applied only where they hold.', examples: ['US', 'GB'] },
+    country: COUNTRY_ARG,
+    full: { type: 'boolean', description: 'true for the whole report: the checks run, every figure with its basis and status, each check\'s coverage and what these checks never look at. Short when left out.', examples: [true] },
   },
   outputSchema: objectSchema({
     label: STRING,
@@ -909,7 +930,13 @@ const checkTool: GridTool = {
       // MSG-7: the change that would clear the line, as data, and the same as a call to retry.
       fixes: { type: 'array' },
       calls: listSchema(objectSchema({ tool: STRING, arguments: { type: 'object' } }, ['tool', 'arguments'])),
+      // MSG-10: the person's seen mark, when the line has one: seen, or back (new again, its parts changed since).
+      seen: objectSchema({ state: STRING, reason: STRING, by: STRING, at: STRING, changed: listSchema(objectSchema({ kind: STRING, id: STRING })) }, ['state', 'reason', 'by', 'at']),
     }, ['code', 'kind', 'thing', 'floor', 'also', 'message', 'found', 'needed', 'fix'])),
+    // MSG-10: how many lines are seen, the marks file beside the plan, and why it could not be read.
+    seenCount: { type: 'number' },
+    marksFile: STRING,
+    marksProblem: { type: ['string', 'null'] },
     // The rooms a finding is about, by id and name, apart from the message: text from the plan file.
     findings: listSchema(objectSchema({ floor: STRING, message: STRING, rooms: listSchema(objectSchema({ id: STRING, name: STRING })) })),
     notChecked: listSchema(objectSchema({ floor: STRING, message: STRING })),
@@ -929,11 +956,13 @@ const checkTool: GridTool = {
     limits: listSchema(STRING),
   }),
   run(args, context) {
-    const { loaded } = readPlan(context, args['plan'])
+    const { loaded, project, file } = readPlan(context, args['plan'])
     const floor = floorArg(loaded.plan, args['floor'])
+    const full = args['full'] === true
     let result
     try {
       result = checkPlan(loaded, { ...(floor ? { floor } : {}), ...(args['country'] ? { country: args['country'] as string } : {}) })
+      result = withSeen(result, loaded.plan, readSeen(project, file))
     } catch (error) {
       throw asRefusal(error)
     }
@@ -946,29 +975,71 @@ const checkTool: GridTool = {
     const notChecked = result.report.notChecked.map((n) => ({ floor: n.floor, message: n.message }))
     const drawing = result.issues.map((i) => ({ severity: i.severity, entity: i.entity, id: i.id, message: i.message }))
     const record = result.result
+    const states = result.seen?.states ?? []
+    const seen = seenCount(result)
     const lines: string[] = [GENERAL_GUIDANCE_LABEL]
-    lines.push(`To look at: ${record.count === 0 ? 'nothing' : `${record.count} (${countsText(record)})`}. Checks run: ${result.report.rules.length}.`)
-    // COD-2: a line that used a figure says what it needed, which names the kind of building the figure was read for.
-    record.lines.slice(0, 12).forEach((line, index) => lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}.${usedFigures(line) ? ` Needed: ${line.needed}.` : ''} Fix: ${line.fix} [${line.code}]`))
-    if (record.count > 12) lines.push(`  … ${record.count - 12} more in the data, each with what was found and needed.`)
+    if (result.seen?.problem) lines.push(`The seen marks were not read: ${result.seen.problem}. Every note is listed as new.`)
+    const seenWords = seen > 0 ? `; ${seen} of them seen, under Seen` : ''
+    const checksRun = result.report.rules.length === 0 ? `Checks run: none. ${NOTHING_CHECKED}` : `Checks run: ${result.report.rules.length}.`
+    // NOTHING_FOUND: an empty list only means these checks found nothing.
+    lines.push(`To look at: ${record.count === 0 ? `nothing. ${NOTHING_FOUND}` : `${record.count} (${countsText(record)}${seenWords}).`} ${checksRun}`)
+    if (full) for (const rule of result.report.rules) lines.push(`  - ${rule.title} (${rule.source.label})`)
+    // A seen line is listed under Seen, never left out (MSG-10).
+    const open = record.lines.map((_, index) => index).filter((index) => states[index]?.state !== 'seen')
+    for (const index of open.slice(0, 12)) {
+      lines.push(toolLine(result, index))
+      const state = states[index]
+      if (state?.state === 'back') lines.push(`      ${seenBeforeText(state)}.`)
+    }
+    if (open.length > 12) lines.push(`  … ${open.length - 12} more in the data, each with what was found and needed.`)
+    if (seen > 0) {
+      lines.push(`Seen (${seen}): ${SEEN_HEADING_NOTE}.`)
+      record.lines.forEach((line, index) => {
+        const state = states[index]
+        if (state?.state === 'seen') lines.push(`  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. Seen ${seenByText(state.mark)}. [${line.code}]`)
+      })
+    }
     // MSG-7: each line one call would clear carries that call, ready to send.
-    const withCalls = record.lines.map((line) => withFixCalls(line, args['plan']))
+    const withCalls = record.lines.map((line, index) => {
+      const withFix = withFixCalls(line, args['plan'])
+      const mark = seenData(states[index])
+      return mark === undefined ? withFix : { ...withFix, seen: mark }
+    })
     const callable = withCalls.filter((line) => line.calls !== undefined).length
     if (callable > 0) lines.push(`${callable === 1 ? 'One line carries' : `${callable} lines carry`} the call that would fix it, under calls in the data.`)
-    if (record.counts.finding === 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
-    // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
-    const rooms = result.rooms
-    lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
-    for (const check of record.coverage) {
-      const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
-      const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
-      lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}${readFor}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
+    if (record.counts.finding === 0 && record.count > 0) lines.push('No findings only means these checks found nothing, not that the plan meets any rule.')
+    if (full) {
+      // MSG-2: what each check looked at, beside the count, so an empty list cannot read as a pass.
+      const rooms = result.rooms
+      lines.push(`Looked at by at least one check: ${rooms.rooms === 0 ? 'no rooms, the plan has none' : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}`}.`)
+      for (const check of record.coverage) {
+        const skipped = check.skippedCount === 0 ? '' : `; not looked at ${check.skippedCount}: ${[...new Set(check.skipped.map((s) => s.why))].join('; ')}`
+        const readFor = check.readFor === undefined || check.readFor.length === 0 ? '' : `; its figures were read for ${buildingKindsText(check.readFor)}`
+        lines.push(check.lookedAtCount === 0 ? `  ${nothingCheckedText(check.title, check.looksAt)}${skipped}${readFor}.` : `  ${check.title}: looked at ${partsText(check.lookedAtCount, check.looksAt)}${skipped}${readFor}.`)
+      }
+      // MSG-3: each figure as the figure used here, with its basis and status.
+      if (record.figures.length > 0) lines.push(`Figures used (${record.figures.length}):`, ...record.figures.map((figure) => `  ${figureUsedText(figure)}`))
+      // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
+      lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
+    } else {
+      // MSG-10: the counts, the gaps with their reasons, and where the rest is.
+      lines.push(...coverageSummary(result).filter((line) => line !== '').map((line) => line.replace(/^ {2}- /, '  ')), restText(result.report, 'full=true'))
     }
-    // COD-4: the same lines `grid check` prints, so nothing on this list can read as checked.
-    lines.push(`Never looked at, whatever the plan (${record.limits.length}):`, ...record.limits.map((limit) => `  ${limit}.`))
     return {
       text: lines.join('\n'),
-      data: { label: GENERAL_GUIDANCE_LABEL, count: record.count, lines: withCalls, findings, notChecked, drawing, coverage: record.coverage, limits: record.limits },
+      data: {
+        label: GENERAL_GUIDANCE_LABEL,
+        count: record.count,
+        lines: withCalls,
+        seenCount: seen,
+        marksFile: result.seen?.file ?? '',
+        marksProblem: result.seen?.problem ?? null,
+        findings,
+        notChecked,
+        drawing,
+        coverage: record.coverage,
+        limits: record.limits,
+      },
     }
   },
 }

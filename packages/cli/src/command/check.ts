@@ -15,6 +15,7 @@ import {
   GENERAL_GUIDANCE_LABEL,
   inspectPlan,
   roomsLookedAt,
+  type AppliedFigure,
   type CheckCoverage,
   type GridResult,
   type LineKind,
@@ -24,6 +25,8 @@ import {
 import { floorOption } from './plan'
 import type { LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
+import type { Project } from '../fs/projectFiles'
+import { markDay, markSeen, partText, seenStates, unmarkSeen, type SeenMark, type SeenRead, type SeenState } from '../seen/marks'
 
 export const CHECK_OPTIONS: OptionSpecs = {
   '--floor': { takesValue: true, help: 'Only show what was found on this floor (a floor id from the plan).' },
@@ -32,6 +35,13 @@ export const CHECK_OPTIONS: OptionSpecs = {
     help: 'Where the plan will be built, as a two-letter code such as US or ES.',
   },
   '--json': { takesValue: false, help: 'Print the report as JSON.' },
+  // MSG-10: the report is short by default; this gives every section.
+  '--full': { takesValue: false, help: 'Print the whole report: the checks run, every figure, what each check looked at part by part, and what these checks never look at.' },
+  // MSG-10: a note set aside as seen, with the person's reason and name, in the marks file beside the plan.
+  '--seen': { takesValue: true, help: 'Mark the note of this number as seen, with --reason and --by. It stays listed, under Seen, and is new again when one of its parts changes.' },
+  '--unseen': { takesValue: true, help: 'Take the seen mark off the note of this number.' },
+  '--reason': { takesValue: true, help: 'With --seen: why the note is set aside, in one line.' },
+  '--by': { takesValue: true, help: 'With --seen: who marks it, as the name or role you give. It is kept only in the marks file beside the plan.' },
   ...PROJECT_OPTION,
 }
 
@@ -60,7 +70,92 @@ export interface CheckResult {
    * printed beside the count of lines. On one floor, that floor's rooms.
    */
   readonly rooms: ReturnType<typeof roomsLookedAt>
+  /**
+   * MSG-10: how each of `result.lines` stands against the seen marks beside the plan, when they
+   * were read. Absent for a check that read no marks file.
+   */
+  readonly seen?: CheckSeen
 }
+
+/** MSG-10: the seen marks as a check read them. */
+export interface CheckSeen {
+  /** The marks file, relative to the project folder. */
+  readonly file: string
+  /** Why the marks file could not be read: then every note is new. */
+  readonly problem: string | null
+  /** Each of `result.lines`' state, in their order. */
+  readonly states: readonly SeenState[]
+}
+
+/** MSG-10: the check with how each of its lines stands against the marks read beside the plan. */
+export function withSeen(result: CheckResult, plan: FloorPlan, read: SeenRead): CheckResult {
+  return { ...result, seen: { file: read.file, problem: read.problem, states: seenStates(plan, result.result.lines, read.marks) } }
+}
+
+/** MSG-10: how many of the check's lines are seen, with a mark that still holds. */
+export function seenCount(result: CheckResult): number {
+  return (result.seen?.states ?? []).filter((s) => s.state === 'seen').length
+}
+
+/** "by "A. Person" on 2026-11-22: "Kept small on purpose"": the person's words, quoted. */
+export function seenByText(mark: SeenMark): string {
+  return `by ${JSON.stringify(mark.by)} on ${markDay(mark)}: ${JSON.stringify(mark.reason)}`
+}
+
+/** A note whose parts changed since it was marked: new again, and why. */
+export function seenBeforeText(state: Extract<SeenState, { state: 'back' }>): string {
+  const changed = state.changed.slice(0, 4).map(partText).join(', ')
+  const more = state.changed.length > 4 ? ` and ${state.changed.length - 4} more` : ''
+  return `seen before, ${seenByText(state.mark)}; but ${changed}${more} changed since, so it is new again`
+}
+
+/** MSG-10: what a request to mark a note asks: its number in the whole plan's report, and what to do. */
+export type MarkAsk =
+  | { readonly mark: 'seen'; readonly number: number; readonly reason: string; readonly by: string; readonly at?: string }
+  | { readonly mark: 'unseen'; readonly number: number }
+
+/** MSG-10: what marking did, in one line for the report, and as data. */
+export interface MarkDone {
+  readonly text: string
+  readonly number: number
+  readonly code: string
+  readonly file: string
+  /** The mark written, or the one taken off; null when there was none to take off. */
+  readonly mark: SeenMark | null
+  readonly unmarked: boolean
+}
+
+/**
+ * The line of a number in the whole plan's report, or why there is none. `whole` is the check of
+ * the whole plan, so a number means what `grid check` and `grid_check` print beside it.
+ */
+export function lineOfNumber(whole: CheckResult, number: number, argument: string): ResultLine {
+  const count = whole.result.count
+  if (count === 0) throw new UsageError(`${argument}: the report has no notes to mark.`)
+  const line = Number.isInteger(number) ? whole.result.lines[number - 1] : undefined
+  if (line === undefined) throw new UsageError(`${argument} takes the number of a note in the report, from 1 to ${count}.`)
+  return line
+}
+
+/** MSG-10: marks a note of the whole plan's report as seen, or takes its mark off, in the marks file beside the plan. */
+export function markNote(project: Project, planFile: string, loaded: LoadedPlan, whole: CheckResult, ask: MarkAsk, argument: string): MarkDone {
+  const line = lineOfNumber(whole, ask.number, argument)
+  const note = `${KIND_WORDS[line.kind]}, ${thingText(line)}: ${line.message}. [${line.code}]`
+  if (ask.mark === 'unseen') {
+    const { file, removed } = unmarkSeen(project, planFile, line)
+    const text = removed === null ? `Note ${ask.number} had no seen mark, so nothing was changed: ${note}` : `Took the seen mark off note ${ask.number}, in ${file}; it is listed as new: ${note}`
+    return { text, number: ask.number, code: line.code, file, mark: removed, unmarked: removed !== null }
+  }
+  const { file, mark } = markSeen(project, planFile, loaded.plan, line, { reason: ask.reason, by: ask.by, ...(ask.at ? { at: ask.at } : {}) })
+  const parts = mark.parts.slice(0, 4).map(partText).join(', ')
+  const more = mark.parts.length > 4 ? ` or ${mark.parts.length - 4} more` : ''
+  const when = mark.parts.length === 1 ? parts : `one of ${parts}${more}`
+  const text = `Marked note ${ask.number} as seen, ${seenByText(mark)}, in ${file}: ${note} It stays listed, under Seen, and is new again when ${when} changes.`
+  return { text, number: ask.number, code: line.code, file, mark, unmarked: false }
+}
+
+/** What the Seen part says of itself: never that a note is dealt with. */
+export const SEEN_HEADING_NOTE = 'each stays listed here, and is new again when one of its parts changes'
 
 const COUNTRY = /^[A-Za-z]{2}$/
 
@@ -160,44 +255,103 @@ function section(title: string, lines: readonly string[]): string[] {
   return ['', `${title} (${lines.length}):`, ...lines.map((line) => `  - ${line}`)]
 }
 
-/** The report as plain text. It always starts with the label. */
-export function checkText(result: CheckResult, floorCount: number): string {
+export interface TextOptions {
+  /** MSG-10: every section: the checks run, every figure, the long coverage and the limits. */
+  readonly full?: boolean
+}
+
+/** One line of the list, with what was found and needed and the fix. */
+function lineText(result: CheckResult, index: number, floorCount: number, details: boolean): string[] {
+  const line = result.result.lines[index]!
+  const where = floorCount > 1 && line.floor !== null && line.thing.kind !== 'floor' ? ` on ${JSON.stringify(line.floor)}` : ''
+  const head = `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`
+  return details ? [head, `      found: ${line.found}`, `      needed: ${line.needed}`, `      fix: ${line.fix}`] : [head]
+}
+
+/** MSG-10: the figures the lines used, once each, as the figure used here with its basis and status. */
+export function figuresOfLines(lines: readonly ResultLine[]): AppliedFigure[] {
+  const figures: AppliedFigure[] = []
+  const taken = new Set<string>()
+  for (const figure of lines.flatMap((line) => line.figures ?? [])) {
+    const key = JSON.stringify(figure)
+    if (taken.has(key)) continue
+    taken.add(key)
+    figures.push(figure)
+  }
+  return figures
+}
+
+/** MSG-10: where the rest of a short report is: what `--full` (the command) or `full=true` (the tool) adds. */
+export function restText(report: RulesReport, option = '--full'): string {
+  return `${option} lists the checks, the figures, the parts looked at and what is never looked at (${report.limits.length}).`
+}
+
+/** MSG-10: how many checks ran, and where they are listed; MSG-3's words when none did. */
+export function checksRunText(report: RulesReport): string {
+  return `${report.rules.length === 0 ? `Checks run: none. ${NOTHING_CHECKED}` : `Checks run: ${report.rules.length}.`} ${restText(report)}`
+}
+
+/**
+ * The report as plain text. It always starts with the label.
+ *
+ * MSG-10: short by default, and about this plan: the lines, the figures they used, what each
+ * check looked at in counts, and where the rest is. `full` gives every section, as before. A
+ * seen line is listed under Seen, never left out; a line seen before whose parts changed is
+ * listed with the others, and says so.
+ */
+export function checkText(result: CheckResult, floorCount: number, options: TextOptions = {}): string {
+  const full = options.full === true
   const { report } = result
   const lines: string[] = [result.label]
   if (report.lookupNotice) lines.push(report.lookupNotice)
   if (result.floor !== undefined) lines.push(`Floor ${result.floor} only.`)
 
-  // MSG-3: an empty list is said in words, never left as a heading over nothing.
-  if (report.rules.length === 0) lines.push('', `Checks run: none. ${NOTHING_CHECKED}`)
-  else lines.push(...section('Checks run', report.rules.map((rule) => `${rule.title} (${rule.source.label})`)))
+  if (full) {
+    // MSG-3: an empty list is said in words, never left as a heading over nothing.
+    if (report.rules.length === 0) lines.push('', `Checks run: none. ${NOTHING_CHECKED}`)
+    else lines.push(...section('Checks run', report.rules.map((rule) => `${rule.title} (${rule.source.label})`)))
+  }
+  if (result.seen?.problem) lines.push('', `The seen marks were not read: ${result.seen.problem}. Every note is listed as new.`)
 
   // One list, one count (MSG-1): the drawing's problems, the door sweeps, the findings and what
   // was not checked, each with its code, what was found and needed, and the fix.
   const record = result.result
+  const states = result.seen?.states ?? []
+  const seen = seenCount(result)
   if (record.count === 0) {
     lines.push('', `To look at: nothing. ${NOTHING_FOUND}`)
   } else {
-    lines.push('', `To look at (${record.count}): ${countsText(record)}.`)
+    lines.push('', `To look at (${record.count}): ${countsText(record)}${seen > 0 ? `; ${seen} of them seen, listed under Seen` : ''}.`)
     // Numbered by place in the whole plan's record: `grid draw` marks each with its number (MSG-8).
-    record.lines.forEach((line, index) => {
-      const where = floorCount > 1 && line.floor !== null && line.thing.kind !== 'floor' ? ` on ${JSON.stringify(line.floor)}` : ''
-      lines.push(
-        `  ${result.numbers[index]}. ${KIND_WORDS[line.kind]}, ${thingText(line)}${where}: ${line.message}. [${line.code}]`,
-        `      found: ${line.found}`,
-        `      needed: ${line.needed}`,
-        `      fix: ${line.fix}`,
-      )
+    record.lines.forEach((_, index) => {
+      const state = states[index]
+      if (state?.state === 'seen') return
+      lines.push(...lineText(result, index, floorCount, true))
+      if (state?.state === 'back') lines.push(`      ${seenBeforeText(state)}.`)
     })
     if (record.counts.finding === 0) lines.push('', `No findings. ${NOTHING_FOUND}`)
+    if (seen > 0) {
+      lines.push('', `Seen (${seen}): ${SEEN_HEADING_NOTE}.`)
+      record.lines.forEach((_, index) => {
+        const state = states[index]
+        if (state?.state !== 'seen') return
+        lines.push(...lineText(result, index, floorCount, full), `      seen ${seenByText(state.mark)}`)
+      })
+    }
   }
-  lines.push(...coverageText(result))
 
-  if (report.figures.length > 0) {
+  if (full) {
+    lines.push(...coverageText(result))
     // MSG-3: each as the figure used here, with its basis and its status.
-    lines.push(...section('Figures used', report.figures.map(figureUsedText)))
+    if (report.figures.length > 0) lines.push(...section('Figures used', report.figures.map(figureUsedText)))
+    lines.push(...section('What these checks never look at', report.limits))
+  } else {
+    // MSG-10: only the figures a line used, each still with its document, edition, clause and status.
+    const used = figuresOfLines(record.lines)
+    if (used.length > 0) lines.push(...section('Figures these notes used', used.map(figureUsedText)))
+    lines.push(...coverageSummary(result))
+    lines.push('', checksRunText(report))
   }
-
-  lines.push(...section('What these checks never look at', report.limits))
   return `${lines.join('\n')}\n`
 }
 
@@ -237,13 +391,9 @@ export function readForText(check: Pick<CheckCoverage, 'readFor'>): string {
 }
 
 export function coverageText(result: CheckResult): string[] {
-  const { rooms } = result
   const coverage = result.result.coverage
   if (coverage.length === 0) return []
-  const summary =
-    rooms.rooms === 0
-      ? 'no rooms: there are none to look at'
-      : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}${rooms.byNone.length > 0 ? `; looked at by none: ${idsText(rooms.byNone.map((r) => r.id))}` : ''}`
+  const summary = roomsSummary(result)
   const several = new Set(coverage.flatMap((check) => [...check.lookedAt, ...check.skipped].map((group) => group.floor))).size > 1
   const lines = ['', `Looked at by at least one check: ${summary}.`, `What each check looked at (${coverage.length}):`]
   for (const check of coverage) {
@@ -258,6 +408,51 @@ export function coverageText(result: CheckResult): string[] {
   return lines
 }
 
-export function checkJson(result: CheckResult): string {
-  return `${JSON.stringify(result, null, 2)}\n`
+/**
+ * MSG-10: what each check looked at, in counts: the rooms looked at by at least one check (and
+ * those none did), then each check's count, the parts it could not look at with the reason,
+ * its findings when it gave any, and the kind of building its figures were read for (COD-2).
+ * A part a check is not about (`use_not_covered`) is no gap and is left to the full report.
+ */
+export function coverageSummary(result: CheckResult): string[] {
+  const coverage = result.result.coverage
+  if (coverage.length === 0) return []
+  // COD-2: the kind of building, once when every check that used figures read them for the same.
+  const withFigures = coverage.filter((check) => check.lookedAtCount > 0 && (check.readFor?.length ?? 0) > 0)
+  const kinds = [...new Set(withFigures.map((check) => buildingKindsText(check.readFor!)))]
+  const once = kinds.length === 1
+  const lines = ['', `Looked at by at least one check: ${roomsSummary(result)}.`, `What each check looked at (${coverage.length}):`]
+  for (const check of coverage) {
+    const gaps = check.skipped.filter((skip) => skip.reason !== 'use_not_covered')
+    const gap = gaps.length === 0 ? '' : `; not looked at ${gaps.reduce((n, skip) => n + skip.ids.length, 0)}: ${[...new Set(gaps.map((skip) => skip.why))].join('; ')}`
+    const findings = check.findings === 0 ? '' : `; ${check.findings} finding${check.findings === 1 ? '' : 's'}`
+    lines.push(check.lookedAtCount === 0
+      ? `  - ${nothingCheckedText(check.title, check.looksAt)}${gap}.`
+      : `  - ${check.title}: ${partsText(check.lookedAtCount, check.looksAt)}${gap}${findings}${once ? '' : readForText(check)}.`)
+  }
+  if (once) {
+    const who = withFigures.length === 1 ? 'The check that uses figures' : withFigures.length === 2 ? 'Both checks that use figures' : `The ${withFigures.length} checks that use figures`
+    lines.push(`${who} read them for ${kinds[0]}.`)
+  }
+  return lines
+}
+
+/** "6 of 6 rooms", with the rooms no check looked at. */
+function roomsSummary(result: CheckResult): string {
+  const { rooms } = result
+  return rooms.rooms === 0
+    ? 'no rooms: there are none to look at'
+    : `${rooms.lookedAt} of ${partsText(rooms.rooms, 'room')}${rooms.byNone.length > 0 ? `; looked at by none: ${idsText(rooms.byNone.map((r) => r.id))}` : ''}`
+}
+
+/**
+ * The whole check as JSON; with `marked`, what `--seen` or `--unseen` did (MSG-10). `seen` is
+ * there once the plan has marks, or a marks file that can't be read: a plan no one has marked
+ * gives the same JSON as before.
+ */
+export function checkJson(result: CheckResult, marked?: MarkDone): string {
+  const { seen, ...rest } = result
+  const marks = seen !== undefined && (seen.problem !== null || seen.states.some((s) => s.state !== 'new') || marked !== undefined)
+  const whole = { ...rest, ...(marks ? { seen } : {}), ...(marked === undefined ? {} : { marked }) }
+  return `${JSON.stringify(whole, null, 2)}\n`
 }
