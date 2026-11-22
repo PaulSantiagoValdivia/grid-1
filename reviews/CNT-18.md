@@ -406,6 +406,60 @@ room is measured as before.
     scoreboard passed again ("Same as the stored figures"). The whole set was run again after
     the merge of cc60df1c.
 
+- After merging main at cc60df1c (MSG-11, every language): eleven conflicts, each kept both
+  sides.
+  - `CHANGELOG.md`: CNT-18's line, then MSG-11's.
+  - `docs/result-contract.md`: CNT-18's entry on top, then MSG-11's, with a bullet added to
+    CNT-18's on what is said in every language.
+  - `describe/card.ts`: MSG-11's words by key, and a curved wall's curve as a key of its own
+    (`describe.wall.curve`, with `{curve}` added to `describe.wall`).
+  - `export/gltf.ts`, `patterns.ts`, `spaces.ts`, `stacking.ts`: both sides' imports.
+  - `room.ts`: the curve traced by its pieces, refused with MSG-11's
+    `issue.room/unclosed.fewWalls`.
+  - `validate.ts`: MSG-11's named numbers, with a curved wall's centre and sweep as two more
+    (`issue.part.number.centreCoordinate`, `.sweep`).
+  - `result/catalogue.ts`: MSG-11's entries, and `wall/arc-ends-apart` and `wall/arc-too-tight`
+    as two more, their words in `line.wall/arc-*.says|needed|fix`.
+  - `result.test.ts`: MSG-11's `values`, with `arc` in the list of a wall's fields.
+
+  CNT-18's own words moved into the message files, as MSG-11's pattern asks, each key in `en.ts`
+  and with a Spanish draft in `es.ts` (draft translation, not reviewed):
+  - the two codes: `issue.wall/arc-ends-apart`, `issue.wall/arc-too-tight` and its `.noRadius`
+    (`curveFault` now gives its sentence by key, as `said`), and their result lines;
+  - the description of a curved wall for a person, and the reason rooms text reads a floor with
+    a curved wall back raw (`describe.rooms.curved`);
+  - the approximation note in the files (`drawing.approximated.*`, `drawing.ifc.approximated`)
+    and the export's line about it (`drawing.export.approximated.*`), said in English as the
+    files' and the commands' words are;
+  - the refusals of an edit on a curved wall and squaring's notes (`edit.curved.*`,
+    `edit.square.*`, a new `edit.*` set of keys, listed in `docs/languages.md`), said in English
+    as the edits' answers are; `refuseCurved` now takes which edit by key;
+  - the schema's refusal of a sweep (`read.arc.sweep`), said in English as the schema's are.
+
+  The English of every one is as before, word for word. What stays English in the code is for
+  people who build Grid: the four arc figures' descriptions in the tolerance table (10 sentences,
+  mirrored in `docs/tolerances.md`) and the error `wallAxis` throws for a curved wall. So
+  `ownWords.test.ts` lists `tolerances.ts` at 233 and `wall.ts` at 2, both `developer`, and the
+  ratchet on what is not moved yet is untouched. Two internal throws went: `exposure.ts` returns
+  a curve that cannot be built as detached, and the IFC's curved-wall writer is handed its curve.
+
+  MSG-11's code was checked for straight walls: it moves words and changes no geometry. Two tests
+  added: the curve faults' English as before, and in Spanish when asked; and `grid_describe` in
+  Spanish on the bay ("en curva de 180° en sentido antihorario en torno a 2; 3 (radio 2, 6,28 a
+  lo largo de la curva)").
+
+  **The bundle was over main's cap, so the cap was raised to 655,000.** Main at cc60df1c is
+  648,688 bytes (MSG-11's review); merged with CNT-18 it is 653,972, with no new dependency. The
+  new cap is the nearest round figure above that.
+
+  Results, run once after both merges (8a0c839e and cc60df1c):
+  - `npm run build` clean, the bundle 653,972 bytes, under the 655,000 cap.
+  - `npm run typecheck` and `npm run lint` clean.
+  - `npm run scoreboard`: "Same as the stored figures."
+  - All of `packages/floorplan/src`, `packages/rules/src`, `packages/cli/src`,
+    `packages/viewer` and `scoreboard/__tests__`, two workers: 350 of 350 files passed, 5,847
+    tests passed and 3 skipped, exit 0.
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
