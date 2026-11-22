@@ -186,8 +186,9 @@ export function Canvas2D({
 
   // Doors whose swing runs into something: a wall, or another door. The
   // warnings that only say a value is missing don't get a mark: that door has
-  // no symbol, so there is nothing to point at.
-  const doorWarnings = useMemo(() => doorWarningsOf(plan), [plan])
+  // no symbol, so there is nothing to point at. Checked for this floor only,
+  // on the drawing already built for it (QAR-7).
+  const doorWarnings = useMemo(() => doorWarningsOf(plan, drawing), [plan, drawing])
   const warningText = useMemo(() => warningMessages(doorWarnings), [doorWarnings])
   const [hoveredWarning, setHoveredWarning] = useState<string | null>(null)
   const hitIds = (hoveredWarning && doorWarnings.get(hoveredWarning)?.hits) || null

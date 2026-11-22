@@ -10,14 +10,17 @@
  * `hinge` and `swing`, so the call is
  * `validateDoorSweeps(plan, (opening) => opening)`, made beside
  * `validatePlan` and never from inside it: this builds each floor with
- * `buildFloorPlan`, which runs `validatePlan`.
+ * `buildFloorPlan`, which runs `validatePlan`. A view that has built the floor
+ * it shows calls `validateFloorDoorSweeps` with that drawing instead (QAR-7).
  */
 
 import type { FloorPlan, Opening, Wall } from './plan'
 import type { Issue } from './validate'
 import type { DoorHinge, DoorSide, DoorSwing } from './door'
 import { doorSwing } from './door'
+import type { PlanDrawing } from './floorplan'
 import { buildFloorPlan } from './floorplan'
+import { boxIndex, boxOfPoints, widenBox } from './boxIndex'
 import { planFloors, planForFloor } from './floors'
 import type { Vec2 } from './vec2'
 import { tolerance } from './tolerances'
@@ -228,79 +231,108 @@ export function validateDoorSweeps(
   plan: FloorPlan,
   swingOf: (opening: Opening) => DoorSwingValues | null | undefined
 ): readonly DoorSweepIssue[] {
-  const issues: DoorSweepIssue[] = []
-
-  for (const floor of planFloors(plan)) {
+  return planFloors(plan).flatMap((floor) => {
     const slice = planForFloor(plan, floor.id)
-    // What the view draws for this storey: broken walls and openings are
-    // already out, and validation has said why.
-    const drawing = buildFloorPlan(slice)
-    const drawnById = new Map(drawing.openings.map((drawn) => [drawn.id, drawn]))
+    return validateFloorDoorSweeps(slice, buildFloorPlan(slice), swingOf)
+  })
+}
 
-    // Every real wall this storey draws, as the rectangles a leaf can hit.
-    const blockers: { readonly id: string; readonly parts: readonly Vec2[][] }[] = []
-    const drawnWalls = new Set(drawing.walls.map((w) => w.id))
-    const joints = wallJoints(slice.walls.filter((w) => drawnWalls.has(w.id)))
-    for (const w of slice.walls) {
-      if (w.virtual || !drawnWalls.has(w.id)) continue
-      const openings = slice.openings.filter((o) => o.wall === w.id && drawnById.has(o.id))
-      blockers.push({ id: w.id, parts: standingParts(w, openings, joints.get(w.id)) })
+/**
+ * The same check for one floor (QAR-7): `slice` is that floor's `planForFloor`, and `drawing`
+ * is `buildFloorPlan(slice)`, which a view has already built to draw it. A view calls this for
+ * the floor it shows, and never builds the other floors to check them.
+ *
+ * Each door is tried only against the walls and doors near it (`boxIndex`), then exactly as
+ * before, so the findings and their order are what trying every pair gives.
+ */
+export function validateFloorDoorSweeps(
+  slice: FloorPlan,
+  drawing: PlanDrawing,
+  swingOf: (opening: Opening) => DoorSwingValues | null | undefined
+): readonly DoorSweepIssue[] {
+  const issues: DoorSweepIssue[] = []
+  // What the view draws for this storey: broken walls and openings are
+  // already out, and validation has said why.
+  const drawnById = new Map(drawing.openings.map((drawn) => [drawn.id, drawn]))
+
+  // Every real wall this storey draws, as the rectangles a leaf can hit.
+  const blockers: { readonly id: string; readonly parts: readonly Vec2[][] }[] = []
+  const drawnWalls = new Set(drawing.walls.map((w) => w.id))
+  const joints = wallJoints(slice.walls.filter((w) => drawnWalls.has(w.id)))
+  const openingsByWall = new Map<string, Opening[]>()
+  for (const o of slice.openings) {
+    if (!drawnById.has(o.id)) continue
+    const list = openingsByWall.get(o.wall)
+    if (list) list.push(o)
+    else openingsByWall.set(o.wall, [o])
+  }
+  for (const w of slice.walls) {
+    if (w.virtual || !drawnWalls.has(w.id)) continue
+    blockers.push({ id: w.id, parts: standingParts(w, openingsByWall.get(w.id) ?? [], joints.get(w.id)) })
+  }
+  const nearBlockers = boxIndex(blockers.map((b) => boxOfPoints(b.parts.flat())))
+
+  // Plan order, not the drawing's (by wall, then offset): "the first door"
+  // of a pair is the one the file lists first.
+  const sweeps: {
+    readonly id: string
+    readonly hinge: Vec2
+    readonly radius: number
+    readonly polygon: readonly Vec2[]
+  }[] = []
+  for (const opening of slice.openings) {
+    if (opening.type !== 'door') continue
+    const drawn = drawnById.get(opening.id)
+    if (!drawn) continue
+
+    const values = swingOf(opening)
+    const hinge = values?.hinge ?? null
+    const swing = values?.swing ?? null
+
+    if (!hinge && !swing) continue
+    if (!hinge) {
+      issues.push(warning('opening/swing-without-hinge', drawn.id))
+      continue
+    }
+    if (!swing) {
+      issues.push(warning('opening/hinge-without-swing', drawn.id))
+      continue
     }
 
-    // Plan order, not the drawing's (by wall, then offset): "the first door"
-    // of a pair is the one the file lists first.
-    const sweeps: {
-      readonly id: string
-      readonly hinge: Vec2
-      readonly radius: number
-      readonly polygon: readonly Vec2[]
-    }[] = []
-    for (const opening of slice.openings) {
-      if (opening.type !== 'door') continue
-      const drawn = drawnById.get(opening.id)
-      if (!drawn) continue
+    const sweep = doorSwing(drawn, hinge, swing)
+    if (!sweep) continue
+    const frame = frameOf(sweep)
 
-      const values = swingOf(opening)
-      const hinge = values?.hinge ?? null
-      const swing = values?.swing ?? null
+    // The sweep lies within its radius of the hinge: a wall whose box is further off cannot
+    // reach into it.
+    const hits = nearBlockers
+      .near(widenBox(boxOfPoints([frame.origin]), frame.radius))
+      .map((i) => blockers[i]!)
+      .filter((b) => b.id !== drawn.wallId)
+      .filter((b) => b.parts.some((rectangle) => reachesInto(frame, rectangle)))
+      .map((b) => b.id)
+    if (hits.length > 0) issues.push(warning('opening/door-blocked', drawn.id, hits))
 
-      if (!hinge && !swing) continue
-      if (!hinge) {
-        issues.push(warning('opening/swing-without-hinge', drawn.id))
-        continue
-      }
-      if (!swing) {
-        issues.push(warning('opening/hinge-without-swing', drawn.id))
-        continue
-      }
+    sweeps.push({
+      id: drawn.id,
+      hinge: sweep.hinge,
+      radius: sweep.arc.radius,
+      polygon: sweepPolygon(sweep)
+    })
+  }
 
-      const sweep = doorSwing(drawn, hinge, swing)
-      if (!sweep) continue
-      const frame = frameOf(sweep)
-
-      const hits = blockers
-        .filter((b) => b.id !== drawn.wallId)
-        .filter((b) => b.parts.some((rectangle) => reachesInto(frame, rectangle)))
-        .map((b) => b.id)
-      if (hits.length > 0) issues.push(warning('opening/door-blocked', drawn.id, hits))
-
-      sweeps.push({
-        id: drawn.id,
-        hinge: sweep.hinge,
-        radius: sweep.arc.radius,
-        polygon: sweepPolygon(sweep)
-      })
-    }
-
-    for (let i = 0; i < sweeps.length; i++) {
-      for (let j = i + 1; j < sweeps.length; j++) {
-        const first = sweeps[i]!
-        const second = sweeps[j]!
-        // Two discs this far apart cannot overlap: skip the clip.
-        if (distance(first.hinge, second.hinge) >= first.radius + second.radius) continue
-        if (narrowestWidth(overlapOf(first.polygon, second.polygon)) > tolerance('swingContact')) {
-          issues.push(warning('opening/doors-collide', first.id, [second.id]))
-        }
+  // Two discs whose boxes do not meet are further apart than their radii: the test below would
+  // skip them too.
+  const nearSweeps = boxIndex(sweeps.map((s) => widenBox(boxOfPoints([s.hinge]), s.radius)))
+  for (let i = 0; i < sweeps.length; i++) {
+    const first = sweeps[i]!
+    for (const j of nearSweeps.near(widenBox(boxOfPoints([first.hinge]), first.radius))) {
+      if (j <= i) continue
+      const second = sweeps[j]!
+      // Two discs this far apart cannot overlap: skip the clip.
+      if (distance(first.hinge, second.hinge) >= first.radius + second.radius) continue
+      if (narrowestWidth(overlapOf(first.polygon, second.polygon)) > tolerance('swingContact')) {
+        issues.push(warning('opening/doors-collide', first.id, [second.id]))
       }
     }
   }

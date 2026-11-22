@@ -105,6 +105,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `plan/out-of-range` | {thing} has a value out of range | {wanted} at {place} |
 | `plan/not-in-format` | {thing} has a field the format cannot read | {wanted} at {place} |
 | `plan/unknown-field` | {thing} has a field Grid does not know, "{field}" | one of the fields of {part}: … |
+| `plan/note-no-place` | Note "{id}" names a room the plan does not have, so it is not drawn | a room id from the plan, or a point (at) |
 | `plan/unknown-use` | Room "{name}" has a use Grid does not know, "{use}" | one of the uses Grid knows: bedroom, living, … |
 | `plan/empty` | The plan has nothing in it: no walls, rooms or openings | walls, and the rooms and openings they hold |
 | `plan/unfinished-merge` | The plan holds an unfinished git merge | one plan, with the merge finished |
@@ -196,6 +197,7 @@ the same words. A test fails when one code is worded two ways (AU4-1).
 | `floor/not-checked-way-out-not-drawn` | The way out of "{floor}" was not checked: its only door out leads to a space that is not drawn | the space beyond its doors drawn as a room, or a door to the outside |
 | `floor/not-checked-rooms-not-drawn` | On "{floor}", rooms that could not be drawn were not checked: "{room}", … | rooms that can be drawn |
 | `floor/not-checked-doors-not-drawn` | On "{floor}", some doors could not be drawn and were not checked | doors that can be drawn |
+| `floor/sketch-drawn-only` | On "{floor}", the sketch is drawn only: {count} sketch items, not measured or checked, and never taken as a wall or a room | nothing: a sketch is for the drawing. A part Grid understands is written as one: a wall, a room, a door, a fixture |
 | `floor/not-checked-no-use` | On "{floor}", room sizes were not checked in rooms with no use stated: {count} | a use on every room (bedroom, living, dining and so on) |
 | `plan/not-checked-sizes-for-place` | Room sizes were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
 | `plan/not-checked-escapes-for-place` | Escape openings were not checked: the figures here are from US model codes, and this plan is for {country} | figures for the place, looked up and given to the check |
@@ -347,6 +349,17 @@ A change that would add a problem that leaves a part out is refused, and nothing
 - A code that changes meaning, or a field taken away, raises `resultVersion`.
 
 ## Changelog for agents
+
+### 2026-11-22: writing on the drawing, and the sketch layer (SHT-7)
+
+- The plan may hold `title`, `annotations` and `sketch`. None of them changes an area, a check or
+  a wall count. A field the format does not have on a note or a sketch item is a
+  `plan/unknown-field` line, as on any other part.
+- New code, not checked: `floor/sketch-drawn-only`, one line per floor with a sketch, naming its
+  items in `also`: the sketch is drawn and exported, and never measured or checked.
+- New code, worth a look: `plan/note-no-place`, a note in a room the plan does not have, naming
+  the note and the room in `also`. The note is not drawn.
+- `grid_view` (kind plan) takes `hide`, `colour` and `key`.
 
 ### 2026-11-22: a problem report the person files (CMD-13)
 
