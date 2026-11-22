@@ -212,6 +212,8 @@ const TOOL_SLOTS: Readonly<Record<string, readonly ToolSlot[]>> = {
   grid_sheet: [{ arg: 'plan', call: tool('grid_sheet', { plan: '@', layout: 'check' }), given: asIs }],
   // MSG-10: its marks file is the plan's name beside the plan, never a path of its own.
   grid_mark_seen: [{ arg: 'plan', call: tool('grid_mark_seen', { plan: '@', line: 1, code: 'room/too-small', reason: 'Seen', by: 'Owner' }), given: asIs }],
+  // BRF-1: its brief is the plan's name beside the plan, never a path of its own.
+  grid_write_brief: [{ arg: 'plan', call: tool('grid_write_brief', { plan: '@', brief: { rooms: [{ name: 'Lounge', area: 20, level: 'must', source: 'assumed' }] } }), given: asIs }],
   grid_write_rooms: [{ arg: 'plan', call: (p) => ({ name: 'grid_write_rooms', arguments: { plan: `${p}.json`, rooms: roomsText } }), given: (p) => `${p}.json` }],
   grid_change_opening: [
     { arg: 'plan', call: tool('grid_change_opening', { plan: '@', opening: 'bed2-door', hinge: 'end' }), given: asIs },

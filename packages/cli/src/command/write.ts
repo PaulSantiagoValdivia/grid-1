@@ -17,6 +17,7 @@ import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
+import { briefAnswer, briefReminder, type BriefData } from '../brief/answer'
 import { TextNotDecoded } from '../fs/textEncoding'
 import { comparePlans } from '../quantities/compare'
 import { surveyPlan } from '../quantities/survey'
@@ -57,6 +58,10 @@ export interface WriteDone {
   /** The comparison with the plan before, or null when there was none. */
   readonly verdict: string | null
   readonly drawingProblems: { readonly before: number; readonly after: number }
+  /** BRF-1: the brief beside the plan, line by line against the plan written. */
+  readonly brief: BriefData
+  /** BRF-1: one line when this is the plan's first write and no brief is kept beside it; never a refusal. */
+  readonly reminder: string | null
   readonly lines: readonly string[]
 }
 
@@ -157,7 +162,11 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
   next['rooms'] = plan.rooms
   next['openings'] = plan.openings
   next['written'] = stampFor(plan)
+  // BRF-1: whether this is the plan's first write, before it is written.
+  const first = before === null || nothingToLose(before)
   const written = project.relative(project.writeFile(planFile, `${JSON.stringify(next, null, 2)}\n`))
+  const brief = briefAnswer(project, planFile, plan)
+  const reminder = first ? briefReminder(project, planFile) : null
 
   const verdict = before === null || nothingToLose(before) ? null : comparePlans(surveyPlan(before), surveyPlan(plan), ['the plan before', 'the plan now']).verdict
   const drawingProblems = { before: before === null ? 0 : validatePlan(before).issues.length, after: validatePlan(plan).issues.length }
@@ -166,6 +175,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     ...roomsAnswer(result, options.brief !== true || result.rooms.length <= ROOMS_LISTED_MAX),
     ...(verdict === null ? [] : [verdict]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
+    ...brief.text,
+    ...(reminder === null ? [] : [reminder]),
   ]
-  return { written, result, plan, verdict, drawingProblems, lines }
+  return { written, result, plan, verdict, drawingProblems, brief: brief.data, reminder, lines }
 }

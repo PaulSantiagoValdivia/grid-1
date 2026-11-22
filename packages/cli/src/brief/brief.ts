@@ -1,0 +1,382 @@
+/**
+ * BRF-1: the brief, what the person asked for, kept in a file of its own beside the plan.
+ *
+ * `<plan>.brief.json` (`plan.brief.json` beside `plan.json`), read and written only through
+ * `fs/projectFiles.ts`. The plan knows nothing of it, and no export, sheet or drawing reads it:
+ * the person's words stay with the person's project.
+ *
+ *   {
+ *     "version": "1",
+ *     "rooms": [
+ *       { "name": "Bathroom 1", "area": 4.5, "level": "must", "source": "given", "quote": "a small bathroom, about 4.5 square metres" },
+ *       { "use": "bedroom", "count": 3, "level": "must", "source": "given", "quote": "three bedrooms" }
+ *     ],
+ *     "footprint": { "width": 10, "depth": 12, "level": "should", "source": "assumed" },
+ *     "touch": [{ "rooms": ["Kitchen", "Living room"], "level": "must", "source": "given", "quote": "the kitchen open to the living room" }],
+ *     "figures": {
+ *       "heading": "The person's own figures: theirs, not from any code or standard.",
+ *       "door_width": { "value": 0.8, "level": "must", "source": "given", "quote": "my chair needs 80 cm doors" }
+ *     },
+ *     "open": [{ "quote": "somewhere to work from home", "about": "its size, and which room" }]
+ *   }
+ *
+ * Every wish carries a level (`must`, `should`, `avoid`) and where it came from, in WRT-6's
+ * words: `given` by the person, with their words beside it, or `assumed` by whoever wrote the
+ * brief, for the person to confirm. What the person said with no figure yet is `open`.
+ *
+ * The figures under `figures` are the person's own, never a code's: the file and every answer
+ * say so under their heading. A figure Grid does not know is refused with the ones it knows.
+ * A refusal names the place and never repeats the text.
+ */
+import path from 'path'
+import { ROOM_USES } from '@ongrid/floorplan/types/floorplan'
+import { PathRefused, quoted, type Project } from '../fs/projectFiles'
+import { TextNotDecoded } from '../fs/textEncoding'
+import { NAME_MAX } from '../command/planText'
+import { reasonProblem } from '../seen/marks'
+
+/** What the file name adds to the plan's name. */
+export const BRIEF_SUFFIX = '.brief.json'
+/** The largest brief Grid reads. */
+export const BRIEF_FILE_MAX_BYTES = 1024 * 1024
+/** The longest quote a wish may keep: the person's words, a sentence or two. */
+export const QUOTE_MAX = 300
+/** The most wishes of one kind a brief may hold. */
+export const WISHES_MAX = 500
+
+/** How much a wish matters to the person. `avoid` is a wish for the drawing not to hold it. */
+export const LEVELS = ['must', 'should', 'avoid'] as const
+export type Level = (typeof LEVELS)[number]
+
+/** WRT-6's words for where a value came from: given by the person, or assumed by whoever wrote it. */
+export const SOURCES = ['given', 'assumed'] as const
+export type Source = (typeof SOURCES)[number]
+
+/** The heading the person's figures sit under, in the file and in every answer. */
+export const FIGURES_HEADING = "The person's own figures: theirs, not from any code or standard."
+
+/**
+ * The person's own figures Grid knows how to measure, and how: each is a smallest size, but a
+ * step, which is a largest height.
+ */
+export const FIGURES = {
+  door_width: { what: 'door width', most: false, measures: 'the hole in the wall of every door and doorless opening; the clear width past a door leaf is less' },
+  corridor_width: { what: 'corridor width', most: false, measures: 'the widest circle each room used as a corridor holds, between its wall faces' },
+  turning_circle: { what: 'turning circle', most: false, measures: 'the widest circle each room holds (or the rooms the figure names), in the empty room' },
+  step: { what: 'step at a door', most: true, measures: 'the sill of every door and doorless opening above its floor' },
+  ceiling_height: { what: 'ceiling height', most: false, measures: 'each room\'s height, as grid_measure gives it' },
+} as const
+export type FigureName = keyof typeof FIGURES
+export const FIGURE_NAMES = Object.keys(FIGURES) as FigureName[]
+
+/** Why a brief was refused. One line, naming the place, never repeating the text. */
+export class BriefRefused extends Error {
+  override readonly name = 'BriefRefused'
+}
+
+/** What every wish says about itself. */
+export interface Said {
+  readonly level: Level
+  readonly source: Source
+  /** The person's words for it; needed when it is given. */
+  readonly quote: string | null
+}
+
+/** A wish about one room (by name) or the rooms of a use. */
+export interface RoomWish extends Said {
+  readonly name: string | null
+  readonly use: string | null
+  readonly count: number | null
+  /** About this net area, m². */
+  readonly area: number | null
+  readonly atLeast: number | null
+  readonly atMost: number | null
+  /** About this inside size, either way round, m. */
+  readonly inside: readonly [number, number] | null
+}
+
+export interface FootprintWish extends Said {
+  readonly width: number | null
+  readonly depth: number | null
+  readonly area: number | null
+}
+
+/** Two rooms that must touch (`must`, `should`) or must not (`avoid`). */
+export interface TouchWish extends Said {
+  readonly rooms: readonly [string, string]
+}
+
+export interface FigureWish extends Said {
+  readonly figure: FigureName
+  readonly value: number
+  /** For a turning circle: the rooms it is for, by name. Every room when empty. */
+  readonly rooms: readonly string[]
+}
+
+/** What the person said that has no figure yet: still to ask. */
+export interface OpenWish {
+  readonly quote: string
+  /** What is still to ask, in the agent's words. */
+  readonly about: string | null
+}
+
+export interface Brief {
+  readonly version: '1'
+  readonly rooms: readonly RoomWish[]
+  readonly footprint: FootprintWish | null
+  readonly touch: readonly TouchWish[]
+  readonly figures: readonly FigureWish[]
+  readonly open: readonly OpenWish[]
+}
+
+/** The brief file of a plan file: beside it, its name without `.json` and `.brief.json` after. */
+export function briefFileOf(planFile: string): string {
+  const name = path.basename(planFile)
+  const base = name.toLowerCase().endsWith('.json') ? name.slice(0, -'.json'.length) : name
+  return path.join(path.dirname(planFile), `${base}${BRIEF_SUFFIX}`)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Reading the brief's contents
+
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const KEY = /^[A-Za-z0-9._-]{1,64}$/
+
+function listOf(names: readonly string[]): string {
+  if (names.length <= 1) return names.join('')
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+function onlyKeys(value: Record<string, unknown>, keys: readonly string[], where: string): void {
+  const unknown = Object.keys(value).filter((key) => !keys.includes(key))
+  if (unknown.length === 0) return
+  const named = unknown.length === 1 && KEY.test(unknown[0]!) ? ` (${quoted(unknown[0]!)})` : ''
+  throw new BriefRefused(`${where} holds a field Grid does not know${named}: it may hold only ${listOf(keys)}`)
+}
+
+function words(value: unknown, where: string, max: number): string {
+  if (typeof value !== 'string') throw new BriefRefused(`${where} must be text`)
+  const problem = reasonProblem(value, max)
+  if (problem !== null) throw new BriefRefused(`${where} ${problem}`)
+  return value
+}
+
+function size(value: unknown, where: string, unit: 'm' | 'm²', max: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > max) {
+    throw new BriefRefused(`${where} must be a number of ${unit === 'm' ? 'metres' : 'square metres'} above 0 and at most ${max.toLocaleString('en-US')}`)
+  }
+  return value
+}
+
+function optional<T>(raw: Record<string, unknown>, key: string, read: (value: unknown) => T): T | null {
+  return raw[key] === undefined || raw[key] === null ? null : read(raw[key])
+}
+
+function said(raw: Record<string, unknown>, where: string, levels: readonly Level[] = LEVELS): Said {
+  const level = raw['level']
+  if (!levels.includes(level as Level)) throw new BriefRefused(`${where}.level must be one of ${listOf([...levels])}`)
+  const source = raw['source']
+  if (!SOURCES.includes(source as Source)) throw new BriefRefused(`${where}.source must be given (the person said it) or assumed (for the person to confirm)`)
+  const quote = optional(raw, 'quote', (value) => words(value, `${where}.quote`, QUOTE_MAX))
+  if (source === 'given' && quote === null) throw new BriefRefused(`${where} is given, so it keeps the person's words in quote`)
+  return { level: level as Level, source: source as Source, quote }
+}
+
+function list(raw: unknown, where: string): unknown[] {
+  if (raw === undefined || raw === null) return []
+  if (!Array.isArray(raw)) throw new BriefRefused(`${where} must be a list`)
+  if (raw.length > WISHES_MAX) throw new BriefRefused(`${where} holds ${raw.length.toLocaleString('en-US')} items; it may hold at most ${WISHES_MAX}`)
+  return raw
+}
+
+const ROOM_KEYS = ['name', 'use', 'count', 'area', 'at_least', 'at_most', 'inside', 'level', 'source', 'quote'] as const
+
+function roomWish(raw: unknown, where: string): RoomWish {
+  if (!isObject(raw)) throw new BriefRefused(`${where} must be an object`)
+  onlyKeys(raw, ROOM_KEYS, where)
+  const name = optional(raw, 'name', (value) => words(value, `${where}.name`, NAME_MAX))
+  const use = optional(raw, 'use', (value) => {
+    if (!ROOM_USES.includes(value as never)) throw new BriefRefused(`${where}.use must be one of the room uses: ${ROOM_USES.join(', ')}`)
+    return value as string
+  })
+  if (name === null && use === null) throw new BriefRefused(`${where} names a room (name) or the rooms of a use (use)`)
+  const count = optional(raw, 'count', (value) => {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 1000) throw new BriefRefused(`${where}.count must be a whole number from 0 to 1,000`)
+    return value
+  })
+  const area = optional(raw, 'area', (value) => size(value, `${where}.area`, 'm²', 100_000))
+  const atLeast = optional(raw, 'at_least', (value) => size(value, `${where}.at_least`, 'm²', 100_000))
+  const atMost = optional(raw, 'at_most', (value) => size(value, `${where}.at_most`, 'm²', 100_000))
+  if (area !== null && (atLeast !== null || atMost !== null)) throw new BriefRefused(`${where} gives area, a size about which the room is, or at_least and at_most: not both`)
+  if (atLeast !== null && atMost !== null && atLeast > atMost) throw new BriefRefused(`${where}.at_least is more than its at_most`)
+  const inside = optional(raw, 'inside', (value) => {
+    if (!Array.isArray(value) || value.length !== 2) throw new BriefRefused(`${where}.inside must be two sizes in metres, as [3, 4]`)
+    return [size(value[0], `${where}.inside[0]`, 'm', 1000), size(value[1], `${where}.inside[1]`, 'm', 1000)] as const
+  })
+  return { name, use, count, area, atLeast, atMost, inside, ...said(raw, where) }
+}
+
+function footprintWish(raw: unknown): FootprintWish {
+  const where = 'footprint'
+  if (!isObject(raw)) throw new BriefRefused(`${where} must be an object`)
+  onlyKeys(raw, ['width', 'depth', 'area', 'level', 'source', 'quote'], where)
+  const width = optional(raw, 'width', (value) => size(value, `${where}.width`, 'm', 10_000))
+  const depth = optional(raw, 'depth', (value) => size(value, `${where}.depth`, 'm', 10_000))
+  const area = optional(raw, 'area', (value) => size(value, `${where}.area`, 'm²', 1_000_000))
+  if ((width === null) !== (depth === null)) throw new BriefRefused(`${where} gives width and depth together, the outside sizes either way round`)
+  if (width === null && area === null) throw new BriefRefused(`${where} gives width and depth, area, or both`)
+  return { width, depth, area, ...said(raw, where, ['must', 'should']) }
+}
+
+function touchWish(raw: unknown, where: string): TouchWish {
+  if (!isObject(raw)) throw new BriefRefused(`${where} must be an object`)
+  onlyKeys(raw, ['rooms', 'level', 'source', 'quote'], where)
+  const rooms = raw['rooms']
+  if (!Array.isArray(rooms) || rooms.length !== 2) throw new BriefRefused(`${where}.rooms must be two rooms' names`)
+  const pair = [words(rooms[0], `${where}.rooms[0]`, NAME_MAX), words(rooms[1], `${where}.rooms[1]`, NAME_MAX)] as const
+  return { rooms: pair, ...said(raw, where) }
+}
+
+function figureWishes(raw: unknown): FigureWish[] {
+  if (raw === undefined || raw === null) return []
+  if (!isObject(raw)) throw new BriefRefused('figures must be an object, each of the person\'s figures by its name')
+  const out: FigureWish[] = []
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === 'heading') continue
+    if (!FIGURE_NAMES.includes(key as FigureName)) {
+      const named = KEY.test(key) ? ` ${quoted(key)}` : ''
+      throw new BriefRefused(`figures names a figure Grid does not know${named}. The figures it knows: ${listOf([...FIGURE_NAMES])}`)
+    }
+    const figure = key as FigureName
+    const where = `figures.${figure}`
+    if (!isObject(value)) throw new BriefRefused(`${where} must be an object with value, level and source`)
+    onlyKeys(value, figure === 'turning_circle' ? ['value', 'rooms', 'level', 'source', 'quote'] : ['value', 'level', 'source', 'quote'], where)
+    const v = value['value']
+    // A step may be none at all: no sill.
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100 || (v === 0 && figure !== 'step')) {
+      throw new BriefRefused(`${where}.value must be a number of metres${figure === 'step' ? ' from 0' : ' above 0'} to 100`)
+    }
+    const rooms = list(value['rooms'], `${where}.rooms`).map((room, i) => words(room, `${where}.rooms[${i}]`, NAME_MAX))
+    out.push({ figure, value: v, rooms, ...said(value, where, ['must', 'should']) })
+  }
+  return out
+}
+
+function openWish(raw: unknown, where: string): OpenWish {
+  if (!isObject(raw)) throw new BriefRefused(`${where} must be an object with the person's words in quote`)
+  onlyKeys(raw, ['quote', 'about'], where)
+  return { quote: words(raw['quote'], `${where}.quote`, QUOTE_MAX), about: optional(raw, 'about', (value) => words(value, `${where}.about`, QUOTE_MAX)) }
+}
+
+/** The brief's contents, checked. Refused with the first place that is wrong. A file's `version` must be "1"; a tool call's may be left out. */
+export function parseBrief(raw: unknown, options: { readonly versionNeeded?: boolean } = {}): Brief {
+  if (!isObject(raw)) throw new BriefRefused('it must be a JSON object with rooms, footprint, touch, figures or open')
+  onlyKeys(raw, ['version', 'rooms', 'footprint', 'touch', 'figures', 'open'], 'the brief')
+  if ((options.versionNeeded !== false || raw['version'] !== undefined) && raw['version'] !== '1') throw new BriefRefused('version must be "1"')
+  const brief: Brief = {
+    version: '1',
+    rooms: list(raw['rooms'], 'rooms').map((wish, i) => roomWish(wish, `rooms[${i}]`)),
+    footprint: raw['footprint'] === undefined || raw['footprint'] === null ? null : footprintWish(raw['footprint']),
+    touch: list(raw['touch'], 'touch').map((wish, i) => touchWish(wish, `touch[${i}]`)),
+    figures: figureWishes(raw['figures']),
+    open: list(raw['open'], 'open').map((wish, i) => openWish(wish, `open[${i}]`)),
+  }
+  if (brief.rooms.length + brief.touch.length + brief.figures.length + brief.open.length === 0 && brief.footprint === null) {
+    throw new BriefRefused('it holds no wish: give rooms, footprint, touch, figures or open')
+  }
+  return brief
+}
+
+/** The brief as its file holds it: the keys the file takes, the person's figures under their heading. */
+export function briefJson(brief: Brief): Record<string, unknown> {
+  const s = (wish: Said): Record<string, unknown> => ({ level: wish.level, source: wish.source, ...(wish.quote === null ? {} : { quote: wish.quote }) })
+  const some = <T>(key: string, value: T | null): Record<string, T> => (value === null ? {} : { [key]: value })
+  const out: Record<string, unknown> = { version: '1' }
+  if (brief.rooms.length > 0) {
+    out['rooms'] = brief.rooms.map((w) => ({
+      ...some('name', w.name), ...some('use', w.use), ...some('count', w.count), ...some('area', w.area),
+      ...some('at_least', w.atLeast), ...some('at_most', w.atMost), ...some('inside', w.inside === null ? null : [...w.inside]), ...s(w),
+    }))
+  }
+  if (brief.footprint !== null) {
+    const f = brief.footprint
+    out['footprint'] = { ...some('width', f.width), ...some('depth', f.depth), ...some('area', f.area), ...s(f) }
+  }
+  if (brief.touch.length > 0) out['touch'] = brief.touch.map((w) => ({ rooms: [...w.rooms], ...s(w) }))
+  if (brief.figures.length > 0) {
+    out['figures'] = {
+      heading: FIGURES_HEADING,
+      ...Object.fromEntries(brief.figures.map((w) => [w.figure, { value: w.value, ...(w.rooms.length > 0 ? { rooms: [...w.rooms] } : {}), ...s(w) }])),
+    }
+  }
+  if (brief.open.length > 0) out['open'] = brief.open.map((w) => ({ quote: w.quote, ...some('about', w.about) }))
+  return out
+}
+
+// ---------------------------------------------------------------------------------------------
+// The file
+
+function oneLine(message: string): string {
+  return message.replace(/\s+/g, ' ').trim()
+}
+
+/** The brief file as read: its path in the project, the brief, and why it could not be read. */
+export interface BriefRead {
+  /** The brief file, relative to the project folder. */
+  readonly file: string
+  /** Null when there is no brief, or it could not be read. */
+  readonly brief: Brief | null
+  /** Why the file could not be read, when it is there and wrong. */
+  readonly problem: string | null
+}
+
+/**
+ * Reads the brief beside `planFile`, inside the project. No file is no brief. A file that can't
+ * be read gives no brief and says why, so an edit never fails on it. A path the project refuses
+ * throws `PathRefused`.
+ */
+export function readBrief(project: Project, planFile: string): BriefRead {
+  const file = briefFileOf(planFile)
+  const shown = path.basename(file)
+  const relative = project.relative(project.resolve(file))
+  let text: string
+  try {
+    text = project.readText(file, BRIEF_FILE_MAX_BYTES).text
+  } catch (error) {
+    if (error instanceof PathRefused) throw error
+    if (error instanceof TextNotDecoded) return { file: relative, brief: null, problem: `${shown}: ${oneLine(error.message)}` }
+    const code = (error as NodeJS.ErrnoException).code
+    if (code === 'ENOENT') return { file: relative, brief: null, problem: null }
+    if (code === 'EISDIR') return { file: relative, brief: null, problem: `${shown} is a folder, not a brief` }
+    if (code === 'EFBIG') return { file: relative, brief: null, problem: `${shown} is larger than ${BRIEF_FILE_MAX_BYTES / 1024 / 1024} MB, the most Grid reads in a brief` }
+    if (code === 'EACCES' || code === 'EPERM') return { file: relative, brief: null, problem: `${shown} can't be read: permission denied` }
+    throw error
+  }
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    // The parser's message quotes the text around the fault, and the text holds the person's words.
+    return { file: relative, brief: null, problem: `${shown} is not JSON` }
+  }
+  try {
+    return { file: relative, brief: parseBrief(raw), problem: null }
+  } catch (error) {
+    if (error instanceof BriefRefused) return { file: relative, brief: null, problem: `${shown} is not a brief: ${error.message}` }
+    throw error
+  }
+}
+
+/** Writes the brief beside `planFile`, replacing the one there. Returns its path in the project. */
+export function writeBrief(project: Project, planFile: string, brief: Brief): string {
+  const file = briefFileOf(planFile)
+  try {
+    return project.relative(project.writeFile(file, `${JSON.stringify(briefJson(brief), null, 2)}\n`))
+  } catch (error) {
+    if (error instanceof PathRefused) throw error
+    const code = (error as NodeJS.ErrnoException).code
+    const why = code === 'EACCES' || code === 'EPERM' ? ': permission denied' : code === 'EISDIR' ? ': it is a folder' : code === 'ENOENT' ? ': its folder does not exist' : `: ${oneLine((error as Error).message)}`
+    throw new BriefRefused(`Can't write ${path.basename(file)}${why}.`)
+  }
+}

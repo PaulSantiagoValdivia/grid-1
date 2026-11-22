@@ -320,6 +320,26 @@ export const TOLERANCES = {
     basis: own
   },
 
+  // ── The brief beside the plan (BRF-1) ─────────────────────────────────────────────────────
+  briefAbout: {
+    kind: 'tolerance',
+    value: 0.05,
+    unit: 'ratio',
+    decides:
+      'A size the person asked for as a figure, not as at least or at most, is met when the drawn ' +
+      'size is within this share of it, above or below: asked 4.5 m², 4.3 to 4.7 m² is met.',
+    basis: own
+  },
+  nameSize: {
+    kind: 'tolerance',
+    value: 0.02,
+    unit: 'ratio',
+    decides:
+      'A size written in a room\'s name (12 m², 6 tatami) and the size drawn differ when they are ' +
+      'further apart than this share of the size named: a room named 6 mats that holds 5.8 does.',
+    basis: own
+  },
+
   // ── Floors (LVL-1) ────────────────────────────────────────────────────────────────────────
   wallAboveStorey: {
     kind: 'tolerance',
