@@ -197,3 +197,56 @@ Final runs, on this branch from main 666bb01:
 - `npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 238 files, 4,667 passed,
   3 skipped, none failed (1,359 s). No timing test failed.
 - `npm run scoreboard`: 197, 386, 16, 2, 11, 735, 95. Same as the stored figures; nothing written.
+
+## Merged with main (56458e5)
+
+Main had gained SHT-4 (dimension chains), MSG-16, CNT-3 (north and front), MSG-10, MSG-3,
+WRT-7, ARE-13 (quantities for a first estimate) and CNT-5 (building types and uses). Merge
+commit 6f08549; five files conflicted, each resolved keeping both sides:
+
+- `packages/floorplan/src/geometry/floorplan.ts`: `buildFloorPlan` returns SHT-11's `lifts` and
+  CNT-3's `north` together.
+- `packages/viewer/src/picture/planSvg.ts`: `planPicture` works out the floor above (SHT-11) and
+  passes it to `planScene`, whose result CNT-3 names `scene` and adds the north arrow to.
+- `packages/viewer/src/picture/scene.ts` (imports): SHT-11's `PlanAbove` type kept; WRT-7's
+  removal of `areaText as areaFigure` kept, since the room labels now use `areaNumber` and
+  `areaUnit`.
+- `docs/commands.md`: SHT-4's "The sizes on a drawing" and SHT-11's "Stairs, lifts and the floor
+  above on the drawing" both kept, in that order, after the `--hide` section.
+- `docs/result-contract.md`: SHT-11's changelog entry first, then CNT-5's and the others from main
+  as they were; all dated 2026-11-22.
+
+The rest merged on its own (`areas.md`, `tolerances.ts` and `tolerances.md`, `look.ts`,
+`spaces.ts`, `index.ts`, `plan.css`, `draw.ts`, `readTools.ts`, `writing.ts`). The type check
+passed on the merged tree before the merge was committed, so no signature had moved.
+
+Decisions after the merge:
+
+- **ARE-13's floor finish counts a stacked stair once** (a29d1d5). `floor:<use>` is defined as
+  the net area of the rooms of that use, as `grid_areas` measures it, but it summed every room's
+  take-off, so `floor:stair` counted a stair on every floor. It now leaves out the rooms with
+  `countedWith`, as the net area does; its rule sentence, the table in `areas.md` and the
+  changelog for agents say so. Wall faces, skirting and ceilings still count every room, since
+  the walls stand on every floor (gross-like, as the gross areas keep those rooms). `upper_floor`
+  is unchanged: it takes the gross internal area, which keeps those rooms, less the stated stairs'
+  footprints, as ARE-13 defined it. A test in `quantities/__tests__/stairArea.test.ts` holds the
+  floor finish to `byUse.stair`; it fails without the fix.
+- **CNT-5's use words need nothing here.** `stairs`, `staircase` and `stairwell` read as `stair`,
+  and `elevator` as `lift`, when the plan is read (`readUse` in the schema), so the stair stack and
+  the lift cross, which look at `room.use`, already take them. `landing` reads as `corridor` and
+  stays out of the stair stack. No new use is stair- or lift-like.
+- ARE-13's `FloorSpaces.outline` and SHT-11's `floorOutline` both come from the same wall join;
+  `floorOutline` keeps the outer rings only and skips the room comparison. Left as two calls; one
+  could be built on the other later.
+- No line was added to `CHANGELOG.md` under "Unreleased" for SHT-11 before or in this merge.
+
+Checks after the merge, on a29d1d5:
+
+- `npm run build`: bundled. `npm run typecheck`: no errors. `npm run lint`: no findings.
+  `npm run check:licenses`: 363 licences, none GPL, LGPL, AGPL, MPL or EPL.
+- `vitest run packages/floorplan/src/geometry packages/viewer packages/cli/src/draw
+  packages/cli/src/sheet packages/cli/src/quantities packages/cli/src/mcp packages/cli/src/command
+  scoreboard/__tests__/areas.test.ts --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`:
+  184 files, 3,846 passed, none failed (281 s).
+- `npm run scoreboard`: 197, 278, 16, 5, 12, 735, 95. Same as the stored figures (main's);
+  nothing written.
