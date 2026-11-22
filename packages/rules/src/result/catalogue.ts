@@ -11,7 +11,7 @@
  * Plain English, never anything that reads as "this plan complies".
  */
 
-import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix } from '@ongrid/floorplan/geometry'
+import { figureText, metresText, passageText, planCheckWordings, tolerance, wordingText, type PlanFix, type WordingPart } from '@ongrid/floorplan/geometry'
 import { BUILDING_TYPE_TEXT, quoted } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
 import { buildingKindsText, findingReadFor, type BuildingKind } from '../checks/figures'
@@ -65,6 +65,13 @@ export interface Subject {
   readonly rename?: string
   /** MSG-6, on an unfinished merge: what each side adds or changes, in words. */
   readonly sides?: string
+  /**
+   * MSG-5, on a line that stands for the same note on several rooms (lab MS-14): their names, in
+   * order, the first being `name`. The wording lists them where the one name goes.
+   */
+  readonly group?: readonly string[]
+  /** MSG-5, on a "could not be drawn" line: the notes it holds back, in words; empty when none. */
+  readonly heldSaid?: string
 }
 
 export interface CodeEntry {
@@ -84,6 +91,41 @@ const meantWall = (s: Subject): string | null => s.fixes?.find((f) => f.wall !==
 const FAR = tolerance('farFromOrigin')
 const TIDY = 'grid tidy lists this fault and can make the fix it names. Otherwise correct the walls by hand.'
 const SIZE_QUESTION = 'If the size is meant, leave it. If not, correct it: every size is in metres.'
+
+/**
+ * MSG-5: how a finding's wording reads for several rooms at once, part by part: the words that
+ * change, singular then plural. Applied only outside the names; a test reads a line's wording
+ * back with the same table, so a line for several rooms keeps its code's one wording.
+ */
+export const PLURALS: readonly (readonly [singular: string, plural: string])[] = [
+  ['The window of ', 'The windows of '],
+  ['A door from ', 'Doors from '],
+  ['An opening from ', 'Openings from '],
+  [' has no ', ' have no '],
+  [' is too ', ' are too '],
+  [' is under ', ' are under '],
+  [' leads ', ' lead '],
+  ['so it is not a way', 'so they are not ways']
+]
+
+/**
+ * A finding's one wording for its room, or, on a line for several rooms (MSG-5), with their
+ * names listed where the one name goes and the words in `PLURALS` made plural.
+ */
+function named(s: Subject, parts: readonly WordingPart[]): string {
+  const group = s.group ?? []
+  if (group.length < 2) return wordingText(parts)
+  let listed = false
+  const plural = (text: string): string => PLURALS.reduce((out, [one, many]) => out.replace(one, many), text)
+  return wordingText(
+    parts.flatMap((part): WordingPart[] => {
+      if (part.name !== true) return [{ text: plural(part.text) }]
+      if (listed) return [part]
+      listed = true
+      return group.flatMap((name, i): WordingPart[] => (i === 0 ? [{ text: name, name: true }] : [{ text: ', ' }, { text: name, name: true }]))
+    })
+  )
+}
 
 /** "The door is 0.30 m wide" as "the door is 0.30 m wide". */
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1)
@@ -254,6 +296,11 @@ export const CODES = {
   },
 
   // --- The plan as a whole --------------------------------------------------------------------
+  'plan/no-walls': {
+    says: fixed('The plan has no walls, but its rooms and openings name walls'),
+    needed: fixed('the walls the rooms and openings name'),
+    fix: fixed('Put the walls back: every room lists its walls and every opening sits on one. The lines about each room and opening follow from this one and go away with it.')
+  },
   'plan/far-from-origin': {
     says: fixed(`The plan reaches more than ${FAR} m from the origin`),
     needed: fixed(`every point within ${FAR} m of the origin (0, 0)`),
@@ -718,31 +765,31 @@ export const CODES = {
     fix: fixed('Add a door in an outside wall, or mark the wall a door is in as exterior if it leads outside.')
   },
   'room/no-door': {
-    says: (s) => wordingText(planCheckWordings.roomWithoutDoor(s.name)),
+    says: (s) => named(s, planCheckWordings.roomWithoutDoor(s.name)),
     found: fixed('no door, opening or open side'),
     needed: fixed('a door, an opening or an open side to another space'),
     fix: fixed('Add a door or an opening in a wall it shares with another room, or make an open side a virtual wall.')
   },
   'room/no-route-out': {
-    says: (s) => wordingText(planCheckWordings.noRoute(s.name)),
+    says: (s) => named(s, planCheckWordings.noRoute(s.name)),
     found: (s) => through(s.finding),
     needed: fixed('a route through doors and openings to a door to the outside'),
     fix: fixed('Add a door from it, or from a room it opens into, toward a room that reaches the outside.')
   },
   'room/no-route-to-door-out': {
-    says: (s) => wordingText(planCheckWordings.noRouteToAnyDoorOut(s.name)),
+    says: (s) => named(s, planCheckWordings.noRouteToAnyDoorOut(s.name)),
     found: (s) => through(s.finding),
     needed: fixed('a route to a door to the outside, or to the door into the space not drawn'),
     fix: fixed('Add a door from it, or from a room it opens into, toward the way out.')
   },
   'opening/to-undrawn-space': {
-    says: (s) => wordingText(planCheckWordings.doorToUndrawnSpace(s.name)),
+    says: (s) => named(s, planCheckWordings.doorToUndrawnSpace(s.name)),
     found: fixed('no room and no outside wall on the far side of the door'),
     needed: fixed('a room, or the outside, on the far side'),
     fix: fixed('If that space is a shared landing or a stair, draw it as a room. If the door leads outside, mark its wall as exterior.')
   },
   'opening/door-out-above-ground': {
-    says: (s) => wordingText(planCheckWordings.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
+    says: (s) => named(s, planCheckWordings.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
     found: (s) => `a door in an outside wall of a floor ${metresText(s.finding?.elevation ?? 0)} m above the ground`,
     needed: fixed('a way out at ground level, or a stair down to one'),
     fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
@@ -772,7 +819,7 @@ export const CODES = {
     fix: fixed('Move it over the lift shaft below.')
   },
   'opening/too-small-to-pass': {
-    says: (s) => wordingText(planCheckWordings.openingTooSmall(s.name)),
+    says: (s) => named(s, planCheckWordings.openingTooSmall(s.name)),
     found: (s) => (s.finding?.passage === undefined ? s.said : lowerFirst(passageText(s.finding.passage))),
     needed: (s) => {
       const p = s.finding?.passage
@@ -783,19 +830,19 @@ export const CODES = {
     fix: fixed('If people go through it, draw it at its real size. If it is a vent or a serving hatch, it is not a way through: give the room a door.')
   },
   'room/too-small': {
-    says: (s) => wordingText(figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
+    says: (s) => named(s, figureWordings.roomTooSmall(s.name, s.finding?.minimum ?? 0)),
     found: (s) => `${area(s.finding?.area)} net`,
     needed: (s) => `${figureNeededText(`at least ${area(s.finding?.minimum)}`, figuresOf(s.finding, ['habitableRoomMinArea']))}${readFor(s)}`,
     fix: fixed('Make the room larger, or check the use it is given.')
   },
   'room/no-escape-opening': {
-    says: (s) => wordingText(figureWordings.noEscapeOpening(s.name)),
+    says: (s) => named(s, figureWordings.noEscapeOpening(s.name)),
     found: fixed('no window or door in an outside wall'),
     needed: (s) => `a window or door to the outside that someone can climb through${readFor(s)}`,
     fix: fixed('Add a window or a door in one of its outside walls.')
   },
   'room/escape-window-too-small': {
-    says: (s) => wordingText(figureWordings.escapeWindowTooSmall(s.name)),
+    says: (s) => named(s, figureWordings.escapeWindowTooSmall(s.name)),
     // MSG-7 (lab MS-13): the measure that fails first, against what it needs; the ones that pass after.
     found: (s) => {
       const f = s.finding
@@ -825,7 +872,7 @@ export const CODES = {
     fix: fixed('Make the window larger, or add one that is.')
   },
   'room/escape-window-too-high': {
-    says: (s) => wordingText(figureWordings.escapeWindowTooHigh(s.name)),
+    says: (s) => named(s, figureWordings.escapeWindowTooHigh(s.name)),
     found: (s) => `a sill ${metres(s.finding?.sill)} above the floor`,
     needed: (s) => `${s.finding?.maximum === undefined ? 'a lower sill' : figureNeededText(`a sill at most ${metres(s.finding.maximum)} above the floor`, figuresOf(s.finding, ['escapeOpeningMaxSill']))}${readFor(s)}`,
     fix: fixed("Lower the window's sill.")
@@ -844,17 +891,18 @@ export const CODES = {
     needed: fixed('the space beyond its doors drawn as a room, or a door to the outside'),
     fix: fixed('If that space is a shared landing or a stair, draw it as a room.')
   },
+  // MSG-5: with the notes held back because they rest on what could not be drawn.
   'floor/not-checked-rooms-not-drawn': {
     says: (s) => wordingText(planCheckWordings.roomsNotDrawn(s.floorName, s.names)),
-    found: fixed('rooms that cannot be drawn'),
+    found: (s) => `rooms that cannot be drawn${s.heldSaid ? `; held back until they can be: ${s.heldSaid}` : ''}`,
     needed: fixed('rooms that can be drawn'),
-    fix: fixed('Correct the lines that leave those rooms out; they are checked once they can be drawn.')
+    fix: fixed('Correct the lines that leave those rooms out. They are checked once they can be drawn, and so is what rests on them: a note held back comes back if it still holds.')
   },
   'floor/not-checked-doors-not-drawn': {
-    says: (s) => wordingText(planCheckWordings.doorsNotDrawn(s.floorName)),
-    found: fixed('doors that cannot be drawn'),
-    needed: fixed('doors that can be drawn'),
-    fix: fixed('Correct the lines that leave those doors out; the routes are checked once they can be drawn.')
+    says: (s) => wordingText(planCheckWordings.doorsNotDrawn(s.floorName, s.also)),
+    found: (s) => `doors or windows that cannot be drawn${s.heldSaid ? `; held back until they can be: ${s.heldSaid}` : ''}`,
+    needed: fixed('doors and windows that can be drawn'),
+    fix: fixed('Correct the lines that leave those doors or windows out. They are checked once they can be drawn, and so is what rests on them: a note held back comes back if it still holds.')
   },
   'floor/sketch-drawn-only': {
     says: (s) => `On ${s.label.replace(/^Floor /, '')}, the sketch is drawn only: ${s.said}, not measured or checked, and never taken as a wall or a room`,

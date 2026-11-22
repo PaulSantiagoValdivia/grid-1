@@ -1,5 +1,5 @@
 /**
- * Curved walls (CNT-18, C9).
+ * Curved walls (CNT-18, C10).
  *
  * A wall may be an arc of a circle: the plan states its `centre` and the `sweep` it turns
  * through from `start` to `end`. The curve is the wall's axis, and every length along a curved

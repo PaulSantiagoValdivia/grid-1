@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import type { FloorPlan, Room } from '../plan'
-import { roomNumbers } from '../roomNumbers'
+import { roomNumbers, shownRoomNumber } from '../roomNumbers'
 
 const room = (id: string, floor?: string): Room => ({ id, name: id, boundary: [], ...(floor === undefined ? {} : { floor }) })
 
@@ -51,6 +51,16 @@ describe('roomNumbers', () => {
       { id: 'first', name: 'First', level: 1 }
     ])
     expect(numbered(p)).toEqual(['1 ground/r1', '2 first/r1'])
+  })
+
+  it('puts the rooms that state a number first on their floor, by that number, and keeps it (CNT-9)', () => {
+    const p = plan([room('a'), { ...room('b'), number: 'G.10' }, room('c'), { ...room('d'), number: 'G.2' }])
+    expect(roomNumbers(p).map((n) => [n.number, n.id, n.stated, shownRoomNumber(n)])).toEqual([
+      [1, 'd', 'G.2', 'G.2'],
+      [2, 'b', 'G.10', 'G.10'],
+      [3, 'a', null, '3'],
+      [4, 'c', null, '4']
+    ])
   })
 
   it('numbers only the floors asked for, from 1', () => {

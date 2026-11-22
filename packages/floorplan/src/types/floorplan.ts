@@ -75,7 +75,14 @@
  *   for the geometry (the derived layer: a height from the wall's floor, else `WALL_DEFAULTS`)
  *   and says which in `unstated`, which is never written back (`statedWall`). Version 1.
  *
- * C9 · A curved wall (CNT-18)
+ * C9 · Facts of the person's own (CNT-9)
+ *   A wall, an opening, a room and a floor MAY carry facts of the person's own in `properties`:
+ *   a name and a value, text, a number or true or false (a fire rating, a department, a head
+ *   count). They sit in that one object, never as loose fields, so a misspelt field of the
+ *   format is still named (MSG-4). A room MAY state its room number in `number`. Grid checks
+ *   nothing against a fact. Optional and never defaulted (version 1).
+ *
+ * C10 · A curved wall (CNT-18)
  *   A wall MAY be an arc of a circle: `arc.centre` is the circle's middle and `arc.sweep` the
  *   angle the wall turns through from `start` to `end` round it, in degrees, counter-clockwise
  *   positive as `turn` and `north` are; 360 (or -360) is a whole circle, whose `start` and `end`
@@ -87,9 +94,11 @@
  *   never defaulted, so a plan with no curved wall reads exactly as before (version 1).
  */
 import { z } from 'zod'
-import { BOUNDARY_MAX, PARTS_MAX, textProblem, type TextKind } from './planText'
+import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
+import { factKey } from './facts'
 
 export * from './planText'
+export * from './facts'
 
 /**
  * The error `parseFloorPlan` throws and one problem it lists. Callers take them from here and
@@ -130,6 +139,33 @@ const finite = (): z.ZodNumber =>
 
 // Coordinate pair [x, y] in meters (floor plan space, see C4)
 const Vec2 = z.tuple([finite(), finite()])
+
+/**
+ * CNT-9 (C9): facts of the person's own, by name: text (one line, at most a name's length), a
+ * finite number, or true or false. A name is one line and not blank; two names one part carries
+ * may not differ only in capitals, spaces, dashes or underscores (`factKey`), and a part carries
+ * at most `PROPERTIES_MAX`. A fact the schema refuses is left out on its own, not with the others
+ * (`readParts.ts`). Grid checks nothing against a fact.
+ */
+export const PropertiesSchema = z
+  .record(
+    text('name').pipe(z.string().refine((name) => name.trim().length > 0, { message: 'is blank: a fact needs a name' })),
+    z.union([text('name').pipe(z.string().min(1)), finite(), z.boolean()]),
+  )
+  .superRefine((facts, ctx) => {
+    const names = Object.keys(facts)
+    if (names.length > PROPERTIES_MAX) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `has ${names.length.toLocaleString('en-US')} facts; one part may carry at most ${PROPERTIES_MAX}` })
+      return
+    }
+    const seen = new Map<string, string>()
+    for (const name of names) {
+      const key = factKey(name)
+      const first = seen.get(key)
+      if (first === undefined) seen.set(key, name)
+      else ctx.addIssue({ code: z.ZodIssueCode.custom, path: [name], message: 'names the same fact as another name on this part, in other capitals or spaces' })
+    }
+  })
 
 /** C5: the floor an entity belongs to when it does not name one. */
 export const DEFAULT_FLOOR_ID = 'ground'
@@ -199,6 +235,8 @@ export const FloorSchema = z.object({
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
   building: BuildingTypeSchema.optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -286,7 +324,7 @@ export function heightByDefault(
 }
 
 /**
- * CNT-18 (C9): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
+ * CNT-18 (C10): what makes a wall a curve. `sweep` is degrees, counter-clockwise positive, never 0
  * and never more than a whole turn.
  */
 export const WallArcSchema = z.object({
@@ -314,9 +352,11 @@ export const WallSchema = z.preprocess(
       // C5: unstated means the ground floor. Optional, not defaulted — a plan written
       // before floors existed must round-trip with no key added to it.
       floor: text('id').pipe(z.string().min(1)).optional(),
-      // CNT-18 (C9): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
+      // CNT-18 (C10): the wall is an arc round `centre`, turning `sweep` degrees from start to end.
       // Optional and never defaulted: unstated, the wall is straight (version 1).
       arc: WallArcSchema.optional(),
+      // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+      properties: PropertiesSchema.optional(),
       // WRT-6: what the file left out and the reading filled in (`withWallDefaults`). Grid's
       // reading only: never in a file, and written back by `statedWall` without those values.
       unstated: z.array(z.enum(UNSTATED_WALL_VALUES)).optional(),
@@ -568,6 +608,12 @@ export const RoomSchema = z.object({
   // bedroom", "Consult A"), beside the fixed `use`. Grid keeps it and reads nothing from it.
   // Optional and never defaulted (version 1).
   roomType: text('name').optional(),
+  // CNT-9 (C9): the room's number as the person states it, text: "101", "G.04", "B-12a". The
+  // schedules give it in place of the number Grid counts, and the IFC space takes it as its name.
+  // Optional and never defaulted (version 1).
+  number: text('id').pipe(z.string().refine((value) => value.trim().length > 0, { message: 'is blank: leave the number out instead' })).optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const OpeningTypeSchema = z.enum(['door', 'window', 'opening'])
@@ -618,6 +664,8 @@ export const OpeningSchema = z.object({
   swing: z.enum(['left', 'right']).optional(),
   // WRT-3: what its place is kept from when an edit changes its wall (OpeningAnchorSchema).
   anchor: OpeningAnchorSchema.optional(),
+  // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
+  properties: PropertiesSchema.optional(),
 })
 
 export const ReferenceImageSchema = z.object({

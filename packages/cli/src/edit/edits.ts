@@ -26,7 +26,7 @@ type RawRecord = Record<string, unknown>
 export type OpeningChange = Partial<{ [K in 'offset' | 'width' | 'height' | 'sill' | 'type' | 'hinge' | 'swing' | 'wall']: Opening[K] }> & { anchor?: OpeningAnchor | null }
 
 /** A change to one room. `null` takes a key out. */
-export type RoomChange = { boundary?: string[]; name?: string; use?: string | null }
+export type RoomChange = { boundary?: string[]; name?: string; use?: string | null; properties?: Readonly<Record<string, string | number | boolean>> }
 
 /** What a change does, by id. */
 export interface Patch {

@@ -98,6 +98,12 @@ describe('a curved wall through the tool server (CNT-18)', () => {
     expect(kitchen.isError, kitchen.text).toBe(false)
   })
 
+  it('finds a curved wall by its length along the curve (CNT-9)', async () => {
+    const reply = await b.call('grid_find', { plan: 'plan.json', kind: ['wall'], where: ['length > 6'], fields: ['length'] })
+    expect(reply.isError, reply.text).toBe(false)
+    expect((reply.data!['ids'] as string[]).sort()).toEqual(['bay', 'round'])
+  })
+
   it('squares a scan round a curved wall, and refuses to move an end on it', async () => {
     const marked = { ...plan, marks: [{ part: 'wall', id: 'ks', source: 'scanned' }, { part: 'wall', id: 'round', source: 'scanned' }] }
     const b2 = bench({ 'scan.json': marked, 'tilted.json': { ...marked, walls: marked.walls.map((w) => (w['id'] === 'e' ? { ...w, end: [4.05, 3] } : w)), marks: ['s', 'e', 'w', 'ks', 'ke', 'kw'].map((id) => ({ part: 'wall', id, source: 'scanned' })) } })
