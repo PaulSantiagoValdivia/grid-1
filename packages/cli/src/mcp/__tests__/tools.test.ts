@@ -13,6 +13,9 @@ const ORDER = [
   'grid_areas',
   'grid_takeoff',
   'grid_schedule',
+  'grid_fields',
+  'grid_find',
+  'grid_count',
   'grid_measure',
   'grid_view',
   'grid_describe',
@@ -32,7 +35,7 @@ const ORDER = [
   'grid_rename_room',
 ]
 
-const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
+const READ_ONLY = new Set(['grid_compare', 'grid_areas', 'grid_takeoff', 'grid_schedule', 'grid_fields', 'grid_find', 'grid_count', 'grid_measure', 'grid_view', 'grid_describe', 'grid_check', 'grid_report_problem', 'grid_preview'])
 const CHANGES_PLAN = new Set(['grid_write_rooms', 'grid_change_opening', 'grid_move_room_side', 'grid_mirror', 'grid_merge_rooms', 'grid_split_room', 'grid_add_room', 'grid_stretch', 'grid_rename_room'])
 
 interface Listed {
@@ -76,7 +79,9 @@ describe('tools/list', () => {
     // 20 since WRT-3: one sentence of request is one call (lab WR-2), so merge, split, add a
     // room, stretch and rename each have one.
     // 21 since CMD-13: a problem report the person decides to file.
-    expect((await listed()).length).toBeLessThanOrEqual(21)
+    // 24 since CNT-9: asking across the parts by their facts is three short calls, one per
+    // request (what can be asked, which parts, how many or how much by group).
+    expect((await listed()).length).toBeLessThanOrEqual(24)
   })
 
   it('gives its own example of rooms text, which writes a plan', async () => {
@@ -169,6 +174,9 @@ describe('the tools on a two-bedroom flat', () => {
     grid_areas: {},
     grid_takeoff: {},
     grid_schedule: {},
+    grid_fields: {},
+    grid_find: { kind: ['door'], fields: ['width'] },
+    grid_count: { kind: ['room'], by: 'use', sum: ['area'] },
     grid_measure: { what: 'room', room: 'hall' },
     grid_view: { kind: 'plan' },
     grid_describe: {},

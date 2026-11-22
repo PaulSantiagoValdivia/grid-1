@@ -14,7 +14,7 @@
  * The tool server's `grid_write_rooms` does the same through `writeRoomsIntoProject`.
  */
 import { validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
-import { compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
+import { carryFacts, compileRoomsText, planRevision, problemLines, roomsAnswer, stampFor, type RoomsResult } from '@ongrid/floorplan/rooms'
 import { FloorPlanSchema } from '@ongrid/floorplan/types/floorplan'
 import type { Project } from '../fs/projectFiles'
 import { TextNotDecoded } from '../fs/textEncoding'
@@ -116,7 +116,7 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     const first = parsed.error.issues[0]
     throw new RoomsRefused('rooms/schema', `The rooms text was not written: the plan it makes does not fit the plan's format at ${first?.path.join('.') ?? 'its top'} (${first?.message ?? 'invalid'}).`)
   }
-  const plan = parsed.data
+  let plan = parsed.data
 
   // The plan now, if there is one, and whether writing over it would lose a change.
   let before: FloorPlan | null = null
@@ -147,6 +147,9 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     }
   }
 
+  // CNT-9: the facts of the person's own and the rooms' numbers stay with their parts, by id.
+  const carried = before === null ? null : carryFacts(before, plan)
+  if (carried !== null) plan = carried.plan
   // Everything the rooms text does not hold stays as the file has it: its id, its picture.
   const next: Record<string, unknown> = { ...raw, version: '1', units: 'm' }
   delete next['floors']
@@ -163,6 +166,8 @@ export function writeRoomsIntoProject(project: Project, text: string, planFile: 
     `Wrote ${written} from rooms text: the walls, their kinds, the room boundaries and the openings' places are worked out by Grid.`,
     ...roomsAnswer(result, options.brief !== true || result.rooms.length <= ROOMS_LISTED_MAX),
     ...(verdict === null ? [] : [verdict]),
+    ...(carried === null || carried.kept === 0 ? [] : [`Facts of your own and room numbers kept by id on ${carried.kept} part${carried.kept === 1 ? '' : 's'}.`]),
+    ...(carried === null || carried.lost.length === 0 ? [] : [`Not in the text, so their facts and numbers are gone with them: ${carried.lost.slice(0, 10).join(', ')}${carried.lost.length > 10 ? ` and ${carried.lost.length - 10} more` : ''}.`]),
     `Problems in the drawing: ${drawingProblems.before} → ${drawingProblems.after}. Run grid check for the notes.`,
   ]
   return { written, result, plan, verdict, drawingProblems, lines }

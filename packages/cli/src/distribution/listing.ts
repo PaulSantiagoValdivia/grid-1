@@ -129,6 +129,8 @@ function skill(): string {
     '',
     '1. Start with `grid_describe` to learn the rooms and what each door joins.',
     '2. Answer questions about sizes with `grid_areas`, `grid_measure`, `grid_schedule` or `grid_takeoff`.',
+    '   Find, count and sum parts by any field or fact of the person\'s own (a fire rating, a',
+    '   department) with `grid_fields`, then `grid_find` or `grid_count`.',
     '3. Show the plan with `grid_view` when the person wants to see it.',
     '4. Run `grid_check` after any change, and pass on what it finds.',
     '5. Write a plan rooms first, the main way to write one: `grid_write_rooms` takes the rooms',
