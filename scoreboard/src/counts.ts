@@ -51,6 +51,18 @@ interface AreaTally {
   notMeasured: number
 }
 
+/** The `units` a plan states, from its text or its JSON; undefined when it states none that can be read. */
+function statedUnits(raw: unknown): unknown {
+  if (typeof raw === 'string') {
+    try {
+      return (JSON.parse(raw) as { units?: unknown }).units
+    } catch {
+      return /"units"\s*:\s*"([^"]*)"/.exec(raw)?.[1]
+    }
+  }
+  return typeof raw === 'object' && raw !== null ? (raw as { units?: unknown }).units : undefined
+}
+
 /** Grid's room areas against the expected ones: the referee's, or the construction's. */
 function tallyAreas(t: AreaTally, raw: unknown, expected: ReadonlyMap<string, number | null>): void {
   t.plans++
@@ -61,7 +73,7 @@ function tallyAreas(t: AreaTally, raw: unknown, expected: ReadonlyMap<string, nu
   }
   // WRT-7: the referee measures a file in its own numbers; Grid reads one that states its unit
   // (`"units": "mm"`) in metres, so the referee's area is put in square metres to compare.
-  const stated = typeof raw === 'object' && raw !== null ? (raw as { units?: unknown }).units : undefined
+  const stated = statedUnits(raw)
   const unit = typeof stated === 'string' ? FILE_UNITS[stated.trim().toLowerCase()] : undefined
   const k = unit === undefined ? 1 : unit.metres * unit.metres
   for (const [key, given] of expected) {
