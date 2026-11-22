@@ -12,6 +12,7 @@
     "./types/jsonText": "./src/types/jsonText.ts",
     "./types/readParts": "./src/types/readParts.ts",
     "./types/sheet": "./src/types/sheet.ts",
+    "./types/units": "./src/types/units.ts",
     "./export": "./src/export/planExport.ts",
     "./notes": "./src/notes/notes.ts",
     "./rooms": "./src/rooms/index.ts",

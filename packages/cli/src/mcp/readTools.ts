@@ -40,7 +40,8 @@ import { planSchedule } from '../quantities/schedule'
 import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fixtures'
 import { surveyPlan, sideNames, type Survey } from '../quantities/survey'
 import { planTakeoff, TAKEOFF_RULES } from '../quantities/takeoff'
-import { areaText, csv, DISPLAY_UNITS, lengthText, sqFt, type DisplayUnits } from '../quantities/units'
+import { areaText, csv, DISPLAY_UNITS, displayFor, lengthText, sqFt } from '../quantities/units'
+import type { Display } from '@ongrid/floorplan/types/units'
 import {
   asRefusal,
   FLOOR_ARG,
@@ -71,8 +72,15 @@ const FIT_CLEAR_RULE = 'What is fitted keeps clear of the room\'s fixtures: each
 const UNITS_ARG: ArgSpec = {
   type: 'string',
   enum: DISPLAY_UNITS,
-  description: 'How figures are written: m (metres and square metres) or ft (feet and inches, square feet beside square metres). m when left out. Grid measures in metres either way.',
-  examples: ['m', 'ft'],
+  description: 'How figures are written: m (metres), cm, mm, or ft-in (feet and inches, square feet beside square metres; ft is the same). The plan\'s own display, or m, when left out. Grid measures in metres either way.',
+  examples: ['m', 'ft-in', 'mm'],
+}
+
+const DECIMAL_ARG: ArgSpec = {
+  type: 'string',
+  enum: ['point', 'comma'],
+  description: 'The decimal mark figures are written with: point (2.40) or comma (2,40). The plan\'s own display, or point, when left out.',
+  examples: ['comma'],
 }
 
 const FORMAT_ARG: ArgSpec = {
@@ -94,7 +102,7 @@ function percent(share: number | null): string {
 // ---------------------------------------------------------------------------------------------
 // grid_compare
 
-function optionLine(row: OptionRow, units: DisplayUnits): string {
+function optionLine(row: OptionRow, units: Display): string {
   const uses = Object.entries(row.byUse).sort((a, b) => b[1] - a[1]).map(([use, value]) => `${use} ${value.toFixed(2)}`).join(', ')
   const gross = row.grossInternal === null ? 'gross not known' : `gross internal ${areaText(row.grossInternal, units)}, gross external ${areaText(row.grossExternal!, units)}`
   return `${row.label}: net ${areaText(row.net, units)}, ${gross}; circulation ${row.circulation.toFixed(2)} m² (${percent(row.circulationShare)} of gross internal); net to gross ${percent(row.netToGross)}; ${row.rooms} rooms, ${row.bedrooms} bedrooms. By use, m²: ${uses || 'no uses said'}.`
@@ -172,7 +180,7 @@ const compareTool: GridTool = {
     const surveys = files.map((file) => load(context, file).survey)
     const options = surveys.map((survey, i) => optionRow(labels[i]!, survey))
     const comparisons = surveys.slice(1).map((survey, i) => ({ before: labels[0]!, after: labels[i + 1]!, ...comparePlans(surveys[0]!, survey, [labels[0]!, labels[i + 1]!]) }))
-    const lines = ['Options:', ...options.map((row) => `  ${optionLine(row, 'm')}`), '', ...comparisons.flatMap(comparisonLines), '', ...Object.values(AREA_RULES)]
+    const lines = ['Options:', ...options.map((row) => `  ${optionLine(row, displayFor(undefined, undefined, surveys[0]!.plan))}`), '', ...comparisons.flatMap(comparisonLines), '', ...Object.values(AREA_RULES)]
     let image
     if (args['picture'] === true) {
       const floor = args['floor']
@@ -216,6 +224,7 @@ const areasTool: GridTool = {
     country: { type: 'string', maxLength: 2, description: 'Where it will be built, as a two-letter country code: the gross measure usual there is given first. Both when left out or when Grid has none for that place.', examples: ['GB', 'US'] },
     gross: { type: 'string', enum: ['internal', 'external', 'both'], description: 'The gross measure to give: internal (to the inside face of the outer walls), external (to the outside face) or both. The usual one for country when left out.', examples: ['both', 'external'] },
     units: UNITS_ARG,
+    decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
   },
   outputSchema: objectSchema({
@@ -238,7 +247,7 @@ const areasTool: GridTool = {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const outside = (args['outside_rooms'] as string[] | undefined) ?? []
     for (const id of outside) roomArg(survey.plan, id, 'outside_rooms item')
-    const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
+    const units = displayFor(args['units'], args['decimal'], survey.plan)
     const country = args['country'] as string | undefined
     if (country !== undefined && !/^[A-Za-z]{2}$/.test(country)) throw new ToolRefusal(`country takes a two-letter country code, such as GB or US: got ${q(country)}.`)
     const asked = args['gross'] as 'internal' | 'external' | 'both' | undefined
@@ -330,6 +339,7 @@ const takeoffTool: GridTool = {
     floor: FLOOR_ARG,
     rooms: { type: 'array', description: 'Only these rooms, by id. Every room when left out.', examples: [['kitchen', 'bath']], items: { id: true }, minItems: 1, maxItems: 200 },
     units: UNITS_ARG,
+    decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
   },
   outputSchema: objectSchema({
@@ -342,7 +352,7 @@ const takeoffTool: GridTool = {
     const { survey, floor } = load(context, args['plan'], args['floor'])
     const rooms = args['rooms'] as string[] | undefined
     for (const id of rooms ?? []) roomArg(survey.plan, id, 'rooms item')
-    const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
+    const units = displayFor(args['units'], args['decimal'], survey.plan)
     const t = planTakeoff(survey, floor === undefined ? undefined : [floor], rooms)
     const data = { walls: t.walls, rooms: t.rooms, totals: t.totals, rules: t.rules }
     if (args['format'] === 'csv') {
@@ -381,6 +391,7 @@ const scheduleTool: GridTool = {
     types: { type: 'array', description: 'Only these kinds: door, window, opening, or fixture for the toilets, basins, showers, baths and kitchen runs. All of them when left out.', examples: [['door'], ['door', 'opening'], ['fixture']], items: { enum: ['door', 'window', 'opening', 'fixture'] }, minItems: 1, maxItems: 4 },
     narrower_than: { type: 'number', description: 'Only openings narrower than this many metres, for example 0.8.', examples: [0.8, 0.9], minimum: 0.1, maximum: 10 },
     units: UNITS_ARG,
+    decimal: DECIMAL_ARG,
     format: FORMAT_ARG,
   },
   outputSchema: objectSchema({
@@ -392,7 +403,7 @@ const scheduleTool: GridTool = {
   }, ['rows', 'counts', 'rule']),
   run(args, context) {
     const { survey, floor } = load(context, args['plan'], args['floor'])
-    const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
+    const units = displayFor(args['units'], args['decimal'], survey.plan)
     const types = args['types'] as ('door' | 'window' | 'opening' | 'fixture')[] | undefined
     const openingTypes = types?.filter((t): t is 'door' | 'window' | 'opening' => t !== 'fixture')
     const s = planSchedule(survey, {
@@ -411,7 +422,7 @@ const scheduleTool: GridTool = {
       for (const r of f?.rows ?? []) rows.push([r.kind, r.id, r.size[0], r.height, '', r.floor, r.room === null ? 'no room' : name(r.room).replace(/"/g, ''), ''])
       return { text: csv(['type', 'id', 'width m', 'height m', 'sill m', 'floor', 'side 1', 'side 2'], rows), data }
     }
-    const lines = types?.length === 1 && types[0] === 'fixture' ? [] : s.rows.map((row) => `${row.count} × ${row.type} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units)}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
+    const lines = types?.length === 1 && types[0] === 'fixture' ? [] : s.rows.map((row) => `${row.count} × ${row.type} ${lengthText(row.width, units)} wide × ${lengthText(row.height, units)} high${row.type === 'window' ? `, sill ${lengthText(row.sill, units, 'height')}` : ''}: ${row.items.map((item) => `${q(item.id)} (${name(item.between[0])} ↔ ${name(item.between[1])})`).join(', ')}`)
     const onlyFixtures = types !== undefined && types.every((t) => t === 'fixture')
     if (lines.length === 0 && !onlyFixtures) lines.push(args['narrower_than'] !== undefined ? `Nothing of that kind is narrower than ${m(args['narrower_than'] as number)} m.` : 'The plan has no openings of that kind.')
     if (!onlyFixtures) lines.push(`In all: ${s.counts.door} doors, ${s.counts.window} windows, ${s.counts.opening} doorless openings.`, s.rule)
@@ -485,12 +496,13 @@ const measureTool: GridTool = {
     diameter: { type: 'number', description: 'For fit: a circle instead of a box, such as 1.5 for a wheelchair turning circle.', examples: [1.5], minimum: 0.05, maximum: 100 },
     under: { type: 'number', description: 'For narrow: the person\'s figure in metres, such as 0.8 for a door or 1.5 for a turning circle.', examples: [0.8, 1.5], minimum: 0.05, maximum: 100 },
     units: UNITS_ARG,
+    decimal: DECIMAL_ARG,
   },
   outputSchema: objectSchema({ what: STRING, answer: { type: 'object' }, rule: STRING }),
   run(args, context) {
     const { survey } = load(context, args['plan'])
     const what = args['what'] as 'room' | 'between' | 'wall' | 'fit' | 'route' | 'narrow'
-    const units = (args['units'] as DisplayUnits | undefined) ?? 'm'
+    const units = displayFor(args['units'], args['decimal'], survey.plan)
     const L = (v: number): string => lengthText(v, units)
     const allowed: Record<string, readonly string[]> = {
       room: ['room'],

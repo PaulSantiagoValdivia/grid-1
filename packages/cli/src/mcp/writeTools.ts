@@ -7,6 +7,7 @@
  * writes the file's own JSON back with only that change in it. It is refused, and nothing is
  * written, when it would leave the drawing with a problem it did not have.
  */
+import { planInMetres } from '@ongrid/floorplan/types/units'
 import { planFloors, validatePlan, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { keptDerived } from '@ongrid/floorplan/rooms'
 import { doorsThatChangedRooms } from '@ongrid/floorplan/geometry/rules/doors'
@@ -266,7 +267,8 @@ export function writeChange(context: ToolContext, args: Record<string, unknown>,
   }
   let raw: Record<string, unknown>
   try {
-    raw = JSON.parse(project.readText(file).text) as Record<string, unknown>
+    // WRT-7: a file in another unit is written back in metres, the only unit Grid writes.
+    raw = planInMetres(JSON.parse(project.readText(file).text) as Record<string, unknown>).raw
   } catch (error) {
     if (error instanceof PathRefused) throw new ToolRefusal(error.message)
     throw new ToolRefusal(`${file} could not be read again to write the change; nothing was written.`)
