@@ -56,6 +56,10 @@ Notes for agents and people changing this repository.
   test fails when it and `src/result/catalogue.ts` list different codes. A new message code
   gets its one wording, what is needed and the fix in that catalogue, and a line in the
   contract's code table and changelog.
+- A firm's own standards (COD-8): `firm-standards.json` beside the plan, read and checked in
+  `packages/cli/src/firm/` (`standards.ts` the file, `measure.ts` the plan measured by CNT-13's
+  indicators and ARE-9's net area) and worded in `packages/rules/src/result/firm.ts` as `firm/`
+  findings under their own heading, never with a code's figures. `docs/firm-standards.md`.
 - `packages/viewer`: the 2D and 3D views. It draws what the core gives it and never
   computes geometry of its own. A look (SHT-1, `src/picture/look.ts`) is a named set of values
   the one drawing function, `planScene`, applies to the same geometry: `working` for the screen

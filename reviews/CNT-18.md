@@ -262,6 +262,14 @@ room is measured as before.
   through its window. CNT-17's accessibility measurements read CNT-13's, which already took the
   curve.
 
+- After merging `main` at 4fe29edc (COD-8): the two changelogs conflicted, both sides kept; COD-8
+  took no convention, so the curved wall stays C15. The bundle is 545,255 bytes, under the
+  600,000 cap. Build, typecheck and lint clean; the scoreboard "Same as the stored figures"; the
+  affected tests (all of `packages/floorplan/src` and `packages/rules/src`, the tool server,
+  quantities, edit, describe, the commands' tests, draw, sheet, versions, firm, the viewer and
+  `scoreboard/__tests__`), 300 files: the first run passed 147 files and stopped at its time limit
+  with the machine's load near 260, and the 153 left then passed on their own (1,048 tests).
+
 ## For the owner
 
 1. **Shipped: the full arc, not the cheaper first step.** The arc is in the plan file and every
