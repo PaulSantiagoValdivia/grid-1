@@ -50,7 +50,7 @@ look at (lab MS-1, AU3-3, W-5).
    empty-plan warning (MS-1).* `packages/rules/src/result/__tests__/result.test.ts` ("names
    thick on a wall, and the field meant") holds the whole line; the CLI test
    `packages/cli/src/command/__tests__/wordsNotRead.test.ts` holds what `grid check` prints. `{}`
-   gives one line, `plan/empty`.
+   gives `plan/empty` (and, since MSG-2, `plan/not-checked-no-rooms` beside it).
 2. *Each of AU3-3's 38 unknown field names and 20 unknown uses gives a warning; 'Bedroom' is
    read as bedroom.* `packages/floorplan/src/types/__tests__/reading.test.ts` holds all 58. Of the
    38 fields, 36 are named; `floors.elevation` and `floors.height` are fields since LVL-1, so the
@@ -71,7 +71,9 @@ look at (lab MS-1, AU3-3, W-5).
 ## Expected texts and figures I changed
 
 - `packages/rules/src/result/__tests__/result.test.ts`: `inspectPlan({})` was `count: 0` ("MSG-4
-  is to say so"); it is now `count: 1` with `plan/empty`. Its corpus has two more plans, the
+  is to say so"); it is now `count: 2`: `plan/empty`, and MSG-2's `plan/not-checked-no-rooms`, which
+  landed in parallel. I kept both, as the coordinator asked: one says the file holds nothing, the
+  other that the room checks did not run. The CLI test expects the same two. Its corpus has two more plans, the
   words-not-read plan and `{}`. The test that compares the record with `checkLocalRules` now gives
   the check the plan as read (`FloorPlanSchema.parse`), since a file with `Bedroom` is read as
   `bedroom`.
@@ -127,3 +129,13 @@ The machine was under load of 220 to 270 the whole time, from the parallel sessi
   `grid check packages/cli/fixtures/two-bed-flat.json` takes 0.18 to 0.46 s, so the time goes to
   starting processes under load. The reading walk is one pass over the file's keys.
 - `npm run scoreboard`: "Same as the stored figures"; no count moved.
+
+### Again after merging main e7cf925 (MSG-2, CMD-15, QAR-10)
+
+Conflicts in `docs/result-contract.md` (both changelog entries kept), `packages/cli/src/command/check.ts`
+(MSG-2's `coverage` and `rooms`, from the record of the file as written) and the `{}` test (both
+lines kept). `npm run build`, `npm run typecheck` and `npm run lint` pass. The tests for the
+touched packages (floorplan types, rules result, cli command, mcp and `src/__tests__`): 638 of 638.
+`npm run scoreboard`: "Same as the stored figures". One full run,
+`npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: 4,375 of 4,375 pass, the
+timing tests among them.
