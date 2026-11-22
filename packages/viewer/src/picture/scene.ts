@@ -215,7 +215,7 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
     room: { fill: look.room } as Attrs,
     wall: (exposure: PlanWall['exposure'] | undefined, phase?: PlanWall['phase']): Attrs => ({
       // CNT-10: an existing wall in its tone and a new one filled, where the look says so.
-      fill: (phase === 'existing' ? named.phases.existing : phase === 'new' ? named.phases.new : null) ?? (exposure === 'exterior' ? look.wallExterior : look.wall)
+      fill: (phase === 'existing' ? named.phases.existing : phase === 'new' ? named.phases.new : null) ?? (exposure === 'exterior' || exposure === 'separating' ? look.wallExterior : look.wall)
     }),
     // CNT-10: a wall or an opening to be demolished: a dashed outline, no fill.
     demolished: {

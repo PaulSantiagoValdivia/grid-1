@@ -504,7 +504,7 @@ function agentRoom(floor: FloorFacts, room: RoomFacts): string {
   return `${agentRoomHead(room)}${next.length > 0 ? ` | next ${next.join(' ')}` : ''}${items.length > 0 ? ` | ${items.join('; ')}` : ''}`
 }
 
-const KIND_LETTER = { exterior: 'x', interior: 'i', partition: 'p' } as const
+const KIND_LETTER = { exterior: 'x', interior: 'i', partition: 'p', separating: 's' } as const
 
 /** Gaps add up to the side's length less the opening's width: the shorter side is the closer reference. */
 function stretch(side: OpeningSide): number {
@@ -581,7 +581,7 @@ function personWalls(floor: FloorFacts, names: PersonNames, w: Words): string[] 
 }
 
 const AGENT_KEY_ROOMS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2 | next: across a wall, no way through | opening: id d/o/w(door/opening/window) or v(virtual wall) width >other side(none=outside window, OUT=outside, NONE=nothing drawn, LEFT=left out) side of this room, gaps to its corners'
-const AGENT_KEY_WALLS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2. wall: id start>end thickness x/i/p/v(exterior/interior/partition/virtual) h=not the floor\'s usual | opening: id d/o/w offset+width room gaps to its side\'s corners(start end first)|other(none=outside, NONE=nothing drawn, LEFT=left out)'
+const AGENT_KEY_WALLS = 'KEY metres, inside, N=+y. room: id "name" use WxD(~ not a rectangle) @lower-left m2. wall: id start>end thickness x/i/p/s/v(exterior/interior/partition/separating/virtual) h=not the floor\'s usual | opening: id d/o/w offset+width room gaps to its side\'s corners(start end first)|other(none=outside, NONE=nothing drawn, LEFT=left out)'
 
 // The label leads every description (`describePlan`, MSG-3), so the close need not repeat it
 // (the person's is `describe.close`).

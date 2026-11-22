@@ -15,7 +15,8 @@ import { roomNesting, tryRoomShape } from '../room'
 import { roomZones } from '../zones'
 import type { FloorSpaces } from '../spaces'
 import { floorSpaces, spacesKnown } from '../spaces'
-import { planWallSides } from '../exposure'
+import { planWallSides, wallBeyond } from '../exposure'
+import { flatOfRoom, planFlats } from '../flats'
 import type { Vec2 } from '../vec2'
 import { add, area, scale } from '../vec2'
 import { wallFrameAt, wallLength } from '../wall'
@@ -158,6 +159,9 @@ export function outsideTest(plan: FloorPlan, index: PlanIndex): OutsideTest {
   // `asStated: false` asks only what lies there, for a door with no room on either side.
   return (wall, along, side, asStated = true) => {
     if (asStated && wall.kind === 'exterior') return true
+    // CNT-6 (C23): more of the building stated beyond the wall is not the outside.
+    const beyond = wallBeyond(wall)
+    if (beyond !== null) return beyond === 'outside'
     const found = spacesOf(floorOf(wall))
     if (found === null) return false
     const axis = wallFrameAt(wall, along)
@@ -206,6 +210,17 @@ export interface OneSided {
   readonly opening: string
 }
 
+/**
+ * CNT-6 (C23): a virtual wall with a room on one side only, an open edge, never a door: where it
+ * leads, as the plan states (`beyond`) or, unstated, as the drawing says: the outside, or floor no
+ * room claims (`undrawn`).
+ */
+export interface OpenEdge {
+  readonly room: string
+  readonly edge: string
+  readonly beyond: 'outside' | 'common' | 'neighbour' | 'undrawn'
+}
+
 export interface FloorGraph {
   /** Every room that closes, by id. */
   readonly rooms: readonly string[]
@@ -214,6 +229,21 @@ export interface FloorGraph {
   readonly exits: readonly OneSided[]
   /** Doors and doorless openings into enclosed floor that no room claims. */
   readonly undrawn: readonly OneSided[]
+  /**
+   * CNT-6 (C23): doors and doorless openings onto a common part of the building that is not
+   * drawn: through a separating wall, or one that states a common part beyond it. A way on, never
+   * an exit, and nothing worth a note: a flat's front door onto a landing.
+   */
+  readonly common: readonly OneSided[]
+  /** CNT-6: doors and doorless openings into a neighbour the plan states beyond the wall: never a route. */
+  readonly intoNeighbour: readonly OneSided[]
+  /** CNT-6: open edges, each once per room; those to the outside are in `exits` too. */
+  readonly openEdges: readonly OpenEdge[]
+  /**
+   * CNT-6 (C23): ways through between rooms of two different flats (CNT-4): a door cut through to
+   * the neighbour. None of them is in `links`: a home is never left through another.
+   */
+  readonly betweenHomes: readonly RouteLink[]
   /**
    * Doors and doorless openings beside a room that no person fits through (MSG-18). None of them
    * is in `links`, `exits` or `undrawn`: a 5 cm hole is not a way out.
@@ -236,14 +266,23 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
   const links: RouteLink[] = []
   const exits: OneSided[] = []
   const undrawn: OneSided[] = []
+  const common: OneSided[] = []
+  const intoNeighbour: OneSided[] = []
+  const openEdges: OpenEdge[] = []
+  const betweenHomes: RouteLink[] = []
   const tooSmall: TooSmall[] = []
+  // CNT-6: which flat each room is in (CNT-4), so a home is never left through another.
+  const flatOf = flatOfRoom(planFlats(plan))
 
   const outside = outsideTest(plan, index)
   const passage = (wall: Wall, via: string, along: number, sides: [string | null, string | null]): void => {
     const [left, right] = sides
     if (left !== null && right !== null) {
       if (left !== right) {
-        links.push({ rooms: [left, right].sort(byText) as [string, string], via })
+        const pair = { rooms: [left, right].sort(byText) as [string, string], via }
+        const homes = [flatOf.get(left), flatOf.get(right)]
+        if (homes[0] !== undefined && homes[1] !== undefined && homes[0] !== homes[1]) betweenHomes.push(pair)
+        else links.push(pair)
       }
       return
     }
@@ -254,9 +293,21 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     // Nor when the room sits inside a room that was left out.
     const host = nesting.inner.get(room)?.host ?? null
     if (host !== null && !outlines.has(host)) return
+    const edge = wall.virtual === true && via === wall.id
+    // CNT-6 (C23): what the plan states lies beyond the wall comes first.
+    const beyond = wallBeyond(wall)
+    if (beyond === 'common' || beyond === 'neighbour') {
+      if (edge) openEdges.push({ room, edge: via, beyond })
+      else (beyond === 'common' ? common : intoNeighbour).push({ room, opening: via })
+      return
+    }
     // Outside as stated, or worked out: no room and no enclosed floor past that face (MSG-13).
-    if (outside(wall, along, left === null ? 'left' : 'right')) {
+    if (beyond === 'outside' || outside(wall, along, left === null ? 'left' : 'right')) {
       exits.push({ room, opening: via })
+      if (edge) openEdges.push({ room, edge: via, beyond: 'outside' })
+    } else if (edge) {
+      // An open edge into floor no room claims is not a door into a space not drawn (CNT-6).
+      openEdges.push({ room, edge: via, beyond: 'undrawn' })
     } else {
       undrawn.push({ room, opening: via })
     }
@@ -300,6 +351,12 @@ export function floorGraph(plan: FloorPlan, leftOut: ReadonlySet<string> = new S
     ),
     exits: once(exits, (e) => `${e.room}|${e.opening}`).sort(bySide),
     undrawn: once(undrawn, (u) => `${u.room}|${u.opening}`).sort(bySide),
+    common: once(common, (u) => `${u.room}|${u.opening}`).sort(bySide),
+    intoNeighbour: once(intoNeighbour, (u) => `${u.room}|${u.opening}`).sort(bySide),
+    openEdges: once(openEdges, (e) => `${e.room}|${e.edge}|${e.beyond}`).sort((a, b) => byText(a.room, b.room) || byText(a.edge, b.edge) || byText(a.beyond, b.beyond)),
+    betweenHomes: once(betweenHomes, (l) => `${l.rooms.join('|')}|${l.via}`).sort(
+      (a, b) => byText(a.rooms[0], b.rooms[0]) || byText(a.rooms[1], b.rooms[1]) || byText(a.via, b.via)
+    ),
     tooSmall: tooSmall.sort((a, b) => byText(a.rooms[0]!, b.rooms[0]!) || byText(a.opening, b.opening))
   }
 }

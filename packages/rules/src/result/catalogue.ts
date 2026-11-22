@@ -565,6 +565,13 @@ export const CODES = {
   'opening/to-undrawn-space': {
     values: (s): Values => ({ wording: grouped(s, planCheckSaids.doorToUndrawnSpace(s.name)) })
   },
+  // CNT-6 (lab EL-4, R-10): homes kept apart, and each flat's front door.
+  'opening/between-homes': {
+    values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
+  },
+  'flat/no-front-door': {
+    values: (s): Values => ({ wording: s.finding?.said ?? s.finding?.message ?? s.label })
+  },
   'opening/door-out-above-ground': {
     values: (s): Values => ({
       wording: grouped(s, planCheckSaids.doorOutAboveGround(s.name, metresText(s.finding?.elevation ?? 0))),
@@ -665,6 +672,10 @@ export const CODES = {
   },
   'floor/not-checked-way-out-not-drawn': {
     values: (s): Values => ({ wording: planCheckSaids.wayOutNotDrawn(s.floorName) })
+  },
+  // CNT-6 (lab R-10): a flat entered from a landing the plan does not draw.
+  'floor/not-checked-way-out-common-parts': {
+    values: (s): Values => ({ wording: planCheckSaids.wayOutThroughCommonParts(s.floorName) })
   },
   // MSG-5: with the notes held back because they rest on what could not be drawn.
   'floor/not-checked-rooms-not-drawn': {

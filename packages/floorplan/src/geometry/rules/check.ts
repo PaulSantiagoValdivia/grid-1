@@ -18,6 +18,7 @@ import { LIMITS, RULES } from './catalogue'
 import { floorGraph, roomOutlines } from './graph'
 import type { FloorGraph } from './graph'
 import { floorJoins } from '../floorJoins'
+import { flatOfRoom, planFlats } from '../flats'
 import { indexPlan } from '../plan'
 import type { Vec2 } from '../vec2'
 import { english, said, withSentence, type MessageKey } from '../../messages/say'
@@ -37,6 +38,9 @@ const RULE_OF: Record<FindingCode, string> = {
   no_route_to_exit: 'room-reaches-exit',
   door_to_undrawn_space: 'door-leads-somewhere',
   door_to_outside_above_ground: 'door-leads-somewhere',
+  // CNT-6: a door into another home leads nowhere a route may go; a home's front door is its way out.
+  door_between_homes: 'door-leads-somewhere',
+  flat_without_front_door: 'room-reaches-exit',
   stair_out_of_line: 'stairs-line-up',
   lift_out_of_line: 'stairs-line-up',
   stair_shifted: 'stairs-line-up',
@@ -92,7 +96,9 @@ function floorFindings(
   roomName: (id: string) => string,
   loneRoomReached: boolean,
   /** Rooms marked as a void (LVL-4): no room to stand in, so they need no door and no route. */
-  voids: ReadonlySet<string>
+  voids: ReadonlySet<string>,
+  /** The floor's openings, by id: a way through that is none of them is an open side (CNT-6). */
+  openings: ReadonlySet<string>
 ): { findings: RuleFinding[]; doorless: string[] } {
   const { graph } = floor
   const findings: RuleFinding[] = []
@@ -102,11 +108,27 @@ function floorFindings(
   for (const { room, opening } of graph.undrawn) {
     findings.push(finding('door_to_undrawn_space', floor.id, [room], messages.doorToUndrawnSpace(roomName(room)), [opening]))
   }
+  // CNT-6 (lab EL-4): a door cut through to another home is said, and is never a route. Each room
+  // of the pair is named, so the line is found from either home.
+  for (const { rooms: [a, b], via } of graph.betweenHomes) {
+    const open = !openings.has(via)
+    const sentence = saids.betweenHomes(roomName(a), roomName(b), open)
+    findings.push(withSentence(finding('door_between_homes', floor.id, [a, b], english(sentence), [via]), sentence))
+  }
+  for (const { room, opening } of graph.intoNeighbour) {
+    const sentence = saids.betweenHomes(roomName(room), null, false)
+    findings.push(withSentence(finding('door_between_homes', floor.id, [room], english(sentence), [opening]), sentence))
+  }
   // A room with nothing to go through at all. The most specific finding it can get.
   const touched = new Set<string>([
     ...graph.links.flatMap((l) => l.rooms),
     ...graph.exits.map((e) => e.room),
     ...graph.undrawn.map((u) => u.room),
+    // CNT-6: a door onto the common parts, an open edge, or one cut through to another home.
+    ...graph.common.map((u) => u.room),
+    ...graph.intoNeighbour.map((u) => u.room),
+    ...graph.openEdges.map((e) => e.room),
+    ...graph.betweenHomes.flatMap((l) => l.rooms),
     ...graph.rooms.filter((room) => joined.has(at(floor.id, room)))
   ])
   // A floor that is one open room and that no stair joins is reached by a stair the plan does
@@ -138,7 +160,9 @@ function routeFindings(
   const starts = (pick: (f: FloorRoutes) => readonly { readonly room: string }[]): string[] =>
     floors.flatMap((f) => pick(f).map((e) => at(f.id, e.room)))
   const exits = starts((f) => (f.exitsCount ? f.graph.exits : []))
-  const undrawn = starts((f) => f.graph.undrawn)
+  // CNT-6: every way on the plan does not draw: a door into a space not drawn, a door onto the
+  // common parts, an open edge onto them or into floor no room claims.
+  const undrawn = starts(onward)
   if (floors.every((f) => f.graph.rooms.length === 0)) return { findings, wayOutNotDrawn: false }
   // A flat drawn on its own leaves through its entrance, into a landing nobody drew. That door
   // is already reported, and whether it is a way out cannot be told. The rooms that reach no
@@ -191,6 +215,66 @@ function routeFindings(
     }
   }
   return { findings, wayOutNotDrawn }
+}
+
+/**
+ * CNT-6 (C23): the ways on from a floor that the plan does not draw, as `{ room, opening }`: doors
+ * into a space not drawn, doors onto the common parts, and open edges onto them or into floor no
+ * room claims. An open edge to the outside is an exit; one to a neighbour leads nowhere.
+ */
+function onward(floor: FloorRoutes): { readonly room: string; readonly opening: string }[] {
+  const { graph } = floor
+  const edges = graph.openEdges.filter((e) => e.beyond === 'common' || e.beyond === 'undrawn').map((e) => ({ room: e.room, opening: e.edge }))
+  return [...graph.undrawn, ...graph.common, ...edges]
+}
+
+/** CNT-6: whether every way on from these floors is onto the building's common parts. */
+const throughCommonParts = (floor: FloorRoutes): boolean =>
+  floor.graph.undrawn.length === 0 && !floor.graph.openEdges.some((e) => e.beyond === 'undrawn')
+
+/**
+ * CNT-6 (lab R-10): every flat (CNT-4) has a front door: a way through from one of its rooms to a
+ * room in no flat, up or down a stair to one, onto the common parts or into a space the plan does
+ * not draw, or a door to the outside on a floor at the ground. A flat with a room that could not be
+ * drawn is not asked: its front door may be on that room.
+ */
+function frontDoorFindings(
+  plan: FloorPlan,
+  floors: readonly { readonly id: string }[],
+  routes: ReadonlyMap<string, FloorRoutes>,
+  stairs: readonly StairLink[],
+  leftOutOn: ReadonlyMap<string, ReadonlySet<string>>,
+  aboveGround: (floor: string) => boolean
+): RuleFinding[] {
+  const flats = planFlats(plan)
+  if (flats.length === 0) return []
+  const flatOf = flatOfRoom(flats)
+  const entered = new Set<string>()
+  const mark = (room: string): void => {
+    const flat = flatOf.get(room)
+    if (flat !== undefined) entered.add(flat)
+  }
+  const across = (a: string, b: string): void => {
+    if (flatOf.get(a) === flatOf.get(b)) return
+    mark(a)
+    mark(b)
+  }
+  for (const floor of floors) {
+    const graph = routes.get(floor.id)?.graph
+    if (graph === undefined) continue
+    for (const { rooms: [a, b] } of graph.links) across(a, b)
+    if (!aboveGround(floor.id)) for (const { room } of graph.exits) mark(room)
+    for (const { room } of [...graph.undrawn, ...graph.common]) mark(room)
+    for (const { room, beyond } of graph.openEdges) if (beyond === 'common' || beyond === 'undrawn') mark(room)
+  }
+  for (const { ends: [a, b] } of stairs) across(a.room, b.room)
+  return flats.flatMap((flat) => {
+    if (flat.rooms.length === 0 || entered.has(flat.id)) return []
+    if (flat.rooms.some((room) => leftOutOn.get(room.floor)?.has(room.id) === true)) return []
+    const floor = flat.floors[0] ?? flat.rooms[0]!.floor
+    const sentence = saids.flatWithoutFrontDoor(flat.name)
+    return [withSentence({ ...finding('flat_without_front_door', floor, flat.rooms.map((room) => room.id), english(sentence)), flat: flat.id }, sentence)]
+  })
 }
 
 /** The finding for a door or doorless opening no person fits through (MSG-18). */
@@ -363,10 +447,11 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
   for (const floor of floors) {
     const checked = checkedGroups.has(find(floor.id))
     const voids = new Set(planForFloor(plan, floor.id).rooms.filter((room) => room.void === true).map((room) => room.id))
-    const own = floorFindings(routes.get(floor.id)!, joined, roomName, !checked, voids)
+    const own = floorFindings(routes.get(floor.id)!, joined, roomName, !checked, voids, openingIds)
     findings.push(...own.findings)
     for (const room of own.doorless) doorless.add(at(floor.id, room))
   }
+  findings.push(...frontDoorFindings(plan, floors, routes, stairLinks, leftOutOn, aboveGround))
   for (const root of checkedGroups) {
     const members = floors.filter((f) => find(f.id) === root).map((f) => routes.get(f.id)!)
     const memberIds = new Set(members.map((m) => m.id))
@@ -380,13 +465,17 @@ export function checkPlanSanity(plan: FloorPlan, options: SanityOptions = {}): R
     findings.push(...found.findings)
     if (found.wayOutNotDrawn) {
       for (const member of members) {
-        if (!groundIds.has(member.id) || member.graph.undrawn.length === 0) continue
+        const ways = onward(member)
+        if (!groundIds.has(member.id) || ways.length === 0) continue
+        // CNT-6 (lab R-10): a floor whose ways on are all onto the common parts, as a flat entered
+        // from a landing is, says so, and never that its door leads to a space not drawn.
+        const common = throughCommonParts(member)
         notChecked.push({
-          reason: 'way_out_not_drawn',
+          reason: common ? 'way_out_through_common_parts' : 'way_out_not_drawn',
           floor: member.id,
           rooms: [],
-          openings: member.graph.undrawn.map((u) => u.opening).sort(byText),
-          message: messages.wayOutNotDrawn(member.name)
+          openings: [...new Set(ways.map((u) => u.opening))].sort(byText),
+          message: common ? messages.wayOutThroughCommonParts(member.name) : messages.wayOutNotDrawn(member.name)
         })
       }
     }

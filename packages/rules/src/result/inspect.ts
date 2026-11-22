@@ -64,6 +64,8 @@ const FINDING_CODES: Record<FindingCode, string> = {
   no_route_to_exit: 'room/no-route-out',
   door_to_undrawn_space: 'opening/to-undrawn-space',
   door_to_outside_above_ground: 'opening/door-out-above-ground',
+  door_between_homes: 'opening/between-homes',
+  flat_without_front_door: 'flat/no-front-door',
   opening_below_ground: 'opening/below-ground',
   opening_too_small_to_pass: 'opening/too-small-to-pass',
   room_too_small: 'room/too-small',
@@ -484,7 +486,10 @@ function findingThing(finding: RuleFinding, wayOutNotDrawn: ReadonlySet<string>)
       ? { kind: 'floor', id: finding.floor }
       : finding.code === 'setback_short' || finding.code === 'over_boundary'
       ? { kind: 'plan', id: '' }
+      : finding.code === 'flat_without_front_door' && finding.flat !== undefined
+      ? { kind: 'flat', id: finding.flat }
       : (finding.code === 'door_to_undrawn_space' ||
+          finding.code === 'door_between_homes' ||
           finding.code === 'door_to_outside_above_ground' ||
           finding.code === 'opening_below_ground' ||
           finding.code === 'opening_too_small_to_pass') &&
@@ -568,6 +573,8 @@ function noticeCode(notice: NotChecked): string {
       return 'floor/not-checked-no-stairs'
     case 'way_out_not_drawn':
       return 'floor/not-checked-way-out-not-drawn'
+    case 'way_out_through_common_parts':
+      return 'floor/not-checked-way-out-common-parts'
     case 'cannot_be_drawn':
       return notice.rooms.length > 0 ? 'floor/not-checked-rooms-not-drawn' : 'floor/not-checked-doors-not-drawn'
     case 'no_use':
@@ -861,7 +868,8 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: I
   stage('plan', () => {
     // MSG-5: with what the reader left out, so a note that rests on it is held back.
     report = checkLocalRules(plan, { ...options, leftOut: read.leftOut })
-    const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn').map((n) => n.floor))
+    // CNT-6: a floor whose way out goes on through the common parts words its cut-off rooms so too.
+    const wayOutNotDrawn = new Set(report.notChecked.filter((n) => n.reason === 'way_out_not_drawn' || n.reason === 'way_out_through_common_parts').map((n) => n.floor))
     // COD-3: the place by Grid's name for it, never the text it was given.
     // MSG-11: in English with its article (`the United States`); in another language by Grid's name for it.
     const country = report.place === null ? '' : speaking.language === DEFAULT_LANGUAGE ? countryInText(report.place.country) : countryName(report.place.country)

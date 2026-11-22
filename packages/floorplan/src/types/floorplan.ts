@@ -207,6 +207,25 @@
  *   `start` to `end`. C2 holds along the curve: an opening's `offset` and `width` are measured
  *   along it, and its hole is straight between its two edges, as a door's leaf is. Optional and
  *   never defaulted, so a plan with no curved wall reads exactly as before (version 1).
+ *
+ * C23 · A plan that is part of a larger building (CNT-6, lab EL-4, R-10, S-3, EL-17, AC-7)
+ *   A wall MAY be `separating`: a party wall, or a wall between a home and the building's common
+ *   parts. A door through it into another home is refused as a route; one into a common part is a
+ *   front door. A wall MAY state what lies `beyond` it where no room is drawn on one side, along
+ *   whatever stretch of it has a room on one side only (MSG-13): `outside`, a `common` part of the
+ *   building that is not drawn, or a `neighbour`, another home or property. A separating wall
+ *   with nothing drawn beyond it and no `beyond` stated is read as one to a common part. A virtual
+ *   wall with a room on one side only is an open edge, never a door: its `beyond` says where it
+ *   leads, and unstated it leads where the drawing says (the outside, or floor no room claims).
+ *   A floor MAY state what lies `above` it (`outside`, `common`, `neighbour`) and `below` it
+ *   (`ground`, `outside`, `common`, `neighbour`): a floor with more of the building above it has
+ *   no roof, and one with more of it below has no ground slab and is not a ground floor.
+ *   A plan MAY name several `buildings`, each an id, a name and the floors that are its own, each
+ *   floor in one building at most; each building stacks its own floors and has its own areas and
+ *   height. A plan MAY draw `context`: shapes round it (a neighbour's house, the hall a stand stands
+ *   in), each an outline on a floor, with a name and a height. A context shape is never a wall, a
+ *   room or a part of any building: it is drawn and is in no measure, check or count. All optional
+ *   and never defaulted (version 1): a plan that states none reads exactly as before.
  */
 import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
@@ -396,6 +415,11 @@ export const RoofSchema = z
  */
 export const OVERHANG_MEANT = ['meant'] as const
 
+/** CNT-6 (C23): what lies above a floor: the open air (it has a roof), or more of the building. */
+export const ABOVE_FLOOR = ['outside', 'common', 'neighbour'] as const
+/** CNT-6 (C23): what lies below a floor: the ground, the open air, or more of the building. */
+export const BELOW_FLOOR = ['ground', 'outside', 'common', 'neighbour'] as const
+
 export const FloorSchema = z.object({
   id: text('id').pipe(z.string().min(1)),
   name: text('name').pipe(z.string().min(1)),
@@ -444,9 +468,22 @@ export const FloorSchema = z.object({
   // proposal, counted against the person's own limits. Optional and never defaulted (version 1).
   homes: z.number().int().min(0).max(PARTS_MAX).optional(),
   parking: z.number().int().min(0).max(PARTS_MAX).optional(),
+  // CNT-6 (C23): what lies above and below the floor, when the plan is part of a larger building.
+  // Optional and never defaulted: unstated, the floor's roof and slab are worked out as before.
+  above: z.enum(ABOVE_FLOOR).optional(),
+  below: z.enum(BELOW_FLOOR).optional(),
 })
 
-export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
+// CNT-6 (C23): `separating` is a party wall, or a wall between a home and the common parts.
+export const WallKindSchema = z.enum(['exterior', 'interior', 'partition', 'separating'])
+
+/**
+ * CNT-6 (C23): what lies past a wall's side with no room drawn on it, or past an open edge:
+ * the outside, a common part of the building that is not drawn (a landing, a stair, a hall's
+ * aisle), or a neighbour (another home or property). Words of the plan's own, never inferred.
+ */
+export const BEYOND_WALL = ['outside', 'common', 'neighbour'] as const
+export const BeyondWallSchema = z.enum(BEYOND_WALL)
 
 /**
  * CNT-10 (C16): what the work does to a wall, an opening or a room: it stands before and stays
@@ -732,6 +769,9 @@ export const WallSchema = z.preprocess(
       properties: PropertiesSchema.optional(),
       // CNT-10 (C16): what the work does to it. Optional and never defaulted (version 1).
       phase: PhaseSchema.optional(),
+      // CNT-6 (C23): what lies past its side with no room drawn on it, along every stretch with a
+      // room on one side only. Optional and never defaulted (version 1).
+      beyond: BeyondWallSchema.optional(),
       // HND-11 (C1, reopened): start→end is this face of the wall, not its centre line. The
       // reading moves the wall to its centre line (`withWallDefaults`), so a wall Grid read has
       // `placedBy` in its place. Optional and never defaulted (version 1).
@@ -1649,6 +1689,40 @@ export const FlatSchema = z.object({
 })
 
 /**
+ * CNT-6 (C23): a building of the plan: an id, a name, and the floors that are its own, by id. A
+ * floor is in one building at most; a floor no building names is in none. A named group of
+ * floors, never a floor: each building stacks its own floors and has its own areas and height
+ * (`geometry/buildings.ts`). Ids that are no floor are named and left out, never refused.
+ */
+export const PlanBuildingSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  floors: parts(text('id').pipe(z.string().min(1)), 'floors').pipe(z.array(z.string()).min(1, { message: 'A building lists at least one floor' })),
+})
+
+/**
+ * CNT-6 (C23): a shape drawn round the plan for context: a neighbour's house, the hall a stand
+ * stands in. Its outline's corners in plan metres, in order round it, either way round, on a floor
+ * (unstated, the ground floor), with a name and a height. Drawn only: it is never a wall or a room,
+ * and is in no measure, check or count.
+ */
+export const ContextShapeSchema = z.object({
+  id: text('id').pipe(z.string().min(1)),
+  name: text('name').optional(),
+  floor: text('id').pipe(z.string().min(1)).optional(),
+  points: z
+    .array(Vec2)
+    .min(3)
+    .max(BOUNDARY_MAX)
+    .superRefine((points, ctx) => {
+      const open = boundaryEdgeCount(points) === points.length ? points : points.slice(0, -1)
+      const problem = ringProblem(open.map(([x, y]) => ({ x, y })))
+      if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
+    }),
+  height: finite().positive().optional(),
+})
+
+/**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
  * wall records its height as not stated (`unstated`), so the reading is the derived layer and a
@@ -1771,6 +1845,11 @@ export const FloorPlanFieldsSchema = z.object({
   // of rooms by id (`FlatSchema`). Optional and never defaulted (version 1).
   flatTypes: parts(FlatTypeSchema, 'flat types').optional(),
   flats: parts(FlatSchema, 'flats').optional(),
+  // CNT-6 (C23): the plan's buildings, each a named group of its own floors (`PlanBuildingSchema`),
+  // and shapes drawn round it for context, in no measure (`ContextShapeSchema`). Optional and
+  // never defaulted (version 1).
+  buildings: parts(PlanBuildingSchema, 'buildings').optional(),
+  context: parts(ContextShapeSchema, 'context shapes').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -1839,6 +1918,9 @@ export type AccessibleRoute = z.infer<typeof AccessibleRouteSchema>
 export type Taped = z.infer<typeof TapedSchema>
 export type FlatType = z.infer<typeof FlatTypeSchema>
 export type Flat = z.infer<typeof FlatSchema>
+export type PlanBuilding = z.infer<typeof PlanBuildingSchema>
+export type ContextShape = z.infer<typeof ContextShapeSchema>
+export type BeyondWall = (typeof BEYOND_WALL)[number]
 export type FloorPlan = z.infer<typeof FloorPlanSchema>
 
 export const EMPTY_FLOOR_PLAN: FloorPlan = {

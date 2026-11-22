@@ -62,7 +62,13 @@ export function groundLevel(plan: FloorPlan, elevations: BuildingElevations = fl
   const stated = statedGround(plan)
   const level = stated ?? 0
   const above = new Map(floors.map((f) => [f.id, (elevations.floors.get(f.id)?.floorLevel ?? 0) - level] as const))
-  const aboveGround = (floor: string): boolean => (above.get(floor) ?? 0) > limit('outsideDoorAboveGround')
+  // CNT-6 (C23): a floor that states what lies below it says itself whether it is at the ground.
+  const below = new Map(floors.map((f) => [f.id, f.below] as const))
+  const aboveGround = (floor: string): boolean => {
+    const stated = below.get(floor)
+    if (stated !== undefined) return stated !== 'ground'
+    return (above.get(floor) ?? 0) > limit('outsideDoorAboveGround')
+  }
   const onGround = floors.filter((f) => !aboveGround(f.id))
   let groundFloors: Floor[]
   if (stated === null) {

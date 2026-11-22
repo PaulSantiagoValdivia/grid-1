@@ -56,7 +56,7 @@ const FIGURE_CODES: readonly string[] = [
   'escape_window_too_high'
 ] satisfies readonly FigureFindingCode[]
 
-const PLAN_REASONS: ReadonlySet<string> = new Set(['no_stairs', 'cannot_be_drawn', 'way_out_not_drawn'] satisfies PlanNotCheckedReason[])
+const PLAN_REASONS: ReadonlySet<string> = new Set(['no_stairs', 'cannot_be_drawn', 'way_out_not_drawn', 'way_out_through_common_parts'] satisfies PlanNotCheckedReason[])
 
 const isFigureFinding = (finding: RuleFinding): finding is FigureFinding => FIGURE_CODES.includes(finding.code)
 const isPlanFinding = (finding: RuleFinding): finding is PlanFinding => !isFigureFinding(finding)

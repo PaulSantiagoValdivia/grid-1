@@ -28,6 +28,7 @@
  */
 
 import type { FloorPlan, PlanIndex, Room, Wall, WallKind } from './plan'
+import type { BeyondWall } from '../types/floorplan'
 import { roomWallIds } from './plan'
 import { floorOf, wallsOnFloor } from './floors'
 import { roomOutline } from './room'
@@ -40,9 +41,28 @@ import { curveFault } from './arc'
 
 /**
  * Whether the wall separates two rooms or faces the outside, as every view and export shows it.
- * `detached`: no room lies along it.
+ * `detached`: no room lies along it. CNT-6 (C23): `separating`, a party wall or a wall to the
+ * common parts: one stated `separating`, or one with a room on one side only that states a common
+ * part or a neighbour beyond it. It is not an outside wall: no way out, no escape window and not
+ * external, and gross external area is measured to its middle.
  */
-export type WallExposure = 'exterior' | 'interior' | 'detached'
+export type WallExposure = 'exterior' | 'interior' | 'separating' | 'detached'
+
+/**
+ * CNT-6 (C23): what lies past a wall's side with no room on it, as the plan states it: its
+ * `beyond`, else, for a wall stated `separating`, a common part (the one way a door through it is
+ * right). Null when the plan says nothing, and the drawing decides (the outside, or floor no room
+ * claims).
+ */
+export function wallBeyond(wall: Pick<Wall, 'kind' | 'beyond'>): BeyondWall | null {
+  return wall.beyond ?? (wall.kind === 'separating' ? 'common' : null)
+}
+
+/** Whether what the plan states beyond a wall is more of the building, not the outside. */
+const separates = (wall: Wall): boolean => {
+  const beyond = wallBeyond(wall)
+  return beyond === 'common' || beyond === 'neighbour'
+}
 
 /** One stretch of a wall, measured along it from its start, and the rooms on each of its faces. */
 export interface WallStretch {
@@ -51,7 +71,10 @@ export interface WallStretch {
   /** Rooms on the face its normal points at (90 degrees counter-clockwise from start to end). */
   readonly left: readonly string[]
   readonly right: readonly string[]
-  /** Worked out from the rooms alone: `interior` with rooms on both faces, `exterior` with one. */
+  /**
+   * Worked out from the rooms alone: `interior` with rooms on both faces, `exterior` with one, or
+   * `separating` with one where the plan states more of the building beyond the wall (CNT-6).
+   */
   readonly worked: WallExposure
 }
 
@@ -282,7 +305,9 @@ function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>,
       if (held === null && !blocked[k] && wall.kind !== 'exterior' && (left.length > 0 || right.length > 0)) blocked[k] = enclosed(probe)
     }
     const worked = workedOf(left.length + (blocked[0] ? 1 : 0), right.length + (blocked[1] ? 1 : 0))
-    raw.push({ from, to, left, right, worked: left.length + right.length === 0 ? 'detached' : worked })
+    // CNT-6 (C23): a room on one side and more of the building stated beyond the other.
+    const one = worked === 'exterior' && separates(wall) ? 'separating' : worked
+    raw.push({ from, to, left, right, worked: left.length + right.length === 0 ? 'detached' : one })
   }
   // Neighbouring stretches with the same rooms are one.
   const same = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x))
@@ -295,12 +320,19 @@ function sidesOf(wall: Wall, listing: readonly Traced[], rooms: Buckets<Traced>,
   const long = (s: WallStretch): boolean => s.to - s.from > tolerance('lineInside')
   const worked: WallExposure = stretches.some((s) => long(s) && s.worked === 'exterior')
     ? 'exterior'
-    : stretches.some((s) => s.worked === 'interior')
-      ? 'interior'
-      : stretches.some((s) => s.worked === 'exterior')
-        ? 'exterior'
-        : 'detached'
-  const exposure: WallExposure = wall.kind === 'exterior' ? 'exterior' : worked
+    : stretches.some((s) => long(s) && s.worked === 'separating')
+      ? 'separating'
+      : stretches.some((s) => s.worked === 'interior')
+        ? 'interior'
+        : stretches.some((s) => s.worked === 'exterior')
+          ? 'exterior'
+          : stretches.some((s) => s.worked === 'separating')
+            ? 'separating'
+            : 'detached'
+  // CNT-6: a wall stated separating stays one between two rooms too (two flats), unless the plan
+  // says it faces outside.
+  const exposure: WallExposure =
+    wall.kind === 'exterior' ? 'exterior' : wall.kind === 'separating' && worked !== 'exterior' && worked !== 'detached' ? 'separating' : worked
   const length = (kind: WallExposure): number =>
     stretches.filter((s) => s.worked === kind).reduce((sum, s) => sum + (s.to - s.from), 0)
   let differs: WallSides['differs'] = null
