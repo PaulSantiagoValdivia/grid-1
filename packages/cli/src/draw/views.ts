@@ -62,6 +62,18 @@ export async function planView(
   return { png, width: picture.width, height: fullHeight(picture), pxPerMetre: picture.width / picture.view.width, boxes, undecidedDoors: picture.undecidedDoors }
 }
 
+/**
+ * VEW-4: one floor as the preview page draws it: the viewer's own SVG, each part with its
+ * `data-id`, and each part's box in the SVG's own frame (plan metres, y down), so the page can
+ * frame a room without measuring anything itself.
+ */
+export function planDrawing(plan: FloorPlan, floor: string, look: 'working' | 'technical' | 'dark'): { svg: string; boxes: Array<{ id: string; kind: string; x: number; y: number; width: number; height: number }> } {
+  const picture = planPicture(plan, { floor, look, showDimensions: true })
+  const round = (n: number): number => Math.round(n * 1000) / 1000
+  const boxes = partBounds(plan, floor).map((part) => ({ id: part.id, kind: part.kind, x: round(part.bounds.min.x), y: round(-part.bounds.max.y), width: round(part.bounds.width), height: round(part.bounds.height) }))
+  return { svg: pictureToSvg(picture), boxes }
+}
+
 /** LVL-9: a section along a line through every floor, with the section it was drawn from. */
 export async function sectionView(plan: FloorPlan, line: SectionLine, look: LookName, language?: Language): Promise<PlanView & { readonly section: PlanSection }> {
   // MSG-11: the drawing's own words in the language asked for, else the plan's own.

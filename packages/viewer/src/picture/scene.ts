@@ -213,9 +213,18 @@ function paints(named: Look, mpp: number, paperScale: number | undefined) {
   })
   return {
     room: { fill: look.room } as Attrs,
-    wall: (exposure: PlanWall['exposure'] | undefined): Attrs => ({
-      fill: exposure === 'exterior' ? look.wallExterior : look.wall
+    wall: (exposure: PlanWall['exposure'] | undefined, phase?: PlanWall['phase']): Attrs => ({
+      // CNT-10: an existing wall in its tone and a new one filled, where the look says so.
+      fill: (phase === 'existing' ? named.phases.existing : phase === 'new' ? named.phases.new : null) ?? (exposure === 'exterior' ? look.wallExterior : look.wall)
     }),
+    // CNT-10: a wall or an opening to be demolished: a dashed outline, no fill.
+    demolished: {
+      fill: 'none',
+      stroke: named.phases.demolished,
+      'stroke-width': width('demolished'),
+      'stroke-dasharray': dashes('demolished'),
+      'stroke-linejoin': 'miter'
+    } as Attrs,
     // Drawn under every wall's fill and twice as wide as the pen: the fill covers its inner
     // half, and where two walls meet, the seam, so what shows is one outline the pen's width
     // round the walls as a whole.
@@ -684,7 +693,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
         'g',
         { 'data-part': 'wall-outlines', 'pointer-events': 'none', 'aria-hidden': 'true' },
         drawing.walls.flatMap((wall) =>
-          wall.virtual ? [] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'wall-outline', 'data-wall': wall.id, ...outline }))
+          wall.virtual || wall.phase === 'demolished' ? [] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'wall-outline', 'data-wall': wall.id, ...outline }))
         ),
         'wall-outlines'
       )
@@ -698,6 +707,14 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     const tracing = live.wallTrace(wall.id)
     const offset = live.wallOffset(wall.id)
     const transform = offset ? `translate(${offset.x} ${-offset.y})` : undefined
+
+    // CNT-10: a wall to be demolished is drawn as it stands before the work, dashed and unfilled,
+    // under what stands after it. Drawing, not a target.
+    if (wall.phase === 'demolished') {
+      const shapes = wall.virtual ? [el('path', { d: virtualPath(wall.centerline), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished })] : wall.slices.map((slice) => el('path', { d: pathOf(slice), 'data-part': 'demolished-wall', 'data-id': wall.id, ...paint.demolished }))
+      out.push(el('g', { 'data-phase': 'demolished', 'pointer-events': 'none' }, shapes, `demolished-${wall.id}`))
+      continue
+    }
 
     if (wall.virtual) {
       const [start, end] = wall.centerline
@@ -737,11 +754,12 @@ function planSceneIn(input: SceneInput): SvgNode[] {
               'data-part': 'wall',
               'data-id': wall.id,
               'data-exposure': wall.exposure,
+              'data-phase': wall.phase,
               'data-selectable': 'true',
               'data-selected': selected(wall.id),
               ...live.marks(wall.id),
               ...live.hit(wall.id),
-              ...paint.wall(wall.exposure)
+              ...paint.wall(wall.exposure, wall.phase)
             },
             [],
             String(index)
@@ -753,9 +771,11 @@ function planSceneIn(input: SceneInput): SvgNode[] {
   }
 
   for (const opening of drawing.openings) {
+    if (opening.phase === 'demolished') continue
     const opened = live.openingOpen(opening.id)
     const span = opened === null ? opening : openingAt(opening, opened)
-    const exposure = drawing.walls.find((wall) => wall.id === opening.wallId)?.exposure
+    const host = drawing.walls.find((wall) => wall.id === opening.wallId)
+    const exposure = host?.exposure
     const door = doorSymbolOf(opening, handings.get(opening.id))
 
     if (opened !== null) {
@@ -774,7 +794,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
               'data-exposure': exposure,
               'data-closing': 'true',
               'pointer-events': 'none',
-              ...paint.wall(exposure)
+              ...paint.wall(exposure, host?.phase)
             },
             [],
             `${opening.id}:closing:${index}`
@@ -790,6 +810,7 @@ function planSceneIn(input: SceneInput): SvgNode[] {
           'data-part': 'opening',
           'data-type': opening.type,
           'data-id': opening.id,
+          'data-phase': opening.phase,
           'data-selectable': 'true',
           'data-selected': selected(opening.id),
           ...live.marks(opening.id),
@@ -831,6 +852,13 @@ function planSceneIn(input: SceneInput): SvgNode[] {
     }
     if (look.glass && opening.type === 'window') out.push(windowSymbol(opening, paint))
     if (look.undecidedDoors && opening.type === 'door' && !door) out.push(undecidedSymbol(opening, mpp, paint))
+  }
+  // CNT-10: each opening to be demolished, as a dashed outline across its wall where it stood,
+  // over the walls and the openings that stand after the work: a blocked window shows on its
+  // wall, a widened door's old opening inside the new one. Drawing, not a target.
+  for (const opening of drawing.openings) {
+    if (opening.phase !== 'demolished') continue
+    out.push(el('path', { d: pathOf(stripAcross(opening.from, opening.to, opening.normal, opening.thickness)), 'data-part': 'demolished-opening', 'data-type': opening.type, 'data-id': opening.id, 'pointer-events': 'none', ...paint.demolished }, [], `demolished-${opening.id}`))
   }
 
   // WRT-6 (lab WR-15): what the plan marks assumed, drawn in its own style: a dashed line round

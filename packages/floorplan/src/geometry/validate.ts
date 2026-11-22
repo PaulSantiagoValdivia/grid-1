@@ -43,6 +43,8 @@ import type { LeftOutPart } from '../types/readParts'
 import { itemUseIssues } from './use'
 import { openingPlaceIssues } from './openingPlaces'
 import { expandPatterns } from './patterns'
+import type { PlanState } from './phases'
+import { idsInPhase, phaseClashes, planHasPhases, planInState } from './phases'
 import { floorRoofShape, rooflightPlace, topBetween, wallTopProfile } from './roofs'
 import { roomZones } from './zones'
 import { plotBoundary, ringFault } from './plot'
@@ -1073,6 +1075,36 @@ export interface ValidateOptions {
    * follow from one to name it as their cause: floor no room claims where a left-out room was.
    */
   readonly leftOutParts?: readonly LeftOutPart[]
+  /**
+   * CNT-10: the state of a plan with phases being checked. Set by `validatePlan` itself, which
+   * checks such a plan once in each state (`validatePhases`); left out by every caller.
+   */
+  readonly state?: PlanState
+}
+
+/**
+ * CNT-10: a plan with phases, checked once as it will be after the work and once as it stands
+ * before it, so a demolished wall and the new one built in its place, or a widened door's old
+ * and new openings, are never in one drawing. What the plan holds after the work is reported in
+ * full; of the state before it, only what is about a part to be demolished, since the parts that
+ * stay are reported already. An opening or a room that stands when its wall does not is one
+ * error of its own (`phaseClashes`) and is left out of both.
+ */
+function validatePhases(plan: FloorPlan, options: ValidateOptions): ValidationResult {
+  const clashes = phaseClashes(plan)
+  const issues: Issue[] = clashes.map((c) => followOn(issue(c.code === 'room/phase-wall' ? 'room' : 'opening', c.id, c.code, c.said), c.wall))
+  const clashing = new Set(clashes.map((c) => c.id))
+  const run = (state: PlanState): ValidationResult => {
+    const inState = planInState(plan, state)
+    const sound = clashing.size === 0 ? inState : { ...inState, openings: inState.openings.filter((o) => !clashing.has(o.id)), rooms: inState.rooms.filter((r) => !clashing.has(r.id)) }
+    return validatePlan(sound, undefined, { ...options, state })
+  }
+  const after = run('after')
+  const before = run('before')
+  const demolished = idsInPhase(plan, 'demolished')
+  issues.push(...after.issues, ...before.issues.filter((i) => demolished.has(i.id)))
+  const broken = new Set<string>([...clashing, ...after.broken, ...[...before.broken].filter((id) => demolished.has(id))])
+  return { issues, broken }
 }
 
 /**
@@ -1153,6 +1185,7 @@ export function validatePlan(
     const result = validatePlan(expanded.plan, undefined, options)
     return { issues: [...expanded.issues, ...result.issues], broken: result.broken }
   }
+  if (options.state === undefined && planHasPhases(plan)) return validatePhases(plan, options)
   const issues: Issue[] = []
   const broken = new Set<string>()
   // MSG-6: a wall the reader left out is not in the plan; what rests on it is left out with it.

@@ -230,9 +230,11 @@ export type LinePart =
   | 'hatch'
   /** LVL-9: a section's cut line on the plan, and the marks for elevations and levels. */
   | 'mark'
+  /** CNT-10: the dashed outline of a wall or an opening to be demolished. */
+  | 'demolished'
 
 /** The parts of the drawing a look gives a dash pattern. */
-export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'chain' | 'boundary'
+export type DashPart = 'virtual' | 'roomDimension' | 'undecided' | 'above' | 'chain' | 'boundary' | 'demolished'
 
 /** Lines for the screen: widths and dashes in screen pixels, whatever the zoom. */
 export interface ScreenLines {
@@ -280,6 +282,8 @@ export interface Look {
    * the number along it. Otherwise plain ends and the number upright, as on screen.
    */
   readonly draftedDimensions: boolean
+  /** CNT-10: how a plan with phases draws each phase (`PhaseLook`). */
+  readonly phases: PhaseLook
   /** BRF-3: the site's colours: the plot and what is on it, drawn in their own style, never as walls or rooms. */
   readonly site: SiteColors
 }
@@ -348,6 +352,20 @@ export const TECHNICAL_SITE: SiteColors = {
   treeEdge: '#3c3c3c'
 }
 
+/**
+ * CNT-10: how a plan with phases is drawn, as a demolition and new-work drawing is: what is to be
+ * demolished as a dashed outline with no fill, what stays in a tone, and what is new filled
+ * solid. A fill that is `null` is the wall's own, as a plan with no phases draws it.
+ */
+export interface PhaseLook {
+  /** The fill of an existing wall, or null for the wall's own. */
+  readonly existing: string | null
+  /** The fill of a new wall, or null for the wall's own. */
+  readonly new: string | null
+  /** The dashed outline of a wall or an opening to be demolished. */
+  readonly demolished: string
+}
+
 /** The names a look is chosen by. */
 export const LOOK_NAMES = ['working', 'technical', 'dark'] as const
 export type LookName = (typeof LOOK_NAMES)[number]
@@ -366,6 +384,12 @@ export const ELEVATION_PX = {
   opening: 0.75,
   level: 0.75
 } as const
+
+/**
+ * CNT-10: the dashed outline of what is to be demolished, on screen, in pixels. Grid's own choice;
+ * the app's stylesheet does not say it again, as it draws the outline only through this tree.
+ */
+export const DEMOLISHED_PX = { width: 1.25, dash: [6, 4] } as const
 
 /** The working look's lines: `LINE_PX`, the app's own, and the parts only other looks draw. */
 const SCREEN_LINES: ScreenLines = {
@@ -402,9 +426,10 @@ const SCREEN_LINES: ScreenLines = {
     // LVL-9: the section's hatch and the marks on a plan, which the app does not draw, so plan.css
     // has none. A section's ground, what it sees beyond and its level marks are LVL-8's parts.
     hatch: 0.75,
-    mark: 1
+    mark: 1,
+    demolished: DEMOLISHED_PX.width
   },
-  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, boundary: [12, 3, 2, 3], chain: [12, 3, 2, 3] }
+  dashes: { virtual: LINE_PX.virtualDash, roomDimension: LINE_PX.roomDimensionDash, undecided: [4, 3], above: LINE_PX.aboveDash, boundary: [12, 3, 2, 3], chain: [12, 3, 2, 3], demolished: DEMOLISHED_PX.dash }
 }
 
 /**
@@ -451,9 +476,11 @@ const PAPER_LINES: PaperLines = {
     elevationOpening: 'finest',
     elevationLevel: 'finest',
     hatch: 'finest',
-    mark: 'fine'
+    mark: 'fine',
+    // CNT-10: what is to be demolished, dashed with the medium pen.
+    demolished: 'medium'
   },
-  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], boundary: [5, 1, 0.6, 1], chain: [6, 1.5, 0.8, 1.5] }
+  dashes: { virtual: [2, 1.2], roomDimension: [0.8, 0.8], undecided: [1, 0.8], above: [1.5, 1], boundary: [5, 1, 0.6, 1], chain: [6, 1.5, 0.8, 1.5], demolished: [2, 1] }
 }
 
 /** Black on white: the technical look's colours. Walls are a grey tone inside a black outline. */
@@ -484,11 +511,13 @@ export const WORKING_LOOK: Look = {
   glass: false,
   undecidedDoors: false,
   draftedDimensions: false,
+  // CNT-10: what stays in a mid tone, the new walls as walls are drawn, the demolished dashed in ink.
+  phases: { existing: '#9b968b', new: null, demolished: LIGHT_LOOK.wall },
   site: LIGHT_SITE
 }
 
 /** The working look on dark paper: the app's dark theme. */
-export const DARK_WORKING_LOOK: Look = { ...WORKING_LOOK, name: 'dark', colors: DARK_LOOK, ink: DARK_LOOK.wall, site: DARK_SITE }
+export const DARK_WORKING_LOOK: Look = { ...WORKING_LOOK, name: 'dark', colors: DARK_LOOK, ink: DARK_LOOK.wall, site: DARK_SITE, phases: { existing: '#7a7266', new: null, demolished: DARK_LOOK.wall } }
 
 /** Sheets and files to hand on: black on white, with lines in millimetres on paper. */
 export const TECHNICAL_LOOK: Look = {
@@ -500,6 +529,8 @@ export const TECHNICAL_LOOK: Look = {
   glass: true,
   undecidedDoors: true,
   draftedDimensions: true,
+  // CNT-10: what stays in the grey tone walls have, the new walls filled black, the demolished dashed.
+  phases: { existing: null, new: '#000000', demolished: '#000000' },
   site: TECHNICAL_SITE
 }
 

@@ -63,4 +63,28 @@ describe('grid describe in Spanish', () => {
     expect(describePlan(loaded(spanish), 'line', 'person', { language: await languageFor(undefined, spanish) })).toMatch(/^Un plano de /m)
     expect(describePlan(loaded(plan), 'line', 'person', { language: await languageFor(undefined, plan) })).toMatch(/^A plan of /m)
   })
+
+  it('walks the plan in Spanish, the names as written (VEW-9)', () => {
+    const text = describePlan(loaded(plan), 'walk', 'person', { language: 'es' })
+    const english = describePlan(loaded(plan), 'walk', 'person')
+    expect(text.split('\n')[0]).toBe('Orientación general, no sus normas locales')
+    expect(text).toContain('El plano recorrido estancia por estancia.')
+    expect(text).toMatch(/Mirando al (N|NE|E|SE|S|SO|O|NO), mide \d+(,\d+)? m de ancho/)
+    expect(text).toMatch(/A su izquierda/)
+    expect(text).toContain('Esto describe el plano tal como se recorre y no comprueba nada')
+    for (const name of names) if (english.includes(name)) expect(text).toContain(name)
+    expect(text).not.toMatch(/\d\.\d/)
+    expect(text).not.toMatch(/\b(Ahead|On your|wide|walked|Facing)\b/)
+    // The same stops, in the same order, as the English walk.
+    expect(text.split('\n').filter((line) => /^\d+\. /.test(line)).length).toBe(english.split('\n').filter((line) => /^\d+\. /.test(line)).length)
+  })
+
+  it("says a refurbishment's work in Spanish, and in main's English (CNT-10)", () => {
+    const refurbishment = FloorPlanSchema.parse(JSON.parse(readFileSync(resolve(__dirname, '../../../../floorplan/fixtures/refurbishment.json'), 'utf8')))
+    const spanish = describePlan(loaded(refurbishment), 'line', 'person', { language: 'es' })
+    expect(spanish).toMatch(/Contiene obra: a demoler, \d+ muros?, \d+ huecos?, \d+ estancias?; nuevo, /)
+    expect(spanish).toContain('las medidas de aquí son de después de la obra.')
+    expect(spanish).not.toMatch(/\{[A-Za-z][A-Za-z0-9]*\}/)
+    expect(describePlan(loaded(refurbishment), 'line', 'person')).toMatch(/It holds work: to be demolished \d+ walls?, \d+ openings?, \d+ rooms?; new /)
+  })
 })

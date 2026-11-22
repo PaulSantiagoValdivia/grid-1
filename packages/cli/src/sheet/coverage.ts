@@ -7,7 +7,7 @@
  * decides what the sheet does with it. `coverage.test.ts` checks the same against the schema
  * itself, so `npm test` fails too.
  */
-import type { FactField, FloorPlan } from '@ongrid/floorplan/types/floorplan'
+import type { FactField, FloorPlan, PhaseField } from '@ongrid/floorplan/types/floorplan'
 
 export type Coverage =
   | { readonly shown: 'drawn' }
@@ -32,6 +32,9 @@ export const SHEET_COVERAGE = {
   floors: { shown: 'a page each' },
   stairs: { shown: 'drawn' },
   referenceImage: { shown: 'not shown', why: 'A tracing aid, not part of the building.' },
+  // CNT-10: a fit-out's base is read in by the command, its walls and openings drawn as existing
+  // on every page that draws the plan; the sheet names no file.
+  base: { shown: 'drawn' },
   // CNT-12: the fixtures are drawn on each floor's plan by `drawPlan`, to scale. The 3D still
   // does not show them yet, and the room table measures the rooms, which they add nothing to.
   items: { shown: 'drawn' },
@@ -77,3 +80,13 @@ export const FACT_COVERAGE = {
   'walls.properties': { shown: 'not shown', why: 'The sheet has no wall schedule; grid_find and the IFC and DXF files give a wall\'s facts.' },
   'floors.properties': { shown: 'not shown', why: 'Each floor page shows its plan and areas; grid_find and the IFC and DXF files give a floor\'s facts.' },
 } as const satisfies Record<FactField, Coverage>
+
+/**
+ * CNT-10: what the sheet does with each field that carries a phase (`PHASE_FIELDS`). A field
+ * added there fails the type check here until it is placed.
+ */
+export const PHASE_COVERAGE = {
+  'walls.phase': { shown: 'drawn' },
+  'openings.phase': { shown: 'drawn' },
+  'rooms.phase': { shown: 'not shown', why: 'The room table and the areas are of the building after the work, so a demolished room is not in them; the table does not mark which rooms are new.' },
+} as const satisfies Record<PhaseField, Coverage>

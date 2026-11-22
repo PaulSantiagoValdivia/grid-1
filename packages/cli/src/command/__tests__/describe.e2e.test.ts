@@ -107,7 +107,7 @@ describe('grid describe', () => {
   })
 
   it('refuses a length or an audience it does not know, by name', () => {
-    expectRefusal(grid(['describe', 'two-bed-flat.json', '--length', 'short']), 2, '--length takes one of line, rooms, walls: got "short".')
+    expectRefusal(grid(['describe', 'two-bed-flat.json', '--length', 'short']), 2, '--length takes one of line, rooms, walls, walk: got "short".')
     expectRefusal(grid(['describe', 'two-bed-flat.json', '--for', 'client']), 2, '--for takes one of person, agent: got "client".')
   })
 
@@ -126,7 +126,7 @@ describe('grid describe', () => {
   it('shows its help, and the overview lists it', () => {
     const help = grid(['describe', '--help'])
     expect(help.status).toBe(0)
-    expect(help.out).toContain('Usage: grid describe [<plan.json>] [--length line|rooms|walls] [--for person|agent] [--as rooms] [--lang en|es] [--project <folder>]')
+    expect(help.out).toContain('Usage: grid describe [<plan.json>] [--length line|rooms|walls|walk] [--for person|agent] [--as rooms] [--floor <id>] [--pictures <folder>] [--lang en|es] [--project <folder>]')
     expect(help.out).toContain('--length <value>')
     expect(help.out).toContain('--for <value>')
     expect(grid(['--help']).out).toMatch(/^ {2}describe Describes the plan/m)

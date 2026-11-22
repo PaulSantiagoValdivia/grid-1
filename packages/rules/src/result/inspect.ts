@@ -17,7 +17,11 @@ import {
   itemNameSaid,
   itemNounSaid,
   marksWithNoPart,
+  mergeBase,
+  phaseCounts,
   planFacing,
+  planHasPhases,
+  planInState,
   planFloors,
   siteThingsSaid,
   tapedLengths,
@@ -632,7 +636,7 @@ function noticeLine(notice: NotChecked, names: Names, country: string, wayOutNot
 }
 
 /** The stages of a check, by their words (`line.part.stage.*`). */
-type Stage = 'reading' | 'drawing' | 'door' | 'plan' | 'firm' | 'writing' | 'site' | 'orientation' | 'marks' | 'taped' | 'accessible'
+type Stage = 'reading' | 'drawing' | 'phases' | 'door' | 'plan' | 'firm' | 'writing' | 'site' | 'orientation' | 'marks' | 'taped' | 'accessible'
 
 function checkFailed(stage: Stage, error: unknown): ResultLine {
   return line('plan/check-failed', 'not-checked', { kind: 'plan', id: '' }, null, {
@@ -791,10 +795,13 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: I
   // LVL-8: the checks read the plain openings a pattern expands into, so a window placed by a
   // pattern counts for escape like one placed by hand. The drawing check reads the plan as stated,
   // and says first what kept any pattern's openings from being placed (`validatePlan`).
-  const stated = read.plan
-  const plan = withPatterns(stated)
+  // CNT-10: a fit-out is read with its base's walls and openings, as existing. The drawing check
+  // reads both states of a plan with phases; every other check, the building after the work.
+  const stated = options.base === undefined ? read.plan : mergeBase(read.plan, withPatterns(options.base)).plan
+  const whole = withPatterns(stated)
+  const plan = planInState(whole, 'after')
   const lines: ResultLine[] = [...read.lines]
-  const names = namesOf(plan, stated)
+  const names = namesOf(whole, stated)
   const stage = (name: Stage, body: () => void): void => {
     try {
       body()
@@ -808,6 +815,15 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: I
   })
   stage('drawing', () => {
     lines.push(...validatePlan(stated, undefined, { leftOutWalls: read.leftOutWalls, leftOutParts: read.leftOut }).issues.map((issue) => issueLine(issue, names)))
+  })
+  // CNT-10: which state the checks read, and what the plan's work holds.
+  stage('phases', () => {
+    if (!planHasPhases(whole)) return
+    const counts = phaseCounts(whole)
+    const parts = (n: { walls: number; openings: number; rooms: number }): number => n.walls + n.openings + n.rooms
+    const work = { existing: parts(counts.existing), demolished: parts(counts.demolished), new: parts(counts.new) }
+    const what = whole.base === undefined ? said('line.part.work', work) : said('line.part.work.base', { ...work, base: name(whole.base) })
+    lines.push(line('plan/read-after-work', 'not-checked', { kind: 'plan', id: '' }, null, { ...blank(THE_PLAN), floors: names.floors, said: what }))
   })
   stage('door', () => {
     const seen = new Set<string>()
@@ -855,7 +871,7 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: I
         })
       )
     }
-    const rooms = new Set(plan.rooms.map((room) => room.id))
+    const rooms = new Set(whole.rooms.map((room) => room.id))
     for (const note of plan.annotations ?? []) {
       if (note.room === undefined || rooms.has(note.room)) continue
       lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(name(note.id)), also: [note.id, note.room], floors: names.floors, said: said('line.part.noteRoom', { room: note.room }) }))
@@ -886,11 +902,11 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, inspectOptions: I
   // WRT-6 (lab WR-15): what the plan marks assumed, for the person to confirm, and a mark that
   // names a part the plan no longer has.
   stage('marks', () => {
-    for (const mark of marksWithNoPart(plan)) {
+    for (const mark of marksWithNoPart(whole)) {
       const label = noun(mark.part, mark.id)
       lines.push(line('plan/mark-no-part', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(label), also: [mark.id], floors: names.floors, ...(mark.value ? { word: valueWord(mark.value) } : {}) }))
     }
-    for (const value of assumedValues(plan)) {
+    for (const value of assumedValues(whole)) {
       const at = names.thingOf(value.part, value.id)
       lines.push(
         line('plan/value-assumed', 'to-confirm', { kind: value.part, id: value.id }, at.floor, {

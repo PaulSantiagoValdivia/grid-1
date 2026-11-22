@@ -36,7 +36,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/brief/brief.ts': [40, 'agent'],
   'packages/cli/src/brief/lines.ts': [20, 'notYet'],
   'packages/cli/src/command/check.ts': [10, 'command'],
-  'packages/cli/src/command/describe.ts': [6, 'command'],
+  'packages/cli/src/command/describe.ts': [9, 'command'],
   'packages/cli/src/command/diff.ts': [13, 'command'],
   'packages/cli/src/command/draw.ts': [44, 'command'],
   'packages/cli/src/command/drawShow.ts': [4, 'command'],
@@ -44,17 +44,18 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/command/export.ts': [17, 'command'],
   'packages/cli/src/command/init.ts': [15, 'command'],
   'packages/cli/src/command/language.ts': [2, 'command'],
-  'packages/cli/src/command/main.ts': [52, 'command'],
+  'packages/cli/src/command/main.ts': [58, 'command'],
   'packages/cli/src/command/options.ts': [9, 'command'],
-  'packages/cli/src/command/plan.ts': [24, 'command'],
+  'packages/cli/src/command/plan.ts': [29, 'command'],
   'packages/cli/src/command/planText.ts': [18, 'command'],
   'packages/cli/src/command/section.ts': [6, 'command'],
   'packages/cli/src/command/sheet.ts': [3, 'command'],
-  'packages/cli/src/command/tidy.ts': [11, 'command'],
-  'packages/cli/src/command/write.ts': [26, 'command'],
-  'packages/cli/src/describe/card.ts': [12, 'agentForm'],
+  'packages/cli/src/command/tidy.ts': [12, 'command'],
+  'packages/cli/src/command/write.ts': [28, 'command'],
+  'packages/cli/src/describe/card.ts': [13, 'agentForm'],
   'packages/cli/src/describe/facts.ts': [2, 'notYet'],
-  'packages/cli/src/distribution/listing.ts': [82, 'developer'],
+  'packages/cli/src/describe/walk.ts': [4, 'agentForm'],
+  'packages/cli/src/distribution/listing.ts': [84, 'developer'],
   'packages/cli/src/distribution/zip.ts': [1, 'developer'],
   'packages/cli/src/draw/cameraAsk.ts': [12, 'agent'],
   'packages/cli/src/draw/canvas.ts': [1, 'developer'],
@@ -64,6 +65,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/edit/addRoom.ts': [19, 'notYet'],
   'packages/cli/src/edit/edits.ts': [49, 'notYet'],
   'packages/cli/src/edit/merge.ts': [23, 'notYet'],
+  'packages/cli/src/edit/phases.ts': [4, 'notYet'],
   'packages/cli/src/edit/rename.ts': [9, 'notYet'],
   'packages/cli/src/edit/seat.ts': [5, 'notYet'],
   'packages/cli/src/edit/split.ts': [20, 'notYet'],
@@ -77,18 +79,23 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/mcp/briefTool.ts': [36, 'tools'],
   'packages/cli/src/mcp/diffTools.ts': [20, 'tools'],
   'packages/cli/src/mcp/editTools.ts': [69, 'tools'],
-  'packages/cli/src/mcp/protocol.ts': [16, 'agent'],
-  'packages/cli/src/mcp/readTools.ts': [285, 'tools'],
+  'packages/cli/src/mcp/previewTools.ts': [39, 'tools'],
+  'packages/cli/src/mcp/protocol.ts': [23, 'agent'],
+  'packages/cli/src/mcp/readTools.ts': [294, 'tools'],
   'packages/cli/src/mcp/reportTool.ts': [30, 'tools'],
   'packages/cli/src/mcp/retelling.ts': [3, 'agent'],
   'packages/cli/src/mcp/sectionAnswer.ts': [5, 'tools'],
   'packages/cli/src/mcp/seenTool.ts': [16, 'tools'],
+  'packages/cli/src/mcp/serveTools.ts': [1, 'tools'],
   'packages/cli/src/mcp/toolkit.ts': [27, 'agent'],
   'packages/cli/src/mcp/viewTool.ts': [15, 'tools'],
-  'packages/cli/src/mcp/writeTools.ts': [99, 'tools'],
+  'packages/cli/src/mcp/writeTools.ts': [90, 'tools'],
   'packages/cli/src/occupancy/occupancy.ts': [16, 'notYet'],
+  'packages/cli/src/preview/localServer.ts': [6, 'agent'],
+  'packages/cli/src/preview/record.ts': [4, 'command'],
   'packages/cli/src/quantities/access.ts': [49, 'notYet'],
-  'packages/cli/src/quantities/areas.ts': [6, 'notYet'],
+  'packages/cli/src/quantities/areas.ts': [8, 'notYet'],
+  'packages/cli/src/quantities/change.ts': [18, 'notYet'],
   'packages/cli/src/quantities/compare.ts': [19, 'notYet'],
   'packages/cli/src/quantities/estimate.ts': [27, 'notYet'],
   'packages/cli/src/quantities/facing.ts': [25, 'notYet'],
@@ -102,14 +109,15 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/cli/src/quantities/sun.ts': [13, 'notYet'],
   'packages/cli/src/quantities/takeoff.ts': [10, 'notYet'],
   'packages/cli/src/quantities/use.ts': [28, 'notYet'],
+  'packages/cli/src/quantities/walked.ts': [1, 'notYet'],
   'packages/cli/src/report/draft.ts': [16, 'notYet'],
   'packages/cli/src/seen/marks.ts': [21, 'notYet'],
-  'packages/cli/src/sheet/coverage.ts': [22, 'developer'],
+  'packages/cli/src/sheet/coverage.ts': [23, 'developer'],
   'packages/cli/src/sheet/fonts.ts': [1, 'developer'],
   'packages/cli/src/sheet/sheetFile.ts': [7, 'command'],
-  'packages/cli/src/versions/diff.ts': [8, 'notYet'],
+  'packages/cli/src/versions/diff.ts': [10, 'notYet'],
   'packages/cli/src/versions/git.ts': [19, 'notYet'],
-  'packages/cli/src/versions/markers.ts': [18, 'notYet'],
+  'packages/cli/src/versions/markers.ts': [19, 'notYet'],
   'packages/floorplan/src/geometry/areas.ts': [32, 'notYet'],
   'packages/floorplan/src/geometry/camera.ts': [1, 'agent'],
   'packages/floorplan/src/geometry/diff/building.ts': [25, 'notYet'],
@@ -135,7 +143,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/floorplan/src/geometry/wallFaults.ts': [3, 'notYet'],
   'packages/floorplan/src/notes/notes.ts': [17, 'notYet'],
   'packages/floorplan/src/rooms/answer.ts': [6, 'notYet'],
-  'packages/floorplan/src/rooms/compile.ts': [115, 'notYet'],
+  'packages/floorplan/src/rooms/compile.ts': [116, 'notYet'],
   'packages/floorplan/src/rooms/read.ts': [21, 'notYet'],
   'packages/floorplan/src/rooms/words.ts': [4, 'notYet'],
   'packages/floorplan/src/types/floorplan.ts': [53, 'notYet'],
@@ -151,6 +159,7 @@ const ALLOWED: Readonly<Record<string, readonly [number, keyof typeof WHY]>> = {
   'packages/rules/src/sheet/rulesSheet.ts': [9, 'notYet'],
   'packages/rules/src/store/store.ts': [1, 'developer'],
   'packages/viewer/src/canvas2d/Canvas2D.tsx': [1, 'notWords'],
+  'packages/viewer/src/page/previewPage.ts': [5, 'notYet'],
   'packages/viewer/src/picture/facade.ts': [2, 'developer'],
   'packages/viewer/src/picture/planSvg.ts': [3, 'developer'],
   'packages/viewer/src/picture/section.ts': [1, 'developer'],
@@ -220,9 +229,13 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
     // The ratchet: what is shown to the person and not moved yet only comes down. It was 913 when
     // MSG-11 landed; main's MSG-5, COD-3, CNT-8, CNT-9, BRF-1, BRF-5, LVL-6, WRT-8 and VEW-3 brought
     // 190 more of the kinds MSG-11 left for later, LVL-8 8, HND-1 14, BRF-3 and WRT-4 63, LVL-9
-    // and CNT-17 65, COD-8 18, and HND-11 3, the refusals of a taped length in the plan's schema
-    // (reviews/MSG-11.md, "After merging main").
-    expect(left).toBeLessThanOrEqual(1274)
+    // and CNT-17 65, COD-8 18, HND-11 3, the refusals of a taped length in the plan's schema, and
+    // CNT-10, VEW-9, VEW-4 and WRT-7 55: the commands' new options, usage and refusals (describe 3,
+    // main 6, plan 5, tidy 1, write 2, the preview record's 4), the change takeoff (18), the edits'
+    // phase receipts (4), the areas' note after the work (2), the walked rule (1), diff by phase
+    // (3), a rooms text size refusal (1) and the preview page (5) (reviews/MSG-11.md, "After
+    // merging main").
+    expect(left).toBeLessThanOrEqual(1329)
   })
 
   it('keeps the moved parts at none: the result record, the checks, the report, the drawings and the sheet', () => {
@@ -247,7 +260,9 @@ describe("Grid's own sentences come from the message files (MSG-11)", () => {
       // After merging main at 90a933b1: HND-11's taped lengths, their table and a GLB's origin note.
       'packages/floorplan/src/geometry/taped.ts',
       'packages/cli/src/taped/table.ts',
-      'packages/floorplan/src/geometry/export/gltf.ts'
+      'packages/floorplan/src/geometry/export/gltf.ts',
+      // After merging main at fbe5160e: CNT-10's phases, a part that stands when its wall does not.
+      'packages/floorplan/src/geometry/phases.ts'
     ]) {
       expect(counts.get(file), file).toBe(0)
     }

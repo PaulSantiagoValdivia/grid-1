@@ -13,7 +13,7 @@ import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { estimateTextWidth } from '../canvas2d/labelPlacement'
 import type { PictureKey } from './faults'
 import { wrapText } from './faults'
-import type { PlanLook } from './look'
+import type { PhaseLook, PlanLook } from './look'
 import { LINE_PX, TEXT_PX, USE_FILLS, lengthText } from './look'
 import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
@@ -125,14 +125,23 @@ export function keyEntries(
     readonly marks: boolean
     readonly above?: boolean
     readonly painted?: readonly { readonly colour: string; readonly words: string }[]
+    readonly phases?: PhaseLook
   },
   words: DrawingWords = ENGLISH_WORDS
 ): KeyEntry[] {
   const say = (key: Parameters<typeof drawingText>[1], values?: Parameters<typeof drawingText>[2]): string => drawingText(words, key, values)
   const entries: KeyEntry[] = []
-  const solid = drawing.walls.filter((wall) => !wall.virtual)
+  const solid = drawing.walls.filter((wall) => !wall.virtual && wall.phase === undefined)
   if (solid.some((wall) => wall.exposure === 'exterior')) entries.push({ swatch: 'fill', color: look.wallExterior, words: say('drawing.key.outsideWall') })
   if (solid.some((wall) => wall.exposure !== 'exterior')) entries.push({ swatch: 'fill', color: look.wall, words: say('drawing.key.insideWall') })
+  // CNT-10: a plan with phases keys its walls by what the work does to them.
+  const phased = drawing.walls.filter((wall) => !wall.virtual && wall.phase !== undefined)
+  const phases = shown.phases
+  if (phases !== undefined && phased.length > 0) {
+    if (phased.some((wall) => wall.phase === 'existing')) entries.push({ swatch: 'fill', color: phases.existing ?? look.wall, words: say('drawing.key.existingWall') })
+    if (phased.some((wall) => wall.phase === 'new')) entries.push({ swatch: 'fill', color: phases.new ?? look.wall, words: say('drawing.key.newWall') })
+  }
+  if (phases !== undefined && [...drawing.walls, ...drawing.openings].some((part) => part.phase === 'demolished')) entries.push({ swatch: 'dash', color: phases.demolished, words: say('drawing.key.demolished') })
   if (drawing.walls.some((wall) => wall.virtual)) entries.push({ swatch: 'dash', color: look.virtual, words: say('drawing.key.virtual') })
   if (drawing.openings.some((o) => o.type === 'window')) entries.push({ swatch: 'fill', color: look.window, words: say('drawing.key.window') })
   if (shown.swings && drawing.openings.some((o) => o.type === 'door' && o.hinge !== undefined && o.swing !== undefined)) {

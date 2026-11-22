@@ -1,0 +1,37 @@
+{
+  "version": "1",
+  "units": "m",
+  "title": "Flat refurbishment, existing, demolished and new",
+  "walls": [
+    {"id":"ws","start":[0,0],"end":[10,0],"thickness":0.3,"height":2.7,"kind":"exterior","phase":"existing"},
+    {"id":"we","start":[10,0],"end":[10,6],"thickness":0.3,"height":2.7,"kind":"exterior","phase":"existing"},
+    {"id":"wn","start":[10,6],"end":[0,6],"thickness":0.3,"height":2.7,"kind":"exterior","phase":"existing"},
+    {"id":"ww","start":[0,6],"end":[0,0],"thickness":0.3,"height":2.7,"kind":"exterior","phase":"existing"},
+    {"id":"wx","start":[5,0],"end":[5,6],"thickness":0.1,"height":2.7,"kind":"interior","phase":"existing"},
+    {"id":"wb","start":[5,4],"end":[10,4],"thickness":0.1,"height":2.7,"kind":"interior","phase":"existing"},
+    {"id":"wk","start":[0,3],"end":[5,3],"thickness":0.1,"height":2.7,"kind":"interior","phase":"demolished"},
+    {"id":"wst","start":[7.5,0],"end":[7.5,4],"thickness":0.1,"height":2.7,"kind":"partition","phase":"new"}
+  ],
+  "rooms": [
+    {"id":"kitchen","name":"Kitchen","use":"kitchen","boundary":["ws","wx","wk","ww"],"phase":"demolished"},
+    {"id":"dining","name":"Dining room","use":"dining","boundary":["wk","wx","wn","ww"],"phase":"demolished"},
+    {"id":"kitchen-dining","name":"Kitchen and dining","use":"kitchen","boundary":["ws","wx","wn","ww"],"phase":"new"},
+    {"id":"living-old","name":"Living room","use":"living","boundary":["ws","we","wb","wx"],"phase":"demolished"},
+    {"id":"living","name":"Living room","use":"living","boundary":["ws","wst","wb","wx"],"phase":"new"},
+    {"id":"study","name":"Study","use":"study","boundary":["ws","we","wb","wst"],"phase":"new"},
+    {"id":"bath","name":"Bathroom","use":"bathroom","boundary":["wb","we","wn","wx"],"phase":"existing"}
+  ],
+  "openings": [
+    {"id":"d-front","wall":"ws","type":"door","offset":1,"width":1,"height":2.1,"hinge":"start","swing":"left","phase":"existing"},
+    {"id":"d-kitchen","wall":"wk","type":"door","offset":3.5,"width":0.8,"height":2.1},
+    {"id":"d-living","wall":"wx","type":"door","offset":1.5,"width":0.8,"height":2.1,"phase":"existing"},
+    {"id":"d-bath-old","wall":"wb","type":"door","offset":1,"width":0.7,"height":2.1,"phase":"demolished"},
+    {"id":"d-bath","wall":"wb","type":"door","offset":0.9,"width":0.9,"height":2.1,"phase":"new"},
+    {"id":"d-study","wall":"wst","type":"door","offset":3,"width":0.8,"height":2.1},
+    {"id":"win-dining","wall":"wn","type":"window","offset":7,"width":1.5,"sill":0.9,"height":1.2,"phase":"existing"},
+    {"id":"win-bath","wall":"wn","type":"window","offset":2,"width":0.8,"sill":1.2,"height":0.8,"phase":"existing"},
+    {"id":"win-east","wall":"we","type":"window","offset":1.5,"width":1.2,"sill":0.9,"height":1.2,"phase":"existing"},
+    {"id":"win-south-old","wall":"ws","type":"window","offset":8,"width":1.2,"sill":0.9,"height":1.2,"phase":"demolished"},
+    {"id":"win-living","wall":"ws","type":"window","offset":5.8,"width":1.2,"sill":0.9,"height":1.2,"phase":"new"}
+  ]
+}

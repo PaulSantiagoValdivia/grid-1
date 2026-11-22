@@ -40,7 +40,9 @@ command or a tool call may ask for one (`--lang es` on `grid check`, `describe`,
 `sheet`; `language: "es"` on `grid_check`, `grid_describe`, `grid_view` and `grid_sheet`), which
 wins. Spanish is loaded only when it is asked for (`loadLanguage`). English is the
 default. A language with a decimal comma (Spanish) writes one unless the display's `decimal`
-says otherwise. Lengths stay as the display states them; the check's figures stay in metres.
+says otherwise. Lengths stay as the display states them, on the sheet too (in Spanish, a sheet in
+feet and inches reads `8'-6" de alto` and its square metres `62,4 m²`); the check's figures stay in
+metres.
 
 ## Adding or changing a sentence
 
@@ -137,6 +139,11 @@ Draft, not reviewed.
 | route | recorrido |
 | the brief | el programa de necesidades |
 | a named person | una persona con nombre |
+| the work (a refurbishment) | la obra |
+| existing, to be demolished, new | existente, a demoler, nuevo; as a phase: existente, de demolición, de obra nueva |
+| fit-out (on a base plan) | acondicionamiento |
+| the walk-through | el recorrido |
+| square feet | pies² |
 
 ## Later steps
 

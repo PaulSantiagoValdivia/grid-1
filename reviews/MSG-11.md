@@ -773,3 +773,93 @@ ratchet moves from 1271 to 1274, by the three schema refusals.
     "Hall", …"), capital and all.
 32. **A GLB's `gridOrigin.note` is a key now** (`drawing.glb.origin`), said in English as every
     export's own words are; the Spanish draft of it is there for when exports take a language.
+
+## After merging main at fbe5160e
+
+Main brought CNT-10 (existing, demolished and new parts, and a fit-out on a fixed shell: the
+`phase` of a wall, opening and room and a plan's `base`, three new codes, the drawing's phase key,
+`grid diff --since phase`, `grid_takeoff for=change`), VEW-9 (a route's walked length and `grid
+describe --length walk`, with `--floor` and `--pictures`), VEW-4 (the preview the person and the
+agent both point at: `grid_preview_sync`, the 31st tool, and `grid preview`) and WRT-7's sheet in
+the person's own units. Fifteen files conflicted: `CHANGELOG.md`, `docs/plan-file.md`,
+`docs/result-contract.md`, cli `command/__tests__/describe.e2e.test.ts`, `command/check.ts`,
+`command/describe.ts`, `command/main.ts`, `describe/card.ts`, `mcp/readTools.ts`,
+`sheet/pages.ts`, rules `result/__tests__/result.test.ts`, `result/catalogue.ts`,
+`result/inspect.ts`, viewer `picture/planSvg.ts` and `picture/writing.ts`. Main's English output
+is kept word for word, and main's tests pass unchanged.
+
+### How the conflicts were resolved
+
+- **The sheet** (`sheet/pages.ts`): WRT-7's `sheetUnits` now takes the sheet's words and writes
+  every figure on the sheet: the cover's and the summary's figures, the area tables and their
+  totals, the room and opening schedules. In English it gives exactly WRT-7's strings. In another
+  language it adds the language's decimal mark to the figures only (never to a name), unless the
+  display states its own `decimal` (`mark`, by `decimalFor`). Square feet are said in the language
+  (`sheet.unit.sqft`: `sq ft`, `pies²`). The headings take the unit (`sheet.rooms`, `sheet.roomSchedule.heading`:
+  `Rooms / {unit}`), a height and a sill take the whole length with its unit (`sheet.high`
+  `{height} high`, `sheet.sill` `sill {sill}`), and the total beside square feet gives square metres
+  (`sheet.total.rooms.metric`). MSG-11's `Words.n` is gone: every figure goes through the units.
+- **The record** (`result/catalogue.ts`, `inspect.ts`): MSG-11's files, with CNT-10's parts.
+  `opening/phase-wall`, `room/phase-wall` and `plan/read-after-work` are catalogue entries of
+  logic only; `plan/read-after-work` gives its counts and base as `values` (`existing`,
+  `demolished`, `new`, `base`). The `phases` stage is in `Stage` (`line.part.stage.phases`). Main's
+  `whole` plan (patterns expanded, base merged) is used where main uses it, with MSG-11's `noun`
+  and `valueWord` for a mark.
+- **The phase clashes** (floorplan `geometry/phases.ts`): `PhaseClash` carries `said`
+  (`issue.opening/phase-wall`, `issue.room/phase-wall`, with `issue.part.phase.*` and
+  `issue.part.states.*`), and `message` is its English. `PHASE_WORDS` now holds keys;
+  `STATE_WORDS`, which nothing read, is gone. `validatePhases` passes the sentence to `issue`.
+- **The drawing's key** (viewer `picture/writing.ts`, `planSvg.ts`): MSG-11's `words` and main's
+  `phases`; `Existing wall`, `New wall` and `To be demolished` are `drawing.key.existingWall`,
+  `.newWall` and `.demolished`.
+- **The description** (`describe/card.ts`, `command/describe.ts`, `command/main.ts`,
+  `mcp/readTools.ts`): CNT-10's sentence on the work is `describe.work` and `describe.work.base`,
+  its counts `describe.count.wall|opening|room`; the agent's `WORK` clause stays as main wrote it.
+  VEW-9's walk takes the language: `walkText` and `describeWalk` take MSG-11's words, the
+  person's form is `describe.walk.*` (49 keys; the facing letters are `describe.c.*`), and
+  `grid_describe length=walk` names its pictures in the language (`describe.walk.pictureName`,
+  `picture 1`, `imagen 1`). The agent's form of the walk stays as it is. `--floor`, `--pictures`
+  and `--lang` are all in the usage line, and `floor`, `pictures` and `language` in the tool's
+  arguments; `grid describe --length walk --lang es` and `grid_describe length=walk language=es`
+  walk in Spanish.
+- **`grid check`** (`command/check.ts`): MSG-11's language and label with main's base.
+- **Tests and docs**: `result.test.ts` keeps MSG-11's `values` with main's `phase` in a wall's
+  fields; `describe.e2e` takes the usage line with both sides' options. `CHANGELOG.md` keeps every
+  Unreleased line; `docs/plan-file.md` keeps both sides' sentences on what follows the display;
+  the contract keeps MSG-11's section first of the day, with a new paragraph on CNT-10, VEW-9 and
+  WRT-7, then main's four sections and their code-table rows. `docs/languages.md` and
+  `docs/commands.md` say that the walk and the sheet's units follow the language; the Spanish
+  terms table adds the work, the phases, a fit-out, the walk-through and square feet.
+
+New keys (76), in `en.ts` with main's English and in `es.ts` as a draft: `issue.opening/phase-wall`,
+`issue.room/phase-wall`, `issue.part.phase.*` (3), `issue.part.states.*` (3),
+`line.part.stage.phases`, `line.part.work`, `line.part.work.base`, `line.plan/read-after-work.*`
+(3), `line.opening/phase-wall.*` (3), `line.room/phase-wall.*` (3), `drawing.key.existingWall`,
+`.newWall`, `.demolished`, `describe.count.opening.*` (2), `describe.work`, `describe.work.base`,
+`describe.walk.*` (49), `sheet.unit.sqft`, `sheet.total.rooms.metric`. Changed: `sheet.rooms`,
+`sheet.roomSchedule.heading` (take `{unit}`), `sheet.high`, `sheet.sill` (take the length with its
+unit), and the Spanish `sheet.total.rooms` (`pies²`).
+
+Tests added: sheet `language.test.ts`, "a sheet in Spanish in the person's own units (MSG-11,
+WRT-7)": feet and inches (`pies²`, `8'-6" de alto`, `antepecho 35"`, square metres beside them with
+a decimal comma), millimetres (`… mm de alto`, `62,4 m²`, no decimal point in any figure), and a
+display's own decimal mark kept; describe `language.test.ts`, the walk in Spanish and a
+refurbishment's work in Spanish and in main's English; rules `language.test.ts`, the three CNT-10
+codes in main's English and in Spanish, with the same codes, things, `also` and values.
+
+### The ownWords guard
+
+`floorplan/src/geometry/phases.ts` is at none and joins the list held at none. `describe/walk.ts`
+is listed with 4 (`agentForm`: its agent KEY lines and the `a room left out` token, as
+`card.ts`'s), and `card.ts` 12 → 13 (the agent's `WORK` clause). Not counted by the ratchet:
+`mcp/previewTools.ts` 39, `mcp/serveTools.ts` 1, `mcp/readTools.ts` 285 → 294, `mcp/writeTools.ts`
+99 → 90 (`tools`); `mcp/protocol.ts` 16 → 23, `preview/localServer.ts` 6 (`agent`);
+`distribution/listing.ts` 82 → 84, `sheet/coverage.ts` 22 → 23 (`developer`). The ratchet moves
+from 1274 to 1329, by 55 of the kinds MSG-11 left for later: the commands' new options, usage and
+refusals (`command/describe.ts` 6 → 9, `main.ts` 52 → 58, `plan.ts` 24 → 29, `tidy.ts` 11 → 12,
+`write.ts` 26 → 28, `preview/record.ts` 4), `quantities/change.ts` 18 (the change takeoff),
+`edit/phases.ts` 4 (the edits' receipts in a plan with phases), `quantities/areas.ts` 6 → 8 (the
+note that areas are after the work), `quantities/walked.ts` 1 (the walked rule),
+`versions/diff.ts` 8 → 10 and `markers.ts` 18 → 19 (diff by phase), `rooms/compile.ts` 115 → 116
+(a size that looks like millimetres or feet) and `viewer/src/page/previewPage.ts` 5 (the preview
+page).

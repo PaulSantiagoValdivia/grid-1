@@ -14,7 +14,7 @@
  */
 
 import { areaText, figureText, fixedText, metresText, planCheckSaids, tapedFiguresSaid, tapedWhatSaid, tolerance, type PlanFix, type TapedRow } from '@ongrid/floorplan/geometry'
-import { en, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type Said, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
+import { en, isSaid, joined, labelOfUse, name, num, say, sayValue, said, valuesData, type Language, type MessageKey, type Said, type SayOptions, type Value, type Values } from '@ongrid/floorplan/messages'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { RULE_READ_FOR } from '../checks/catalogue'
 import { buildingKindsSaid, buildingTypeSaid, findingReadFor, type BuildingKind } from '../checks/figures'
@@ -383,6 +383,7 @@ export const CODES = {
   },
   'opening/negative-sill': {},
   'opening/overlap': {},
+  'opening/phase-wall': {},
   'opening/size-question': {},
   'opening/swing-without-hinge': {},
   'opening/hinge-without-swing': {},
@@ -405,6 +406,7 @@ export const CODES = {
   'room/unknown-floor': {},
   'room/cross-floor': {},
   'room/broken-wall': {},
+  'room/phase-wall': {},
   'room/empty': {},
   'room/unclosed': {},
   'room/out-of-order': {},
@@ -640,6 +642,10 @@ export const CODES = {
   // MSG-2: what a check skipped, said where it used to pass in silence.
   'floor/not-checked-above-escape-storeys': {
     values: (s): Values => ({ wording: figureSaids.aboveEscapeStoreys(s.floorName, s.names.length), rooms: joined(s.names.map(name), 'join.comma') })
+  },
+  // CNT-10: a plan with phases is checked as it will be after the work; its counts (and base) as data.
+  'plan/read-after-work': {
+    values: (s): Values => (isSaid(s.said) ? { ...(s.said.values ?? {}) } : {})
   },
   // WRT-6 (lab WR-15): what the plan marks assumed, listed for the person to confirm.
   'plan/value-assumed': {

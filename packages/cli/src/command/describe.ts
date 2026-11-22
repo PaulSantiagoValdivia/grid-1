@@ -6,6 +6,10 @@
  * `--as rooms` (WRT-2) reads the plan back as rooms text instead: the way an agent writes a
  * plan, to change and write again with `grid write`, losing nothing.
  *
+ * `--length walk` (VEW-9) is the long form: the plan walked room by room, standing in each
+ * doorway (`describe/walk.ts`), one floor with `--floor`, and with `--pictures <folder>` a
+ * picture at eye height from each doorway, written there.
+ *
  * `--lang` (MSG-11) writes the person's form in a language, with its decimal mark unless the
  * plan's display states one. Names from the plan stay as written. The agent's form is a format
  * of codes and ids that stays as it is; only its label is in the language.
@@ -21,13 +25,23 @@ import { facingDescription } from '../quantities/facing'
 import { fixtureCountText, planFixtures, type Fixtures } from '../quantities/fixtures'
 import { siteDescription } from '../quantities/site'
 import { askedLanguage, LANG_OPTION } from './language'
+import { planWalk, walkText, type PlanWalk, type WalkStop } from '../describe/walk'
+import { surveyPlan, type Survey } from '../quantities/survey'
 import type { LoadedPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
 export const DESCRIBE_OPTIONS: OptionSpecs = {
   '--length': {
     takesValue: true,
-    help: 'line (one line), rooms (each room, its openings and neighbours) or walls (the rooms, then every wall and its openings). rooms when left out.',
+    help: 'line (one line), rooms (each room, its openings and neighbours), walls (the rooms, then every wall and its openings) or walk (the plan walked room by room from its way in: in each doorway, what is ahead, left, right and in the wall you stand in). rooms when left out.',
+  },
+  '--floor': {
+    takesValue: true,
+    help: 'With --length walk: walk only this floor (a floor id from the plan). Every floor when left out, a floor laid out like an earlier one said once.',
+  },
+  '--pictures': {
+    takesValue: true,
+    help: 'With --length walk: a folder to write a picture into from each doorway, at eye height, looking ahead: walk-01.png, walk-02.png and on. The folder must be there.',
   },
   '--for': {
     takesValue: true,
@@ -45,6 +59,8 @@ export interface DescribeRequest {
   readonly length?: string | undefined
   readonly for?: string | undefined
   readonly as?: string | undefined
+  readonly floor?: string | undefined
+  readonly pictures?: string | undefined
   /** `--lang`: the language asked for, resolved with the plan's by `languageFor` once it is read. */
   readonly lang?: string | undefined
 }
@@ -67,8 +83,12 @@ export function checkDescribeRequest(request: DescribeRequest): { length: Descri
   if (request.as !== undefined && (request.length !== undefined || request.for !== undefined)) {
     throw new UsageError(`--as ${as} reads the plan back as rooms text, which has no ${request.length !== undefined ? '--length' : '--for'}: leave it out.`)
   }
+  const length = oneOf('--length', request.length, DESCRIBE_LENGTHS, 'rooms')
+  for (const [option, value] of [['--floor', request.floor], ['--pictures', request.pictures]] as const) {
+    if (value !== undefined && length !== 'walk') throw new UsageError(`${option} goes with --length walk only: ${request.as !== undefined ? '--as rooms reads back the whole plan' : `--length ${length} describes every floor and draws nothing`}.`)
+  }
   return {
-    length: oneOf('--length', request.length, DESCRIBE_LENGTHS, 'rooms'),
+    length,
     audience: oneOf('--for', request.for, DESCRIBE_AUDIENCES, 'person'),
     as: request.as === undefined ? 'words' : as,
     language: askedLanguage(request.lang),
@@ -93,7 +113,23 @@ export function describeRooms(loaded: LoadedPlan, options: DescribeOptions = {})
 export function describePlan(loaded: LoadedPlan, length: DescribeLength, audience: DescribeAudience, options: DescribeOptions = {}): string {
   const w: Words = { language: options.language ?? DEFAULT_LANGUAGE, options: { decimal: loaded.plan.display?.decimal } }
   // MSG-3: the label is the first line of every description, the one-line one too.
+  if (length === 'walk') {
+    const { survey, walk } = walkOf(loaded)
+    return describeWalk(survey, walk, audience, new Map(), options)
+  }
   return `${say(w.language, 'label')}\n${describeBody(loaded, length, audience, w)}`
+}
+
+/** VEW-9: the plan surveyed and walked, every floor or the one given (an id already checked). */
+export function walkOf(loaded: LoadedPlan, floor?: string): { survey: Survey; walk: PlanWalk } {
+  const survey = surveyPlan(loaded.plan)
+  return { survey, walk: planWalk(survey, floor) }
+}
+
+/** VEW-9: the walk in words, after the label, naming each stop's picture when it has one; in the language of `options` (MSG-11). */
+export function describeWalk(survey: Survey, walk: PlanWalk, audience: DescribeAudience, pictures: ReadonlyMap<WalkStop, string> = new Map(), options: DescribeOptions = {}): string {
+  const w: Words = { language: options.language ?? DEFAULT_LANGUAGE, options: { decimal: survey.plan.display?.decimal } }
+  return `${say(w.language, 'label')}\n${walkText(survey, walk, audience, pictures, w)}`
 }
 
 /** The fixtures counted, in the person's words: `1 toilet, 2 basins`. */

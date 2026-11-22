@@ -6,7 +6,9 @@
  *   opening in it with the room on its other side and its distance to the two inside
  *   corners of that side of the room.
  * - `walls`: the rooms, then every wall with its openings, each with the rooms on its two
- *   sides. The agent's form leaves openings and neighbours out of its room lines, to stay
+ *   sides.
+ * - `walk` (VEW-9): the plan walked room by room from its way in, standing in each doorway;
+ *   `walk.ts` works it out and words it, and `describePlan` sends it there. The agent's form leaves openings and neighbours out of its room lines, to stay
  *   short: every opening under its wall names the rooms it joins.
  *
  * The person's form names rooms and floors by their names and never prints an id: ids are
@@ -21,11 +23,11 @@
  * your local rules" first, as every report of Grid's does (MSG-3). No line says a plan
  * complies.
  */
-import { decimalFor, DEFAULT_LANGUAGE, joined, num, say, sayValue, labelOfUse, type Language, type MessageKey, type SayOptions, type Values } from '@ongrid/floorplan/messages'
+import { decimalFor, DEFAULT_LANGUAGE, joined, name, num, say, sayValue, labelOfUse, type Language, type MessageKey, type SayOptions, type Values } from '@ongrid/floorplan/messages'
 import type { RoomUse } from '@ongrid/floorplan/types/floorplan'
 import type { Beyond, CornerGap, FloorFacts, HeightException, OpeningFacts, OpeningSide, PlanFacts, RoomFacts } from './facts'
 
-export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls'] as const
+export const DESCRIBE_LENGTHS = ['line', 'rooms', 'walls', 'walk'] as const
 export type DescribeLength = (typeof DESCRIBE_LENGTHS)[number]
 
 export const DESCRIBE_AUDIENCES = ['person', 'agent'] as const
@@ -107,7 +109,7 @@ function capped(w: Words, items: readonly string[], most: number): string[] {
 const isSide = (side: OpeningSide | Beyond): side is OpeningSide => typeof side !== 'string'
 
 /** Names for a person: a room by its name, numbered when two on a floor share it. */
-class PersonNames {
+export class PersonNames {
   private readonly rooms = new Map<string, string>()
   private readonly floors = new Map<string, string>()
 
@@ -203,7 +205,25 @@ function personLine(facts: PlanFacts, names: PersonNames, w: Words): string {
     ? t(w, 'describe.entered.none')
     : t(w, 'describe.entered', { ways: waysText(ways, w), rooms: listed(w, capped(w, into, 5)) })
   const line = t(w, 'describe.line', { floors: floorText, rooms: countOf(w, 'describe.count.room', facts.rooms.size), uses: usesText(facts, w), area: area(w, totalArea(facts)), entered })
-  return `${line}${personBuilding(facts, names, w)}`
+  return `${line}${personBuilding(facts, names, w)}${personWork(facts, w)}`
+}
+
+/** CNT-10: what the plan's work holds, as a sentence; every other figure is after the work. */
+function personWork(facts: PlanFacts, w: Words): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string =>
+    [countOf(w, 'describe.count.wall', n.walls), countOf(w, 'describe.count.opening', n.openings), countOf(w, 'describe.count.room', n.rooms)].join(t(w, 'join.comma'))
+  const shell = base === null ? '' : ` ${t(w, 'describe.work.base', { base: name(base) })}`
+  return ` ${t(w, 'describe.work', { demolished: parts(counts.demolished), new: parts(counts.new) })}${shell}`
+}
+
+/** CNT-10: the same for an agent, as `WORK demolished 1 wall, …; new …; figures after the work`. */
+function agentWork(facts: PlanFacts): string {
+  if (facts.work === null) return ''
+  const { counts, base } = facts.work
+  const parts = (n: { walls: number; openings: number; rooms: number }): string => `${n.walls} walls ${n.openings} openings ${n.rooms} rooms`
+  return ` WORK existing ${parts(counts.existing)}; demolished ${parts(counts.demolished)}; new ${parts(counts.new)}; figures after the work${base === null ? '' : `; BASE ${JSON.stringify(base)} read-only`}.`
 }
 
 /** CNT-5: what kind of building the plan says it is, and each floor that says otherwise, as a sentence. */
@@ -225,7 +245,7 @@ function agentBuilding(facts: PlanFacts): string {
 function agentLine(facts: PlanFacts): string {
   const ways = waysIn(facts)
   const into = ways.length === 0 ? 'no way in from outside' : `from outside into ${capped(ENGLISH, [...new Set(ways.map((way) => way.room))], 8).join(', ')}`
-  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts, ENGLISH)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}`
+  return `PLAN ${plural(facts.floors.length, 'floor')}, ${plural(facts.rooms.size, 'room')}${usesText(facts, ENGLISH)}, ${m(totalArea(facts))} m2 inside, ${plural(facts.wallCount, 'wall')}, ${plural(facts.openingCount, 'opening')}; ${into}.${agentBuilding(facts)}${agentWork(facts)}`
 }
 
 /** What the plan cannot say, which a reader may expect, for a person and for an agent. */

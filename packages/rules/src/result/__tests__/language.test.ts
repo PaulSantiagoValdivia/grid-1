@@ -230,3 +230,46 @@ describe('the lengths taped on site, in Spanish (HND-11, after merging main at 9
     expect(differs(english).values).toMatchObject({ name: 'Hall', taped: 3.7, drawn: 3.8, off: 0.1, within: 0.01 })
   })
 })
+
+describe('existing, demolished and new, in Spanish (CNT-10, after merging main at fbe5160e)', () => {
+  const plan = {
+    version: '1',
+    units: 'm',
+    walls: [
+      { id: 's', start: [0, 0], end: [4, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'e', start: [4, 0], end: [4, 3], thickness: 0.2, height: 2.6, kind: 'exterior' },
+      { id: 'n', start: [4, 3], end: [0, 3], thickness: 0.2, height: 2.6, kind: 'exterior', phase: 'demolished' },
+      { id: 'w', start: [0, 3], end: [0, 0], thickness: 0.2, height: 2.6, kind: 'exterior' },
+    ],
+    rooms: [{ id: 'hall', name: 'Hall', use: 'corridor', boundary: ['s', 'e', 'n', 'w'] }],
+    openings: [
+      { id: 'd1', wall: 's', type: 'door', offset: 1, width: 0.9, height: 2.1, sill: 0 },
+      { id: 'd2', wall: 'n', type: 'door', offset: 1, width: 0.9, height: 2.1, sill: 0, phase: 'new' },
+    ],
+  }
+
+  it('says the work and a part that stands when its wall does not, in Spanish, with the same codes, things and values', () => {
+    const english = inspectPlan(plan)
+    const spanish = inspectPlan(plan, { language: 'es' })
+    const pick = (code: string) => (r: GridResult) => r.lines.find((l) => l.code === code)!
+    const work = pick('plan/read-after-work')
+    const opening = pick('opening/phase-wall')
+    const room = pick('room/phase-wall')
+    // Main's English, word for word.
+    expect(work(english).message).toBe('The plan holds work: 5 existing, 1 to be demolished, 1 new walls, openings and rooms. Its sizes, areas and checks are for the building as it will be after the work')
+    expect(opening(english).message).toBe('Door "d2" stands when its wall does not, so it is left out')
+    expect(opening(english).found).toBe('Opening "d2" is new, so it stands only after the work, but its wall "n" is to be demolished and stands only before the work')
+    expect(room(english).found).toBe('Room "hall" is existing, so it stands before and after the work, but its wall "n" is to be demolished and stands only before the work')
+    expect(work(spanish).message).toBe('El plano contiene obra: existentes 5, a demoler 1 y nuevos 1, contando muros, huecos y estancias. Sus medidas, superficies y comprobaciones son del edificio tal como quedará después de la obra')
+    expect(opening(spanish).found).toBe('El hueco "d2" es de la fase de obra nueva, así que existe solo después de la obra, pero su muro "n" es de la fase de demolición y existe solo antes de la obra')
+    expect(work(english).values).toMatchObject({ existing: 5, demolished: 1, new: 1 })
+    for (const which of [work, opening, room]) {
+      const [en, es] = [which(english), which(spanish)]
+      expect([es.code, es.kind, es.thing, es.also, es.values]).toEqual([en.code, en.kind, en.thing, en.also, en.values])
+      for (const text of [es.message, es.found, es.needed, es.fix]) {
+        expect(approvalWords(text)).toEqual([])
+        expect(text).not.toMatch(/\{[A-Za-z]/)
+      }
+    }
+  })
+})

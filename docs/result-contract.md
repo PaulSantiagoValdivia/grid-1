@@ -245,6 +245,7 @@ display chooses a point. Names from the plan are never translated.
 | `opening/above-roof` | {thing} reaches above the roof over its wall | its sill and height together no higher than the roof over that stretch of its wall |
 | `opening/negative-sill` | {thing} has its sill below the floor | a sill at 0 or above |
 | `opening/overlap` | {thing} overlaps another opening on its wall | openings on one wall that share no part of it |
+| `opening/phase-wall` | {thing} stands when its wall does not, so it is left out | an opening that stands only while its wall does: a new opening in an existing or new wall, an existing or demolished one in an existing wall |
 | `opening/size-question` | {thing} has a size that may not be meant | the size of a door or window in a building |
 | `opening/swing-without-hinge` | {thing} says which way it opens but not which side it hangs on | both its hinge ("start" or "end") and its swing ("left" or "right") |
 | `opening/hinge-without-swing` | {thing} says which side it hangs on but not which way it opens | both its hinge ("start" or "end") and its swing ("left" or "right") |
@@ -258,6 +259,7 @@ display chooses a point. Names from the plan are never translated.
 | `room/unknown-floor` | {thing} is on a floor the plan does not list | a floor from the plan's floors |
 | `room/cross-floor` | {thing} rests on a wall of another floor | every wall it lists on its own floor |
 | `room/broken-wall` | {thing} rests on a wall that cannot be drawn | walls that can be drawn |
+| `room/phase-wall` | {thing} stands when one of its walls does not, so it is left out | a room whose walls stand whenever it does: an existing room round existing walls, a new room round existing or new walls, a demolished room round existing or demolished walls |
 | `room/empty` | {thing} encloses no floor | walls that enclose some floor |
 | `room/unclosed` | {thing} cannot be closed from the walls it lists | at least three walls in the plan, each meeting the next, round the room |
 | `room/out-of-order` | {thing} lists its walls out of order | its walls in order round the room, each meeting the next |
@@ -342,6 +344,7 @@ display chooses a point. Names from the plan are never translated.
 | `floor/not-checked-above-escape-storeys` | On "{floor}", escape openings were not checked in bedrooms: the figures here cover bedrooms up to the third storey: {count} | figures for escape from bedrooms above the third storey, which these checks do not carry |
 | `plan/not-checked-access` | What the plan marks as needing to be accessible ({count} rooms and {count} routes) was not checked: Grid holds no figure for it that a named person has confirmed | figures for the widths of doors and corridors, turning space and steps that a named person has confirmed against their source, or the person's own figures in the brief beside the plan |
 | `plan/not-checked-no-rooms` | No check that looks at rooms ran: the plan has no rooms | the rooms drawn on the walls, each with the walls round it and its use |
+| `plan/read-after-work` | The plan holds work: {existing, demolished and new counts}. Its sizes, areas and checks are for the building as it will be after the work | nothing: the parts to be demolished are drawn dashed and checked as they stand before the work, and grid diff --since phase lists what the work does |
 | `plan/value-assumed` | The {value} of {thing} was assumed, not given or measured (or {thing} was assumed, for a whole part) | the person's word on it: this value confirmed, or the right one |
 | `plan/mark-no-part` | A mark names {thing}, which the plan does not have, so the mark is not read | a mark on a part the plan has, by its id |
 | `room/taped-differs` | {The side along wall "w1"} taped in {thing} is not the length drawn | the drawing within {0.010 m} of the length taped |
@@ -652,7 +655,7 @@ its text, which says the same.
 |---|---|
 | `grid_export` | `written` (the file, inside the project), `format`, `leftOut` (how many parts of the plan the file leaves out), `leftOutParts` (each of them: `kind` `wall`, `room`, `opening`, `item` or `floor`; `id`, null when the reader could not read one; `place` in the plan file, `openings[4]`, for a part left out when the plan was read, else null; `floor`, null when not known; `code`, the line that leaves it out, as `grid_check` gives it, or null), `note`, `dxfProfile` (HND-1: for a DXF, the project's profile file its layers and pens came from, `dxf-layers.json`; null for Grid's own layers and for the other formats). An export that would hold no wall, room or fixture is refused, and so is a DXF whose project profile is wrong. |
 | `grid_sheet` | `written`, `layout`, `pages` (kind, title, floor), `leftOut`, `note`. |
-| `grid_preview` | `floor`, `view`, `room`, `note`. It writes nothing. |
+| `grid_preview` | `floor`, `view`, `room` (the room framed), `note`, `highlight`, `selected`, `camera`, `revision`, `planFile`, `previewFile` (the record beside the plan, inside the project) and `shown` (false when it only read the selection and wrote nothing). It never writes the plan ([The preview, shared with the person](tool-server.md#the-preview-shared-with-the-person)). |
 | `grid_mark_seen` | `written` (the marks file, inside the project), `line` and `code` (the note marked), `unmarked` (true when a mark was taken off), `mark` (`reason`, `by`, `at` and `parts`, each `{ kind, id }`; null when `unmark` found none). It never writes the plan. |
 | `grid_write_brief` | `written` (the brief file, inside the project; null when `brief` was left out and nothing was written), `file` (the brief file), `planDrawn` (false before the plan is written), `problem` (why the brief there can't be read, or null) and `lines`, each line of the brief as below. It never writes the plan. |
 | `grid_change_opening`, `grid_move_room_side`, `grid_mirror`, `grid_merge_rooms`, `grid_split_room`, `grid_add_room`, `grid_stretch`, `grid_rename_room`, `grid_square_scan` | `written` (the plan's path in the project, never the full path), `changed` (each change in words), `verdict` (the plan before and after), `drawingProblems` and `toLookAt` (the record's `count`), each `before` and `after`, `doors` (each door that now joins other rooms), `guessed` (what the request left open and Grid chose), `couldNotKeep` (what the change could not keep as it was), `brief` (`file`, `problem`, `lines`: the brief beside the plan against the plan as changed) and `taped` (each length taped on site against the plan as changed, as in "Taped against drawn"; empty when it keeps none, HND-11). `grid_rename_room` adds `checks`: the ids of the figure rules that now look at the room (`now`) and no longer do (`noLonger`). `grid_square_scan` adds `moves` (each wall it moved: `wall`, `turned` in degrees, anticlockwise positive, and `moved`, how far its farther end moved, in metres) and `leftAsTheyAre` (the walls too far off square to turn). `grid_write_rooms` adds `brief` and `taped` too, and `reminder`: one line on a first plan with no brief beside it, else null. |
@@ -722,6 +725,87 @@ A change that would add a problem that leaves a part out is refused, and nothing
   dibujo`). Their lines' `values` hold `taped`, `drawn`, `off` and `within`, in metres; the
   record's `taped` rows are data and the same in every language. The table in every change's
   answer stays English, as the rest of that answer.
+- CNT-10's `plan/read-after-work`, `opening/phase-wall` and `room/phase-wall` are said in every
+  language too, and so are the drawing key's phases (`Muro existente`, `Muro nuevo`, `A demoler`)
+  and `grid_describe`'s sentence on the work. `plan/read-after-work`'s `values` hold `existing`,
+  `demolished` and `new` (counts of walls, openings and rooms together) and `base`. VEW-9's walk
+  (`grid_describe length=walk`, for a person) takes the language, its pictures named in it
+  (`imagen 1`); the agent's form of the walk stays as it is. WRT-7's sheet in the person's units
+  takes the language too: Spanish words, the display's units, and the language's decimal mark
+  unless the display states one. `grid_measure what=route`, `grid_takeoff for=change` and the
+  preview answer in English, as the other measures and tools do.
+### 2026-11-22: the preview, shared with the person (VEW-4)
+
+- `grid_preview` writes the preview record beside the plan (`<plan>.preview.json`), so its hint
+  is now write-file (`readOnlyHint` false, `destructiveHint` false). It takes `highlight` (ids,
+  an empty list for none) and `camera` (a record `grid_view` returned), and `room` now frames the
+  room. Its answer carries the picture the preview shows, as `grid_view` draws it, and its data
+  gains `highlight`, `selected`, `camera`, `revision`, `planFile`, `previewFile` and `shown`;
+  `view` is now the view shown (`2d` when none was set) where it was null when left out. With no
+  argument but `plan` it no longer refuses: it reads what the person selected and writes nothing.
+- A new tool after it, `grid_preview_sync`, the preview page's own call, which an MCP Apps host
+  lists for the page only (`_meta.ui.visibility: ["app"]`). 31 tools.
+- The server offers resources: `resources/list` and `resources/read` give the preview page,
+  `ui://grid/preview`, of type `text/html;profile=mcp-app`. `initialize` and `server/discover`
+  say `resources: {}` and `extensions: { "io.modelcontextprotocol/ui": { "mimeTypes": [...] } }`.
+  An unknown resource is refused with -32002, without repeating its address.
+- `@ongrid/floorplan/geometry` exports `pickInModel` and `pictureRay`: the part of the model a
+  point on a 3D picture shows, through its camera record.
+
+### 2026-11-22: a route's length, and the walk-through (VEW-9)
+
+- `grid_measure what=route`'s `answer` adds `length` (metres walked, null when a room on the way
+  has no outline) and `legs` (`room`, `length`: each room's share, in order; the holes through
+  the walls are the rest). The text adds "Walked, …: each room's share, and … through the walls."
+  and the rule it is walked by. With `width`, `way` and `shortest` each add `length`.
+- `grid_describe` takes `length=walk`, `floor` (with `walk` only; an unknown floor is refused
+  naming the plan's floors, whatever the length) and `pictures` (with `walk` only). Its data adds
+  `pictures`: `picture`, `room`, `floor`, `eyeHeight`, `heading`, one per picture, which come
+  after the text as image content, at most 12. Every other length answers as before.
+- An answer may now carry several pictures (`images`), after the one `image` some tools give.
+
+### 2026-11-22: existing, demolished and new, and a fit-out on a fixed shell (CNT-10)
+
+- A wall, an opening and a room may state `phase`: `existing`, `demolished` or `new`, and a plan
+  may name a `base` plan it is fitted out in ([phases](plan-file.md#existing-demolished-and-new)).
+  A plan with neither answers exactly as before.
+- In a plan with phases, every measuring tool (`grid_areas`, `grid_measure`, `grid_schedule`,
+  `grid_takeoff`, `grid_describe`, `grid_find`, `grid_count`, `grid_compare`) and every check
+  read the building as it will be after the work. `grid_areas` adds a first note saying so;
+  `grid_describe` adds a sentence (person) or a `WORK` clause (agent) with the counts by phase.
+- New codes: `plan/read-after-work` (`not-checked`, one line on a plan with phases, with the
+  counts and the base), `opening/phase-wall` and `room/phase-wall` (`left-out`: an opening or a
+  room that stands when its wall does not). The drawing check reads each state on its own, so a
+  widened door's old and new openings, or a wall rebuilt where one is demolished, are no
+  `opening/overlap` or `wall/duplicate`; a fault of a part to be demolished is reported as it
+  stands before the work. `resultVersion` stays 1.
+- `grid_diff` takes `since: "phase"`: the plan before its work against after it. `since` in its
+  data is `{ kind: "phase", name: null, at: null, commit: null }`.
+- `grid_takeoff` takes `for: "change"`: the work as three lists, each line with a new `list`
+  (`demolish`, `make good`, `new`) and keys a rates file prices (`demolish:wall:interior:0.1`,
+  `make_good:infill:exterior:0.3`, `new:door:0.9x2.1`). The answer's shape is `for=estimate`'s.
+- The tools that change a plan: in a plan with phases what they add is `new`, a door, window,
+  wall or room they take out of what stood before stays, `demolished`, and an opening they
+  change keeps its old self beside it as `<id>-before`, demolished; a wall or room that stood
+  before and is moved, cut or reshaped is changed in place and named in `couldNotKeep`. In a
+  fit-out, a change that touches a base wall or opening is refused, naming them, and nothing is
+  written.
+- `grid_view` and `grid_export`: walls and openings to be demolished are drawn dashed, new walls
+  filled, and the key lists the phases; the DXF puts each wall on `GRID-WALLS-EXISTING`,
+  `-NEW` or `-DEMOLISHED` and the openings to be demolished on `GRID-OPENINGS-DEMOLISHED`; the
+  IFC gives each element a `Grid_Phase` set.
+
+### 2026-11-22: the person's own units, from rooms text to the sheet (WRT-7)
+
+- Rooms text takes a length with its unit in one word (`360cm`, `12ft`, `12ft6in`, `12'6"`); a
+  plain number is still metres. A unit it cannot read is refused as `rooms/units`, with the
+  forms it takes.
+- A `display` line in rooms text (`display ft-in`, `display mm decimal comma`) writes the plan's
+  `display`, and `grid_describe as=rooms` writes it back. The plan file stays in metres.
+- `grid_sheet` writes its figures, area tables and schedules in the plan's `display`: square feet
+  with feet and inches, and a decimal comma when chosen. A plan with no `display` is unchanged.
+- The server's instructions ask the agent to settle the person's units with the brief and to ask
+  only when the person's words and place do not say. No field of the result record changes.
 
 ### 2026-11-22: a survey drawn from its own numbers (HND-11)
 

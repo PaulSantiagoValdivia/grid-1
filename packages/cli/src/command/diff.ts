@@ -16,7 +16,7 @@ import { loadPlan } from './plan'
 import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
 
 export const DIFF_OPTIONS: OptionSpecs = {
-  '--since': { takesValue: true, help: `What to compare with: a marker's name, or git for the version last committed in the project's .git. The marker ${DEFAULT_MARKER} when the plan has one, else git.` },
+  '--since': { takesValue: true, help: `What to compare with: a marker's name, git for the version last committed in the project's .git, or phase for the plan before its work (CNT-10). The marker ${DEFAULT_MARKER} when the plan has one, else git.` },
   '--rooms': { takesValue: true, help: 'The rooms meant to be edited, by id, separated by commas: every change outside them is named.' },
   '--show': { takesValue: true, help: `What to print: ${DIFF_SHOWS.join(', ')}. all when left out.` },
   '--picture': { takesValue: true, help: 'Write the comparison as a PNG to this file: removed in red, added in green, changed rooms in amber, the rest pale.' },

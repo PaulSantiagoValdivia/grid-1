@@ -8,7 +8,7 @@
 import { floorElevations, planFloors, type Bounds } from '@ongrid/floorplan/geometry'
 import { areaText, metresText, sumText } from '@ongrid/floorplan/geometry/rounding'
 import type { SheetWords } from '@ongrid/floorplan/types/sheet'
-import { DEFAULT_LANGUAGE, joined, name, num, say, sayValue, labelOfUse, type Language, type MessageKey, type Said, type Values } from '@ongrid/floorplan/messages'
+import { decimalFor, DEFAULT_LANGUAGE, joined, name, num, say, sayValue, labelOfUse, type Language, type MessageKey, type Said, type Values } from '@ongrid/floorplan/messages'
 import { ROOM_USES, type RoomUse } from '@ongrid/floorplan/types/floorplan'
 import { findingReadFor, readForSentence } from '@ongrid/rules'
 import { FRAME_MARGIN, fitTo } from '@ongrid/viewer/src/canvas2d/viewport'
@@ -22,7 +22,8 @@ import { planFacts } from '../describe/facts'
 import { AREA_RULES, planAreas, type FloorAreas } from '../quantities/areas'
 import { factsText, openingSchedule, roomSchedule, shownNumber } from '../quantities/schedule'
 import { surveyPlan } from '../quantities/survey'
-import { sqFt } from '../quantities/units'
+import { displayFor, sqFt } from '../quantities/units'
+import { showLength, type Display } from '@ongrid/floorplan/types/units'
 
 export type SheetLayout = 'client' | 'check'
 export const SHEET_LAYOUTS: readonly SheetLayout[] = ['client', 'check']
@@ -132,14 +133,13 @@ export interface SheetOptions {
 }
 
 /**
- * MSG-11: the sheet's words in one language. `say` a key; `n` a figure as Grid rounds it, with
- * the language's decimal mark. Names from the plan go in as they are: the sheet prints them
- * unquoted, as the person wrote them.
+ * MSG-11: the sheet's words in one language. `say` a key; its figures are written by
+ * `sheetUnits`, in the person's units with the language's decimal mark. Names from the plan go
+ * in as they are: the sheet prints them unquoted, as the person wrote them.
  */
 interface Words {
   readonly language: Language
   readonly say: (key: MessageKey, values?: Values) => string
-  readonly n: (figure: string) => string
   /** A sentence Grid made elsewhere: its English as given, else said from its key and values. */
   readonly said: (message: string, said: Said | undefined) => string
   /** A room use's own word in the language; a word that is not a use, as written. */
@@ -151,7 +151,6 @@ function wordsIn(language: Language): Words {
   return {
     language,
     say: (key, values) => say(language, key, values),
-    n: (figure) => sayValue(language, num(figure)),
     said: (message, said) => (english || said === undefined ? message : sayValue(language, said)),
     use: (use) => (english || !(ROOM_USES as readonly string[]).includes(use) ? use : labelOfUse(language, use as RoomUse)),
   }
@@ -212,48 +211,105 @@ function undecidedNote(loaded: LoadedPlan, floor: string, w: Words): string[] {
   return undecidedDoorsOf(loaded.plan, floor).length > 0 ? [w.say('sheet.undecided')] : []
 }
 
-function areaTable(floor: FloorAreas, withUse: boolean, w: Words): SheetTable {
+/**
+ * WRT-7: the sheet's figures in the person's units, the plan's `display`; metres and square
+ * metres, as before, when it has none. A table's rows still add up to its total in either.
+ *
+ * MSG-11: and in the sheet's language. English writes them exactly as WRT-7 does; another
+ * language writes its own decimal mark (a comma in Spanish) unless the display states one
+ * (`mark`), on the figures only, never on a name. A unit's words are said in the language.
+ */
+interface SheetUnits {
+  readonly metric: boolean
+  /** `m²` or `sq ft`, for a heading. */
+  readonly areaUnit: string
+  /** Whether the area unit is square feet. */
+  readonly feet: boolean
+  /** A figure Grid wrote with a point, with the sheet's decimal mark. */
+  mark(text: string): string
+  length(metres: number, kind?: 'length' | 'height'): string
+  /** An area as a number, without its unit. */
+  area(squareMetres: number): string
+  /** Areas that add up to their total, without their unit. */
+  sum(parts: readonly number[], total: number): { parts: string[]; total: string }
+}
+
+function sheetUnits(plan: LoadedPlan['plan'], w: Words): SheetUnits {
+  const display: Display = displayFor(undefined, undefined, plan)
+  const metric = display.length === 'm' && display.area === 'm2' && display.decimal === 'point' && display.precision === undefined
+  const language = w.language === DEFAULT_LANGUAGE ? null : decimalFor(w.language, plan.display?.decimal)
+  const fm = (text: string): string => (language === 'comma' ? sayValue(w.language, num(text), { decimal: 'comma' }) : text)
+  if (metric) {
+    return {
+      metric, feet: false, areaUnit: 'm²', mark: fm,
+      length: (m) => `${fm(metresText(m))} m`,
+      area: (a) => fm(areaText(a, 1)),
+      sum: (parts, total) => {
+        const shown = sumText(parts, total, 1)
+        return { parts: shown.parts.map(fm), total: fm(shown.total) }
+      },
+    }
+  }
+  const feet = display.area === 'ft2'
+  const decimals = feet ? 0 : 1
+  const mark = (text: string): string => fm(display.decimal === 'comma' ? text.replace('.', ',') : text)
+  const inUnit = (a: number): number => (feet ? sqFt(a) : a)
+  return {
+    metric,
+    feet,
+    areaUnit: feet ? w.say('sheet.unit.sqft') : 'm²',
+    mark: fm,
+    length: (m, kind = 'length') => fm(showLength(m, display, { kind })),
+    area: (a) => mark(areaText(inUnit(a), decimals)),
+    sum: (parts, total) => {
+      const shown = sumText(parts.map(inUnit), inUnit(total), decimals)
+      return { parts: shown.parts.map(mark), total: mark(shown.total) }
+    },
+  }
+}
+
+function areaTable(floor: FloorAreas, withUse: boolean, units: SheetUnits, w: Words): SheetTable {
   // CNT-8: a zone's floor is its room's, so the table has one row per room, and the column adds
   // up to the net. The plan draws each zone with its name and area.
   const places = floor.rooms.filter((r) => r.zoneOf === undefined)
   // SHT-11: a stair room over the stair below is counted there, so it is in no part of the sum.
   const counted = places.filter((r) => r.countedWith === undefined)
-  const shown = sumText(counted.map((r) => r.net ?? 0), floor.net, 1)
+  const shown = units.sum(counted.map((r) => r.net ?? 0), floor.net)
   const parts = new Map(counted.map((room, i) => [room, shown.parts[i]!] as const))
   return {
-    heading: w.say('sheet.rooms'),
+    heading: w.say('sheet.rooms', { unit: units.areaUnit }),
     // MSG-2: a room that could not be measured has no area, never 0.
     rows: places.map((room) => {
       const part = parts.get(room)
       return {
         name: room.name,
         detail: withUse && room.use !== null ? w.use(room.use) : null,
-        area: room.net === null ? w.say('sheet.notMeasured') : part === undefined ? w.say('sheet.countedBelow') : w.n(part),
+        area: room.net === null ? w.say('sheet.notMeasured') : part === undefined ? w.say('sheet.countedBelow') : part,
       }
     }),
-    total: { name: w.say('sheet.netArea'), detail: null, area: w.n(shown.total) },
+    total: { name: w.say('sheet.netArea'), detail: null, area: shown.total },
     note: AREA_RULES.net,
   }
 }
 
 /** Floor to floor, from the levels the 3D view stacks; one floor gives its clear height. */
-function heightFigure(loaded: LoadedPlan, w: Words): SheetFigure | null {
+function heightFigure(loaded: LoadedPlan, units: SheetUnits, w: Words): SheetFigure | null {
   const storeys = [...floorElevations(loaded.plan).floors.values()]
   const levels = [...new Set(storeys.map((s) => s.floorLevel))].sort((a, b) => a - b)
   if (levels.length < 2) {
     const only = storeys[0]
-    return only ? { value: `${w.n(metresText(only.clearHeight))} m`, label: w.say('sheet.figure.clearHeight') } : null
+    return only ? { value: units.length(only.clearHeight), label: w.say('sheet.figure.clearHeight') } : null
   }
   const steps = levels.slice(1).map((level, i) => level - levels[i]!)
   const low = Math.min(...steps)
   const high = Math.max(...steps)
-  const value = metresText(low) === metresText(high) ? `${w.n(metresText(low))} m` : `${w.n(metresText(low))}–${w.n(metresText(high))} m`
+  const value = units.length(low) === units.length(high) ? units.length(low) : units.metric ? `${units.mark(metresText(low))}–${units.mark(metresText(high))} m` : `${units.length(low)}–${units.length(high)}`
   return { value, label: w.say('sheet.figure.floorToFloor') }
 }
 
 /** An area figure, or "not known" when the plan gives none (the reason goes in the notes). */
-function areaFigure(value: number | null, label: string, w: Words): SheetFigure {
-  return { value: value === null ? w.say('sheet.notKnown') : `${w.n(areaText(value, 1))} m²`, label }
+function areaFigure(value: number | null, label: string, units: SheetUnits, w: Words): SheetFigure {
+  return { value: value === null ? w.say('sheet.notKnown') : `${units.area(value)} ${units.areaUnit}`, label }
 }
 
 function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string, w: Words): Body[] {
@@ -263,10 +319,11 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
   const facts = planFacts(loaded.plan)
   const bedrooms = loaded.plan.rooms.filter((room) => room.use === 'bedroom').length
   const title = words?.name ?? name
-  const figures: SheetFigure[] = [areaFigure(areas.grossInternal, w.say('sheet.figure.grossInternal'), w)]
+  const units = sheetUnits(loaded.plan, w)
+  const figures: SheetFigure[] = [areaFigure(areas.grossInternal, w.say('sheet.figure.grossInternal'), units, w)]
   figures.push({ value: String(floors.length), label: w.say(floors.length === 1 ? 'sheet.figure.floors.one' : 'sheet.figure.floors.many') })
   figures.push({ value: String(bedrooms), label: w.say(bedrooms === 1 ? 'sheet.figure.bedrooms.one' : 'sheet.figure.bedrooms.many') })
-  const height = heightFigure(loaded, w)
+  const height = heightFigure(loaded, units, w)
   if (height) figures.push(height)
 
   const shown = w.say(facts.connections.stairs.length > 0 ? 'sheet.limits.stairs' : 'sheet.limits')
@@ -285,7 +342,7 @@ function clientBodies(loaded: LoadedPlan, words: SheetWords | null, name: string
     return {
       kind: 'floor', floor: floor.id, topLine: `${title} / ${floorTitle}`, title: floorTitle, subtitle: null,
       paragraphs: words?.floors?.[floor.id] ?? [], figures: [],
-      table: floorAreas ? areaTable(floorAreas, false, w) : null,
+      table: floorAreas ? areaTable(floorAreas, false, units, w) : null,
       picture: floorPicture(loaded, frames, floor.id, false),
       notes: [...limits, ...(leftOut ? [w.say('sheet.leftOutLimit')] : []), ...undecidedNote(loaded, floor.id, w)],
     }
@@ -328,12 +385,13 @@ function checkBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
   const floors = planFloors(loaded.plan)
   const frames = floorFrames(loaded)
   const whole = checkPlan(loaded, {})
+  const units = sheetUnits(loaded.plan, w)
   const figures: SheetFigure[] = [
     { value: String(whole.report.findings.length), label: w.say('sheet.figure.findings') },
     { value: String(whole.issues.length), label: w.say('sheet.figure.problems') },
-    areaFigure(areas.net, w.say('sheet.figure.net'), w),
-    areaFigure(areas.grossInternal, w.say('sheet.figure.grossInternal'), w),
-    areaFigure(areas.grossExternal, w.say('sheet.figure.grossExternal'), w),
+    areaFigure(areas.net, w.say('sheet.figure.net'), units, w),
+    areaFigure(areas.grossInternal, w.say('sheet.figure.grossInternal'), units, w),
+    areaFigure(areas.grossExternal, w.say('sheet.figure.grossExternal'), units, w),
   ]
   const checkSet = w.say('sheet.checkSet')
   const why = w.say('sheet.nothingFound')
@@ -368,7 +426,7 @@ function checkBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
     return {
       kind: 'floor', floor: floor.id, topLine: `${name} / ${floorTitle}`, title: floorTitle, subtitle: null,
       paragraphs: [], figures: [],
-      table: floorAreas ? areaTable(floorAreas, true, w) : null,
+      table: floorAreas ? areaTable(floorAreas, true, units, w) : null,
       picture: floorPicture(loaded, frames, floor.id, true),
       notes: shown,
     }
@@ -386,28 +444,36 @@ function scheduleBodies(loaded: LoadedPlan, name: string, w: Words): Body[] {
   const rooms = roomSchedule(survey)
   const openings = openingSchedule(survey)
   const several = rooms.floors.length > 1
+  const units = sheetUnits(loaded.plan, w)
   const roomRows: SheetRow[] = rooms.rows.map((r) => ({
     // CNT-9: a stated room number wins over Grid's, and the room's own facts close the detail.
     name: `${shownNumber(r)}. ${r.name}`,
     detail: [
       r.use === null ? w.say('sheet.useNotSaid') : w.use(r.use),
-      r.height === null ? w.say('sheet.heightNotKnown') : w.say('sheet.high', { height: num(metresText(r.height)) }),
+      r.height === null ? w.say('sheet.heightNotKnown') : w.say('sheet.high', { height: units.length(r.height) }),
       ...(several ? [r.floorName] : []),
       ...(Object.keys(r.properties).length > 0 ? [factsText(r.properties)] : []),
     ].join(w.say('join.comma')),
-    area: r.area === null ? w.say('sheet.notMeasured') : w.n(areaText(r.area, 1)),
+    area: r.area === null ? w.say('sheet.notMeasured') : units.area(r.area),
   }))
-  for (const t of rooms.floors) if (several) roomRows.push({ name: w.say('sheet.total.floor', { floor: String(t.floorName) }), detail: w.say('sheet.roomCount', { count: t.rooms }), area: w.n(areaText(t.area, 1)) })
+  for (const t of rooms.floors) if (several) roomRows.push({ name: w.say('sheet.total.floor', { floor: String(t.floorName) }), detail: w.say('sheet.roomCount', { count: t.rooms }), area: units.area(t.area) })
   const total = rooms.total
   const roomTable: SheetTable = {
-    heading: w.say('sheet.roomSchedule.heading'),
+    heading: w.say('sheet.roomSchedule.heading', { unit: units.areaUnit }),
     rows: roomRows,
-    total: { name: w.say(several ? 'sheet.total.all' : 'sheet.total'), detail: w.say('sheet.total.rooms', { count: total.rooms, sqft: Math.round(sqFt(total.area)) }), area: w.n(areaText(total.area, 1)) },
+    total: {
+      name: w.say(several ? 'sheet.total.all' : 'sheet.total'),
+      // WRT-7: the other unit beside the total: square metres beside square feet, and the other way round.
+      detail: units.feet
+        ? w.say('sheet.total.rooms.metric', { count: total.rooms, area: units.mark(areaText(total.area, 1)) })
+        : w.say('sheet.total.rooms', { count: total.rooms, sqft: Math.round(sqFt(total.area)) }),
+      area: units.area(total.area),
+    },
     note: rooms.rules[0]!,
   }
   const openingRows: SheetRow[] = openings.rows.map((r) => ({
     name: `${r.number}. ${w.say(`sheet.type.${r.type}`)} ${r.id}`,
-    detail: `${w.n(metresText(r.width))} × ${w.n(metresText(r.height))} m${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: num(metresText(r.sill)) })}` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
+    detail: `${units.metric ? `${units.mark(metresText(r.width))} × ${units.mark(metresText(r.height))} m` : `${units.length(r.width)} × ${units.length(r.height)}`}${r.type === 'window' ? `, ${w.say('sheet.sill', { sill: units.length(r.sill, 'height') })}` : ''}, ${r.between[0]} – ${r.between[1]}${several ? `, ${r.floorName}` : ''}${Object.keys(r.properties).length > 0 ? `, ${factsText(r.properties)}` : ''}`,
     area: '1',
   }))
   const c = openings.counts
