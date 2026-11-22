@@ -19,7 +19,7 @@ export const NAME_MAX = 120
 export const ID_MAX = 64
 /** The most characters the trace image's path may have. */
 export const IMAGE_PATH_MAX = 1024
-/** The most walls, rooms, openings or floors a plan may have, each. */
+/** The most walls, rooms, openings, floors or items a plan may have, each. */
 export const PARTS_MAX = 50_000
 /** The most walls a room's boundary may list. */
 export const BOUNDARY_MAX = 2_000

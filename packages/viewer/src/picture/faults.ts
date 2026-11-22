@@ -4,7 +4,7 @@
  * A picture can be given the lines of Grid's one result record (MSG-1), in the record's order.
  * Each line keeps its number, its place in the record from 1, which is the number `grid check`
  * prints before it, so a mark on the drawing and a line of the report say the same number.
- * A line about a room, a wall or an opening gets a numbered mark on that part with its words
+ * A line about a room, a wall, an opening or a fixture gets a numbered mark on that part with its words
  * beside it (an opening the drawing leaves out, on its wall); a line about the floor or the whole
  * plan, or about a part the drawing does not hold, gets a mark of its own down the drawing's
  * top-left corner. Every line is also in the key under the drawing.
@@ -16,6 +16,7 @@
  * Pure: no DOM, no React.
  */
 import type { PlanDrawing, Vec2 } from '@ongrid/floorplan/geometry'
+import { centroid } from '@ongrid/floorplan/geometry'
 import type { Box } from '../canvas2d/labelPlacement'
 import { estimateTextWidth, overlaps } from '../canvas2d/labelPlacement'
 import type { PlanLook } from './look'
@@ -24,7 +25,7 @@ import type { Attrs, SvgNode } from './svgNode'
 import { el } from './svgNode'
 
 /** What a line is about, as the result record names it. */
-export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening'
+export type FaultThingKind = 'plan' | 'floor' | 'wall' | 'room' | 'opening' | 'item'
 
 /**
  * The part of a result line (MSG-1's `ResultLine`) a picture uses. A record's `lines` can be
@@ -179,6 +180,11 @@ function spotOf(kind: FaultThingKind, id: string, layout: FaultLayout, wall?: st
     if (opening) return { at: { x: (opening.from.x + opening.to.x) / 2, y: (opening.from.y + opening.to.y) / 2 }, words: true }
     // Left out of the drawing: on the wall it should be in.
     return wall === undefined ? null : spotOf('wall', wall, layout)
+  }
+  if (kind === 'item') {
+    // A fixture (CNT-12): on the middle of its outline.
+    const item = drawing.items.find((i) => i.id === id)
+    return item && item.outline.length > 0 ? { at: centroid(item.outline), words: true } : null
   }
   if (kind === 'wall') {
     const wall = drawing.walls.find((w) => w.id === id)

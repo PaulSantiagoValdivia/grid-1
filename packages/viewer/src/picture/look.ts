@@ -80,6 +80,8 @@ export const LINE_PX = {
   jamb: 1,
   /** A step between rooms at different levels (LVL-7). */
   step: 1.5,
+  /** A fixture's symbol (CNT-12). */
+  fixture: 0.75,
   doorLeaf: 1.5,
   doorArc: 0.75,
   dimension: 1,

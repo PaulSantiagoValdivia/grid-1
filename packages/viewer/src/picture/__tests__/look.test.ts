@@ -67,6 +67,8 @@ describe('the picture look', () => {
     expect(number(at('opening').get('stroke-width'))).toBe(LINE_PX.opening)
     expect(number(at('jamb').get('stroke-width'))).toBe(LINE_PX.jamb)
     expect(number(at('step').get('stroke-width'))).toBe(LINE_PX.step)
+    expect(number(at('fixture-ring').get('stroke-width'))).toBe(LINE_PX.fixture)
+    expect(number(at('fixture-line').get('stroke-width'))).toBe(LINE_PX.fixture)
     expect(number(at('door-leaf').get('stroke-width'))).toBe(LINE_PX.doorLeaf)
     expect(number(at('door-arc').get('stroke-width'))).toBe(LINE_PX.doorArc)
     expect(number(at('dimension-line').get('stroke-width'))).toBe(LINE_PX.dimension)
