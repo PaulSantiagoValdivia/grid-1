@@ -102,7 +102,20 @@ little. Line widths and label sizes, which are pixels times metres per pixel, ch
   "defaults" test now expects the kinds `opening`, `wall`, `overall` and `room`. The opening
   dimensions on each wall stay off by default. The old checks are kept: 5.25 × 8.25 overall,
   4.80 × 2.375 for the dining room, width × depth = area, and lines clear of the label.
-- No scoreboard figure changed (see the final run below).
+- No scoreboard figure changed (see the checks run, below).
+
+## The checks run
+
+- `npm run build`: done. The bundle `grid.mjs` is 470,551 bytes, under the 500 kB limit.
+- `npm run typecheck`: no errors in any workspace.
+- `npm run lint`: no problems.
+- `npm run check:licenses`: "Checked 363 licences in package-lock.json: none is GPL, LGPL,
+  AGPL, MPL, EPL."
+- `vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1`: Test Files 1 failed | 234
+  passed (235), Tests 1 failed | 4653 passed | 3 skipped (4657). The one failure is a timing
+  test, `diff-size.test.ts`, "diffs 1,000 entities … well inside a second" (1,223 ms, with a load
+  average near 246). That code does not touch dimensions. Rerun alone, it passes (4 of 4).
+- `npm run scoreboard`: "Same as the stored figures."
 
 ## For the owner
 
