@@ -348,6 +348,15 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: a problem report the person files (CMD-13)
+
+- New tool `grid_report_problem`, read-only, last of the reading tools: a draft issue from a
+  failure you met, with the call, its answer, the record's line for a code you pass, Grid's
+  version and the smallest plan that shows it, cleared of names, ids, addresses and paths. It
+  returns `title`, `body`, `labels`, `link` (the issue form), `linkHasBody`, `code`, `plan`,
+  `kept` and `sent: false`. Grid sends nothing: show the person the draft.
+- A tool call now sees the protocol version a 2026-07-28 request names. No other answer changes.
+
 ### 2026-11-22: an export says what it leaves out (HND-6)
 
 - `grid_export` adds `leftOutParts`: each part of the plan the file leaves out, with its kind,
