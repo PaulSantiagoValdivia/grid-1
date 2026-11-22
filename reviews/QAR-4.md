@@ -55,7 +55,7 @@
 - The default time limit is longer on CI and Windows (`vitest.config.ts`). Locally, nothing
   changes.
 - `packages/cli/src/mcp/__tests__/reportProblem.test.ts` (CMD-13's): the S-11 draft's answer now
-  starts with the path, not ends with it. `grid_check`'s answer has grown on `main` past the 4,000
+  starts with the path, not ends with it (main made the same change; the merge keeps main's). `grid_check`'s answer has grown on `main` past the 4,000
   characters a draft keeps, so the line holding the path was cut before it was cleared, and the
   test's `<path>` check failed. Nothing leaked: the path was simply not in the draft.
 
