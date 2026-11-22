@@ -597,6 +597,28 @@ function agentFloorHead(floor: FloorFacts): string {
   return `FLOOR ${floor.id} ${floor.name === null ? '(no name)' : JSON.stringify(floor.name)} level ${floor.level}: ${roomCount(floor)}, ${m(floor.area)} m2${left}`
 }
 
+/** CNT-16: a floor's columns, in one line, each by its size and place and the room it stands in; nothing on a floor with none. */
+function personColumns(floor: FloorFacts, names: PersonNames, w: Words): string[] {
+  const columns = floor.columns ?? []
+  if (columns.length === 0) return []
+  const each = columns.map((c) => {
+    const label = c.label === null ? '' : t(w, 'describe.column.label', { label: c.label })
+    const room = c.room === null ? '' : t(w, 'describe.column.in', { room: names.room(c.room) })
+    const at = point(w, c.at.x, c.at.y)
+    return c.depth === null
+      ? t(w, 'describe.column.round', { label, width: fig(w, c.width), at, room })
+      : t(w, 'describe.column.square', { label, width: fig(w, c.width), depth: fig(w, c.depth), at, room })
+  })
+  return [`  ${t(w, 'describe.columns', { count: columns.length, columns: listed(w, each) })}`]
+}
+
+/** CNT-16: the agent's form of a floor's columns: `COLUMNS id sq<w>x<d>|rd<d> @x,y room`. */
+function agentColumns(floor: FloorFacts): string[] {
+  const columns = floor.columns ?? []
+  if (columns.length === 0) return []
+  return [`COLUMNS ${columns.map((c) => `${c.id} ${c.depth === null ? `rd${m(c.width)}` : `sq${m(c.width)}x${m(c.depth)}`} @${m(c.at.x)},${m(c.at.y)} ${c.room ?? '-'}`).join('; ')}`]
+}
+
 function personCard(facts: PlanFacts, withWalls: boolean, w: Words): string[] {
   const names = new PersonNames(facts, w)
   const lines = [
@@ -615,6 +637,7 @@ function personCard(facts: PlanFacts, withWalls: boolean, w: Words): string[] {
     }
     lines.push('', personFloorHead(floor, names, w))
     for (const room of floor.rooms) lines.push(...personRoom(floor, room, names, w))
+    lines.push(...personColumns(floor, names, w))
     if (withWalls && floor.walls.length > 0) lines.push(t(w, 'describe.walls', { floor: names.floor(floor.id) }), ...personWalls(floor, names, w))
   }
   lines.push('', t(w, 'describe.close'))
@@ -636,6 +659,7 @@ function agentCard(facts: PlanFacts, withWalls: boolean): string[] {
     }
     lines.push(`${agentFloorHead(floor)}${repeat !== null ? `; laid out as ${repeat.of}, other ids` : ''}`)
     for (const room of floor.rooms) lines.push(withWalls ? agentRoomHead(room) : agentRoom(floor, room))
+    lines.push(...agentColumns(floor))
     if (withWalls) lines.push(...agentWalls(floor))
   }
   lines.push(AGENT_CLOSE)

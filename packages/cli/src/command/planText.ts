@@ -77,6 +77,10 @@ const FIELDS: Readonly<Record<string, Readonly<Record<string, Kind>>>> = {
   // CNT-4: a flat type, and a flat with the type it names; its rooms are ids (below).
   flatTypes: { id: 'id', name: 'name' },
   flats: { id: 'id', name: 'name', type: 'id' },
+  // CNT-16: a column names its floor and the highest floor it rises through; a structural grid
+  // has a name (its floors and its lines' names are in the schema's own text checks).
+  columns: { id: 'id', floor: 'id', through: 'id', label: 'name' },
+  grids: { id: 'id', name: 'name' },
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

@@ -9,12 +9,13 @@
  *
  * The figures come from the spaces the walls enclose (`spaces.ts`), so that on every floor
  *
- *     gross external = net + rooms named outside + walls + floor no room claims − off its space
+ *     gross external = net + columns + rooms named outside + walls + floor no room claims − off its space
  *
  * holds to the last digit the arithmetic keeps, and gross internal is the same with the outer
  * walls left out. `off its space` is room floor that is not enclosed floor counted once: rooms
  * that overlap, or that run over walls or outside them. On a plan without such faults it is 0
- * (validation names each one: `room/overlap`, `room/space-mismatch`).
+ * (validation names each one: `room/overlap`, `room/space-mismatch`). `columns` is the floor the
+ * columns standing in the rooms cover (CNT-16), which each room's area has taken off.
  *
  * Which walls face outside is the one answer `exposure.ts` gives (MSG-13), stretch by stretch.
  * Gross internal is the outline of the floor less those stretches of wall, keeping only the parts
@@ -46,6 +47,7 @@ import { wallLength, wallSegments } from './wall'
 import { curveFault } from './arc'
 import { buildingPlan, outdoorIds, outdoorKind, outdoorRoofed, planHasOutdoor } from './outdoor'
 import type { OutdoorKind } from '../types/floorplan'
+import { roomColumnArea, roomColumns } from './columns'
 import { english, num, said } from '../messages/say'
 
 /** The three measures, the floor by headroom band (LVL-6) and outdoor space (CNT-7). */
@@ -73,8 +75,8 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
   net: {
     measure: 'net',
     name: 'Net area',
-    measures: 'Net area is the floor inside each room, measured to the faces of its walls, less any hole in it and any room drawn inside it; a stair drawn as a room on floor after floor counts once, on the floor it rises from.',
-    notTakenOff: 'Nothing inside a room is taken off: fixed units, a column drawn without walls and floor under a low ceiling all count.',
+    measures: 'Net area is the floor inside each room, measured to the faces of its walls, less any hole in it, any room drawn inside it and the floor the columns standing in it cover; a stair drawn as a room on floor after floor counts once, on the floor it rises from.',
+    notTakenOff: 'Nothing else inside a room is taken off: fixed units, a column drawn as a short wall rather than as a column, and floor under a low ceiling all count.',
     cannotSay: 'The plan cannot say which rooms the reader counts: a balcony or a store drawn as a room counts unless it is named as outside.',
   },
   grossInternal: {
@@ -95,7 +97,7 @@ export const MEASURES: Readonly<Record<Measure, MeasureRule>> = {
     measure: 'headroom',
     name: 'Area by headroom',
     measures: `Area by headroom is the floor of each room with at least ${TOLERANCES.headroomLow.value} m, and with at least ${TOLERANCES.headroomFull.value} m, of height over it, from the room's floor to its ceiling or to the underside of the roof its floor states, whichever is lower.`,
-    notTakenOff: 'It is part of the net area: nothing standing in the room is taken off, and floor under a lowered zone of the ceiling counts by that zone\'s height.',
+    notTakenOff: 'It is measured on the room\'s whole floor: nothing standing in the room is taken off, a column neither, and floor under a lowered zone of the ceiling counts by that zone\'s height.',
     cannotSay: 'The plan cannot say how deep the roof is built up or where a low slope is boxed in, so the height is taken to the roof\'s underside as stated, from its eaves on the outside walls\' lines.',
   },
   outdoor: {
@@ -133,8 +135,10 @@ export interface RoomAreaFigure {
   readonly name: string
   readonly use: string | null
   readonly floor: string
-  /** Net, as Grid measures a room everywhere (`roomArea`). */
+  /** Net, as Grid measures a room everywhere (`roomArea`): less the floor its columns cover. */
   readonly area: number
+  /** CNT-16: the floor the columns standing in it cover, taken off `area`, and the columns by id. Absent when none stands in it. */
+  readonly columns?: { readonly area: number; readonly ids: readonly string[] }
   /** Named as outside by the caller: listed apart, in no net or gross internal figure. */
   readonly outside: boolean
   /**
@@ -176,6 +180,8 @@ export interface FloorAreaFigures {
   readonly outsideRooms: number
   /** SHT-11: the stair rooms over a stair room below, whose floor is counted there (`countedWith`). */
   readonly overStairs: number
+  /** CNT-16: the floor the columns standing in this floor's rooms cover (zones aside): taken off the rooms' areas, in the gross figures. */
+  readonly columns: number
   /** The rest are null when the floor's spaces could not be worked out (`why`). */
   readonly grossExternal: number | null
   readonly grossInternal: number | null
@@ -498,6 +504,8 @@ function floorFigures(
     const kind = outdoorKind(room)
     const apart = kind === null && outside.has(room.id)
     const below = apart || kind !== null ? undefined : countedWith.get(`${floor}|${room.id}`)
+    // CNT-16: the columns standing in it, taken off its area (`roomFloorArea`).
+    const columnIds = roomColumns(room, index)
     rooms.push({
       id: room.id,
       name: nameOf(room),
@@ -507,6 +515,7 @@ function floorFigures(
       outside: apart,
       zoneOf,
       ...(below === undefined ? {} : { countedWith: below }),
+      ...(columnIds.length === 0 ? {} : { columns: { area: roomColumnArea(room, index), ids: columnIds } }),
       ...(kind === null ? {} : { outdoor: { kind, roofed: outdoorRoofed(room)! } }),
     })
   }
@@ -536,7 +545,8 @@ function floorFigures(
   const net = sum(counted.map((room) => room.area))
   const outsideRooms = sum(rooms.filter((room) => room.outside).map((room) => room.area))
   const outdoorRooms = rooms.filter((room) => room.outdoor !== undefined)
-  const base = { floor, rooms, leftOut, net, byUse, outsideRooms, overStairs, ...(outdoorRooms.length === 0 ? {} : { outdoor: sum(outdoorRooms.map((room) => room.area)) }) }
+  const columns = sum(rooms.map((room) => room.columns?.area ?? 0))
+  const base = { floor, rooms, leftOut, net, byUse, outsideRooms, overStairs, columns, ...(outdoorRooms.length === 0 ? {} : { outdoor: sum(outdoorRooms.map((room) => room.area)) }) }
 
   // CNT-7: the gross figures are the building's, measured without the walls that bound only
   // outdoor space; an outdoor space inside the building's walls (a courtyard) is taken off them.
@@ -760,6 +770,12 @@ export function planAreaFigures(stated: FloorPlan, given: AreaOptions = {}): Pla
           `its floor is counted once, there, so ${sum(above.map((room) => room.area)).toFixed(2)} m² over it is in no net figure; the gross figures still hold it.`
       )
     }
+  }
+  // CNT-16: the floor the columns cover, taken off the rooms they stand in.
+  const columnFloor = sum(floors.map((f) => f.columns))
+  if (columnFloor > 0) {
+    const count = new Set(rooms(floors).flatMap((room) => room.columns?.ids ?? [])).size
+    notes.push(english(said(count === 1 ? 'areas.columns.one' : 'areas.columns.many', { count, area: num(columnFloor.toFixed(2)) })))
   }
   if (rooms(floors).some((room) => room.outside)) notes.push('Rooms named as outside are listed apart: they are in no net or gross internal figure, and their floor is in the gross external one.')
   const outdoor = outdoorFigure(floors, options.outdoorWeights)

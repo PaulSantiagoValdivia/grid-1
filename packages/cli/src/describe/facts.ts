@@ -8,6 +8,11 @@
  * from a name: a room is a bedroom only when its `use` says so.
  */
 import {
+  columnDepth,
+  columnRoom,
+  roomColumnArea,
+  roomShapes,
+  soundColumns,
   cross,
   dot,
   floorJoins,
@@ -149,6 +154,21 @@ export interface FloorFacts {
   readonly wallHeight: number | null
   /** Rooms and openings the drawing's checks leave out on this floor, by id. */
   readonly leftOut: readonly string[]
+  /** CNT-16: the columns standing on this floor, in plan order. Left out on a plan with none. */
+  readonly columns?: readonly ColumnFacts[]
+}
+
+/** CNT-16: a column, as the description says it. */
+export interface ColumnFacts {
+  readonly id: string
+  readonly label: string | null
+  readonly shape: 'square' | 'round'
+  readonly width: number
+  /** A square column's other side; null for a round one. */
+  readonly depth: number | null
+  readonly at: Vec2
+  /** The room it stands in, by id, or null. */
+  readonly room: string | null
 }
 
 /** Something that departs from the usual height. */
@@ -291,14 +311,15 @@ function usual(values: readonly number[]): number | null {
   return best
 }
 
-function shapeOf(polygon: readonly Vec2[], area: number): RoomShape {
+/** CNT-16: `columns` is the floor its columns take off `area`, which leaves its outline a rectangle. */
+function shapeOf(polygon: readonly Vec2[], area: number, columns = 0): RoomShape {
   const xs = polygon.map((p) => p.x)
   const ys = polygon.map((p) => p.y)
   const minX = Math.min(...xs)
   const minY = Math.min(...ys)
   const across = Math.max(...xs) - minX
   const up = Math.max(...ys) - minY
-  const rectangle = polygon.length === 4 && Math.abs(across * up - area) < 0.01
+  const rectangle = polygon.length === 4 && Math.abs(across * up - (area + columns)) < 0.01
   return { at: { x: minX, y: minY }, across, up, rectangle, area }
 }
 
@@ -470,7 +491,7 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
       name: room.name,
       ...(room.use === undefined ? {} : { use: room.use }),
       floor: floor.id,
-      shape: outline === undefined ? null : shapeOf(outline.polygon, roomArea(room, index)),
+      shape: outline === undefined ? null : shapeOf(outline.polygon, roomArea(room, index), roomColumnArea(room, index)),
       neighbours: [...(next.get(room.id) ?? [])].sort(byText),
       ...(of === undefined ? {} : { zoneOf: of }),
     }
@@ -530,7 +551,22 @@ function floorFacts(plan: FloorPlan, floor: Floor, named: boolean): FloorFacts {
     area: rooms.reduce((sum, room) => sum + (room.zoneOf === undefined ? (room.shape?.area ?? 0) : 0), 0),
     wallHeight: usualHeight(plan, storey.walls),
     leftOut: [...leftOut.rooms, ...leftOut.openings].sort(byText),
+    ...(storey.columns === undefined ? {} : { columns: columnFacts(storey, index) }),
   }
+}
+
+/** CNT-16: the columns a floor's slice holds that are drawn, each with the room it stands in. */
+function columnFacts(storey: FloorPlan, index: ReturnType<typeof indexPlan>): ColumnFacts[] {
+  const rooms = roomShapes(index)
+  return soundColumns(storey).map((column) => ({
+    id: column.id,
+    label: column.label ?? null,
+    shape: column.shape,
+    width: column.width,
+    depth: column.shape === 'round' ? null : columnDepth(column),
+    at: { x: column.at[0], y: column.at[1] },
+    room: columnRoom(column, rooms)?.id ?? null,
+  }))
 }
 
 /**

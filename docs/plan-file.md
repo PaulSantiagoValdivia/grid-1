@@ -23,6 +23,7 @@ section explains. Rooms text, the main way to write a plan, is in
 - [A curved wall](#a-curved-wall): `wall/arc-ends-apart`, `wall/arc-too-tight`
 - [Opening patterns](#opening-patterns): `pattern/unknown-wall`, `pattern/does-not-fit`, `pattern/unknown-floor`, `pattern/no-wall-above`, `pattern/overlaps-opening`, `pattern/id-clash`
 - [Fixtures](#fixtures): `item/unknown-kind`, `item/too-large`, `item/no-size`, `item/duplicate-id`, `item/unknown-floor`, `item/outside-rooms`, `item/into-wall`, `item/too-tall`, `item/blocks-doorway`, `item/blocks-window`, `opening/door-hits-item`
+- [Columns and a structural grid](#columns-and-a-structural-grid): `plan/column-too-large`, `plan/column-duplicate-id`, `plan/column-unknown-floor`, `plan/column-through-floor`, `plan/grid-unknown-floor`
 - [Writing on the drawing, and the sketch layer](#writing-on-the-drawing-and-the-sketch-layer): `floor/sketch-drawn-only`, `plan/note-no-place`
 - [Facts of your own, and room numbers](#facts-of-your-own-and-room-numbers): what a part may carry, and where it goes
 - [Kinds of door and window, their handing and the part that opens](#kinds-of-door-and-window-their-handing-and-the-part-that-opens): `opening/wide-single-leaf`, `opening/kind-not-for-type`, `opening/part-too-large`, `floor/not-checked-door-swings`
@@ -50,8 +51,8 @@ file never reaches the exports with its letters turned into question marks. A fi
 
 | Text | At most | Also refused |
 |---|---|---|
-| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name, a building's or a context shape's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
-| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id, a building's id and floors, a context shape's id and floor | 64 characters | the same |
+| a room, floor or stair name, a fixture's label, the plan's title, a note's or a sketch's text, a lowered zone's name, a saved view's name, a flat's or a flat type's name, a building's or a context shape's name, a column's label, a structural grid's name or a grid line's name | 120 characters | line breaks of any kind, control characters, characters that change the direction text is shown in, and half of a character pair |
+| an id: of a wall, room, opening, floor, stair, rooflight or opening pattern, a wall a room, an opening or a pattern names, a part's floor, the floors a stair joins or a pattern repeats on, the room a zone is part of, a flat's id, type and rooms, a flat type's id, a building's id and floors, a context shape's id and floor, a column's id, floor and `through`, a structural grid's id and floors | 64 characters | the same |
 | the trace image's path, the base plan's path | 1,024 characters | the same |
 | the place, `site.country` | 120 characters, and then a name or a code on Grid's list ([the place](#the-place)) | the same |
 | a fact's name, or its value when it is text (CNT-9); a room's number | 120 characters; a number 64 | the same |
@@ -59,7 +60,7 @@ file never reaches the exports with its letters turned into question marks. A fi
 | the wall types, door types or window types | 50,000 of each | |
 | the facts one wall, opening, room or floor carries | 100 | |
 | a thing on the site: its id; its label | 64 characters; 120 | the same |
-| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats, flat types, buildings or context shapes | 50,000 of each | |
+| walls, rooms, openings, floors, items, stairs, opening patterns, annotations, sketch items, saved views, things on the site, taped lengths, flats, flat types, buildings, context shapes, columns or structural grids | 50,000 of each | |
 | the floors one building lists | 50,000, and at least one | |
 | the rooms one flat lists | 50,000, and at least one | |
 | the floors one opening pattern repeats on | 200 | |
@@ -871,6 +872,62 @@ shape. A kind it does not hold yet is left out with a note, and the rest of the 
 | `opening/door-hits-item` | A door's leaf swings into the fixture: the line names it by its label, kind and id, `Door "d1" hits "Table 2" (kitchen run "table-2") when it opens` |
 | `item/blocks-doorway` | It stands within 0.3 m (`useApproachDepth`) in front of a doorway's hole: the line says how much of the hole it covers and the clear width left, as an indicator |
 | `item/blocks-window` | It is higher than a window's sill and stands within 0.3 m in front of it: the line says how much of the window it covers, as an indicator |
+
+## Columns and a structural grid
+
+Read this when the building stands on columns: an open office, a warehouse, a car park, a carport.
+A column is a thing of its own (CNT-16, C25), never a very short wall, a room or a fixture, so it
+comes off the room's area, exports as a column and draws as one.
+
+```json
+"columns": [
+  { "id": "c1", "shape": "square", "width": 0.4, "at": [7.5, 10], "height": 6 },
+  { "id": "c2", "shape": "round", "width": 0.5, "at": [15, 10], "label": "C2" },
+  { "id": "c3", "shape": "square", "width": 0.3, "depth": 0.6, "at": [22.5, 10], "turn": 90, "through": "first" }
+],
+"grids": [
+  { "id": "main", "name": "Main grid", "origin": [0, 0], "x": { "spacing": [7.5, 7.5, 7.5, 7.5] }, "y": { "spacing": [10, 10] } }
+]
+```
+
+- `shape` is `square` or `round`. `width` is a square column's side along its own x and a round
+  column's diameter; `depth` is a square column's side along its own y, and unstated it is as wide
+  (a square). A round column with a `depth` is refused. `at` is its middle; `turn` turns a square
+  column counter-clockwise, in degrees.
+- `floor` is the floor it stands on (unstated, the ground floor). `through` names the highest
+  floor it rises through, as a wall's does ([Walls through floors](#walls-through-floors-and-floors-that-line-up)):
+  one column on each of those floors. `height` is how high it stands above the floor it rises
+  through; unstated, it is that floor's storey height. A `through` that reaches no floor above its
+  own is said (`plan/column-through-floor`), and the column stands on its own floor only.
+- The room a column stands in is found from the outlines, never named: the smallest room on its
+  floor whose floor holds its middle, zones aside. The floor it covers inside that room's outline
+  comes off the room's net area ([areas.md](areas.md)), on each floor it stands on.
+- A column with an id another part has, on a floor the plan does not have, or too large to build
+  is left out of every view, measure and export (`plan/column-duplicate-id`,
+  `plan/column-unknown-floor`, `plan/column-too-large`).
+- It is drawn cut through, as the walls are, filled in the outside walls' tone, and is in the
+  drawing's key. The IFC writes each as an `IfcColumn` on its own floor's storey, swept from that
+  storey's level to its top, with its length, cross-section and volume; the DXF puts it on its own
+  layer (`GRID-COLUMNS`), a round one as a true circle; the OBJ and the GLB hold a solid for each
+  (`column_<id>`); the 3D view and the sheet's still show it. `grid_takeoff` counts the columns by
+  shape and size, with their metres and volume, and `grid describe` says each floor's.
+
+A structural grid is a named set of lines the columns are set out on. Its `x` lines run along the
+grid's own y, the first through `origin`, each `spacing` metres past the one before; its `y` lines
+run along its x. `turn` turns the whole grid counter-clockwise, in degrees. A set's `names` name
+its lines in order, one each (a set with no spacing is one line); unstated, the x lines are
+numbered 1, 2, 3 and the y lines lettered A, B, C, then AA, AB. The schema refuses names that do
+not match the lines, two lines of one grid with one name, and more than 100 lines in a set
+(`gridLinesMost`). `floors` names the floors it is drawn on; unstated, every floor, and a floor it
+names that the plan does not have is said (`plan/grid-unknown-floor`).
+
+The grid is drawn only: each line a chain line running `gridOverrun` (1.5 m) past the outermost
+line across it, its name in a circle past both ends, and its spacing dimensioned line to line
+along the lines' start and in all along their other end (dimensions of kind `grid`, to the lines'
+centre lines). Both looks draw it, so it is on the screen, in every picture, on the sheet and in
+`grid draw`; the DXF puts the lines, circles and names on `GRID-STRUCTURAL-GRID` and the spacing
+with the other dimensions. It is in no measure, check or count, and places no column: a column
+states its own `at`.
 
 ## Writing on the drawing, and the sketch layer
 

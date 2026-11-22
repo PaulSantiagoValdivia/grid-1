@@ -243,6 +243,25 @@
  *   names that no type has is said and read as no type, never refused. Optional and never
  *   defaulted: a plan with none reads exactly as before (version 1).
  *
+ * C25 · Columns and a structural grid (CNT-16, lab EL-6)
+ *   A plan MAY hold `columns`: each a thing of its own, never a wall, a room or a fixture. A column
+ *   is `square` or `round`; `width` is a square column's side along its own x and a round one's
+ *   diameter, and `depth` a square column's side along its own y (unstated, as wide: a square; a
+ *   round column states none). `at` is its middle on the plan and `turn` turns a square column
+ *   counter-clockwise about it, in degrees. It stands on its `floor` (C5) and MAY rise `through`
+ *   floors above it as a wall does (C19): one column, shared by those floors. `height` is how high
+ *   it stands above the floor it rises through; unstated, it rises to that floor's storey height.
+ *   The room a column stands in is found from the outlines (the smallest room on its floor whose
+ *   floor holds its middle, zones aside), never named, and the floor it covers there is taken off
+ *   that room's area.
+ *   A plan MAY hold `grids`: each a named structural grid, its lines set out from `origin` and
+ *   turned by `turn` (degrees, counter-clockwise): `x` lines, which run along the grid's y, each
+ *   `spacing` metres past the one before it, and `y` lines, which run along its x. A set's
+ *   `names` name its lines in order, one each; unstated, x lines are numbered 1, 2, 3 and y lines
+ *   lettered A, B, C. A grid is drawn on the `floors` it names (unstated, every floor) with its
+ *   names and the spacing between its lines, and is in no measure or check. All optional and
+ *   never defaulted (version 1): a plan that states none reads exactly as before.
+ *
  * C26 · Outdoor space, roofed or open (CNT-7, lab EL-8, EL-18, R-8)
  *   A room MAY be an outdoor space: `outdoor` names its kind (`OUTDOOR_KINDS`: a garden, a
  *   courtyard, a terrace, a balcony, a light well, a porch, a carport, or `other`; `true` is one of
@@ -2007,6 +2026,80 @@ export const ContextShapeSchema = z.object({
   height: finite().positive().optional(),
 })
 
+/** CNT-16 (C25): the shapes a column may be. */
+export const COLUMN_SHAPES = ['square', 'round'] as const
+export type ColumnShape = (typeof COLUMN_SHAPES)[number]
+
+/**
+ * CNT-16 (C25): a column, a thing of its own: never a wall, a room or a fixture. `width` is a
+ * square column's side along its own x and a round one's diameter; `depth` a square column's side
+ * along its own y (unstated, as wide). `at` is its middle, `turn` turns a square one about it in
+ * degrees, counter-clockwise. It stands on `floor` (C5: unstated, the ground floor) and may rise
+ * `through` floors above it, as a wall does (C19). `height` is how high it stands above the floor
+ * it rises through; unstated, it is that floor's storey height. `label` is what the drawing and
+ * an export call it.
+ */
+export const ColumnSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)),
+    shape: z.enum(COLUMN_SHAPES),
+    width: finite().positive(),
+    depth: finite().positive().optional(),
+    at: Vec2,
+    turn: finite().optional(),
+    height: finite().positive().optional(),
+    floor: text('id').pipe(z.string().min(1)).optional(),
+    through: text('id').pipe(z.string().min(1)).optional(),
+    label: text('name').optional(),
+  })
+  .superRefine((column, ctx) => {
+    if (column.shape === 'round' && column.depth !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['depth'], message: english(said('read.column.roundDepth')) })
+    }
+  })
+
+/**
+ * CNT-16 (C25): one set of a structural grid's lines: the `spacing` from each line to the next, in
+ * metres, and their `names`, one per line, in order. A set with no spacing is one line. At most
+ * `gridLinesMost` lines.
+ */
+export const GridLinesSchema = z
+  .object({
+    spacing: z.array(finite().positive()),
+    names: z.array(text('name').pipe(z.string().refine((value) => value.trim().length > 0, { message: english(said('read.grid.blankName')) }))).optional(),
+  })
+  .superRefine((set, ctx) => {
+    if (set.spacing.length + 1 > limit('gridLinesMost')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['spacing'], message: english(said('read.grid.tooMany', { most: limit('gridLinesMost') })) })
+    }
+    if (set.names !== undefined && set.names.length !== set.spacing.length + 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['names'], message: english(said('read.grid.namesCount', { lines: set.spacing.length + 1, names: set.names.length })) })
+    }
+  })
+
+/**
+ * CNT-16 (C25): a named structural grid. Its lines are set out from `origin`, turned by `turn`
+ * (degrees, counter-clockwise): the `x` lines run along the grid's y, the first through `origin`,
+ * and the `y` lines along its x. Unnamed, x lines are numbered 1, 2, 3 and y lines lettered A, B,
+ * C. Drawn on the `floors` it names (unstated, every floor); in no measure or check. No two of its
+ * lines share a name.
+ */
+export const StructuralGridSchema = z
+  .object({
+    id: text('id').pipe(z.string().min(1)),
+    name: text('name').optional(),
+    origin: Vec2,
+    turn: finite().optional(),
+    floors: parts(text('id').pipe(z.string().min(1)), 'floors').optional(),
+    x: GridLinesSchema,
+    y: GridLinesSchema,
+  })
+  .superRefine((grid, ctx) => {
+    const names = [...(grid.x.names ?? []), ...(grid.y.names ?? [])].map((value) => value.trim())
+    const twice = names.find((value, i) => names.indexOf(value) !== i)
+    if (twice !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: english(said('read.grid.sameName')) })
+  })
+
 /**
  * LVL-1: a solid wall that states no height takes its floor's stated `height`. Done on the file
  * as read, before the wall's own default (2.7 m) fills the gap. WRT-6 (lab AU3-6): either way the
@@ -2138,6 +2231,10 @@ export const FloorPlanFieldsSchema = z.object({
   // CNT-15 (C24): the named wall, door and window types the parts name, and the defaults
   // (`PartTypesSchema`). Optional and never defaulted (version 1).
   types: PartTypesSchema.optional(),
+  // CNT-16 (C25): the columns, each a thing of its own (`ColumnSchema`), and the structural grids,
+  // each its named lines (`StructuralGridSchema`). Optional and never defaulted (version 1).
+  columns: parts(ColumnSchema, 'columns').optional(),
+  grids: parts(StructuralGridSchema, 'structural grids').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its
   // fingerprint as Grid wrote it, `boundaries` each room's boundary fingerprint: a boundary is
   // derived from where the rooms are, and one edited by hand is refused (`room/derived-edited`).
@@ -2210,6 +2307,9 @@ export type FlatType = z.infer<typeof FlatTypeSchema>
 export type Flat = z.infer<typeof FlatSchema>
 export type PlanBuilding = z.infer<typeof PlanBuildingSchema>
 export type ContextShape = z.infer<typeof ContextShapeSchema>
+export type Column = z.infer<typeof ColumnSchema>
+export type StructuralGrid = z.infer<typeof StructuralGridSchema>
+export type GridLines = z.infer<typeof GridLinesSchema>
 export type BeyondWall = (typeof BEYOND_WALL)[number]
 export type WallType = z.infer<typeof WallTypeSchema>
 export type DoorType = z.infer<typeof DoorTypeSchema>

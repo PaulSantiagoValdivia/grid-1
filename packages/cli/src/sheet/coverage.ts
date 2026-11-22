@@ -80,6 +80,11 @@ export const SHEET_COVERAGE = {
   // page, from the same rows as grid_schedule of=doors and of=windows; a wall type and a finish
   // are in grid_takeoff and grid_schedule of=finishes, not on the sheet yet.
   types: { shown: 'tabled' },
+  // CNT-16: the columns are drawn on each floor's plan by `drawPlan`, cut through as the walls are,
+  // stand in the 3D still, and come off the room table's areas (`planAreas`). The structural grid
+  // is drawn on each floor's plan with its lines' names and its spacing dimensioned.
+  columns: { shown: 'drawn and tabled' },
+  grids: { shown: 'drawn' },
 } as const satisfies Record<keyof FloorPlan, Coverage>
 
 /**
