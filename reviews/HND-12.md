@@ -119,7 +119,25 @@ nothing under AE-2, so the done-when is held by invented scans (below).
 
 ## Gates
 
-GATES_PLACEHOLDER
+Run on the shared laptop with two workers, while about ten other sessions ran theirs.
+
+- `npm run build`: the built file is 574,019 bytes before merging main, 574,675 after merging
+  main at 4fe29ed (LVL-9, CNT-17, COD-8), under the 600 kB cap.
+- `npm run typecheck`, `npm run lint`: clean, before and after both merges.
+- `npm run scoreboard`: "Same as the stored figures" before merging (197 wrong of 16,542 lab and
+  generated rooms compared, 735 not measured, 95 sound plans with a warning; 791.9 s), and again
+  after merging main at 4fe29ed (the same counts; 645.6 s). `scoreboard/current.json` is unchanged: the lab
+  plans carry no scan.
+- The full suite (`timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2
+  --minWorkers=1`), after merging main at 26e928e…e486ccb: the 1,500 s timeout ended it with 155
+  test files done (4,427 tests, 4 skipped) and one failure, the speed test ("answers grid check on
+  the sample flat in under 500 ms (median of 7)", 6.8 s under the load; it measures the machine,
+  not this change). The 162 files it had not reached were then run on their own: 162 files,
+  1,112 tests, all passed. After merging COD-8, the affected tests were rerun: the scan tests, rooms, tolerances and contract (7 files, 87
+  tests) pass; everyPath, tools, server, write, writeRooms, fileAccess and grid.e2e (7 files, 175
+  tests) pass but for the same speed test (5.0 s), with the load average at about 280. Timed by
+  hand then, `grid check` on the sample flat took 0.54 to 1.25 s; it reads the scan code only to
+  load it.
 
 ## Tests added and changed, and why
 
@@ -173,7 +191,7 @@ GATES_PLACEHOLDER
   across the drawing. Which way is up is then one of four; `grid_mirror turn` turns it.
 - **The bundle cap is 600 kB.** Before merging main this step raised it from 550 kB (574,019
   bytes); CNT-17 on main raised it to the same 600 kB, so the cap is main's. Merged, the built file
-  is 564,215 bytes, about 34,000 of them this step's (the reader 4.4 kB, the face pairing 19.5 kB, the evidence 1.3 kB, the
+  is 574,675 bytes (after merging main with LVL-9, CNT-17 and COD-8), about 34,000 of them this step's (the reader 4.4 kB, the face pairing 19.5 kB, the evidence 1.3 kB, the
   command 5.8 kB), with no new dependency.
 - **Refusal codes** (`scan/not-read`, `scan/no-walls`, `scan/same-id`, `scan/not-closed`,
   `scan/outline`, `scan/plan-changed`, `scan/same-file`, and rooms-writing codes as `scan/gap`)
