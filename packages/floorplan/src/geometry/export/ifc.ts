@@ -43,7 +43,8 @@ import {
   type StoreyLevel
 } from '../elevations'
 import type { MultiPolygon } from 'polygon-clipping'
-import { planEnvelope, roomCeiling } from '../envelope'
+import { planEnvelope, roomCeiling, type FloorRoof } from '../envelope'
+import { faceUnderTop, floorRoofShape, planeAt, volumeUnder, wallPeak, wallTopProfile, type RoofPlane } from '../roofs'
 import { multiArea, piecesAsRings, ringOf } from '../polygons'
 import { tolerance } from '../tolerances'
 import { tryRoomShape } from '../room'
@@ -558,10 +559,11 @@ function analyseFloor(plan: FloorPlan, floor: Floor): FloorModel {
  */
 function deriveLevels(models: readonly FloorModel[]): Map<string, StoreyLevel> {
   return stackFloors(
-    models.map(({ floor, walls }) => {
+    models.map(({ floor, walls, index }) => {
       let tallest = 0
       for (const wall of walls) {
-        if (Number.isFinite(wall.height) && wall.height > tallest) tallest = wall.height
+        // LVL-6: a wall the floor's roof cuts is as tall as the roof leaves it.
+        if (Number.isFinite(wall.height)) tallest = Math.max(tallest, wallPeak(index.plan, wall))
       }
       return { floor, tallest }
     }),
@@ -636,15 +638,42 @@ function extrusion(c: Context, profile: number, height: number): number {
   )
 }
 
-function bodyRepresentation(c: Context, solid: number): number {
+function bodyRepresentation(c: Context, solid: number, type: 'SweptSolid' | 'Clipping' = 'SweptSolid'): number {
   return c.w.add(
     'IFCSHAPEREPRESENTATION',
     ref(c.shared.bodyContext),
     str('Body'),
-    str('SweptSolid'),
+    str(type),
     refs([solid])
   )
 }
+
+/** A plane through `at`, and the side of it a clipping takes away: the side `toward` points to. */
+interface HalfSpaceCut {
+  readonly at: Triple
+  readonly toward: Triple
+}
+
+/**
+ * LVL-6: a solid with each half-space taken away, in turn, as IFC cuts a gable wall: an
+ * IfcBooleanClippingResult per cut, of an IfcHalfSpaceSolid bounded by an IfcPlane whose normal
+ * points into what is taken away (AgreementFlag false). The planes are in the frame the solid is
+ * swept in.
+ */
+function clipped(c: Context, solid: number, cuts: readonly HalfSpaceCut[]): number {
+  let result = solid
+  for (const cut of cuts) {
+    const length = Math.hypot(...cut.toward)
+    const normal = cut.toward.map((v) => v / length)
+    const position = c.w.add('IFCAXIS2PLACEMENT3D', ref(c.w.add('IFCCARTESIANPOINT', reals(cut.at))), ref(c.w.add('IFCDIRECTION', reals(normal))), NULL)
+    const half = c.w.add('IFCHALFSPACESOLID', ref(c.w.add('IFCPLANE', ref(position))), '.F.')
+    result = c.w.add('IFCBOOLEANCLIPPINGRESULT', en('DIFFERENCE'), ref(result), ref(half))
+  }
+  return result
+}
+
+/** What lies above a roof plane, in a frame whose origin stands `base` above the floor's level. */
+const above = (plane: RoofPlane, base: number): HalfSpaceCut => ({ at: [0, 0, plane.z0 - base], toward: [-plane.gx, -plane.gy, 1] })
 
 const productShape = (c: Context, representations: readonly number[]): number =>
   c.w.add('IFCPRODUCTDEFINITIONSHAPE', NULL, NULL, refs(representations))
@@ -726,6 +755,13 @@ interface WallElement {
   readonly length: number
   /** The area of its body profile, seen from above: its footprint, corners joined. */
   readonly footprint: number
+  /** LVL-6: its body's height, the highest point of the top a roof leaves it, else its own. */
+  readonly height: number
+  /** LVL-6: its side along the axis under its top, and its body's volume, cut by the roof. */
+  readonly side: number
+  readonly volume: number
+  /** Whether the roof cuts it. */
+  readonly cut: boolean
 }
 
 /**
@@ -777,7 +813,23 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
     outline === null
       ? rectangleProfile(c, axis.length, wall.thickness, axis.length / 2)
       : footprintProfile(c, { outline, holes: [] })
-  const body = bodyRepresentation(c, extrusion(c, profile, wall.height))
+  // LVL-6: a wall the floor's roof cuts rises to its highest point and has the roof's planes taken
+  // off above its line, each level across the wall as the views draw it.
+  const top = wallTopProfile(storey.model.index.plan, wall)
+  const roof = top === null ? null : floorRoofShape(storey.model.index.plan, storey.model.floor.id)
+  const peak = top === null ? wall.height : Math.max(...top.map((p) => p.z))
+  const cuts: HalfSpaceCut[] = []
+  const planes: RoofPlane[] = []
+  for (const plane of roof?.planes ?? []) {
+    const a = plane.z0 + plane.gx * axis.start.x + plane.gy * axis.start.y
+    const b = plane.gx * axis.dir.x + plane.gy * axis.dir.y
+    if (Math.min(a, a + b * axis.length) < peak - tolerance('joint')) {
+      cuts.push({ at: [0, 0, a], toward: [-b, 0, 1] })
+      planes.push({ z0: a, gx: b, gy: 0 })
+    }
+  }
+  const swept = extrusion(c, profile, peak)
+  const body = cuts.length === 0 ? bodyRepresentation(c, swept) : bodyRepresentation(c, clipped(c, swept, cuts), 'Clipping')
   const shape = productShape(c, [axisRepresentation, body])
 
   const id = w.add(
@@ -796,7 +848,11 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
   typeWall(c, wall, id)
   noteFacts(c, id, 'wall', wall)
   const footprint = outline === null ? axis.length * wall.thickness : area(outline)
-  return { id, placement: wallPlacement, wall, length: axis.length, footprint }
+  // LVL-6 with HND-2: a wall the roof cuts is measured as written, under its cut top.
+  const ring = outline ?? [{ x: 0, y: -half }, { x: axis.length, y: -half }, { x: axis.length, y: half }, { x: 0, y: half }]
+  const side = top === null ? axis.length * peak : faceUnderTop(top, 0, axis.length)
+  const volume = cuts.length === 0 ? footprint * peak : volumeUnder([...planes, { z0: peak, gx: 0, gy: 0 }], [[ringOf(ring)]])
+  return { id, placement: wallPlacement, wall, length: axis.length, footprint, height: peak, side, volume, cut: cuts.length > 0 }
 }
 
 /**
@@ -805,16 +861,14 @@ function writeWall(c: Context, storey: Storey, wall: Wall, ends: WallEnds | unde
  * volume, each less the openings written in it (their width by height, through its thickness).
  */
 function writeWallQuantities(c: Context, element: WallElement, openings: readonly Opening[]): void {
-  const { wall, length, footprint } = element
+  const { wall, length, footprint, height, side, volume, cut } = element
   const holes = openings.reduce((sum, opening) => sum + opening.width * opening.height, 0)
-  const side = length * wall.height
-  const volume = footprint * wall.height
   quantitySet(c, `wall:${wall.id}`, 'Qto_WallBaseQuantities', [
     ['LENGTH', 'Length', length, 'Along its axis, from start to end.'],
     ['LENGTH', 'Width', wall.thickness],
-    ['LENGTH', 'Height', wall.height],
+    cut ? ['LENGTH', 'Height', height, 'Its highest point: the roof cuts its top.'] : ['LENGTH', 'Height', height],
     ['AREA', 'GrossFootprintArea', footprint, 'Its body seen from above, with its corners joined to the walls it meets.'],
-    ['AREA', 'GrossSideArea', side, 'Its length along the axis times its height, one side.'],
+    ['AREA', 'GrossSideArea', side, cut ? 'One side along its axis, under the top the roof leaves it.' : 'Its length along the axis times its height, one side.'],
     ['AREA', 'NetSideArea', side - holes, 'The gross side area less every opening written in it, at its full size.'],
     ['VOLUME', 'GrossVolume', volume],
     ['VOLUME', 'NetVolume', volume - holes * wall.thickness, 'The gross volume less every opening written in it, through its thickness.']
@@ -1161,13 +1215,26 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
   const { w } = c
 
   const offset = roomFloorOffset(room)
+  // LVL-6: under a roof the floor states, the space rises to the roof's top and the roof's planes
+  // are taken off it, so it holds the volume under the slope.
+  const roof = floorRoofShape(storey.model.index.plan, storey.model.floor.id)
+  const reach = roof === null ? storey.height : roof.top
   // A room raised to the ceiling or past it (asked about by the checks) keeps the storey's height.
-  const height = storey.height - offset > 0 ? storey.height - offset : storey.height
+  const height = reach - offset > 0 ? reach - offset : reach
+  const corners = [footprint.outline, ...footprint.holes].flat()
+  const cutting = (roof?.planes ?? []).filter(
+    (plane) => Math.min(...corners.map((p) => plane.z0 + plane.gx * p.x + plane.gy * p.y)) - offset < height - tolerance('joint')
+  )
+  const cuts = cutting.map((plane) => above(plane, offset))
+  // HND-2's volume, as written: under the roof, the clipped body's.
+  const volume =
+    cuts.length === 0
+      ? footprintArea(footprint) * height
+      : volumeUnder([...cutting.map((plane) => ({ ...plane, z0: plane.z0 - offset })), { z0: height, gx: 0, gy: 0 }], [[ringOf(footprint.outline), ...footprint.holes.map((hole) => ringOf(hole))]])
   const spacePlacement = placement(w, storey.placement, [0, 0, offset])
   const profile = footprintProfile(c, footprint)
-  const shape = productShape(c, [
-    bodyRepresentation(c, extrusion(c, profile, height))
-  ])
+  const swept = extrusion(c, profile, height)
+  const shape = productShape(c, [cuts.length === 0 ? bodyRepresentation(c, swept) : bodyRepresentation(c, clipped(c, swept, cuts), 'Clipping')])
 
   // HND-2: Name is the room's number and LongName its name, the way a BIM tool reads a room's
   // number and name; ObjectType is its use, when the plan states one. CNT-9: the number is the
@@ -1188,7 +1255,7 @@ function writeSpace(c: Context, storey: Storey, room: Room): number | null {
     en('INTERNAL'),
     NULL
   )
-  writeSpaceData(c, storey, room, space, footprint, height, numbered)
+  writeSpaceData(c, storey, room, space, footprint, { height, volume, cut: cuts.length > 0 }, numbered)
   // The stated number is a fact of the room's set too, first, as the DXF writes it.
   const facts = room.number === undefined || factOf(room, ROOM_NUMBER_FACT) !== undefined ? room.properties : { [ROOM_NUMBER_FACT]: room.number, ...room.properties }
   noteFacts(c, space, 'space', { id: room.id, properties: facts })
@@ -1214,7 +1281,7 @@ function writeSpaceData(
   room: Room,
   space: number,
   footprint: Footprint,
-  height: number,
+  body: { readonly height: number; readonly volume: number; readonly cut: boolean },
   numbered: RoomNumber | undefined
 ): void {
   let net: number | null = null
@@ -1250,11 +1317,11 @@ function writeSpaceData(
   ], space)
 
   quantitySet(c, `space:${room.id}`, 'Qto_SpaceBaseQuantities', [
-    ['LENGTH', 'Height', height],
+    body.cut ? ['LENGTH', 'Height', body.height, 'Its highest point: the roof cuts it.'] : ['LENGTH', 'Height', body.height],
     ['LENGTH', 'GrossPerimeter', perimeter(footprint.outline)],
     ['AREA', 'GrossFloorArea', gross, FOOTPRINT_RULE],
     ...(net === null ? [] : [['AREA', 'NetFloorArea', net, rule.measures] as const]),
-    ['VOLUME', 'GrossVolume', gross * height]
+    body.cut ? ['VOLUME', 'GrossVolume', body.volume, 'Under the roof: the space as written, cut to its slopes.'] : ['VOLUME', 'GrossVolume', body.volume]
   ], space)
 }
 
@@ -1334,6 +1401,103 @@ function writeSlab(
 
 const footprintPieces = (footprint: Footprint): MultiPolygon => [[ringOf(footprint.outline), ...footprint.holes.map(ringOf)]]
 
+/** IFC's roof types (IfcRoofTypeEnum), by the shape the floor states. */
+const ROOF_TYPES = { flat: 'FLAT_ROOF', 'mono-pitch': 'SHED_ROOF', gable: 'GABLE_ROOF', hip: 'HIP_ROOF' } as const
+
+/** The lowest point of a roof's underside over its pieces, above the floor's level. */
+function roofBase(roof: FloorRoof): number {
+  let low = Infinity
+  for (const facet of roof.facets) {
+    for (const piece of piecesAsRings(facet.pieces)) for (const p of piece.outline) low = Math.min(low, planeAt(facet.plane, p))
+  }
+  return Number.isFinite(low) ? low : roof.bottom
+}
+
+/**
+ * LVL-6: a sloped roof as one IfcSlab `ROOF`: each plane's pieces swept up from the roof's lowest
+ * point past its highest, with what lies above the roof's top face and below its underside taken
+ * off (`clipped`), so each piece lies on its slope, as thick as the roof measured upright.
+ */
+function writeSlopedRoof(c: Context, storey: Storey, floor: Floor, roof: FloorRoof): { id: number; placement: number } | null {
+  const base = roofBase(roof)
+  const solids: number[] = []
+  for (const facet of roof.facets) {
+    const below: HalfSpaceCut = { at: [0, 0, facet.plane.z0 - base], toward: [facet.plane.gx, facet.plane.gy, -1] }
+    const over = above({ ...facet.plane, z0: facet.plane.z0 + roof.thickness }, base)
+    for (const piece of piecesAsRings(facet.pieces)) {
+      if (piece.outline.length < 3) continue
+      const high = Math.max(...piece.outline.map((p) => planeAt(facet.plane, p))) + roof.thickness - base
+      if (!(high > 0)) continue
+      solids.push(clipped(c, extrusion(c, footprintProfile(c, piece), high), [over, below]))
+    }
+  }
+  if (solids.length === 0) return null
+  const slabPlacement = placement(c.w, storey.placement, [0, 0, base])
+  const shape = productShape(c, [c.w.add('IFCSHAPEREPRESENTATION', ref(c.shared.bodyContext), str('Body'), str('Clipping'), refs(solids))])
+  const id = c.w.add('IFCSLAB', str(c.guid('roof-slab', floor.id)), ref(c.owner), str(`${floor.name} roof slab`), NULL, NULL, ref(slabPlacement), ref(shape), NULL, en('ROOF'))
+  return { id, placement: slabPlacement }
+}
+
+/**
+ * LVL-6: each rooflight as a void through the roof slab and the window that fills it, as a window
+ * fills a wall: the void an upright prism over the rooflight's rectangle on the plan, through the
+ * roof and past both faces; the window a pane in the slope, as wide and long as the rooflight, in
+ * the middle of the roof's depth. Returns the windows, to be contained in the storey.
+ */
+function writeRooflights(c: Context, storey: Storey, floor: Floor, roof: FloorRoof, slab: { id: number; placement: number }): number[] {
+  const windows: number[] = []
+  const slabBase = roof.facets.some((f) => f.plane.gx !== 0 || f.plane.gy !== 0) ? roofBase(roof) : roof.bottom - storey.elevation
+  for (const place of roof.rooflights) {
+    const { rooflight, plane } = place
+    const heights = place.outline.map((p) => planeAt(plane, p))
+    const low = Math.min(...heights) - VOID_CLEARANCE
+    const high = Math.max(...heights) + roof.thickness + VOID_CLEARANCE
+    const cut = extrusion(c, footprintProfile(c, { outline: place.outline, holes: [] }), high - low)
+    const hole = c.w.add(
+      'IFCOPENINGELEMENT',
+      str(c.guid('opening', `rooflight:${floor.id}:${rooflight.id}`)),
+      ref(c.owner),
+      str(rooflight.id),
+      NULL,
+      str('Rooflight'),
+      ref(placement(c.w, slab.placement, [0, 0, low - slabBase])),
+      ref(productShape(c, [bodyRepresentation(c, cut)])),
+      NULL
+    )
+    relate(c, 'IFCRELVOIDSELEMENT', `rooflight:${floor.id}:${rooflight.id}`, ref(slab.id), ref(hole))
+
+    // The pane: its own z the roof's normal, its x along the rooflight's width.
+    const at = { x: rooflight.at[0], y: rooflight.at[1] }
+    const length = Math.hypot(plane.gx, plane.gy, 1)
+    const normal: Triple = [-plane.gx / length, -plane.gy / length, 1 / length]
+    const middle = planeAt(plane, at) + roof.thickness / 2
+    const origin: Triple = [at.x - (normal[0] * LEAF_DEPTH) / 2, at.y - (normal[1] * LEAF_DEPTH) / 2, middle - (normal[2] * LEAF_DEPTH) / 2]
+    const axes = c.w.add(
+      'IFCAXIS2PLACEMENT3D',
+      ref(c.w.add('IFCCARTESIANPOINT', reals(origin))),
+      ref(c.w.add('IFCDIRECTION', reals(normal))),
+      ref(c.w.add('IFCDIRECTION', reals([place.across.x, place.across.y, 0])))
+    )
+    const pane = rectangleProfile(c, rooflight.width, rooflight.length, 0)
+    const window = c.w.add(
+      'IFCWINDOW',
+      str(c.guid('window', `rooflight:${floor.id}:${rooflight.id}`)),
+      ref(c.owner),
+      str(rooflight.id),
+      NULL,
+      str('Rooflight'),
+      ref(c.w.add('IFCLOCALPLACEMENT', ref(storey.placement), ref(axes))),
+      ref(productShape(c, [bodyRepresentation(c, extrusion(c, pane, LEAF_DEPTH))])),
+      NULL,
+      real(rooflight.length),
+      real(rooflight.width)
+    )
+    relate(c, 'IFCRELFILLSELEMENT', `rooflight:${floor.id}:${rooflight.id}`, ref(hole), ref(window))
+    windows.push(window)
+  }
+  return windows
+}
+
 /** The length round the outer edge of every piece, its holes not counted. */
 const piecesPerimeter = (pieces: MultiPolygon): number =>
   piecesAsRings(pieces).reduce((sum, piece) => sum + perimeter(piece.outline), 0)
@@ -1377,6 +1541,28 @@ const RAISED_NOTE =
   'The plan states no slab: Grid fills under this room, set above its storey, over its footprint, from the storey\'s floor up to the room\'s.'
 const roofNote = (thickness: number): string =>
   `The plan states no roof: Grid puts a flat one, ${thickness} m thick, over every part of the floor with nothing above, on its walls, with no overhang and no fall.`
+
+/**
+ * LVL-6 with HND-2: a roof the floor states, measured as written: its area on the slope, the
+ * rooflights' rectangles in it, and its volume, as thick as it is measured upright over its plan.
+ * With rooflights, the net area and volume are the roof less them.
+ */
+function writeStatedRoofQuantities(c: Context, key: string, slab: number, roof: FloorRoof): void {
+  const lights = roof.rooflights.reduce((sum, place) => sum + place.rooflight.width * place.rooflight.length, 0)
+  const net = roof.facets.reduce((sum, facet) => sum + facet.area, 0)
+  const some = roof.rooflights.length > 0
+  quantitySet(c, key, 'Qto_SlabBaseQuantities', [
+    ['LENGTH', 'Width', roof.thickness, roof.pitch === 0 ? 'Its thickness.' : 'Its thickness, measured upright.'],
+    ['LENGTH', 'Perimeter', piecesPerimeter(roof.pieces), 'Round its edge on the plan.'],
+    roof.pitch === 0 ? ['AREA', 'GrossArea', roof.slopeArea + lights] : ['AREA', 'GrossArea', roof.slopeArea + lights, 'On the slope.'],
+    ...(some ? [['AREA', 'NetArea', roof.slopeArea, 'The gross area less its rooflights.'] as const] : []),
+    ['VOLUME', 'GrossVolume', roof.area * roof.thickness],
+    ...(some ? [['VOLUME', 'NetVolume', net * roof.thickness] as const] : [])
+  ], slab)
+}
+
+const statedRoofNote = (roof: FloorRoof): string =>
+  `The floor states its roof (${roof.shape ?? 'flat'}): its shape, eaves and pitch are the plan's. Grid lays it over every part of the floor with nothing above, its eaves on the outside walls' lines, ${roof.thickness} m thick measured upright, with no overhang.`
 
 /**
  * Every storey's slab, its openings, the roof over its parts with nothing above, its parapet and
@@ -1491,14 +1677,24 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
           ref(placement(c.w, storey.placement, [0, 0, 0])),
           NULL,
           NULL,
-          en('FLAT_ROOF')
+          en(ROOF_TYPES[roof.shape ?? 'flat'])
         )
-        const slab = writeSlab(c, storey, ['roof-slab', floor.id], `${floor.name} roof slab`, roof.pieces, 'ROOF', bottom, roof.thickness)
+        const sloped = roof.facets.some((f) => f.plane.gx !== 0 || f.plane.gy !== 0)
+        const flatPieces = roof.facets.length === 1 ? roof.facets[0]!.pieces : roof.pieces
+        const slab = sloped
+          ? writeSlopedRoof(c, storey, floor, roof)
+          : writeSlab(c, storey, ['roof-slab', floor.id], `${floor.name} roof slab`, flatPieces, 'ROOF', bottom, roof.thickness)
         if (slab !== null) {
           aggregate(c, `roof:${floor.id}`, element, [slab.id])
           // IFC2x3 has no base quantities for a roof: its slab carries them.
-          writeSlabQuantities(c, `roof-slab:${floor.id}`, slab.id, roof.pieces, roof.thickness)
-          describeSlab(c, `roof-slab:${floor.id}`, slab.id, false, roofNote(roof.thickness))
+          if (roof.shape === null) {
+            writeSlabQuantities(c, `roof-slab:${floor.id}`, slab.id, roof.pieces, roof.thickness)
+            describeSlab(c, `roof-slab:${floor.id}`, slab.id, false, roofNote(roof.thickness))
+          } else {
+            writeStatedRoofQuantities(c, `roof-slab:${floor.id}`, slab.id, roof)
+            describeSlab(c, `roof-slab:${floor.id}`, slab.id, false, statedRoofNote(roof))
+          }
+          contained.push(...writeRooflights(c, storey, floor, roof, slab))
         }
         contained.push(element)
         if (roof.parapet !== null) {
@@ -1533,7 +1729,7 @@ function writeSlabs(building: Context, plan: FloorPlan, storeys: readonly Storey
     for (const room of index.plan.rooms) {
       if (broken.has(room.id) || room.ceiling === undefined) continue
       try {
-        const pieces = roomCeiling(room, index, storey.height) ?? []
+        const pieces = roomCeiling(room, index, storey.height, floorRoofShape(index.plan, floor.id)) ?? []
         const coverings: number[] = []
         const offset = roomFloorOffset(room)
         for (const piece of pieces) {

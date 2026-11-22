@@ -11,11 +11,13 @@ import {
   cross,
   dot,
   floorOf,
+  floorRoofShape,
   fromTuple,
   itemFootprint,
   planForFloor,
   pointAlong,
   poleOfInaccessibility,
+  roomHeadroom,
   roomWallIds,
   spotsInside,
   sub,
@@ -215,16 +217,18 @@ export const FACES_RULE =
   'Measured between faces, as a tape would be: a wall by its faces, a door or window by the edges of its hole in the wall, a room by its inside outline. Centre lines are used only for a wall\'s own length.'
 
 export const HEIGHT_RULE =
-  'A room is as high as the plan states for it. When it states none, the room is as high as the lowest solid wall round it, since a level ceiling rests on all of them; dividing lines stand no height and are left out.'
+  'A room is as high as the plan states for it. When it states none, the room is as high as the lowest solid wall round it, since a level ceiling rests on all of them; dividing lines stand no height and are left out. Under a roof its floor states, a room that states no height is as high as the roof over it, given from its lowest to its highest.'
 
 /** A room's height and where it comes from. */
 export interface RoomHeight {
   /** In metres; null when the plan states none and no solid wall bounds the room. */
   readonly value: number | null
   /** `room`: the room states it; `walls`: its solid walls agree; `lowest wall`: they differ and the lowest wins. */
-  readonly from: 'room' | 'walls' | 'lowest wall' | null
+  readonly from: 'room' | 'walls' | 'lowest wall' | 'roof' | null
   /** The solid walls round the room: the lowest and highest height, and the walls at the lowest, by id. Null when there are none. */
   readonly walls: { readonly low: number; readonly high: number; readonly lowest: readonly string[] } | null
+  /** LVL-6, only under a roof the floor states: the lowest and highest height over the room's floor. */
+  readonly roof?: { readonly lowest: number; readonly highest: number }
 }
 
 /**
@@ -246,6 +250,10 @@ export function roomHeight(plan: FloorPlan, roomId: string): RoomHeight {
     walls = { low, high, lowest: solid.filter((w) => w.height - low < tolerance('joint')).map((w) => w.id) }
   }
   if (room?.height !== undefined) return { value: room.height, from: 'room', walls }
+  // LVL-6: under a roof the floor states, the ceiling is the roof: the room is as high as the
+  // roof over it, from its lowest to its highest, and its walls (cut to the roof) do not bound it.
+  const under = room !== undefined && floorRoofShape(plan, floorOf(room)) !== null ? roomHeadroom(plan, room) : null
+  if (under !== null) return { value: under.highest, from: 'roof', walls, roof: { lowest: under.lowest, highest: under.highest } }
   if (walls === null) return { value: null, from: null, walls }
   return { value: walls.low, from: walls.high - walls.low < tolerance('joint') ? 'walls' : 'lowest wall', walls }
 }

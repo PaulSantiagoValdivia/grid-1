@@ -66,7 +66,8 @@ describe('a start marker, an edit and grid diff, in a folder with no git (done-w
     expect(after.out).toContain('Room added: "Store"')
     expect(after.out).toContain('Nothing changed outside the rooms named ("bed1")')
 
-    const merged = await grid(dir, 'edit', 'merge', '--room', 'bed1', '--with', 'store')
+    // CNT-8: merging rooms of two uses asks which one; the split took a bedroom, so it goes back as one.
+    const merged = await grid(dir, 'edit', 'merge', '--room', 'bed1', '--with', 'store', '--use', 'bedroom')
     expect(merged.status, merged.err).toBe(0)
     const back = await grid(dir, 'diff')
     expect(back.status, back.err).toBe(0)

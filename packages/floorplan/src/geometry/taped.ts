@@ -1,5 +1,5 @@
 /**
- * HND-11 (C11, lab WR-14): the lengths taped on site against the same lengths drawn.
+ * HND-11 (C12, lab WR-14): the lengths taped on site against the same lengths drawn.
  *
  * A plan keeps what was taped in `taped`: a room's side along one of its walls, or the distance
  * between two of the room's corners, each corner named by the two walls that meet there. Both

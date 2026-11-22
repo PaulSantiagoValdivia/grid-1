@@ -25,7 +25,7 @@ the scoreboard did, and the choices that were yours.
     `Left` is read as meant.
   - Rooms text read back (`describe --as rooms`) gives such a floor in Grid's own terms (raw
     lines, with `face`), so writing it again loses nothing.
-- **Lengths taped on site** (C11, `taped` in the plan, `TapedSchema`). Each is a room's side along
+- **Lengths taped on site** (C12, `taped` in the plan, `TapedSchema`). Each is a room's side along
   one of its walls (`wall`) or the distance between two of its corners (`from`, `to`, each the
   two walls that meet there), with `length` and an optional `tolerance` and `id`.
   `packages/floorplan/src/geometry/taped.ts` (`tapedLengths`) measures both on the room's outline

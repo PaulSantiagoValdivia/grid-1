@@ -10,6 +10,7 @@ import { DEFAULT_FLOOR, planFloors, planForFloor } from './floors'
 import type { Floor, FloorPlan, Wall } from './plan'
 import { indexPlan } from './plan'
 import { validatePlan } from './validate'
+import { wallPeak } from './roofs'
 
 /** What a storey with no drawn wall counts as: the plan's default wall height. */
 export const DEFAULT_STOREY_HEIGHT = 2.7
@@ -155,14 +156,15 @@ export interface BuildingElevations {
   readonly roof: { readonly bottom: number; readonly top: number }
 }
 
-/** The tallest wall a floor draws, or 0 when it draws none or cannot be analysed. */
+/** The tallest wall a floor draws, as its roof cuts it (LVL-6), or 0 when it draws none or cannot be analysed. */
 function tallestDrawnWall(plan: FloorPlan, floor: Floor): number {
   try {
     const slice = planForFloor(plan, floor.id)
     const broken = new Set(validatePlan(slice, indexPlan(slice), { spaces: false }).broken)
     let tallest = 0
     for (const wall of slice.walls) {
-      if (isDrawnWall(wall, broken) && wall.height > tallest) tallest = wall.height
+      // LVL-6: a wall the floor's roof cuts is as tall as the roof leaves it.
+      if (isDrawnWall(wall, broken)) tallest = Math.max(tallest, wallPeak(slice, wall))
     }
     return tallest
   } catch {
