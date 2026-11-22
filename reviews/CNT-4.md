@@ -8,10 +8,10 @@ the same stand-in grouping).
 
 ## What CNT-4 adds
 
-**Flats and flat types in the plan file** (C17, `packages/floorplan/src/types/floorplan.ts`). Two
+**Flats and flat types in the plan file** (C18, `packages/floorplan/src/types/floorplan.ts`). Two
 optional top-level lists, never defaulted (version 1), as the format's change rule asks:
 `flatTypes` (each `id`, `name`) and `flats` (each `id`, `name`, `type`, `rooms` by id, at least
-one, on any floors, and `mirrored`). C14 is CNT-17's, C15 HND-11's (taped lengths) and C16 CNT-10's (phases), all merged from main while CNT-4 was built, so this is C17. Both are placed in
+one, on any floors, and `mirrored`). C14 is CNT-17's, C15 HND-11's (taped lengths), C16 CNT-10's (phases) and C17 BRF-4's (floor outlines), all merged from main while CNT-4 was built, so this is C18. Both are placed in
 `packages/cli/src/sheet/coverage.ts`: `flats` drawn and tabled, `flatTypes` tabled (a new
 `Coverage` variant). The command's text limits (`src/command/planText.ts`) hold their ids, names
 and room lists; MSG-4 names a misspelt field inside a flat with the one meant; a flat that cannot

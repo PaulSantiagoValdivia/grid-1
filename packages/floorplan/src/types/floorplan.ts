@@ -152,7 +152,19 @@
  *   own work, are read into the plan as existing and are never written back to it; the plan's own
  *   parts that state no phase are new. Both optional and never defaulted (version 1).
  *
- * C17 · Flats (CNT-4, lab EL-1, WR-6, AR-7, CP3-6)
+ * C17 · Floor outlines (BRF-4, lab FD-1)
+ *   A floor MAY state its `outline`: its outside face, its corners in plan metres in order round
+ *   it, either way round, as `site.boundary` is written (C13). It is the one shape a floor's slab
+ *   covers, its roof is cut from and its gross external area is measured to: joined with what
+ *   the floor's walls enclose, so a floor with walls and no outline reads exactly as before. A
+ *   floor with an outline and no walls is massing: its level, height (C5) and kind of building
+ *   (`building`, CNT-5) give its gross area and its storey, and nothing inside it is checked.
+ *   Floor inside the outline that no room claims is floor no room claims. A floor MAY also state
+ *   how many `homes` it holds and how many `parking` spaces: the agent's proposal, which Grid
+ *   counts against the person's own limits and never brings a figure for. All three are optional
+ *   and never defaulted (version 1).
+ *
+ * C18 · Flats (CNT-4, lab EL-1, WR-6, AR-7, CP3-6)
  *   A plan MAY say which rooms make each flat (a dwelling, a unit), in `flats`: each with an id, a
  *   name, the `type` it is, by id, and its `rooms`, by id, on one floor or several (a duplex). A
  *   flat type is stated once, in `flatTypes` (an id and a name), and placed many times: a flat
@@ -169,6 +181,7 @@ import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } f
 import { factKey } from './facts'
 import { placeProblem } from './places'
 import { roofFrame, roofTop } from './roofFrame'
+import { ringProblem } from '../geometry/ring'
 
 export * from './planText'
 export * from './facts'
@@ -380,6 +393,23 @@ export const FloorSchema = z.object({
   building: BuildingTypeSchema.optional(),
   // CNT-9 (C9): facts of the person's own. Optional and never defaulted (version 1).
   properties: PropertiesSchema.optional(),
+  // BRF-4 (C17): the floor's outside face, its corners in order round it, either way round; a
+  // last point on the first closes it. Joined with what the walls enclose for the slab, the roof
+  // and the gross external area. Optional and never defaulted (version 1).
+  outline: z
+    .array(Vec2)
+    .min(3)
+    .max(BOUNDARY_MAX)
+    .superRefine((points, ctx) => {
+      const open = boundaryEdgeCount(points) === points.length ? points : points.slice(0, -1)
+      const problem = ringProblem(open.map(([x, y]) => ({ x, y })))
+      if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `is not an outline: ${problem}` })
+    })
+    .optional(),
+  // BRF-4 (C17): how many homes the floor holds, and how many parking spaces: the agent's
+  // proposal, counted against the person's own limits. Optional and never defaulted (version 1).
+  homes: z.number().int().min(0).max(PARTS_MAX).optional(),
+  parking: z.number().int().min(0).max(PARTS_MAX).optional(),
 })
 
 export const WallKindSchema = z.enum(['exterior', 'interior', 'partition'])
@@ -1462,7 +1492,7 @@ export const AccessibleSchema = z.object({
 })
 
 /**
- * CNT-4 (C17): a kind of flat, stated once and placed many times: an id the flats name in their
+ * CNT-4 (C18): a kind of flat, stated once and placed many times: an id the flats name in their
  * `type`, and a name to read it by ("One bedroom"). Optional and never defaulted (version 1).
  */
 export const FlatTypeSchema = z.object({
@@ -1471,7 +1501,7 @@ export const FlatTypeSchema = z.object({
 })
 
 /**
- * CNT-4 (C17): a flat (a dwelling, a unit): an id, a name, the type it is (an id in `flatTypes`),
+ * CNT-4 (C18): a flat (a dwelling, a unit): an id, a name, the type it is (an id in `flatTypes`),
  * its rooms by id (on one floor or several: a duplex), and whether it is its type's mirror image.
  * A group of rooms, never a room. Optional and never defaulted (version 1).
  */
@@ -1600,7 +1630,7 @@ export const FloorPlanFieldsSchema = z.object({
   // HND-11 (C15): lengths taped on site, kept as checks beside the drawing (`TapedSchema`).
   // Optional and never defaulted (version 1).
   taped: parts(TapedSchema, 'taped lengths').optional(),
-  // CNT-4 (C17): the flat types, each stated once (`FlatTypeSchema`), and the flats, each a group
+  // CNT-4 (C18): the flat types, each stated once (`FlatTypeSchema`), and the flats, each a group
   // of rooms by id (`FlatSchema`). Optional and never defaulted (version 1).
   flatTypes: parts(FlatTypeSchema, 'flat types').optional(),
   flats: parts(FlatSchema, 'flats').optional(),

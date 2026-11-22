@@ -297,6 +297,7 @@ label.
 | `firm/room-width` | {thing}: the widest circle it holds is {width} m across, under the firm's own figure of {figure} m for room width | at least {figure} m: the firm's figure used here, from "{file}", … |
 | `firm/not-read` | The firm's standards in "{file}" were not read, so none of them was set against the plan | a firm's standards file Grid reads: version "1" and a list of standards, as docs/firm-standards.md sets out |
 | `floor/unclaimed` | {thing} has enclosed floor that no room claims | every enclosed floor in a room |
+| `floor/past-outline` | {thing}'s walls reach past the outline it states | walls inside the outline the floor states, the outside face of the floor |
 | `floor/empty-top` | {thing} is the top floor and has nothing drawn on it | a top floor with something on it |
 | `floor/rooflight-misplaced` | {thing} has a rooflight that does not lie on one slope of its roof | a rooflight wholly inside the roof and on one of its slopes, clear of the ridge and the hips |
 | `floor/dormers-not-drawn` | {thing} lists dormers, which are not supported yet | a roof Grid can draw: dormers are not supported yet |
@@ -675,7 +676,7 @@ A change that would add a problem that leaves a part out is refused, and nothing
 ### 2026-11-22: flats, flat types and the mix (CNT-4)
 
 - The plan format takes `flatTypes` (each `id` and `name`) and `flats` (each `id`, `name`,
-  `type`, `rooms` by id, at least one, on one floor or several, and `mirrored`), C17. Both are
+  `type`, `rooms` by id, at least one, on one floor or several, and `mirrored`), C18. Both are
   optional and never defaulted; `plan/unknown-field`'s list of the plan's fields now names them
   after `taped`.
 - A new kind of thing, `flat`, and six codes, all worth a look and none leaving out more than the
@@ -698,6 +699,49 @@ A change that would add a problem that leaves a part out is refused, and nothing
   the paper's colour along the middle of the walls round its rooms (`data-part="flat"`). The IFC
   writes an `IfcZone` per flat with an `IfcRelAssignsToGroup` of its spaces and a `Grid_Flat`
   property set. `grid sheet --layout check` ends with a flat schedule page on such a plan.
+
+### 2026-11-22: a plan from a phone room scan (HND-12)
+
+- `grid_write_rooms` takes `scan`, a room scan file in the project (Apple's room model as JSON),
+  in place of `rooms`; `rooms` is no longer required, and passing both or neither is refused.
+  The answer's data gains `scan`: `null` for rooms text, else `evidence` (the file kept beside
+  the plan, `<plan>.scan.json`), `paired` (each wall made from two faces: `wall`, `faces`,
+  `thickness`), `oneSided` (the walls with a face on one side only), `areas` (each room's `area`
+  beside the scan's `scanArea`, `from` `floor outline` or `wall faces`, and `difference`, a
+  fraction), `assumed` (`text`, `parts` with `part` and `id`, and `value` or null), `leftOut` and
+  `match` (`kept`, `fresh`, and `gone` with `scanId`, `part` and `id`). `rooms`, `walls`,
+  `openings`, `warnings`, `verdict`, `drawingProblems`, `brief`, `reminder` and HND-11's `taped`
+  are as for rooms text; `guesses` is empty.
+- A plan written from a scan marks every part `scanned` and each assumed value `assumed`, so
+  `grid_check` gives one `plan/value-assumed` line (`to-confirm`) for each outside wall's
+  thickness and each fixture's turn. No new message code and no new tool.
+- A refusal of the scan has a code of its own in its text's place (`scan/not-read`,
+  `scan/no-walls`, `scan/same-id`, `scan/not-closed`, `scan/outline`, `scan/plan-changed`,
+  `scan/same-file`, or a rooms-writing code such as `scan/gap`), and names the part and the
+  limit, never the scan's text.
+
+### 2026-11-22: massing before walls, and the person's site limits (BRF-4)
+
+- A floor may state its `outline` (C17), its outside face before any wall, and how many `homes`
+  and `parking` spaces it holds ([plan-file.md](plan-file.md#a-floor-outline-before-the-walls)).
+  The outline is joined with what the floor's walls enclose: the slab, the roof, the gross
+  external area, the plot's footprint and the floor-above line all take it. A floor with an
+  outline and no walls is massing. A plan that states no outline answers as before.
+- On a massing floor, `grid_areas` gives `grossExternal` and a null `grossInternal` with the
+  floor's `why`; its floor carries `massing: true` (left out on every other floor), and the
+  notes name the massing floors. `grid_areas` adds `storeys` (`above`, `below`, `storeys` by
+  level with their `floors` and `below`, `empty`), and a "Storeys:" line when a floor is massing.
+- A new worth-a-look line, `floor/past-outline`: the floor's walls reach past the outline it
+  states, with the area past it. A massing floor gives no `floor/unclaimed` and no
+  `floor/empty-top`, and a plan whose only content is outlines no `plan/empty`. A floor whose
+  walls and outline leave floor no room claims gives `floor/unclaimed` for it, as before.
+- The brief's `figures` take the person's site limits: `plot_coverage` (a percentage),
+  `floor_area_ratio` (with `measure`, `gross_external` or `gross_internal`), `building_height`
+  (metres) and `parking_per_home`. Their brief lines are met, missed or open, as the others.
+- `grid_measure what=site` adds to its `answer`: `storeys`, `limits` (each with `limit`, `edge`,
+  `state` `met`, `missed` or `not-measured`, `used`, `allowed`, `most`, `unit`, `rule`, `why`,
+  `assumed`, `source`) and `brief`, and its text the massing lines and "Site limits". The
+  plan's set-backs are among the limits, edge by edge.
 
 ### 2026-11-22: the preview, shared with the person (VEW-4)
 

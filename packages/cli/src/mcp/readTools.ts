@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, limit, planFloors, planOrientation, tolerance, viewSetting, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
+import { FACADE_SIDES, MEASURES, compassPoint, drawingBearing, findView, floorOf, itemFootprint, limit, planFloors, planOrientation, planStoreys, tolerance, viewSetting, wrapDegrees, type CameraRecord, type FacadeSide, type FloorPlan, type HeadroomBand, type PlanFix } from '@ongrid/floorplan/geometry'
 import { CameraRefused, cameraFor, eyeCamera, lensProblem, settingOfCamera, type CameraAsk } from '../draw/cameraAsk'
 import { PATH_MAX } from '../fs/projectFiles'
 import { FIRM_HEADING, GENERAL_GUIDANCE_LABEL, buildingKindsText, confirmedFigure, figureUsedText, inspectPlan, isFirmLine, type ResultLine } from '@ongrid/rules'
@@ -52,9 +52,10 @@ import { fixtureCountText, FIXTURE_RULES, planFixtures } from '../quantities/fix
 import { FACING_RULE, facingAnswer, northWords } from '../quantities/facing'
 import { SUN_RULE, sunAnswer } from '../quantities/sun'
 import { SITE_RULE, siteAnswer } from '../quantities/site'
+import { LIMITS_RULE, massingLines, siteLimits, storeysText } from '../quantities/limits'
 import { figureOf, roomIndicators, USE_RULE, wideRoute, wideRouteLines } from '../quantities/use'
 import { ACCESS_RULE, accessAnswer } from '../quantities/access'
-import { readBrief } from '../brief/brief'
+import { FIGURES_HEADING, readBrief } from '../brief/brief'
 import { surveyPlan, sideNames, type Survey, type SurveyRoom } from '../quantities/survey'
 import { planEstimate, WHOLE_BUILDING_KEY, type Estimate, type EstimateLine, type QuantityUnit } from '../quantities/estimate'
 import { estimateCsv, priceEstimate, rateCard, RATE_UNITS, RATES_FILE, RatesRefused, readRates, type PricedLine, type Pricing, type Rates } from '../quantities/rates'
@@ -308,6 +309,8 @@ const areasTool: GridTool = {
     states: { type: 'object' },
     // WRT-6: where the marked walls came from and the net total's give or take; null with no wall marks.
     sureness: { type: ['object', 'null'], properties: { source: STRING, plusMinus: NULLABLE_NUMBER, percent: NULLABLE_NUMBER } },
+    // BRF-4: the storeys at or above the ground floor and below it.
+    storeys: objectSchema({ above: NUMBER, below: NUMBER, storeys: { type: 'array' }, empty: { type: 'array' } }, ['above', 'below']),
     // CNT-4, only on a plan that lists flats: each flat's net area from the list, and the rooms in no flat.
     flats: listSchema(objectSchema({ id: STRING, name: STRING, type: { type: ['string', 'null'] }, net: NUMBER, floors: listSchema(STRING), rooms: listSchema(STRING) }, ['id', 'name', 'net'])),
     notInFlats: NULLABLE_NUMBER,
@@ -321,6 +324,7 @@ const areasTool: GridTool = {
     if (country !== undefined && !/^[A-Za-z]{2}$/.test(country)) throw new ToolRefusal(`country takes a two-letter country code, such as GB or US: got ${q(country)}.`)
     const asked = args['gross'] as 'internal' | 'external' | 'both' | undefined
     const gross = asked === undefined ? undefined : asked === 'both' ? 'both' : asked === 'internal' ? 'grossInternal' : 'grossExternal'
+    const storeys = planStoreys(survey.plan)
     const areas = planAreas(survey, {
       outside: new Set(outside),
       ...(floor === undefined ? {} : { floors: [floor] }),
@@ -343,6 +347,9 @@ const areasTool: GridTool = {
       notes: areas.notes,
       states: areas.states,
       sureness: areas.sureness ?? null,
+      // BRF-4 (lab FD-1): the storeys, counted by level from the floors that hold an outline or
+      // walls that close one: massing counts before any wall.
+      storeys: { above: storeys.above, below: storeys.below, storeys: storeys.storeys, empty: storeys.empty },
       // CNT-4: only on a plan that lists flats, so every other answer is as it was.
       ...(areas.notInFlats === null ? {} : { flats: areas.flats, notInFlats: areas.notInFlats }),
     }
@@ -401,6 +408,7 @@ const areasTool: GridTool = {
       lines.push(`${m === 'grossInternal' ? 'Gross internal' : 'Gross external'}: ${value === null ? 'not known' : areaText(value, units)}${state}. ${AREA_RULES[m]}`)
     }
     if (areas.headroom !== null) lines.push(`Area by headroom: ${bandsText(areas.headroom, units)}. ${MEASURES.headroom.measures}`)
+    if (areas.floors.some((f) => f.massing)) lines.push(storeysText(storeys))
     lines.push(`Assumed: ${areas.reader.why} Grid's own rule, not checked against any local standard.`)
     if (areas.grossInternal !== null && areas.reader.gross.includes('grossInternal')) {
       lines.push(`Circulation: ${areas.circulation.toFixed(2)} m², ${percent(areas.circulationShare)} of gross internal. Net to gross: ${percent(areas.netToGross)}.`)
@@ -1161,9 +1169,34 @@ const measureTool: GridTool = {
       return { text: [...sun.lines, SUN_RULE].join('\n'), data: { what, answer: sun.data, rule: SUN_RULE } }
     }
     if (what === 'site') {
-      // BRF-3 (lab EL-16): the building against its plot, and the plot coverage.
+      // BRF-3 (lab EL-16): the building against its plot, and the plot coverage. BRF-4 (lab FD-1):
+      // the storeys and the gross area per floor, massing or walls, and the person's own site
+      // limits from the brief beside the plan, each used, allowed, and met or not.
+      let read: ReturnType<typeof readBrief>
+      try {
+        read = readBrief(projectOf(context), file)
+      } catch (error) {
+        throw asRefusal(error)
+      }
       const site = siteAnswer(survey.plan, units)
-      return { text: [...site.lines, SITE_RULE].join('\n'), data: { what, answer: site.data, rule: SITE_RULE } }
+      const storeys = planStoreys(survey.plan)
+      const limits = siteLimits(survey.plan, read.brief?.figures ?? [], units)
+      const said = read.problem === null ? [] : [`The brief beside the plan was not read, so none of your own site limits is used: ${read.problem}.`]
+      const limitLines = limits.length === 0 ? ['Site limits: none given. The person\'s own coverage, floor area ratio, height and parking per home go in the brief\'s figures (grid_write_brief), the set-backs in site.setbacks.'] : ['Site limits, ' + FIGURES_HEADING.charAt(0).toLowerCase() + FIGURES_HEADING.slice(1), ...limits.map((l) => `  ${l.text}`)]
+      const text = [...site.lines, ...massingLines(survey.plan, units), ...said, ...limitLines, SITE_RULE, LIMITS_RULE]
+      return {
+        text: text.join('\n'),
+        data: {
+          what,
+          answer: {
+            ...site.data,
+            storeys: { above: storeys.above, below: storeys.below, storeys: storeys.storeys, empty: storeys.empty },
+            limits: limits.map((limit) => Object.fromEntries(Object.entries(limit).filter(([key]) => key !== 'text'))),
+            brief: read.brief === null ? null : read.file,
+          },
+          rule: `${SITE_RULE} ${LIMITS_RULE}`,
+        },
+      }
     }
     if (what === 'between') {
       if (args['from'] === undefined) throw new ToolRefusal('what=between needs from: the id of a wall, door, window, opening, fixture or room.')

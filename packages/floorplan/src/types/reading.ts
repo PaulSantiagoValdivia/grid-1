@@ -206,6 +206,8 @@ export function readingNotes(raw: unknown): ReadingNote[] {
     })
   }
   const none = (key: string): boolean => !Array.isArray(raw[key]) || (raw[key] as unknown[]).length === 0
-  if (none('walls') && none('rooms') && none('openings') && none('items')) notes.push({ kind: 'empty' })
+  // BRF-4 (C17): a floor that states its outline is massing, not nothing.
+  const outlined = Array.isArray(raw['floors']) && (raw['floors'] as unknown[]).some((floor) => isObject(floor) && floor['outline'] !== undefined && floor['outline'] !== null)
+  if (none('walls') && none('rooms') && none('openings') && none('items') && !outlined) notes.push({ kind: 'empty' })
   return notes
 }

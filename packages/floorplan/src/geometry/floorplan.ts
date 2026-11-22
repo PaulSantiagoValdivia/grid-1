@@ -31,7 +31,8 @@ import type { StairSymbol } from './stairSymbol'
 import { stairSymbol } from './stairSymbol'
 import type { LiftSymbol } from './liftSymbol'
 import { liftSymbol } from './liftSymbol'
-import { wholePlan } from './floors'
+import { planFloors, wholePlan } from './floors'
+import { statedOutline } from './massing'
 import type { ItemKind } from './items'
 import { ITEM_KIND_WORDS, isItemKind, itemFootprint, itemRoom, itemSymbol, roomShapes } from './items'
 import { planMarks } from './marks'
@@ -246,6 +247,12 @@ export interface PlanDrawing {
   readonly site: PlanSite | null
   /** BRF-3: the box round the site, so a view frames the plot too; null with no site drawn. */
   readonly siteBounds: Bounds | null
+  /**
+   * BRF-4 (C17): the outline the floor states, its corners in order, drawn as a line round the
+   * floor: massing before any wall, and the outside face the walls are drawn inside. Left out
+   * when the floor states none.
+   */
+  readonly outline?: readonly Vec2[]
   /** Envelope of the whole drawing, for computing the viewBox. */
   readonly bounds: Bounds
   /** What could not be drawn and why. Never a reason to skip the rest. */
@@ -453,7 +460,13 @@ function buildDrawing(plan: FloorPlan, index: ReturnType<typeof indexPlan>, issu
   const site = floor === null || siteFloors(wholePlan(plan).whole).includes(floor) ? planSite(plan) : null
   const siteBounds = site === null ? null : computeBounds(siteExtent(site))
   const flats = flatOutlines(plan, index, broken)
-  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds, bounds: computeBounds(extent), issues }
+  // BRF-4 (C17): the floor's stated outline, on its own plan; on a plan that is no slice, its one floor's.
+  const floors = planFloors(plan)
+  const drawnFloor = floor ?? (floors.length === 1 ? floors[0]!.id : null)
+  const statedRing = drawnFloor === null ? null : statedOutline(plan, drawnFloor)
+  const floorRing = statedRing === null ? null : statedRing[0]!.slice(0, -1).map(([x, y]) => ({ x, y }))
+  if (floorRing !== null) extent.push(...floorRing)
+  return { walls, rooms, openings, steps: planSteps(plan, index, broken), items, undrawn, stairs, lifts, flats, sketch, notes, north, sketchBounds, site, siteBounds, ...(floorRing === null ? {} : { outline: floorRing }), bounds: computeBounds(extent), issues }
 }
 
 /**

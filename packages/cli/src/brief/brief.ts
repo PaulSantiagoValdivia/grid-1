@@ -62,14 +62,22 @@ export const FIGURES_HEADING = "The person's own figures: theirs, not from any c
 
 /**
  * The person's own figures Grid knows how to measure, and how: each is a smallest size, but a
- * step, which is a largest height.
+ * step, which is a largest height. BRF-4 adds the person's site limits (`site`): a largest plot
+ * coverage (a percentage), floor area ratio, building height (metres), and a smallest number of
+ * parking spaces per home. `least` and `top` bound the value; a value of `least` itself is
+ * refused but for a step (no sill) and parking (none per home).
  */
 export const FIGURES = {
-  door_width: { what: 'door width', most: false, measures: 'the hole in the wall of every door and doorless opening; the clear width past a door leaf is less' },
-  corridor_width: { what: 'corridor width', most: false, measures: 'the widest circle each room used as a corridor holds, between its wall faces' },
-  turning_circle: { what: 'turning circle', most: false, measures: 'the widest circle each room holds (or the rooms the figure names), in the empty room' },
-  step: { what: 'step at a door', most: true, measures: 'the sill of every door and doorless opening above its floor' },
-  ceiling_height: { what: 'ceiling height', most: false, measures: 'each room\'s height, as grid_measure gives it' },
+  door_width: { what: 'door width', most: false, unit: 'm', least: 0, top: 100, site: false, measures: 'the hole in the wall of every door and doorless opening; the clear width past a door leaf is less' },
+  corridor_width: { what: 'corridor width', most: false, unit: 'm', least: 0, top: 100, site: false, measures: 'the widest circle each room used as a corridor holds, between its wall faces' },
+  turning_circle: { what: 'turning circle', most: false, unit: 'm', least: 0, top: 100, site: false, measures: 'the widest circle each room holds (or the rooms the figure names), in the empty room' },
+  step: { what: 'step at a door', most: true, unit: 'm', least: 0, top: 100, site: false, measures: 'the sill of every door and doorless opening above its floor' },
+  ceiling_height: { what: 'ceiling height', most: false, unit: 'm', least: 0, top: 100, site: false, measures: 'each room\'s height, as grid_measure gives it' },
+  // BRF-4: the person's own site limits, each set against the plan as it is drawn, massing or walls.
+  plot_coverage: { what: 'plot coverage', most: true, unit: '%', least: 0, top: 100, site: true, measures: 'the building seen from above, every floor at or above the ground floor, against the plot\'s area, as grid_measure what=site gives it' },
+  floor_area_ratio: { what: 'floor area ratio', most: true, unit: '', least: 0, top: 100, site: true, measures: 'the gross area of every floor at or above the ground floor, by the measure named, against the plot\'s area' },
+  building_height: { what: 'building height', most: true, unit: 'm', least: 0, top: 1000, site: true, measures: 'from the ground to the top of the highest roof' },
+  parking_per_home: { what: 'parking per home', most: false, unit: 'spaces per home', least: 0, top: 100, site: true, measures: 'the parking spaces the floors state against the homes they state' },
 } as const
 export type FigureName = keyof typeof FIGURES
 export const FIGURE_NAMES = Object.keys(FIGURES) as FigureName[]
@@ -111,11 +119,17 @@ export interface TouchWish extends Said {
   readonly rooms: readonly [string, string]
 }
 
+/** BRF-4: the gross measure a floor area ratio is set by, as the brief writes it. */
+export const RATIO_MEASURES = ['gross_external', 'gross_internal'] as const
+export type RatioMeasure = (typeof RATIO_MEASURES)[number]
+
 export interface FigureWish extends Said {
   readonly figure: FigureName
   readonly value: number
   /** For a turning circle: the rooms it is for, by name. Every room when empty. */
   readonly rooms: readonly string[]
+  /** For a floor area ratio: the gross measure it is set by; null when the brief names none. */
+  readonly measure: RatioMeasure | null
 }
 
 /** What the person said that has no figure yet: still to ask. */
@@ -256,14 +270,22 @@ function figureWishes(raw: unknown): FigureWish[] {
     const figure = key as FigureName
     const where = `figures.${figure}`
     if (!isObject(value)) throw new BriefRefused(`${where} must be an object with value, level and source`)
-    onlyKeys(value, figure === 'turning_circle' ? ['value', 'rooms', 'level', 'source', 'quote'] : ['value', 'level', 'source', 'quote'], where)
+    const extra = figure === 'turning_circle' ? ['rooms'] : figure === 'floor_area_ratio' ? ['measure'] : []
+    onlyKeys(value, ['value', ...extra, 'level', 'source', 'quote'], where)
     const v = value['value']
-    // A step may be none at all: no sill.
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100 || (v === 0 && figure !== 'step')) {
-      throw new BriefRefused(`${where}.value must be a number of metres${figure === 'step' ? ' from 0' : ' above 0'} to 100`)
+    const { unit, least, top } = FIGURES[figure]
+    // A step may be none at all, no sill, and so may the parking a home needs.
+    const zero = figure === 'step' || figure === 'parking_per_home'
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < least || v > top || (v === least && !zero)) {
+      const of = unit === 'm' ? 'a number of metres' : unit === '%' ? 'a percentage of the plot' : unit === '' ? 'a ratio, the floor area over the plot area,' : `a number of ${unit}`
+      throw new BriefRefused(`${where}.value must be ${of}${zero ? ` from ${least}` : ` above ${least}`} to ${top.toLocaleString('en-US')}`)
     }
     const rooms = list(value['rooms'], `${where}.rooms`).map((room, i) => words(room, `${where}.rooms[${i}]`, NAME_MAX))
-    out.push({ figure, value: v, rooms, ...said(value, where, ['must', 'should']) })
+    const measure = optional(value, 'measure', (m) => {
+      if (!RATIO_MEASURES.includes(m as RatioMeasure)) throw new BriefRefused(`${where}.measure must be ${RATIO_MEASURES.join(' or ')}`)
+      return m as RatioMeasure
+    })
+    out.push({ figure, value: v, rooms, measure, ...said(value, where, ['must', 'should']) })
   }
   return out
 }
@@ -312,7 +334,7 @@ export function briefJson(brief: Brief): Record<string, unknown> {
   if (brief.figures.length > 0) {
     out['figures'] = {
       heading: FIGURES_HEADING,
-      ...Object.fromEntries(brief.figures.map((w) => [w.figure, { value: w.value, ...(w.rooms.length > 0 ? { rooms: [...w.rooms] } : {}), ...s(w) }])),
+      ...Object.fromEntries(brief.figures.map((w) => [w.figure, { value: w.value, ...(w.rooms.length > 0 ? { rooms: [...w.rooms] } : {}), ...some('measure', w.measure), ...s(w) }])),
     }
   }
   if (brief.open.length > 0) out['open'] = brief.open.map((w) => ({ quote: w.quote, ...some('about', w.about) }))
