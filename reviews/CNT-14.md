@@ -9,7 +9,7 @@ plans), R-6, R-5, AC-13, F18, F20, AE-7, SG5, SB4.
 
 ## What changed
 
-1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C14), version 1,
+1. **The plan format** (`packages/floorplan/src/types/floorplan.ts`, convention C15), version 1,
    nothing defaulted:
    - `kind` on an opening: `DOOR_KINDS` (`single`, `double`, `sliding`, `pocket`, `folding`,
      `roller`, `garage`) and `WINDOW_KINDS` (`single`, `double`, `sliding`, `fixed`,
@@ -475,7 +475,8 @@ and a mirrored plan recognised (WRT-4), and the plot, its set-backs and the dist
 - `CHANGELOG.md`: every Unreleased entry of both sides, CNT-14's first.
 - `docs/result-contract.md`: every agents' changelog entry, CNT-14's at the top.
 - `packages/floorplan/src/types/floorplan.ts`: BRF-3 took C13 for the plot, so CNT-14's convention
-  is now C14 (the header, its three comments, `openingKinds.ts` and point 1 above).
+  became C14 (the header, its three comments, `openingKinds.ts` and point 1 above); C15 after the
+  next merge.
 - `geometry/floorplan.ts`, `rules/src/result/inspect.ts`: import lists, the union of both
   (`inspect.ts` keeps CNT-14's `checkDoorSweeps` in place of `validateDoorSweeps`, and BRF-3's
   `siteThingsText`).
@@ -502,3 +503,39 @@ reason is in `scoreboard/README.md`.
   packages/rules packages/cli packages/viewer scoreboard/__tests__`: 306 of 306 files passed,
   5,378 tests passed, 4 skipped (5,382), in 874 s.
 - `npm run scoreboard`: 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures."
+
+### Again after merging `main` e486ccb (CNT-17, LVL-9)
+
+`main` moved again while the merge above was checked: accessibility measurements, as numbers
+only (CNT-17), and sections drawn from the model with section and level marks (LVL-9).
+
+**Conflicts and how each was kept**
+
+- `CHANGELOG.md`: every Unreleased entry of both sides, CNT-14's first.
+- `docs/result-contract.md`: every agents' changelog entry, CNT-14's at the top.
+- `packages/floorplan/src/types/floorplan.ts`: CNT-17 took C14 for what needs to be accessible,
+  so CNT-14's convention is now C15 (the header, its three comments, `openingKinds.ts` and point
+  1 above).
+
+**Where the two features meet.** CNT-17 measures each door's clear width with CNT-13's
+`doorwayClearance`, which takes a leaf's allowance (`useOpenLeaf`) off every door. That is For
+the owner 12's follow-up, now seen in one more answer: a sliding, pocket, roller or garage door
+has no leaf standing in its opening, and a pair has two. Not changed here: it would move CNT-17's
+EL-15 figures, and the right allowance per kind is a decision. LVL-9's sections, like LVL-8's
+facades, draw no door leaves or glass, so a door's kind is not drawn there yet: the same
+follow-up as the facade.
+
+**Expectations changed.** None.
+
+**Scoreboard** (`npm run scoreboard`): 197, 278, 20, 5, 22, 735, 95, "Same as the stored figures."
+Main moved no count; nothing stored.
+
+**Checks run**
+
+- `npm run build`, `npm run typecheck`, `npm run lint`: pass.
+- `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2 --minWorkers=1 packages/floorplan
+  packages/rules packages/cli packages/viewer scoreboard/__tests__`: stopped by its timeout on a
+  machine with a load average near 245, after 146 files had passed and none had failed. The 167
+  files it had not reached were run with the same options: 167 of 167 passed, 1,823 tests passed,
+  2 skipped (1,825), in 1,387 s. Together that is every test file in the five folders once, none
+  failed.

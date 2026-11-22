@@ -337,3 +337,59 @@ export function findingReadFor(finding: {
   if (kinds.length === 0 && finding.code === 'no_escape_opening') kinds.push(ESCAPE_TOP_LEVEL.provenance.readFor)
   return [...new Set(kinds)]
 }
+
+/**
+ * CNT-17: the statuses that say a named person has checked a figure against its source. Only a
+ * figure with one of them, and each check in `verifiedBy` by a person, is confirmed. `ai-found`,
+ * `human-entered` and `disputed` never are.
+ */
+export const CONFIRMED_STATUSES: readonly VerificationStatus[] = ['checked-once', 'checked-twice']
+
+/** Whether a named person has confirmed the figure against its source (CNT-17). An AI is never the one who verified it. */
+export function isConfirmed(provenance: Pick<Provenance, 'status' | 'verifiedBy'>): boolean {
+  return (
+    CONFIRMED_STATUSES.includes(provenance.status) &&
+    provenance.verifiedBy.length > 0 &&
+    provenance.verifiedBy.every((check) => check.by.trim() !== '' && !/\bAI\b/.test(check.by))
+  )
+}
+
+/** A figure a named person has confirmed, as a comparison names it: its value, its source and who checked it. */
+export interface ConfirmedFigure {
+  readonly key: FigureKey
+  readonly value: number
+  readonly unit: FigureUnit
+  readonly status: VerificationStatus
+  readonly jurisdiction: string
+  readonly readFor: BuildingKind
+  readonly citations: readonly RuleCitation[]
+  readonly verifiedBy: readonly Verification[]
+}
+
+/**
+ * CNT-17: the figure for `key`, only when a named person has confirmed it (`isConfirmed`), the
+ * place is stated and is one its figures are for (`baselineApplies`: a plan that states no place
+ * gets no figure, COD-3), and the building is a kind it was read for (`readForCovers`). Null
+ * otherwise, and then nothing is compared with it. `specs` is the table read, `FIGURES` but in a test.
+ */
+export function confirmedFigure(
+  key: FigureKey,
+  where: { readonly country?: string; readonly building?: BuildingType },
+  specs: Readonly<Record<FigureKey, FigureSpec>> = FIGURES
+): ConfirmedFigure | null {
+  const spec = specs[key]
+  const country = where.country?.trim() ?? ''
+  if (!isConfirmed(spec.provenance) || country === '' || !baselineApplies(country)) return null
+  if (!readForCovers([spec.provenance.readFor], where.building)) return null
+  const { jurisdiction, readFor, citations, verifiedBy, status } = spec.provenance
+  return {
+    key,
+    value: spec.baseline,
+    unit: spec.unit,
+    status,
+    jurisdiction,
+    readFor,
+    citations: citations.map(({ document, edition, clause }) => ({ document, edition, clause })),
+    verifiedBy
+  }
+}

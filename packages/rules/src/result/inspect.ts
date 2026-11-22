@@ -813,6 +813,17 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
       )
     }
   })
+  // CNT-17 (lab EL-15): what the plan marks as needing to be accessible is measured by
+  // grid_measure what=access, never checked here: no figure for it has been confirmed.
+  stage('accessible', () => {
+    const rooms = plan.accessible?.rooms ?? []
+    const routes = plan.accessible?.routes ?? []
+    if (rooms.length === 0 && routes.length === 0) return
+    const count = (n: number, one: string): string => `${n} ${one}${n === 1 ? '' : 's'}`
+    const said = [rooms.length > 0 ? count(rooms.length, 'room') : null, routes.length > 0 ? count(routes.length, 'route') : null].filter((x) => x !== null).join(' and ')
+    const marked = [...new Set([...rooms, ...routes.flatMap((r) => [r.to, ...(r.from === undefined ? [] : [r.from])])])]
+    lines.push(line('plan/not-checked-access', 'not-checked', { kind: 'plan', id: '' }, null, { ...blank('The plan'), also: marked, floors: names.floors, said }))
+  })
   // MSG-5: a plan that may not be in metres (`plan/units-question`): what is measured against a
   // size follows from it, and it follows from the unit the plan states, which is read as metres.
   const units = lines.find((l) => l.code === 'plan/units-question')
