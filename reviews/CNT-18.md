@@ -87,7 +87,7 @@ under "For the owner".
 
 ## Tests
 
-- New `packages/floorplan/src/geometry/__tests__/curvedWalls.test.ts` (29): the schema reads and
+- New `packages/floorplan/src/geometry/__tests__/curvedWalls.test.ts` (30): the schema reads and
   keeps an arc, refuses a sweep of 0 or past a whole turn, and reads an arc it cannot read as
   not stated (the lab's scenario s05b); the curve worked out; the pieces within a millimetre;
   **a round room of one arc wall within 0.1% of its hand area, and under 0.03%**; a 0.9 m door
@@ -99,7 +99,8 @@ under "For the owner".
   naming a changed curve; the facing every compass point; a door swinging from its straight
   edge into the room with nothing in its way; a clockwise curve; a curved dividing line; an
   opening past the end of the curve refused; the DXF bulges and `ARC`, the IFC trimmed circle,
-  void, door and `Grid_Approximated`, the OBJ and GLB notes; a plan with no curved wall exports as
+  void, door and `Grid_Approximated`, a whole circle's faces as two half arcs, the OBJ and GLB
+  notes; a plan with no curved wall exports as
   before; the rooms-text read-back written again.
 - New `packages/cli/src/mcp/__tests__/curvedWalls.test.ts` (6), through the tool server on a
   round room, a living room with a bay and a kitchen beside it: `grid_check` with no part it
@@ -132,7 +133,30 @@ room is measured as before.
 
 ## The checks run
 
-CHECKS_RUN
+- While building, only the touched files, two workers: the floorplan package (95 files, 2,880
+  passed after the first pass), then the CLI, viewer and rules packages (143 files). Failures on
+  the way, all fixed: the two MS-1 expectations above (the new `arc` field); the catalogue and
+  contract tests before the two codes were worded; in the new tests, a joint expectation (a bay
+  leaves its side walls in line, so their ends meet square, not mitred), the hand area of a curved
+  dividing line (measured to the line, so no wall thickness off), CRLF line ends in the DXF
+  regex, the quoting of the read-back's reason, and a whole circle's face with no opening, whose
+  single 360° stretch had no DXF bulge (now two half arcs).
+- `npm run scoreboard`: once "Worse" (rooms Grid does not measure 735 → 736, see Scoreboard),
+  fixed; then "Same as the stored figures." (run twice, the second after the last code change).
+- The full suite, `timeout 1500 npx vitest run --exclude '.claude/**' --maxWorkers=2
+  --minWorkers=1`, after the build: 257 of 257 files passed, 4,951 tests passed and 2 skipped,
+  exit 0. It ran before the last two changes (the DXF half arcs and a test's null check), so the
+  files they touch were run again: the curved-wall tests of both packages, every floorplan export
+  test, the tolerance table and the tool server's export, measure and room-name tests, 18 files,
+  458 passed.
+- `npm run build`, `npm run lint`: clean. `npm run typecheck`: one failure on the way, in the new
+  test (`readPlanParts` can return no plan), fixed; then clean.
+- By hand on a project with a round room and a bay: `grid check` (nothing to look at), `grid
+  describe` in every length and `--as rooms`, `grid export` in all four formats, `grid draw` as
+  SVG, PNG and `--3d` (looked at: the round room with its door and swing, the bay with its window,
+  the 3D drum and bay), `grid sheet` in both layouts, `grid tidy` (no faults), and the edits:
+  `mirror`, `opening` along the curve, `move-side` refused on the curve and done on a straight
+  side.
 
 ## For the owner
 

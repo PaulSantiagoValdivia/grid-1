@@ -79,6 +79,7 @@ describe('a curved wall in the plan file (C8)', () => {
     // The lab's agents wrote a radius alone (scenario s05b): no centre, no sweep.
     const raw = { ...bayRoom(), walls: bayRoom().walls.map((w) => (w.id === 'bay' ? { ...w, arc: { radius: 3 } } : w)) }
     const read = readPlanParts(raw)
+    if (read.plan === null) throw new Error('the plan was refused')
     expect(read.plan.walls.find((w) => w.id === 'bay')!.arc).toBeUndefined()
     expect(read.faults).toContainEqual(expect.objectContaining({ kind: 'value-left-out', part: expect.objectContaining({ list: 'walls', id: 'bay' }) }))
   })

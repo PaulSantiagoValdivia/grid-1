@@ -362,8 +362,8 @@ door swings from that straight edge.
 
 Grid works the room's outline out along the inside face of the curve, piece by straight piece,
 each no more than `arcSagitta` (1 mm) off the curve and turning no more than `arcStep` (0.03
-radians): a round room of 2.9 m inside radius measures 26.41 m² against the 26.42 m² of the true
-circle, under 0.02% short. The same pieces are what the area, the spaces, the outside walls and
+radians): a round room of 2.9 m inside radius measures 26.417 m² against the 26.421 m² of the true
+circle, 0.016% short. The same pieces are what the area, the spaces, the outside walls and
 the checks read. The 2D drawing, the sheet and the DXF draw the wall's faces as arcs; the 3D
 view raises it as flat pieces mitred to each other, with a lintel over each hole. What each
 export writes as pieces it says ([commands.md](commands.md#what-an-export-leaves-out-hnd-6)).
