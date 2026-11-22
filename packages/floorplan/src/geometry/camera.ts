@@ -271,7 +271,7 @@ export function cameraSetting(record: Pick<CameraRecord, 'target' | 'bearing' | 
   }
 }
 
-/** A view as the plan file stores it (`views`, C10): its name, its setting and its BCF camera. */
+/** A view as the plan file stores it (`views`, C11): its name, its setting and its BCF camera. */
 export interface StoredView {
   readonly name: string
   readonly target: { readonly room?: string; readonly point: Point3 }

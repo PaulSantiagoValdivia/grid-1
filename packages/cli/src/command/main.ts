@@ -1,6 +1,6 @@
 /**
- * The `grid` command, which `ongrid` runs too: `init`, `write`, `edit`, `check`, `describe`,
- * `draw`, `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an
+ * The `grid` command, which `ongrid` runs too: `init`, `write`, `edit`, `mark`, `diff`, `check`,
+ * `describe`, `draw`, `export`, `tidy`, `occupancy`, `serve` and `mcp`, the same server under the name an
  * agent's host types (`npx -y ongrid mcp`, CMD-9).
  *
  * A thin front end. Each command reads its own options strictly (see `options.ts`), reads the
@@ -32,6 +32,9 @@ import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, typ
 import { readSeen, SeenRefused } from '../seen/marks'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
 import { checkDescribeRequest, DESCRIBE_OPTIONS, describePlan, describeRooms } from './describe'
+import { DIFF_OPTIONS, MARK_OPTIONS, runDiff, runMark } from './diff'
+import { MARKERS_MAX, MarkerRefused } from '../versions/markers'
+import { GitUnread } from '../versions/git'
 import { checkDrawRequest, DRAW_OPTIONS, drawFile, undecidedNote } from './draw'
 import { checkExportRequest, EXPORT_OPTIONS, exportFile, exportIntoProject, ExportWriteFailed, leftOutText } from './export'
 import type { LeftOutPart } from '@ongrid/floorplan/export'
@@ -75,6 +78,16 @@ const COMMANDS = {
     summary: EDIT_SUMMARY,
     // Each verb takes its own options: grid edit <verb> --help.
     options: {},
+  },
+  mark: {
+    usage: 'grid mark [<name>] [--plan <plan.json>] [--remove] [--project <folder>]',
+    summary: `Keeps the plan as it is now under a name (start unless named), beside it, for grid diff --since <name> to compare with: no git needed. At most ${MARKERS_MAX}.`,
+    options: MARK_OPTIONS,
+  },
+  diff: {
+    usage: 'grid diff [<plan.json>] [--since <name>|git] [--rooms <ids>] [--show all|summary|changes|issues] [--picture <file.png>] [--floor <id>] [--json] [--project <folder>]',
+    summary: 'Says what changed since a start marker or the last commit, by what stands where, not by ids: issues first, then room by room, then each change. --picture draws it.',
+    options: DIFF_OPTIONS,
   },
   check: {
     usage: 'grid check [<plan.json>] [--floor <id>] [--country <code>] [--full] [--json] [--seen <n> --reason <text> --by <name> | --unseen <n>] [--project <folder>]',
@@ -145,7 +158,7 @@ const OVERVIEW = [
   'starts from the folder Grid runs in; for the tools of grid serve, from the project folder.',
   '',
   `A project folder that holds ${PROJECT_FILE}, as grid init makes it, is a Grid project. There,`,
-  `write writes ${PROJECT_PLAN}, and check, describe, draw, export, sheet, tidy and occupancy read it when no plan file is named, and export`,
+  `write writes ${PROJECT_PLAN}, and check, describe, draw, export, sheet, tidy, occupancy, mark and diff read it when no plan file is named, and export`,
   'writes into exports/. grid init never replaces a file: it refuses a folder that already holds',
   `${PROJECT_FILE} or ${PROJECT_PLAN}.`,
   '',
@@ -280,6 +293,17 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     return EXIT_OK
   }
 
+  if (name === 'mark') {
+    if (parsed.positionals.length > 1) throw new UsageError(`mark takes one marker name: grid mark [<name>], but was given ${parsed.positionals.length}.`)
+    const marker = parsed.positionals[0]
+    if (marker !== undefined && marker.toLowerCase().endsWith('.json')) throw new UsageError(`mark takes a marker name, not a plan: ${JSON.stringify(marker)} ends in .json. Name the plan with --plan.`)
+    const project = openProject(projectOption, io.cwd)
+    const target = textOf(parsed, '--plan') ?? projectPlanFile(project)
+    if (target === null) throw new UsageError(`mark needs a plan: --plan <plan.json>, or run it in a project folder grid init made, which holds ${PROJECT_FILE}.`)
+    io.stdout(runMark(project, target, marker, parsed.values.has('--remove')))
+    return EXIT_OK
+  }
+
   // A plan file named on the command line, or else the plan of the Grid project it runs in.
   let planFile: string
   if (parsed.positionals.length > 0) {
@@ -307,6 +331,17 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       // The label stays the first line; what was marked comes right after it.
       io.stdout(done === null ? text : text.replace('\n', `\n${done.text}\n`))
     }
+    return EXIT_OK
+  }
+
+  if (name === 'diff') {
+    const project = openProject(projectOption, io.cwd)
+    const request = { since: textOf(parsed, '--since'), rooms: textOf(parsed, '--rooms'), show: textOf(parsed, '--show'), picture: textOf(parsed, '--picture'), floor: textOf(parsed, '--floor') }
+    const done = await runDiff(project, planFile, request)
+    if (done.png !== null && request.picture !== undefined) {
+      const written = project.shown(write(project, request.picture, done.png))
+      io.stdout(parsed.values.has('--json') ? done.json : `${done.text}Wrote the picture of floor ${JSON.stringify(done.floor)} to ${written}\n`)
+    } else io.stdout(parsed.values.has('--json') ? done.json : done.text)
     return EXIT_OK
   }
 
@@ -454,7 +489,7 @@ export async function runGrid(argv: readonly string[], io: CommandIo): Promise<n
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_USAGE
     }
-    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof SeenRefused || error instanceof CanvasMissing || error instanceof FontsMissing) {
+    if (error instanceof PlanRefused || error instanceof RoomsRefused || error instanceof EditCommandRefused || error instanceof PathRefused || error instanceof TextNotDecoded || error instanceof WriteFailed || error instanceof ExportWriteFailed || error instanceof InitRefused || error instanceof OccupancyRefused || error instanceof SeenRefused || error instanceof MarkerRefused || error instanceof GitUnread || error instanceof CanvasMissing || error instanceof FontsMissing) {
       io.stderr(`grid: ${error.message}\n`)
       return EXIT_REFUSED
     }

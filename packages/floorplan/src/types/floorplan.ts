@@ -82,7 +82,13 @@
  *   format is still named (MSG-4). A room MAY state its room number in `number`. Grid checks
  *   nothing against a fact. Optional and never defaulted (version 1).
  *
- * C10 · Saved views (VEW-3, lab SE-4, SE-7, S-16)
+ * C10 · The place (COD-3)
+ *   `site.country` names the country the building will be built in, by a name or a code on
+ *   Grid's list (`places.ts`); any other text is refused, naming the field and never the text.
+ *   It picks the figures the checks apply (`@ongrid/rules`); a plan that states no place gets
+ *   no figure applied, and its report says so. Optional and never defaulted (version 1).
+ *
+ * C11 · Saved views (VEW-3, lab SE-4, SE-7, S-16)
  *   A plan MAY keep named views in `views`: each a camera, by what it is pointed at (`target`: a
  *   point, and the room it is in), the compass bearing to the camera from the north the plan
  *   states (`bearingFrom: 'north'`, with that `north`) or from the top of the drawing (`'plan
@@ -96,6 +102,7 @@ import { z } from 'zod'
 import { limit } from '../geometry/tolerances'
 import { BOUNDARY_MAX, PARTS_MAX, PROPERTIES_MAX, textProblem, type TextKind } from './planText'
 import { factKey } from './facts'
+import { placeProblem } from './places'
 
 export * from './planText'
 export * from './facts'
@@ -115,6 +122,13 @@ export type { ZodIssue as PlanSchemaIssue } from 'zod'
 const text = (kind: TextKind) =>
   z.string().superRefine((value, ctx) => {
     const problem = textProblem(value, kind)
+    if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
+  })
+
+/** COD-3: a place, by a name or a code on Grid's list. A refusal names the field and the rule, never the text. */
+const placeText = () =>
+  z.string().superRefine((value, ctx) => {
+    const problem = textProblem(value, 'name') ?? placeProblem(value)
     if (problem !== null) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem })
   })
 
@@ -878,6 +892,11 @@ export const SiteSchema = z
     longitude: finite().min(-180).max(180).optional(),
     elevation: finite().optional(),
     ground: finite().optional(),
+    // COD-3: the country the building will be built in, by its name or its two- or three-letter
+    // code (ISO 3166-1), as Grid's list (`places.ts`) has it. It picks the figures the checks
+    // apply; with none stated, no figure is applied. Kept as written; a report names the place
+    // from the list, never from this text.
+    country: placeText().optional(),
   })
   .superRefine((site, ctx) => {
     if ((site.latitude === undefined) !== (site.longitude === undefined)) {
@@ -931,14 +950,14 @@ export const MarkSchema = z
     }
   })
 
-/** C10: a point in plan metres, z up from the ground floor's floor level. */
+/** C11: a point in plan metres, z up from the ground floor's floor level. */
 const Vec3 = z.tuple([finite(), finite(), finite()])
 
-/** VEW-3 (C10): what a saved view's bearing is read from. */
+/** VEW-3 (C11): what a saved view's bearing is read from. */
 export const VIEW_BEARING_FROM = ['north', 'plan up'] as const
 
 /**
- * VEW-3 (C10): a named view, saved with the plan. The setting (`target` to `cut`) is what Grid
+ * VEW-3 (C11): a named view, saved with the plan. The setting (`target` to `cut`) is what Grid
  * reads; `floors` and the BCF camera (`position` to `aspectRatio`) are what it worked out, for
  * other programs. Optional and never defaulted (version 1).
  */
@@ -1047,7 +1066,7 @@ export const FloorPlanFieldsSchema = z.object({
   // WRT-6 (C8): where values came from, given, measured, scanned or assumed, and how sure each is
   // (`MarkSchema`). Optional and never defaulted (version 1).
   marks: parts(MarkSchema, 'marks').optional(),
-  // VEW-3 (C10): named views, each a camera saved with the plan (`ViewSchema`). Optional and never
+  // VEW-3 (C11): named views, each a camera saved with the plan (`ViewSchema`). Optional and never
   // defaulted (version 1).
   views: parts(ViewSchema, 'views').optional(),
   // WRT-2: the plan was last written from rooms text (`grid write`). `revision` is its

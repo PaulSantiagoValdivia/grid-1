@@ -11,6 +11,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [The project folder](#the-project-folder)
 - [The report, short or full, and notes seen: `grid check`](#the-report-short-or-full-and-notes-seen-grid-check)
 - [Describing a plan: `grid describe`](#describing-a-plan-grid-describe)
+- [What a change did: `grid mark` and `grid diff`](#what-a-change-did-grid-mark-and-grid-diff)
 - [Walls that do not meet: `grid tidy`](#walls-that-do-not-meet-grid-tidy)
 - [What went wrong, on the drawing: `grid draw`](#what-went-wrong-on-the-drawing-grid-draw)
 - [What a drawing shows: `--hide`, `--colour` and `--key`](#what-a-drawing-shows---hide---colour-and---key)
@@ -25,14 +26,16 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 |---|---|
 | `grid init [<folder>]` | Starts a project folder: `grid.json`, a starter `plan.json` and `exports/` (see below) |
 | `grid write <plan.rooms> [--plan <plan.json>] [--replace] [--json]` | Writes a plan from rooms text, the main way to write one: Grid works out the walls (see [Writing a plan rooms first](rooms-first.md)) |
-| `grid check [<plan>] [--floor <id>] [--country <code>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--seen` sets a note aside as seen (see below) |
+| `grid check [<plan>] [--floor <id>] [--country <place>] [--full] [--json] [--seen <n> --reason <text> --by <name> \| --unseen <n>]` | Prints the report, short and about this plan unless `--full`. Every report is labelled "General guidance, not your local rules". `--country` names the place for this check, in place of the plan's `site.country`. `--seen` sets a note aside as seen (see below) |
 | `grid describe [<plan>] [--length line\|rooms\|walls] [--for person\|agent] [--as rooms]` | Describes the plan in a few lines: its rooms, which rooms each opening joins, and with `--length walls` its walls (see below). `--as rooms` reads it back as rooms text |
 | `grid draw [<plan>] [--png \| --3d \| --view <name>] [--look <name>] [--hide <parts>] [--colour use] [--key] [--out <file>] [--floor <id>] [--scale <n>]` | Draws one floor as SVG, or PNG with `--png`, or the 3D model as PNG with `--3d`, or a saved view with `--view`; to standard output unless `--out` names a file. In the technical look (black on white, lines in millimetres on paper) unless `--look working` or `dark`. `--hide`, `--colour` and `--key` choose what it shows (see below) |
 | `grid export [<plan>] --format dxf\|ifc\|glb\|obj [--floor <id>] [--out <file>]` | Writes an export into `exports/` beside the plan, unless `--out` names a file |
 | `grid sheet [<plan>] --layout client\|check [--sheet <sheet.json>] [--out <file.pdf>]` | Writes the plan as an A3 PDF for people: `--layout client`, with the words of `sheet.json`, or `--layout check`, with ids and findings (see below) |
 | `grid edit <verb> [<plan>] [options]` | Changes the plan, one sentence of request a command: `opening`, `move-side`, `merge`, `split`, `add-room`, `stretch`, `rename`, `mirror`, `square` (squares a scanned plan and says how far each wall moved), each the tool of that name in [the tool server](tool-server.md) with the same options (`grid edit <verb> --help`) |
+| `grid mark [<name>] [--plan <plan.json>] [--remove]` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside it, for `grid diff` to compare with: no git needed. At most 5 (see below) |
+| `grid diff [<plan>] [--since <name>\|git] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 27 tools in [the tool server](tool-server.md) |
+| `grid serve` | Starts the tool server on standard input and output, with the 29 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes
@@ -206,6 +209,19 @@ counts, with the parts it could not look at and why, and one line on what `--ful
 `--full` prints the whole report: the checks run, every figure, each part each check looked at
 or skipped, and what these checks never look at. `--json` always gives the whole check.
 
+The line after the label says the place the figures were for and where it came from (COD-3).
+The plan states its place in `site.country` ([the place](plan-file.md#the-place)); `--country`
+names another for this check: a country's name or its two- or three-letter code, such as `US`,
+`USA`, `United States` or `Spain`, in any case. A place not on Grid's list is refused with exit
+code 2, naming `--country` and never the text. With no place stated, no figure is applied, and
+the line says how many lines the US figures would have given: `--country US` checks against
+them for one run.
+
+```text
+General guidance, not your local rules
+No place is stated, so no figure was applied: the US figures would have given no lines. State it in the plan as site.country, or give --country.
+```
+
 A note you have looked at can be set aside as seen, with why and who:
 
 ```bash
@@ -248,6 +264,51 @@ really faces, and which rooms face each way
 says so; its first line is the label "General guidance, not your local rules", as for every
 report (MSG-3). `--as rooms` starts with the label as a comment, which `grid write` ignores, and
 `grid draw` puts it in the drawing's top-left corner.
+
+## What a change did: `grid mark` and `grid diff`
+
+`grid mark` keeps the plan as it is now, under a name (`start` unless you name another), in a
+file of its own beside the plan: `plan.markers.json` beside `plan.json`. The plan knows nothing
+of it, and no export, sheet or drawing reads it. A plan keeps at most 5 markers; marking a name
+again replaces it, and `--remove` takes one off. `git` is not a marker's name: it means the
+version last committed.
+
+`grid diff` compares the plan with an earlier version of itself: the marker `--since` names, or
+with `--since git` the version last committed in the project's own git folder. With neither, it
+compares with the marker `start` when the plan has one, else with the last commit. Grid reads
+git's own files, through the same project folder rules as every other file, and runs no
+program: a `.git` folder in the project folder itself, a SHA-1 repository, the branch `HEAD`
+names. A repository whose `.git` is above the project folder is outside it, and is not read.
+
+The two versions are compared by what stands where in the building, not by ids. The earlier
+plan is laid on the later one, moved to its origin when that lines up more walls; each wall is
+paired with the wall standing in its place, either way round, its ends within `diffPlace`
+(5 cm) of each other ([tolerances](tolerances.md)), each opening with the opening at its place and
+each room with the room on the same walls or the same floor; what is left is paired by id. A
+point that slipped by less than a centimetre has not moved. A room's walls are compared as a
+ring: the same walls from another wall, or the other way round, are the same room. A plan
+written rooms first in both versions is compared by its rooms and openings, whose names you
+chose: a room that kept its size and moved is said to have moved, and an opening that kept its
+place along its wall in one of its rooms is said to have stayed where it was.
+
+The answer, in this order:
+
+- **Issues**: a door that now joins other rooms, a wall added or moved that now meets another
+  wall inside an opening, a room that no longer closes, and the notes of `grid check` that came
+  and went.
+- **Verdict**: room by room, how many ids were only renamed, and with `--rooms` how many changes
+  are outside the rooms named. The same building under new ids reads `Same building, 28 ids
+  renamed (9 walls, 13 openings, 6 rooms): every room, wall and opening stands where it stood.`
+- **Rooms** that changed, moved, came or went, with their old and new net area.
+- **Changes**, one line each; walls changed the same way are one line
+  (`9 walls height 2.60 → 2.70 m: …`). Then the openings that kept their place though their
+  wall changed or their room moved.
+
+`--show summary` stops after the rooms, `--show issues` gives the issues alone, and `--json` the
+same as data. `--picture d.png` writes the comparison as a picture of one floor (the first with
+a change, or `--floor`): what was removed in red, what was added in green, the rooms that
+changed in amber with their old and new area, and the rest pale. When nothing changed it draws
+nothing and says so.
 
 ## Walls that do not meet: `grid tidy`
 

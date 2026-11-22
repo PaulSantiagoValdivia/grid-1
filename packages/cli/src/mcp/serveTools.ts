@@ -1,7 +1,8 @@
 /**
  * The tools of `grid serve`, in the order `tools/list` gives them: the tools that read the
  * plan first, ordered by the requests they answer most often (lab entry Y-2), with the problem
- * report last of them (CMD-13), then the preview, the export, the sheet, the seen mark (MSG-10),
+ * report last of them (CMD-13), then the preview, the export, the sheet, the start marker
+ * (WRT-8), the seen mark (MSG-10),
  * and last the tools that change the plan, the saved views last of them (VEW-3).
  *
  * Every path an agent passes goes through the project's resolver (`fs/projectFiles.ts`):
@@ -15,6 +16,7 @@ import type { ServerTool, ToolAnswer } from './protocol'
 import { READ_TOOLS } from './readTools'
 import { reportProblemTool } from './reportTool'
 import { markSeenTool } from './seenTool'
+import { diffTool, markStartTool } from './diffTools'
 import { labelled, readArgs, toolDefinition, ToolRefusal, type GridTool, type ToolContext } from './toolkit'
 import { WRITE_TOOLS } from './writeTools'
 import { EDIT_TOOLS } from './editTools'
@@ -24,11 +26,16 @@ export { EXPORT_TOOL_NAME, PREVIEW_TOOL_NAME } from './writeTools'
 
 /** Every tool, in its fixed order. */
 export const GRID_TOOLS: readonly GridTool[] = [
-  ...READ_TOOLS,
+  // WRT-8: what a change did, right after the comparison of separate plans it is told apart from.
+  READ_TOOLS[0]!,
+  diffTool,
+  ...READ_TOOLS.slice(1),
   // CMD-13: the last of the reading tools, for the rarest request: telling Grid's makers.
   reportProblemTool,
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'read'),
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'write-file'),
+  // WRT-8: writes the markers file beside the plan, never the plan.
+  markStartTool,
   // MSG-10: writes the marks file beside the plan, never the plan: the last of the files it writes.
   markSeenTool,
   ...WRITE_TOOLS.filter((tool) => tool.hint === 'change-plan'),

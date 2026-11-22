@@ -1,0 +1,94 @@
+/**
+ * WRT-8: `grid diff` and `grid mark`, the command's side of the tools `grid_diff` and
+ * `grid_mark_start`, sharing their code (`versions/`).
+ *
+ * `grid mark [<name>]` keeps the plan as it is now under a name (`start` unless named) in the
+ * markers file beside it. `grid diff [<plan.json>] [--since <name>|git]` compares the plan with
+ * that version, or with the version last committed in the project's own git folder, by what
+ * stands where: issues first, then the verdict room by room, then the changes one line each.
+ * `--rooms` names the rooms meant to be edited, and `--picture` writes the comparison's picture.
+ */
+import { GENERAL_GUIDANCE_LABEL } from '@ongrid/rules'
+import type { Project } from '../fs/projectFiles'
+import { DIFF_SHOWS, diffData, diffSince, diffText, type DiffShow } from '../versions/diff'
+import { DEFAULT_MARKER, MARKERS_MAX, removeMarker, setMarker } from '../versions/markers'
+import { loadPlan } from './plan'
+import { PROJECT_OPTION, UsageError, type OptionSpecs } from './options'
+
+export const DIFF_OPTIONS: OptionSpecs = {
+  '--since': { takesValue: true, help: `What to compare with: a marker's name, or git for the version last committed in the project's .git. The marker ${DEFAULT_MARKER} when the plan has one, else git.` },
+  '--rooms': { takesValue: true, help: 'The rooms meant to be edited, by id, separated by commas: every change outside them is named.' },
+  '--show': { takesValue: true, help: `What to print: ${DIFF_SHOWS.join(', ')}. all when left out.` },
+  '--picture': { takesValue: true, help: 'Write the comparison as a PNG to this file: removed in red, added in green, changed rooms in amber, the rest pale.' },
+  '--floor': { takesValue: true, help: 'For --picture: the floor to draw. The first floor with a change when left out.' },
+  '--json': { takesValue: false, help: 'Print the comparison as JSON.' },
+  ...PROJECT_OPTION,
+}
+
+export const MARK_OPTIONS: OptionSpecs = {
+  '--plan': { takesValue: true, help: 'The plan file to mark. The project\'s plan.json when left out, in a folder grid init made.' },
+  '--remove': { takesValue: false, help: 'Take the marker off.' },
+  ...PROJECT_OPTION,
+}
+
+export interface DiffRequest {
+  readonly since?: string
+  readonly rooms?: string
+  readonly show?: string
+  readonly picture?: string
+  readonly floor?: string
+}
+
+/** The options of `grid diff`, checked before anything is read. */
+export function checkDiffRequest(request: DiffRequest): { show: DiffShow; rooms: string[] | undefined } {
+  if (request.show !== undefined && !(DIFF_SHOWS as readonly string[]).includes(request.show)) throw new UsageError(`--show takes ${DIFF_SHOWS.join(', ')}.`)
+  if (request.floor !== undefined && request.picture === undefined) throw new UsageError('--floor goes with --picture: it is the floor the picture draws.')
+  let rooms: string[] | undefined
+  if (request.rooms !== undefined) {
+    rooms = request.rooms.split(',').map((id) => id.trim()).filter((id) => id !== '')
+    if (rooms.length === 0) throw new UsageError('--rooms takes room ids separated by commas, such as kitchen,hall.')
+    if (rooms.some((id) => !/^[A-Za-z0-9._-]{1,64}$/.test(id))) throw new UsageError('--rooms takes room ids: letters, digits, dots, dashes and underscores, separated by commas.')
+  }
+  return { show: (request.show as DiffShow | undefined) ?? 'all', rooms }
+}
+
+export interface DiffDone {
+  readonly text: string
+  readonly json: string
+  /** The picture's bytes, when one was asked for and something changed. */
+  readonly png: Uint8Array | null
+  readonly floor: string | null
+}
+
+export async function runDiff(project: Project, planFile: string, request: DiffRequest): Promise<DiffDone> {
+  const { show, rooms } = checkDiffRequest(request)
+  // CMD-15: the picture's path is checked before the plans are read.
+  if (request.picture !== undefined) project.writable(request.picture)
+  const run = diffSince(project, planFile, request.since, rooms)
+  const data = diffData(run, show)
+  let png: Uint8Array | null = null
+  let floor: string | null = null
+  const lines = [GENERAL_GUIDANCE_LABEL, diffText(run, show)]
+  if (request.picture !== undefined) {
+    if (run.comparison.sameBuilding) lines.push('No picture: nothing changed.')
+    else {
+      const { comparisonView } = await import('../draw/views')
+      const view = await comparisonView(run.comparison, run.later.plan, request.floor ?? run.comparison.diff.changes[0]?.floor)
+      png = view.png
+      floor = view.floor
+    }
+  }
+  return { text: `${lines.join('\n')}\n`, json: `${JSON.stringify({ label: GENERAL_GUIDANCE_LABEL, ...data }, null, 2)}\n`, png, floor }
+}
+
+/** `grid mark [<name>]`: sets, or with `--remove` takes off, a start marker. */
+export function runMark(project: Project, planFile: string, name: string | undefined, remove: boolean): string {
+  const marker = name ?? DEFAULT_MARKER
+  if (remove) {
+    const done = removeMarker(project, planFile, marker)
+    return `${GENERAL_GUIDANCE_LABEL}\nTook marker ${JSON.stringify(marker)} off. Markers kept in ${done.file}: ${done.names.join(', ') || 'none'}.\n`
+  }
+  const loaded = loadPlan(project, planFile)
+  const done = setMarker(project, planFile, marker, loaded.text ?? JSON.stringify(loaded.plan))
+  return `${GENERAL_GUIDANCE_LABEL}\n${done.replaced ? 'Set marker' : 'Marked'} ${JSON.stringify(marker)}: the plan as it is now, kept in ${done.file}. Markers: ${done.names.join(', ')} (at most ${MARKERS_MAX}). After the edit, grid diff --since ${marker} says what changed.\n`
+}
