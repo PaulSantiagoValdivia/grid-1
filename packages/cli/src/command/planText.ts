@@ -112,6 +112,24 @@ export function planTextProblem(raw: Record<string, unknown>): string | null {
             if (problem) return `${where}[${k}] ${problem}`
           }
         }
+        // LVL-4: the zones of a room's ceiling, each named like a room, its outline as long as a boundary.
+        const ceiling = part['ceiling']
+        const zones = isObject(ceiling) ? ceiling['lowered'] : undefined
+        if (Array.isArray(zones)) {
+          if (zones.length > PARTS_MAX) {
+            return `rooms[${i}].ceiling.lowered has ${zones.length.toLocaleString('en-US')} entries; a plan may have at most ${PARTS_MAX.toLocaleString('en-US')} lowered zones in one ceiling`
+          }
+          for (let z = 0; z < zones.length; z++) {
+            const zone: unknown = zones[z]
+            if (!isObject(zone)) continue
+            const problem = typeof zone['name'] === 'string' ? textProblem(zone['name'], 'name') : null
+            if (problem) return `rooms[${i}].ceiling.lowered[${z}].name ${problem}`
+            const points = zone['points']
+            if (Array.isArray(points) && points.length > BOUNDARY_MAX) {
+              return `rooms[${i}].ceiling.lowered[${z}].points has ${points.length.toLocaleString('en-US')} points; a lowered zone may have at most ${BOUNDARY_MAX.toLocaleString('en-US')}`
+            }
+          }
+        }
       }
     }
   }

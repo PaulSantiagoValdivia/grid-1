@@ -7,7 +7,7 @@
  * network.
  */
 
-import { checkPlanSanity, floorBuilding, floorStatesBuilding, planFloors, planForFloor, type FloorPlan } from '@ongrid/floorplan/geometry'
+import { checkPlanSanity, floorBuilding, floorStatesBuilding, groundLevel, planFloors, planForFloor, statedGround, type FloorPlan } from '@ongrid/floorplan/geometry'
 import { drawable } from '@ongrid/floorplan/geometry/rules/check'
 import { BUILDING_TYPE_TEXT, type BuildingType } from '@ongrid/floorplan/types/floorplan'
 import { FIGURE_LIMITS, FIGURE_RULES, RULE_BUILDINGS, RULE_FIGURES, RULE_READ_FOR, RULE_USES, ruleReadsBuilding, type FigureRuleId } from './catalogue'
@@ -65,6 +65,10 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
   }
   const base = checkPlanSanity(plan)
   const floors = planFloors(plan)
+  // LVL-4: the floor at grade is the ground floor, restated against the site's ground level.
+  const atGround = new Set(
+    statedGround(plan) === null ? floors.filter((f) => f.level === 0).map((f) => f.id) : groundLevel(plan).groundFloors.map((f) => f.id)
+  )
   const level = new Map(floors.map((f) => [f.id, f.level] as const))
   const names = new Map(plan.rooms.map((r) => [r.id, r.name || r.id] as const))
   const roomName = (id: string): string => names.get(id) ?? id
@@ -95,7 +99,9 @@ export function checkLocalRules(plan: FloorPlan, options: CheckOptions = {}): Ru
       notFor[rule.id].push({ floor: floor.id, rooms: storey.rooms.map((room) => room.id), building })
     }
     // Escape openings don't need stairs: every floor up to the third storey is checked.
-    const escapes = reads('escape-opening') ? escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape) : null
+    const escapes = reads('escape-opening')
+      ? escapeCheck(storey, leftOut.rooms, floor.id, floor.level, roomName, escape, atGround.has(floor.id))
+      : null
     if (escapes === null) {
       // Skipped above, with the reason.
     } else if (ran['escape-opening']) {

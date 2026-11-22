@@ -753,6 +753,18 @@ export const CODES = {
     needed: fixed('a way out at ground level, or a stair down to one'),
     fix: fixed('If the door opens onto a balcony or a terrace, draw that space. It is not counted as a way out.')
   },
+  'opening/below-ground': {
+    says: (s) => s.finding?.message ?? `${s.label} lies below the ground`,
+    found: (s) => {
+      const b = s.finding?.belowGround
+      if (b === undefined) return 'a door or window in an outside wall below the ground level the site states'
+      return b.wholly
+        ? `a door or window in an outside wall whose top is ${metresText(b.top)} m under the ground level the site states`
+        : `a door or window in an outside wall whose foot is ${metresText(b.foot)} m under the ground level the site states, its top above it`
+    },
+    needed: fixed('a door or window above the ground outside, or a light well or an outside stair in front of it'),
+    fix: fixed('If the ground in front of it is dug away, as for a light well or an area, draw that space; if the ground level is not right, change site.ground.')
+  },
   'room/stair-out-of-line': {
     says: (s) => s.finding?.message ?? `${s.label} does not line up with the stair below`,
     found: fixed('no room used as a stair on the floor below lies under half of it'),

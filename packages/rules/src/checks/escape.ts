@@ -77,7 +77,13 @@ export function escapeCheck(
   floor: string,
   level: number,
   roomName: (id: string) => string,
-  figures: EscapeFigures
+  figures: EscapeFigures,
+  /**
+   * Whether the floor is the ground floor (LVL-4, `groundLevel`): the floor at level 0, or, with
+   * the site's ground level stated, the floor nearest it. Its windows take the figure for a floor
+   * at grade where one is carried. Unstated, the floor at level 0.
+   */
+  atGround: boolean = level === 0
 ): { findings: RuleFinding[]; scope: FloorScope; wholeRooms: WholeRoom[] } {
   const index = indexPlan(storey)
   const outlines = roomOutlines(storey, index, leftOut)
@@ -111,7 +117,7 @@ export function escapeCheck(
   // Above the third storey the figures here stop: the bedrooms are said to be not checked (CH-4).
   if (above || !hasEscapeFigures(figures)) return { findings: [], scope, wholeRooms }
 
-  const minArea = level === 0 ? (figures.minAreaGrade ?? figures.minArea) : figures.minArea
+  const minArea = atGround ? (figures.minAreaGrade ?? figures.minArea) : figures.minArea
   const { minWidth, minHeight, maxSill } = figures
   const bigEnough = (w: Measured): boolean =>
     (minWidth === null || !underFigure(w.width, minWidth.value, 'm')) &&

@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type * as THREE from 'three'
 import { SLAB_THICKNESS, type SceneSlab } from '@ongrid/floorplan/geometry'
-import { floorSlabGeometry, roofGeometry } from '../Slab3D'
+import { floorSlabGeometry } from '../Slab3D'
 
 /**
- * Slabs have thickness:
- * a storey's floor slab goes down from its floor level, and the roof
- * goes up from the top storey's walls. Heights are local to the storey's group.
+ * Slabs have thickness: a room's floor slab goes down from its floor level. Heights are local
+ * to the storey's group. The roof is the storey's shell's, from its outline (LVL-4, `Shell3D`).
  */
 
 const slab: SceneSlab = {
@@ -75,20 +74,5 @@ describe('floorSlabGeometry', () => {
   it('faces outward, so it is not mirrored', () => {
     const volume = signedVolume(floorSlabGeometry(slab))
     expect(volume).toBeCloseTo(5 * 3 * SLAB_THICKNESS, 6)
-  })
-})
-
-describe('roofGeometry', () => {
-  it('lies on the walls and goes up 0.25 m', () => {
-    const [low, high] = range(vertices(roofGeometry(slab, 2.8)).map(([, y]) => y))
-    expect(low).toBeCloseTo(2.8, 5)
-    expect(high).toBeCloseTo(2.8 + SLAB_THICKNESS, 5)
-  })
-
-  it('covers the same polygon as the floor slab, and faces outward', () => {
-    const v = vertices(roofGeometry(slab, 2.8))
-    expect(range(v.map(([x]) => x))).toEqual([1, 6])
-    expect(range(v.map(([, , z]) => z))).toEqual([-5, -2])
-    expect(signedVolume(roofGeometry(slab, 2.8))).toBeCloseTo(5 * 3 * SLAB_THICKNESS, 6)
   })
 })

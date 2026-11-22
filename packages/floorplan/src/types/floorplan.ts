@@ -62,7 +62,8 @@
  *   outside face is the front: a wall, or an opening (the front door) by its wall. `site` says
  *   where the building sits: `origin`, a point of the plan, and where that point is on the earth
  *   (`latitude` and `longitude` in degrees, `elevation` in metres); it places nothing without
- *   `origin`. All four are optional and
+ *   `origin`. LVL-4 adds `site.ground`, the ground's level from the ground floor's (no `origin`
+ *   needed). All four are optional and
  *   never defaulted, so a plan that states none reads exactly as before (version 1): it has no
  *   north, and its y runs up (C4).
  */
@@ -171,6 +172,10 @@ export const FloorSchema = z.object({
   height: finite().positive().optional(),
   // Metres: the thickness of the slab this floor stands on.
   slab: finite().nonnegative().optional(),
+  // LVL-4: metres the outside walls of this floor rise above the roof over it, where it has one
+  // (every part of the floor with nothing above it). Optional and never defaulted: unstated, the
+  // roof has no parapet (version 1).
+  parapet: finite().positive().optional(),
   // CNT-5: what kind of building this floor is, when it is not the plan's (`FloorPlan.building`):
   // the shop on the ground floor of a block of flats. Optional and never defaulted: unstated, the
   // floor is the plan's kind (version 1).
@@ -387,6 +392,39 @@ const wallList = () =>
     })
   })
 
+/** LVL-4: the most points a lowered zone of a ceiling may have. */
+export const CEILING_ZONE_MAX = BOUNDARY_MAX
+
+/**
+ * LVL-4: a part of a room's ceiling that is lower than the rest: a bulkhead over a kitchen, a
+ * strip lowered for ducts. `points` is its outline on the plan (C4), three points or more; `height`
+ * is metres from the room's floor to its underside.
+ */
+export const LoweredZoneSchema = z.object({
+  name: text('name').optional(),
+  points: z
+    .array(Vec2)
+    .min(3)
+    .superRefine((list, ctx) => {
+      if (list.length <= CEILING_ZONE_MAX) return
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `has ${list.length.toLocaleString('en-US')} points; a lowered zone may have at most ${CEILING_ZONE_MAX.toLocaleString('en-US')}`,
+      })
+    }),
+  height: finite().positive(),
+})
+
+/**
+ * LVL-4: a room's ceiling. It is flat, at the room's `height` (ARE-10) above its floor, or, when
+ * the room states none, as high as its storey; `lowered` are the zones under it at their own
+ * heights. Stating `ceiling` says the room has one: the IFC writes it, and a ceiling plan, lights
+ * and grilles come later.
+ */
+export const CeilingSchema = z.object({
+  lowered: parts(LoweredZoneSchema, 'lowered zones in one ceiling').optional(),
+})
+
 export const RoomSchema = z.object({
   id: text('id'),
   name: text('name'),
@@ -428,6 +466,13 @@ export const RoomSchema = z.object({
   // the openings to rooms at another level, and along a dividing line between them. Optional
   // and never defaulted: unstated, the room stands on its storey's floor (version 1).
   floorOffset: finite().optional(),
+  // LVL-4: the room is a void, open to the floor below: it has no floor, so its storey's slab is
+  // open over it and the room below rises through it. It adds no floor area and needs no door.
+  // Optional and never defaulted (version 1).
+  void: z.boolean().optional(),
+  // LVL-4: the room's ceiling (CeilingSchema): it stands at the room's `height`, with any zones
+  // lowered under it. Optional and never defaulted (version 1).
+  ceiling: CeilingSchema.optional(),
   // CNT-5: who the room is for (`ROOM_TENURES`). Optional and never defaulted (version 1).
   tenure: RoomTenureSchema.optional(),
   // CNT-5: the firm's own type for the room, as its room data sheets name it ("B2 double
@@ -695,6 +740,13 @@ export const FrontSchema = z
  * sea level) say where that point is on the earth. Each is optional, so a site an agent wrote
  * with fields Grid does not hold yet (a plot boundary, setbacks) still reads, with those fields
  * named; nothing is placed on the earth until `origin` is stated.
+ *
+ * LVL-4: `ground` is the level of the ground outside, in metres from the ground floor's floor
+ * level (0), the same datum as a floor's `elevation` (not `site.elevation`, which is above sea
+ * level): -0.15 for a floor 15 cm above the ground. It needs no `origin`. With it stated, a door
+ * or window in an outside wall that lies below the ground is named, and the ground floor is the
+ * floor nearest it. One level for the whole site: a ground level for each wall, for a slope,
+ * comes later.
  */
 export const SiteSchema = z
   .object({
@@ -702,6 +754,7 @@ export const SiteSchema = z
     latitude: finite().min(-90).max(90).optional(),
     longitude: finite().min(-180).max(180).optional(),
     elevation: finite().optional(),
+    ground: finite().optional(),
   })
   .superRefine((site, ctx) => {
     if ((site.latitude === undefined) !== (site.longitude === undefined)) {
@@ -771,7 +824,8 @@ export const FloorPlanFieldsSchema = z.object({
   annotations: parts(AnnotationSchema, 'annotations').optional(),
   sketch: parts(SketchItemSchema, 'sketch items').optional(),
   // CNT-3 (C7): the plan's real north (degrees counter-clockwise from +Y), which way its y runs,
-  // its front and where it sits. Optional and never defaulted (version 1).
+  // its front and where it sits; LVL-4 adds the site's ground level (`site.ground`). Optional
+  // and never defaulted (version 1).
   north: finite().optional(),
   yAxis: z.enum(Y_AXES).optional(),
   front: FrontSchema.optional(),
@@ -814,6 +868,8 @@ export type Room = z.infer<typeof RoomSchema>
 export type OpeningType = z.infer<typeof OpeningTypeSchema>
 export type Opening = z.infer<typeof OpeningSchema>
 export type Stair = z.infer<typeof StairSchema>
+export type Ceiling = z.infer<typeof CeilingSchema>
+export type LoweredZone = z.infer<typeof LoweredZoneSchema>
 export type OpeningAnchor = z.infer<typeof OpeningAnchorSchema>
 export type ReferenceImage = z.infer<typeof ReferenceImageSchema>
 export type Item = z.infer<typeof ItemSchema>
