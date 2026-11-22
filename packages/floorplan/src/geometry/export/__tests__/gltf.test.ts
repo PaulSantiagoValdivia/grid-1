@@ -93,23 +93,26 @@ describe('nodes', () => {
 
     const glb = parseGlb(toGlb(scene))
     const meshes = readMeshes(glb)
-    expect(meshes).toHaveLength(8)
+    // LVL-4: and the floor's slab and its roof, last.
+    expect(meshes).toHaveLength(10)
     expect(meshes.filter((m) => m.name.startsWith('wall_'))).toHaveLength(5)
     expect(meshes.filter((m) => m.name.startsWith('floor_'))).toHaveLength(3)
     expect(meshes.map((m) => m.name)).toEqual([
       ...scene.walls.map((w) => `wall_${w.id}`),
-      ...scene.slabs.map((s) => `floor_${s.roomId}`)
+      ...scene.slabs.map((s) => `floor_${s.roomId}`),
+      'slab_ground',
+      'roof_ground'
     ])
     for (const node of glb.json.nodes!) {
       expect(glb.json.meshes![node.mesh!]!.primitives).toHaveLength(1)
     }
-    expect(glb.json.meshes).toHaveLength(8)
+    expect(glb.json.meshes).toHaveLength(10)
   })
 
   it('names nodes with letters, digits, underscore, dot and dash only, and uniquely', () => {
     const glb = parseGlb(toGlb(buildScene(samplePlan())))
     const names = readMeshes(glb).map((m) => m.name)
-    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1'])
+    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', 'slab_ground', 'roof_ground'])
     for (const name of names) expect(name).toMatch(/^[A-Za-z0-9_.-]+$/)
     expect(new Set(names).size).toBe(names.length)
   })
@@ -125,8 +128,9 @@ describe('nodes', () => {
 
     // parseGlb throws if the JSON is not well formed.
     const names = readMeshes(parseGlb(toGlb(buildScene(plan)))).map((m) => m.name)
-    expect(names).toHaveLength(4)
-    expect(new Set(names).size).toBe(4)
+    // The four walls, and the slab and roof their outline carries (LVL-4).
+    expect(names).toHaveLength(6)
+    expect(new Set(names).size).toBe(6)
     for (const name of names) expect(name).toMatch(/^[A-Za-z0-9_.-]+$/)
     expect(names.slice(0, 2)).toEqual(['wall_a_b', 'wall_a_b_2'])
   })
@@ -220,7 +224,7 @@ describe('accessors', () => {
     // disagree with the data in the last digit, and a validator checks it.
     const glb = parseGlb(toGlb(buildScene(samplePlan())))
     const positions = glb.json.meshes!.map((m) => m.primitives[0]!.attributes.POSITION!)
-    expect(positions).toHaveLength(5)
+    expect(positions).toHaveLength(7)
     for (const index of positions) {
       const rows = readAccessor(glb, index)
       const accessor = glb.json.accessors![index]!
@@ -507,7 +511,7 @@ describe('a plan that is not sound', () => {
     const names = readMeshes(parseGlb(toGlb(scene))).map((m) => m.name)
     expect(names).not.toContain('wall_bad')
     expect(names).not.toContain('wall_virt')
-    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1'])
+    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', 'slab_ground', 'roof_ground'])
   })
 
   it('writes only finite positions', () => {

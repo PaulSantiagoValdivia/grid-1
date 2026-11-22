@@ -20,6 +20,11 @@ Grid say that a plan complies with anything.
 
 Grid has not been released yet. The first release will hold:
 
+- Every floor has a slab from its outline, open over its stairs, lift shafts and voids, and every
+  part with nothing above has a flat roof, with a parapet when the floor states one: in the 3D
+  view, the OBJ, glTF and IFC files, and `grid_takeoff`, whose slab and roof lines are marked
+  assumed. A room can carry a ceiling with lowered zones, and the site a ground level: a door or
+  window below it is named.
 - `grid write` writes a plan from rooms text, with each room's size and neighbours, and works
   out the walls; `grid describe --as rooms` reads any plan back the same way.
 - `grid check` gives one list of what to look at in a plan, with one count: parts that cannot

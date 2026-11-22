@@ -62,7 +62,9 @@ describe('planStill', () => {
         if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh)
       })
       const model = buildScene(flat)
-      expect(meshes.length).toBe(model.walls.length + model.slabs.length)
+      // LVL-4: and the slab the floor stands on, from its outline. One floor alone has no roof drawn.
+      expect(model.shell!.slab).toHaveLength(1)
+      expect(meshes.length).toBe(model.walls.length + model.slabs.length + model.shell!.slab.length)
       // Its lights are the app's, read from the scene rather than written down twice.
       const lights = still.scene.children.filter((object) => (object as THREE.Light).isLight)
       expect(lights.map((light) => light.type).sort()).toEqual(['DirectionalLight', 'HemisphereLight'])

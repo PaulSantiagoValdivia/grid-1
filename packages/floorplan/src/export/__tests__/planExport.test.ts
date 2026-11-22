@@ -41,9 +41,9 @@ describe('exportPlan', () => {
     for (const layer of [DXF_LAYERS.wallExterior, DXF_LAYERS.rooms, DXF_LAYERS.openings]) expect(usedLayers).toContain(layer)
   })
 
-  it('writes an OBJ with one object per wall and room', () => {
+  it('writes an OBJ with one object per wall and room, and the floor\'s slab and roof (LVL-4)', () => {
     const obj = text(exportPlan(samplePlan() as FloorPlan, 'obj', ids).data)
-    expect(objObjects(obj)).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1'])
+    expect(objObjects(obj)).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', 'slab_ground', 'roof_ground'])
     const vertices = obj.split('\n').filter((l) => l.startsWith('v ')).length
     for (const face of obj.split('\n').filter((l) => l.startsWith('f '))) {
       for (const index of face.slice(2).split(' ').map(Number)) {
@@ -57,7 +57,7 @@ describe('exportPlan', () => {
     const { data } = exportPlan(samplePlan() as FloorPlan, 'glb', ids)
     expect(data).toBeInstanceOf(Uint8Array)
     const names = readMeshes(parseGlb(data as Uint8Array)).map((m) => m.name)
-    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1'])
+    expect(names).toEqual(['wall_w1', 'wall_w2', 'wall_w3', 'wall_w4', 'floor_r1', 'slab_ground', 'roof_ground'])
   })
 
   it('writes an IFC of the whole building, seeded with the project identity and time', () => {

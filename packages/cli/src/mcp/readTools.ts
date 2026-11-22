@@ -7,7 +7,7 @@
  * Every answer is short text in Grid's own words, with the same facts as data under the tool's
  * output schema. Names and ids that come from the plan file are quoted.
  */
-import { floorOf, itemFootprint, limit, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
+import { floorOf, itemFootprint, limit, planFloors, tolerance, wrapDegrees, type FloorPlan, type PlanFix } from '@ongrid/floorplan/geometry'
 import { PATH_MAX } from '../fs/projectFiles'
 import { GENERAL_GUIDANCE_LABEL, buildingKindsText, figureUsedText, inspectPlan, type ResultLine } from '@ongrid/rules'
 import { checkPlan, countsText, coverageSummary, KIND_WORDS, NOTHING_CHECKED, NOTHING_FOUND, nothingCheckedText, partsText, restText, SEEN_HEADING_NOTE, seenBeforeText, seenByText, seenCount, thingText, usedFigures, withSeen, type CheckResult } from '../command/check'
@@ -434,11 +434,12 @@ const takeoffTool: GridTool = {
   title: 'Quantities for pricing',
   hint: 'read',
   description:
-    'Use this when a builder or the person asks for quantities to price work: metres of wall (outside walls, inner walls, partitions), plaster or paint area per room less openings, ceiling areas, skirting lengths, or these as a spreadsheet. '
+    'Use this when a builder or the person asks for quantities to price work: metres of wall (outside walls, inner walls, partitions), plaster or paint area per room less openings, ceiling areas, skirting lengths, slab and roof areas, or these as a spreadsheet. '
     + 'With for=estimate, or when the person asks what the plan will cost, how much flooring, paint or plasterboard it takes, or for a bill of quantities, it gives the figures a first estimate needs instead: floor finishes and wall faces by room use, ceilings, skirting, reveals, walls by kind and thickness, the outside face, doors and windows by size, the slab, upper floors and the roof (assumed: the plan holds none), and the gross internal area, each line with a key, its rule and an assumed mark. '
     + `A cost comes only from the person's own rates file (rates, or ${RATES_FILE} beside the plan), which must name its currency; with none, the answer is a rate card to fill in and holds no money. Lines with no rate and rates in the wrong unit are listed apart. Grid has no prices. `
     + 'Every figure is worked out from the plan\'s walls and openings by a rule stated in the answer. '
-    + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). The plan holds no finishes, ceilings or fixtures. Units are metres.',
+    + 'It also gives each floor\'s slab and the roof over every part with nothing above, worked out from the outlines and marked assumed. '
+    + 'Do not use for floor areas alone (grid_areas) or a list of doors and windows (grid_schedule). The plan holds no finishes. Units are metres.',
   args: {
     plan: PLAN_ARG,
     floor: FLOOR_ARG,
@@ -456,8 +457,23 @@ const takeoffTool: GridTool = {
   },
   outputSchema: objectSchema({
     walls: listSchema(objectSchema({ kind: STRING, count: NUMBER, gross: NUMBER, net: NUMBER })),
-    rooms: listSchema(objectSchema({ id: STRING, name: STRING, floor: STRING, floorArea: NUMBER, ceiling: NUMBER, perimeter: NUMBER, skirting: NUMBER, wallFace: NUMBER, openingsOff: NUMBER, height: NULLABLE_NUMBER })),
+    rooms: listSchema(objectSchema({ id: STRING, name: STRING, floor: STRING, floorArea: NUMBER, ceiling: NUMBER, perimeter: NUMBER, skirting: NUMBER, wallFace: NUMBER, openingsOff: NUMBER, height: NULLABLE_NUMBER, ceilingHeight: NULLABLE_NUMBER, lowered: listSchema(objectSchema({ name: STRING, height: NUMBER, area: NUMBER })) })),
     totals: objectSchema({ floorArea: NUMBER, ceiling: NUMBER, skirting: NUMBER, wallFace: NUMBER }),
+    envelope: objectSchema({
+      floors: listSchema(objectSchema({
+        floor: STRING,
+        floorName: STRING,
+        outline: NULLABLE_NUMBER,
+        slab: { type: ['object', 'null'] },
+        roof: { type: ['object', 'null'] },
+        state: STRING,
+        assumed: listSchema(STRING),
+        why: NULLABLE_STRING,
+      })),
+      slabs: NULLABLE_NUMBER,
+      roof: NULLABLE_NUMBER,
+      state: STRING,
+    }),
     rules: listSchema(STRING),
     // ARE-13, with for=estimate: the lines, and the cost from the person's rates or the rate card.
     label: STRING,
@@ -491,20 +507,41 @@ const takeoffTool: GridTool = {
     for (const id of rooms ?? []) roomArg(survey.plan, id, 'rooms item')
     const units = displayFor(args['units'], args['decimal'], survey.plan)
     const t = planTakeoff(survey, floor === undefined ? undefined : [floor], rooms)
-    const data = { walls: t.walls, rooms: t.rooms, totals: t.totals, rules: t.rules }
+    const data = { walls: t.walls, rooms: t.rooms, totals: t.totals, envelope: t.envelope, rules: t.rules }
+    const several = survey.facts.floors.length > 1
     if (args['format'] === 'csv') {
       const rows = [
-        ...t.walls.map((w) => ['wall', `${w.kind} walls (${w.count})`, null, null, null, null, w.gross, w.net]),
-        ...t.rooms.map((r) => ['room', r.name, r.floorArea, r.ceiling, r.skirting, r.wallFace, r.perimeter, null]),
-        ['total', 'all rooms', t.totals.floorArea, t.totals.ceiling, t.totals.skirting, t.totals.wallFace, null, null],
+        ...t.walls.map((w) => ['wall', `${w.kind} walls (${w.count})`, null, null, null, null, w.gross, w.net, null]),
+        ...t.rooms.map((r) => ['room', r.name, r.floorArea, r.ceiling, r.skirting, r.wallFace, r.perimeter, null, null]),
+        ['total', 'all rooms', t.totals.floorArea, t.totals.ceiling, t.totals.skirting, t.totals.wallFace, null, null, null],
+        // LVL-4: worked out from the outlines, never stated by the plan (AC-6).
+        ...t.envelope.floors.flatMap((f) => [
+          ...(f.slab ? [['slab', `${f.slab.kind === 'base' ? 'lowest floor slab' : 'floor slab'}, ${f.floorName}`, f.slab.area, null, null, null, null, null, 'assumed']] : []),
+          ...(f.roof ? [['roof', `roof over ${f.floorName}, where nothing is above`, f.roof.area, null, null, null, null, null, 'assumed']] : []),
+        ]),
+        ...(t.envelope.roof === null ? [] : [['total', 'roof, all floors', t.envelope.roof, null, null, null, null, null, 'assumed']]),
       ]
-      return { text: csv(['row', 'what', 'floor m2', 'ceiling m2', 'skirting m', 'wall face m2', 'length or perimeter m', 'net length m'], rows), data }
+      return { text: csv(['row', 'what', 'floor m2', 'ceiling m2', 'skirting m', 'wall face m2', 'length or perimeter m', 'net length m', 'state'], rows), data }
     }
+    const envelopeLines = t.envelope.floors.flatMap((f) => {
+      const on = several ? ` (${q(f.floorName)})` : ''
+      if (f.slab === null && f.roof === null) return [`  ${q(f.floorName)}: no slab or roof: ${f.why ?? 'none'}.`]
+      const openings = f.slab === null || f.slab.openings.length === 0 ? '' : `, open over ${f.slab.openings.map((o) => `${o.kind === 'void' ? 'a void' : o.kind === 'lift' ? 'a lift shaft' : 'a stair'} (${areaText(o.area, units)})`).join(', ')}`
+      return [
+        ...(f.slab ? [`  ${f.slab.kind === 'base' ? 'Lowest floor slab' : 'Floor slab'}${on}: ${areaText(f.slab.area, units)}${openings}; assumed.`] : []),
+        ...(f.roof ? [`  Roof over${on || ' the floor'}, where nothing is above: ${areaText(f.roof.area, units)}${f.roof.parapet === null ? '' : `, parapet ${lengthText(f.roof.parapet, units)} high`}; assumed.`] : []),
+      ]
+    })
+    const assumed = [...new Set(t.envelope.floors.flatMap((f) => f.assumed))]
     const lines = [
       `Walls: ${t.walls.map((w) => `${w.kind} ${lengthText(w.gross, units)} (${w.count} wall${w.count === 1 ? '' : 's'}; ${lengthText(w.net, units)} less openings)`).join('; ')}.`,
       'By room: floor and ceiling, skirting, wall face to plaster.',
       ...t.rooms.map((r) => `  ${q(r.name)}: floor ${areaText(r.floorArea, units)}, ceiling ${areaText(r.ceiling, units)}, skirting ${lengthText(r.skirting, units)}, wall face ${areaText(r.wallFace, units)} (${r.openingsOff.toFixed(2)} m² of openings off, walls ${r.height === null ? 'none' : `${r.height.toFixed(2)} m`} high)`),
       `Totals: floor ${areaText(t.totals.floorArea, units)}, ceiling ${areaText(t.totals.ceiling, units)}, skirting ${lengthText(t.totals.skirting, units)}, wall face ${areaText(t.totals.wallFace, units)}.`,
+      'Slabs and roof, worked out from the outlines (assumed: the plan states no slab or roof):',
+      ...envelopeLines,
+      ...(t.envelope.roof === null ? [] : [`Roof in all: ${areaText(t.envelope.roof, units)}, assumed.`]),
+      ...(assumed.length === 0 ? [] : [`Assumed: ${assumed.join('; ')}.`]),
       ...Object.values(TAKEOFF_RULES),
       'For a first estimate (finishes, reveals, walls by thickness, doors and windows by size, slab, roof) and a cost from the person\'s rates, ask with for=estimate.',
     ]
@@ -893,7 +930,7 @@ const viewTool: GridTool = {
   description:
     'Use this when the person asks to see the plan: "can I see it", a floor plan, a 3D view from the garden side or from above, "stand me in the kitchen looking at the garden", "can I see out sitting down", or a black and white drawing. '
     + 'kind=plan draws one floor from above with its sizes; kind=3d draws the model from a side of the drawing (north here is the top of the drawing, whatever north the plan states; grid_measure what=facing says which way the rooms face); kind=eye stands in a room at eye_height and looks level toward an opening or a direction, and lists the window sills against that eye height. '
-    + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export) or to move the person\'s live preview (grid_preview). The model has no roof, furniture, glass or door leaves. Units are metres.',
+    + 'It returns the picture with the numbers that made it; look at the picture before you describe it. It changes nothing and writes no file. Do not use for a file to hand on (grid_export) or to move the person\'s live preview (grid_preview). The model of one floor has no roof; a building of several floors is drawn with a flat roof over every part with nothing above. It has no furniture, glass or door leaves. Units are metres.',
   args: {
     units: UNITS_ARG,
     decimal: DECIMAL_ARG,
@@ -962,8 +999,12 @@ const viewTool: GridTool = {
       const from = (args['from'] as Side | undefined) ?? 'south-east'
       const { modelView } = await import('../draw/views')
       const view = await modelView(plan, { from, ...(floor ? { floor } : {}) })
+      // LVL-4: the whole of a building of several floors is drawn closed, with its roofs; one floor
+      // alone, or a floor cut away, is drawn open from above, as the 3D view draws it.
+      const roofed = floor === undefined && planFloors(plan).length > 1
+      const roof = roofed ? 'Every part with nothing above it has a flat roof; the model has no furniture, glass or door leaves.' : 'The model has no roof, furniture, glass or door leaves.'
       return {
-        text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing${plan.north === undefined ? '' : `, not the north the plan states (${northWords(wrapDegrees(plan.north))})`}. The model has no roof, furniture, glass or door leaves. Look at the picture before you describe it.`,
+        text: `The model from the ${from === 'above' ? 'air, looking down' : `${from} side of the drawing`}${floor ? `, floor ${q(floor)} cut away` : ''}. North is the top of the drawing${plan.north === undefined ? '' : `, not the north the plan states (${northWords(wrapDegrees(plan.north))})`}. ${roof} Look at the picture before you describe it.`,
         data: { kind, floor: floor ?? null, camera: view.camera, pxPerMetre: null, sills: [], ids: [], boxes: [] },
         image: { data: view.png, mimeType: 'image/png' },
       }
