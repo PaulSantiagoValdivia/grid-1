@@ -18,7 +18,7 @@ is published yet and there is no release to install.
 | `packages/floorplan` | `@ongrid/floorplan` | Plan schema, geometry, validation, plan checks and exporters |
 | `packages/rules` | `@ongrid/rules` | Checks that apply figures from building codes, with each figure's source |
 | `packages/viewer` | `@ongrid/viewer` | 2D and 3D views of a plan, `planToSvg` (a picture of a plan as an SVG file) and `planStill` (a still of the 3D model as pixels), with no browser |
-| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `edit`, `check`, `describe`, `draw`, `export`, `tidy`, `serve` (the tool server an agent uses) and `mcp` (the same server). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
+| `packages/cli` | `ongrid` | The `grid` command (`ongrid` does the same): `init`, `edit`, `check`, `describe`, `draw`, `export`, `tidy`, `preview` (the preview page in a browser), `serve` (the tool server an agent uses) and `mcp` (the same server). Also CAD program lookup, `drawPlan` (a plan as SVG or PNG) and `drawStill` (the 3D model as PNG) |
 
 ## Development
 

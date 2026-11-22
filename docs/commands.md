@@ -21,6 +21,7 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 - [A facade: `grid draw --facade`](#a-facade-grid-draw---facade)
 - [A sheet for people: `grid sheet`](#a-sheet-for-people-grid-sheet)
 - [Who sits where: `grid occupancy`](#who-sits-where-grid-occupancy)
+- [The preview in a browser: `grid preview`](#the-preview-in-a-browser-grid-preview)
 
 ## The commands
 
@@ -37,7 +38,8 @@ with [rooms-first.md](rooms-first.md); an agent calls the same work as tools, in
 | `grid mark [<name>] [--plan <plan.json>] [--remove]` | Keeps the plan as it is now under a name, `start` unless named, in `plan.markers.json` beside it, for `grid diff` to compare with: no git needed. At most 5 (see below) |
 | `grid diff [<plan>] [--since <name>\|git] [--rooms <ids>] [--show all\|summary\|changes\|issues] [--picture <file.png>] [--floor <id>] [--json]` | Says what changed since a marker or the last commit, by what stands where, not by ids: issues first, then the verdict room by room, then each change (see below) |
 | `grid occupancy [<plan>]` | Lists who sits where, by room, from the occupancy file beside the plan; no export carries it (see below) |
-| `grid serve` | Starts the tool server on standard input and output, with the 30 tools in [the tool server](tool-server.md) |
+| `grid preview [<plan>] [--port <n>]` | Serves the preview as a page on this computer only: the plan in 2D and 3D, the part you click shared with the agent, the room it frames and the parts it picks out; it draws again within 2 s of the plan changing (see below) |
+| `grid serve` | Starts the tool server on standard input and output, with the 31 tools in [the tool server](tool-server.md) |
 | `grid mcp` | The same as `grid serve`, under the name agents start it by (`npx -y ongrid mcp`) |
 
 ## Options and exit codes
@@ -650,3 +652,21 @@ is refused and says where the file goes.
 The file is kept apart from the plan so that people's names never travel with it: no export,
 sheet or tool of the tool server reads it, and the tool server has no tool for it. Its format is
 in [People are kept out of the plan](plan-file.md#people-are-kept-out-of-the-plan).
+
+## The preview in a browser: `grid preview`
+
+`grid preview [plan.json]` serves Grid's preview as a page at `http://127.0.0.1:4178/`, or at
+another free port when that one is in use (`--port` names one; `0` takes any free one), and keeps
+running until Ctrl+C. Open it in a browser on the same computer: it listens on 127.0.0.1 only,
+answers only requests addressed to 127.0.0.1 or localhost on its port, and takes calls only from
+its own page. It is the page an agent's host shows beside the chat when it shows MCP Apps
+([The preview, shared with the person](tool-server.md#the-preview-shared-with-the-person)), for
+hosts and editors that do not.
+
+The page shows one floor in 2D, the viewer's own drawing (wheel to zoom, drag to move, double
+click to frame again), or the model in 3D (drag to turn it, wheel to move nearer). A click on a
+part selects it: the agent reads it with `grid_preview`. The parts the agent picks out are
+coloured, the room it frames fills the page, and its note is under the drawing. The page reads
+the plan and the record beside it, `plan.preview.json`, every half second, and draws again
+within 2 s of either changing. The plan is refused, and nothing is served, when it is outside
+the project folder or cannot be read.

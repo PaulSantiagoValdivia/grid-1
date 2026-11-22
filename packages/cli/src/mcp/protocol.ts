@@ -3,7 +3,8 @@
  *
  * This runs inside the tool server an agent's host starts, so it imports nothing: no SDK, no
  * files, no network. The tools are handed in by the caller (`serveTools.ts`), and reach the
- * disk only through the project's resolver.
+ * disk only through the project's resolver. So is the one resource, the preview page (VEW-4), an
+ * MCP App: with it the server says it offers resources and the MCP Apps extension.
  *
  * Limits (T-3): a request line of more than `LINE_MAX_BYTES` is refused unread, and so is a
  * request id of more than `REQUEST_ID_MAX` characters. Neither is ever repeated in the answer.
@@ -91,6 +92,37 @@ export interface ServerTool {
   call(args: unknown, request?: CallRequest): ToolAnswer | Promise<ToolAnswer>
 }
 
+/**
+ * VEW-4: a resource the server offers, handed in like the tools: the preview page, an MCP App.
+ * `read` gives its text and the `_meta` its content carries.
+ */
+export interface ServerResource {
+  /** The resource as `resources/list` shows it: uri, name, title, description and mimeType. */
+  readonly definition: { readonly uri: string; readonly mimeType: string } & Record<string, unknown>
+  read(): Promise<{ readonly text: string; readonly _meta?: Record<string, unknown> }>
+}
+
+/** The MCP Apps standard's extension, for a host that shows a tool's answers in a page of its own. */
+const APPS_EXTENSION = 'io.modelcontextprotocol/ui'
+/** MCP's error for a resource it does not have. */
+const RESOURCE_NOT_FOUND = -32002
+
+/** What the server can do: tools, and with a resource handed in, resources and the MCP Apps extension. */
+function capabilitiesOf(resources: readonly ServerResource[]): Record<string, unknown> {
+  if (resources.length === 0) return { tools: {} }
+  const mimeTypes = [...new Set(resources.map((resource) => resource.definition.mimeType))]
+  return { tools: {}, resources: {}, extensions: { [APPS_EXTENSION]: { mimeTypes } } }
+}
+
+/** `resources/list` and `resources/read`, the same in both eras. */
+async function readResource(id: Id, params: Record<string, unknown>, resources: readonly ServerResource[], wrap: (result: Record<string, unknown>) => Record<string, unknown>): Promise<string> {
+  const resource = resources.find((r) => r.definition.uri === params['uri'])
+  // The uri sent is text from the client: it is not repeated back.
+  if (!resource) return fail(id, RESOURCE_NOT_FOUND, `Resource not found. Grid offers ${listOf(resources.map((r) => r.definition.uri))}.`)
+  const read = await resource.read()
+  return reply(id, wrap({ contents: [{ uri: resource.definition.uri, mimeType: resource.definition.mimeType, text: read.text, ...(read._meta ? { _meta: read._meta } : {}) }] }))
+}
+
 /** What one request names about itself. The server keeps nothing between requests. */
 export interface CallRequest {
   readonly protocolVersion?: string
@@ -141,7 +173,7 @@ function complete(result: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** One request of a 2026-07-28 client, which names its version in its own `_meta`. */
-function perRequest(id: Id, method: unknown, params: Record<string, unknown>, tools: readonly ServerTool[]): string | Promise<string> {
+function perRequest(id: Id, method: unknown, params: Record<string, unknown>, tools: readonly ServerTool[], resources: readonly ServerResource[]): string | Promise<string> {
   const meta = isObject(params['_meta']) ? params['_meta'] : {}
   const asked = meta[META_VERSION]
   if (typeof asked !== 'string') {
@@ -165,7 +197,7 @@ function perRequest(id: Id, method: unknown, params: Record<string, unknown>, to
     case 'server/discover':
       return reply(id, complete({
         supportedVersions: [...PER_REQUEST_VERSIONS],
-        capabilities: { tools: {} },
+        capabilities: capabilitiesOf(resources),
         instructions: INSTRUCTIONS,
         ttlMs: CACHE_MS,
         cacheScope: 'public',
@@ -178,6 +210,12 @@ function perRequest(id: Id, method: unknown, params: Record<string, unknown>, to
       // The version is one Grid speaks, checked above: it may be repeated.
       return runTool(id, tool, params['arguments'], complete, { protocolVersion: asked })
     }
+    case 'resources/list':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return reply(id, complete({ resources: resources.map((r) => r.definition), ttlMs: CACHE_MS, cacheScope: 'public' }))
+    case 'resources/read':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return readResource(id, params, resources, complete)
     default:
       // initialize and ping are gone from this revision; anything else Grid does not offer.
       return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
@@ -194,7 +232,7 @@ function byteLength(line: string): number {
  * One JSON-RPC line in, one line out, or null when nothing should be sent. A tool call that
  * draws a picture answers later, so a call may give a promise of its line.
  */
-export function handleLine(line: string, tools: readonly ServerTool[] = []): string | null | Promise<string> {
+export function handleLine(line: string, tools: readonly ServerTool[] = [], resources: readonly ServerResource[] = []): string | null | Promise<string> {
   if (byteLength(line) > LINE_MAX_BYTES) {
     return fail(null, -32600, `Request refused unread: the line is longer than ${LINE_MAX_BYTES} bytes (1 MiB), the most Grid's tool server reads.`)
   }
@@ -224,7 +262,7 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
 
   // A request that names its version, or asks what the server speaks, is of the 2026-07-28 era.
   if (message['method'] === 'server/discover' || (isObject(params['_meta']) && params['_meta'][META_VERSION] !== undefined)) {
-    return perRequest(id, message['method'], params, tools)
+    return perRequest(id, message['method'], params, tools, resources)
   }
 
   switch (message['method']) {
@@ -233,7 +271,7 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
       const known = (PROTOCOL_VERSIONS as readonly unknown[]).includes(asked)
       return reply(id, {
         protocolVersion: known ? asked : LATEST_PROTOCOL_VERSION,
-        capabilities: { tools: {} },
+        capabilities: capabilitiesOf(resources),
         serverInfo: SERVER_INFO,
       })
     }
@@ -246,6 +284,12 @@ export function handleLine(line: string, tools: readonly ServerTool[] = []): str
       if (!tool) return fail(id, -32602, 'Unknown tool')
       return runTool(id, tool, params['arguments'])
     }
+    case 'resources/list':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return reply(id, { resources: resources.map((r) => r.definition) })
+    case 'resources/read':
+      if (resources.length === 0) return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
+      return readResource(id, params, resources, (result) => result)
     default:
       return fail(id, -32601, `Method not found. ${VERSIONS_SPOKEN}`)
   }

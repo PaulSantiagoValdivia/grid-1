@@ -27,7 +27,8 @@ import { FontsMissing } from '../sheet/fonts'
 import { linkSeats, occupancyFileOf, occupancyText, OccupancyRefused, readOccupancy } from '../occupancy/occupancy'
 import { checkSheetRequest, makeSheet, readSheetWords, sheetIntoProject } from '../sheet/sheetFile'
 import { startToolServer } from '../mcp/serve'
-import { projectTools } from '../mcp/serveTools'
+import { PREVIEW_PORT, startLocalPreview } from '../preview/localServer'
+import { projectResources, projectTools } from '../mcp/serveTools'
 import { CHECK_OPTIONS, checkJson, checkPlan, checkText, markNote, withSeen, type MarkAsk, type MarkDone } from './check'
 import { readSeen, SeenRefused } from '../seen/marks'
 import { EDIT_SUMMARY, EDIT_USAGE, EditCommandRefused, runEdit } from './edit'
@@ -62,6 +63,12 @@ export interface CommandIo {
 class WriteFailed extends Error {}
 
 const HELP_FLAG: OptionSpecs = { '--help': { takesValue: false, help: 'Show this help.' } }
+
+/** VEW-4: the local preview page's options. */
+const PREVIEW_OPTIONS: OptionSpecs = {
+  '--port': { takesValue: true, help: `The port on 127.0.0.1 to serve the page on, from 1 to 65535. ${PREVIEW_PORT} when left out, or another one free when that is in use.` },
+  ...PROJECT_OPTION,
+}
 
 const COMMANDS = {
   init: {
@@ -124,6 +131,11 @@ const COMMANDS = {
     usage: 'grid occupancy [<plan.json>] [--project <folder>]',
     summary: 'Lists who sits where, from the occupancy file beside the plan (plan.occupancy.json), by room. No export carries it.',
     options: PROJECT_OPTION,
+  },
+  preview: {
+    usage: 'grid preview [<plan.json>] [--port <n>] [--project <folder>]',
+    summary: 'Opens the preview as a page in your browser, on this computer only: the plan in 2D and 3D, the part you click shared with the agent, and the room it frames or the parts it picks out. It draws again within 2 s of the plan changing. Ctrl+C stops it.',
+    options: PREVIEW_OPTIONS,
   },
   serve: {
     usage: 'grid serve [--project <folder>]',
@@ -268,7 +280,7 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
       if (!(error instanceof PathRefused) || projectOption !== undefined) throw error
       project = error
     }
-    startToolServer(projectTools(project))
+    startToolServer(projectTools(project), projectResources())
     return EXIT_OK
   }
 
@@ -412,6 +424,25 @@ async function runCommand(name: CommandName, args: readonly string[], io: Comman
     const written = done.text === null ? null : project.shown(write(project, out ?? planFile, done.text))
     const result = { label: GENERAL_GUIDANCE_LABEL, applied: done.applied, skipped: done.skipped, left: done.left, written }
     io.stdout(json ? `${JSON.stringify(result, null, 2)}\n` : tidyAppliedText(result))
+    return EXIT_OK
+  }
+
+  if (name === 'preview') {
+    const portText = textOf(parsed, '--port')
+    const port = portText === undefined ? undefined : Number(portText)
+    if (port !== undefined && (!/^\d{1,5}$/.test(portText!) || port > 65535)) throw new UsageError('--port takes a whole number from 1 to 65535, or 0 for any free port.')
+    // The plan is named from the folder Grid runs in; the page names it from the project folder, as the tools do.
+    const named = openProject(projectOption, io.cwd)
+    loadPlan(named, planFile)
+    const plan = named.relative(named.resolve(planFile))
+    const project = openProject(projectOption, io.cwd, 'project')
+    // The page is loaded only here and when a host reads it: no other command reads it at start.
+    const { previewPageHtml } = await import('@ongrid/viewer/src/page/previewPage')
+    const started = await startLocalPreview({ project, plan, ...(port !== undefined ? { port } : {}), page: previewPageHtml({ plan }) })
+    const lines = [`Grid's preview of ${JSON.stringify(plan)}: ${started.url}`]
+    if (started.moved) lines.push(`Port ${port ?? PREVIEW_PORT} was in use, so it took ${started.port}.`)
+    lines.push('Open it in a browser on this computer; no other computer can reach it. Ctrl+C stops it.')
+    io.stdout(`${lines.join('\n')}\n`)
     return EXIT_OK
   }
 

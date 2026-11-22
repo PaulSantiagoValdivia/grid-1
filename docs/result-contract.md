@@ -597,6 +597,24 @@ A change that would add a problem that leaves a part out is refused, and nothing
 
 ## Changelog for agents
 
+### 2026-11-22: the preview, shared with the person (VEW-4)
+
+- `grid_preview` writes the preview record beside the plan (`<plan>.preview.json`), so its hint
+  is now write-file (`readOnlyHint` false, `destructiveHint` false). It takes `highlight` (ids,
+  an empty list for none) and `camera` (a record `grid_view` returned), and `room` now frames the
+  room. Its answer carries the picture the preview shows, as `grid_view` draws it, and its data
+  gains `highlight`, `selected`, `camera`, `revision`, `planFile`, `previewFile` and `shown`;
+  `view` is now the view shown (`2d` when none was set) where it was null when left out. With no
+  argument but `plan` it no longer refuses: it reads what the person selected and writes nothing.
+- A new tool after it, `grid_preview_sync`, the preview page's own call, which an MCP Apps host
+  lists for the page only (`_meta.ui.visibility: ["app"]`). 31 tools.
+- The server offers resources: `resources/list` and `resources/read` give the preview page,
+  `ui://grid/preview`, of type `text/html;profile=mcp-app`. `initialize` and `server/discover`
+  say `resources: {}` and `extensions: { "io.modelcontextprotocol/ui": { "mimeTypes": [...] } }`.
+  An unknown resource is refused with -32002, without repeating its address.
+- `@ongrid/floorplan/geometry` exports `pickInModel` and `pictureRay`: the part of the model a
+  point on a 3D picture shows, through its camera record.
+
 ### 2026-11-22: accessibility measurements, as numbers (CNT-17)
 
 - The plan format takes `accessible` (C14): `rooms` by id and `routes` (`to` a room, `from` a

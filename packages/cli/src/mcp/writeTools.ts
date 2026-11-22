@@ -1,5 +1,5 @@
 /**
- * The tools of `grid serve` that write: an export file beside the plan, the live preview, the
+ * The tools of `grid serve` that write: an export file beside the plan, the
  * plan written from rooms text (WRT-2, the main way to write one), and the three changes to the
  * plan itself (an opening, one side of a room, a mirror).
  *
@@ -50,8 +50,6 @@ import {
 } from './toolkit'
 
 export const EXPORT_TOOL_NAME = 'grid_export'
-export const PREVIEW_TOOL_NAME = 'grid_preview'
-export const PREVIEW_NOTE_MAX = 120
 
 const q = (text: string): string => JSON.stringify(text)
 
@@ -118,47 +116,6 @@ const exportTool: GridTool = {
       if (error instanceof UsageError) throw new ToolRefusal(asArguments(error.message))
       throw error
     }
-  },
-}
-
-// ---------------------------------------------------------------------------------------------
-// grid_preview
-
-const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/g
-
-const previewTool: GridTool = {
-  name: PREVIEW_TOOL_NAME,
-  title: 'Show in preview',
-  hint: 'read',
-  description:
-    'Use this when you have changed the plan, once, to point the person at the change in Grid\'s live preview, or when they ask to see a floor or a room there: the floor you changed, the view that shows it best (3d for heights and volumes, 2d for layout), and a short note in your own words saying what to look at. '
-    + 'It only moves the preview; it changes nothing in the plan. The floor and room are checked against the plan. Do not use to get a picture back (grid_view).',
-  args: {
-    plan: PLAN_ARG,
-    floor: { ...FLOOR_ARG, description: 'A floor id from the plan\'s "floors".' },
-    room: { type: 'string', id: true, description: 'A room id. The preview shows the floor that room is on.', examples: ['kitchen', 'f1-r2'] },
-    view: { type: 'string', enum: ['2d', '3d'], description: '2d for the plan view, 3d for the model.', examples: ['2d', '3d'] },
-    note: { type: 'string', maxLength: 500, description: `One short sentence for the person, in your own words, saying what to look at. Cut to ${PREVIEW_NOTE_MAX} characters.`, examples: ['The new bathroom is behind the kitchen.'] },
-  },
-  outputSchema: objectSchema({ floor: STRING, view: { type: ['string', 'null'] }, room: { type: ['string', 'null'] }, note: { type: ['string', 'null'] } }),
-  run(args, context) {
-    if (args['floor'] === undefined && args['room'] === undefined && args['view'] === undefined) {
-      throw new ToolRefusal('Pass a floor id, a room id or a view ("2d" or "3d"), and a short note.')
-    }
-    const { loaded } = readPlan(context, args['plan'])
-    const plan: FloorPlan = loaded.plan
-    let floor = floorArg(plan, args['floor'])
-    const room = args['room'] === undefined ? undefined : roomArg(plan, args['room'])
-    if (room !== undefined) {
-      const of = plan.rooms.find((r) => r.id === room)!.floor ?? 'ground'
-      if (floor !== undefined && floor !== of) throw new ToolRefusal(`That room is on floor ${q(of)}, not the floor named.`)
-      floor = of
-    }
-    const shown = floor ?? surveyPlan(plan).facts.floors[0]?.id ?? 'ground'
-    const view = (args['view'] as string | undefined) ?? null
-    const note = (args['note'] as string | undefined)?.replace(CONTROL, '').trim().slice(0, PREVIEW_NOTE_MAX) || null
-    const text = `Showing floor ${q(shown)}${room ? `, room ${q(room)}` : ''}${view ? ` in ${view}` : ''}${note ? `, with your note` : ''}.`
-    return { text, data: { floor: shown, view, room: room ?? null, note } }
   },
 }
 
@@ -527,4 +484,4 @@ const writeRoomsTool: GridTool = {
   },
 }
 
-export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, previewTool, writeRoomsTool, changeOpeningTool, moveSideTool, mirrorTool]
+export const WRITE_TOOLS: readonly GridTool[] = [exportTool, sheetTool, writeRoomsTool, changeOpeningTool, moveSideTool, mirrorTool]
