@@ -156,6 +156,38 @@ scoreboard/__tests__ scripts --maxWorkers=2 --minWorkers=1`: 4,172 passed, 3 ski
 214 files. Nothing was rerun alone. `npm run scoreboard`: "Same as the stored figures" (197, 278,
 18, 5, 16; guards 735 and 95; `main`'s LVL-6 stored 16 for the checks the plan can feed).
 
+### After merging `main` at e486ccb (LVL-8, HND-1, BRF-3, WRT-4, LVL-9, CNT-17)
+
+Merge commit 531515f. Eleven files conflicted; both sides were kept in each:
+
+- `packages/floorplan/src/types/floorplan.ts`: `main` took C12 (LVL-8's opening patterns), C13
+  (BRF-3's plot) and C14 (CNT-17's accessible), so taped lengths are C15; the plan's fields run
+  `views`, `accessible`, `taped`. `TapedSchema` sits beside the accessible schemas.
+- `packages/rules/src/result/__tests__/result.test.ts`: the plan's fields as the schema orders
+  them, `…, marks, views, accessible, taped, display, written`.
+- `packages/rules/src/result/inspect.ts`: both sets of imports; the taped stage, then CNT-17's
+  accessible stage.
+- `packages/rules/src/result/catalogue.ts`: HND-11's two codes, then CNT-17's
+  `plan/not-checked-access`.
+- `packages/floorplan/src/geometry/tolerances.ts`, `docs/tolerances.md`: `tapedAgree`, then
+  BRF-3's `setbackShort` and `pastBoundary`.
+- `packages/floorplan/src/export/planExport.ts`: `main`'s `exportPlan` (LVL-8's patterns
+  expanded first, HND-1's DXF room numbers and profile) with HND-11's GLB near zero.
+- `packages/cli/src/command/write.ts`: one import line, `expandPatterns` and `TapedRow`.
+- `CHANGELOG.md`, `docs/result-contract.md`: every section, HND-11's on top.
+- `docs/plan-file.md`: the limits row and the `site` row are `main`'s with HND-11's additions;
+  "Survey coordinates at a stored origin" sits before BRF-3's "The plot".
+
+WRT-4's `grid_mirror turn=…` turns walls without `mirrored`, so a wall placed by its face keeps
+its face through a turn, as a rotation should. HND-11 adds no tool; the count stays `main`'s 30.
+
+After the merge: `npm run build`, `npm run typecheck`, `npm run lint` and `npm run
+check:licenses` (363 licences) exit 0. `npx vitest run packages/cli --maxWorkers=2
+--minWorkers=1`: 1,228 passed, 1 skipped, in 89 of 89 files. `npx vitest run packages/floorplan
+packages/rules packages/viewer scoreboard/__tests__ scripts --maxWorkers=2 --minWorkers=1`: 4,312
+passed, 3 skipped, in 228 of 228 files. Nothing was rerun alone. `npm run scoreboard`: "Same as
+the stored figures" (197, 278, 19, 5, 20; guards 735 and 95).
+
 ## For the owner
 
 The owner is away, so each choice took the reversible option; each is a small change.
