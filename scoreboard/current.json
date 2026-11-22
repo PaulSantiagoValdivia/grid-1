@@ -3,7 +3,7 @@
  "counts": {
   "roomsMeasuredWrong": 197,
   "damageSilent": 278,
-  "turnsAnswered": 18,
+  "turnsAnswered": 19,
   "mistakesNamed": 5,
   "checksFed": 16,
   "roomsNotMeasured": 735,
@@ -53,7 +53,7 @@
   },
   "turns": {
    "turns": 67,
-   "answered": 18,
+   "answered": 19,
    "labAnsweredFully": 15
   },
   "checks": {
@@ -111,7 +111,7 @@
    "note-reasons": "no",
    "compare-notes": "yes",
    "layout-help": "no",
-   "repeat-floor": "no",
+   "repeat-floor": "yes",
    "local-rules": "no",
    "permission": "no",
    "openable-part": "no",
