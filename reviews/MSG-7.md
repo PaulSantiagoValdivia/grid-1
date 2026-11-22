@@ -71,14 +71,11 @@ words and sensible units." Lab evidence MS-13 (reproduced by AU1), F32, W-1.
 - `geometry/__tests__/holes.test.ts` and `types/__tests__/planText.test.ts`: "which does not
   exist" is "which is not in the plan".
 - `cli/src/mcp/__tests__/measureBetween.test.ts` passes unchanged: its three ids are near ones.
-- Two tests fail on `main` as well, and I changed them here:
-  - `grid.e2e.test.ts` "the built file": the bundle budget was 450,000 bytes. Built from `main`
-    the bundle is 459,241 bytes (after CMD-13 and HND-6); MSG-7 adds 1,689 (460,930). I raised
-    the budget to 500,000, with those figures in its comment.
-  - `reportProblem.test.ts` (CMD-13) "holds no path": the test appends the path line to the end of
-    `grid_check`'s text, and the draft cuts an answer at 4,000 characters, so the path was cut off
-    before it could be replaced. None of MSG-7's new text reaches that plan's answer. I put the path
-    line first.
+- Two tests failed on `main` at 56ed9b5 as well: the bundle budget in `grid.e2e.test.ts` (450,000
+  bytes; `main`'s bundle was 459,241, and MSG-7 adds 1,689) and the problem report's path line in
+  `reportProblem.test.ts` (cut off past the draft's 4,000 characters). I fixed both here; SHT-7
+  then fixed both on `main` the same way (500 kB, the path line first), and the merge keeps
+  `main`'s versions.
 
 ## For the owner
 
@@ -101,5 +98,4 @@ words and sensible units." Lab evidence MS-13 (reproduced by AU1), F32, W-1.
    the catalogue's figures trim zeros (0.6 m) as they did. MS-13's "1.118 m" was not reworked.
 6. **"A window called a door"** (MS-13): I found no message that does it today. The opening
    noun comes from the opening's type in every line I read.
-7. **The bundle budget** went from 450 kB to 500 kB, because `main` was already past it.
-   Reversible: one figure in `grid.e2e.test.ts`.
+7. **The bundle** is 1,689 bytes larger with MSG-7, under the 500 kB budget `main` now has.

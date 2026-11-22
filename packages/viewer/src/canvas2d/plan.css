@@ -139,6 +139,24 @@
   user-select: none;
 }
 
+/* SHT-7: the sketch layer, drawn only, in a soft line; and the notes, tags and symbols. */
+.canvas path[data-part='sketch'] {
+  fill: none;
+  stroke: var(--plan-label-soft, #75726a);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.canvas [data-part^='note-'] text {
+  fill: var(--plan-label, #232320);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* A room that could not be drawn (MSG-8): the box round its walls, tinted and dashed, with its
    name and why in the middle. */
 .canvas [data-part='undrawn-room'] {

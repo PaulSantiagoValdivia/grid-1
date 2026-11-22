@@ -194,6 +194,9 @@ export function buildDimensions(
  */
 export function boundsWithDimensions(drawing: PlanDrawing, dims: readonly Dimension[]): Bounds {
   const points: Vec2[] = [drawing.bounds.min, drawing.bounds.max]
+  // SHT-7: the sketch layer and the notes placed at a point are framed too.
+  if (drawing.sketchBounds) points.push(drawing.sketchBounds.min, drawing.sketchBounds.max)
+  for (const note of drawing.notes) if (note.at && note.room === null) points.push(note.at)
   for (const dim of dims) {
     const shift = scale(dim.normal, dim.offset)
     points.push(add(dim.from, shift), add(dim.to, shift))

@@ -69,7 +69,7 @@ describe('a draft from the S-11 plan', () => {
       plan: 's11-junctions.json',
       tool: 'grid_check',
       arguments: { plan: `${real}/s11-junctions.json` },
-      // The path first: the draft cuts an answer past ANSWER_MAX, and this plan's grid_check text is longer than that.
+      // The path comes first: the draft cuts a long answer, and grid_check's text grows.
       answer: `Read from ${real}/s11-junctions.json\n${check.text}`,
       expected: 'The walls meet at the junctions, so nothing should be named.',
       code,

@@ -510,6 +510,32 @@ function inspectRead(read: Extract<Read, { plan: FloorPlan }>, options: CheckOpt
     lines.push(...report.findings.map((finding) => findingLine(finding, names, wayOutNotDrawn)))
     lines.push(...report.notChecked.map((notice) => noticeLine(notice, names, country)))
   })
+  // SHT-7: what is written on the drawing. The sketch is drawn and never measured or checked,
+  // and the record says so, floor by floor. A note in a room the plan lacks is not drawn.
+  stage('writing', () => {
+    const byFloor = new Map<string, NonNullable<FloorPlan['sketch']>>()
+    for (const item of plan.sketch ?? []) byFloor.set(floorOf(item), [...(byFloor.get(floorOf(item)) ?? []), item])
+    for (const [floor, items] of byFloor) {
+      const label = names.thingOf('floor', floor).label
+      const categories = [...new Set(items.map((item) => item.category))]
+      lines.push(
+        line('floor/sketch-drawn-only', 'not-checked', { kind: 'floor', id: floor }, floor, {
+          ...blank(label),
+          name: names.floorName(floor),
+          floorName: names.floorName(floor),
+          said: `${items.length} sketch item${items.length === 1 ? '' : 's'}`,
+          also: items.map((item) => item.id),
+          names: categories,
+          floors: names.floors
+        })
+      )
+    }
+    const rooms = new Set(plan.rooms.map((room) => room.id))
+    for (const note of plan.annotations ?? []) {
+      if (note.room === undefined || rooms.has(note.room)) continue
+      lines.push(line('plan/note-no-place', 'worth-a-look', { kind: 'plan', id: '' }, null, { ...blank(quoted(note.id)), also: [note.id, note.room], floors: names.floors, said: `room ${note.room}` }))
+    }
+  })
   return record(lines, true, report)
 }
 
